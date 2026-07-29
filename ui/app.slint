@@ -1,7 +1,7 @@
 import "../assets/fonts/JetBrainsMono-Regular.ttf";
 import { Button, CheckBox, LineEdit, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { TerminalPane } from "terminal-pane.slint";
+import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
 import { SettingsPane } from "settings.slint";
 import { SessionEditorPane } from "session-editor.slint";
 
@@ -21,6 +21,12 @@ export struct WorkspaceTabRow {
     connected: bool,
 }
 
+export struct SessionGroupIconRow {
+    group-name: string,
+    icon: string,
+    accessible-name: string,
+}
+
 export component AppWindow inherits Window {
     title: "AxSSH";
     min-width: 940px;
@@ -30,10 +36,12 @@ export component AppWindow inherits Window {
     background: Theme.background;
 
     in property <[SessionRow]> sessions;
+    in property <[SessionGroupIconRow]> group-icons;
     in property <[WorkspaceTabRow]> workspace-tabs;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
     in property <[string]> terminal-font-options;
+    in property <[string]> local-shell-options;
     in property <string> status: "Ready";
     in property <string> active-tab-id: "";
     in property <string> active-tab-kind: "empty";
@@ -50,23 +58,59 @@ export component AppWindow inherits Window {
     in property <string> password-key-path: "";
     in property <bool> worker-running: false;
     in property <bool> connected: false;
-    in property <string> terminal-output: "";
+    in property <[TerminalRenderLine]> terminal-render-lines;
+    in property <int> terminal-content-columns: 0;
+    in property <int> terminal-cursor-row: 0;
+    in property <int> terminal-cursor-column: 0;
+    in property <bool> terminal-cursor-visible: false;
+    in property <string> terminal-cursor-text: " ";
     in property <string> terminal-font-family: "JetBrains Mono";
     in property <int> terminal-font-size: 14;
+    in property <int> terminal-line-height-percent: 120;
+    in property <string> terminal-color-scheme: "dark";
+    in property <int> terminal-brightness-percent: 100;
+    in property <bool> bright-bold-text: true;
+    in property <bool> right-click-copy-or-paste: false;
+    in property <color> terminal-foreground: #cccccc;
+    in property <color> terminal-background: #1e1e1e;
+    in property <color> terminal-selection-background: #264f78;
     in property <int> scrollback-lines: 2000;
     in property <int> default-terminal-columns: 120;
     in property <int> default-terminal-rows: 36;
+    in property <string> local-shell: "System default";
+    in property <int> local-shell-index: 0;
     in property <int> sidebar-width: 260;
     in property <int> tab-width: 172;
+    in property <string> open-settings-shortcut;
+    in property <string> toggle-sidebar-shortcut;
+    in property <string> copy-selection-shortcut;
+    in property <string> paste-shortcut;
+    in property <string> default-open-settings-shortcut;
+    in property <string> default-toggle-sidebar-shortcut;
+    in property <string> default-copy-selection-shortcut;
+    in property <string> default-paste-shortcut;
+    in property <bool> apple-platform: false;
+    in property <bool> unified-titlebar: false;
+
+    private property <bool> sidebar-collapsed: false;
+    private property <bool> shortcut-recording: false;
+    private property <length> activity-bar-width: 62px;
+    private property <length> navigation-width:
+        root.activity-bar-width + (root.sidebar-collapsed ? 0px : root.sidebar-width * 1px);
 
     callback new-session();
+    callback open-local-shell();
     callback open-settings();
     callback activate-tab(string);
     callback close-tab(string);
-    callback save-settings(string, int, int, int, int, int, int);
+    callback save-settings(
+        string, int, int, string, int, bool, bool, string, int, int, int, int, int,
+        string, string, string, string,
+    );
     callback cancel-settings();
     callback connect-session(string);
     callback toggle-group(string);
+    callback activate-group(string);
     callback save-session(string, string, string, string, string, string, string, string, bool);
     callback cancel-session-dialog();
     callback confirm-host-key();
@@ -76,38 +120,69 @@ export component AppWindow inherits Window {
     callback disconnect-session();
     callback terminal-key(string, bool, bool, bool, bool) -> bool;
     callback resize-terminal(int, int);
+    callback scroll-terminal(int);
+    callback terminal-selection-text(int, int, int, int) -> string;
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
 
-    VerticalLayout {
-        spacing: 0px;
+    shortcut-scope := FocusScope {
+        capture-key-pressed(event) => {
+            if root.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
+                return EventResult.reject;
+            }
+            // Slint swaps Command and Control on Apple platforms for Qt compatibility.
+            let physical-control = root.apple-platform
+                ? event.modifiers.meta : event.modifiers.control;
+            let physical-meta = root.apple-platform
+                ? event.modifiers.control : event.modifiers.meta;
+            if root.active-tab-kind == "terminal"
+                    && physical-control
+                    && !physical-meta {
+                return EventResult.reject;
+            }
+            if root.format-shortcut(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) == root.open-settings-shortcut {
+                root.open-settings();
+                return EventResult.accept;
+            }
+            if root.format-shortcut(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) == root.toggle-sidebar-shortcut {
+                root.sidebar-collapsed = !root.sidebar-collapsed;
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
 
-        Rectangle {
-            height: 42px;
-            background: Theme.panel;
-            border-width: 1px;
-            border-color: Theme.border;
+        VerticalLayout {
+            spacing: 0px;
 
-            HorizontalLayout {
-                spacing: 0px;
+            Rectangle {
+                height: root.unified-titlebar ? 38px : 42px;
+                background: Theme.panel;
+                border-width: 1px;
+                border-color: Theme.border;
 
-                Rectangle {
-                    width: root.sidebar-width * 1px;
-                    background: Theme.panel;
-                    Text {
-                        x: 16px;
-                        width: parent.width - 24px;
-                        height: parent.height;
-                        text: "AxSSH";
-                        color: Theme.text;
-                        font-size: 16px;
-                        font-weight: 700;
-                        vertical-alignment: center;
+                HorizontalLayout {
+                    spacing: 0px;
+
+                    Rectangle {
+                        width: root.unified-titlebar ? 76px : root.navigation-width;
+                        background: Theme.panel;
                     }
-                }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    clip: true;
-                    tabs-flick := Flickable {
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        clip: true;
+                        tabs-flick := Flickable {
                         width: parent.width;
                         height: parent.height;
                         viewport-width: max(self.width, root.workspace-tabs.length * root.tab-width * 1px);
@@ -174,55 +249,132 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
-                Rectangle {
-                    width: 42px;
-                    background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
-                    Text {
-                        width: parent.width;
-                        height: parent.height;
-                        text: "+";
-                        color: Theme.text;
-                        font-size: 20px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    add-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        accessible-role: button;
-                        accessible-label: "New session tab";
-                        clicked => { root.new-session(); }
+                    Rectangle {
+                        width: 42px;
+                        background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
+                        Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: "+";
+                            color: Theme.text;
+                            font-size: 20px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        add-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            accessible-role: button;
+                            accessible-label: "New session tab";
+                            clicked => { root.new-session(); }
+                        }
                     }
                 }
             }
-        }
 
-        HorizontalLayout {
-            spacing: 0px;
+            HorizontalLayout {
+                spacing: 0px;
 
-            Rectangle {
-                width: root.sidebar-width * 1px;
-                background: Theme.panel;
-                border-width: 1px;
-                border-color: Theme.border;
+                Rectangle {
+                    width: root.activity-bar-width;
+                    background: Theme.panel-alt;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    VerticalLayout {
+                        padding-top: 6px;
+                        padding-bottom: 6px;
+                        spacing: 4px;
+
+                        Rectangle {
+                            height: 48px;
+                            background: local-shell-touch.has-hover ? Theme.panel : transparent;
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: "$_";
+                                color: Theme.text;
+                                font-family: "JetBrains Mono";
+                                font-size: 15px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            local-shell-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "Open local shell";
+                                clicked => { root.open-local-shell(); }
+                            }
+                        }
+                        Rectangle { height: 1px; background: Theme.border; }
+                        ListView {
+                            vertical-stretch: 1;
+                            for group in root.group-icons : Rectangle {
+                                height: 48px;
+                                background: group-touch.has-hover ? Theme.panel : transparent;
+                                border-radius: Theme.radius;
+                                Text {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: group.icon;
+                                    color: Theme.text;
+                                    font-family: "JetBrains Mono";
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                group-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    accessible-role: button;
+                                    accessible-label: group.accessible-name;
+                                    clicked => {
+                                        root.sidebar-collapsed = false;
+                                        root.activate-group(group.group-name);
+                                    }
+                                }
+                            }
+                        }
+                        Rectangle { height: 1px; background: Theme.border; }
+                        Rectangle {
+                            height: 48px;
+                            background: rail-new-session.has-hover ? Theme.panel : transparent;
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: "+";
+                                color: Theme.text;
+                                font-size: 20px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            rail-new-session := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "New session tab";
+                                clicked => { root.new-session(); }
+                            }
+                        }
+                    }
+                }
+
+                if !root.sidebar-collapsed : Rectangle {
+                    width: root.sidebar-width * 1px;
+                    background: Theme.panel;
+                    border-width: 1px;
+                    border-color: Theme.border;
 
                 VerticalLayout {
                     padding: 14px;
                     spacing: 10px;
 
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Button {
-                            horizontal-stretch: 1;
-                            text: "+ New session";
-                            clicked => { root.new-session(); }
+                        Text {
+                            text: "Sessions";
+                            color: Theme.text;
+                            font-size: 14px;
+                            font-weight: 700;
                         }
-                        Button {
-                            width: 42px;
-                            text: "S";
-                            accessible-label: "Settings";
-                            clicked => { root.open-settings(); }
-                        }
-                    }
                     Rectangle { height: 1px; background: Theme.border; }
                     ListView {
                         vertical-stretch: 1;
@@ -291,54 +443,96 @@ export component AppWindow inherits Window {
                 }
             }
 
-            Rectangle {
-                horizontal-stretch: 1;
-                background: Theme.background;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.background;
 
-                if root.active-tab-kind == "terminal" : VerticalLayout {
-                    padding: 16px;
-                    spacing: 10px;
-                    HorizontalLayout {
-                        Text {
-                            horizontal-stretch: 1;
-                            text: root.active-tab-title;
-                            color: Theme.text;
-                            font-size: 18px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
-                        if root.worker-running : Button {
-                            text: root.connected ? "Disconnect" : "Cancel connection";
-                            clicked => { root.disconnect-session(); }
-                        }
+                if root.active-tab-kind == "terminal" : terminal-pane := TerminalPane {
+                    connected: root.connected;
+                    render-lines: root.terminal-render-lines;
+                    content-columns: root.terminal-content-columns;
+                    cursor-row: root.terminal-cursor-row;
+                    cursor-column: root.terminal-cursor-column;
+                    cursor-visible: root.terminal-cursor-visible;
+                    cursor-text: root.terminal-cursor-text;
+                    terminal-font-family: root.terminal-font-family;
+                    terminal-font-size: root.terminal-font-size * 1px;
+                    terminal-line-height-percent: root.terminal-line-height-percent;
+                    terminal-foreground: root.terminal-foreground;
+                    terminal-background: root.terminal-background;
+                    terminal-selection-background: root.terminal-selection-background;
+                    right-click-copy-or-paste: root.right-click-copy-or-paste;
+                    copy-selection-shortcut: root.copy-selection-shortcut;
+                    paste-shortcut: root.paste-shortcut;
+                    format-shortcut(text, alt, control, meta, shift) => {
+                        return root.format-shortcut(text, alt, control, meta, shift);
                     }
-                    terminal-pane := TerminalPane {
-                        vertical-stretch: 1;
-                        connected: root.connected;
-                        output: root.terminal-output;
-                        status: root.active-tab-status;
-                        terminal-font-family: root.terminal-font-family;
-                        terminal-font-size: root.terminal-font-size * 1px;
-                        terminal-key(text, alt, control, meta, shift) => {
-                            return root.terminal-key(text, alt, control, meta, shift);
-                        }
-                        resized(columns, rows) => { root.resize-terminal(columns, rows); }
+                    terminal-key(text, alt, control, meta, shift) => {
+                        return root.terminal-key(text, alt, control, meta, shift);
+                    }
+                    resized(columns, rows) => { root.resize-terminal(columns, rows); }
+                    scrolled(lines) => { root.scroll-terminal(lines); }
+                    selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+                        return root.terminal-selection-text(
+                            anchor-row, anchor-column, focus-row, focus-column,
+                        );
                     }
                 }
 
                 if root.active-tab-kind == "settings" : SettingsPane {
                     terminal-font-options: root.terminal-font-options;
+                    local-shell-options: root.local-shell-options;
                     terminal-font-family: root.terminal-font-family;
                     terminal-font-size: root.terminal-font-size;
+                    terminal-line-height-percent: root.terminal-line-height-percent;
+                    terminal-color-scheme: root.terminal-color-scheme;
+                    terminal-brightness-percent: root.terminal-brightness-percent;
+                    bright-bold-text: root.bright-bold-text;
+                    right-click-copy-or-paste: root.right-click-copy-or-paste;
                     scrollback-lines: root.scrollback-lines;
                     default-terminal-columns: root.default-terminal-columns;
                     default-terminal-rows: root.default-terminal-rows;
+                    local-shell: root.local-shell;
+                    local-shell-index: root.local-shell-index;
                     sidebar-width: root.sidebar-width;
                     tab-width: root.tab-width;
+                    open-settings-shortcut: root.open-settings-shortcut;
+                    toggle-sidebar-shortcut: root.toggle-sidebar-shortcut;
+                    copy-selection-shortcut: root.copy-selection-shortcut;
+                    paste-shortcut: root.paste-shortcut;
+                    default-open-settings-shortcut: root.default-open-settings-shortcut;
+                    default-toggle-sidebar-shortcut: root.default-toggle-sidebar-shortcut;
+                    default-copy-selection-shortcut: root.default-copy-selection-shortcut;
+                    default-paste-shortcut: root.default-paste-shortcut;
                     status: root.status;
-                    save(font, size, scrollback, columns, rows, sidebar, tab-size) => {
-                        root.save-settings(font, size, scrollback, columns, rows, sidebar, tab-size);
+                    save(font, size, line-height, color-scheme, brightness, bright-bold, right-click-copy, shell,
+                         scrollback, columns, rows, sidebar, tab-size, open-settings-key,
+                         toggle-sidebar-key, copy-key, paste-key) => {
+                        root.save-settings(
+                            font,
+                            size,
+                            line-height,
+                            color-scheme,
+                            brightness,
+                            bright-bold,
+                            right-click-copy,
+                            shell,
+                            scrollback,
+                            columns,
+                            rows,
+                            sidebar,
+                            tab-size,
+                            open-settings-key,
+                            toggle-sidebar-key,
+                            copy-key,
+                            paste-key,
+                        );
+                    }
+                    format-shortcut(text, alt, control, meta, shift) => {
+                        return root.format-shortcut(text, alt, control, meta, shift);
+                    }
+                    shortcut-recording-changed(recording) => {
+                        root.shortcut-recording = recording;
                     }
                     cancel => { root.cancel-settings(); }
                 }
@@ -487,4 +681,5 @@ export component AppWindow inherits Window {
             }
         }
     }
+}
 }

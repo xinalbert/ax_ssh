@@ -1,0 +1,373 @@
+//! UI-independent terminal palette resolution.
+
+use ax_ssh::config::TerminalColorScheme;
+use ax_ssh::terminal::{
+    TerminalColor, TerminalSnapshot, TerminalStyle, TerminalStyledLine, TerminalStyledRun,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RgbColor {
+    pub(super) red: u8,
+    pub(super) green: u8,
+    pub(super) blue: u8,
+}
+
+impl RgbColor {
+    const fn new(red: u8, green: u8, blue: u8) -> Self {
+        Self { red, green, blue }
+    }
+}
+
+pub(super) struct TerminalRenderSettings {
+    pub(super) color_scheme: TerminalColorScheme,
+    pub(super) brightness_percent: u16,
+    pub(super) bright_bold_text: bool,
+}
+
+pub(super) struct RenderedTerminal {
+    pub(super) lines: Vec<RenderedTerminalLine>,
+    pub(super) max_columns: usize,
+    pub(super) cursor_row: usize,
+    pub(super) cursor_column: usize,
+    pub(super) cursor_visible: bool,
+    pub(super) cursor_text: String,
+    pub(super) foreground: RgbColor,
+    pub(super) background: RgbColor,
+    pub(super) selection_background: RgbColor,
+}
+
+pub(super) struct RenderedTerminalLine {
+    pub(super) runs: Vec<RenderedTerminalRun>,
+}
+
+pub(super) struct RenderedTerminalRun {
+    pub(super) text: String,
+    pub(super) column: usize,
+    pub(super) cells: usize,
+    pub(super) foreground: RgbColor,
+    pub(super) background: RgbColor,
+    pub(super) bold: bool,
+    pub(super) italic: bool,
+    pub(super) underline: bool,
+    pub(super) strikethrough: bool,
+}
+
+pub(super) fn render_terminal(
+    snapshot: TerminalSnapshot,
+    settings: TerminalRenderSettings,
+) -> RenderedTerminal {
+    let palette = TerminalPalette::for_scheme(settings.color_scheme);
+    let foreground = adjust_contrast(
+        palette.foreground,
+        palette.background,
+        settings.brightness_percent,
+    );
+    let lines = snapshot
+        .lines
+        .into_iter()
+        .map(|line| render_line(line, &palette, &settings))
+        .collect();
+    RenderedTerminal {
+        lines,
+        max_columns: snapshot.max_columns,
+        cursor_row: snapshot.cursor_row,
+        cursor_column: snapshot.cursor_column,
+        cursor_visible: snapshot.cursor_visible,
+        cursor_text: snapshot.cursor_text,
+        foreground,
+        background: palette.background,
+        selection_background: palette.selection_background,
+    }
+}
+
+fn render_line(
+    line: TerminalStyledLine,
+    palette: &TerminalPalette,
+    settings: &TerminalRenderSettings,
+) -> RenderedTerminalLine {
+    let runs = line
+        .runs
+        .into_iter()
+        .map(|run| render_run(run, palette, settings))
+        .collect();
+    RenderedTerminalLine { runs }
+}
+
+fn render_run(
+    run: TerminalStyledRun,
+    palette: &TerminalPalette,
+    settings: &TerminalRenderSettings,
+) -> RenderedTerminalRun {
+    let TerminalStyledRun {
+        text,
+        column,
+        cells,
+        style,
+    } = run;
+    let (foreground, background) = resolve_style_colors(style, palette, settings);
+    RenderedTerminalRun {
+        text,
+        column,
+        cells,
+        foreground,
+        background,
+        bold: style.bold,
+        italic: style.italic,
+        underline: style.underline,
+        strikethrough: style.strikethrough,
+    }
+}
+
+fn resolve_style_colors(
+    style: TerminalStyle,
+    palette: &TerminalPalette,
+    settings: &TerminalRenderSettings,
+) -> (RgbColor, RgbColor) {
+    let foreground_color = if settings.bright_bold_text && style.bold {
+        match style.foreground {
+            TerminalColor::Indexed(index @ 0..=7) => TerminalColor::Indexed(index + 8),
+            color => color,
+        }
+    } else {
+        style.foreground
+    };
+    let mut foreground = resolve_color(foreground_color, palette.foreground, palette);
+    let mut background = resolve_color(style.background, palette.background, palette);
+    if style.inverse {
+        std::mem::swap(&mut foreground, &mut background);
+    }
+    foreground = adjust_contrast(foreground, palette.background, settings.brightness_percent);
+    if background != palette.background {
+        background = adjust_contrast(background, palette.background, settings.brightness_percent);
+    }
+    if style.dim {
+        foreground = blend(foreground, background, 55);
+    }
+    (foreground, background)
+}
+
+fn resolve_color(color: TerminalColor, default: RgbColor, palette: &TerminalPalette) -> RgbColor {
+    match color {
+        TerminalColor::Default => default,
+        TerminalColor::Indexed(index) => indexed_color(index, palette),
+        TerminalColor::Rgb { red, green, blue } => RgbColor::new(red, green, blue),
+    }
+}
+
+fn indexed_color(index: u8, palette: &TerminalPalette) -> RgbColor {
+    match index {
+        0..=15 => palette.ansi[usize::from(index)],
+        16..=231 => {
+            const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+            let value = index - 16;
+            RgbColor::new(
+                LEVELS[usize::from(value / 36)],
+                LEVELS[usize::from((value % 36) / 6)],
+                LEVELS[usize::from(value % 6)],
+            )
+        }
+        232..=255 => {
+            let gray = 8 + (index - 232) * 10;
+            RgbColor::new(gray, gray, gray)
+        }
+    }
+}
+
+fn adjust_contrast(color: RgbColor, background: RgbColor, percent: u16) -> RgbColor {
+    let percent = percent.clamp(60, 140);
+    if percent <= 100 {
+        return blend(background, color, percent as u8);
+    }
+    let target = if relative_luminance(background) > 127 {
+        RgbColor::new(0, 0, 0)
+    } else {
+        RgbColor::new(255, 255, 255)
+    };
+    blend(color, target, ((percent - 100) * 100 / 40) as u8)
+}
+
+fn blend(from: RgbColor, to: RgbColor, to_percent: u8) -> RgbColor {
+    let to_weight = u16::from(to_percent.min(100));
+    let from_weight = 100 - to_weight;
+    let channel = |from: u8, to: u8| {
+        ((u16::from(from) * from_weight + u16::from(to) * to_weight) / 100) as u8
+    };
+    RgbColor::new(
+        channel(from.red, to.red),
+        channel(from.green, to.green),
+        channel(from.blue, to.blue),
+    )
+}
+
+fn relative_luminance(color: RgbColor) -> u16 {
+    (u16::from(color.red) * 54 + u16::from(color.green) * 183 + u16::from(color.blue) * 19) / 256
+}
+
+struct TerminalPalette {
+    foreground: RgbColor,
+    background: RgbColor,
+    selection_background: RgbColor,
+    ansi: [RgbColor; 16],
+}
+
+impl TerminalPalette {
+    fn for_scheme(scheme: TerminalColorScheme) -> Self {
+        match scheme {
+            TerminalColorScheme::Dark => Self {
+                foreground: RgbColor::new(204, 204, 204),
+                background: RgbColor::new(30, 30, 30),
+                selection_background: RgbColor::new(38, 79, 120),
+                ansi: [
+                    RgbColor::new(0, 0, 0),
+                    RgbColor::new(205, 49, 49),
+                    RgbColor::new(13, 188, 121),
+                    RgbColor::new(229, 229, 16),
+                    RgbColor::new(36, 114, 200),
+                    RgbColor::new(188, 63, 188),
+                    RgbColor::new(17, 168, 205),
+                    RgbColor::new(229, 229, 229),
+                    RgbColor::new(102, 102, 102),
+                    RgbColor::new(241, 76, 76),
+                    RgbColor::new(35, 209, 139),
+                    RgbColor::new(245, 245, 67),
+                    RgbColor::new(59, 142, 234),
+                    RgbColor::new(214, 112, 214),
+                    RgbColor::new(41, 184, 219),
+                    RgbColor::new(255, 255, 255),
+                ],
+            },
+            TerminalColorScheme::Light => Self {
+                foreground: RgbColor::new(51, 51, 51),
+                background: RgbColor::new(255, 255, 255),
+                selection_background: RgbColor::new(173, 214, 255),
+                ansi: [
+                    RgbColor::new(0, 0, 0),
+                    RgbColor::new(205, 49, 49),
+                    RgbColor::new(0, 128, 0),
+                    RgbColor::new(148, 108, 0),
+                    RgbColor::new(4, 81, 165),
+                    RgbColor::new(175, 0, 219),
+                    RgbColor::new(5, 139, 164),
+                    RgbColor::new(85, 85, 85),
+                    RgbColor::new(102, 102, 102),
+                    RgbColor::new(241, 76, 76),
+                    RgbColor::new(20, 164, 20),
+                    RgbColor::new(181, 137, 0),
+                    RgbColor::new(0, 122, 204),
+                    RgbColor::new(188, 63, 188),
+                    RgbColor::new(49, 154, 188),
+                    RgbColor::new(0, 0, 0),
+                ],
+            },
+            TerminalColorScheme::SolarizedDark => Self {
+                foreground: RgbColor::new(131, 148, 150),
+                background: RgbColor::new(0, 43, 54),
+                selection_background: RgbColor::new(7, 54, 66),
+                ansi: [
+                    RgbColor::new(7, 54, 66),
+                    RgbColor::new(220, 50, 47),
+                    RgbColor::new(133, 153, 0),
+                    RgbColor::new(181, 137, 0),
+                    RgbColor::new(38, 139, 210),
+                    RgbColor::new(211, 54, 130),
+                    RgbColor::new(42, 161, 152),
+                    RgbColor::new(238, 232, 213),
+                    RgbColor::new(0, 43, 54),
+                    RgbColor::new(203, 75, 22),
+                    RgbColor::new(88, 110, 117),
+                    RgbColor::new(101, 123, 131),
+                    RgbColor::new(131, 148, 150),
+                    RgbColor::new(108, 113, 196),
+                    RgbColor::new(147, 161, 161),
+                    RgbColor::new(253, 246, 227),
+                ],
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(style: TerminalStyle) -> TerminalSnapshot {
+        TerminalSnapshot {
+            text: "x".into(),
+            lines: vec![TerminalStyledLine {
+                runs: vec![TerminalStyledRun {
+                    text: "x".into(),
+                    column: 0,
+                    cells: 1,
+                    style,
+                }],
+            }],
+            max_columns: 1,
+            cursor_row: 0,
+            cursor_column: 1,
+            cursor_visible: true,
+            cursor_text: " ".into(),
+        }
+    }
+
+    fn settings() -> TerminalRenderSettings {
+        TerminalRenderSettings {
+            color_scheme: TerminalColorScheme::Dark,
+            brightness_percent: 100,
+            bright_bold_text: true,
+        }
+    }
+
+    #[test]
+    fn bold_standard_colors_use_bright_palette_when_enabled() {
+        let rendered = render_terminal(
+            snapshot(TerminalStyle {
+                foreground: TerminalColor::Indexed(1),
+                bold: true,
+                ..TerminalStyle::default()
+            }),
+            settings(),
+        );
+
+        assert_eq!(
+            rendered.lines[0].runs[0].foreground,
+            RgbColor::new(241, 76, 76)
+        );
+    }
+
+    #[test]
+    fn resolves_256_color_cube_and_inverse_background() {
+        let rendered = render_terminal(
+            snapshot(TerminalStyle {
+                foreground: TerminalColor::Indexed(208),
+                background: TerminalColor::Indexed(21),
+                inverse: true,
+                ..TerminalStyle::default()
+            }),
+            settings(),
+        );
+
+        assert_eq!(
+            rendered.lines[0].runs[0].foreground,
+            RgbColor::new(0, 0, 255)
+        );
+        assert_eq!(
+            rendered.lines[0].runs[0].background,
+            RgbColor::new(255, 135, 0)
+        );
+    }
+
+    #[test]
+    fn brightness_moves_colors_toward_or_away_from_background() {
+        let palette = TerminalPalette::for_scheme(TerminalColorScheme::Dark);
+        let color = RgbColor::new(100, 120, 140);
+
+        assert!(
+            relative_luminance(adjust_contrast(color, palette.background, 60))
+                < relative_luminance(color)
+        );
+        assert!(
+            relative_luminance(adjust_contrast(color, palette.background, 140))
+                > relative_luminance(color)
+        );
+    }
+}

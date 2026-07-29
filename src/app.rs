@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use slint::platform::Key;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -18,60 +18,105 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use ax_ssh::config::{
-    AppSettings, AuthMethod, ConfigStore, SessionProfile, SessionStore, normalize_group_name,
+    AppSettings, AuthMethod, ConfigStore, SessionProfile, SessionStore, ShortcutSettings,
+    TerminalColorScheme, normalize_group_name,
 };
+use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};
-use ax_ssh::terminal::{TerminalKey, TerminalModifiers, encode_key as encode_terminal_key};
+use ax_ssh::terminal::{
+    TerminalKey, TerminalModifiers, TerminalSnapshot, encode_key as encode_terminal_key,
+};
 
 use self::credential_tasks::{
     delete_password as delete_stored_password, load_password as load_stored_password,
     save_password as save_stored_password,
 };
-use self::session_groups::{group_options, profile_endpoint, session_groups};
+use self::session_groups::{group_icon, group_options, profile_endpoint, session_groups};
 use self::state::{
     ActiveTabSnapshot, AppState, ConnectionStart, PendingAuth, PendingHostKey, PendingProbe,
-    prepare_authentication_retry, prepare_host_key_retry, retire_session_attempt,
-    session_attempt_is_active, set_credential_marker,
+    TerminalTabState, TerminalWorker, prepare_authentication_retry, prepare_host_key_retry,
+    retire_session_attempt, session_attempt_is_active, set_credential_marker,
+};
+use self::terminal_render::{
+    RenderedTerminalLine, RenderedTerminalRun, RgbColor, TerminalRenderSettings, render_terminal,
 };
 
 mod credential_tasks;
+#[cfg(target_os = "macos")]
+mod macos_window;
 mod session_groups;
 mod state;
+mod terminal_render;
 
 slint::include_modules!();
 
 pub fn run() -> Result<()> {
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
-    let sessions = config.load().context("failed to load session profiles")?;
+    let mut sessions = config.load().context("failed to load session profiles")?;
+    if sessions
+        .settings
+        .terminal
+        .merge_known_shells(discover_shells())
+        && let Err(error) = config.save(&sessions)
+    {
+        warn!(%error, "failed to persist newly discovered local shells");
+    }
     let runtime = Runtime::new().context("failed to start Tokio runtime")?;
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let ui = AppWindow::new().context("failed to create Slint window")?;
 
-    let (rows, groups, settings) = {
+    let (rows, group_icons, groups, settings) = {
         let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
         (
             session_rows(&app.sessions, &app.expanded_groups),
+            group_icon_rows(&app.sessions),
             group_option_rows(&app.sessions),
             app.sessions.settings.clone(),
         )
     };
     ui.set_sessions(ModelRc::new(VecModel::from(rows)));
+    ui.set_group_icons(ModelRc::new(VecModel::from(group_icons)));
     ui.set_group_options(ModelRc::new(VecModel::from(groups)));
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
+        Vec::<TerminalRenderLine>::new(),
+    )));
     ui.set_terminal_font_options(ModelRc::new(VecModel::from(vec![
         SharedString::from("JetBrains Mono"),
         SharedString::from("monospace"),
     ])));
+    ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
+    let default_shortcuts = ShortcutSettings::default();
+    ui.set_default_open_settings_shortcut(default_shortcuts.open_settings.into());
+    ui.set_default_toggle_sidebar_shortcut(default_shortcuts.toggle_sidebar.into());
+    ui.set_default_copy_selection_shortcut(default_shortcuts.copy_selection.into());
+    ui.set_default_paste_shortcut(default_shortcuts.paste.into());
+    ui.set_apple_platform(cfg!(target_os = "macos"));
     apply_settings_to_component(&ui, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default());
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
     ui.set_status("Ready".into());
+    ui.set_unified_titlebar(false);
 
     wire_callbacks(&ui, state.clone(), runtime.handle().clone());
     load_private_key_options(runtime.handle(), ui.as_weak());
+    #[cfg(target_os = "macos")]
+    {
+        ui.show().context("failed to create macOS window")?;
+        let ui_for_window = ui.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(100), move || {
+            let Some(ui) = ui_for_window.upgrade() else {
+                return;
+            };
+            match macos_window::configure(ui.window()) {
+                Ok(()) => ui.set_unified_titlebar(true),
+                Err(error) => warn!(%error, "falling back to the standard macOS title bar"),
+            }
+        });
+    }
     info!("AxSSH UI initialized");
     let ui_result = ui.run().context("Slint event loop failed");
 
@@ -92,7 +137,7 @@ pub fn run() -> Result<()> {
     }
     for worker in workers {
         if let Err(error) = runtime.block_on(worker.shutdown()) {
-            warn!(%error, "failed to shut down SSH worker cleanly");
+            warn!(%error, "failed to shut down terminal worker cleanly");
         }
     }
 
@@ -142,7 +187,38 @@ fn group_option_rows(sessions: &SessionStore) -> Vec<SharedString> {
         .collect()
 }
 
+fn group_icon_rows(sessions: &SessionStore) -> Vec<SessionGroupIconRow> {
+    session_groups(sessions)
+        .into_iter()
+        .map(|group| {
+            let display_name = if group.name.is_empty() {
+                "Ungrouped".to_owned()
+            } else {
+                group.name.clone()
+            };
+            SessionGroupIconRow {
+                group_name: group.name.clone().into(),
+                icon: group_icon(&group.name).into(),
+                accessible_name: format!("Open {display_name} group").into(),
+            }
+        })
+        .collect()
+}
+
+fn shell_option_rows(settings: &AppSettings) -> Vec<SharedString> {
+    settings
+        .terminal
+        .known_shells
+        .iter()
+        .cloned()
+        .map(SharedString::from)
+        .collect()
+}
+
 fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
+    ui.on_format_shortcut(move |text, alt, control, meta, shift| {
+        format_shortcut_event(text.as_str(), alt, control, meta, shift).into()
+    });
     wire_workspace_tabs(ui, state.clone(), runtime.clone());
     wire_session_editor(ui, state.clone(), runtime.clone());
     wire_connection_request(ui, state.clone(), runtime.clone());
@@ -181,6 +257,35 @@ fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Han
             }
         }
         refresh_workspace(&ui_for_new, &state_for_new);
+    });
+
+    let ui_for_local = ui.as_weak();
+    let state_for_local = state.clone();
+    let runtime_for_local = runtime.clone();
+    ui.on_open_local_shell(move || {
+        if let Err(error) = start_local_shell(
+            &runtime_for_local,
+            state_for_local.clone(),
+            ui_for_local.clone(),
+        ) {
+            set_status(&ui_for_local, &format!("Cannot open local shell: {error}"));
+        }
+    });
+
+    let ui_for_group = ui.as_weak();
+    let state_for_group = state.clone();
+    ui.on_activate_group(move |group_name| {
+        let group_name = normalize_group_name(group_name.as_str());
+        match state_for_group.lock() {
+            Ok(mut app) => {
+                app.expanded_groups.insert(group_name);
+            }
+            Err(_) => {
+                set_status(&ui_for_group, "Cannot update group state");
+                return;
+            }
+        }
+        refresh_session_models(&ui_for_group, &state_for_group);
     });
 
     let ui_for_activate = ui.as_weak();
@@ -260,11 +365,39 @@ fn close_workspace_tab(
         runtime.spawn(async move {
             if let Err(error) = worker.shutdown().await {
                 warn!(tab_id = %tab_id, %error, "failed to shut down closed tab worker");
-                set_status(&ui, &format!("Cannot close SSH worker cleanly: {error}"));
+                set_status(
+                    &ui,
+                    &format!("Cannot close terminal worker cleanly: {error}"),
+                );
             }
         });
     }
     refresh_workspace(ui, state);
+}
+
+fn start_local_shell(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) -> Result<()> {
+    let (tab_id, events) = {
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        let shell = app.sessions.settings.terminal.local_shell.clone();
+        let columns = u32::from(app.sessions.settings.terminal.default_columns);
+        let rows = u32::from(app.sessions.settings.terminal.default_rows);
+        let tab_id = app.open_local_shell_tab();
+        let (worker, events) = LocalShellHandle::spawn(shell, columns, rows);
+        let terminal = app
+            .terminal_mut(tab_id)
+            .context("local terminal tab disappeared while starting worker")?;
+        terminal.worker = Some(TerminalWorker::Local(worker));
+        (tab_id, events)
+    };
+    refresh_workspace(&ui, &state);
+    spawn_local_shell_monitor(runtime, state, ui, tab_id, events);
+    Ok(())
 }
 
 fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
@@ -774,8 +907,10 @@ fn start_session_worker(
         let terminal = app
             .terminal_mut(tab_id)
             .context("terminal tab disappeared while starting worker")?;
-        terminal.attempt_id = Some(attempt_id);
-        terminal.worker = Some(worker);
+        if !terminal.set_ssh_attempt(Some(attempt_id)) {
+            anyhow::bail!("terminal tab is not an SSH terminal");
+        }
+        terminal.worker = Some(TerminalWorker::Ssh(worker));
         terminal.worker_running = true;
         terminal.connected = false;
         terminal.status = format!("Connecting to {}...", profile_endpoint(&profile));
@@ -872,10 +1007,10 @@ fn wire_authentication(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Han
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
             .and_then(|app| {
                 app.active_terminal()
-                    .context("no active SSH terminal")?
+                    .context("no active terminal")?
                     .worker
                     .as_ref()
-                    .context("active terminal has no SSH worker")?
+                    .context("active terminal has no worker")?
                     .request_disconnect()
             });
         match result {
@@ -892,47 +1027,57 @@ fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
     ui.on_terminal_key(move |text, alt, control, meta, shift| {
-        if control && shift && text.as_str().eq_ignore_ascii_case("c") {
-            return false;
-        }
-        let key = terminal_key_from_slint(text.as_str());
-        let modifiers = TerminalModifiers {
-            alt,
-            control,
-            meta,
-            shift,
-        };
-        let Some(data) = encode_terminal_key(&key, modifiers) else {
-            return false;
-        };
+        let modifiers = normalize_slint_modifiers(alt, control, meta, shift);
+        let key = terminal_key_from_slint(text.as_str(), modifiers);
         let result = state_for_key
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-            .and_then(|app| {
-                app.active_terminal()
-                    .context("no active SSH terminal")?
-                    .worker
-                    .as_ref()
-                    .context("active terminal has no SSH worker")?
-                    .request_send(data)
+            .and_then(|mut app| {
+                let application_cursor = app
+                    .active_terminal()
+                    .context("no active terminal")?
+                    .terminal
+                    .application_cursor();
+                let Some(data) = encode_terminal_key(&key, modifiers, application_cursor) else {
+                    return Ok((false, None));
+                };
+                let viewport_changed = {
+                    let terminal = app.active_terminal_mut().context("no active terminal")?;
+                    let viewport_changed = terminal.terminal.scroll_to_bottom();
+                    terminal
+                        .worker
+                        .as_ref()
+                        .context("active terminal has no worker")?
+                        .request_send(data)?;
+                    viewport_changed
+                };
+                Ok((true, viewport_changed.then(|| app.active_snapshot())))
             });
-        if let Err(error) = result {
-            set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
+        match result {
+            Ok((handled, Some(snapshot))) => {
+                dispatch_active_snapshot(&ui_for_key, snapshot);
+                handled
+            }
+            Ok((handled, None)) => handled,
+            Err(error) => {
+                set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
+                true
+            }
         }
-        true
     });
 
     let ui_for_resize = ui.as_weak();
+    let state_for_resize = state.clone();
     ui.on_resize_terminal(move |columns, rows| {
-        let result = state
+        let result = state_for_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
             .and_then(|app| {
                 app.active_terminal()
-                    .context("no active SSH terminal")?
+                    .context("no active terminal")?
                     .worker
                     .as_ref()
-                    .context("active terminal has no SSH worker")?
+                    .context("active terminal has no worker")?
                     .request_resize(columns.max(1) as u32, rows.max(1) as u32)
             });
         if let Err(error) = result {
@@ -940,9 +1085,39 @@ fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
             set_status(&ui_for_resize, &format!("Cannot resize terminal: {error}"));
         }
     });
+
+    let ui_for_scroll = ui.as_weak();
+    let state_for_scroll = state.clone();
+    ui.on_scroll_terminal(move |lines| {
+        let snapshot = state_for_scroll.lock().ok().and_then(|mut app| {
+            let changed = app.active_terminal_mut()?.terminal.scroll(lines);
+            changed.then(|| app.active_snapshot())
+        });
+        if let Some(snapshot) = snapshot {
+            dispatch_active_snapshot(&ui_for_scroll, snapshot);
+        }
+    });
+
+    ui.on_terminal_selection_text(move |anchor_row, anchor_column, focus_row, focus_column| {
+        state
+            .lock()
+            .ok()
+            .and_then(|app| {
+                app.active_terminal().map(|terminal| {
+                    terminal.terminal.selection_text(
+                        anchor_row.max(0) as usize,
+                        anchor_column.max(0) as usize,
+                        focus_row.max(0) as usize,
+                        focus_column.max(0) as usize,
+                    )
+                })
+            })
+            .unwrap_or_default()
+            .into()
+    });
 }
 
-fn terminal_key_from_slint(text: &str) -> TerminalKey {
+fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) -> TerminalKey {
     let special = [
         (Key::Return, TerminalKey::Return),
         (Key::Backspace, TerminalKey::Backspace),
@@ -965,12 +1140,149 @@ fn terminal_key_from_slint(text: &str) -> TerminalKey {
         .find_map(|(slint_key, terminal_key)| {
             matches_slint_key(text, slint_key).then_some(terminal_key)
         })
-        .unwrap_or_else(|| TerminalKey::Text(text.to_owned()))
+        .unwrap_or_else(|| {
+            let text = if text == "-"
+                && modifiers.shift
+                && !modifiers.alt
+                && !modifiers.control
+                && !modifiers.meta
+            {
+                "_"
+            } else {
+                text
+            };
+            TerminalKey::Text(text.to_owned())
+        })
 }
 
 fn matches_slint_key(text: &str, key: Key) -> bool {
     let mut characters = text.chars();
     characters.next() == Some(char::from(key)) && characters.next().is_none()
+}
+
+fn format_shortcut_event(text: &str, alt: bool, control: bool, meta: bool, shift: bool) -> String {
+    let modifiers = normalize_slint_modifiers(alt, control, meta, shift);
+    if !modifiers.alt && !modifiers.control && !modifiers.meta && !modifiers.shift {
+        return String::new();
+    }
+    let Some(key) = shortcut_key_name(text, modifiers.control) else {
+        return String::new();
+    };
+    let mut parts = Vec::with_capacity(5);
+    if modifiers.meta {
+        parts.push(if cfg!(target_os = "macos") {
+            "Cmd".to_owned()
+        } else {
+            "Meta".to_owned()
+        });
+    }
+    if modifiers.control {
+        parts.push("Ctrl".to_owned());
+    }
+    if modifiers.alt {
+        parts.push("Alt".to_owned());
+    }
+    if modifiers.shift {
+        parts.push("Shift".to_owned());
+    }
+    parts.push(key);
+    parts.join("+")
+}
+
+fn normalize_slint_modifiers(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+) -> TerminalModifiers {
+    normalize_slint_modifiers_for_platform(alt, control, meta, shift, cfg!(target_os = "macos"))
+}
+
+fn normalize_slint_modifiers_for_platform(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+    apple_platform: bool,
+) -> TerminalModifiers {
+    TerminalModifiers {
+        alt,
+        control: if apple_platform { meta } else { control },
+        meta: if apple_platform { control } else { meta },
+        shift,
+    }
+}
+
+fn shortcut_key_name(text: &str, control: bool) -> Option<String> {
+    let modifier_keys = [
+        Key::Alt,
+        Key::AltGr,
+        Key::Control,
+        Key::ControlR,
+        Key::Meta,
+        Key::MetaR,
+        Key::Shift,
+        Key::ShiftR,
+    ];
+    if modifier_keys
+        .into_iter()
+        .any(|key| matches_slint_key(text, key))
+    {
+        return None;
+    }
+    let special_keys = [
+        (Key::Backspace, "Backspace"),
+        (Key::Tab, "Tab"),
+        (Key::Backtab, "Backtab"),
+        (Key::Return, "Enter"),
+        (Key::Escape, "Escape"),
+        (Key::Delete, "Delete"),
+        (Key::Space, "Space"),
+        (Key::UpArrow, "ArrowUp"),
+        (Key::DownArrow, "ArrowDown"),
+        (Key::LeftArrow, "ArrowLeft"),
+        (Key::RightArrow, "ArrowRight"),
+        (Key::Insert, "Insert"),
+        (Key::Home, "Home"),
+        (Key::End, "End"),
+        (Key::PageUp, "PageUp"),
+        (Key::PageDown, "PageDown"),
+        (Key::F1, "F1"),
+        (Key::F2, "F2"),
+        (Key::F3, "F3"),
+        (Key::F4, "F4"),
+        (Key::F5, "F5"),
+        (Key::F6, "F6"),
+        (Key::F7, "F7"),
+        (Key::F8, "F8"),
+        (Key::F9, "F9"),
+        (Key::F10, "F10"),
+        (Key::F11, "F11"),
+        (Key::F12, "F12"),
+    ];
+    if let Some((_, label)) = special_keys
+        .into_iter()
+        .find(|(key, _)| matches_slint_key(text, *key))
+    {
+        return Some(label.to_owned());
+    }
+
+    let mut characters = text.chars();
+    let character = characters.next()?;
+    if characters.next().is_some() {
+        return None;
+    }
+    if control && ('\u{0001}'..='\u{000f}').contains(&character) {
+        return Some(((character as u8 + b'A' - 1) as char).to_string());
+    }
+    if character.is_control() {
+        return None;
+    }
+    Some(match character {
+        '+' => "Plus".to_owned(),
+        character if character.is_ascii_alphabetic() => character.to_ascii_uppercase().to_string(),
+        character => character.to_string(),
+    })
 }
 
 fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
@@ -996,19 +1308,57 @@ fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
     ui.on_save_settings(
         move |font_family,
               font_size,
+              line_height_percent,
+              color_scheme,
+              brightness_percent,
+              bright_bold_text,
+              right_click_copy_or_paste,
+              local_shell,
               scrollback_lines,
               default_columns,
               default_rows,
               sidebar_width,
-              tab_width| {
+              tab_width,
+              open_settings_shortcut,
+              toggle_sidebar_shortcut,
+              copy_selection_shortcut,
+              paste_shortcut| {
+            let shortcuts = ShortcutSettings {
+                open_settings: open_settings_shortcut.as_str().to_owned(),
+                toggle_sidebar: toggle_sidebar_shortcut.as_str().to_owned(),
+                copy_selection: copy_selection_shortcut.as_str().to_owned(),
+                paste: paste_shortcut.as_str().to_owned(),
+            };
+            if let Err(error) = shortcuts.validate() {
+                set_status(&ui_for_save, &format!("Cannot save shortcuts: {error}"));
+                return;
+            }
+            let known_shells = match state.lock() {
+                Ok(app) => app.sessions.settings.terminal.known_shells.clone(),
+                Err(_) => {
+                    set_status(&ui_for_save, "Cannot read local shell settings");
+                    return;
+                }
+            };
             let settings = AppSettings::normalized(
                 font_family.as_str(),
                 font_size,
+                line_height_percent,
+                color_scheme.as_str(),
+                brightness_percent,
+                bright_bold_text,
+                right_click_copy_or_paste,
                 scrollback_lines,
                 default_columns,
                 default_rows,
+                local_shell.as_str(),
+                &known_shells,
                 sidebar_width,
                 tab_width,
+                &shortcuts.open_settings,
+                &shortcuts.toggle_sidebar,
+                &shortcuts.copy_selection,
+                &shortcuts.paste,
             );
             let state = state.clone();
             let ui = ui_for_save.clone();
@@ -1248,6 +1598,106 @@ fn spawn_session_monitor(
     });
 }
 
+fn spawn_local_shell_monitor(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    mut events: mpsc::Receiver<LocalShellEvent>,
+) {
+    runtime.spawn(async move {
+        let mut terminal_event = false;
+        while let Some(event) = events.recv().await {
+            match event {
+                LocalShellEvent::Started { shell } => {
+                    let Some(snapshot) = mutate_local_terminal(&state, tab_id, |terminal| {
+                        terminal.connected = true;
+                        terminal.worker_running = true;
+                        terminal.status = format!("Local shell: {shell}");
+                    }) else {
+                        continue;
+                    };
+                    info!(tab_id = %tab_id, shell = %shell, "local shell started");
+                    if let Some(snapshot) = snapshot {
+                        dispatch_active_snapshot(&ui, snapshot);
+                    }
+                    refresh_workspace(&ui, &state);
+                }
+                LocalShellEvent::Output(data) => {
+                    if let Some(Some(snapshot)) =
+                        mutate_local_terminal(&state, tab_id, |terminal| {
+                            terminal.terminal.process(&data);
+                        })
+                    {
+                        dispatch_active_snapshot(&ui, snapshot);
+                    }
+                }
+                LocalShellEvent::Resized { columns, rows } => {
+                    if let Some(Some(snapshot)) =
+                        mutate_local_terminal(&state, tab_id, |terminal| {
+                            terminal.terminal.resize(columns as usize, rows as usize);
+                        })
+                    {
+                        dispatch_active_snapshot(&ui, snapshot);
+                    }
+                }
+                LocalShellEvent::Exited { status } => {
+                    terminal_event = true;
+                    if finish_local_terminal(
+                        &state,
+                        tab_id,
+                        &format!("Local shell exited: {status}"),
+                    ) {
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+                LocalShellEvent::Failed(message) => {
+                    terminal_event = true;
+                    if finish_local_terminal(
+                        &state,
+                        tab_id,
+                        &format!("Local shell failed: {message}"),
+                    ) {
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+            }
+        }
+        if !terminal_event && finish_local_terminal(&state, tab_id, "Local shell worker stopped") {
+            refresh_workspace(&ui, &state);
+        }
+        debug!(tab_id = %tab_id, "local shell event monitor stopped");
+    });
+}
+
+fn mutate_local_terminal(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    action: impl FnOnce(&mut TerminalTabState),
+) -> Option<Option<ActiveTabSnapshot>> {
+    let mut app = state.lock().ok()?;
+    if !app.terminal(tab_id).is_some_and(TerminalTabState::is_local) {
+        return None;
+    }
+    action(app.terminal_mut(tab_id)?);
+    Some((app.active_tab_id() == Some(tab_id)).then(|| app.active_snapshot()))
+}
+
+fn finish_local_terminal(state: &Arc<Mutex<AppState>>, tab_id: Uuid, status: &str) -> bool {
+    match state.lock() {
+        Ok(mut app) if app.terminal(tab_id).is_some_and(TerminalTabState::is_local) => {
+            if let Some(terminal) = app.terminal_mut(tab_id) {
+                terminal.worker = None;
+                terminal.connected = false;
+                terminal.worker_running = false;
+                terminal.status = status.to_owned();
+            }
+            true
+        }
+        Ok(_) | Err(_) => false,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn persist_authenticated_credential(
     runtime: &Handle,
@@ -1305,12 +1755,13 @@ fn mutate_terminal_attempt(
     tab_id: Uuid,
     profile_id: Uuid,
     attempt_id: Uuid,
-    action: impl FnOnce(&mut state::TerminalTabState),
+    action: impl FnOnce(&mut TerminalTabState),
 ) -> Option<Option<ActiveTabSnapshot>> {
     let mut app = state.lock().ok()?;
-    let current = app.terminal(tab_id).is_some_and(|terminal| {
-        terminal.profile_id == profile_id && terminal.attempt_id == Some(attempt_id)
-    });
+    let current = app
+        .terminal(tab_id)
+        .and_then(TerminalTabState::ssh_route)
+        .is_some_and(|route| route == (profile_id, Some(attempt_id)));
     if !current {
         return None;
     }
@@ -1319,9 +1770,10 @@ fn mutate_terminal_attempt(
 }
 
 fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    let (rows, groups) = match state.lock() {
+    let (rows, group_icons, groups) = match state.lock() {
         Ok(app) => (
             session_rows(&app.sessions, &app.expanded_groups),
+            group_icon_rows(&app.sessions),
             group_option_rows(&app.sessions),
         ),
         Err(_) => {
@@ -1331,6 +1783,7 @@ fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppStat
     };
     dispatch_ui(ui, move |ui| {
         ui.set_sessions(ModelRc::new(VecModel::from(rows)));
+        ui.set_group_icons(ModelRc::new(VecModel::from(group_icons)));
         ui.set_group_options(ModelRc::new(VecModel::from(groups)));
     });
 }
@@ -1400,7 +1853,18 @@ fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot) {
     ui.set_active_tab_kind(snapshot.kind.into());
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());
-    ui.set_terminal_output(snapshot.output.into());
+    let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
+    let rendered = render_terminal(
+        terminal,
+        TerminalRenderSettings {
+            color_scheme: TerminalColorScheme::from_setting(
+                ui.get_terminal_color_scheme().as_str(),
+            ),
+            brightness_percent: ui.get_terminal_brightness_percent().clamp(60, 140) as u16,
+            bright_bold_text: ui.get_bright_bold_text(),
+        },
+    );
+    apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
 }
@@ -1412,11 +1876,94 @@ fn apply_settings(ui: &slint::Weak<AppWindow>, settings: AppSettings) {
 fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
     ui.set_terminal_font_family(settings.appearance.terminal_font_family.clone().into());
     ui.set_terminal_font_size(i32::from(settings.appearance.terminal_font_size));
+    ui.set_terminal_line_height_percent(i32::from(
+        settings.appearance.terminal_line_height_percent,
+    ));
+    ui.set_terminal_color_scheme(
+        settings
+            .appearance
+            .terminal_color_scheme
+            .as_setting()
+            .into(),
+    );
+    ui.set_terminal_brightness_percent(i32::from(settings.appearance.terminal_brightness_percent));
+    ui.set_bright_bold_text(settings.appearance.bright_bold_text);
+    ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
     ui.set_scrollback_lines(settings.terminal.scrollback_lines as i32);
     ui.set_default_terminal_columns(i32::from(settings.terminal.default_columns));
     ui.set_default_terminal_rows(i32::from(settings.terminal.default_rows));
+    ui.set_local_shell(settings.terminal.local_shell.clone().into());
+    let local_shell_index = settings
+        .terminal
+        .known_shells
+        .iter()
+        .position(|shell| shell.eq_ignore_ascii_case(&settings.terminal.local_shell))
+        .unwrap_or(0);
+    ui.set_local_shell_index(local_shell_index.min(i32::MAX as usize) as i32);
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
+    ui.set_open_settings_shortcut(settings.shortcuts.open_settings.clone().into());
+    ui.set_toggle_sidebar_shortcut(settings.shortcuts.toggle_sidebar.clone().into());
+    ui.set_copy_selection_shortcut(settings.shortcuts.copy_selection.clone().into());
+    ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
+}
+
+fn empty_terminal_snapshot() -> TerminalSnapshot {
+    TerminalSnapshot {
+        text: String::new(),
+        lines: vec![Default::default()],
+        max_columns: 0,
+        cursor_row: 0,
+        cursor_column: 0,
+        cursor_visible: false,
+        cursor_text: " ".to_owned(),
+    }
+}
+
+fn apply_rendered_terminal(ui: &AppWindow, rendered: terminal_render::RenderedTerminal) {
+    ui.set_terminal_content_columns(rendered.max_columns.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_row(rendered.cursor_row.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_column(rendered.cursor_column.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_visible(rendered.cursor_visible);
+    ui.set_terminal_cursor_text(rendered.cursor_text.into());
+    ui.set_terminal_foreground(to_slint_color(rendered.foreground));
+    ui.set_terminal_background(to_slint_color(rendered.background));
+    ui.set_terminal_selection_background(to_slint_color(rendered.selection_background));
+    let lines = rendered
+        .lines
+        .into_iter()
+        .map(terminal_render_line)
+        .collect::<Vec<_>>();
+    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(lines)));
+}
+
+fn terminal_render_line(line: RenderedTerminalLine) -> TerminalRenderLine {
+    let runs = line
+        .runs
+        .into_iter()
+        .map(terminal_render_run)
+        .collect::<Vec<_>>();
+    TerminalRenderLine {
+        runs: ModelRc::new(VecModel::from(runs)),
+    }
+}
+
+fn terminal_render_run(run: RenderedTerminalRun) -> TerminalRenderRun {
+    TerminalRenderRun {
+        text: run.text.into(),
+        column: run.column.min(i32::MAX as usize) as i32,
+        cells: run.cells.min(i32::MAX as usize) as i32,
+        foreground: to_slint_color(run.foreground),
+        background: to_slint_color(run.background),
+        bold: run.bold,
+        italic: run.italic,
+        underline: run.underline,
+        strikethrough: run.strikethrough,
+    }
+}
+
+fn to_slint_color(color: RgbColor) -> Color {
+    Color::from_rgb_u8(color.red, color.green, color.blue)
 }
 
 #[derive(Clone, Copy)]
@@ -1545,7 +2092,87 @@ mod tests {
     #[test]
     fn maps_slint_navigation_and_text_keys_to_terminal_domain() {
         let up = SharedString::from(Key::UpArrow);
-        assert_eq!(terminal_key_from_slint(up.as_str()), TerminalKey::Up);
-        assert_eq!(terminal_key_from_slint("x"), TerminalKey::Text("x".into()));
+        assert_eq!(
+            terminal_key_from_slint(up.as_str(), TerminalModifiers::default()),
+            TerminalKey::Up
+        );
+        assert_eq!(
+            terminal_key_from_slint("x", TerminalModifiers::default()),
+            TerminalKey::Text("x".into())
+        );
+    }
+
+    #[test]
+    fn normalizes_unshifted_slint_hyphen_text_when_shift_is_pressed() {
+        let shift = TerminalModifiers {
+            shift: true,
+            ..TerminalModifiers::default()
+        };
+        assert_eq!(
+            terminal_key_from_slint("-", shift),
+            TerminalKey::Text("_".into())
+        );
+        assert_eq!(
+            terminal_key_from_slint("_", shift),
+            TerminalKey::Text("_".into())
+        );
+    }
+
+    #[test]
+    fn formats_modified_shortcuts_and_ignores_plain_or_modifier_keys() {
+        let (slint_control, slint_meta) = if cfg!(target_os = "macos") {
+            (false, true)
+        } else {
+            (true, false)
+        };
+        assert_eq!(
+            format_shortcut_event("b", false, slint_control, slint_meta, true),
+            "Ctrl+Shift+B"
+        );
+        assert_eq!(
+            format_shortcut_event("\u{0003}", false, slint_control, slint_meta, true),
+            "Ctrl+Shift+C"
+        );
+        assert_eq!(format_shortcut_event("b", false, false, false, false), "");
+        let control = SharedString::from(Key::Control);
+        assert_eq!(
+            format_shortcut_event(control.as_str(), false, slint_control, slint_meta, false,),
+            ""
+        );
+
+        let (slint_command, slint_command_meta, expected) = if cfg!(target_os = "macos") {
+            (true, false, "Cmd+,")
+        } else {
+            (false, true, "Meta+,")
+        };
+        assert_eq!(
+            format_shortcut_event(",", false, slint_command, slint_command_meta, false,),
+            expected
+        );
+    }
+
+    #[test]
+    fn restores_physical_control_and_command_from_slint_apple_modifiers() {
+        assert_eq!(
+            normalize_slint_modifiers_for_platform(false, false, true, false, true),
+            TerminalModifiers {
+                control: true,
+                ..TerminalModifiers::default()
+            }
+        );
+        assert_eq!(
+            normalize_slint_modifiers_for_platform(false, true, false, false, true),
+            TerminalModifiers {
+                meta: true,
+                ..TerminalModifiers::default()
+            }
+        );
+        assert_eq!(
+            normalize_slint_modifiers_for_platform(false, true, false, false, false),
+            TerminalModifiers {
+                control: true,
+                ..TerminalModifiers::default()
+            }
+        );
     }
 }

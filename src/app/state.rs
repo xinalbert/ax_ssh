@@ -9,8 +9,9 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use ax_ssh::config::{ConfigStore, SessionProfile, SessionStore, normalize_group_name};
+use ax_ssh::local_shell::LocalShellHandle;
 use ax_ssh::ssh::SshSessionHandle;
-use ax_ssh::terminal::TerminalModel;
+use ax_ssh::terminal::{TerminalModel, TerminalSnapshot};
 
 pub(super) struct AppState {
     pub(super) config: ConfigStore,
@@ -22,6 +23,7 @@ pub(super) struct AppState {
     tabs: Vec<WorkspaceTab>,
     active_tab_id: Option<Uuid>,
     terminal_numbers: HashMap<Uuid, u32>,
+    local_terminal_number: u32,
 }
 
 impl AppState {
@@ -41,6 +43,7 @@ impl AppState {
             tabs: Vec::new(),
             active_tab_id: None,
             terminal_numbers: HashMap::new(),
+            local_terminal_number: 0,
         }
     }
 
@@ -84,13 +87,39 @@ impl AppState {
             id,
             title: format!("{} #{}", profile.name, number),
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
-                profile_id: profile.id,
-                attempt_id: None,
+                backend: TerminalBackend::Ssh {
+                    profile_id: profile.id,
+                    attempt_id: None,
+                },
                 worker: None,
                 terminal,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
+            }),
+        });
+        self.active_tab_id = Some(id);
+        id
+    }
+
+    pub(super) fn open_local_shell_tab(&mut self) -> Uuid {
+        self.local_terminal_number = self.local_terminal_number.saturating_add(1);
+        let id = Uuid::new_v4();
+        let terminal = TerminalModel::new(
+            usize::from(self.sessions.settings.terminal.default_columns),
+            usize::from(self.sessions.settings.terminal.default_rows),
+            self.sessions.settings.terminal.scrollback_lines as usize,
+        );
+        self.tabs.push(WorkspaceTab {
+            id,
+            title: format!("Local Shell #{}", self.local_terminal_number),
+            kind: WorkspaceTabKind::Terminal(TerminalTabState {
+                backend: TerminalBackend::Local,
+                worker: None,
+                terminal,
+                status: "Starting local shell...".to_owned(),
+                connected: false,
+                worker_running: true,
             }),
         });
         self.active_tab_id = Some(id);
@@ -157,7 +186,7 @@ impl AppState {
 
     pub(super) fn drain_runtime_resources(
         &mut self,
-    ) -> (Vec<SshSessionHandle>, Option<PendingProbe>) {
+    ) -> (Vec<TerminalWorker>, Option<PendingProbe>) {
         let workers = self
             .tabs
             .iter_mut()
@@ -197,7 +226,7 @@ impl AppState {
                 kind: "terminal",
                 title: tab.title.clone(),
                 status: terminal.status.clone(),
-                output: terminal.terminal.contents(),
+                terminal: Some(terminal.terminal.snapshot()),
                 connected: terminal.connected,
                 worker_running: terminal.worker_running,
             },
@@ -222,6 +251,10 @@ impl AppState {
 
     pub(super) fn active_terminal(&self) -> Option<&TerminalTabState> {
         self.active_tab_id.and_then(|id| self.terminal(id))
+    }
+
+    pub(super) fn active_terminal_mut(&mut self) -> Option<&mut TerminalTabState> {
+        self.active_tab_id.and_then(|id| self.terminal_mut(id))
     }
 
     pub(super) fn terminal(&self, tab_id: Uuid) -> Option<&TerminalTabState> {
@@ -288,13 +321,84 @@ struct WorkspaceTab {
 }
 
 pub(super) struct TerminalTabState {
-    pub(super) profile_id: Uuid,
-    pub(super) attempt_id: Option<Uuid>,
-    pub(super) worker: Option<SshSessionHandle>,
+    pub(super) backend: TerminalBackend,
+    pub(super) worker: Option<TerminalWorker>,
     pub(super) terminal: TerminalModel,
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+}
+
+impl TerminalTabState {
+    pub(super) fn ssh_route(&self) -> Option<(Uuid, Option<Uuid>)> {
+        match self.backend {
+            TerminalBackend::Ssh {
+                profile_id,
+                attempt_id,
+            } => Some((profile_id, attempt_id)),
+            TerminalBackend::Local => None,
+        }
+    }
+
+    pub(super) fn set_ssh_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
+        match &mut self.backend {
+            TerminalBackend::Ssh {
+                attempt_id: current,
+                ..
+            } => {
+                *current = attempt_id;
+                true
+            }
+            TerminalBackend::Local => false,
+        }
+    }
+
+    pub(super) fn is_local(&self) -> bool {
+        matches!(self.backend, TerminalBackend::Local)
+    }
+}
+
+pub(super) enum TerminalBackend {
+    Ssh {
+        profile_id: Uuid,
+        attempt_id: Option<Uuid>,
+    },
+    Local,
+}
+
+pub(super) enum TerminalWorker {
+    Ssh(SshSessionHandle),
+    Local(LocalShellHandle),
+}
+
+impl TerminalWorker {
+    pub(super) fn request_disconnect(&self) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_disconnect(),
+            Self::Local(worker) => worker.request_disconnect(),
+        }
+    }
+
+    pub(super) fn request_send(&self, data: Vec<u8>) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_send(data),
+            Self::Local(worker) => worker.request_send(data),
+        }
+    }
+
+    pub(super) fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_resize(columns, rows),
+            Self::Local(worker) => worker.request_resize(columns, rows),
+        }
+    }
+
+    pub(super) async fn shutdown(self) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.shutdown().await,
+            Self::Local(worker) => worker.shutdown().await,
+        }
+    }
 }
 
 pub(super) struct WorkspaceTabSummary {
@@ -309,7 +413,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) kind: &'static str,
     pub(super) title: String,
     pub(super) status: String,
-    pub(super) output: String,
+    pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
 }
@@ -321,7 +425,7 @@ impl Default for ActiveTabSnapshot {
             kind: "empty",
             title: "Workspace".to_owned(),
             status: "Ready".to_owned(),
-            output: String::new(),
+            terminal: None,
             connected: false,
             worker_running: false,
         }
@@ -329,7 +433,7 @@ impl Default for ActiveTabSnapshot {
 }
 
 pub(super) struct ClosedTab {
-    pub(super) worker: Option<SshSessionHandle>,
+    pub(super) worker: Option<TerminalWorker>,
     pub(super) pending_probe: Option<PendingProbe>,
     pub(super) dismissed_prompt: bool,
 }
@@ -383,7 +487,7 @@ pub(super) fn prepare_authentication_retry(
     }
     if let Some(terminal) = app.terminal_mut(tab_id) {
         terminal.worker = None;
-        terminal.attempt_id = None;
+        terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
     }
@@ -427,7 +531,7 @@ pub(super) fn prepare_host_key_retry(
     }
     if let Some(terminal) = app.terminal_mut(tab_id) {
         terminal.worker = None;
-        terminal.attempt_id = None;
+        terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
     }
@@ -445,7 +549,7 @@ pub(super) fn retire_session_attempt(
         Ok(mut app) if matches_attempt(&app, tab_id, session_id, attempt_id) => {
             if let Some(terminal) = app.terminal_mut(tab_id) {
                 terminal.worker = None;
-                terminal.attempt_id = None;
+                terminal.set_ssh_attempt(None);
                 terminal.connected = false;
                 terminal.worker_running = false;
             }
@@ -499,9 +603,9 @@ pub(super) fn session_attempt_is_active(
 }
 
 fn matches_attempt(app: &AppState, tab_id: Uuid, session_id: Uuid, attempt_id: Uuid) -> bool {
-    app.terminal(tab_id).is_some_and(|terminal| {
-        terminal.profile_id == session_id && terminal.attempt_id == Some(attempt_id)
-    })
+    app.terminal(tab_id)
+        .and_then(TerminalTabState::ssh_route)
+        .is_some_and(|route| route == (session_id, Some(attempt_id)))
 }
 
 #[cfg(test)]
@@ -567,11 +671,11 @@ mod tests {
         state
             .terminal_mut(first)
             .expect("first terminal should exist")
-            .attempt_id = Some(first_attempt);
+            .set_ssh_attempt(Some(first_attempt));
         state
             .terminal_mut(second)
             .expect("second terminal should exist")
-            .attempt_id = Some(second_attempt);
+            .set_ssh_attempt(Some(second_attempt));
         let state = Arc::new(Mutex::new(state));
 
         assert!(retire_session_attempt(
@@ -581,10 +685,35 @@ mod tests {
             first_attempt
         ));
         let state = state.lock().expect("state should remain readable");
-        assert_eq!(state.terminal(first).and_then(|tab| tab.attempt_id), None);
         assert_eq!(
-            state.terminal(second).and_then(|tab| tab.attempt_id),
-            Some(second_attempt)
+            state.terminal(first).and_then(TerminalTabState::ssh_route),
+            Some((profile.id, None))
+        );
+        assert_eq!(
+            state.terminal(second).and_then(TerminalTabState::ssh_route),
+            Some((profile.id, Some(second_attempt)))
+        );
+    }
+
+    #[test]
+    fn local_shell_tabs_have_unique_ids_and_independent_numbers() {
+        let mut state = test_state();
+
+        let first = state.open_local_shell_tab();
+        let second = state.open_local_shell_tab();
+
+        assert_ne!(first, second);
+        assert_eq!(state.tab_summaries()[0].title, "Local Shell #1");
+        assert_eq!(state.tab_summaries()[1].title, "Local Shell #2");
+        assert!(
+            state
+                .terminal(first)
+                .is_some_and(TerminalTabState::is_local)
+        );
+        assert!(
+            state
+                .terminal(second)
+                .is_some_and(TerminalTabState::is_local)
         );
     }
 }

@@ -41,6 +41,19 @@ pub(super) fn profile_endpoint(profile: &SessionProfile) -> String {
     format!("{}@{}:{}", profile.username, profile.host, profile.port)
 }
 
+pub(super) fn group_icon(group_name: &str) -> String {
+    let display_name = if group_name.is_empty() {
+        "Ungrouped"
+    } else {
+        group_name
+    };
+    let characters = display_name.chars().collect::<Vec<_>>();
+    let first = characters.iter().take(2).collect::<String>();
+    let last_start = characters.len().saturating_sub(2);
+    let last = characters.iter().skip(last_start).collect::<String>();
+    format!("{first}*{last}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -62,5 +75,12 @@ mod tests {
             group_options(&sessions),
             ["Ungrouped", "Production", "Staging"]
         );
+    }
+
+    #[test]
+    fn group_icons_use_unicode_characters_from_both_ends() {
+        assert_eq!(group_icon("Production"), "Pr*on");
+        assert_eq!(group_icon("生产环境"), "生产*环境");
+        assert_eq!(group_icon(""), "Un*ed");
     }
 }

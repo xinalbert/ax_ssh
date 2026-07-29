@@ -1,27 +1,101 @@
-import { LineEdit, TextEdit } from "std-widgets.slint";
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+
+export struct TerminalRenderRun {
+    text: string,
+    column: int,
+    cells: int,
+    foreground: color,
+    background: color,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    strikethrough: bool,
+}
+
+export struct TerminalRenderLine {
+    runs: [TerminalRenderRun],
+}
 
 export component TerminalPane inherits Rectangle {
     in property <bool> connected;
-    in property <string> output;
-    in property <string> status;
+    in property <[TerminalRenderLine]> render-lines;
+    in property <int> content-columns;
+    in property <int> cursor-row;
+    in property <int> cursor-column;
+    in property <bool> cursor-visible;
+    in property <string> cursor-text;
     in property <string> terminal-font-family;
     in property <length> terminal-font-size;
+    in property <int> terminal-line-height-percent;
+    in property <color> terminal-foreground;
+    in property <color> terminal-background;
+    in property <color> terminal-selection-background;
+    in property <bool> right-click-copy-or-paste;
+    in property <string> copy-selection-shortcut;
+    in property <string> paste-shortcut;
 
     callback terminal-key(string, bool, bool, bool, bool) -> bool;
     callback resized(int, int);
+    callback scrolled(int);
+    callback selection-text(int, int, int, int) -> string;
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
 
-    private property <length> cell-width: max(5px, root.terminal-font-size * 0.62);
-    private property <length> cell-height: max(10px, root.terminal-font-size * 1.45);
-    private property <int> terminal-columns: max(20, min(300, round(terminal-view.visible-width / root.cell-width)));
-    private property <int> terminal-rows: max(5, min(100, round(terminal-view.visible-height / root.cell-height)));
-    private property <length> terminal-content-height: terminal-view.viewport-height;
-    private property <length> terminal-viewport-y: terminal-view.viewport-y;
-    private property <length> bottom-viewport-y: min(0px, terminal-view.visible-height - terminal-view.viewport-height);
-    private property <bool> follow-output: true;
+    private property <length> font-cell-width:
+        max(1px, cell-probe.preferred-width / 50);
+    private property <length> font-cell-height: max(1px, cell-probe.preferred-height);
+    private property <length> cell-width: root.font-cell-width;
+    private property <length> cell-height:
+        max(root.font-cell-height,
+            root.font-cell-height * root.terminal-line-height-percent / 100);
+    private property <int> terminal-columns:
+        max(20, min(300, floor(grid-clip.width / root.cell-width)));
+    private property <int> terminal-rows:
+        max(5, min(100, floor(grid-clip.height / root.cell-height)));
+    private property <bool> cursor-blink: true;
+    private property <bool> selecting: false;
+    private property <int> selection-anchor-row: 0;
+    private property <int> selection-anchor-column: 0;
+    private property <int> selection-focus-row: 0;
+    private property <int> selection-focus-column: 0;
+    private property <bool> selection-active:
+        root.selection-anchor-row != root.selection-focus-row
+        || root.selection-anchor-column != root.selection-focus-column;
+    private property <bool> anchor-first:
+        root.selection-anchor-row < root.selection-focus-row
+        || (root.selection-anchor-row == root.selection-focus-row
+            && root.selection-anchor-column <= root.selection-focus-column);
+    private property <int> selection-first-row:
+        root.anchor-first ? root.selection-anchor-row : root.selection-focus-row;
+    private property <int> selection-first-column:
+        root.anchor-first ? root.selection-anchor-column : root.selection-focus-column;
+    private property <int> selection-last-row:
+        root.anchor-first ? root.selection-focus-row : root.selection-anchor-row;
+    private property <int> selection-last-column:
+        root.anchor-first ? root.selection-focus-column : root.selection-anchor-column;
+
+    function direct-terminal-key(text: string, alt: bool, control: bool,
+                                 meta: bool, shift: bool) -> bool {
+        return alt || control || meta || shift
+            || text == Key.Return
+            || text == Key.Backspace
+            || text == Key.Tab
+            || text == Key.Backtab
+            || text == Key.Escape
+            || text == Key.UpArrow
+            || text == Key.DownArrow
+            || text == Key.LeftArrow
+            || text == Key.RightArrow
+            || text == Key.Insert
+            || text == Key.Delete
+            || text == Key.Home
+            || text == Key.End
+            || text == Key.PageUp
+            || text == Key.PageDown;
+    }
 
     public function focus-terminal() {
-        terminal-view.focus();
+        ime-input.focus();
     }
 
     function update-terminal-size() {
@@ -30,10 +104,37 @@ export component TerminalPane inherits Rectangle {
         }
     }
 
-    function scroll-to-bottom() {
-        if root.follow-output {
-            terminal-view.viewport-y = root.bottom-viewport-y;
+    function clear-selection() {
+        root.selecting = false;
+        root.selection-focus-row = root.selection-anchor-row;
+        root.selection-focus-column = root.selection-anchor-column;
+    }
+
+    function copy-selection() {
+        if root.selection-active {
+            copy-input.text = root.selection-text(
+                root.selection-anchor-row,
+                root.selection-anchor-column,
+                root.selection-focus-row,
+                root.selection-focus-column,
+            );
+            copy-input.select-all();
+            copy-input.copy();
+            ime-input.focus();
         }
+    }
+
+    function select-all-visible() {
+        root.selection-anchor-row = 0;
+        root.selection-anchor-column = 0;
+        root.selection-focus-row = max(0, root.render-lines.length - 1);
+        root.selection-focus-column = max(0, root.content-columns - 1);
+    }
+
+    function paste-from-clipboard() {
+        paste-input.text = "";
+        paste-input.paste();
+        ime-input.focus();
     }
 
     changed terminal-columns => { root.update-terminal-size(); }
@@ -41,65 +142,331 @@ export component TerminalPane inherits Rectangle {
     changed connected => {
         root.update-terminal-size();
         if root.connected {
-            terminal-view.focus();
+            root.focus-terminal();
         }
     }
-    changed output => { root.scroll-to-bottom(); }
-    changed terminal-content-height => { root.scroll-to-bottom(); }
-    changed terminal-viewport-y => {
-        root.follow-output = terminal-view.viewport-y <= root.bottom-viewport-y + root.cell-height;
+    changed visible => {
+        if self.visible && root.connected {
+            root.focus-terminal();
+        }
     }
 
-    background: Theme.panel;
+    background: root.terminal-background;
     border-width: 1px;
     border-color: Theme.border;
+    forward-focus: ime-input;
+    accessible-role: text;
+    accessible-label: "Terminal";
+
+    cell-probe := Text {
+        x: -1000px;
+        y: -1000px;
+        width: 0px;
+        height: 0px;
+        text: "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+        font-family: root.terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400;
+        letter-spacing: 0px;
+        opacity: 0;
+    }
+
+    Timer {
+        running: root.connected && ime-input.has-focus && root.cursor-visible;
+        interval: 530ms;
+        triggered => { root.cursor-blink = !root.cursor-blink; }
+    }
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 8px;
-        terminal-view := TextEdit {
+        padding: 8px;
+
+        grid-clip := Rectangle {
             vertical-stretch: 1;
-            text: root.output;
-            read-only: true;
-            wrap: no-wrap;
-            font-family: root.terminal-font-family;
-            font-size: root.terminal-font-size;
-            accessible-label: "SSH terminal";
-            key-pressed(event) => {
-                if event.modifiers.control && event.modifiers.shift
-                    && (event.text == "c" || event.text == "C") {
-                    terminal-view.copy();
-                    return EventResult.accept;
+            clip: true;
+            background: root.terminal-background;
+
+            for line[line-index] in root.render-lines : Rectangle {
+                x: 0px;
+                y: line-index * root.cell-height;
+                width: parent.width;
+                height: root.cell-height;
+                background: root.terminal-background;
+
+                for run in line.runs : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: run.background;
                 }
-                if ((event.modifiers.meta && !event.modifiers.control)
-                    || (event.modifiers.control && event.modifiers.shift))
-                    && (event.text == "v" || event.text == "V") {
-                    clipboard-input.text = "";
-                    clipboard-input.paste();
-                    terminal-view.focus();
-                    return EventResult.accept;
+
+                if root.selection-active
+                    && line-index >= root.selection-first-row
+                    && line-index <= root.selection-last-row : Rectangle {
+                    property <int> first-column:
+                        line-index == root.selection-first-row
+                            ? root.selection-first-column : 0;
+                    property <int> last-column:
+                        line-index == root.selection-last-row
+                            ? root.selection-last-column : root.content-columns - 1;
+                    x: max(0, self.first-column) * root.cell-width;
+                    width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
+                    height: root.cell-height;
+                    background: root.terminal-selection-background.with-alpha(0.72);
                 }
-                if root.terminal-key(
-                    event.text,
-                    event.modifiers.alt,
-                    event.modifiers.control,
-                    event.modifiers.meta,
-                    event.modifiers.shift,
-                ) {
-                    return EventResult.accept;
+
+                for run in line.runs : Text {
+                    x: run.column * root.cell-width;
+                    y: (root.cell-height - root.font-cell-height) / 2;
+                    width: run.cells * root.cell-width;
+                    height: root.font-cell-height;
+                    text: run.text;
+                    color: run.foreground;
+                    font-family: root.terminal-font-family;
+                    font-size: root.terminal-font-size;
+                    font-weight: run.bold ? 700 : 400;
+                    font-italic: run.italic;
+                    letter-spacing: 0px;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                    overflow: clip;
                 }
-                return EventResult.reject;
+
+                for run in line.runs : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: transparent;
+                    if run.underline : Rectangle {
+                        y: parent.height - 2px;
+                        width: parent.width;
+                        height: 1px;
+                        background: run.foreground;
+                    }
+                    if run.strikethrough : Rectangle {
+                        y: parent.height / 2;
+                        width: parent.width;
+                        height: 1px;
+                        background: run.foreground;
+                    }
+                }
+
+                if root.connected && root.cursor-visible && root.cursor-blink
+                    && line-index == root.cursor-row : Rectangle {
+                    x: root.cursor-column * root.cell-width;
+                    width: root.cell-width;
+                    height: root.cell-height;
+                    background: root.terminal-foreground;
+                    Text {
+                        y: (parent.height - root.font-cell-height) / 2;
+                        width: parent.width;
+                        height: root.font-cell-height;
+                        text: root.cursor-text;
+                        color: root.terminal-background;
+                        font-family: root.terminal-font-family;
+                        font-size: root.terminal-font-size;
+                        letter-spacing: 0px;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                        overflow: clip;
+                    }
+                }
             }
-        }
-        Text {
-            text: root.status;
-            color: root.connected ? Theme.success : Theme.accent;
-            font-size: 12px;
-            wrap: word-wrap;
+
+            if root.connected && root.cursor-visible
+                    && ime-input.preedit-text != "" : preedit-overlay := Rectangle {
+                x: max(0px, min(parent.width - root.cell-width,
+                    root.cursor-column * root.cell-width));
+                y: max(0px, min(parent.height - root.cell-height,
+                    root.cursor-row * root.cell-height));
+                width: min(parent.width - self.x,
+                    max(root.cell-width, preedit-text.preferred-width));
+                height: root.cell-height;
+                background: root.terminal-background;
+
+                preedit-text := Text {
+                    y: (parent.height - root.font-cell-height) / 2;
+                    width: parent.width;
+                    height: root.font-cell-height;
+                    text: ime-input.preedit-text;
+                    color: root.terminal-foreground;
+                    font-family: root.terminal-font-family;
+                    font-size: root.terminal-font-size;
+                    letter-spacing: 0px;
+                    horizontal-alignment: left;
+                    vertical-alignment: center;
+                    overflow: clip;
+                }
+                Rectangle {
+                    y: parent.height - 1px;
+                    width: parent.width;
+                    height: 1px;
+                    background: root.terminal-foreground;
+                }
+            }
+
+            body-touch := TouchArea {
+                mouse-cursor: text;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        ime-input.focus();
+                        if event.button == PointerEventButton.left {
+                            root.selection-anchor-row = max(
+                                0,
+                                min(root.render-lines.length - 1,
+                                    floor(self.mouse-y / root.cell-height)),
+                            );
+                            root.selection-anchor-column = max(
+                                0,
+                                min(root.content-columns - 1,
+                                    floor(self.mouse-x / root.cell-width)),
+                            );
+                            root.selection-focus-row = root.selection-anchor-row;
+                            root.selection-focus-column = root.selection-anchor-column;
+                            root.selecting = true;
+                        } else if event.button == PointerEventButton.right
+                            && root.right-click-copy-or-paste {
+                            if root.selection-active {
+                                root.copy-selection();
+                            } else if root.connected {
+                                root.paste-from-clipboard();
+                            }
+                        }
+                    } else if event.kind == PointerEventKind.up
+                        && event.button == PointerEventButton.left {
+                        root.selecting = false;
+                    }
+                }
+                moved => {
+                    if root.selecting {
+                        root.selection-focus-row = max(
+                            0,
+                            min(root.render-lines.length - 1,
+                                floor(self.mouse-y / root.cell-height)),
+                        );
+                        root.selection-focus-column = max(
+                            0,
+                            min(root.content-columns - 1,
+                                floor(self.mouse-x / root.cell-width)),
+                        );
+                    }
+                }
+                scroll-event(event) => {
+                    root.clear-selection();
+                    root.scrolled(event.delta-y > 0 ? 3 : -3);
+                    accept
+                }
+            }
+
+            ContextMenuArea {
+                width: parent.width;
+                height: parent.height;
+                enabled: !root.right-click-copy-or-paste;
+                Menu {
+                    MenuItem {
+                        title: "Copy";
+                        enabled: root.selection-active;
+                        activated => { root.copy-selection(); }
+                    }
+                    MenuItem {
+                        title: "Paste";
+                        enabled: root.connected;
+                        activated => { root.paste-from-clipboard(); }
+                    }
+                    MenuItem {
+                        title: "Select All";
+                        enabled: root.render-lines.length > 0;
+                        activated => { root.select-all-visible(); }
+                    }
+                }
+            }
         }
     }
 
-    clipboard-input := LineEdit {
+    ime-input := TextInput {
+        x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
+            root.cursor-column * root.cell-width));
+        y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
+            root.cursor-row * root.cell-height));
+        width: 1px;
+        height: root.cell-height;
+        opacity: 0;
+        single-line: true;
+        color: transparent;
+        selection-foreground-color: transparent;
+        selection-background-color: transparent;
+        text-cursor-width: 0px;
+        font-family: root.terminal-font-family;
+        font-size: root.terminal-font-size;
+        accessible-role: none;
+
+        changed has-focus => {
+            if self.has-focus {
+                root.cursor-blink = true;
+            }
+        }
+        key-pressed(event) => {
+            let shortcut = root.format-shortcut(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            );
+            if shortcut == root.copy-selection-shortcut && root.selection-active {
+                root.copy-selection();
+                return EventResult.accept;
+            }
+            if shortcut == root.paste-shortcut {
+                root.paste-from-clipboard();
+                return EventResult.accept;
+            }
+            if self.preedit-text != ""
+                    && !event.modifiers.control
+                    && !event.modifiers.alt
+                    && !event.modifiers.meta {
+                return EventResult.reject;
+            }
+            if !root.direct-terminal-key(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) {
+                return EventResult.reject;
+            }
+            root.clear-selection();
+            if root.terminal-key(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) {
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
+        edited => {
+            if self.preedit-text == "" && self.text != "" {
+                root.clear-selection();
+                root.terminal-key(self.text, false, false, false, false);
+                self.text = "";
+            }
+        }
+    }
+
+    copy-input := TextInput {
+        x: -2px;
+        y: -2px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        single-line: false;
+        accessible-role: none;
+    }
+
+    paste-input := LineEdit {
         x: -2px;
         y: -2px;
         width: 1px;
@@ -108,6 +475,7 @@ export component TerminalPane inherits Rectangle {
         accessible-role: none;
         edited(value) => {
             if !value.is-empty {
+                root.clear-selection();
                 root.terminal-key(value, false, false, false, false);
                 self.text = "";
             }

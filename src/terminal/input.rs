@@ -37,8 +37,17 @@ impl TerminalModifiers {
     }
 }
 
-pub fn encode_key(key: &TerminalKey, modifiers: TerminalModifiers) -> Option<Vec<u8>> {
-    encode_key_for_platform(key, modifiers, TerminalPlatform::current())
+pub fn encode_key(
+    key: &TerminalKey,
+    modifiers: TerminalModifiers,
+    application_cursor: bool,
+) -> Option<Vec<u8>> {
+    encode_key_for_platform(
+        key,
+        modifiers,
+        application_cursor,
+        TerminalPlatform::current(),
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +69,7 @@ impl TerminalPlatform {
 fn encode_key_for_platform(
     key: &TerminalKey,
     modifiers: TerminalModifiers,
+    application_cursor: bool,
     platform: TerminalPlatform,
 ) -> Option<Vec<u8>> {
     if let Some(sequence) = platform_navigation_sequence(key, modifiers, platform) {
@@ -93,6 +103,16 @@ fn encode_key_for_platform(
             Some(b"\x1b[Z".as_slice())
         }
         TerminalKey::Escape if modifiers.is_empty() => Some(b"\x1b".as_slice()),
+        TerminalKey::Up if modifiers.is_empty() && application_cursor => Some(b"\x1bOA".as_slice()),
+        TerminalKey::Down if modifiers.is_empty() && application_cursor => {
+            Some(b"\x1bOB".as_slice())
+        }
+        TerminalKey::Right if modifiers.is_empty() && application_cursor => {
+            Some(b"\x1bOC".as_slice())
+        }
+        TerminalKey::Left if modifiers.is_empty() && application_cursor => {
+            Some(b"\x1bOD".as_slice())
+        }
         TerminalKey::Up if modifiers.is_empty() => Some(b"\x1b[A".as_slice()),
         TerminalKey::Down if modifiers.is_empty() => Some(b"\x1b[B".as_slice()),
         TerminalKey::Right if modifiers.is_empty() => Some(b"\x1b[C".as_slice()),
@@ -116,6 +136,9 @@ fn encode_key_for_platform(
     let TerminalKey::Text(text) = key else {
         return None;
     };
+    if is_bare_modifier_text(text, modifiers) {
+        return None;
+    }
     if modifiers.control {
         let mut encoded = encode_control_text(text)?;
         if modifiers.alt {
@@ -134,6 +157,17 @@ fn encode_key_for_platform(
     } else {
         Some(text.as_bytes().to_vec())
     }
+}
+
+fn is_bare_modifier_text(text: &str, modifiers: TerminalModifiers) -> bool {
+    if modifiers.control {
+        return false;
+    }
+    let mut characters = text.chars();
+    let Some(character) = characters.next() else {
+        return false;
+    };
+    characters.next().is_none() && ('\u{0010}'..='\u{0018}').contains(&character)
 }
 
 fn platform_navigation_sequence(
@@ -179,6 +213,9 @@ fn encode_control_text(text: &str) -> Option<Vec<u8>> {
     if characters.next().is_some() {
         return None;
     }
+    if ('\u{0001}'..='\u{001f}').contains(&character) || character == '\u{007f}' {
+        return Some(vec![character as u8]);
+    }
     let upper = character.to_ascii_uppercase();
     let byte = match upper {
         ' ' | '@' => 0x00,
@@ -203,21 +240,43 @@ mod tests {
         assert_eq!(
             encode_key(
                 &TerminalKey::Text("ls".into()),
-                TerminalModifiers::default()
+                TerminalModifiers::default(),
+                false,
             ),
             Some(b"ls".to_vec())
         );
         assert_eq!(
-            encode_key(&TerminalKey::Return, TerminalModifiers::default()),
+            encode_key(&TerminalKey::Return, TerminalModifiers::default(), false),
             Some(b"\r".to_vec())
         );
         assert_eq!(
-            encode_key(&TerminalKey::Backspace, TerminalModifiers::default()),
+            encode_key(&TerminalKey::Backspace, TerminalModifiers::default(), false,),
             Some(b"\x7f".to_vec())
         );
         assert_eq!(
-            encode_key(&TerminalKey::Up, TerminalModifiers::default()),
+            encode_key(&TerminalKey::Up, TerminalModifiers::default(), false),
             Some(b"\x1b[A".to_vec())
+        );
+    }
+
+    #[test]
+    fn encodes_unmodified_arrows_for_normal_and_application_cursor_modes() {
+        let modifiers = TerminalModifiers::default();
+        assert_eq!(
+            encode_key(&TerminalKey::Up, modifiers, false),
+            Some(b"\x1b[A".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Down, modifiers, false),
+            Some(b"\x1b[B".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Up, modifiers, true),
+            Some(b"\x1bOA".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Down, modifiers, true),
+            Some(b"\x1bOB".to_vec())
         );
     }
 
@@ -228,12 +287,20 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key(&TerminalKey::Text("c".into()), control),
+            encode_key(&TerminalKey::Text("c".into()), control, false),
             Some(vec![0x03])
         );
         assert_eq!(
-            encode_key(&TerminalKey::Text("[".into()), control),
+            encode_key(&TerminalKey::Text("[".into()), control, false),
             Some(vec![0x1b])
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Text("\u{0002}".into()), control, false),
+            Some(vec![0x02])
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Text("\u{0003}".into()), control, false),
+            Some(vec![0x03])
         );
         let control_shift = TerminalModifiers {
             control: true,
@@ -241,7 +308,7 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key(&TerminalKey::Backspace, control_shift),
+            encode_key(&TerminalKey::Backspace, control_shift, false),
             Some(vec![0x08])
         );
 
@@ -250,8 +317,41 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key(&TerminalKey::Text("b".into()), alt),
+            encode_key(&TerminalKey::Text("b".into()), alt, false),
             Some(b"\x1bb".to_vec())
+        );
+    }
+
+    #[test]
+    fn drops_bare_modifier_codes_without_dropping_real_control_bytes() {
+        let shift = TerminalModifiers {
+            shift: true,
+            ..TerminalModifiers::default()
+        };
+        assert_eq!(
+            encode_key(&TerminalKey::Text("\u{0010}".into()), shift, false),
+            None
+        );
+        assert_eq!(
+            encode_key(
+                &TerminalKey::Text("\u{0015}".into()),
+                TerminalModifiers::default(),
+                false,
+            ),
+            None
+        );
+
+        let control = TerminalModifiers {
+            control: true,
+            ..TerminalModifiers::default()
+        };
+        assert_eq!(
+            encode_key(&TerminalKey::Text("\u{0010}".into()), control, false),
+            Some(vec![0x10])
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Text("\u{0011}".into()), control, false),
+            Some(vec![0x11])
         );
     }
 
@@ -263,11 +363,11 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key(&TerminalKey::Left, modifiers),
+            encode_key(&TerminalKey::Left, modifiers, true),
             Some(b"\x1b[1;6D".to_vec())
         );
         assert_eq!(
-            encode_key(&TerminalKey::Delete, modifiers),
+            encode_key(&TerminalKey::Delete, modifiers, true),
             Some(b"\x1b[3;6~".to_vec())
         );
     }
@@ -279,7 +379,7 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key_for_platform(&TerminalKey::Left, meta, TerminalPlatform::MacOs),
+            encode_key_for_platform(&TerminalKey::Left, meta, true, TerminalPlatform::MacOs),
             Some(vec![0x01])
         );
         let alt = TerminalModifiers {
@@ -287,11 +387,11 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key_for_platform(&TerminalKey::Right, alt, TerminalPlatform::MacOs),
+            encode_key_for_platform(&TerminalKey::Right, alt, true, TerminalPlatform::MacOs),
             Some(b"\x1bf".to_vec())
         );
         assert_eq!(
-            encode_key_for_platform(&TerminalKey::Right, alt, TerminalPlatform::Other),
+            encode_key_for_platform(&TerminalKey::Right, alt, true, TerminalPlatform::Other),
             Some(b"\x1b[1;3C".to_vec())
         );
     }
@@ -302,6 +402,9 @@ mod tests {
             meta: true,
             ..TerminalModifiers::default()
         };
-        assert_eq!(encode_key(&TerminalKey::Text("c".into()), meta), None);
+        assert_eq!(
+            encode_key(&TerminalKey::Text("c".into()), meta, false),
+            None
+        );
     }
 }

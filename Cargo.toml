@@ -11,19 +11,24 @@ readme = "README.md"
 anyhow = "1"
 directories = "6"
 keyring = "4.1.5"
+portable-pty = "0.9.0"
 russh = "0.62.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-slint = { version = "1.17.1", default-features = false, features = ["backend-winit", "compat-1-2", "renderer-software", "std"] }
+slint = { version = "1.17.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-software", "std"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde", "v4"] }
-vte = "0.15.0"
+vt100 = "0.16.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSView", "NSWindow", "std"] }
+raw-window-handle = "0.6.2"
 
 [build-dependencies]
 slint-build = "1.17.1"
