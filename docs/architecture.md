@@ -98,6 +98,12 @@ Process startup (src/main.rs)
    cell snapshot crosses the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
    keep a window alive.
+9. On macOS, the application bridge enables full-size title-bar content but
+   disables AppKit's movable-window-background behavior. Slint reports a
+   mouse-down only from the empty zero-tab strip or dedicated trailing space,
+   and the UI-thread callback hands the current event to
+   `NSWindow::performWindowDragWithEvent`. Tabs, the activity bar, sidebar,
+   and terminal never invoke that callback.
 
 ## SSH security contract
 
@@ -155,8 +161,10 @@ brightness, bold-color and right-click behavior, scrollback, default PTY
 dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
 widths, and shortcuts. Shell discovery validates the saved cache and appends
 only newly available names after load. Older settings migrate during
-deserialization. Passwords, passphrases, private-key contents, terminal output,
-tab runtime IDs, child processes, and workers are never serialized.
+deserialization; schema version 7 replaces only the previous 260px sidebar
+default with the compact 220px default and preserves custom widths. Passwords,
+passphrases, private-key contents, terminal output, tab runtime IDs, child
+processes, and workers are never serialized.
 
 ## Staged scope
 

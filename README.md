@@ -22,6 +22,10 @@ xterm-style modified navigation are encoded for the active PTY. Unmodified
 arrows follow the terminal's normal or application-cursor mode, so shell
 history and full-screen programs receive the expected CSI or SS3 sequence.
 Terminals, Settings, and the new-session editor share one top tab bar.
+Overflowing tabs scroll horizontally with a touchpad or mouse wheel, while
+mouse-drag scrolling is disabled. On macOS, the empty zero-tab strip and a
+dedicated trailing title-bar space move the window; tabs, the activity bar,
+the session sidebar, and terminal content remain interaction-only regions.
 
 Terminal, shortcut, local-shell, and workspace settings are managed in a
 Settings tab and persisted in the versioned `sessions.json`; discovered shell

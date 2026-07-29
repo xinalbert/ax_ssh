@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260729-terminal-rendering-interaction
-- 目标：完成接近 VS Code 习惯的终端渲染、IME 与工作区交互，并加入独立 Local Shell Tab、可配置跨平台 shell 和可滚动分组 Activity Bar。
-- 交付物：ANSI 彩色终端、网格选区/光标、透明 IME 代理、跨平台 Ctrl/Cmd 物理键还原、右键/快捷键设置、macOS 统一标题栏、唯一 ID 的 SSH/Local 终端 Tab、有界本地 PTY worker、版本化 shell 设置、Unicode 分组图标和完整验证记录。
+- 目标 ID：20260729-window-density-drag-regions
+- 目标：按常见代码编辑器布局压缩 Activity Bar、侧栏和 macOS Tab 标题栏，并把窗口拖动限制到标题栏空白区域。
+- 交付物：无冗余标题/未分组行的会话侧栏、版本化紧凑宽度默认值、34px macOS Tab 标题栏、Tab 横向滚动和 AppKit 精确拖动区域。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`Cargo.lock`、`src/local_shell.rs`、`src/lib.rs`、`src/terminal.rs`、`src/config.rs`、`src/app.rs`、`src/app/`、`ui/`、双语 README/架构/开发文档和 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：SSH 认证或 host-key 策略变更、全屏 TUI 兼容、鼠标上报、OSC 超链接、持久化终端内容、恢复上次工作区或复制 `third_package/axshell` 源码。
+- 当前范围：`Cargo.toml`、`src/config.rs`、`src/app.rs`、`src/app/macos_window.rs`、`ui/app.slint`、`ui/settings.slint`、双语架构/开发文档和 `docs/project-implementation-tracker/`。
+- 不在本轮范围内：Tab 重排、侧栏手动 resize、终端鼠标上报、SSH 认证/host-key、PTY 生命周期或持久化终端内容。
 
 ## 当前状态
 
@@ -23,38 +23,37 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | ANSI 样式 run、标准/亮色/256 色/真彩色解析和亮度映射 | 终端模型 focused tests 与 Slint/Rust 联合编译 | scrollback 与快照保持有界 |
-| P2 | completed | 版本化外观/右键/快捷键设置和 Settings 专页 | 配置迁移、clamp、快捷键测试与 GUI 走查 | 只持久化非敏感参数 |
-| P3 | completed | macOS 统一标题栏、可折叠导航与动态 Tab 布局 | macOS 实际窗口截图和 Cargo 联合编译 | AppKit 失败时保留标准布局 |
-| P4 | completed | 有界 Local Shell PTY worker、显式 SSH/Local backend 和版本化 shell 选择 | worker/config/state focused tests | 子进程、reader、writer 和关闭流程由 worker 独占 |
-| P5 | completed | 顶部 Local Shell 入口、Unicode `前2*后2` 分组图标和可滚动 Activity Bar | Slint/Rust 联合编译和 GUI 走查 | 点击分组时展开侧栏和目标组 |
-| P6 | completed | 双语产品/架构/开发说明和项目地图更新 | Markdown 相对链接与 tracking validator | 记录 shell、终端输入和生命周期 |
-| P7 | completed | 最终格式、Cargo、差异、GUI 回归和清晰提交 | 仓库完整验证命令与 Git diff/stage 检查 | 记录本机缺失工具和手工键盘验收边界 |
+| P1 | completed | 参考图、现有 Slint/AppKit 行为和官方拖动语义核对 | 本机源码与 Apple 文档证据 | 不引入第二套窗口框架 |
+| P2 | completed | 扁平未分组会话、紧凑 Activity Bar/侧栏和版本化宽度迁移 | config/app focused tests + Slint 编译 | 自定义宽度保持不变 |
+| P3 | completed | macOS 全背景拖动关闭、仅标题栏空白区原生拖动 | Cargo 联合编译 + macOS GUI 走查 | Tab、侧栏和终端不注册拖动 callback |
+| P4 | completed | 多 Tab 的滚动与独立标题栏留白命中 | Slint 编译 + viewport/drag 边界审查 | Tab 禁止鼠标拖拽，零 Tab 空白可拖窗口 |
+| P5 | completed | 双语说明、完整门禁和差异审查 | Cargo/test/tracker/Markdown/diff | 记录自动化受限的手工边界 |
 
 ## 已完成
 
-- 已用有界 `vt100` 网格取代文本框式终端，完成 ANSI 样式、宽字符、网格选区、整格光标、scrollback、字体测量、行高与 floor-based PTY 尺寸。
-- 已完成逐 Tab UUID 的 SSH/Local backend、独立 worker、本地 shell 发现缓存、设置页参数化、顶部 Tab、Activity Bar、分组图标和 macOS 统一标题栏。
-- 已完成 application-cursor 方向键、`Shift+-` 后备、终端 Ctrl 优先、平台剪贴板快捷键和可配置右键复制/粘贴。
-- 已移除可见终端编辑框；透明 `TextInput` 只作为随网格光标定位的系统 IME 代理，预编辑留给输入法，提交文本只发送一次。
-- 已确认 Slint 1.17.1 在 Apple 平台交换 Command/Control 字段，并在 `src/app.rs` 恢复物理修饰键语义；macOS 物理 `Ctrl+B/C` 编码为 `0x02/0x03`，物理 `Cmd+C/V/S` 保留给剪贴板和工作区。
-- SSH host-key 拒绝策略、短期凭据、worker 有界队列和日志禁记终端内容的安全边界保持不变。
+- 已确认参考布局的 Activity Bar 约 52px、macOS Tab 标题栏约 34px，当前 62px/38px/260px 默认值偏松。
+- 已确认会话侧栏的 `Sessions` 标题和 `Ungrouped` 行是冗余层级；未分组 profile 可直接列出，命名分组仍保留折叠行。
+- 已确认现有 Tab 使用 `Flickable`，但缺少把垂直滚轮转换为横向 viewport 移动的明确处理。
+- 已确认 `setMovableByWindowBackground(true)` 使任意背景可拖动；AppKit 提供 `performWindowDragWithEvent` 支持从命中的标题栏区域交回系统窗口拖动。
+- 已移除会话侧栏标题和未分组伪分组行；Activity Bar、macOS 顶栏、侧栏默认值分别收紧为 52px、34px、220px，侧栏下限为 180px。
+- schema 7 仅迁移旧默认 260px，保留自定义宽度；Tab 滚轮/触控板增量统一钳制到横向 viewport 边界。
+- macOS 已关闭整窗背景拖动；零 Tab 时中间空白可拖，有 Tab 时只保留最右侧 72px 专用拖动留白；Tab 的鼠标拖拽滚动已关闭，Activity Bar、侧栏和终端也没有窗口拖动调用路径。
+- SSH host-key、凭据、worker、PTY 与终端输入安全边界未变化，未引入参考项目依赖或源码。
 
 ## 验证
 
-- 已完成：项目 skill/reference、locked Slint/winit Apple 修饰键源码、直接 `rustfmt --check`、`cargo check --locked --offline`、`cargo test --locked --offline`（库 43 passed、1 ignored；应用 15 passed）、Slint 联合编译、窗口截图、依赖/有界 channel 和 `git diff --check`。
-- 未完成：本机未安装 `cargo-fmt` 与 `cargo-clippy` 子命令；真实中文输入法候选、物理 `Ctrl+B/C`、`Cmd+C/V/S` 和远端 tmux 仍需以最新二进制做目标平台手工验收。
+- 已完成：项目 skill/references、tracker contract、参考截图和 AppKit/Slint API 核对；focused config/app tests；直接 `rustfmt --check`；`cargo check --locked --offline`；完整测试（库 44 passed、1 ignored；应用 15 passed）；Cargo metadata；零 Tab 和多 Local Shell 实际 macOS 窗口运行；参考耦合和 `git diff --check`。
+- 未完成：本机未安装 `cargo-fmt` 与 `cargo-clippy` 子命令；系统辅助功能权限关闭，无法自动执行真实窗口拖动、Tab 溢出滚轮手势和逐区域负向命中测试，需目标平台手工验收。
 
 ## 风险与阻塞
 
-- 无实现阻塞。GUI 自动化不能证明物理 macOS 修饰键、系统中文 IME 候选窗或真实 tmux 的端到端行为，需保留手工验收。
-- 透明 IME 代理是 Slint 接入系统输入法的必要边界，不能在没有替代平台输入法 API 的情况下删除。
-- 后续升级 Slint/winit 时必须重新核对 Apple Command/Control 映射，避免重复交换或回归。
+- 无实现阻塞。原生拖动和触控板手势的端到端行为仍属于目标平台手工验收边界。
+- 后续布局调整不得重新启用 `setMovableByWindowBackground(true)`，也不得把拖动 callback 放到 Tab、Activity Bar、侧栏或终端。
 
 ## 下一步
 
-- 使用最新提交后的二进制手工验收中文 IME、`Ctrl+B/C`、`Cmd+C/V/S` 和真实 tmux；鼠标上报、全屏 TUI 完整兼容与工作区恢复作为后续独立目标。
+- 用最新二进制手工确认零 Tab 空白和右侧专用留白可拖、有 Tab 时 Tab 条不可拖，以及溢出 Tab 的触控板/滚轮横向滚动。
 
 ## 最后更新时间
 
-- 2026-07-29 16:31 +0800
+- 2026-07-29 17:06 +0800

@@ -52,6 +52,8 @@ git diff --check
   定位，把未修饰的预编辑按键留给输入法，并确保提交文本只发送一次。
 - 本地 PTY 的 child、reader、writer、取消和 join 所有权保留在 `src/local_shell.rs`，
   不得把阻塞式 PTY 操作移到 UI 线程。
+- macOS 必须关闭整窗背景拖动；只有零 Tab 空白条或最右侧专用留白的鼠标左键 down
+  可以调用 UI 线程原生拖动 callback，Tab、Activity Bar、侧栏和终端不得成为拖动区域。
 - 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；构建或运行时不得从
   `third_package/axshell` 加载静态资源。
 - 修改面向用户的文档时同步维护中英文页面。
@@ -76,4 +78,4 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 Secret Service 和 Windows Credential Manager 仍需对应平台验证。窗口渲染、键盘/
 焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH 服务器登录仍需
 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实 SSH 并发连接和切换后的终端
-焦点保持。
+焦点保持，以及原生标题栏拖动命中区域。

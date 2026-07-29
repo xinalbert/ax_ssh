@@ -17,6 +17,9 @@ SSH 连接流程会校验服务器 SHA-256 主机密钥指纹、接收临时密�
 键、Ctrl 控制字节和带修饰键的 xterm 导航序列都会发送到活动 PTY。未修饰方向键会
 跟随终端普通或 application-cursor 模式发送 CSI 或 SS3 序列，因此 shell 历史和全屏
 程序可以收到正确输入。终端、Settings 和新建会话编辑器共用同一个顶部 Tab 条。
+Tab 溢出后可用触控板或鼠标滚轮横向滚动，但不响应鼠标拖拽滚动。macOS 只有零 Tab
+时的空白条和最右侧专用留白可以移动窗口；Tab、Activity Bar、会话侧栏和终端内容
+都只响应自身交互，不会拖动窗口。
 
 终端、快捷键、本地 shell 和工作区参数在 Settings Tab 中管理，并写入版本化
 `sessions.json`；已发现的 shell 名称会缓存，下次只合并新增项。项目按 SIL Open Font

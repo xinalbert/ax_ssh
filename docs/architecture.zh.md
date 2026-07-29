@@ -80,6 +80,10 @@ Slint UI（.slint）
    scrollback、宽字符和 application-cursor 模式。非活动 Tab 的输出留在 Rust 状态，
    只有活动字符格快照进入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
+9. macOS 应用 bridge 会启用铺满标题栏的内容，但关闭 AppKit 的整窗背景拖动。Slint
+   只从零 Tab 空白条或最右侧专用留白报告 mouse-down，并由 UI 线程 callback 把当前
+   事件交给 `NSWindow::performWindowDragWithEvent`；Tab、Activity Bar、侧栏和终端
+   都不会调用该 callback。
 
 ## SSH 安全契约
 
@@ -122,7 +126,8 @@ UI model。
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，包括经过约束
 的字体、字号、行高、配色、亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
 本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度与快捷键。启动时会验证已有 shell
-缓存并只追加新发现项。旧设置会在反序列化时迁移。密码、passphrase、私钥内容、
+缓存并只追加新发现项。旧设置会在反序列化时迁移；schema 版本 7 只把旧默认
+260px 侧栏替换为紧凑的 220px，自定义宽度保持不变。密码、passphrase、私钥内容、
 终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
 ## 分阶段范围

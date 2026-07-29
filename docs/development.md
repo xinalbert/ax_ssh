@@ -61,6 +61,10 @@ local environment could reach crates.io when `keyring 4.1.5` was resolved on
   preedit keys to the input method, and send committed text exactly once.
 - Keep local PTY child, reader, writer, cancellation, and join ownership inside
   `src/local_shell.rs`; do not move blocking PTY operations onto the UI thread.
+- Keep macOS movable-window-background disabled. Only a left-button down in
+  the empty zero-tab strip or dedicated trailing space may invoke the
+  UI-thread native drag callback; tabs, the activity bar, sidebar, and
+  terminal must not become drag regions.
 - Bundled fonts must live under `assets/fonts/` with their independent license
   and notices. Never load static resources from `third_package/axshell` at
   build time or runtime.
@@ -90,5 +94,6 @@ real platform credential write/read/delete and may trigger an OS authorization
 prompt. It passed against macOS Keychain; Unix Secret Service and Windows
 Credential Manager still require platform-specific verification. Manual
 follow-up is also required for window rendering, horizontal tab scrolling,
-keyboard/focus input, the visible group/host-key/authentication flows,
+native title-bar drag hit testing, keyboard/focus input, the visible
+group/host-key/authentication flows,
 concurrent login against real SSH servers, and full-screen terminal programs.
