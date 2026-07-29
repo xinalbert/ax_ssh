@@ -4,7 +4,8 @@
 
 AxSSH 是一个基于 Rust、Slint、Tokio 和 russh 的跨平台 SSH 工作区。已保存会话可放入
 可折叠分组；Activity Bar 的分组图标用于展开会话侧栏，再次点击当前分组会收起。
-Local Shell 图标只新建本地终端 Tab，不改变侧栏状态。未分组会话以紧凑的顶层项直接
+没有已保存会话时侧栏自动隐藏。Local Shell 图标只新建本地终端 Tab，不改变侧栏
+状态。未分组会话以紧凑的顶层项直接
 显示在侧栏中，鼠标短暂停留后显示连接地址。每个本地或 SSH 终端 Tab 都有唯一运行时
 ID，并独占 worker 和有界终端模型，因此重复打开同一个服务器或本地 shell 时不会
 共享输出和进程状态。
@@ -18,12 +19,16 @@ SSH 连接流程会校验服务器 SHA-256 主机密钥指纹、接收临时密�
 整格光标。Enter、Backspace、Tab、Escape、方向键、Home/End、Insert/Delete、Page
 键、Ctrl 控制字节和带修饰键的 xterm 导航序列都会发送到活动 PTY。未修饰方向键会
 跟随终端普通或 application-cursor 模式发送 CSI 或 SS3 序列，因此 shell 历史和全屏
-程序可以收到正确输入。终端、Settings 和新建会话编辑器共用同一个顶部 Tab 条。
-Tab 溢出后可用触控板或鼠标滚轮横向滚动，但不响应鼠标拖拽滚动。macOS 只有零 Tab
-时的空白条和最右侧专用留白可以移动窗口；Tab、Activity Bar、会话侧栏和终端内容
-都只响应自身交互，不会拖动窗口。
+程序可以收到正确输入。终端和新建会话编辑器共用顶部 Tab 条；Settings 使用独立
+工作台页面，不再显示为普通 Tab，顶部区域只保留窗口拖动。Tab 溢出后可用触控板或
+鼠标滚轮横向滚动，但不响应鼠标拖拽滚动。macOS 的零 Tab 空白条、Settings 顶部空白
+和最右侧专用留白可以移动窗口；Tab、Activity Bar、会话侧栏和终端内容都只响应自身
+交互，不会拖动窗口。
 
-终端、快捷键、本地 shell 和工作区参数在 Settings Tab 中管理，并写入版本化
+终端、快捷键、本地 shell 和工作区参数在 Settings 页面中管理，可从 Activity Bar
+的 Settings 按钮或快捷键打开；相邻的 About 按钮会直接进入 About 页面，其中展示
+产品用途、版本和核心技术栈。General、Appearance、Terminal、Workspace、Shortcuts
+和 About 仍可从设置菜单切换，Save 与 Close 位于页面标题栏。保存值写入版本化
 `sessions.json`；已发现的 shell 名称会缓存，下次只合并新增项。项目按 SIL Open Font
 License 自带 JetBrains Mono。SFTP 和完整鼠标终端协议仍留在后续阶段实现。
 

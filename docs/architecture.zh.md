@@ -84,6 +84,11 @@ Slint UI（.slint）
    只从零 Tab 空白条或最右侧专用留白报告 mouse-down，并由 UI 线程 callback 把当前
    事件交给 `NSWindow::performWindowDragWithEvent`；Tab、Activity Bar、侧栏和终端
    都不会调用该 callback。
+10. Activity Bar 的 Settings 和 About 意图分别把同一个单例 Settings 工作台打开到
+    General 或 About。应用 bridge 不把该内部单例放入可见工作区 Tab model；Settings
+    激活时，Slint 用仅可拖动的标题栏区域替换 Tab 条。页面切换时未保存草稿仍由 Slint
+    持有；只有标题栏 Save 会跨入应用边界。About 展示静态产品用途说明，并只接收
+    编译期 package 版本作为只读 UI 元数据。
 
 ## SSH 安全契约
 
@@ -130,12 +135,22 @@ UI model。
 260px 侧栏替换为紧凑的 220px，自定义宽度保持不变。密码、passphrase、私钥内容、
 终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
+只有会话模型非空且用户没有手动收起时，会话侧栏才参与布局。空状态仍保留 Activity
+Bar 上的 Local Shell、Settings、About 和新建会话入口。
+
+静态界面样式只由 `ui/theme.slint` 的语义 token 配置，包括调色板角色、字号层级、
+间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
+`ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
+页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
+列，标准控件统一使用 Theme 配置的高度。运行时终端几何与用户选项仍进入版本化
+`AppSettings`；Theme global 只负责视觉配置，不是可变领域状态。
+
 ## 分阶段范围
 
 当前应用可校验并持久化 profile、确认逐 profile 主机指纹、使用临时密码或本机
 私钥认证，并持有多个逐 Tab 隔离的 SSH 或本地交互式 PTY shell，相同目标也可重复
-打开。Settings 和新建会话编辑器属于工作区 Tab；只有短期信任和 secret 提示保留
-为覆盖层。
+打开。新建会话编辑器仍属于工作区 Tab；Settings 是可见 Tab 条之外的单例工作台页面，
+只有短期信任和 secret 提示保留为覆盖层。
 以下内容仍作为独立步骤：
 
 - 共享的 OpenSSH 兼容 known_hosts 存储和主机密钥撤销；

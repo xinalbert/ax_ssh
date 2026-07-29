@@ -5,12 +5,12 @@
 AxSSH is a cross-platform SSH workspace built with Rust, Slint, Tokio, and
 russh. Saved sessions can be organized into collapsible groups. The activity
 bar group icons open the session sidebar, and clicking the active group again
-closes it. The Local Shell icon only opens a new local terminal tab and never
-changes the sidebar. Ungrouped sessions appear as compact top-level sidebar
-entries and reveal their endpoint after a short pointer hover. Every local or
-SSH terminal tab has a unique runtime ID, worker, and bounded terminal model,
-so opening the same server or local shell repeatedly does not share output or
-process state.
+closes it. An empty session list keeps the sidebar hidden. The Local Shell icon
+only opens a new local terminal tab and never changes the sidebar. Ungrouped
+sessions appear as compact top-level sidebar entries and reveal their endpoint
+after a short pointer hover. Every local or SSH terminal tab has a unique
+runtime ID, worker, and bounded terminal model, so opening the same server or
+local shell repeatedly does not share output or process state.
 
 The SSH workflow verifies a server's SHA-256 host-key fingerprint, accepts a
 transient password, and can optionally remember it in the platform credential
@@ -25,17 +25,23 @@ Tab, Escape, arrows, Home/End, Insert/Delete, Page keys, Ctrl control bytes, and
 xterm-style modified navigation are encoded for the active PTY. Unmodified
 arrows follow the terminal's normal or application-cursor mode, so shell
 history and full-screen programs receive the expected CSI or SS3 sequence.
-Terminals, Settings, and the new-session editor share one top tab bar.
-Overflowing tabs scroll horizontally with a touchpad or mouse wheel, while
-mouse-drag scrolling is disabled. On macOS, the empty zero-tab strip and a
-dedicated trailing title-bar space move the window; tabs, the activity bar,
-the session sidebar, and terminal content remain interaction-only regions.
+Terminals and the new-session editor share one top tab bar. Overflowing tabs
+scroll horizontally with a touchpad or mouse wheel, while mouse-drag scrolling
+is disabled. Settings uses a dedicated workbench view instead of another
+visible tab; its title-bar area remains available for window dragging. On
+macOS, the empty zero-tab strip and a dedicated trailing title-bar space move
+the window; tabs, the activity bar, the session sidebar, and terminal content
+remain interaction-only regions.
 
 Terminal, shortcut, local-shell, and workspace settings are managed in a
-Settings tab and persisted in the versioned `sessions.json`; discovered shell
-names are cached and only newly available names are added later. JetBrains Mono
-is bundled under the SIL Open Font License. SFTP and full mouse-oriented
-terminal protocol support remain staged.
+Settings view opened from the activity bar or its shortcut. The adjacent About
+activity opens the About page directly, where the product purpose, version, and
+core stack are shown. General, Appearance, Terminal, Workspace, Shortcuts, and
+About remain navigable inside Settings. Save and Close stay in the Settings
+page header. Saved values are persisted in the versioned `sessions.json`;
+discovered shell names are cached and only newly available names are added
+later. JetBrains Mono is bundled under the SIL Open Font License. SFTP and full
+mouse-oriented terminal protocol support remain staged.
 
 ## Quick start
 

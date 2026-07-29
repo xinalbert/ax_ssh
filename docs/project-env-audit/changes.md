@@ -15,3 +15,11 @@
 - 影响文件：`Cargo.toml`、`Cargo.lock`、`src/credentials.rs`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
 - 验证结果：`cargo search keyring --limit 1` 返回 `4.1.5`；locked/offline Cargo metadata 仅含一个 workspace member；macOS 平台凭据 round-trip 测试通过且测试条目已删除。本机仍未安装 `cargo-fmt`/`cargo-clippy`。
 - 对 plan 的更新：registry 不再是当前阻塞；Linux Secret Service 和 Windows Credential Manager 保留为对应平台验收项。
+
+## 2026-07-29 对齐环境记忆契约
+
+- 日期：2026-07-29 18:49 +0800
+- 变化摘要：环境事实未变化；把 `current.md` 从压缩式预检摘要整理为项目类型、运行环境、测试环境、关键命令、外部依赖和证据文件的当前契约结构。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 更新后的命令或环境：继续使用 Rust 2024、锁定依赖和 locked/offline Cargo 门禁；UI-only 修复不需要网络或外部 SSH 服务。
+- 验证结果：本机 `rustc 1.96.1`、`cargo 1.96.1` 与 locked/offline Cargo metadata 通过；仓库仍只有一个 workspace member。

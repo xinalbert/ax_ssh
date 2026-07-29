@@ -104,6 +104,14 @@ Process startup (src/main.rs)
    and the UI-thread callback hands the current event to
    `NSWindow::performWindowDragWithEvent`. Tabs, the activity bar, sidebar,
    and terminal never invoke that callback.
+10. The activity-bar Settings and About intents open one singleton Settings
+    workbench view at General or About respectively. The bridge omits that
+    internal singleton from the visible workspace-tab model, and Slint replaces
+    the tab strip with a drag-only title-bar region while Settings is active.
+    Unsaved drafts stay in Slint while pages change; only the header Save action
+    crosses the application boundary. About presents a static product-purpose
+    description and receives the compile-time package version as read-only UI
+    metadata.
 
 ## SSH security contract
 
@@ -166,14 +174,30 @@ default with the compact 220px default and preserves custom widths. Passwords,
 passphrases, private-key contents, terminal output, tab runtime IDs, child
 processes, and workers are never serialized.
 
+The session sidebar participates in layout only when the session model is not
+empty and the user has not collapsed it. Local Shell, Settings, About, and
+new-session activity-bar actions remain available in the empty state.
+
+Static interface styling is configured only by semantic tokens in
+`ui/theme.slint`: palette roles, type scale, spacing, radii, standard workspace
+geometry, Settings control dimensions, editor widths, and overlay sizes.
+`ui/components/settings-controls.slint` consumes those tokens to provide the
+shared Settings glyph, navigation, page, compact right-aligned field, row,
+toggle, shortcut, and action header primitives. Setting rows keep a stable
+title and metadata column while standard controls use one theme-configured height.
+Runtime terminal geometry and user choices remain in versioned
+`AppSettings`; the Theme global is visual configuration, not mutable domain
+state.
+
 ## Staged scope
 
 The current application validates and persists profiles, confirms per-profile
 host fingerprints, authenticates with transient passwords or local private
 keys, and owns multiple independent SSH or local tab-scoped PTY shells,
-including duplicate targets. Settings and new-session editing are workspace
-tabs; only short-lived trust and secret prompts remain overlays. The following
-remain separate steps:
+including duplicate targets. New-session editing remains a workspace tab;
+Settings is a singleton workbench view outside the visible tab strip, and only
+short-lived trust and secret prompts remain overlays. The following remain
+separate steps:
 
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;
 - SFTP as a separate worker sharing an authenticated transport policy;
