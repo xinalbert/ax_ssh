@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use slint::platform::Key;
+use slint::platform::{Clipboard, Key};
 use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
@@ -226,6 +226,20 @@ fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) 
     ui.on_format_shortcut(move |text, alt, control, meta, shift| {
         format_shortcut_event(text.as_str(), alt, control, meta, shift).into()
     });
+    let ui_for_clipboard_write = ui.as_weak();
+    ui.on_write_clipboard(move |text| {
+        if let Some(ui) = ui_for_clipboard_write.upgrade() {
+            set_platform_clipboard_text(&ui, text.as_str());
+        }
+    });
+    let ui_for_clipboard_read = ui.as_weak();
+    ui.on_read_clipboard(move || {
+        ui_for_clipboard_read
+            .upgrade()
+            .map(|ui| platform_clipboard_text(&ui))
+            .unwrap_or_default()
+            .into()
+    });
     #[cfg(target_os = "macos")]
     {
         let ui_for_drag = ui.as_weak();
@@ -245,6 +259,22 @@ fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) 
     wire_authentication(ui, state.clone(), runtime.clone());
     wire_settings(ui, state.clone(), runtime);
     wire_terminal(ui, state);
+}
+
+fn set_platform_clipboard_text(ui: &AppWindow, text: &str) {
+    // Slint 1.17 exposes clipboard access through its window context.
+    slint::private_unstable_api::re_exports::WindowInner::from_pub(ui.window())
+        .context()
+        .platform()
+        .set_clipboard_text(text, Clipboard::DefaultClipboard);
+}
+
+fn platform_clipboard_text(ui: &AppWindow) -> String {
+    slint::private_unstable_api::re_exports::WindowInner::from_pub(ui.window())
+        .context()
+        .platform()
+        .clipboard_text(Clipboard::DefaultClipboard)
+        .unwrap_or_default()
 }
 
 fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {

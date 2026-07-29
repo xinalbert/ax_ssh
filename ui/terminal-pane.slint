@@ -1,4 +1,3 @@
-import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export struct TerminalRenderRun {
@@ -40,6 +39,8 @@ export component TerminalPane inherits Rectangle {
     callback scrolled(int);
     callback selection-text(int, int, int, int) -> string;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback write-clipboard(string);
+    callback read-clipboard() -> string;
 
     private property <length> font-cell-width:
         max(1px, cell-probe.preferred-width / 50);
@@ -112,14 +113,12 @@ export component TerminalPane inherits Rectangle {
 
     function copy-selection() {
         if root.selection-active {
-            copy-input.text = root.selection-text(
+            root.write-clipboard(root.selection-text(
                 root.selection-anchor-row,
                 root.selection-anchor-column,
                 root.selection-focus-row,
                 root.selection-focus-column,
-            );
-            copy-input.select-all();
-            copy-input.copy();
+            ));
             ime-input.focus();
         }
     }
@@ -132,8 +131,11 @@ export component TerminalPane inherits Rectangle {
     }
 
     function paste-from-clipboard() {
-        paste-input.text = "";
-        paste-input.paste();
+        let text = root.read-clipboard();
+        if root.connected && !text.is-empty {
+            root.clear-selection();
+            root.terminal-key(text, false, false, false, false);
+        }
         ime-input.focus();
     }
 
@@ -175,6 +177,80 @@ export component TerminalPane inherits Rectangle {
         running: root.connected && ime-input.has-focus && root.cursor-visible;
         interval: 530ms;
         triggered => { root.cursor-blink = !root.cursor-blink; }
+    }
+
+    ime-input := TextInput {
+        x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
+            root.cursor-column * root.cell-width));
+        y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
+            root.cursor-row * root.cell-height));
+        width: 1px;
+        height: root.cell-height;
+        opacity: 0;
+        single-line: true;
+        color: transparent;
+        selection-foreground-color: transparent;
+        selection-background-color: transparent;
+        text-cursor-width: 0px;
+        font-family: root.terminal-font-family;
+        font-size: root.terminal-font-size;
+        accessible-role: none;
+
+        changed has-focus => {
+            if self.has-focus {
+                root.cursor-blink = true;
+            }
+        }
+        key-pressed(event) => {
+            let shortcut = root.format-shortcut(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            );
+            if shortcut == root.copy-selection-shortcut && root.selection-active {
+                root.copy-selection();
+                return EventResult.accept;
+            }
+            if shortcut == root.paste-shortcut {
+                root.paste-from-clipboard();
+                return EventResult.accept;
+            }
+            if self.preedit-text != ""
+                    && !event.modifiers.control
+                    && !event.modifiers.alt
+                    && !event.modifiers.meta {
+                return EventResult.reject;
+            }
+            if !root.direct-terminal-key(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) {
+                return EventResult.reject;
+            }
+            root.clear-selection();
+            if root.terminal-key(
+                event.text,
+                event.modifiers.alt,
+                event.modifiers.control,
+                event.modifiers.meta,
+                event.modifiers.shift,
+            ) {
+                return EventResult.accept;
+            }
+            return EventResult.reject;
+        }
+        edited => {
+            if self.preedit-text == "" && self.text != "" {
+                root.clear-selection();
+                root.terminal-key(self.text, false, false, false, false);
+                self.text = "";
+            }
+        }
     }
 
     VerticalLayout {
@@ -327,6 +403,7 @@ export component TerminalPane inherits Rectangle {
                             && root.right-click-copy-or-paste {
                             if root.selection-active {
                                 root.copy-selection();
+                                root.clear-selection();
                             } else if root.connected {
                                 root.paste-from-clipboard();
                             }
@@ -378,106 +455,6 @@ export component TerminalPane inherits Rectangle {
                         activated => { root.select-all-visible(); }
                     }
                 }
-            }
-        }
-    }
-
-    ime-input := TextInput {
-        x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
-            root.cursor-column * root.cell-width));
-        y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
-            root.cursor-row * root.cell-height));
-        width: 1px;
-        height: root.cell-height;
-        opacity: 0;
-        single-line: true;
-        color: transparent;
-        selection-foreground-color: transparent;
-        selection-background-color: transparent;
-        text-cursor-width: 0px;
-        font-family: root.terminal-font-family;
-        font-size: root.terminal-font-size;
-        accessible-role: none;
-
-        changed has-focus => {
-            if self.has-focus {
-                root.cursor-blink = true;
-            }
-        }
-        key-pressed(event) => {
-            let shortcut = root.format-shortcut(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            );
-            if shortcut == root.copy-selection-shortcut && root.selection-active {
-                root.copy-selection();
-                return EventResult.accept;
-            }
-            if shortcut == root.paste-shortcut {
-                root.paste-from-clipboard();
-                return EventResult.accept;
-            }
-            if self.preedit-text != ""
-                    && !event.modifiers.control
-                    && !event.modifiers.alt
-                    && !event.modifiers.meta {
-                return EventResult.reject;
-            }
-            if !root.direct-terminal-key(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            ) {
-                return EventResult.reject;
-            }
-            root.clear-selection();
-            if root.terminal-key(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            ) {
-                return EventResult.accept;
-            }
-            return EventResult.reject;
-        }
-        edited => {
-            if self.preedit-text == "" && self.text != "" {
-                root.clear-selection();
-                root.terminal-key(self.text, false, false, false, false);
-                self.text = "";
-            }
-        }
-    }
-
-    copy-input := TextInput {
-        x: -2px;
-        y: -2px;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        single-line: false;
-        accessible-role: none;
-    }
-
-    paste-input := LineEdit {
-        x: -2px;
-        y: -2px;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        accessible-role: none;
-        edited(value) => {
-            if !value.is-empty {
-                root.clear-selection();
-                root.terminal-key(value, false, false, false, false);
-                self.text = "";
             }
         }
     }

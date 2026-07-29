@@ -127,6 +127,8 @@ export component AppWindow inherits Window {
     callback scroll-terminal(int);
     callback terminal-selection-text(int, int, int, int) -> string;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback write-clipboard(string);
+    callback read-clipboard() -> string;
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -559,6 +561,8 @@ export component AppWindow inherits Window {
                             anchor-row, anchor-column, focus-row, focus-column,
                         );
                     }
+                    write-clipboard(text) => { root.write-clipboard(text); }
+                    read-clipboard() => { return root.read-clipboard(); }
                 }
 
                 if root.active-tab-kind == "settings" : SettingsPane {
