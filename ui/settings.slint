@@ -1,0 +1,211 @@
+import { Button, ComboBox, LineEdit, SpinBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component SettingsPane inherits Rectangle {
+    in property <[string]> terminal-font-options;
+    in property <string> terminal-font-family;
+    in property <int> terminal-font-size;
+    in property <int> scrollback-lines;
+    in property <int> default-terminal-columns;
+    in property <int> default-terminal-rows;
+    in property <int> sidebar-width;
+    in property <int> tab-width;
+    in property <string> status;
+
+    callback save(string, int, int, int, int, int, int);
+    callback cancel();
+
+    private property <string> selected-section: "Terminal";
+    private property <string> draft-font-family: root.terminal-font-family;
+    private property <int> draft-font-size: root.terminal-font-size;
+    private property <int> draft-scrollback-lines: root.scrollback-lines;
+    private property <int> draft-columns: root.default-terminal-columns;
+    private property <int> draft-rows: root.default-terminal-rows;
+    private property <int> draft-sidebar-width: root.sidebar-width;
+    private property <int> draft-tab-width: root.tab-width;
+
+    background: Theme.background;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            width: 224px;
+            background: Theme.panel;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 6px;
+
+                Text {
+                    text: "Settings";
+                    color: Theme.text;
+                    font-size: 18px;
+                    font-weight: 700;
+                }
+                Rectangle { height: 8px; }
+
+                Rectangle {
+                    height: 38px;
+                    background: root.selected-section == "Terminal" ? Theme.panel-alt : transparent;
+                    border-radius: Theme.radius;
+                    terminal-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.selected-section = "Terminal"; }
+                    }
+                    Text {
+                        x: 12px;
+                        width: parent.width - 24px;
+                        height: parent.height;
+                        text: "Terminal";
+                        color: Theme.text;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 38px;
+                    background: root.selected-section == "Workspace" ? Theme.panel-alt : transparent;
+                    border-radius: Theme.radius;
+                    workspace-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.selected-section = "Workspace"; }
+                    }
+                    Text {
+                        x: 12px;
+                        width: parent.width - 24px;
+                        height: parent.height;
+                        text: "Workspace layout";
+                        color: Theme.text;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.background;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+
+                Text {
+                    text: root.selected-section;
+                    color: Theme.text;
+                    font-size: 20px;
+                    font-weight: 700;
+                }
+                Rectangle { height: 1px; background: Theme.border; }
+
+                if root.selected-section == "Terminal" : VerticalLayout {
+                    spacing: 12px;
+                    Text { text: "Font family"; color: Theme.muted; font-size: 12px; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        settings-font-edit := LineEdit {
+                            horizontal-stretch: 1;
+                            text <=> root.draft-font-family;
+                        }
+                        ComboBox {
+                            width: 180px;
+                            model: root.terminal-font-options;
+                            selected(value) => { root.draft-font-family = value; }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 18px;
+                        VerticalLayout {
+                            spacing: 6px;
+                            Text { text: "Font size"; color: Theme.muted; font-size: 12px; }
+                            settings-font-size := SpinBox {
+                                width: 150px;
+                                minimum: 9;
+                                maximum: 32;
+                                value <=> root.draft-font-size;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: 6px;
+                            Text { text: "Scrollback lines"; color: Theme.muted; font-size: 12px; }
+                            settings-scrollback := SpinBox {
+                                width: 170px;
+                                minimum: 100;
+                                maximum: 50000;
+                                value <=> root.draft-scrollback-lines;
+                            }
+                        }
+                    }
+                    Text { text: "Default PTY size"; color: Theme.muted; font-size: 12px; }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        settings-columns := SpinBox {
+                            width: 150px;
+                            minimum: 20;
+                            maximum: 300;
+                            value <=> root.draft-columns;
+                        }
+                        Text { text: "columns"; color: Theme.muted; vertical-alignment: center; }
+                        settings-rows := SpinBox {
+                            width: 150px;
+                            minimum: 5;
+                            maximum: 100;
+                            value <=> root.draft-rows;
+                        }
+                        Text { text: "rows"; color: Theme.muted; vertical-alignment: center; }
+                    }
+                }
+
+                if root.selected-section == "Workspace" : VerticalLayout {
+                    spacing: 12px;
+                    Text { text: "Session sidebar width"; color: Theme.muted; font-size: 12px; }
+                    settings-sidebar-width := SpinBox {
+                        width: 170px;
+                        minimum: 220;
+                        maximum: 420;
+                        value <=> root.draft-sidebar-width;
+                    }
+                    Text { text: "Tab width"; color: Theme.muted; font-size: 12px; }
+                    settings-tab-width := SpinBox {
+                        width: 170px;
+                        minimum: 120;
+                        maximum: 260;
+                        value <=> root.draft-tab-width;
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+                Text {
+                    text: root.status;
+                    color: Theme.accent;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    Button { text: "Close"; clicked => { root.cancel(); } }
+                    Button {
+                        text: "Save";
+                        clicked => {
+                            root.save(
+                                root.draft-font-family,
+                                root.draft-font-size,
+                                root.draft-scrollback-lines,
+                                root.draft-columns,
+                                root.draft-rows,
+                                root.draft-sidebar-width,
+                                root.draft-tab-width,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,116 @@
+import { LineEdit, TextEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component TerminalPane inherits Rectangle {
+    in property <bool> connected;
+    in property <string> output;
+    in property <string> status;
+    in property <string> terminal-font-family;
+    in property <length> terminal-font-size;
+
+    callback terminal-key(string, bool, bool, bool, bool) -> bool;
+    callback resized(int, int);
+
+    private property <length> cell-width: max(5px, root.terminal-font-size * 0.62);
+    private property <length> cell-height: max(10px, root.terminal-font-size * 1.45);
+    private property <int> terminal-columns: max(20, min(300, round(terminal-view.visible-width / root.cell-width)));
+    private property <int> terminal-rows: max(5, min(100, round(terminal-view.visible-height / root.cell-height)));
+    private property <length> terminal-content-height: terminal-view.viewport-height;
+    private property <length> terminal-viewport-y: terminal-view.viewport-y;
+    private property <length> bottom-viewport-y: min(0px, terminal-view.visible-height - terminal-view.viewport-height);
+    private property <bool> follow-output: true;
+
+    public function focus-terminal() {
+        terminal-view.focus();
+    }
+
+    function update-terminal-size() {
+        if root.connected {
+            root.resized(root.terminal-columns, root.terminal-rows);
+        }
+    }
+
+    function scroll-to-bottom() {
+        if root.follow-output {
+            terminal-view.viewport-y = root.bottom-viewport-y;
+        }
+    }
+
+    changed terminal-columns => { root.update-terminal-size(); }
+    changed terminal-rows => { root.update-terminal-size(); }
+    changed connected => {
+        root.update-terminal-size();
+        if root.connected {
+            terminal-view.focus();
+        }
+    }
+    changed output => { root.scroll-to-bottom(); }
+    changed terminal-content-height => { root.scroll-to-bottom(); }
+    changed terminal-viewport-y => {
+        root.follow-output = terminal-view.viewport-y <= root.bottom-viewport-y + root.cell-height;
+    }
+
+    background: Theme.panel;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        terminal-view := TextEdit {
+            vertical-stretch: 1;
+            text: root.output;
+            read-only: true;
+            wrap: no-wrap;
+            font-family: root.terminal-font-family;
+            font-size: root.terminal-font-size;
+            accessible-label: "SSH terminal";
+            key-pressed(event) => {
+                if event.modifiers.control && event.modifiers.shift
+                    && (event.text == "c" || event.text == "C") {
+                    terminal-view.copy();
+                    return EventResult.accept;
+                }
+                if ((event.modifiers.meta && !event.modifiers.control)
+                    || (event.modifiers.control && event.modifiers.shift))
+                    && (event.text == "v" || event.text == "V") {
+                    clipboard-input.text = "";
+                    clipboard-input.paste();
+                    terminal-view.focus();
+                    return EventResult.accept;
+                }
+                if root.terminal-key(
+                    event.text,
+                    event.modifiers.alt,
+                    event.modifiers.control,
+                    event.modifiers.meta,
+                    event.modifiers.shift,
+                ) {
+                    return EventResult.accept;
+                }
+                return EventResult.reject;
+            }
+        }
+        Text {
+            text: root.status;
+            color: root.connected ? Theme.success : Theme.accent;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+
+    clipboard-input := LineEdit {
+        x: -2px;
+        y: -2px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        accessible-role: none;
+        edited(value) => {
+            if !value.is-empty {
+                root.terminal-key(value, false, false, false, false);
+                self.text = "";
+            }
+        }
+    }
+}

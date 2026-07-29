@@ -1,0 +1,113 @@
+import { Button, CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component SessionEditorPane inherits Rectangle {
+    in property <[string]> group-options;
+    in property <[string]> private-key-options;
+    in property <string> status;
+
+    callback save(string, string, string, string, string, string, string, string, bool);
+    callback cancel();
+
+    background: Theme.background;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: "New SSH session";
+            color: Theme.text;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        Rectangle { height: 1px; background: Theme.border; }
+
+        Text { text: "Identity"; color: Theme.muted; font-size: 12px; }
+        name-edit := LineEdit { placeholder-text: "Name"; }
+        HorizontalLayout {
+            spacing: 8px;
+            group-edit := LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Group (optional)";
+            }
+            if root.group-options.length > 0 : ComboBox {
+                width: 200px;
+                model: root.group-options;
+                selected(value) => { group-edit.text = value == "Ungrouped" ? "" : value; }
+            }
+        }
+
+        Text { text: "Endpoint"; color: Theme.muted; font-size: 12px; }
+        HorizontalLayout {
+            spacing: 8px;
+            host-edit := LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Host";
+            }
+            port-edit := LineEdit {
+                width: 100px;
+                text: "22";
+                placeholder-text: "Port";
+            }
+        }
+        user-edit := LineEdit { placeholder-text: "Username"; }
+
+        Text { text: "Authentication"; color: Theme.muted; font-size: 12px; }
+        auth-method := ComboBox { model: ["Password", "Private key"]; }
+        key-row := HorizontalLayout {
+            visible: auth-method.current-value == "Private key";
+            height: self.visible ? 34px : 0px;
+            spacing: 8px;
+            key-edit := LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Private key path";
+            }
+            if root.private-key-options.length > 0 : ComboBox {
+                width: 220px;
+                model: root.private-key-options;
+                selected(value) => { key-edit.text = value; }
+            }
+        }
+        new-password-edit := LineEdit {
+            visible: auth-method.current-value == "Password";
+            height: self.visible ? 34px : 0px;
+            placeholder-text: "Password";
+            input-type: InputType.password;
+        }
+        remember-new-password := CheckBox {
+            visible: auth-method.current-value == "Password";
+            height: self.visible ? 32px : 0px;
+            text: "Save password in system credential store";
+        }
+
+        Rectangle { vertical-stretch: 1; }
+        Text {
+            text: root.status;
+            color: Theme.accent;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            Button { text: "Cancel"; clicked => { root.cancel(); } }
+            Button {
+                text: "Save session";
+                clicked => {
+                    root.save(
+                        name-edit.text,
+                        group-edit.text,
+                        host-edit.text,
+                        port-edit.text,
+                        user-edit.text,
+                        auth-method.current-value,
+                        key-edit.text,
+                        new-password-edit.text,
+                        remember-new-password.checked,
+                    );
+                }
+            }
+        }
+    }
+}
