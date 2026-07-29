@@ -313,7 +313,7 @@ export component TerminalPane inherits Rectangle {
                     height: root.cell-height;
                     background: transparent;
                     if run.underline : Rectangle {
-                        y: parent.height - 2px;
+                        y: parent.height - Theme.terminal-underline-offset;
                         width: parent.width;
                         height: Theme.hairline;
                         background: run.foreground;

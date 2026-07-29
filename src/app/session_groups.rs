@@ -41,17 +41,10 @@ pub(super) fn profile_endpoint(profile: &SessionProfile) -> String {
     format!("{}@{}:{}", profile.username, profile.host, profile.port)
 }
 
-pub(super) fn group_icon(group_name: &str) -> String {
-    let display_name = if group_name.is_empty() {
-        "Ungrouped"
-    } else {
-        group_name
-    };
-    let characters = display_name.chars().collect::<Vec<_>>();
-    let first = characters.iter().take(2).collect::<String>();
-    let last_start = characters.len().saturating_sub(2);
-    let last = characters.iter().skip(last_start).collect::<String>();
-    format!("{first}*{last}")
+pub(super) fn compact_label(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    let value = if value.is_empty() { fallback } else { value };
+    value.chars().take(2).collect()
 }
 
 #[cfg(test)]
@@ -78,9 +71,9 @@ mod tests {
     }
 
     #[test]
-    fn group_icons_use_unicode_characters_from_both_ends() {
-        assert_eq!(group_icon("Production"), "Pr*on");
-        assert_eq!(group_icon("生产环境"), "生产*环境");
-        assert_eq!(group_icon(""), "Un*ed");
+    fn compact_labels_keep_the_first_two_unicode_characters() {
+        assert_eq!(compact_label("Production", "Un"), "Pr");
+        assert_eq!(compact_label("生产环境", "Un"), "生产");
+        assert_eq!(compact_label("", "Un"), "Un");
     }
 }

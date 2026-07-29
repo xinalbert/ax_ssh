@@ -31,7 +31,7 @@ use self::credential_tasks::{
     delete_password as delete_stored_password, load_password as load_stored_password,
     save_password as save_stored_password,
 };
-use self::session_groups::{group_icon, group_options, profile_endpoint, session_groups};
+use self::session_groups::{compact_label, group_options, profile_endpoint, session_groups};
 use self::state::{
     ActiveTabSnapshot, AppState, ConnectionStart, PendingAuth, PendingHostKey, PendingProbe,
     TerminalTabState, TerminalWorker, WorkspaceTabSummary, prepare_authentication_retry,
@@ -67,19 +67,17 @@ pub fn run() -> Result<()> {
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let ui = AppWindow::new().context("failed to create Slint window")?;
 
-    let (rows, group_icons, groups, settings) = {
+    let (rows, groups, settings) = {
         let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
         (
             session_rows(&app.sessions, &app.expanded_groups),
-            group_icon_rows(&app.sessions),
             group_option_rows(&app.sessions),
             app.sessions.settings.clone(),
         )
     };
     ui.set_sessions(ModelRc::new(VecModel::from(rows)));
-    ui.set_group_icons(ModelRc::new(VecModel::from(group_icons)));
     ui.set_group_options(ModelRc::new(VecModel::from(groups)));
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
@@ -112,6 +110,20 @@ pub fn run() -> Result<()> {
             match macos_window::configure(ui.window()) {
                 Ok(()) => ui.set_unified_titlebar(true),
                 Err(error) => warn!(%error, "falling back to the standard macOS title bar"),
+            }
+            let ui_for_menu = ui.as_weak();
+            if let Err(error) = macos_window::configure_application_menu(move |section| {
+                let Some(ui) = ui_for_menu.upgrade() else {
+                    return;
+                };
+                let section = match section {
+                    macos_window::NativeMenuSection::Settings => "General",
+                    macos_window::NativeMenuSection::About => "About",
+                };
+                ui.set_settings_section(section.into());
+                ui.invoke_open_settings();
+            }) {
+                warn!(%error, "failed to connect the standard macOS application menu");
             }
         });
     }
@@ -150,24 +162,19 @@ fn session_rows(sessions: &SessionStore, expanded_groups: &BTreeSet<String>) -> 
     let mut rows = Vec::new();
     for group in session_groups(sessions) {
         let group_name = group.name;
+        let display_name = if group_name.is_empty() {
+            "Ungrouped".to_owned()
+        } else {
+            group_name.clone()
+        };
         let profiles = group.profiles;
-        if group_name.is_empty() {
-            rows.extend(profiles.into_iter().map(|profile| SessionRow {
-                id: profile.id.to_string().into(),
-                group_name: "".into(),
-                name: profile.name.clone().into(),
-                endpoint: profile_endpoint(profile).into(),
-                is_group: false,
-                expanded: false,
-            }));
-            continue;
-        }
         let expanded = expanded_groups.contains(&group_name);
         rows.push(SessionRow {
             id: "".into(),
             group_name: group_name.clone().into(),
-            name: group_name.clone().into(),
+            name: display_name.clone().into(),
             endpoint: profiles.len().to_string().into(),
+            icon: compact_label(&display_name, "Un").into(),
             is_group: true,
             expanded,
         });
@@ -177,6 +184,7 @@ fn session_rows(sessions: &SessionStore, expanded_groups: &BTreeSet<String>) -> 
                 group_name: group_name.clone().into(),
                 name: profile.name.clone().into(),
                 endpoint: profile_endpoint(profile).into(),
+                icon: compact_label(&profile.name, "--").into(),
                 is_group: false,
                 expanded: false,
             }));
@@ -189,24 +197,6 @@ fn group_option_rows(sessions: &SessionStore) -> Vec<SharedString> {
     group_options(sessions)
         .into_iter()
         .map(SharedString::from)
-        .collect()
-}
-
-fn group_icon_rows(sessions: &SessionStore) -> Vec<SessionGroupIconRow> {
-    session_groups(sessions)
-        .into_iter()
-        .map(|group| {
-            let display_name = if group.name.is_empty() {
-                "Ungrouped".to_owned()
-            } else {
-                group.name.clone()
-            };
-            SessionGroupIconRow {
-                group_name: group.name.clone().into(),
-                icon: group_icon(&group.name).into(),
-                accessible_name: format!("Open {display_name} group").into(),
-            }
-        })
         .collect()
 }
 
@@ -1817,10 +1807,9 @@ fn mutate_terminal_attempt(
 }
 
 fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    let (rows, group_icons, groups) = match state.lock() {
+    let (rows, groups) = match state.lock() {
         Ok(app) => (
             session_rows(&app.sessions, &app.expanded_groups),
-            group_icon_rows(&app.sessions),
             group_option_rows(&app.sessions),
         ),
         Err(_) => {
@@ -1830,7 +1819,6 @@ fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppStat
     };
     dispatch_ui(ui, move |ui| {
         ui.set_sessions(ModelRc::new(VecModel::from(rows)));
-        ui.set_group_icons(ModelRc::new(VecModel::from(group_icons)));
         ui.set_group_options(ModelRc::new(VecModel::from(groups)));
     });
 }
@@ -2155,8 +2143,9 @@ mod tests {
         assert_eq!(rows[1].name.as_str(), "prod-a");
         assert!(!rows[2].is_group);
         assert_eq!(rows[2].name.as_str(), "prod-b");
-        assert!(!rows[3].is_group);
-        assert_eq!(rows[3].name.as_str(), "local");
+        assert!(rows[3].is_group);
+        assert_eq!(rows[3].name.as_str(), "Ungrouped");
+        assert_eq!(rows[3].icon.as_str(), "Un");
         assert!(!rows[3].expanded);
     }
 

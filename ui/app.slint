@@ -3,7 +3,7 @@ import { Button, CheckBox, LineEdit, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
 import { SettingsPane } from "settings.slint";
-import { SettingsGlyph } from "components/settings-controls.slint";
+import { SidebarFolderGlyph, SidebarRailItem, SidebarTerminalGlyph } from "components/sidebar-controls.slint";
 import { SessionEditorPane } from "session-editor.slint";
 
 export struct SessionRow {
@@ -11,6 +11,7 @@ export struct SessionRow {
     group-name: string,
     name: string,
     endpoint: string,
+    icon: string,
     is-group: bool,
     expanded: bool,
 }
@@ -22,12 +23,6 @@ export struct WorkspaceTabRow {
     connected: bool,
 }
 
-export struct SessionGroupIconRow {
-    group-name: string,
-    icon: string,
-    accessible-name: string,
-}
-
 export component AppWindow inherits Window {
     title: "AxSSH";
     min-width: Theme.window-min-width;
@@ -37,7 +32,6 @@ export component AppWindow inherits Window {
     background: Theme.background;
 
     in property <[SessionRow]> sessions;
-    in property <[SessionGroupIconRow]> group-icons;
     in property <[WorkspaceTabRow]> workspace-tabs;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
@@ -96,7 +90,7 @@ export component AppWindow inherits Window {
     private property <bool> sidebar-collapsed: false;
     private property <bool> sidebar-group-selected: false;
     private property <string> active-sidebar-group: "";
-    private property <string> settings-section: "General";
+    in-out property <string> settings-section: "General";
     private property <bool> shortcut-recording: false;
     private property <length> activity-bar-width: Theme.activity-bar-width;
     private property <length> titlebar-drag-width:
@@ -104,7 +98,7 @@ export component AppWindow inherits Window {
     private property <bool> sidebar-content-visible:
         !root.sidebar-collapsed && root.sessions.length > 0;
     private property <length> navigation-width:
-        root.activity-bar-width + (root.sidebar-content-visible ? root.sidebar-width * 1px : 0px);
+        root.sidebar-content-visible ? root.sidebar-width * 1px : root.activity-bar-width;
 
     callback new-session();
     callback open-local-shell();
@@ -134,6 +128,69 @@ export component AppWindow inherits Window {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem {
+                title: "New Session";
+                activated => { root.new-session(); }
+            }
+        }
+        Menu {
+            title: "Edit";
+            MenuItem {
+                title: "Undo";
+                enabled: false;
+            }
+            if !root.apple-platform : MenuItem {
+                title: "Settings...";
+                activated => {
+                    root.settings-section = "General";
+                    root.open-settings();
+                }
+            }
+        }
+        Menu {
+            title: "View";
+            MenuItem {
+                title: "Toggle Session Sidebar";
+                activated => { root.sidebar-collapsed = !root.sidebar-collapsed; }
+            }
+        }
+        Menu {
+            title: "Pane";
+            MenuItem {
+                title: "New Local Shell";
+                activated => { root.open-local-shell(); }
+            }
+        }
+        Menu {
+            title: "Window";
+            MenuItem {
+                title: "Close Current Tab";
+                enabled: !root.active-tab-id.is-empty && root.active-tab-kind != "settings";
+                activated => { root.close-tab(root.active-tab-id); }
+            }
+        }
+        Menu {
+            title: "Help";
+            MenuItem {
+                title: "Keyboard Shortcuts";
+                activated => {
+                    root.settings-section = "Shortcuts";
+                    root.open-settings();
+                }
+            }
+            if !root.apple-platform : MenuItem {
+                title: "About AxSSH";
+                activated => {
+                    root.settings-section = "About";
+                    root.open-settings();
+                }
+            }
+        }
+    }
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -358,7 +415,7 @@ export component AppWindow inherits Window {
             HorizontalLayout {
                 spacing: 0px;
 
-                Rectangle {
+                if !root.sidebar-content-visible : Rectangle {
                     width: root.activity-bar-width;
                     background: Theme.panel-alt;
                     border-width: Theme.hairline;
@@ -369,134 +426,40 @@ export component AppWindow inherits Window {
                         padding-bottom: Theme.space-sm;
                         spacing: Theme.space-xs;
 
-                        Rectangle {
-                            height: Theme.activity-primary-height;
-                            background: local-shell-touch.has-hover ? Theme.panel : transparent;
-                            Text {
-                                width: parent.width;
-                                height: parent.height;
-                                text: "$_";
-                                color: Theme.text;
-                                font-family: "JetBrains Mono";
-                                font-size: Theme.font-activity;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                            local-shell-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                accessible-role: button;
-                                accessible-label: "Open local shell";
-                                clicked => { root.open-local-shell(); }
-                            }
+                        SidebarRailItem {
+                            local: true;
+                            accessible-name: "Open local shell";
+                            activated => { root.open-local-shell(); }
                         }
                         Rectangle { height: Theme.hairline; background: Theme.border; }
                         ListView {
                             vertical-stretch: 1;
-                            for group in root.group-icons : Rectangle {
-                                height: Theme.activity-primary-height;
-                                background: !root.sidebar-collapsed
-                                        && root.sidebar-group-selected
-                                        && root.active-sidebar-group == group.group-name
-                                    ? Theme.panel
-                                    : (group-touch.has-hover ? Theme.panel : transparent);
-                                border-radius: Theme.radius;
-                                Text {
-                                    width: parent.width;
-                                    height: parent.height;
-                                    text: group.icon;
-                                    color: Theme.text;
-                                    font-family: "JetBrains Mono";
-                                    font-size: Theme.font-micro;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-                                group-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    accessible-role: button;
-                                    accessible-label: group.accessible-name;
-                                    clicked => {
-                                        if !root.sidebar-collapsed
-                                                && root.sidebar-group-selected
-                                                && root.active-sidebar-group == group.group-name {
-                                            root.sidebar-collapsed = true;
-                                        } else {
-                                            root.sidebar-group-selected = true;
-                                            root.active-sidebar-group = group.group-name;
-                                            root.sidebar-collapsed = false;
-                                            root.activate-group(group.group-name);
-                                        }
+                            for row in root.sessions : SidebarRailItem {
+                                label: row.icon;
+                                group: row.is-group;
+                                selected: row.is-group
+                                    && root.sidebar-group-selected
+                                    && root.active-sidebar-group == row.group-name;
+                                accessible-name: row.is-group
+                                    ? "Open " + row.name + " group"
+                                    : "Connect to " + row.name;
+                                activated => {
+                                    if row.is-group {
+                                        root.sidebar-group-selected = true;
+                                        root.active-sidebar-group = row.group-name;
+                                        root.sidebar-collapsed = false;
+                                        root.activate-group(row.group-name);
+                                    } else {
+                                        root.connect-session(row.id);
                                     }
                                 }
                             }
                         }
                         Rectangle { height: Theme.hairline; background: Theme.border; }
-                        Rectangle {
-                            height: Theme.activity-action-height;
-                            background: settings-touch.has-hover ? Theme.panel : transparent;
-                            SettingsGlyph {
-                                x: (parent.width - self.width) / 2;
-                                y: (parent.height - self.height) / 2;
-                                glyph-color: root.active-tab-kind == "settings"
-                                        && root.settings-section != "About"
-                                    ? Theme.accent : Theme.text;
-                            }
-                            settings-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                accessible-role: button;
-                                accessible-label: "Open Settings";
-                                clicked => {
-                                    root.settings-section = "General";
-                                    root.open-settings();
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: Theme.activity-action-height;
-                            background: about-touch.has-hover ? Theme.panel : transparent;
-                            Text {
-                                width: parent.width;
-                                height: parent.height;
-                                text: "i";
-                                color: root.active-tab-kind == "settings"
-                                        && root.settings-section == "About"
-                                    ? Theme.accent : Theme.text;
-                                font-family: "JetBrains Mono";
-                                font-size: Theme.font-body-strong;
-                                font-weight: 700;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                            about-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                accessible-role: button;
-                                accessible-label: "Open About";
-                                clicked => {
-                                    root.settings-section = "About";
-                                    root.open-settings();
-                                }
-                            }
-                        }
-                        Rectangle {
-                            height: Theme.activity-action-height;
-                            background: rail-new-session.has-hover ? Theme.panel : transparent;
-                            Text {
-                                width: parent.width;
-                                height: parent.height;
-                                text: "+";
-                                color: Theme.text;
-                                font-size: Theme.font-page-title;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                            rail-new-session := TouchArea {
-                                mouse-cursor: pointer;
-                                accessible-role: button;
-                                accessible-label: "New session tab";
-                                clicked => { root.new-session(); }
-                            }
+                        SidebarRailItem {
+                            label: "+";
+                            accessible-name: "New session tab";
+                            activated => { root.new-session(); }
                         }
                     }
                 }
@@ -507,95 +470,154 @@ export component AppWindow inherits Window {
                     border-width: Theme.hairline;
                     border-color: Theme.border;
 
-                VerticalLayout {
-                    padding-left: Theme.space-md;
-                    padding-right: Theme.space-md;
-                    padding-top: Theme.space-sm;
-                    padding-bottom: Theme.space-sm;
-                    spacing: Theme.space-xs;
+                    VerticalLayout {
+                        padding-left: Theme.space-md;
+                        padding-right: Theme.space-md;
+                        padding-top: Theme.space-sm;
+                        padding-bottom: Theme.space-sm;
+                        spacing: Theme.space-xs;
 
-                    ListView {
-                        vertical-stretch: 1;
-                        for row in root.sessions : Rectangle {
-                            height: row.is-group || row.group-name.is-empty
-                                ? Theme.session-group-row-height : Theme.session-row-height;
-                            background: session-touch.has-hover ? Theme.panel-alt : transparent;
+                        local-card := Rectangle {
+                            height: Theme.sidebar-local-card-height;
+                            background: Theme.panel-alt;
+                            border-width: Theme.hairline;
+                            border-color: local-card-touch.has-hover ? Theme.accent : Theme.border;
                             border-radius: Theme.radius;
-                            session-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => {
-                                    if row.is-group {
-                                        root.toggle-group(row.group-name);
-                                    } else {
-                                        root.connect-session(row.id);
+
+                            HorizontalLayout {
+                                padding-left: Theme.sidebar-card-padding;
+                                padding-right: Theme.sidebar-card-padding;
+                                spacing: Theme.space-lg;
+
+                                SidebarTerminalGlyph {
+                                    glyph-color: local-card-touch.has-hover ? Theme.accent : Theme.text;
+                                }
+                                VerticalLayout {
+                                    padding-top: Theme.space-lg;
+                                    padding-bottom: Theme.space-lg;
+                                    spacing: Theme.space-xxs;
+                                    Text {
+                                        text: "Local Shell";
+                                        color: Theme.text;
+                                        font-size: Theme.font-body-strong;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: "Open a new local shell tab";
+                                        color: Theme.muted;
+                                        font-size: Theme.font-caption;
+                                        overflow: elide;
                                     }
                                 }
                             }
-                            if row.is-group : HorizontalLayout {
-                                padding-left: Theme.space-sm;
-                                padding-right: Theme.space-sm;
-                                spacing: Theme.space-sm;
-                                Text {
-                                    width: Theme.space-lg;
-                                    text: row.expanded ? "v" : ">";
-                                    color: Theme.muted;
-                                    font-size: Theme.font-small;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    horizontal-stretch: 1;
-                                    text: row.name;
-                                    color: Theme.text;
-                                    font-size: Theme.font-body;
-                                    font-weight: 700;
-                                    overflow: elide;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: row.endpoint;
-                                    color: Theme.muted;
-                                    font-size: Theme.font-caption;
-                                    vertical-alignment: center;
-                                }
+                            local-card-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "Open local shell";
+                                clicked => { root.open-local-shell(); }
                             }
-                            if !row.is-group && row.group-name.is-empty : HorizontalLayout {
-                                padding-left: Theme.space-lg;
-                                padding-right: Theme.space-md;
-                                Text {
-                                    horizontal-stretch: 1;
-                                    text: row.name;
-                                    color: Theme.text;
-                                    font-size: Theme.font-body;
-                                    overflow: elide;
-                                    vertical-alignment: center;
+                        }
+
+                        ListView {
+                            vertical-stretch: 1;
+                            for row in root.sessions : Rectangle {
+                                height: row.is-group
+                                    ? Theme.sidebar-group-card-height + Theme.space-xs
+                                    : Theme.sidebar-session-card-height + Theme.space-xs;
+                                background: transparent;
+
+                                session-card := Rectangle {
+                                    width: parent.width;
+                                    height: parent.height - Theme.space-xs;
+                                    background: Theme.panel-alt;
+                                    border-width: Theme.hairline;
+                                    border-color: session-touch.has-hover ? Theme.accent : Theme.border;
+                                    border-radius: Theme.radius;
+
+                                session-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    accessible-role: button;
+                                    accessible-label: row.is-group
+                                        ? "Toggle " + row.name + " group"
+                                        : "Connect to " + row.name;
+                                    clicked => {
+                                        if row.is-group {
+                                            root.sidebar-group-selected = true;
+                                            root.active-sidebar-group = row.group-name;
+                                            root.toggle-group(row.group-name);
+                                        } else {
+                                            root.connect-session(row.id);
+                                        }
+                                    }
                                 }
-                            }
-                            if !row.is-group && row.group-name.is-empty : Rectangle {
-                                Tooltip { text: @markdown("\{row.endpoint}"); }
-                            }
-                            if !row.is-group && !row.group-name.is-empty : VerticalLayout {
-                                padding-left: Theme.session-child-indent;
-                                padding-right: Theme.space-md;
-                                padding-top: Theme.space-sm;
-                                padding-bottom: Theme.space-sm;
-                                spacing: Theme.space-xxs;
-                                Text {
-                                    text: row.name;
-                                    color: Theme.text;
-                                    font-size: Theme.font-body-strong;
-                                    overflow: elide;
+
+                                if row.is-group : HorizontalLayout {
+                                    padding-left: Theme.sidebar-card-padding;
+                                    padding-right: Theme.sidebar-card-padding;
+                                    spacing: Theme.space-sm;
+
+                                    Text {
+                                        width: Theme.space-lg;
+                                        text: row.expanded ? "v" : ">";
+                                        color: Theme.muted;
+                                        font-size: Theme.font-small;
+                                        vertical-alignment: center;
+                                    }
+                                    SidebarFolderGlyph {
+                                        glyph-color: root.sidebar-group-selected
+                                                && root.active-sidebar-group == row.group-name
+                                            ? Theme.accent : Theme.muted;
+                                        surface-color: session-card.background;
+                                    }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: row.name;
+                                        color: Theme.text;
+                                        font-size: Theme.font-body-strong;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: row.endpoint;
+                                        color: Theme.muted;
+                                        font-size: Theme.font-caption;
+                                        vertical-alignment: center;
+                                    }
                                 }
-                                Text {
-                                    text: row.endpoint;
-                                    color: Theme.muted;
-                                    font-size: Theme.font-caption;
-                                    overflow: elide;
+
+                                if !row.is-group : HorizontalLayout {
+                                    padding-left: Theme.sidebar-card-padding + Theme.space-lg;
+                                    padding-right: Theme.sidebar-card-padding;
+                                    spacing: Theme.space-md;
+
+                                    Text {
+                                        width: Theme.sidebar-session-name-width;
+                                        text: row.name;
+                                        color: Theme.text;
+                                        font-family: "JetBrains Mono";
+                                        font-size: Theme.font-body;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: row.endpoint;
+                                        color: Theme.muted;
+                                        font-family: "JetBrains Mono";
+                                        font-size: Theme.font-caption;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                    if !row.is-group : Tooltip { text: @markdown("\{row.endpoint}"); }
                                 }
                             }
                         }
                     }
                 }
-            }
 
                 Rectangle {
                     horizontal-stretch: 1;
@@ -788,7 +810,9 @@ export component AppWindow inherits Window {
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
             width: Theme.password-dialog-width;
-            height: root.password-private-key ? 310px : 270px;
+            height: root.password-private-key
+                ? Theme.password-private-key-dialog-height
+                : Theme.password-dialog-height;
             background: Theme.panel-alt;
             border-width: Theme.hairline;
             border-color: Theme.border;
@@ -822,7 +846,7 @@ export component AppWindow inherits Window {
                 }
                 remember-password := CheckBox {
                     visible: !root.password-private-key;
-                    height: self.visible ? 32px : 0px;
+                    height: self.visible ? Theme.editor-check-row-height : 0px;
                     text: "Save password in system credential store";
                     checked: root.password-remember-default;
                 }

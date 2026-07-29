@@ -1,0 +1,134 @@
+import { Theme } from "../theme.slint";
+
+export component SidebarTerminalGlyph inherits Rectangle {
+    in property <brush> glyph-color: Theme.text;
+
+    width: Theme.sidebar-glyph-size;
+    height: Theme.sidebar-glyph-size;
+    background: transparent;
+
+    Rectangle {
+        x: Theme.sidebar-glyph-inset;
+        y: Theme.sidebar-glyph-inset + Theme.space-xxs;
+        width: parent.width - 2 * Theme.sidebar-glyph-inset;
+        height: parent.height - 2 * Theme.sidebar-glyph-inset - Theme.space-xxs;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: ">_";
+            color: root.glyph-color;
+            font-family: "JetBrains Mono";
+            font-size: Theme.font-micro;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component SidebarFolderGlyph inherits Rectangle {
+    in property <brush> glyph-color: Theme.text;
+    in property <brush> surface-color: transparent;
+
+    width: Theme.sidebar-glyph-size;
+    height: Theme.sidebar-glyph-size;
+    background: transparent;
+
+    Rectangle {
+        x: Theme.sidebar-glyph-inset;
+        y: Theme.sidebar-folder-body-top;
+        width: parent.width - 2 * Theme.sidebar-glyph-inset;
+        height: parent.height - Theme.sidebar-folder-body-top - Theme.sidebar-glyph-inset;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+    }
+
+    Rectangle {
+        x: Theme.sidebar-folder-tab-left;
+        y: Theme.sidebar-folder-tab-top;
+        width: Theme.sidebar-folder-tab-width;
+        height: Theme.sidebar-folder-tab-height;
+        background: root.surface-color;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+    }
+}
+
+export component SidebarRailItem inherits Rectangle {
+    in property <string> label;
+    in property <string> accessible-name;
+    in property <bool> group: false;
+    in property <bool> local: false;
+    in property <bool> selected: false;
+    callback activated();
+
+    height: Theme.sidebar-rail-row-height;
+    background: transparent;
+
+    item-card := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sidebar-rail-card-size;
+        height: Theme.sidebar-rail-card-size;
+        background: root.selected || item-touch.has-hover ? Theme.panel : transparent;
+        border-width: Theme.hairline;
+        border-color: root.selected ? Theme.accent : Theme.border;
+        border-radius: Theme.radius;
+
+        if root.local : SidebarTerminalGlyph {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            glyph-color: root.selected ? Theme.accent : Theme.text;
+        }
+
+        if root.group : SidebarFolderGlyph {
+            x: (parent.width - self.width) / 2;
+            y: Theme.sidebar-rail-folder-top;
+            glyph-color: root.selected ? Theme.accent : Theme.muted;
+            surface-color: item-card.background;
+        }
+
+        if root.group : Text {
+            x: Theme.space-xs;
+            y: Theme.sidebar-rail-label-top;
+            width: parent.width - 2 * Theme.space-xs;
+            height: Theme.sidebar-rail-label-height;
+            text: root.label;
+            color: root.selected ? Theme.accent : Theme.text;
+            font-family: "JetBrains Mono";
+            font-size: Theme.font-micro;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        if !root.local && !root.group : Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.label;
+            color: Theme.text;
+            font-family: "JetBrains Mono";
+            font-size: Theme.font-body;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        item-touch := TouchArea {
+            mouse-cursor: pointer;
+            accessible-role: button;
+            accessible-label: root.accessible-name;
+            clicked => { root.activated(); }
+        }
+    }
+}

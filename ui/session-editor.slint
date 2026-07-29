@@ -57,7 +57,7 @@ export component SessionEditorPane inherits Rectangle {
         auth-method := ComboBox { model: ["Password", "Private key"]; }
         key-row := HorizontalLayout {
             visible: auth-method.current-value == "Private key";
-            height: self.visible ? 34px : 0px;
+            height: self.visible ? Theme.editor-input-row-height : 0px;
             spacing: Theme.space-md;
             key-edit := LineEdit {
                 horizontal-stretch: 1;
@@ -71,13 +71,13 @@ export component SessionEditorPane inherits Rectangle {
         }
         new-password-edit := LineEdit {
             visible: auth-method.current-value == "Password";
-            height: self.visible ? 34px : 0px;
+            height: self.visible ? Theme.editor-input-row-height : 0px;
             placeholder-text: "Password";
             input-type: InputType.password;
         }
         remember-new-password := CheckBox {
             visible: auth-method.current-value == "Password";
-            height: self.visible ? 32px : 0px;
+            height: self.visible ? Theme.editor-check-row-height : 0px;
             text: "Save password in system credential store";
         }
 
