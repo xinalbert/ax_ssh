@@ -48,7 +48,19 @@ local environment could reach crates.io when `keyring 4.1.5` was resolved on
   `tab_id + attempt_id`.
 - Keep terminal input, output batches, event queues, and scrollback bounded.
 - Keep Slint key values out of `src/terminal/input.rs`; map them in `src/app.rs`
-  and test terminal byte sequences without constructing a window.
+  and test normal/application-cursor byte sequences without constructing a
+  window. Platform-specific printable-key fallbacks belong in the Slint bridge.
+- Keep Ctrl combinations available to the focused PTY on every platform,
+  including `Ctrl+C` and tmux prefixes. Terminal clipboard defaults use `Cmd`
+  on macOS and `Ctrl+Shift` elsewhere. Global UI commands use `Cmd` on macOS
+  and `Ctrl` elsewhere, and must not shadow terminal control bytes. Slint 1.17
+  swaps Command/Control modifier fields on Apple platforms; normalize them in
+  `src/app.rs` before shortcut matching or terminal encoding.
+- Keep the visible terminal as a rendered grid. The hidden Slint `TextInput`
+  is an IME proxy only: position it at the terminal cursor, leave unmodified
+  preedit keys to the input method, and send committed text exactly once.
+- Keep local PTY child, reader, writer, cancellation, and join ownership inside
+  `src/local_shell.rs`; do not move blocking PTY operations onto the UI thread.
 - Bundled fonts must live under `assets/fonts/` with their independent license
   and notices. Never load static resources from `third_package/axshell` at
   build time or runtime.
@@ -70,7 +82,9 @@ probing, trusted password/private-key authentication, PTY shell input/output,
 resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,
 bounded scrollback, terminal control/navigation encoding, legacy appearance
 migration into versioned settings, duplicate-profile tab isolation, local key
-discovery, and encrypted-key passphrases.
+discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
+application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
+events, and Apple modifier normalization.
 The ignored `platform_credential_store_round_trips_and_deletes` test performs a
 real platform credential write/read/delete and may trigger an OS authorization
 prompt. It passed against macOS Keychain; Unix Secret Service and Windows

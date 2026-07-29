@@ -21,7 +21,9 @@ Slint UI（.slint）
        ├──────────────► 系统凭据（src/credentials.rs）
        │                 阻塞式平台 keyring API
        ├──────────────► 终端模型（src/terminal.rs）
-       │                 有界 ANSI 状态 + scrollback
+       │                 有界 vt100 网格 + scrollback
+       ├──────────────► 本地 PTY（src/local_shell.rs）
+       │                 有界线程 + portable-pty 子进程
        └──────────────► SSH 边界（src/ssh.rs）
                          Tokio task + russh handle/channel + 私钥加载
 
@@ -39,7 +41,8 @@ Slint UI（.slint）
 | `src/app/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换、分组聚合和阻塞式凭据 task 边界 | 生成的 Slint component/model 类型 |
 | `src/config.rs` | `SessionProfile`、版本化 `AppSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
-| `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 ANSI 解析、光标状态、文本 scrollback 和终端按键编码 | Slint 类型、网络 handle、凭据 |
+| `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
+| `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
 | `src/ssh.rs` | russh handler、主机密钥决策、认证、shell channel 边界 | 窗口更新、持久化会话修改、UI 格式化 |
 | `src/ssh/private_keys.rs` | 本机 `.ssh` 私钥发现和阻塞式密钥加载 | passphrase 持久化、UI 状态、主机信任决策 |
 | `src/ssh/worker.rs` | 有界 shell 输入命令、合并式 resize 状态、批量输出事件、取消和关闭 | UI 状态或 profile 持久化 |
@@ -50,24 +53,33 @@ Slint UI（.slint）
 
 1. Slint callback 只产生已保存 profile ID、唯一 Tab ID、组名、终端按键/修饰键、
    草稿字段、信任决策或一次性临时密码等小值。
-2. 每次打开 profile 都会创建新的终端 Tab UUID，即使另一个 Tab 使用同一 profile。
-   应用控制器按 `tab_id + attempt_id` 路由输入、resize、输出、重试和关闭。未知主机
-   会启动绑定该 Tab 的可取消探测，但传输仍保持拒绝。
+2. 每次打开 profile 或本地 shell 都会创建新的终端 Tab UUID，即使另一个 Tab 使用
+   相同目标。SSH 输入、resize、输出、重试和关闭按 `tab_id + attempt_id` 路由；本地
+   操作按 `tab_id` 路由。未知 SSH 主机会启动绑定该 Tab 的可取消探测，但传输仍拒绝。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；私钥 profile 在 UI 线程外加载所选路径，
    只有加密密钥无法空口令打开时才请求一次性 passphrase。
 4. 新建 profile 时明确选择保存的密码会随该 profile 操作写入系统凭据库；在认证
    弹窗输入的密码只在 SSH 认证成功后写入。已存凭据缺失或被拒绝时清除非敏感
    标记，并回退到一次手工密码提示。
-5. 终端表面把 Slint 特殊键转换成与 UI 无关的终端键值；`src/terminal/input.rs`
-   生成控制字节、常规 CSI 和带修饰键的 xterm 序列。选区复制留在 UI，本地粘贴
-   内容作为有界 shell 输入发送。
+5. 终端表面把 Slint 特殊键转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
+   `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI
+   或 application-cursor SS3 方向键，以及带修饰键的 xterm 序列。macOS 在应用边界
+   还原 Slint Apple 映射中交换的 Control/Command 语义。一个透明、随光标定位的
+   `TextInput` 只作为原生 IME 代理；提交文本进入终端编码器，预编辑保留在 UI 状态。
+   普通 `Ctrl+C` 保留为 PTY 输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS
+   保留 `Cmd+C/V`，其他平台使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。
+   选区复制留在 UI，粘贴内容作为有界 shell 输入发送；可选右键行为根据是否存在选区
+   选择复制或粘贴。
 6. 认证后每个终端 Tab 持有一个 worker，该 worker 独占一个 PTY shell 及其 russh
    handle/channel。同 profile 的重复 Tab 使用彼此独立的有界命令队列和单槽尺寸状态。
    关闭 Tab 时先移除事件路由，再异步 shutdown 对应 worker，迟到事件不会更新其他 Tab。
-7. 每个终端 Tab 还持有一个有界 `TerminalModel`。非活动 Tab 的输出留在 Rust 状态，
-   只有活动 Tab 快照进入 Slint event loop；更新统一使用 `slint::invoke_from_event_loop`
-   和 `Weak<AppWindow>`，避免退出时保活窗口。
+7. 本地终端 Tab 改为持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占
+   child、reader、writer、resize 状态、有界命令/事件队列、取消标记和超时 join。
+8. 每个终端 Tab 还持有一个有界 `TerminalModel`。`vt100` 负责行、字符格样式、光标、
+   scrollback、宽字符和 application-cursor 模式。非活动 Tab 的输出留在 Rust 状态，
+   只有活动字符格快照进入 Slint event loop；更新统一使用
+   `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
 
 ## SSH 安全契约
 
@@ -104,19 +116,24 @@ UI model。
 
 `assets/fonts/JetBrainsMono-Regular.ttf` 是由 Slint 编译器注册的项目自有静态资源，
 同目录保留 OFL 许可证和作者声明。构建和运行时都不会从 `third_package/axshell`
-加载字体。`SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，
-包括经过约束的终端字体/字号、scrollback、默认 PTY 尺寸、侧栏宽度和 Tab 宽度。
-旧版顶层 `appearance` 会在反序列化时迁移。密码、passphrase、私钥内容、终端输出、
-Tab 运行时 ID 和 worker 永远不会序列化。
+加载字体。Slint 测量配置字体，并用测得的字符格宽度和配置的行高百分比统一计算
+渲染、选区、光标和向下取整的 PTY 尺寸。
+
+`SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，包括经过约束
+的字体、字号、行高、配色、亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
+本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度与快捷键。启动时会验证已有 shell
+缓存并只追加新发现项。旧设置会在反序列化时迁移。密码、passphrase、私钥内容、
+终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
 ## 分阶段范围
 
 当前应用可校验并持久化 profile、确认逐 profile 主机指纹、使用临时密码或本机
-私钥认证，并持有多个逐 Tab 隔离的交互式 PTY shell，同一 profile 也可重复打开。
-Settings 和新建会话编辑器属于工作区 Tab；只有短期信任和 secret 提示保留为覆盖层。
+私钥认证，并持有多个逐 Tab 隔离的 SSH 或本地交互式 PTY shell，相同目标也可重复
+打开。Settings 和新建会话编辑器属于工作区 Tab；只有短期信任和 secret 提示保留
+为覆盖层。
 以下内容仍作为独立步骤：
 
 - 共享的 OpenSSH 兼容 known_hosts 存储和主机密钥撤销；
 - 与认证策略共享的独立 SFTP worker；
 - SSH agent、重连和工作区恢复；
-- 更完整的全屏终端兼容、颜色/属性渲染、应用光标模式和鼠标上报。
+- 更完整的全屏终端兼容和鼠标上报。

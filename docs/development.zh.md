@@ -41,7 +41,17 @@ git diff --check
   重试、关闭和迟到事件都按 `tab_id + attempt_id` 路由。
 - 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
-  窗口的条件下测试终端字节序列。
+  窗口的条件下测试普通/application-cursor 终端字节序列；平台可打印键后备转换归
+  Slint bridge 所有。
+- 所有平台都要把 Ctrl 组合留给获得焦点的 PTY，包括 `Ctrl+C` 和 tmux 前缀；终端
+  剪贴板默认键在 macOS 使用 `Cmd`，其他平台使用 `Ctrl+Shift`。全局 UI 命令在
+  macOS 使用 `Cmd`，其他平台使用 `Ctrl`，不得遮蔽终端控制字节。Slint 1.17 会在
+  Apple 平台交换 Command/Control 修饰键字段，快捷键匹配或终端编码前必须在
+  `src/app.rs` 还原。
+- 可见终端保持为渲染网格。隐藏的 Slint `TextInput` 只充当 IME 代理：跟随终端光标
+  定位，把未修饰的预编辑按键留给输入法，并确保提交文本只发送一次。
+- 本地 PTY 的 child、reader、writer、取消和 join 所有权保留在 `src/local_shell.rs`，
+  不得把阻塞式 PTY 操作移到 UI 线程。
 - 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；构建或运行时不得从
   `third_package/axshell` 加载静态资源。
 - 修改面向用户的文档时同步维护中英文页面。
@@ -59,7 +69,8 @@ writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 
 loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、PTY shell
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
-发现和加密密钥 passphrase。忽略测试
+发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
+方向键、Shift 可打印键后备转换、原始 C0 控制字节事件和 Apple 修饰键还原。忽略测试
 `platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
 写入、读取和删除，并可能触发系统授权提示；该测试已在 macOS Keychain 通过，Unix
 Secret Service 和 Windows Credential Manager 仍需对应平台验证。窗口渲染、键盘/

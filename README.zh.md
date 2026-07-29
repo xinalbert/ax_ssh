@@ -2,18 +2,25 @@
 
 # AxSSH
 
-AxSSH 是一个基于 Rust、Slint、Tokio 和 russh 的跨平台 SSH 工作区。本仓库当前
-支持把已保存会话放入可折叠分组。连接流程会校验服务器 SHA-256 主机密钥指纹、
-接收临时密码，并可选择将密码保存到系统凭据库，供下次自动登录；认证后的连接由
-可取消的 worker 持续持有。会话也可以选择用户 `.ssh` 目录中发现的私钥或手工输入
-路径；加密私钥会请求一次性 passphrase。worker 认证后打开 PTY shell，显示有界的
-ANSI 终端输出，并由终端区域直接接收键盘输入。Enter、Backspace、Tab、Escape、
-方向键、Home/End、Insert/Delete、Page 键、Ctrl 控制字节和带修饰键的 xterm 导航
-序列都会发送到远端 PTY。终端、Settings 和新建会话编辑器共用同一个顶部 Tab 条；
-每个终端 Tab 都有唯一运行时 ID，并独占 worker 和有界终端模型，因此同一个已保存
-服务器可以打开多次，输出和连接状态不会串线。终端与工作区参数在 Settings Tab 中
-管理，并写入版本化 `sessions.json`；项目按 SIL Open Font License 自带 JetBrains
-Mono。SFTP 和完整鼠标终端协议仍留在后续阶段实现。
+AxSSH 是一个基于 Rust、Slint、Tokio 和 russh 的跨平台 SSH 工作区。已保存会话可放入
+可折叠分组；Activity Bar 顶部还可以立即打开新的本地 shell Tab。每个本地或 SSH
+终端 Tab 都有唯一运行时 ID，并独占 worker 和有界终端模型，因此重复打开同一个
+服务器或本地 shell 时不会共享输出和进程状态。
+
+SSH 连接流程会校验服务器 SHA-256 主机密钥指纹、接收临时密码，并可选择将密码保存
+到系统凭据库。会话也可以选择用户 `.ssh` 目录中发现的私钥或手工输入路径；加密私钥
+会请求一次性 passphrase。worker 认证后打开 PTY shell，并与本地 Tab 使用同一个
+终端表面。
+
+终端按与字体关联的字符网格渲染，提供有界 scrollback、ANSI 颜色、网格坐标选区和
+整格光标。Enter、Backspace、Tab、Escape、方向键、Home/End、Insert/Delete、Page
+键、Ctrl 控制字节和带修饰键的 xterm 导航序列都会发送到活动 PTY。未修饰方向键会
+跟随终端普通或 application-cursor 模式发送 CSI 或 SS3 序列，因此 shell 历史和全屏
+程序可以收到正确输入。终端、Settings 和新建会话编辑器共用同一个顶部 Tab 条。
+
+终端、快捷键、本地 shell 和工作区参数在 Settings Tab 中管理，并写入版本化
+`sessions.json`；已发现的 shell 名称会缓存，下次只合并新增项。项目按 SIL Open Font
+License 自带 JetBrains Mono。SFTP 和完整鼠标终端协议仍留在后续阶段实现。
 
 ## 快速开始
 
@@ -30,9 +37,17 @@ Secret Service。会话 JSON 保存 profile、非敏感设置和凭据可用性�
 
 私钥 profile 只保存所选文件路径；私钥内容和 passphrase 不会持久化或写入日志。
 
-终端支持鼠标选择文本；`Ctrl+Shift+C` 复制选区，macOS 使用 `Cmd+V`、其他桌面
-平台使用 `Ctrl+Shift+V` 把剪贴板文本粘贴到远端 shell。普通 `Ctrl+C` 仍发送终端
-中断字节。
+终端支持鼠标选择文本；macOS 保留 `Cmd+C`/`Cmd+V` 复制粘贴，其他平台使用
+`Ctrl+Shift+C`/`Ctrl+Shift+V`。普通 `Ctrl+C` 保留为终端中断字节，其他 Ctrl 组合
+继续交给 shell、tmux 等终端程序。
+工作区命令使用平台主修饰键，例如 macOS 用 `Cmd+S`、其他平台用 `Ctrl+S` 收放侧栏；
+AxSSH 会在 Slint 的 Apple 平台修饰键映射后还原物理 Control/Command 语义，因此 macOS
+的 `Ctrl+B` 会进入 tmux，而 `Cmd+B` 仍是 UI 快捷键候选。终端获得焦点时优先接收
+Ctrl 输入，不会被冲突的工作区快捷键抢走。可配置的右键快捷行为会在有选区时复制、
+没有选区时粘贴。
+
+可见终端是渲染网格，不是文本编辑器。一个完全透明并跟随终端光标的输入法代理负责
+接入系统中文 IME 的预编辑和候选界面，只有已提交文本会进入有界 PTY 输入路径。
 
 在 Cargo 缓存已准备好的环境中，可使用离线检查：
 

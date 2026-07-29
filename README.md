@@ -3,22 +3,31 @@
 # AxSSH
 
 AxSSH is a cross-platform SSH workspace built with Rust, Slint, Tokio, and
-russh. Saved sessions can be organized into collapsible groups. The connection
-workflow verifies a server's SHA-256 host-key fingerprint, accepts a transient
-password, and can optionally remember it in the platform credential store for
-later automatic login. Sessions may instead use a private key discovered from
-the user's `.ssh` directory or a manually entered path; encrypted keys request
-a transient passphrase. The authenticated worker opens a PTY shell, displays
-bounded ANSI terminal output, and accepts direct terminal-surface keyboard
-input until disconnect. Enter, Backspace, Tab, Escape, arrows, Home/End,
-Insert/Delete, Page keys, Ctrl control bytes, and xterm-style modified
-navigation are encoded for the remote PTY. Terminals, Settings, and the new
-session editor share one top tab bar. Every terminal tab has a unique runtime
-ID and owns an independent worker and bounded terminal model, so the same saved
-server can be opened more than once without sharing output or connection state.
-Terminal and workspace settings are managed in a Settings tab and persisted in
-the versioned `sessions.json`; JetBrains Mono is bundled under the SIL Open Font
-License. SFTP and full mouse-oriented terminal protocol support remain staged.
+russh. Saved sessions can be organized into collapsible groups. The activity
+bar also opens a new local shell tab immediately. Every local or SSH terminal
+tab has a unique runtime ID, worker, and bounded terminal model, so opening the
+same server or local shell repeatedly does not share output or process state.
+
+The SSH workflow verifies a server's SHA-256 host-key fingerprint, accepts a
+transient password, and can optionally remember it in the platform credential
+store. Sessions may instead use a private key discovered from the user's
+`.ssh` directory or a manually entered path; encrypted keys request a transient
+passphrase. The authenticated worker opens a PTY shell and uses the same
+terminal surface as local tabs.
+
+The terminal is rendered as a font-linked cell grid with bounded scrollback,
+ANSI colors, cell-coordinate selection, and a block cursor. Enter, Backspace,
+Tab, Escape, arrows, Home/End, Insert/Delete, Page keys, Ctrl control bytes, and
+xterm-style modified navigation are encoded for the active PTY. Unmodified
+arrows follow the terminal's normal or application-cursor mode, so shell
+history and full-screen programs receive the expected CSI or SS3 sequence.
+Terminals, Settings, and the new-session editor share one top tab bar.
+
+Terminal, shortcut, local-shell, and workspace settings are managed in a
+Settings tab and persisted in the versioned `sessions.json`; discovered shell
+names are cached and only newly available names are added later. JetBrains Mono
+is bundled under the SIL Open Font License. SFTP and full mouse-oriented
+terminal protocol support remain staged.
 
 ## Quick start
 
@@ -38,10 +47,21 @@ the password, passphrase, private-key contents, terminal output, or worker state
 Private-key profiles store only the selected filesystem path. Key contents and
 passphrases are never persisted or logged.
 
-Terminal selection uses the normal pointer interaction. `Ctrl+Shift+C` copies
-the selection; `Cmd+V` on macOS and `Ctrl+Shift+V` on other desktop platforms
-paste clipboard text into the remote shell. Plain `Ctrl+C` remains the terminal
-interrupt byte.
+Terminal selection uses normal pointer interaction. macOS keeps `Cmd+C`/`Cmd+V`
+for clipboard actions; other platforms use `Ctrl+Shift+C`/`Ctrl+Shift+V`.
+Plain `Ctrl+C` remains the terminal interrupt byte and other Ctrl combinations
+remain available to shells and tools such as tmux. Workspace commands use the
+platform modifier, including `Cmd+S` on macOS or `Ctrl+S` elsewhere to toggle
+the sidebar. AxSSH restores physical Control/Command semantics after Slint's
+Apple-platform modifier mapping, so macOS `Ctrl+B` reaches tmux while `Cmd+B`
+remains a UI shortcut candidate. Terminal Ctrl input takes priority over a
+conflicting workspace shortcut. The configurable right-click quick action
+copies an active selection or pastes when none exists.
+
+The visible terminal is a rendered grid rather than a text editor. A fully
+transparent input-method proxy follows the terminal cursor so Chinese IME
+preedit and candidate UI remain native; only committed text crosses into the
+bounded PTY input path.
 
 For an offline check when the Cargo cache is already populated:
 

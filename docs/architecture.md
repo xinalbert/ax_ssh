@@ -23,7 +23,9 @@ Application controller (src/app.rs)
        ├──────────────► Credential store (src/credentials.rs)
        │                 blocking platform keyring API
        ├──────────────► Terminal model (src/terminal.rs)
-       │                 bounded ANSI state + scrollback
+       │                 bounded vt100 grid + scrollback
+       ├──────────────► Local PTY (src/local_shell.rs)
+       │                 bounded thread + portable-pty process
        └──────────────► SSH boundary (src/ssh.rs)
                          Tokio tasks + russh handles/channels + key loading
 
@@ -41,7 +43,8 @@ Process startup (src/main.rs)
 | `src/app/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, group aggregation, and blocking credential task boundary | Generated Slint component/model types |
 | `src/config.rs` | `SessionProfile`, versioned `AppSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
-| `src/terminal.rs` and `src/terminal/input.rs` | Bounded ANSI parsing, cursor state, text scrollback, and terminal key encoding | Slint types, network handles, credentials |
+| `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
+| `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
 | `src/ssh.rs` | russh handler, host-key decision, authentication, shell channel boundary | Window updates, persistent session mutation, UI formatting |
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/worker.rs` | Bounded shell input commands, coalesced resize state, batched output events, cancellation, and shutdown | UI state or profile persistence |
@@ -53,11 +56,11 @@ Process startup (src/main.rs)
 1. A Slint callback produces a small value such as a saved profile ID, unique
    tab ID, group name, terminal key/modifier tuple, draft fields, a trust
    decision, or one transient password.
-2. Opening a profile always creates a new terminal tab UUID, even when another
-   tab uses the same profile. The application controller routes input, resize,
-   output, retry, and close operations by `tab_id + attempt_id`. An unknown
-   host starts a cancellable probe tied to that tab while transport remains
-   rejected.
+2. Opening a profile or local shell always creates a new terminal tab UUID,
+   even when another tab uses the same target. SSH input, resize, output, retry,
+   and close operations route by `tab_id + attempt_id`; local operations route
+   by `tab_id`. An unknown SSH host starts a cancellable probe tied to that tab
+   while transport remains rejected.
 3. After explicit confirmation, the controller atomically persists the exact
    fingerprint. Password profiles load a remembered credential on a Tokio
    blocking boundary or open a password prompt. Private-key profiles load the
@@ -68,18 +71,33 @@ Process startup (src/main.rs)
    written only after SSH authentication succeeds. Missing or rejected stored
    credentials clear the non-secret marker and fall back to one manual prompt.
 5. The terminal surface maps Slint special keys to UI-independent terminal key
-   values. `src/terminal/input.rs` emits control bytes and conventional CSI or
-   xterm modified sequences; selection copy remains local while paste becomes
-   bounded shell input.
+   values and applies a narrow shifted-hyphen fallback when the platform still
+   reports `-` for `Shift+-`. `src/terminal/input.rs` emits control bytes,
+   normal CSI or application-cursor SS3 arrows, and xterm modified sequences.
+   At the application boundary, macOS restores physical Control and Command
+   after Slint's Apple mapping swaps their semantic modifier fields. A
+   transparent, cursor-positioned `TextInput` is used only as the native IME
+   proxy; committed text enters the terminal encoder while preedit remains UI
+   state.
+   Terminal Ctrl combinations take priority while the terminal is focused;
+   `Ctrl+C` remains PTY input. Clipboard actions keep `Cmd+C/V` on macOS and
+   `Ctrl+Shift+C/V` elsewhere. Workspace commands use the platform modifier.
+   Selection copy remains local while paste becomes bounded shell input; the
+   optional right-click action chooses between them based on selection state.
 6. After authentication, each terminal tab owns one worker, and that worker
    exclusively owns one PTY shell plus its russh handle/channel. Bounded command
    queues and single-slot watched sizes remain independent between duplicate
    profile tabs. Closing a tab removes its routing state before asynchronously
    shutting down that worker, so late events cannot update another tab.
-7. Each terminal tab also owns one bounded `TerminalModel`. Output for inactive
-   tabs stays in Rust state; only the active tab snapshot crosses the Slint
-   event loop. UI updates use `slint::invoke_from_event_loop` and
-   `Weak<AppWindow>` so shutdown does not keep a window alive.
+7. A local terminal tab instead owns one `portable-pty` worker thread. That
+   worker owns its child, reader, writer, resize state, bounded command/event
+   queues, cancellation flag, and timeout-bounded join for the tab lifetime.
+8. Each terminal tab also owns one bounded `TerminalModel`. `vt100` owns the
+   rows, cell styles, cursor, scrollback, wide characters, and application
+   cursor mode. Output for inactive tabs stays in Rust state; only the active
+   cell snapshot crosses the Slint event loop. UI updates use
+   `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
+   keep a window alive.
 
 ## SSH security contract
 
@@ -127,24 +145,29 @@ fingerprint; credentials and terminal contents are forbidden.
 `assets/fonts/JetBrainsMono-Regular.ttf` is a project-owned static resource
 registered by the Slint compiler. Its OFL license and author notice are kept in
 the same directory. No font is loaded from `third_package/axshell` during build
-or runtime. `SessionStore` writes a versioned `settings` object to the existing
-private `sessions.json`. It contains normalized terminal font/size, scrollback,
-default PTY dimensions, sidebar width, and tab width. Older top-level
-`appearance` data migrates during deserialization. Passwords, passphrases,
-private-key contents, terminal output, tab runtime IDs, and workers are never
-serialized.
+or runtime. Slint measures the configured font and uses the measured cell width
+plus the configured line-height percentage for rendering, selection, cursor,
+and floor-based PTY dimensions.
+
+`SessionStore` writes a versioned `settings` object to the existing private
+`sessions.json`. It contains normalized font, size, line height, color scheme,
+brightness, bold-color and right-click behavior, scrollback, default PTY
+dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
+widths, and shortcuts. Shell discovery validates the saved cache and appends
+only newly available names after load. Older settings migrate during
+deserialization. Passwords, passphrases, private-key contents, terminal output,
+tab runtime IDs, child processes, and workers are never serialized.
 
 ## Staged scope
 
 The current application validates and persists profiles, confirms per-profile
 host fingerprints, authenticates with transient passwords or local private
-keys, and owns multiple independent tab-scoped PTY shells, including duplicate
-tabs for one profile. Settings and new-session editing are workspace tabs; only
-short-lived trust and secret prompts remain overlays. The following remain
-separate steps:
+keys, and owns multiple independent SSH or local tab-scoped PTY shells,
+including duplicate targets. Settings and new-session editing are workspace
+tabs; only short-lived trust and secret prompts remain overlays. The following
+remain separate steps:
 
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;
 - SFTP as a separate worker sharing an authenticated transport policy;
 - SSH agent integration, reconnect, and persisted workspace restoration;
-- richer full-screen terminal compatibility, color/attribute rendering,
-  application cursor modes, and mouse reporting.
+- richer full-screen terminal compatibility and mouse reporting.
