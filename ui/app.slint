@@ -446,7 +446,7 @@ export component AppWindow inherits Window {
                     ListView {
                         vertical-stretch: 1;
                         for row in root.sessions : Rectangle {
-                            height: row.is-group ? 34px : 50px;
+                            height: row.is-group || row.group-name.is-empty ? 34px : 50px;
                             background: session-touch.has-hover ? Theme.panel-alt : transparent;
                             border-radius: Theme.radius;
                             session-touch := TouchArea {
@@ -486,8 +486,23 @@ export component AppWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                             }
-                            if !row.is-group : VerticalLayout {
-                                padding-left: row.group-name.is-empty ? 10px : 26px;
+                            if !row.is-group && row.group-name.is-empty : HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 8px;
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: row.name;
+                                    color: Theme.text;
+                                    font-size: 13px;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if !row.is-group && row.group-name.is-empty : Rectangle {
+                                Tooltip { text: @markdown("\{row.endpoint}"); }
+                            }
+                            if !row.is-group && !row.group-name.is-empty : VerticalLayout {
+                                padding-left: 26px;
                                 padding-right: 8px;
                                 padding-top: 6px;
                                 padding-bottom: 6px;
