@@ -26,7 +26,7 @@ pub const MIN_TERMINAL_COLUMNS: u16 = 20;
 pub const MAX_TERMINAL_COLUMNS: u16 = 300;
 pub const MIN_TERMINAL_ROWS: u16 = 5;
 pub const MAX_TERMINAL_ROWS: u16 = 100;
-pub const MIN_SIDEBAR_WIDTH: u16 = 220;
+pub const MIN_SIDEBAR_WIDTH: u16 = 180;
 pub const MAX_SIDEBAR_WIDTH: u16 = 420;
 pub const MIN_TAB_WIDTH: u16 = 120;
 pub const MAX_TAB_WIDTH: u16 = 260;
@@ -37,10 +37,12 @@ const DEFAULT_TERMINAL_BRIGHTNESS: u16 = 100;
 const DEFAULT_SCROLLBACK_LINES: u32 = 2_000;
 const DEFAULT_TERMINAL_COLUMNS: u16 = 120;
 const DEFAULT_TERMINAL_ROWS: u16 = 36;
-const DEFAULT_SIDEBAR_WIDTH: u16 = 260;
+const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
+const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
-const CURRENT_SCHEMA_VERSION: u32 = 6;
+const CURRENT_SCHEMA_VERSION: u32 = 7;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
+const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;
 const MAX_FONT_FAMILY_CHARS: usize = 128;
 const MAX_SHORTCUT_CHARS: usize = 64;
 const MAX_KNOWN_SHELLS: usize = 32;
@@ -682,6 +684,11 @@ impl<'de> Deserialize<'de> for SessionStore {
                 settings.shortcuts.toggle_sidebar = default_toggle_sidebar_shortcut();
             }
         }
+        if wire.version < WORKSPACE_DENSITY_SCHEMA_VERSION
+            && settings.workspace.sidebar_width == PREVIOUS_DEFAULT_SIDEBAR_WIDTH
+        {
+            settings.workspace.sidebar_width = DEFAULT_SIDEBAR_WIDTH;
+        }
         settings.normalize_in_place();
         Ok(Self {
             version: wire.version.max(CURRENT_SCHEMA_VERSION),
@@ -1124,6 +1131,31 @@ mod tests {
         let migrated: SessionStore =
             serde_json::from_str(&custom).expect("custom shortcut should load");
         assert_eq!(migrated.settings.shortcuts.toggle_sidebar, "Alt+S");
+    }
+
+    #[test]
+    fn previous_workspace_width_migrates_without_overwriting_custom_values() {
+        let json = r#"{
+            "version": 6,
+            "settings": {
+                "workspace": {
+                    "sidebar_width": 260,
+                    "tab_width": 172
+                }
+            }
+        }"#;
+        let migrated: SessionStore =
+            serde_json::from_str(json).expect("previous workspace width should migrate");
+        assert_eq!(migrated.version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(
+            migrated.settings.workspace.sidebar_width,
+            DEFAULT_SIDEBAR_WIDTH
+        );
+
+        let custom = json.replace("\"sidebar_width\": 260", "\"sidebar_width\": 300");
+        let migrated: SessionStore =
+            serde_json::from_str(&custom).expect("custom workspace width should load");
+        assert_eq!(migrated.settings.workspace.sidebar_width, 300);
     }
 
     #[test]

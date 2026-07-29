@@ -1,10 +1,34 @@
 //! Native macOS title-bar integration for the Slint window.
 
 use anyhow::{Context, Result};
-use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};
+use objc2_app_kit::{NSView, NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
 pub(super) fn configure(window: &slint::Window) -> Result<()> {
+    with_native_window(window, |native_window| {
+        native_window
+            .setStyleMask(native_window.styleMask() | NSWindowStyleMask::FullSizeContentView);
+        native_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        native_window.setTitlebarAppearsTransparent(true);
+        native_window.setMovableByWindowBackground(false);
+        Ok(())
+    })
+}
+
+pub(super) fn start_drag(window: &slint::Window) -> Result<()> {
+    with_native_window(window, |native_window| {
+        let event = native_window
+            .currentEvent()
+            .context("AppKit has no current mouse-down event")?;
+        native_window.performWindowDragWithEvent(&event);
+        Ok(())
+    })
+}
+
+fn with_native_window<T>(
+    window: &slint::Window,
+    operation: impl FnOnce(&NSWindow) -> Result<T>,
+) -> Result<T> {
     let handle = window.window_handle();
     let raw = handle
         .window_handle()
@@ -18,9 +42,5 @@ pub(super) fn configure(window: &slint::Window) -> Result<()> {
     // NSView owned by this window for the lifetime of the borrowed handle.
     let view = unsafe { appkit.ns_view.cast::<NSView>().as_ref() };
     let native_window = view.window().context("AppKit view has no NSWindow")?;
-    native_window.setStyleMask(native_window.styleMask() | NSWindowStyleMask::FullSizeContentView);
-    native_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
-    native_window.setTitlebarAppearsTransparent(true);
-    native_window.setMovableByWindowBackground(true);
-    Ok(())
+    operation(&native_window)
 }

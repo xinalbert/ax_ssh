@@ -153,15 +153,22 @@ fn session_rows(sessions: &SessionStore, expanded_groups: &BTreeSet<String>) -> 
     for group in session_groups(sessions) {
         let group_name = group.name;
         let profiles = group.profiles;
+        if group_name.is_empty() {
+            rows.extend(profiles.into_iter().map(|profile| SessionRow {
+                id: profile.id.to_string().into(),
+                group_name: "".into(),
+                name: profile.name.clone().into(),
+                endpoint: profile_endpoint(profile).into(),
+                is_group: false,
+                expanded: false,
+            }));
+            continue;
+        }
         let expanded = expanded_groups.contains(&group_name);
         rows.push(SessionRow {
             id: "".into(),
             group_name: group_name.clone().into(),
-            name: if group_name.is_empty() {
-                "Ungrouped".into()
-            } else {
-                group_name.clone().into()
-            },
+            name: group_name.clone().into(),
             endpoint: profiles.len().to_string().into(),
             is_group: true,
             expanded,
@@ -219,6 +226,18 @@ fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) 
     ui.on_format_shortcut(move |text, alt, control, meta, shift| {
         format_shortcut_event(text.as_str(), alt, control, meta, shift).into()
     });
+    #[cfg(target_os = "macos")]
+    {
+        let ui_for_drag = ui.as_weak();
+        ui.on_drag_window(move || {
+            let Some(ui) = ui_for_drag.upgrade() else {
+                return;
+            };
+            if let Err(error) = macos_window::start_drag(ui.window()) {
+                warn!(%error, "failed to start native macOS window drag");
+            }
+        });
+    }
     wire_workspace_tabs(ui, state.clone(), runtime.clone());
     wire_session_editor(ui, state.clone(), runtime.clone());
     wire_connection_request(ui, state.clone(), runtime.clone());
@@ -2084,8 +2103,8 @@ mod tests {
         assert_eq!(rows[1].name.as_str(), "prod-a");
         assert!(!rows[2].is_group);
         assert_eq!(rows[2].name.as_str(), "prod-b");
-        assert!(rows[3].is_group);
-        assert_eq!(rows[3].name.as_str(), "Ungrouped");
+        assert!(!rows[3].is_group);
+        assert_eq!(rows[3].name.as_str(), "local");
         assert!(!rows[3].expanded);
     }
 

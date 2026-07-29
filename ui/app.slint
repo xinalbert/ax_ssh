@@ -79,7 +79,7 @@ export component AppWindow inherits Window {
     in property <int> default-terminal-rows: 36;
     in property <string> local-shell: "System default";
     in property <int> local-shell-index: 0;
-    in property <int> sidebar-width: 260;
+    in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
     in property <string> open-settings-shortcut;
     in property <string> toggle-sidebar-shortcut;
@@ -94,13 +94,15 @@ export component AppWindow inherits Window {
 
     private property <bool> sidebar-collapsed: false;
     private property <bool> shortcut-recording: false;
-    private property <length> activity-bar-width: 62px;
+    private property <length> activity-bar-width: 52px;
+    private property <length> titlebar-drag-width: root.unified-titlebar ? 72px : 0px;
     private property <length> navigation-width:
         root.activity-bar-width + (root.sidebar-collapsed ? 0px : root.sidebar-width * 1px);
 
     callback new-session();
     callback open-local-shell();
     callback open-settings();
+    callback drag-window();
     callback activate-tab(string);
     callback close-tab(string);
     callback save-settings(
@@ -123,6 +125,14 @@ export component AppWindow inherits Window {
     callback scroll-terminal(int);
     callback terminal-selection-text(int, int, int, int) -> string;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
+
+    function scroll-tabs(delta-x: length, delta-y: length) {
+        let delta = delta-x != 0px ? delta-x : delta-y;
+        tabs-flick.viewport-x = max(
+            tabs-flick.width - tabs-flick.viewport-width,
+            min(0px, tabs-flick.viewport-x + delta),
+        );
+    }
 
     shortcut-scope := FocusScope {
         capture-key-pressed(event) => {
@@ -166,7 +176,7 @@ export component AppWindow inherits Window {
             spacing: 0px;
 
             Rectangle {
-                height: root.unified-titlebar ? 38px : 42px;
+                height: root.unified-titlebar ? 34px : 38px;
                 background: Theme.panel;
                 border-width: 1px;
                 border-color: Theme.border;
@@ -183,74 +193,108 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
                         clip: true;
                         tabs-flick := Flickable {
-                        width: parent.width;
-                        height: parent.height;
-                        viewport-width: max(self.width, root.workspace-tabs.length * root.tab-width * 1px);
-                        viewport-height: self.height;
-
-                        for tab[index] in root.workspace-tabs : Rectangle {
-                            x: index * root.tab-width * 1px;
-                            y: 0px;
-                            width: root.tab-width * 1px;
+                            width: parent.width;
                             height: parent.height;
-                            background: tab.id == root.active-tab-id ? Theme.background : Theme.panel;
-                            border-width: 1px;
-                            border-color: Theme.border;
+                            interactive: false;
+                            viewport-width: max(
+                                self.width,
+                                root.workspace-tabs.length * root.tab-width * 1px,
+                            );
+                            viewport-height: self.height;
 
-                            tab-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.activate-tab(tab.id); }
-                            }
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 6px;
-                                spacing: 7px;
-                                Rectangle {
-                                    width: 7px;
-                                    background: transparent;
-                                    Rectangle {
-                                        y: (parent.height - self.height) / 2;
-                                        width: 7px;
-                                        height: 7px;
-                                        border-radius: 4px;
-                                        background: tab.connected ? Theme.success : (tab.kind == "terminal" ? Theme.accent : Theme.muted);
+                            for tab[index] in root.workspace-tabs : Rectangle {
+                                x: index * root.tab-width * 1px;
+                                y: 0px;
+                                width: root.tab-width * 1px;
+                                height: parent.height;
+                                background: tab.id == root.active-tab-id ? Theme.background : Theme.panel;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                tab-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.activate-tab(tab.id); }
+                                    scroll-event(event) => {
+                                        root.scroll-tabs(event.delta-x, event.delta-y);
+                                        return EventResult.accept;
                                     }
                                 }
-                                Text {
-                                    horizontal-stretch: 1;
-                                    text: tab.title;
-                                    color: Theme.text;
-                                    font-size: 12px;
-                                    overflow: elide;
-                                    vertical-alignment: center;
-                                }
-                                Rectangle {
-                                    width: 24px;
-                                    height: 24px;
-                                    border-radius: Theme.radius;
-                                    background: close-touch.has-hover ? Theme.panel-alt : transparent;
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 4px;
+                                    spacing: 6px;
+                                    Rectangle {
+                                        width: 7px;
+                                        background: transparent;
+                                        Rectangle {
+                                            y: (parent.height - self.height) / 2;
+                                            width: 7px;
+                                            height: 7px;
+                                            border-radius: 4px;
+                                            background: tab.connected ? Theme.success : (tab.kind == "terminal" ? Theme.accent : Theme.muted);
+                                        }
+                                    }
                                     Text {
-                                        width: parent.width;
-                                        height: parent.height;
-                                        text: "x";
-                                        color: Theme.muted;
+                                        horizontal-stretch: 1;
+                                        text: tab.title;
+                                        color: Theme.text;
                                         font-size: 12px;
-                                        horizontal-alignment: center;
+                                        overflow: elide;
                                         vertical-alignment: center;
                                     }
-                                    close-touch := TouchArea {
-                                        mouse-cursor: pointer;
-                                        accessible-role: button;
-                                        accessible-label: "Close tab";
-                                        clicked => { root.close-tab(tab.id); }
+                                    Rectangle {
+                                        width: 24px;
+                                        height: 24px;
+                                        border-radius: Theme.radius;
+                                        background: close-touch.has-hover ? Theme.panel-alt : transparent;
+                                        Text {
+                                            width: parent.width;
+                                            height: parent.height;
+                                            text: "x";
+                                            color: Theme.muted;
+                                            font-size: 12px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                        close-touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            accessible-role: button;
+                                            accessible-label: "Close tab";
+                                            clicked => { root.close-tab(tab.id); }
+                                            scroll-event(event) => {
+                                                root.scroll-tabs(event.delta-x, event.delta-y);
+                                                return EventResult.accept;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                x: root.workspace-tabs.length * root.tab-width * 1px;
+                                y: 0px;
+                                width: max(0px, tabs-flick.width - self.x);
+                                height: parent.height;
+                                background: Theme.panel;
+                                titlebar-empty-touch := TouchArea {
+                                    pointer-event(event) => {
+                                        if root.unified-titlebar
+                                                && root.workspace-tabs.length == 0
+                                                && event.kind == PointerEventKind.down
+                                                && event.button == PointerEventButton.left {
+                                            root.drag-window();
+                                        }
+                                    }
+                                    scroll-event(event) => {
+                                        root.scroll-tabs(event.delta-x, event.delta-y);
+                                        return EventResult.accept;
                                     }
                                 }
                             }
                         }
                     }
-                }
                     Rectangle {
-                        width: 42px;
+                        width: parent.height;
                         background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
                         Text {
                             width: parent.width;
@@ -266,6 +310,19 @@ export component AppWindow inherits Window {
                             accessible-role: button;
                             accessible-label: "New session tab";
                             clicked => { root.new-session(); }
+                        }
+                    }
+                    Rectangle {
+                        width: root.titlebar-drag-width;
+                        background: Theme.panel;
+                        titlebar-trailing-touch := TouchArea {
+                            pointer-event(event) => {
+                                if root.unified-titlebar
+                                        && event.kind == PointerEventKind.down
+                                        && event.button == PointerEventButton.left {
+                                    root.drag-window();
+                                }
+                            }
                         }
                     }
                 }
@@ -366,20 +423,16 @@ export component AppWindow inherits Window {
                     border-color: Theme.border;
 
                 VerticalLayout {
-                    padding: 14px;
-                    spacing: 10px;
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    padding-top: 6px;
+                    padding-bottom: 6px;
+                    spacing: 4px;
 
-                        Text {
-                            text: "Sessions";
-                            color: Theme.text;
-                            font-size: 14px;
-                            font-weight: 700;
-                        }
-                    Rectangle { height: 1px; background: Theme.border; }
                     ListView {
                         vertical-stretch: 1;
                         for row in root.sessions : Rectangle {
-                            height: row.is-group ? 40px : 56px;
+                            height: row.is-group ? 34px : 50px;
                             background: session-touch.has-hover ? Theme.panel-alt : transparent;
                             border-radius: Theme.radius;
                             session-touch := TouchArea {
@@ -393,9 +446,9 @@ export component AppWindow inherits Window {
                                 }
                             }
                             if row.is-group : HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 7px;
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                spacing: 6px;
                                 Text {
                                     width: 10px;
                                     text: row.expanded ? "v" : ">";
@@ -420,11 +473,11 @@ export component AppWindow inherits Window {
                                 }
                             }
                             if !row.is-group : VerticalLayout {
-                                padding-left: 28px;
-                                padding-right: 10px;
-                                padding-top: 7px;
-                                padding-bottom: 7px;
-                                spacing: 3px;
+                                padding-left: row.group-name.is-empty ? 10px : 26px;
+                                padding-right: 8px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                spacing: 2px;
                                 Text {
                                     text: row.name;
                                     color: Theme.text;

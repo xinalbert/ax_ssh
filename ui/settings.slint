@@ -340,7 +340,7 @@ export component SettingsPane inherits Rectangle {
                     Text { text: "Session sidebar width"; color: Theme.muted; font-size: 12px; }
                     settings-sidebar-width := SpinBox {
                         width: 170px;
-                        minimum: 220;
+                        minimum: 180;
                         maximum: 420;
                         value <=> root.draft-sidebar-width;
                     }
