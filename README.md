@@ -34,14 +34,30 @@ the window; tabs, the activity bar, the session sidebar, and terminal content
 remain interaction-only regions.
 
 Terminal, shortcut, local-shell, and workspace settings are managed in a
-Settings view opened from the activity bar or its shortcut. The adjacent About
-activity opens the About page directly, where the product purpose, version, and
-core stack are shown. General, Appearance, Terminal, Workspace, Shortcuts, and
-About remain navigable inside Settings. Save and Close stay in the Settings
-page header. Saved values are persisted in the versioned `sessions.json`;
+Settings view opened from the platform menu or its shortcut. On macOS, the
+standard `ax_ssh` application menu owns Settings and About; Windows and Linux
+place them under Edit and Help. The sidebar no longer duplicates either entry.
+General, Appearance, Terminal, Workspace, Shortcuts, and About remain navigable
+inside Settings. Save and Close stay in the Settings page header. Saved values
+are persisted in the versioned `sessions.json`;
 discovered shell names are cached and only newly available names are added
 later. JetBrains Mono is bundled under the SIL Open Font License. SFTP and full
 mouse-oriented terminal protocol support remain staged.
+
+The session navigator switches between two exclusive forms. Expanded mode
+shows a Local Shell card followed by bordered group and session cards;
+collapsed mode shows a compact terminal icon, folder initials, expanded child
+session initials, and the new-session action. Ungrouped profiles use the same
+group behavior instead of bypassing the hierarchy.
+
+The application menu bar declares File, Edit, View, Pane, Window, and Help as
+stable extension points. Slint installs the business menus in the system-wide
+menu bar on macOS, uses the native window menu on Windows, and renders them at
+the top of the window on Linux. The macOS bridge reuses the existing standard
+application menu, binds About to the internal page, and inserts `Settings...`
+with `Cmd+,`. File opens a new session, View toggles the session navigator,
+Pane opens a local shell, Window closes the current tab, and Help opens keyboard
+shortcuts. Windows/Linux additionally expose Settings in Edit and About in Help.
 
 ## Quick start
 

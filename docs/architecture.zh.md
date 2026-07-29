@@ -38,6 +38,7 @@ Slint UI（.slint）
 | --- | --- | --- |
 | `ui/` | 顶部 Tab、页面布局、视觉状态、用户手势、生成的 callback 契约 | 文件系统、Tokio task、russh handle |
 | `src/app.rs` | Slint 初始化、领域值到行模型的转换、callback 接线、event loop 更新 | SSH 协议细节或 JSON schema 细节 |
+| `src/app/macos_window.rs` | 主线程 AppKit 标题栏设置和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换、分组聚合和阻塞式凭据 task 边界 | 生成的 Slint component/model 类型 |
 | `src/config.rs` | `SessionProfile`、版本化 `AppSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
@@ -84,11 +85,22 @@ Slint UI（.slint）
    只从零 Tab 空白条或最右侧专用留白报告 mouse-down，并由 UI 线程 callback 把当前
    事件交给 `NSWindow::performWindowDragWithEvent`；Tab、Activity Bar、侧栏和终端
    都不会调用该 callback。
-10. Activity Bar 的 Settings 和 About 意图分别把同一个单例 Settings 工作台打开到
-    General 或 About。应用 bridge 不把该内部单例放入可见工作区 Tab model；Settings
-    激活时，Slint 用仅可拖动的标题栏区域替换 Tab 条。页面切换时未保存草稿仍由 Slint
-    持有；只有标题栏 Save 会跨入应用边界。About 展示静态产品用途说明，并只接收
-    编译期 package 版本作为只读 UI 元数据。
+10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台打开到 General
+    或 About。应用 bridge 不把该内部单例放入可见工作区 Tab model；Settings 激活时，
+    Slint 用仅可拖动的标题栏区域替换 Tab 条。页面切换时未保存草稿仍由 Slint 持有；
+    只有标题栏 Save 会跨入应用边界。About 展示静态产品用途说明，并只接收编译期
+    package 版本作为只读 UI 元数据。会话侧边栏不再重复 Settings/About。
+11. 单一声明式 Slint `MenuBar` 持有跨平台业务菜单树。锁定的 winit/muda 后端把它安装
+    到 macOS 屏幕顶部和 Windows 原生窗口菜单；没有 native menu 支持的 Linux 后端在
+    客户区顶部渲染同一棵树。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
+    应用菜单，把现有 About 接到内部页面，并插入带 `Cmd+,` 的 `Settings...`。AppKit
+    target 只在主线程运行且只捕获 `Weak<AppWindow>`；由于 target 为弱引用，菜单项用
+    represented object 保持其生命周期。Windows/Linux 在 Edit/Help 提供 Settings/About，
+    其他菜单复用已有的新建会话、侧栏、本地 shell、关闭 Tab 和快捷键意图。
+12. 会话导航只持有一个 Slint 展开/收起状态。展开态渲染 Local Shell 卡片和带边框的
+    分组/会话行；收起态把同一扁平模型渲染为终端、文件夹和两字标签。分组展开状态决定
+    两种形态中是否存在子会话，未分组 profile 也生成显式 Ungrouped 分组行。静态图标和
+    卡片尺寸全部进入 `ui/theme.slint`，导航展示状态不进入 `SessionStore`。
 
 ## SSH 安全契约
 
@@ -135,8 +147,9 @@ UI model。
 260px 侧栏替换为紧凑的 220px，自定义宽度保持不变。密码、passphrase、私钥内容、
 终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
-只有会话模型非空且用户没有手动收起时，会话侧栏才参与布局。空状态仍保留 Activity
-Bar 上的 Local Shell、Settings、About 和新建会话入口。
+只有会话模型非空且用户没有手动收起时，展开会话侧栏才参与布局；否则窄栏仍保留
+Local Shell 和新建会话入口。Settings/About 只保留在平台菜单和快捷键中，不再进入
+左侧栏。
 
 静态界面样式只由 `ui/theme.slint` 的语义 token 配置，包括调色板角色、字号层级、
 间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。

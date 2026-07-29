@@ -9,7 +9,7 @@
 ## 运行环境
 
 - 语言与版本：Rust 2024，MSRV `1.92.0`；本机 `rustc 1.96.1`、`cargo 1.96.1`。
-- 主要依赖：Slint `1.17.1`、Tokio `1`、russh `0.62.2`、keyring `4.1.5`。
+- 主要依赖：Slint `1.17.1`、Tokio `1`、russh `0.62.2`、keyring `4.1.5`；macOS target 直接使用 objc2 `0.6.4`、objc2-app-kit `0.3.2` 和 objc2-foundation `0.3.2`。
 - 构建入口：`src/main.rs`、`build.rs` 和 `ui/app.slint`。
 - 依赖管理：Cargo，锁文件为 `Cargo.lock`。
 
@@ -31,7 +31,7 @@
 
 - 冷缓存依赖 crates.io registry；当前本机缓存可完成 locked/offline 构建。
 - macOS Keychain 真实写入、读取和删除已验证；其他平台凭据服务尚未在本机验证。
-- UI-only 布局修改不依赖网络或外部 SSH 服务器。
+- macOS 菜单 bridge 只调用系统 AppKit；UI/菜单修改不依赖网络或外部 SSH 服务器。
 
 ## 证据文件
 
@@ -43,4 +43,4 @@
 
 ## 最后确认时间
 
-- 2026-07-29 18:49 +0800
+- 2026-07-29 23:44 +0800

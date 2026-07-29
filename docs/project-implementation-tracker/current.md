@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260729-navigation-settings-polish
-- 目标：没有已保存服务器时自动隐藏空会话侧栏，并把 Settings 建立在统一、可复用、完全由主题 token 配置的 Slint 基础控件上；根据实际截图移除 Settings 与工作区重复的 Tab/底栏 chrome，并修复 Activity Bar 设置图标缺失。
-- 交付物：派生侧栏可见状态、无重复工作区 Tab 的 Settings Activity Bar 入口、可直达 About 的 Activity Bar 入口、稳定设置图标、标题栏内保存/关闭操作、独立 Settings 基础组件模块、集中式语义颜色/字号/间距/尺寸 token、六分类页面、编译期版本展示、成对用户说明和完整回归记录。
+- 目标 ID：20260729-platform-menubar
+- 目标：复用 macOS 已有的系统 `ax_ssh` 应用菜单承载 Settings/About，在 Windows/Linux 提供窗口顶部同构菜单，并把左侧会话导航重做为互斥的展开卡片列表与收起图标栏。
+- 交付物：macOS 应用菜单内可用的 About 与 `Settings...`（`Cmd+,`）；六个跨平台业务菜单；无 Settings/About Activity Bar 入口；展开态 Local Shell、分组与会话卡片；收起态终端/文件夹/会话紧凑图标；集中式 Theme token、成对说明和完整回归记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app.rs`、`ui/`、`README.md`、`README.zh.md`、`docs/project-env-audit/` 和 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：新增设置字段、会话持久化 schema、SSH 认证、host-key、worker 或终端生命周期。
+- 当前范围：`Cargo.toml`、`Cargo.lock`、`src/app.rs`、`src/app/macos_window.rs`、`src/app/session_groups.rs`、`ui/app.slint`、`ui/theme.slint`、`ui/components/sidebar-controls.slint`、根 README、成对架构文档和实施/环境记录。
+- 不在本轮范围内：分组重命名、完整实现 Edit/Pane/Window 命令组、修改设置 schema、SSH 认证、host-key、worker 或终端生命周期。
 
 ## 当前状态
 
@@ -23,57 +23,48 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | 环境预检、空侧栏根因和 Slint 所有权确认 | Cargo metadata 与 `ui/app.slint` 绑定审查 | 项目地图覆盖本轮，无需刷新 |
-| P2 | completed | 空会话派生可见性、Settings Activity Bar 入口与分类式设置页面 | Slint/Cargo 联合编译和差异审查 | 保留现有保存 callback 和 draft 状态 |
-| P3 | completed | 编译期版本映射、成对用户说明和初次联合编译 | Cargo check、格式和差异审查 | 不修改持久化或 SSH 契约 |
-| P4 | completed | Settings 基础组件模块、集中式 Theme token 和基于该模块的页面重构 | Slint import graph 联合编译、硬编码样式扫描与重复布局审查 | 单文件组件集，主题配置留在 `ui/theme.slint` |
-| P5 | completed | 完整仓库门禁和 GUI 走查 | test、文档/tracker validator、用户截图 | 自动截图受 macOS Screen Recording 权限限制 |
-| P6 | completed | 左侧标题/说明与右侧紧凑控件组成的统一设置行 | Slint/Cargo 联合编译、控件尺寸与重复字段审查 | 保留简单分类导航，不引入 VS Code 大型设置树 |
-| P7 | completed | 紧凑设置页最终回归和记录收口 | full test、文档/tracker validator、边界和差异检查 | 最新二进制窗口已启动，视觉细节保留手工确认 |
-| P8 | completed | 移除 Settings 重复 Tab/底栏，修复设置图标并加入 About 直达入口 | Slint/Cargo 联合编译、截图标注区域与两个 Activity Bar 入口逐项审查 | Settings 状态保留为单例，UI Tab 模型不再展示它 |
-| P9 | completed | 最新布局完整回归和记录收口 | full test、文档/tracker validator、窗口启动和差异检查 | 页面像素仍需目标平台手工确认 |
+| P1 | completed | 锁定 Slint 1.17.1 MenuBar 平台行为和所有权边界 | 本地 locked crate source 与现有 callback 审查 | macOS/Windows 使用 native muda，Linux 由 Slint 渲染 |
+| P2 | completed | 六个顶级菜单骨架和已有命令入口 | Slint/Cargo 联合编译与菜单 callback 审查 | 不手写 AppKit target/action，不新增依赖 |
+| P3 | completed | macOS 系统菜单实际检查和重复入口结论 | 用户截图与实际菜单项审查 | 已确认应复用现有应用菜单，不在 File/Help 重复 Settings/About |
+| P4 | completed | macOS 应用菜单桥接及六个可见业务菜单 | Slint/Cargo 联合编译与 AppKit 主线程/生命周期审查 | macOS 条件隐藏重复 Settings/About；Edit 保留标准禁用 Undo 槽位 |
+| P5 | completed | 最新 macOS 顶部菜单运行时检查 | 实际启动、进程日志和系统截图 | 已确认空 Edit 会被省略并完成可见性修正；菜单点击受辅助功能权限限制 |
+| P6 | completed | 无 Settings/About 入口的展开/收起会话导航组件 | Slint/Cargo 联合编译、模型映射测试和桌面截图 | 展开态与收起态互斥；不新增持久化字段 |
+| P7 | completed | 双语说明、完整回归和最终 GUI 确认 | full test、文档/tracker validator、运行时截图 | Windows/Linux 外观保留对应平台验收 |
 
 ## 已完成
 
-- 已确认 `sidebar-collapsed` 默认是 `false`，会话面板没有检查 `sessions.length`，所以空模型仍占用配置的 220px 宽度。
-- 已确认可见性属于 `ui/app.slint` 的派生展示状态，不需要修改 `src/app.rs`、持久化配置或 SSH 边界。
-- 已完成施工前环境复核；环境事实无变化，并把旧环境摘要对齐到当前记录契约。
-- 已确认现有 Settings 只有 Terminal、Workspace 和 Keybindings 三个粗粒度页面，Activity Bar 没有可点击 Settings 入口，且没有 About 页面。
-- 已确认现有设置字段可在 Slint 内重新分组；Rust 侧只需注入只读编译期版本，不改变保存 callback 参数或配置 schema。
-- 已实现空会话侧栏派生可见性；Activity Bar 的 Local Shell、Settings 和新增会话入口始终保留。
-- 已把 Settings 重组为六个直接可达页面和固定底部操作栏；分类切换保留 draft，About 显示编译期版本。
-- 已刷新项目地图和中英文 README/架构说明，记录新导航、空状态和只读版本映射。
-- 已完成初次编译期版本映射、成对说明和 Slint/Rust 联合编译；用户走查后确认仍需统一基础控件以消除页面粗糙感。
-- 已创建 Settings 基础组件模块并完成第一次引用编译；用户进一步要求全部界面样式配置集中到配置文件，以便后续配置主题。
-- 已把语义颜色、字号、通用间距/圆角和标准工作区、Settings、编辑器、弹窗尺寸集中到 `ui/theme.slint`；页面只保留运行时尺寸、用户设置和必要零值。
-- 已让 `ui/settings.slint` 通过 `SettingsPage`、`SettingsRow`、`SettingsToggleRow`、`ShortcutRecorder`、`SettingsFooter` 等基础组件组合六个页面，并加入导航键盘焦点态。
-- 已刷新双语架构和项目地图，明确 Theme visual config 与持久化 `AppSettings` 的边界。
-- 已完成上一轮完整回归：`cargo check --locked --offline` 和 `cargo test --locked --offline` 通过，库测试 44 passed、1 ignored，应用测试 15 passed；tracker、Markdown 相对链接、Theme 字面量和差异检查通过。
-- 已根据用户提供的 Settings 实际截图确认：52px 设置行会拉伸标准控件，Appearance 字体输入重复，右侧字段缺少统一的紧凑尺寸和左侧说明层级。
-- 已新增 `SettingsField`，所有右侧控件统一使用 280px 字段槽和 32px 高度；设置行改为标题加简短元数据，Appearance 字体只保留可编辑输入框，并移除无消费者的 Rust 字体选项模型。
-- 已按 Slint Fluent SpinBox 的 128px 最小宽度校正双数字字段，并为输入、下拉、数字和滑块补齐可访问标签；联合编译通过。
-- 已完成最终回归和最新二进制启动检查；AxSSH 正常创建 1180x740 窗口并初始化，测试、文档/tracker、主题字面量、相对链接、Cargo workspace 和差异检查通过。
-- 用户最新截图确认三个 chrome 问题：Settings 仍显示为顶部工作区 Tab 且保留新建按钮，Activity Bar 设置字符缺少字形，页面底部又重复显示状态/Close/Save 操作栏。
-- 用户进一步要求 Settings 从左侧 Activity Bar 进入，并在同一栏增加 About 直达入口，同时补充使用说明。
-- 已从可见工作区 Tab model 过滤 Settings，并在 Settings 激活时用纯拖动标题区替代 Tab/+；对应应用边界回归测试通过。
-- 已用可复用 `SettingsGlyph` 替代缺字齿轮，Activity Bar 的 Settings/About 分别直达 General/About，且只高亮当前入口。
-- 已删除 `SettingsFooter`，把非 Ready 状态、Close 和 Save 收入 `SettingsHeader`；中英文 README、架构和项目地图已同步。
-- 已为 About 页面补充 AxSSH 的用途说明；对应高度和说明文本尺寸继续由 `ui/theme.slint` 统一配置。
-- 已完成最新布局回归；CoreGraphics 确认最新二进制创建 1180x740 的屏幕内主窗口，随后已停止测试进程。
+- 已确认用户所指菜单栏是操作系统/窗口顶部菜单，而不是左侧 Activity Bar。
+- 已确认锁定的 Slint 1.17.1 `MenuBar` 会在 macOS 屏幕顶部显示原生菜单，在 Windows 使用原生窗口菜单，在不支持 native muda 的 Linux 后端由 Slint 在窗口顶部渲染。
+- 已确认菜单项可直接复用 `new-session`、`open-local-shell`、`open-settings` callback，并由 Slint 本地状态切换 General/About 和侧栏可见性，不需要新增 Rust、AppKit 或持久化契约。
+- 已确认顶级骨架需要保留 `File`、`Edit`、`View`、`Pane`、`Window`、`Help`，后续命令在对应菜单内增量填充。
+- 已实现单一 MenuBar；File 接入 New Session、New Local Shell 和 Settings，View 接入 Toggle Session Sidebar，Help 接入 About AxSSH，Edit/Pane/Window 保留空菜单骨架。
+- 已通过 `cargo check --locked --offline` 验证 Slint 菜单生成契约和现有 Rust callback 无变化，并同步双语产品、架构与项目地图说明。
+- 已通过实际 macOS 菜单确认：Slint/winit 已生成标准 `ax_ssh` 应用菜单，继续在 File/Help 增加 Settings/About 会形成重复入口；空 Edit/Pane/Window 也不会显示。
+- 已确定复用现有应用菜单：重新绑定标准 About，紧随其后插入 `Settings...`；六个业务菜单各使用现有可执行命令，避免空骨架被系统省略。
+- 已完成 cfg-scoped AppKit action target：标准 About 与新插入的 Settings 只捕获 `Weak<AppWindow>`，由菜单项 represented object 保持 target 生命周期；`cargo check --offline` 通过。
+- 已启动最新二进制并取得系统截图，确认 macOS 顶部显示 `ax_ssh / File / View / Pane / Window / Help`；由此确认空 Edit 会被系统省略，并加入标准禁用 Undo 槽位维持六分类可见。
+- 用户进一步要求移除左侧 Settings/About，并以参考图的卡片式展开会话列表和图标式收起栏替代现有 Activity Bar；Local Shell 的文本符号将替换为自绘终端图标。
+- 已删除左侧 Settings/About；展开态只显示 Local Shell 与分组/会话卡片，收起态只显示终端、文件夹/两字分组、已展开子会话和新建会话。
+- 已新增 `ui/components/sidebar-controls.slint`，自绘稳定的终端/文件夹图标与窄栏卡片；对应颜色和全部几何尺寸进入 `ui/theme.slint`。
+- 已让 Ungrouped 生成正式分组行，并以 Unicode 前两个字符生成分组/会话紧凑标签；删除独立 group-icons 模型，展开/收起复用同一个 `SessionRow` 模型。
+- 已通过 `cargo check --locked --offline`、紧凑标签测试和会话分组/展开映射测试；设置 schema、SSH、凭据和 worker 均未变化。
+- 已把密码弹窗、会话编辑器条件行和终端下划线偏移的遗留静态尺寸收回 `ui/theme.slint`，页面不再新增或保留这些配置字面量。
+- 已完成最终 locked/offline 回归：库 44 passed、1 ignored，应用 16 passed；直接 rustfmt、tracker、Markdown 相对链接、Cargo metadata、主题/耦合/无界 channel 扫描和 `git diff --check` 通过。
+- 已启动最终二进制，CoreGraphics 确认屏幕内 1180x740 AxSSH 窗口；系统截图确认 `ax_ssh / File / Edit / View / Pane / Window / Help` 六分类全部可见，随后停止测试进程。
 
 ## 验证
 
-- 已完成：项目 skill/reference、环境记忆、Cargo metadata、基础组件/Theme Slint-Rust 联合编译、完整 Cargo test（库 44 passed、1 ignored；应用 16 passed）、静态样式字面量扫描、直接 Rust 格式检查、项目地图、Markdown/tracker validator、相对链接、边界和差异检查，以及最新二进制 1180x740 窗口启动。
-- 未完成：macOS Screen Recording/Accessibility 权限阻止自动点击和截图；Settings/About 入口、说明换行与三个原红框区域保留为目标平台手工视觉确认。`cargo-fmt` 和 `cargo-clippy` 组件未安装。
+- 已完成：项目 skill/reference、环境记忆、项目地图、macOS 标准应用菜单桥接、会话导航组件/模型、双语说明、locked/offline check/test、直接 rustfmt、tracker/Markdown validator、边界扫描、最终二进制窗口和系统顶部菜单截图。
+- 未完成：本机未安装 Cargo `fmt`/`clippy` 子命令；Screen Recording/Accessibility 权限阻止 Slint 客户区截图和自动菜单点击；Windows/Linux 平台外观未在本机验收。
 
 ## 风险与阻塞
 
-- 无实现阻塞。Settings 必须继续显式保存并可关闭返回，但不再进入可见工作区 Tab 列表；主题 token 仍只拥有视觉语义，用户设置继续由 `AppSettings` 持久化。剩余风险仅为未自动化的目标平台像素和点击走查。
+- 无实现阻塞。剩余风险仅是未自动化的 Settings/About 原生菜单点击、展开/收起像素细节和 Windows/Linux 顶部菜单外观；SSH、安全、凭据和配置 schema 未变化。
 
 ## 下一步
 
-- 用户在目标平台确认左侧 Settings/About 入口、About 说明换行，以及顶部 Tab、设置图标和底部操作三个原标注区域。
+- 用户在目标平台确认 macOS 应用菜单的 Settings/About 点击，以及展开/收起侧栏的卡片密度、文本截断和图标观感。
 
 ## 最后更新时间
 
-- 2026-07-29 23:04 +0800
+- 2026-07-30 00:24 +0800

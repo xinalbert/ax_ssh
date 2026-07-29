@@ -25,12 +25,24 @@ SSH 连接流程会校验服务器 SHA-256 主机密钥指纹、接收临时密�
 和最右侧专用留白可以移动窗口；Tab、Activity Bar、会话侧栏和终端内容都只响应自身
 交互，不会拖动窗口。
 
-终端、快捷键、本地 shell 和工作区参数在 Settings 页面中管理，可从 Activity Bar
-的 Settings 按钮或快捷键打开；相邻的 About 按钮会直接进入 About 页面，其中展示
-产品用途、版本和核心技术栈。General、Appearance、Terminal、Workspace、Shortcuts
-和 About 仍可从设置菜单切换，Save 与 Close 位于页面标题栏。保存值写入版本化
+终端、快捷键、本地 shell 和工作区参数在 Settings 页面中管理，可从平台顶部菜单或
+快捷键打开。macOS 由标准 `ax_ssh` 应用菜单承载 Settings/About；Windows 和 Linux
+分别放在 Edit/Help 下，侧边栏不再重复保留这两个入口。General、Appearance、Terminal、
+Workspace、Shortcuts 和 About 仍可从设置菜单切换，Save 与 Close 位于页面标题栏。
+保存值写入版本化
 `sessions.json`；已发现的 shell 名称会缓存，下次只合并新增项。项目按 SIL Open Font
 License 自带 JetBrains Mono。SFTP 和完整鼠标终端协议仍留在后续阶段实现。
+
+会话导航在两种互斥形态间切换：展开时先显示 Local Shell 卡片，再显示带边框的分组和
+会话卡片；收起时只显示终端图标、分组文件夹与两字标签、已展开子会话的两字标签和
+新建会话入口。未分组 profile 也统一进入 Ungrouped 分组，不再绕过分组层级。
+
+应用顶部菜单栏固定声明 File、Edit、View、Pane、Window 和 Help，作为后续命令的稳定
+扩展入口。Slint 在 macOS 把业务菜单放到系统屏幕顶部，在 Windows 使用原生窗口菜单，
+在 Linux 渲染到应用窗口顶部。macOS bridge 复用已有标准应用菜单，把 About 接到内部
+页面，并在其后插入带 `Cmd+,` 的 `Settings...`。File 新建会话，View 切换会话导航，
+Pane 打开本地 shell，Window 关闭当前 Tab，Help 打开快捷键；Windows/Linux 还分别在
+Edit/Help 提供 Settings/About。
 
 ## 快速开始
 

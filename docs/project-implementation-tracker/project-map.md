@@ -34,6 +34,7 @@
 | `src/main.rs` | 进程入口 | `LoggingGuard`、`app::run` | 启动、退出和进程级生命周期 |
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh` | 领域、系统服务、进程服务和传输公共边界 |
 | `src/app.rs` | Slint/Rust bridge | `run`、`wire_callbacks`、`set_status` | callback、模型/编译期 UI 元数据映射和 event loop |
+| `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`configure_application_menu`、`NativeMenuTarget` | 标题栏拖动、标准应用菜单 Settings/About action 与主线程生命周期 |
 | `src/app/state.rs` | 应用状态转换和工作区 Tab 所有权 | `AppState`、`WorkspaceTab`、`TerminalTabState`、attempt 生命周期 | Tab 创建/切换/关闭、同 profile 多实例和迟到 worker 隔离 |
 | `src/app/session_groups.rs` | 会话分组领域逻辑 | `session_groups`、`group_options` | 分组聚合、已有组选项和 endpoint 格式 |
 | `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout | 从 UI 线程外调用系统凭据库 |
@@ -46,9 +47,10 @@
 | `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 passphrase |
 | `src/ssh/worker.rs` | SSH worker 生命周期 | `SshSessionHandle`、`SshSessionEvent` | 有界 shell 输入/resize/输出、取消和退出 join |
 | `src/ssh/tests.rs` | 确定性 SSH 回归 | loopback russh server | 主机密钥、密码/私钥认证、PTY shell 和 worker 生命周期测试 |
-| `ui/app.slint` | 主窗口和 Tab 交互契约 | `AppWindow`、`WorkspaceTabRow`、安全提示层 | 顶部 Tab、会话侧栏、活动页面和 callback |
+| `ui/app.slint` | 主窗口、菜单栏和 Tab 交互契约 | `AppWindow`、`MenuBar`、`WorkspaceTabRow`、安全提示层 | 平台顶部菜单、Tab、会话侧栏、活动页面和 callback |
 | `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane` | 终端焦点、复制粘贴、输出跟随和 PTY resize |
 | `ui/theme.slint` | 集中式视觉配置 | `Theme` semantic palette/type/spacing/geometry tokens | 修改颜色、字号、间距、圆角或标准界面尺寸 |
+| `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarFolderGlyph`、`SidebarRailItem` | 修改 Local Shell/分组图标和收起态卡片交互 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 图标、导航、标题操作、紧凑字段和行布局 |
 | `ui/settings.slint` | Settings 工作台页面 | `SettingsPane` | 分类页面、About、参数草稿和保存意图 |
 | `ui/session-editor.slint` | New Session Tab | `SessionEditorPane` | profile、分组、密码/私钥表单 |
@@ -64,6 +66,8 @@
 - 修改本机私钥发现或加载：`src/ssh/private_keys.rs`，不得持久化私钥内容或 passphrase。
 - 修改日志初始化、滚动或刷新：`src/logging.rs`，由 `src/main.rs` 持有唯一 guard。
 - 修改 UI callback：先改 `ui/app.slint`，再改 `src/app.rs::wire_callbacks`。
+- 修改平台顶部菜单：业务菜单在 `ui/app.slint`，macOS 标准应用菜单 action 在 `src/app/macos_window.rs`；优先复用现有 callback 和 Slint 状态。
+- 修改会话导航：`src/app.rs::session_rows` 生成统一分组/子会话模型，`ui/app.slint` 选择展开或收起形态，图标基础件在 `ui/components/sidebar-controls.slint`。
 - 修改主题或静态界面尺寸：只改 `ui/theme.slint` token；新增 Settings 行优先组合 `ui/components/settings-controls.slint`。
 - 修改 Rust/Slint 工程规则：先读根 `AGENTS.md`，再由项目 skill 选择 Rust 或 Slint reference。
 - 修改工程边界：同步根 README、`docs/architecture*.md` 和本项目地图。
@@ -77,8 +81,8 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-07-29 空会话派生侧栏、Settings/滑杆图标 Activity Bar 入口、无重复 Tab 的 Settings 工作台与集中式 Theme token。
+- 最近依据：2026-07-29 macOS 标准应用菜单 bridge、互斥展开/收起会话导航、无重复 Tab 的 Settings 工作台与集中式 Theme token。
 
 ## 最后更新时间
 
-- 2026-07-29 22:55 +0800
+- 2026-07-29 23:44 +0800

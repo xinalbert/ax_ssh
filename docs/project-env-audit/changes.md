@@ -23,3 +23,11 @@
 - 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
 - 更新后的命令或环境：继续使用 Rust 2024、锁定依赖和 locked/offline Cargo 门禁；UI-only 修复不需要网络或外部 SSH 服务。
 - 验证结果：本机 `rustc 1.96.1`、`cargo 1.96.1` 与 locked/offline Cargo metadata 通过；仓库仍只有一个 workspace member。
+
+## 2026-07-29 暴露 macOS 原生菜单直接依赖
+
+- 日期：2026-07-29 23:44 +0800
+- 变化摘要：为复用标准 macOS 应用菜单，将锁文件中已有的 objc2、objc2-app-kit 和 objc2-foundation 版本声明为 macOS target 的直接依赖，并启用 NSApplication/NSMenu/NSMenuItem 所需 feature。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`src/app/macos_window.rs`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 更新后的命令或环境：继续使用 locked/offline Cargo 门禁；macOS 原生菜单编译不需要新增系统包或网络服务。
+- 验证结果：`cargo check --locked --offline` 通过，最新二进制成功进入 Slint event loop，AppKit 菜单桥接没有运行时错误。

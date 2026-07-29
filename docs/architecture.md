@@ -40,6 +40,7 @@ Process startup (src/main.rs)
 | --- | --- | --- |
 | `ui/` | Top tab bar, page layout, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
 | `src/app.rs` | Slint setup, domain-to-row mapping, callback wiring, event-loop updates | SSH protocol details or JSON schema details |
+| `src/app/macos_window.rs` | Main-thread AppKit title-bar setup and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, group aggregation, and blocking credential task boundary | Generated Slint component/model types |
 | `src/config.rs` | `SessionProfile`, versioned `AppSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
@@ -104,14 +105,32 @@ Process startup (src/main.rs)
    and the UI-thread callback hands the current event to
    `NSWindow::performWindowDragWithEvent`. Tabs, the activity bar, sidebar,
    and terminal never invoke that callback.
-10. The activity-bar Settings and About intents open one singleton Settings
+10. Platform-menu Settings and About intents open one singleton Settings
     workbench view at General or About respectively. The bridge omits that
     internal singleton from the visible workspace-tab model, and Slint replaces
     the tab strip with a drag-only title-bar region while Settings is active.
     Unsaved drafts stay in Slint while pages change; only the header Save action
     crosses the application boundary. About presents a static product-purpose
     description and receives the compile-time package version as read-only UI
-    metadata.
+    metadata. The session sidebar does not duplicate Settings or About.
+11. One declarative Slint `MenuBar` owns the cross-platform business-menu tree.
+    The locked winit/muda backend installs it in the macOS screen menu bar and
+    the Windows native window menu; Linux backends without native menu support
+    render the same tree at the top of the client window. On macOS,
+    `src/app/macos_window.rs` reuses the backend-created standard application
+    menu, binds its existing About item to the internal page, and inserts
+    `Settings...` with `Cmd+,`. The AppKit target is main-thread-only, captures
+    only `Weak<AppWindow>`, and is retained by each menu item's represented
+    object because AppKit target references are weak. Windows/Linux keep
+    Settings in Edit and About in Help. File, View, Pane, Window, and Help reuse
+    existing new-session, sidebar, local-shell, close-tab, and shortcut intents.
+12. The session navigator has one Slint-owned expanded/collapsed state. Expanded
+    mode renders a Local Shell card and bordered group/session rows; collapsed
+    mode renders the same flattened model as terminal, folder, and two-character
+    labels. Group expansion controls which child sessions exist in both forms.
+    Ungrouped profiles receive an explicit `Ungrouped` group row. Static glyph
+    and card geometry lives in `ui/theme.slint`; no navigation presentation state
+    enters `SessionStore`.
 
 ## SSH security contract
 
@@ -174,9 +193,10 @@ default with the compact 220px default and preserves custom widths. Passwords,
 passphrases, private-key contents, terminal output, tab runtime IDs, child
 processes, and workers are never serialized.
 
-The session sidebar participates in layout only when the session model is not
-empty and the user has not collapsed it. Local Shell, Settings, About, and
-new-session activity-bar actions remain available in the empty state.
+The expanded session sidebar participates in layout only when the session model
+is not empty and the user has not collapsed it. Otherwise the narrow rail keeps
+Local Shell and new-session actions available. Settings and About remain in the
+platform menu and shortcuts instead of the rail.
 
 Static interface styling is configured only by semantic tokens in
 `ui/theme.slint`: palette roles, type scale, spacing, radii, standard workspace
