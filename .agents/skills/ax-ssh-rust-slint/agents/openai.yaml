@@ -1,0 +1,4 @@
+interface:
+  display_name: "AxSSH Rust + Slint"
+  short_description: "Apply AxSSH Rust and Slint architecture rules"
+  default_prompt: "Use $ax-ssh-rust-slint to implement this AxSSH Rust and Slint change."
