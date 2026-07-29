@@ -4,9 +4,11 @@
 
 AxSSH is a cross-platform SSH workspace built with Rust, Slint, Tokio, and
 russh. Saved sessions can be organized into collapsible groups. The activity
-bar also opens a new local shell tab immediately. Every local or SSH terminal
-tab has a unique runtime ID, worker, and bounded terminal model, so opening the
-same server or local shell repeatedly does not share output or process state.
+bar group icons open the session sidebar, and clicking the active group again
+closes it. The Local Shell icon only opens a new local terminal tab and never
+changes the sidebar. Every local or SSH terminal tab has a unique runtime ID,
+worker, and bounded terminal model, so opening the same server or local shell
+repeatedly does not share output or process state.
 
 The SSH workflow verifies a server's SHA-256 host-key fingerprint, accepts a
 transient password, and can optionally remember it in the platform credential

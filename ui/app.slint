@@ -93,6 +93,8 @@ export component AppWindow inherits Window {
     in property <bool> unified-titlebar: false;
 
     private property <bool> sidebar-collapsed: false;
+    private property <bool> sidebar-group-selected: false;
+    private property <string> active-sidebar-group: "";
     private property <bool> shortcut-recording: false;
     private property <length> activity-bar-width: 52px;
     private property <length> titlebar-drag-width: root.unified-titlebar ? 72px : 0px;
@@ -368,7 +370,11 @@ export component AppWindow inherits Window {
                             vertical-stretch: 1;
                             for group in root.group-icons : Rectangle {
                                 height: 48px;
-                                background: group-touch.has-hover ? Theme.panel : transparent;
+                                background: !root.sidebar-collapsed
+                                        && root.sidebar-group-selected
+                                        && root.active-sidebar-group == group.group-name
+                                    ? Theme.panel
+                                    : (group-touch.has-hover ? Theme.panel : transparent);
                                 border-radius: Theme.radius;
                                 Text {
                                     width: parent.width;
@@ -387,8 +393,16 @@ export component AppWindow inherits Window {
                                     accessible-role: button;
                                     accessible-label: group.accessible-name;
                                     clicked => {
-                                        root.sidebar-collapsed = false;
-                                        root.activate-group(group.group-name);
+                                        if !root.sidebar-collapsed
+                                                && root.sidebar-group-selected
+                                                && root.active-sidebar-group == group.group-name {
+                                            root.sidebar-collapsed = true;
+                                        } else {
+                                            root.sidebar-group-selected = true;
+                                            root.active-sidebar-group = group.group-name;
+                                            root.sidebar-collapsed = false;
+                                            root.activate-group(group.group-name);
+                                        }
                                     }
                                 }
                             }
