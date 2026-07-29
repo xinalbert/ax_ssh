@@ -34,8 +34,9 @@ use self::credential_tasks::{
 use self::session_groups::{group_icon, group_options, profile_endpoint, session_groups};
 use self::state::{
     ActiveTabSnapshot, AppState, ConnectionStart, PendingAuth, PendingHostKey, PendingProbe,
-    TerminalTabState, TerminalWorker, prepare_authentication_retry, prepare_host_key_retry,
-    retire_session_attempt, session_attempt_is_active, set_credential_marker,
+    TerminalTabState, TerminalWorker, WorkspaceTabSummary, prepare_authentication_retry,
+    prepare_host_key_retry, retire_session_attempt, session_attempt_is_active,
+    set_credential_marker,
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, TerminalRenderSettings, render_terminal,
@@ -84,10 +85,6 @@ pub fn run() -> Result<()> {
     ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
         Vec::<TerminalRenderLine>::new(),
     )));
-    ui.set_terminal_font_options(ModelRc::new(VecModel::from(vec![
-        SharedString::from("JetBrains Mono"),
-        SharedString::from("monospace"),
-    ])));
     ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
     let default_shortcuts = ShortcutSettings::default();
     ui.set_default_open_settings_shortcut(default_shortcuts.open_settings.into());
@@ -95,6 +92,7 @@ pub fn run() -> Result<()> {
     ui.set_default_copy_selection_shortcut(default_shortcuts.copy_selection.into());
     ui.set_default_paste_shortcut(default_shortcuts.paste.into());
     ui.set_apple_platform(cfg!(target_os = "macos"));
+    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
     apply_settings_to_component(&ui, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default());
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
@@ -1839,19 +1837,10 @@ fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppStat
 
 fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
     let (tabs, snapshot) = match state.lock() {
-        Ok(app) => {
-            let tabs = app
-                .tab_summaries()
-                .into_iter()
-                .map(|tab| WorkspaceTabRow {
-                    id: tab.id.to_string().into(),
-                    title: tab.title.into(),
-                    kind: tab.kind.into(),
-                    connected: tab.connected,
-                })
-                .collect::<Vec<_>>();
-            (tabs, app.active_snapshot())
-        }
+        Ok(app) => (
+            visible_workspace_tab_rows(app.tab_summaries()),
+            app.active_snapshot(),
+        ),
         Err(_) => {
             set_status(ui, "State lock poisoned");
             return;
@@ -1861,6 +1850,18 @@ fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) 
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
         apply_active_snapshot(ui, snapshot);
     });
+}
+
+fn visible_workspace_tab_rows(tabs: Vec<WorkspaceTabSummary>) -> Vec<WorkspaceTabRow> {
+    tabs.into_iter()
+        .filter(|tab| tab.kind != "settings")
+        .map(|tab| WorkspaceTabRow {
+            id: tab.id.to_string().into(),
+            title: tab.title.into(),
+            kind: tab.kind.into(),
+            connected: tab.connected,
+        })
+        .collect()
 }
 
 fn set_tab_status(
@@ -2109,6 +2110,27 @@ fn dispatch_ui(ui: &slint::Weak<AppWindow>, action: impl FnOnce(&AppWindow) + Se
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_workbench_is_not_exposed_as_a_workspace_tab() {
+        let rows = visible_workspace_tab_rows(vec![
+            WorkspaceTabSummary {
+                id: Uuid::new_v4(),
+                title: "Settings".to_owned(),
+                kind: "settings",
+                connected: false,
+            },
+            WorkspaceTabSummary {
+                id: Uuid::new_v4(),
+                title: "New session".to_owned(),
+                kind: "session-editor",
+                connected: false,
+            },
+        ]);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].kind.as_str(), "session-editor");
+    }
 
     #[test]
     fn session_rows_group_profiles_and_respect_expansion() {

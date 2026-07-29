@@ -1,62 +1,18 @@
-import { Button, CheckBox, ComboBox, LineEdit, Slider, SpinBox } from "std-widgets.slint";
+import { Button, ComboBox, LineEdit, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-
-component ShortcutRecorder inherits FocusScope {
-    in-out property <string> shortcut;
-    in property <string> accessible-name;
-    private property <string> candidate-shortcut;
-
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
-    callback recording-changed(bool);
-
-    height: 38px;
-    focus-on-click: true;
-    focus-on-tab-navigation: true;
-    accessible-role: text-input;
-    accessible-label: root.accessible-name;
-
-    focus-gained => { root.recording-changed(true); }
-    focus-lost => { root.recording-changed(false); }
-    key-pressed(event) => {
-        if event.text == Key.Escape {
-            root.clear-focus();
-            return EventResult.accept;
-        }
-        root.candidate-shortcut = root.format-shortcut(
-            event.text,
-            event.modifiers.alt,
-            event.modifiers.control,
-            event.modifiers.meta,
-            event.modifiers.shift,
-        );
-        if !root.candidate-shortcut.is-empty {
-            root.shortcut = root.candidate-shortcut;
-            root.clear-focus();
-        }
-        return EventResult.accept;
-    }
-
-    Rectangle {
-        background: root.has-focus ? Theme.panel-alt : Theme.panel;
-        border-width: root.has-focus ? 2px : 1px;
-        border-color: root.has-focus ? Theme.accent : Theme.border;
-        border-radius: Theme.radius;
-        Text {
-            x: 10px;
-            width: parent.width - 20px;
-            height: parent.height;
-            text: root.shortcut;
-            color: Theme.text;
-            font-family: "JetBrains Mono";
-            font-size: 12px;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-    }
-}
+import {
+    SettingsField,
+    SettingsHeader,
+    SettingsInfoRow,
+    SettingsNavItem,
+    SettingsPage,
+    SettingsRow,
+    SettingsSectionHeading,
+    SettingsToggleRow,
+    ShortcutRecorder,
+} from "components/settings-controls.slint";
 
 export component SettingsPane inherits Rectangle {
-    in property <[string]> terminal-font-options;
     in property <[string]> local-shell-options;
     in property <string> terminal-font-family;
     in property <int> terminal-font-size;
@@ -80,6 +36,7 @@ export component SettingsPane inherits Rectangle {
     in property <string> default-toggle-sidebar-shortcut;
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
+    in property <string> app-version;
     in property <string> status;
 
     callback save(
@@ -90,7 +47,13 @@ export component SettingsPane inherits Rectangle {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
 
-    private property <string> selected-section: "Terminal";
+    in-out property <string> selected-section: "General";
+    private property <string> section-title:
+        root.selected-section == "Appearance" ? "Appearance"
+        : (root.selected-section == "Terminal" ? "Terminal"
+        : (root.selected-section == "Workspace" ? "Workspace"
+        : (root.selected-section == "Shortcuts" ? "Shortcuts"
+        : (root.selected-section == "About" ? "About" : "General"))));
     private property <string> draft-font-family: root.terminal-font-family;
     private property <int> draft-font-size: root.terminal-font-size;
     private property <int> draft-line-height-percent: root.terminal-line-height-percent;
@@ -111,90 +74,105 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-copy-selection-shortcut: root.copy-selection-shortcut;
     private property <string> draft-paste-shortcut: root.paste-shortcut;
 
+    function select-section(section: string) {
+        root.shortcut-recording-changed(false);
+        root.selected-section = section;
+    }
+
+    function commit-settings() {
+        root.shortcut-recording-changed(false);
+        root.save(
+            root.draft-font-family,
+            root.draft-font-size,
+            root.draft-line-height-percent,
+            root.draft-color-scheme,
+            root.draft-brightness-percent,
+            root.draft-bright-bold-text,
+            root.draft-right-click-copy-or-paste,
+            root.draft-local-shell,
+            root.draft-scrollback-lines,
+            root.draft-columns,
+            root.draft-rows,
+            root.draft-sidebar-width,
+            root.draft-tab-width,
+            root.draft-open-settings-shortcut,
+            root.draft-toggle-sidebar-shortcut,
+            root.draft-copy-selection-shortcut,
+            root.draft-paste-shortcut,
+        );
+    }
+
     background: Theme.background;
 
     HorizontalLayout {
         spacing: 0px;
 
         Rectangle {
-            width: 224px;
+            width: Theme.settings-nav-width;
             background: Theme.panel;
-            border-width: 1px;
-            border-color: Theme.border;
+
+            Rectangle {
+                x: parent.width - Theme.hairline;
+                width: Theme.hairline;
+                height: parent.height;
+                background: Theme.border;
+            }
 
             VerticalLayout {
-                padding: 14px;
-                spacing: 6px;
+                padding-left: Theme.space-lg;
+                padding-right: Theme.space-lg;
+                padding-top: Theme.space-lg;
+                padding-bottom: Theme.space-lg;
+                spacing: Theme.space-xs;
 
                 Text {
+                    height: Theme.settings-nav-title-height;
                     text: "Settings";
                     color: Theme.text;
-                    font-size: 18px;
+                    font-size: Theme.font-section;
                     font-weight: 700;
+                    vertical-alignment: center;
                 }
-                Rectangle { height: 8px; }
 
-                Rectangle {
-                    height: 38px;
-                    background: root.selected-section == "Terminal" ? Theme.panel-alt : transparent;
-                    border-radius: Theme.radius;
-                    terminal-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.shortcut-recording-changed(false);
-                            root.selected-section = "Terminal";
-                        }
-                    }
-                    Text {
-                        x: 12px;
-                        width: parent.width - 24px;
-                        height: parent.height;
-                        text: "Terminal";
-                        color: Theme.text;
-                        font-size: 13px;
-                        vertical-alignment: center;
-                    }
+                SettingsNavItem {
+                    settings-icon: true;
+                    label: "General";
+                    selected: root.selected-section == "General";
+                    activated => { root.select-section("General"); }
                 }
-                Rectangle {
-                    height: 38px;
-                    background: root.selected-section == "Workspace" ? Theme.panel-alt : transparent;
-                    border-radius: Theme.radius;
-                    workspace-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.shortcut-recording-changed(false);
-                            root.selected-section = "Workspace";
-                        }
-                    }
-                    Text {
-                        x: 12px;
-                        width: parent.width - 24px;
-                        height: parent.height;
-                        text: "Workspace layout";
-                        color: Theme.text;
-                        font-size: 13px;
-                        vertical-alignment: center;
-                    }
+                SettingsNavItem {
+                    icon: "Aa";
+                    label: "Appearance";
+                    selected: root.selected-section == "Appearance";
+                    activated => { root.select-section("Appearance"); }
                 }
-                Rectangle {
-                    height: 38px;
-                    background: root.selected-section == "Keybindings" ? Theme.panel-alt : transparent;
-                    border-radius: Theme.radius;
-                    keybindings-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.selected-section = "Keybindings"; }
-                    }
-                    Text {
-                        x: 12px;
-                        width: parent.width - 24px;
-                        height: parent.height;
-                        text: "Keybindings";
-                        color: Theme.text;
-                        font-size: 13px;
-                        vertical-alignment: center;
-                    }
+                SettingsNavItem {
+                    icon: ">_";
+                    label: "Terminal";
+                    selected: root.selected-section == "Terminal";
+                    activated => { root.select-section("Terminal"); }
                 }
+                SettingsNavItem {
+                    icon: "[]";
+                    label: "Workspace";
+                    selected: root.selected-section == "Workspace";
+                    activated => { root.select-section("Workspace"); }
+                }
+                SettingsNavItem {
+                    icon: "K";
+                    label: "Shortcuts";
+                    selected: root.selected-section == "Shortcuts";
+                    activated => { root.select-section("Shortcuts"); }
+                }
+
                 Rectangle { vertical-stretch: 1; }
+                Rectangle { height: Theme.hairline; background: Theme.border; }
+                SettingsNavItem {
+                    icon: "i";
+                    label: "About";
+                    selected: root.selected-section == "About";
+                    activated => { root.select-section("About"); }
+                }
             }
         }
 
@@ -203,313 +181,422 @@ export component SettingsPane inherits Rectangle {
             background: Theme.background;
 
             VerticalLayout {
-                padding: 24px;
-                spacing: 14px;
+                spacing: 0px;
 
-                Text {
-                    text: root.selected-section;
-                    color: Theme.text;
-                    font-size: 20px;
-                    font-weight: 700;
+                SettingsHeader {
+                    title: root.section-title;
+                    status: root.status == "Ready" ? "" : root.status;
+                    close => {
+                        root.shortcut-recording-changed(false);
+                        root.cancel();
+                    }
+                    save => { root.commit-settings(); }
                 }
-                Rectangle { height: 1px; background: Theme.border; }
 
-                if root.selected-section == "Terminal" : VerticalLayout {
-                    spacing: 12px;
-                    Text { text: "Font family"; color: Theme.muted; font-size: 12px; }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        settings-font-edit := LineEdit {
-                            horizontal-stretch: 1;
-                            text <=> root.draft-font-family;
-                        }
-                        ComboBox {
-                            width: 180px;
-                            model: root.terminal-font-options;
-                            selected(value) => { root.draft-font-family = value; }
-                        }
-                    }
-                    Text { text: "Local shell"; color: Theme.muted; font-size: 12px; }
-                    ComboBox {
-                        width: 260px;
-                        model: root.local-shell-options;
-                        current-index <=> root.draft-local-shell-index;
-                        selected(value) => { root.draft-local-shell = value; }
-                    }
-                    HorizontalLayout {
-                        spacing: 18px;
-                        VerticalLayout {
-                            spacing: 6px;
-                            Text { text: "Font size"; color: Theme.muted; font-size: 12px; }
-                            settings-font-size := SpinBox {
-                                width: 150px;
-                                minimum: 9;
-                                maximum: 32;
-                                value <=> root.draft-font-size;
-                            }
-                        }
-                        VerticalLayout {
-                            spacing: 6px;
-                            Text { text: "Line height (%)"; color: Theme.muted; font-size: 12px; }
-                            SpinBox {
-                                width: 150px;
-                                minimum: 100;
-                                maximum: 200;
-                                value <=> root.draft-line-height-percent;
-                            }
-                        }
-                        VerticalLayout {
-                            spacing: 6px;
-                            Text { text: "Scrollback lines"; color: Theme.muted; font-size: 12px; }
-                            settings-scrollback := SpinBox {
-                                width: 170px;
-                                minimum: 100;
-                                maximum: 50000;
-                                value <=> root.draft-scrollback-lines;
-                            }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: 18px;
-                        VerticalLayout {
-                            spacing: 6px;
-                            Text { text: "Color scheme"; color: Theme.muted; font-size: 12px; }
-                            ComboBox {
-                                width: 190px;
-                                model: ["Dark", "Light", "Solarized Dark"];
-                                current-index: root.draft-color-scheme == "light"
-                                    ? 1 : (root.draft-color-scheme == "solarized-dark" ? 2 : 0);
-                                selected(value) => {
-                                    root.draft-color-scheme = value == "Light"
-                                        ? "light" : (value == "Solarized Dark" ? "solarized-dark" : "dark");
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: Theme.background;
+
+                    if root.selected-section == "General" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        SettingsSectionHeading { label: "DEFAULTS"; }
+                        SettingsRow {
+                            label: "Local shell";
+                            description: "Executable used for new local terminal tabs";
+                            SettingsField {
+                                ComboBox {
+                                    height: Theme.settings-control-height;
+                                    model: root.local-shell-options;
+                                    current-index <=> root.draft-local-shell-index;
+                                    accessible-label: "Local shell";
+                                    selected(value) => { root.draft-local-shell = value; }
                                 }
                             }
                         }
-                        VerticalLayout {
-                            spacing: 6px;
-                            Text {
-                                text: "Brightness  \{root.draft-brightness-percent}%";
-                                color: Theme.muted;
-                                font-size: 12px;
-                            }
-                            Slider {
-                                width: 230px;
-                                minimum: 60;
-                                maximum: 140;
-                                step: 5;
-                                value: root.draft-brightness-percent;
-                                changed(value) => {
-                                    root.draft-brightness-percent = round(value);
+                        SettingsRow {
+                            label: "Default terminal size";
+                            description: "20-300 columns, 5-100 rows";
+                            show-divider: false;
+                            SettingsField {
+                                settings-columns := SpinBox {
+                                    width: Theme.settings-terminal-size-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 20;
+                                    maximum: 300;
+                                    value <=> root.draft-columns;
+                                    accessible-label: "Default terminal columns";
+                                }
+                                Text { text: "x"; color: Theme.muted; vertical-alignment: center; }
+                                settings-rows := SpinBox {
+                                    width: Theme.settings-terminal-size-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 5;
+                                    maximum: 100;
+                                    value <=> root.draft-rows;
+                                    accessible-label: "Default terminal rows";
                                 }
                             }
                         }
+                        Rectangle { vertical-stretch: 1; }
                     }
-                    HorizontalLayout {
-                        spacing: 24px;
-                        CheckBox {
-                            text: "Use bright colors for bold text";
+
+                    if root.selected-section == "Appearance" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        SettingsSectionHeading { label: "TYPOGRAPHY"; }
+                        SettingsRow {
+                            label: "Font family";
+                            description: "Terminal font family";
+                            SettingsField {
+                                settings-font-edit := LineEdit {
+                                    height: Theme.settings-control-height;
+                                    text <=> root.draft-font-family;
+                                    accessible-label: "Terminal font family";
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Font size";
+                            description: "9-32 px";
+                            SettingsField {
+                                settings-font-size := SpinBox {
+                                    width: Theme.settings-number-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 9;
+                                    maximum: 32;
+                                    value <=> root.draft-font-size;
+                                    accessible-label: "Terminal font size";
+                                }
+                                Text {
+                                    width: Theme.settings-unit-width;
+                                    text: "px";
+                                    color: Theme.muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Line height";
+                            description: "100-200 percent";
+                            show-divider: false;
+                            SettingsField {
+                                SpinBox {
+                                    width: Theme.settings-number-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 100;
+                                    maximum: 200;
+                                    value <=> root.draft-line-height-percent;
+                                    accessible-label: "Terminal line height percentage";
+                                }
+                                Text {
+                                    width: Theme.settings-unit-width;
+                                    text: "%";
+                                    color: Theme.muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        SettingsSectionHeading { label: "COLOR"; }
+                        SettingsRow {
+                            label: "Color scheme";
+                            description: "Terminal color palette";
+                            SettingsField {
+                                ComboBox {
+                                    height: Theme.settings-control-height;
+                                    model: ["Dark", "Light", "Solarized Dark"];
+                                    current-index: root.draft-color-scheme == "light"
+                                        ? 1 : (root.draft-color-scheme == "solarized-dark" ? 2 : 0);
+                                    accessible-label: "Terminal color scheme";
+                                    selected(value) => {
+                                        root.draft-color-scheme = value == "Light"
+                                            ? "light" : (value == "Solarized Dark" ? "solarized-dark" : "dark");
+                                    }
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Brightness";
+                            description: "60-140 percent";
+                            SettingsField {
+                                Slider {
+                                    width: Theme.settings-slider-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 60;
+                                    maximum: 140;
+                                    step: 5;
+                                    value: root.draft-brightness-percent;
+                                    accessible-label: "Terminal brightness";
+                                    changed(value) => {
+                                        root.draft-brightness-percent = round(value);
+                                    }
+                                }
+                                Text {
+                                    width: Theme.settings-value-width;
+                                    text: "\{root.draft-brightness-percent}%";
+                                    color: Theme.muted;
+                                    font-size: Theme.font-small;
+                                    horizontal-alignment: right;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        SettingsToggleRow {
+                            label: "Bright colors for bold text";
+                            description: "Use the bright ANSI palette for bold text";
                             checked <=> root.draft-bright-bold-text;
+                            show-divider: false;
                         }
-                        CheckBox {
-                            text: "Right-click copy or paste";
+                    }
+
+                    if root.selected-section == "Terminal" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        SettingsSectionHeading { label: "BUFFER"; }
+                        SettingsRow {
+                            label: "Scrollback";
+                            description: "100-50,000 retained lines";
+                            show-divider: false;
+                            SettingsField {
+                                settings-scrollback := SpinBox {
+                                    width: Theme.settings-wide-number-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 100;
+                                    maximum: 50000;
+                                    value <=> root.draft-scrollback-lines;
+                                    accessible-label: "Terminal scrollback lines";
+                                }
+                                Text {
+                                    width: Theme.settings-unit-width;
+                                    text: "lines";
+                                    color: Theme.muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        SettingsSectionHeading { label: "MOUSE"; }
+                        SettingsToggleRow {
+                            label: "Right-click copy or paste";
+                            description: "Copy a selection; otherwise paste";
                             checked <=> root.draft-right-click-copy-or-paste;
+                            show-divider: false;
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    if root.selected-section == "Workspace" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        SettingsSectionHeading { label: "LAYOUT"; }
+                        SettingsRow {
+                            label: "Session sidebar width";
+                            description: "180-420 px when sessions are available";
+                            SettingsField {
+                                settings-sidebar-width := SpinBox {
+                                    width: Theme.settings-wide-number-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 180;
+                                    maximum: 420;
+                                    value <=> root.draft-sidebar-width;
+                                    accessible-label: "Session sidebar width";
+                                }
+                                Text {
+                                    width: Theme.settings-unit-width;
+                                    text: "px";
+                                    color: Theme.muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Workspace tab width";
+                            description: "120-260 px";
+                            show-divider: false;
+                            SettingsField {
+                                settings-tab-width := SpinBox {
+                                    width: Theme.settings-wide-number-width;
+                                    height: Theme.settings-control-height;
+                                    minimum: 120;
+                                    maximum: 260;
+                                    value <=> root.draft-tab-width;
+                                    accessible-label: "Workspace tab width";
+                                }
+                                Text {
+                                    width: Theme.settings-unit-width;
+                                    text: "px";
+                                    color: Theme.muted;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    if root.selected-section == "Shortcuts" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        HorizontalLayout {
+                            height: Theme.settings-nav-title-height;
+                            SettingsSectionHeading {
+                                horizontal-stretch: 1;
+                                label: "WORKSPACE";
+                            }
+                            Button {
+                                width: Theme.settings-reset-button-width;
+                                height: Theme.settings-control-height;
+                                text: "Reset defaults";
+                                clicked => {
+                                    root.draft-open-settings-shortcut = root.default-open-settings-shortcut;
+                                    root.draft-toggle-sidebar-shortcut = root.default-toggle-sidebar-shortcut;
+                                    root.draft-copy-selection-shortcut = root.default-copy-selection-shortcut;
+                                    root.draft-paste-shortcut = root.default-paste-shortcut;
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Open Settings";
+                            description: "Application command";
+                            SettingsField {
+                                open-settings-recorder := ShortcutRecorder {
+                                    width: Theme.settings-field-width;
+                                    shortcut <=> root.draft-open-settings-shortcut;
+                                    accessible-name: "Open Settings shortcut";
+                                    format-shortcut(text, alt, control, meta, shift) => {
+                                        return root.format-shortcut(text, alt, control, meta, shift);
+                                    }
+                                    recording-changed(recording) => {
+                                        root.shortcut-recording-changed(recording);
+                                    }
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Toggle Session Sidebar";
+                            description: "Workspace command";
+                            show-divider: false;
+                            SettingsField {
+                                toggle-sidebar-recorder := ShortcutRecorder {
+                                    width: Theme.settings-field-width;
+                                    shortcut <=> root.draft-toggle-sidebar-shortcut;
+                                    accessible-name: "Toggle Session Sidebar shortcut";
+                                    format-shortcut(text, alt, control, meta, shift) => {
+                                        return root.format-shortcut(text, alt, control, meta, shift);
+                                    }
+                                    recording-changed(recording) => {
+                                        root.shortcut-recording-changed(recording);
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingsSectionHeading { label: "TERMINAL"; }
+                        SettingsRow {
+                            label: "Copy Terminal Selection";
+                            description: "Terminal command";
+                            SettingsField {
+                                copy-recorder := ShortcutRecorder {
+                                    width: Theme.settings-field-width;
+                                    shortcut <=> root.draft-copy-selection-shortcut;
+                                    accessible-name: "Copy Terminal Selection shortcut";
+                                    format-shortcut(text, alt, control, meta, shift) => {
+                                        return root.format-shortcut(text, alt, control, meta, shift);
+                                    }
+                                    recording-changed(recording) => {
+                                        root.shortcut-recording-changed(recording);
+                                    }
+                                }
+                            }
+                        }
+                        SettingsRow {
+                            label: "Paste Into Terminal";
+                            description: "Terminal command";
+                            show-divider: false;
+                            SettingsField {
+                                paste-recorder := ShortcutRecorder {
+                                    width: Theme.settings-field-width;
+                                    shortcut <=> root.draft-paste-shortcut;
+                                    accessible-name: "Paste Into Terminal shortcut";
+                                    format-shortcut(text, alt, control, meta, shift) => {
+                                        return root.format-shortcut(text, alt, control, meta, shift);
+                                    }
+                                    recording-changed(recording) => {
+                                        root.shortcut-recording-changed(recording);
+                                    }
+                                }
+                            }
                         }
                     }
-                    Text { text: "Default PTY size"; color: Theme.muted; font-size: 12px; }
-                    HorizontalLayout {
-                        spacing: 12px;
-                        settings-columns := SpinBox {
-                            width: 150px;
-                            minimum: 20;
-                            maximum: 300;
-                            value <=> root.draft-columns;
+
+                    if root.selected-section == "About" : SettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+
+                        HorizontalLayout {
+                            height: Theme.settings-about-header-height;
+                            spacing: Theme.space-xxl;
+                            Rectangle {
+                                width: Theme.settings-about-mark-size;
+                                height: Theme.settings-about-mark-size;
+                                border-radius: Theme.radius;
+                                background: Theme.panel-alt;
+                                border-width: Theme.hairline;
+                                border-color: Theme.border;
+                                Text {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: ">_";
+                                    color: Theme.accent;
+                                    font-family: "JetBrains Mono";
+                                    font-size: Theme.font-section;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: Theme.space-xxs;
+                                Text {
+                                    text: "AxSSH";
+                                    color: Theme.text;
+                                    font-size: Theme.font-title;
+                                    font-weight: 700;
+                                    vertical-alignment: bottom;
+                                }
+                                Text {
+                                    text: "Version \{root.app-version}";
+                                    color: Theme.muted;
+                                    font-size: Theme.font-small;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    height: Theme.settings-about-description-height;
+                                    text: "A focused desktop SSH workspace for saved servers, local shells, and terminal sessions.";
+                                    color: Theme.muted;
+                                    font-size: Theme.font-small;
+                                    wrap: word-wrap;
+                                    vertical-alignment: top;
+                                }
+                            }
                         }
-                        Text { text: "columns"; color: Theme.muted; vertical-alignment: center; }
-                        settings-rows := SpinBox {
-                            width: 150px;
-                            minimum: 5;
-                            maximum: 100;
-                            value <=> root.draft-rows;
+                        SettingsSectionHeading { label: "APPLICATION"; }
+                        SettingsInfoRow { label: "Interface"; value: "Slint"; }
+                        SettingsInfoRow { label: "SSH transport"; value: "russh"; }
+                        SettingsInfoRow {
+                            label: "Async runtime";
+                            value: "Tokio";
+                            show-divider: false;
                         }
-                        Text { text: "rows"; color: Theme.muted; vertical-alignment: center; }
+                        Rectangle { vertical-stretch: 1; }
                     }
                 }
 
-                if root.selected-section == "Workspace" : VerticalLayout {
-                    spacing: 12px;
-                    Text { text: "Session sidebar width"; color: Theme.muted; font-size: 12px; }
-                    settings-sidebar-width := SpinBox {
-                        width: 170px;
-                        minimum: 180;
-                        maximum: 420;
-                        value <=> root.draft-sidebar-width;
-                    }
-                    Text { text: "Tab width"; color: Theme.muted; font-size: 12px; }
-                    settings-tab-width := SpinBox {
-                        width: 170px;
-                        minimum: 120;
-                        maximum: 260;
-                        value <=> root.draft-tab-width;
-                    }
-                }
-
-                if root.selected-section == "Keybindings" : VerticalLayout {
-                    spacing: 10px;
-                    HorizontalLayout {
-                        Text {
-                            horizontal-stretch: 1;
-                            text: "Workspace";
-                            color: Theme.muted;
-                            font-size: 12px;
-                            vertical-alignment: center;
-                        }
-                        Button {
-                            text: "Reset defaults";
-                            clicked => {
-                                root.draft-open-settings-shortcut = root.default-open-settings-shortcut;
-                                root.draft-toggle-sidebar-shortcut = root.default-toggle-sidebar-shortcut;
-                                root.draft-copy-selection-shortcut = root.default-copy-selection-shortcut;
-                                root.draft-paste-shortcut = root.default-paste-shortcut;
-                            }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: 16px;
-                        Text {
-                            width: 210px;
-                            text: "Open Settings";
-                            color: Theme.text;
-                            font-size: 13px;
-                            vertical-alignment: center;
-                        }
-                        open-settings-recorder := ShortcutRecorder {
-                            width: 250px;
-                            shortcut <=> root.draft-open-settings-shortcut;
-                            accessible-name: "Open Settings shortcut";
-                            format-shortcut(text, alt, control, meta, shift) => {
-                                return root.format-shortcut(text, alt, control, meta, shift);
-                            }
-                            recording-changed(recording) => {
-                                root.shortcut-recording-changed(recording);
-                            }
-                        }
-                    }
-                    Rectangle { height: 1px; background: Theme.border; }
-                    HorizontalLayout {
-                        spacing: 16px;
-                        Text {
-                            width: 210px;
-                            text: "Toggle Session Sidebar";
-                            color: Theme.text;
-                            font-size: 13px;
-                            vertical-alignment: center;
-                        }
-                        toggle-sidebar-recorder := ShortcutRecorder {
-                            width: 250px;
-                            shortcut <=> root.draft-toggle-sidebar-shortcut;
-                            accessible-name: "Toggle Session Sidebar shortcut";
-                            format-shortcut(text, alt, control, meta, shift) => {
-                                return root.format-shortcut(text, alt, control, meta, shift);
-                            }
-                            recording-changed(recording) => {
-                                root.shortcut-recording-changed(recording);
-                            }
-                        }
-                    }
-                    Rectangle { height: 1px; background: Theme.border; }
-                    Text {
-                        text: "Terminal";
-                        color: Theme.muted;
-                        font-size: 12px;
-                    }
-                    HorizontalLayout {
-                        spacing: 16px;
-                        Text {
-                            width: 210px;
-                            text: "Copy Terminal Selection";
-                            color: Theme.text;
-                            font-size: 13px;
-                            vertical-alignment: center;
-                        }
-                        copy-recorder := ShortcutRecorder {
-                            width: 250px;
-                            shortcut <=> root.draft-copy-selection-shortcut;
-                            accessible-name: "Copy Terminal Selection shortcut";
-                            format-shortcut(text, alt, control, meta, shift) => {
-                                return root.format-shortcut(text, alt, control, meta, shift);
-                            }
-                            recording-changed(recording) => {
-                                root.shortcut-recording-changed(recording);
-                            }
-                        }
-                    }
-                    Rectangle { height: 1px; background: Theme.border; }
-                    HorizontalLayout {
-                        spacing: 16px;
-                        Text {
-                            width: 210px;
-                            text: "Paste Into Terminal";
-                            color: Theme.text;
-                            font-size: 13px;
-                            vertical-alignment: center;
-                        }
-                        paste-recorder := ShortcutRecorder {
-                            width: 250px;
-                            shortcut <=> root.draft-paste-shortcut;
-                            accessible-name: "Paste Into Terminal shortcut";
-                            format-shortcut(text, alt, control, meta, shift) => {
-                                return root.format-shortcut(text, alt, control, meta, shift);
-                            }
-                            recording-changed(recording) => {
-                                root.shortcut-recording-changed(recording);
-                            }
-                        }
-                    }
-                }
-
-                Rectangle { vertical-stretch: 1; }
-                Text {
-                    text: root.status;
-                    color: Theme.accent;
-                    font-size: 12px;
-                    wrap: word-wrap;
-                }
-                HorizontalLayout {
-                    alignment: end;
-                    spacing: 8px;
-                    Button {
-                        text: "Close";
-                        clicked => {
-                            root.shortcut-recording-changed(false);
-                            root.cancel();
-                        }
-                    }
-                    Button {
-                        text: "Save";
-                        clicked => {
-                            root.shortcut-recording-changed(false);
-                            root.save(
-                                root.draft-font-family,
-                                root.draft-font-size,
-                                root.draft-line-height-percent,
-                                root.draft-color-scheme,
-                                root.draft-brightness-percent,
-                                root.draft-bright-bold-text,
-                                root.draft-right-click-copy-or-paste,
-                                root.draft-local-shell,
-                                root.draft-scrollback-lines,
-                                root.draft-columns,
-                                root.draft-rows,
-                                root.draft-sidebar-width,
-                                root.draft-tab-width,
-                                root.draft-open-settings-shortcut,
-                                root.draft-toggle-sidebar-shortcut,
-                                root.draft-copy-selection-shortcut,
-                                root.draft-paste-shortcut,
-                            );
-                        }
-                    }
-                }
             }
         }
     }

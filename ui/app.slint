@@ -3,6 +3,7 @@ import { Button, CheckBox, LineEdit, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
 import { SettingsPane } from "settings.slint";
+import { SettingsGlyph } from "components/settings-controls.slint";
 import { SessionEditorPane } from "session-editor.slint";
 
 export struct SessionRow {
@@ -29,10 +30,10 @@ export struct SessionGroupIconRow {
 
 export component AppWindow inherits Window {
     title: "AxSSH";
-    min-width: 940px;
-    min-height: 580px;
-    preferred-width: 1180px;
-    preferred-height: 740px;
+    min-width: Theme.window-min-width;
+    min-height: Theme.window-min-height;
+    preferred-width: Theme.window-preferred-width;
+    preferred-height: Theme.window-preferred-height;
     background: Theme.background;
 
     in property <[SessionRow]> sessions;
@@ -40,7 +41,6 @@ export component AppWindow inherits Window {
     in property <[WorkspaceTabRow]> workspace-tabs;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
-    in property <[string]> terminal-font-options;
     in property <[string]> local-shell-options;
     in property <string> status: "Ready";
     in property <string> active-tab-id: "";
@@ -71,9 +71,9 @@ export component AppWindow inherits Window {
     in property <int> terminal-brightness-percent: 100;
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
-    in property <color> terminal-foreground: #cccccc;
-    in property <color> terminal-background: #1e1e1e;
-    in property <color> terminal-selection-background: #264f78;
+    in property <color> terminal-foreground: Theme.terminal-foreground;
+    in property <color> terminal-background: Theme.terminal-background;
+    in property <color> terminal-selection-background: Theme.terminal-selection;
     in property <int> scrollback-lines: 2000;
     in property <int> default-terminal-columns: 120;
     in property <int> default-terminal-rows: 36;
@@ -91,15 +91,20 @@ export component AppWindow inherits Window {
     in property <string> default-paste-shortcut;
     in property <bool> apple-platform: false;
     in property <bool> unified-titlebar: false;
+    in property <string> app-version;
 
     private property <bool> sidebar-collapsed: false;
     private property <bool> sidebar-group-selected: false;
     private property <string> active-sidebar-group: "";
+    private property <string> settings-section: "General";
     private property <bool> shortcut-recording: false;
-    private property <length> activity-bar-width: 52px;
-    private property <length> titlebar-drag-width: root.unified-titlebar ? 72px : 0px;
+    private property <length> activity-bar-width: Theme.activity-bar-width;
+    private property <length> titlebar-drag-width:
+        root.unified-titlebar ? Theme.titlebar-drag-width : 0px;
+    private property <bool> sidebar-content-visible:
+        !root.sidebar-collapsed && root.sessions.length > 0;
     private property <length> navigation-width:
-        root.activity-bar-width + (root.sidebar-collapsed ? 0px : root.sidebar-width * 1px);
+        root.activity-bar-width + (root.sidebar-content-visible ? root.sidebar-width * 1px : 0px);
 
     callback new-session();
     callback open-local-shell();
@@ -160,6 +165,7 @@ export component AppWindow inherits Window {
                 event.modifiers.meta,
                 event.modifiers.shift,
             ) == root.open-settings-shortcut {
+                root.settings-section = "General";
                 root.open-settings();
                 return EventResult.accept;
             }
@@ -180,20 +186,37 @@ export component AppWindow inherits Window {
             spacing: 0px;
 
             Rectangle {
-                height: root.unified-titlebar ? 34px : 38px;
+                height: root.unified-titlebar
+                    ? Theme.titlebar-height : Theme.titlebar-fallback-height;
                 background: Theme.panel;
-                border-width: 1px;
+                border-width: Theme.hairline;
                 border-color: Theme.border;
 
                 HorizontalLayout {
                     spacing: 0px;
 
                     Rectangle {
-                        width: root.unified-titlebar ? 76px : root.navigation-width;
+                        width: root.unified-titlebar
+                            ? Theme.titlebar-leading-width : root.navigation-width;
                         background: Theme.panel;
                     }
 
+                    if root.active-tab-kind == "settings" : Rectangle {
+                        horizontal-stretch: 1;
+                        background: Theme.panel;
+                        settings-titlebar-touch := TouchArea {
+                            pointer-event(event) => {
+                                if root.unified-titlebar
+                                        && event.kind == PointerEventKind.down
+                                        && event.button == PointerEventButton.left {
+                                    root.drag-window();
+                                }
+                            }
+                        }
+                    }
+
                     Rectangle {
+                        visible: root.active-tab-kind != "settings";
                         horizontal-stretch: 1;
                         clip: true;
                         tabs-flick := Flickable {
@@ -212,7 +235,7 @@ export component AppWindow inherits Window {
                                 width: root.tab-width * 1px;
                                 height: parent.height;
                                 background: tab.id == root.active-tab-id ? Theme.background : Theme.panel;
-                                border-width: 1px;
+                                border-width: Theme.hairline;
                                 border-color: Theme.border;
 
                                 tab-touch := TouchArea {
@@ -224,17 +247,17 @@ export component AppWindow inherits Window {
                                     }
                                 }
                                 HorizontalLayout {
-                                    padding-left: 10px;
-                                    padding-right: 4px;
-                                    spacing: 6px;
+                                    padding-left: Theme.space-lg;
+                                    padding-right: Theme.space-xs;
+                                    spacing: Theme.space-sm;
                                     Rectangle {
-                                        width: 7px;
+                                        width: Theme.tab-status-size;
                                         background: transparent;
                                         Rectangle {
                                             y: (parent.height - self.height) / 2;
-                                            width: 7px;
-                                            height: 7px;
-                                            border-radius: 4px;
+                                            width: Theme.tab-status-size;
+                                            height: Theme.tab-status-size;
+                                            border-radius: Theme.radius-small;
                                             background: tab.connected ? Theme.success : (tab.kind == "terminal" ? Theme.accent : Theme.muted);
                                         }
                                     }
@@ -242,13 +265,13 @@ export component AppWindow inherits Window {
                                         horizontal-stretch: 1;
                                         text: tab.title;
                                         color: Theme.text;
-                                        font-size: 12px;
+                                        font-size: Theme.font-small;
                                         overflow: elide;
                                         vertical-alignment: center;
                                     }
                                     Rectangle {
-                                        width: 24px;
-                                        height: 24px;
+                                        width: Theme.tab-close-size;
+                                        height: Theme.tab-close-size;
                                         border-radius: Theme.radius;
                                         background: close-touch.has-hover ? Theme.panel-alt : transparent;
                                         Text {
@@ -256,7 +279,7 @@ export component AppWindow inherits Window {
                                             height: parent.height;
                                             text: "x";
                                             color: Theme.muted;
-                                            font-size: 12px;
+                                            font-size: Theme.font-small;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                         }
@@ -297,7 +320,7 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
-                    Rectangle {
+                    if root.active-tab-kind != "settings" : Rectangle {
                         width: parent.height;
                         background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
                         Text {
@@ -305,7 +328,7 @@ export component AppWindow inherits Window {
                             height: parent.height;
                             text: "+";
                             color: Theme.text;
-                            font-size: 20px;
+                            font-size: Theme.font-page-title;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -338,16 +361,16 @@ export component AppWindow inherits Window {
                 Rectangle {
                     width: root.activity-bar-width;
                     background: Theme.panel-alt;
-                    border-width: 1px;
+                    border-width: Theme.hairline;
                     border-color: Theme.border;
 
                     VerticalLayout {
-                        padding-top: 6px;
-                        padding-bottom: 6px;
-                        spacing: 4px;
+                        padding-top: Theme.space-sm;
+                        padding-bottom: Theme.space-sm;
+                        spacing: Theme.space-xs;
 
                         Rectangle {
-                            height: 48px;
+                            height: Theme.activity-primary-height;
                             background: local-shell-touch.has-hover ? Theme.panel : transparent;
                             Text {
                                 width: parent.width;
@@ -355,7 +378,7 @@ export component AppWindow inherits Window {
                                 text: "$_";
                                 color: Theme.text;
                                 font-family: "JetBrains Mono";
-                                font-size: 15px;
+                                font-size: Theme.font-activity;
                                 font-weight: 700;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
@@ -367,11 +390,11 @@ export component AppWindow inherits Window {
                                 clicked => { root.open-local-shell(); }
                             }
                         }
-                        Rectangle { height: 1px; background: Theme.border; }
+                        Rectangle { height: Theme.hairline; background: Theme.border; }
                         ListView {
                             vertical-stretch: 1;
                             for group in root.group-icons : Rectangle {
-                                height: 48px;
+                                height: Theme.activity-primary-height;
                                 background: !root.sidebar-collapsed
                                         && root.sidebar-group-selected
                                         && root.active-sidebar-group == group.group-name
@@ -384,7 +407,7 @@ export component AppWindow inherits Window {
                                     text: group.icon;
                                     color: Theme.text;
                                     font-family: "JetBrains Mono";
-                                    font-size: 10px;
+                                    font-size: Theme.font-micro;
                                     font-weight: 700;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
@@ -409,16 +432,62 @@ export component AppWindow inherits Window {
                                 }
                             }
                         }
-                        Rectangle { height: 1px; background: Theme.border; }
+                        Rectangle { height: Theme.hairline; background: Theme.border; }
                         Rectangle {
-                            height: 48px;
+                            height: Theme.activity-action-height;
+                            background: settings-touch.has-hover ? Theme.panel : transparent;
+                            SettingsGlyph {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                glyph-color: root.active-tab-kind == "settings"
+                                        && root.settings-section != "About"
+                                    ? Theme.accent : Theme.text;
+                            }
+                            settings-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "Open Settings";
+                                clicked => {
+                                    root.settings-section = "General";
+                                    root.open-settings();
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: Theme.activity-action-height;
+                            background: about-touch.has-hover ? Theme.panel : transparent;
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: "i";
+                                color: root.active-tab-kind == "settings"
+                                        && root.settings-section == "About"
+                                    ? Theme.accent : Theme.text;
+                                font-family: "JetBrains Mono";
+                                font-size: Theme.font-body-strong;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            about-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "Open About";
+                                clicked => {
+                                    root.settings-section = "About";
+                                    root.open-settings();
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: Theme.activity-action-height;
                             background: rail-new-session.has-hover ? Theme.panel : transparent;
                             Text {
                                 width: parent.width;
                                 height: parent.height;
                                 text: "+";
                                 color: Theme.text;
-                                font-size: 20px;
+                                font-size: Theme.font-page-title;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -432,23 +501,24 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if !root.sidebar-collapsed : Rectangle {
+                if root.sidebar-content-visible : Rectangle {
                     width: root.sidebar-width * 1px;
                     background: Theme.panel;
-                    border-width: 1px;
+                    border-width: Theme.hairline;
                     border-color: Theme.border;
 
                 VerticalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    padding-top: 6px;
-                    padding-bottom: 6px;
-                    spacing: 4px;
+                    padding-left: Theme.space-md;
+                    padding-right: Theme.space-md;
+                    padding-top: Theme.space-sm;
+                    padding-bottom: Theme.space-sm;
+                    spacing: Theme.space-xs;
 
                     ListView {
                         vertical-stretch: 1;
                         for row in root.sessions : Rectangle {
-                            height: row.is-group || row.group-name.is-empty ? 34px : 50px;
+                            height: row.is-group || row.group-name.is-empty
+                                ? Theme.session-group-row-height : Theme.session-row-height;
                             background: session-touch.has-hover ? Theme.panel-alt : transparent;
                             border-radius: Theme.radius;
                             session-touch := TouchArea {
@@ -462,21 +532,21 @@ export component AppWindow inherits Window {
                                 }
                             }
                             if row.is-group : HorizontalLayout {
-                                padding-left: 6px;
-                                padding-right: 6px;
-                                spacing: 6px;
+                                padding-left: Theme.space-sm;
+                                padding-right: Theme.space-sm;
+                                spacing: Theme.space-sm;
                                 Text {
-                                    width: 10px;
+                                    width: Theme.space-lg;
                                     text: row.expanded ? "v" : ">";
                                     color: Theme.muted;
-                                    font-size: 12px;
+                                    font-size: Theme.font-small;
                                     vertical-alignment: center;
                                 }
                                 Text {
                                     horizontal-stretch: 1;
                                     text: row.name;
                                     color: Theme.text;
-                                    font-size: 13px;
+                                    font-size: Theme.font-body;
                                     font-weight: 700;
                                     overflow: elide;
                                     vertical-alignment: center;
@@ -484,18 +554,18 @@ export component AppWindow inherits Window {
                                 Text {
                                     text: row.endpoint;
                                     color: Theme.muted;
-                                    font-size: 11px;
+                                    font-size: Theme.font-caption;
                                     vertical-alignment: center;
                                 }
                             }
                             if !row.is-group && row.group-name.is-empty : HorizontalLayout {
-                                padding-left: 10px;
-                                padding-right: 8px;
+                                padding-left: Theme.space-lg;
+                                padding-right: Theme.space-md;
                                 Text {
                                     horizontal-stretch: 1;
                                     text: row.name;
                                     color: Theme.text;
-                                    font-size: 13px;
+                                    font-size: Theme.font-body;
                                     overflow: elide;
                                     vertical-alignment: center;
                                 }
@@ -504,21 +574,21 @@ export component AppWindow inherits Window {
                                 Tooltip { text: @markdown("\{row.endpoint}"); }
                             }
                             if !row.is-group && !row.group-name.is-empty : VerticalLayout {
-                                padding-left: 26px;
-                                padding-right: 8px;
-                                padding-top: 6px;
-                                padding-bottom: 6px;
-                                spacing: 2px;
+                                padding-left: Theme.session-child-indent;
+                                padding-right: Theme.space-md;
+                                padding-top: Theme.space-sm;
+                                padding-bottom: Theme.space-sm;
+                                spacing: Theme.space-xxs;
                                 Text {
                                     text: row.name;
                                     color: Theme.text;
-                                    font-size: 14px;
+                                    font-size: Theme.font-body-strong;
                                     overflow: elide;
                                 }
                                 Text {
                                     text: row.endpoint;
                                     color: Theme.muted;
-                                    font-size: 11px;
+                                    font-size: Theme.font-caption;
                                     overflow: elide;
                                 }
                             }
@@ -566,7 +636,8 @@ export component AppWindow inherits Window {
                 }
 
                 if root.active-tab-kind == "settings" : SettingsPane {
-                    terminal-font-options: root.terminal-font-options;
+                    selected-section <=> root.settings-section;
+                    app-version: root.app-version;
                     local-shell-options: root.local-shell-options;
                     terminal-font-family: root.terminal-font-family;
                     terminal-font-size: root.terminal-font-size;
@@ -634,24 +705,24 @@ export component AppWindow inherits Window {
                 }
 
                 if root.active-tab-kind == "empty" : VerticalLayout {
-                    padding: 28px;
-                    spacing: 10px;
+                    padding: Theme.empty-page-padding;
+                    spacing: Theme.space-lg;
                     Text {
                         text: "Workspace";
                         color: Theme.text;
-                        font-size: 20px;
+                        font-size: Theme.font-page-title;
                         font-weight: 700;
                     }
                     Text {
                         text: "Open a saved session or create a new tab.";
                         color: Theme.muted;
-                        font-size: 13px;
+                        font-size: Theme.font-body;
                     }
                     Rectangle { vertical-stretch: 1; }
                     Text {
                         text: root.status;
                         color: Theme.accent;
-                        font-size: 12px;
+                        font-size: Theme.font-small;
                         wrap: word-wrap;
                     }
                 }
@@ -662,41 +733,41 @@ export component AppWindow inherits Window {
     if root.host-key-dialog-open : Rectangle {
         width: root.width;
         height: root.height;
-        background: #00000099;
+        background: Theme.overlay;
         TouchArea { }
 
         Rectangle {
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
-            width: 500px;
-            height: 320px;
+            width: Theme.host-dialog-width;
+            height: Theme.host-dialog-height;
             background: Theme.panel-alt;
-            border-width: 1px;
+            border-width: Theme.hairline;
             border-color: root.host-key-changed ? Theme.danger : Theme.border;
             border-radius: Theme.radius;
 
             VerticalLayout {
-                padding: 20px;
-                spacing: 12px;
+                padding: Theme.dialog-padding;
+                spacing: Theme.space-xl;
                 Text {
                     text: root.host-key-changed ? "SSH host key changed" : "Unknown SSH host key";
                     color: root.host-key-changed ? Theme.danger : Theme.text;
-                    font-size: 18px;
+                    font-size: Theme.font-title;
                     font-weight: 700;
                 }
-                Text { text: root.host-key-endpoint; color: Theme.muted; font-size: 13px; }
-                Text { text: "SHA-256 fingerprint"; color: Theme.muted; font-size: 12px; }
+                Text { text: root.host-key-endpoint; color: Theme.muted; font-size: Theme.font-body; }
+                Text { text: "SHA-256 fingerprint"; color: Theme.muted; font-size: Theme.font-small; }
                 Text {
                     text: root.host-key-fingerprint;
                     color: Theme.text;
                     font-family: root.terminal-font-family;
-                    font-size: 12px;
+                    font-size: Theme.font-small;
                     wrap: word-wrap;
                 }
                 Rectangle { vertical-stretch: 1; }
                 HorizontalLayout {
                     alignment: end;
-                    spacing: 8px;
+                    spacing: Theme.space-md;
                     Button { text: "Cancel"; clicked => { root.reject-host-key(); } }
                     Button {
                         text: root.host-key-changed ? "Trust new key" : "Trust and continue";
@@ -710,38 +781,38 @@ export component AppWindow inherits Window {
     if root.password-dialog-open : Rectangle {
         width: root.width;
         height: root.height;
-        background: #00000099;
+        background: Theme.overlay;
         TouchArea { }
 
         Rectangle {
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
-            width: 430px;
+            width: Theme.password-dialog-width;
             height: root.password-private-key ? 310px : 270px;
             background: Theme.panel-alt;
-            border-width: 1px;
+            border-width: Theme.hairline;
             border-color: Theme.border;
             border-radius: Theme.radius;
 
             VerticalLayout {
-                padding: 20px;
-                spacing: 12px;
+                padding: Theme.dialog-padding;
+                spacing: Theme.space-xl;
                 Text {
                     text: root.password-private-key ? "Private key authentication" : "Password authentication";
                     color: Theme.text;
-                    font-size: 18px;
+                    font-size: Theme.font-title;
                     font-weight: 700;
                 }
                 Text {
                     text: root.password-endpoint;
                     color: Theme.muted;
-                    font-size: 13px;
+                    font-size: Theme.font-body;
                     overflow: elide;
                 }
                 if root.password-private-key : Text {
                     text: root.password-key-path;
                     color: Theme.text;
-                    font-size: 12px;
+                    font-size: Theme.font-small;
                     overflow: elide;
                 }
                 password-edit := LineEdit {
@@ -757,7 +828,7 @@ export component AppWindow inherits Window {
                 }
                 HorizontalLayout {
                     alignment: end;
-                    spacing: 8px;
+                    spacing: Theme.space-md;
                     Button { text: "Cancel"; clicked => { root.cancel-password-dialog(); } }
                     Button {
                         text: "Connect";

@@ -154,7 +154,7 @@ export component TerminalPane inherits Rectangle {
     }
 
     background: root.terminal-background;
-    border-width: 1px;
+    border-width: Theme.hairline;
     border-color: Theme.border;
     forward-focus: ime-input;
     accessible-role: text;
@@ -184,7 +184,7 @@ export component TerminalPane inherits Rectangle {
             root.cursor-column * root.cell-width));
         y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
             root.cursor-row * root.cell-height));
-        width: 1px;
+        width: Theme.hairline;
         height: root.cell-height;
         opacity: 0;
         single-line: true;
@@ -254,7 +254,7 @@ export component TerminalPane inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: 8px;
+        padding: Theme.space-md;
 
         grid-clip := Rectangle {
             vertical-stretch: 1;
@@ -315,13 +315,13 @@ export component TerminalPane inherits Rectangle {
                     if run.underline : Rectangle {
                         y: parent.height - 2px;
                         width: parent.width;
-                        height: 1px;
+                        height: Theme.hairline;
                         background: run.foreground;
                     }
                     if run.strikethrough : Rectangle {
                         y: parent.height / 2;
                         width: parent.width;
-                        height: 1px;
+                        height: Theme.hairline;
                         background: run.foreground;
                     }
                 }
@@ -375,7 +375,7 @@ export component TerminalPane inherits Rectangle {
                 Rectangle {
                     y: parent.height - 1px;
                     width: parent.width;
-                    height: 1px;
+                    height: Theme.hairline;
                     background: root.terminal-foreground;
                 }
             }

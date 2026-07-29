@@ -1,0 +1,383 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component SettingsGlyph inherits Rectangle {
+    in property <brush> glyph-color: Theme.text;
+
+    width: Theme.settings-icon-size;
+    height: Theme.settings-icon-size;
+    background: transparent;
+
+    first-line := Rectangle {
+        y: parent.height * 0.2;
+        width: parent.width;
+        height: Theme.settings-icon-stroke;
+        border-radius: self.height / 2;
+        background: root.glyph-color;
+    }
+    Rectangle {
+        x: parent.width * 0.2;
+        y: first-line.y - (self.height - first-line.height) / 2;
+        width: Theme.settings-icon-knob-size;
+        height: Theme.settings-icon-knob-size;
+        border-radius: self.width / 2;
+        background: root.glyph-color;
+    }
+
+    second-line := Rectangle {
+        y: parent.height * 0.5;
+        width: parent.width;
+        height: Theme.settings-icon-stroke;
+        border-radius: self.height / 2;
+        background: root.glyph-color;
+    }
+    Rectangle {
+        x: parent.width * 0.62;
+        y: second-line.y - (self.height - second-line.height) / 2;
+        width: Theme.settings-icon-knob-size;
+        height: Theme.settings-icon-knob-size;
+        border-radius: self.width / 2;
+        background: root.glyph-color;
+    }
+
+    third-line := Rectangle {
+        y: parent.height * 0.8;
+        width: parent.width;
+        height: Theme.settings-icon-stroke;
+        border-radius: self.height / 2;
+        background: root.glyph-color;
+    }
+    Rectangle {
+        x: parent.width * 0.36;
+        y: third-line.y - (self.height - third-line.height) / 2;
+        width: Theme.settings-icon-knob-size;
+        height: Theme.settings-icon-knob-size;
+        border-radius: self.width / 2;
+        background: root.glyph-color;
+    }
+}
+
+export component SettingsNavItem inherits FocusScope {
+    in property <string> icon;
+    in property <bool> settings-icon;
+    in property <string> label;
+    in property <bool> selected;
+    callback activated();
+
+    height: Theme.settings-nav-item-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-small;
+        background: root.selected
+            ? Theme.panel-alt
+            : (nav-touch.has-hover || root.has-focus ? Theme.background : transparent);
+
+        Rectangle {
+            width: 2 * Theme.hairline;
+            height: Theme.settings-nav-indicator-height;
+            y: (parent.height - self.height) / 2;
+            border-radius: Theme.hairline;
+            background: root.selected || root.has-focus ? Theme.accent : transparent;
+        }
+
+        nav-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.activated(); }
+        }
+
+        HorizontalLayout {
+            padding-left: Theme.space-lg;
+            padding-right: Theme.space-md;
+            spacing: Theme.space-md;
+            Rectangle {
+                width: Theme.settings-nav-icon-width;
+                if root.settings-icon : SettingsGlyph {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    glyph-color: root.selected ? Theme.accent : Theme.muted;
+                }
+                if !root.settings-icon : Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: root.icon;
+                    color: root.selected ? Theme.accent : Theme.muted;
+                    font-family: "JetBrains Mono";
+                    font-size: root.icon == "Aa" ? Theme.font-micro : Theme.font-small;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-body;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component SettingsPage inherits Rectangle {
+    background: Theme.background;
+
+    VerticalLayout {
+        padding-left: Theme.page-padding;
+        padding-right: Theme.page-padding;
+        padding-top: Theme.space-xl;
+        padding-bottom: Theme.space-xl;
+        spacing: 0px;
+
+        @children
+    }
+}
+
+export component SettingsHeader inherits Rectangle {
+    in property <string> title;
+    in property <string> status;
+    callback close();
+    callback save();
+
+    height: Theme.settings-header-height;
+    background: Theme.background;
+
+    HorizontalLayout {
+        x: Theme.page-padding;
+        width: parent.width - 2 * Theme.page-padding;
+        height: parent.height;
+        spacing: Theme.space-md;
+
+        Text {
+            width: Theme.settings-label-width;
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.font-header;
+            font-weight: 700;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.status;
+            color: Theme.accent;
+            font-size: Theme.font-small;
+            overflow: elide;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+        Button {
+            width: Theme.settings-action-button-width;
+            height: Theme.settings-control-height;
+            text: "Close";
+            clicked => { root.close(); }
+        }
+        Button {
+            width: Theme.settings-action-button-width;
+            height: Theme.settings-control-height;
+            text: "Save";
+            clicked => { root.save(); }
+        }
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.border;
+    }
+}
+
+export component SettingsSectionHeading inherits Text {
+    in property <string> label;
+
+    height: Theme.settings-section-height;
+    text: root.label;
+    color: Theme.muted;
+    font-size: Theme.font-caption;
+    font-weight: 700;
+    vertical-alignment: center;
+}
+
+export component SettingsField inherits Rectangle {
+    in property <length> field-width: Theme.settings-field-width;
+
+    width: root.field-width;
+    height: Theme.settings-row-height;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-top: Theme.settings-control-vertical-padding;
+        padding-bottom: Theme.settings-control-vertical-padding;
+        spacing: Theme.space-md;
+        alignment: end;
+
+        @children
+    }
+}
+
+export component SettingsRow inherits Rectangle {
+    in property <string> label;
+    in property <string> description;
+    in property <length> label-width: Theme.settings-label-width;
+    in property <bool> show-divider: true;
+
+    height: Theme.settings-row-height;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: Theme.space-lg;
+        Rectangle {
+            width: root.label-width;
+            height: root.height;
+
+            Text {
+                y: root.description.is-empty
+                    ? (parent.height - self.height) / 2
+                    : Theme.settings-row-text-top;
+                width: parent.width;
+                height: Theme.settings-row-title-height;
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.font-body;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if !root.description.is-empty : Text {
+                y: Theme.settings-row-text-top
+                    + Theme.settings-row-title-height
+                    + Theme.space-xxs;
+                width: parent.width;
+                height: Theme.settings-row-description-height;
+                text: root.description;
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        @children
+    }
+
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: root.show-divider ? Theme.border : transparent;
+    }
+}
+
+export component SettingsToggleRow inherits Rectangle {
+    in property <string> label;
+    in property <string> description;
+    in-out property <bool> checked;
+    in property <bool> show-divider: true;
+
+    height: Theme.settings-row-height;
+
+    SettingsRow {
+        label: root.label;
+        description: root.description;
+        show-divider: root.show-divider;
+        SettingsField {
+            CheckBox {
+                height: Theme.settings-control-height;
+                checked <=> root.checked;
+                accessible-label: root.label;
+            }
+        }
+    }
+}
+
+export component SettingsInfoRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> show-divider: true;
+
+    height: Theme.settings-info-row-height;
+
+    SettingsRow {
+        height: parent.height;
+        label: root.label;
+        show-divider: root.show-divider;
+        SettingsField {
+            height: parent.height;
+            Text {
+                width: Theme.settings-field-width;
+                text: root.value;
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component ShortcutRecorder inherits FocusScope {
+    in-out property <string> shortcut;
+    in property <string> accessible-name;
+    private property <string> candidate-shortcut;
+
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback recording-changed(bool);
+
+    height: Theme.settings-control-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: text-input;
+    accessible-label: root.accessible-name;
+
+    focus-gained => { root.recording-changed(true); }
+    focus-lost => { root.recording-changed(false); }
+    key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.clear-focus();
+            return EventResult.accept;
+        }
+        root.candidate-shortcut = root.format-shortcut(
+            event.text,
+            event.modifiers.alt,
+            event.modifiers.control,
+            event.modifiers.meta,
+            event.modifiers.shift,
+        );
+        if !root.candidate-shortcut.is-empty {
+            root.shortcut = root.candidate-shortcut;
+            root.clear-focus();
+        }
+        return EventResult.accept;
+    }
+
+    Rectangle {
+        background: root.has-focus ? Theme.panel-alt : Theme.panel;
+        border-width: root.has-focus ? 2 * Theme.hairline : Theme.hairline;
+        border-color: root.has-focus ? Theme.accent : Theme.border;
+        border-radius: Theme.radius-small;
+        Text {
+            x: Theme.space-lg;
+            width: parent.width - 2 * Theme.space-lg;
+            height: parent.height;
+            text: root.shortcut;
+            color: Theme.text;
+            font-family: "JetBrains Mono";
+            font-size: Theme.font-caption;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}

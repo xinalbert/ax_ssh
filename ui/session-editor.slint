@@ -12,59 +12,59 @@ export component SessionEditorPane inherits Rectangle {
     background: Theme.background;
 
     VerticalLayout {
-        padding: 24px;
-        spacing: 12px;
+        padding: Theme.page-padding;
+        spacing: Theme.space-xl;
 
         Text {
             text: "New SSH session";
             color: Theme.text;
-            font-size: 20px;
+            font-size: Theme.font-page-title;
             font-weight: 700;
         }
-        Rectangle { height: 1px; background: Theme.border; }
+        Rectangle { height: Theme.hairline; background: Theme.border; }
 
-        Text { text: "Identity"; color: Theme.muted; font-size: 12px; }
+        Text { text: "Identity"; color: Theme.muted; font-size: Theme.font-small; }
         name-edit := LineEdit { placeholder-text: "Name"; }
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Theme.space-md;
             group-edit := LineEdit {
                 horizontal-stretch: 1;
                 placeholder-text: "Group (optional)";
             }
             if root.group-options.length > 0 : ComboBox {
-                width: 200px;
+                width: Theme.editor-field-width;
                 model: root.group-options;
                 selected(value) => { group-edit.text = value == "Ungrouped" ? "" : value; }
             }
         }
 
-        Text { text: "Endpoint"; color: Theme.muted; font-size: 12px; }
+        Text { text: "Endpoint"; color: Theme.muted; font-size: Theme.font-small; }
         HorizontalLayout {
-            spacing: 8px;
+            spacing: Theme.space-md;
             host-edit := LineEdit {
                 horizontal-stretch: 1;
                 placeholder-text: "Host";
             }
             port-edit := LineEdit {
-                width: 100px;
+                width: Theme.editor-port-width;
                 text: "22";
                 placeholder-text: "Port";
             }
         }
         user-edit := LineEdit { placeholder-text: "Username"; }
 
-        Text { text: "Authentication"; color: Theme.muted; font-size: 12px; }
+        Text { text: "Authentication"; color: Theme.muted; font-size: Theme.font-small; }
         auth-method := ComboBox { model: ["Password", "Private key"]; }
         key-row := HorizontalLayout {
             visible: auth-method.current-value == "Private key";
             height: self.visible ? 34px : 0px;
-            spacing: 8px;
+            spacing: Theme.space-md;
             key-edit := LineEdit {
                 horizontal-stretch: 1;
                 placeholder-text: "Private key path";
             }
             if root.private-key-options.length > 0 : ComboBox {
-                width: 220px;
+                width: Theme.editor-auth-width;
                 model: root.private-key-options;
                 selected(value) => { key-edit.text = value; }
             }
@@ -85,12 +85,12 @@ export component SessionEditorPane inherits Rectangle {
         Text {
             text: root.status;
             color: Theme.accent;
-            font-size: 12px;
+            font-size: Theme.font-small;
             wrap: word-wrap;
         }
         HorizontalLayout {
             alignment: end;
-            spacing: 8px;
+            spacing: Theme.space-md;
             Button { text: "Cancel"; clicked => { root.cancel(); } }
             Button {
                 text: "Save session";
