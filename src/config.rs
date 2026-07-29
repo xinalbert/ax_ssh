@@ -759,12 +759,15 @@ impl ConfigStore {
             use std::os::unix::fs::OpenOptionsExt as _;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(&temporary)
-            .with_context(|| format!("failed to open {}", temporary.display()))?;
-        file.write_all(&bytes)
-            .and_then(|_| file.sync_all())
-            .with_context(|| format!("failed to write {}", temporary.display()))?;
+        // ReplaceFileW requires the replacement file handle to be closed first.
+        {
+            let mut file = options
+                .open(&temporary)
+                .with_context(|| format!("failed to open {}", temporary.display()))?;
+            file.write_all(&bytes)
+                .and_then(|_| file.sync_all())
+                .with_context(|| format!("failed to write {}", temporary.display()))?;
+        }
         replace_file_atomically(&temporary, &self.path).with_context(|| {
             format!(
                 "failed to atomically replace {} with {}",
