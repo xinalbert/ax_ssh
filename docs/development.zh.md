@@ -22,18 +22,28 @@ cargo test --locked --offline
 git diff --check
 ```
 
-`cargo check` / `cargo test` 不带 `--offline` 时可能需要访问 registry。本环境
-当前无法解析 crates.io，因此冷依赖缓存属于外部前置条件，不应误判为代码错误。
+`cargo check` / `cargo test` 不带 `--offline` 时可能需要访问 registry。2026-07-29
+解析 `keyring 4.1.5` 时本机可以访问 crates.io；离线命令仍要求 Cargo 缓存已准备好。
 
 ## 修改规则
 
 - Slint 生成类型集中在 `src/app.rs`；领域模块和传输模块不得依赖 UI。
-- 不把密码写入 JSON；凭据提供器应只向 SSH worker 返回临时 secret。
+- 不把密码写入 JSON；`src/credentials.rs` 只能按 profile 通过平台系统凭据库读写一份
+  密码，并且只向 SSH worker 返回临时 secret。
+- 私钥 profile 只能持久化文件路径；私钥内容和 passphrase 必须在 UI 线程外加载，
+  且不得记录或持久化。
 - 不为了方便而接受未知 SSH 主机密钥；测试应注入确定性的 trust policy。
 - 进程持有的日志 guard 必须存活到应用退出，以刷新有界非阻塞队列；不得记录凭据
   或终端内容。
 - UI 边界上的 payload 必须是有上限的自有数据；不得把 russh channel 或 Tokio
   receiver 暴露给 Slint。
+- 运行实例必须使用终端 Tab UUID，而不是已保存的 profile UUID；输入、resize、输出、
+  重试、关闭和迟到事件都按 `tab_id + attempt_id` 路由。
+- 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
+- `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
+  窗口的条件下测试终端字节序列。
+- 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；构建或运行时不得从
+  `third_package/axshell` 加载静态资源。
 - 修改面向用户的文档时同步维护中英文页面。
 
 ## 运行日志
@@ -46,6 +56,13 @@ writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 
 ## 验证边界
 
 自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、日志退出刷新，以及
-loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码认证、worker 断开与
-join。窗口渲染、键盘/焦点、可见的主机密钥/密码弹窗，以及真实 SSH 服务器登录
-仍需 GUI/联机手工验收。
+loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、PTY shell
+输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
+终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
+发现和加密密钥 passphrase。忽略测试
+`platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
+写入、读取和删除，并可能触发系统授权提示；该测试已在 macOS Keychain 通过，Unix
+Secret Service 和 Windows Credential Manager 仍需对应平台验证。窗口渲染、键盘/
+焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH 服务器登录仍需
+GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实 SSH 并发连接和切换后的终端
+焦点保持。

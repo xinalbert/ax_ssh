@@ -7,3 +7,11 @@
 - 影响文件：`Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`docs/project-env-audit/`。
 - 验证结果：本机 `cargo check --offline` 通过；在线 `cargo search` 因 crates.io DNS 解析失败不可用。
 - 对 plan 的更新：后续开发以根 Cargo 项目为唯一实施边界，参考子模块保持 build graph 外部。
+
+## 2026-07-29 刷新 registry 与系统凭据环境
+
+- 触发原因：会话密码记忆引入跨平台 keyring，原记录的 crates.io DNS 失败事实也已过时。
+- 执行内容：确认根目录仍是单一 Rust package；核对 Rust/Cargo 版本、CI、Cargo metadata 和 keyring feature tree；重新访问 crates.io，并运行真实 macOS Keychain 写入、读取和删除测试。
+- 影响文件：`Cargo.toml`、`Cargo.lock`、`src/credentials.rs`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 验证结果：`cargo search keyring --limit 1` 返回 `4.1.5`；locked/offline Cargo metadata 仅含一个 workspace member；macOS 平台凭据 round-trip 测试通过且测试条目已删除。本机仍未安装 `cargo-fmt`/`cargo-clippy`。
+- 对 plan 的更新：registry 不再是当前阻塞；Linux Secret Service 和 Windows Credential Manager 保留为对应平台验收项。

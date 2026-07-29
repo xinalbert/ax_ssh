@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260729-ssh-login-log-lifecycle
-- 目标：修复当前没有可用登录路径的问题，并建立进程级日志初始化、滚动、保留、刷新和退出生命周期。
-- 交付物：主机密钥确认、临时密码认证、持续连接/断开 worker、全局文件日志守卫、配套测试和同步后的双语文档。
+- 目标 ID：20260729-tabbed-workspace-parameterized-settings
+- 目标：把终端、设置和新建会话统一为顶部 Tab 工作区，并让同一服务器 profile 的多个终端实例通过唯一 Tab ID 独立运行。
+- 交付物：Tab 领域模型、多 worker 事件路由、参数化 JSON 设置、Settings/New Session Tab、终端 Tab 生命周期测试、双语架构与完整验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`Cargo.lock`、`src/`、`ui/`、双语架构/开发文档和 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：终端模拟、SFTP、私钥认证、无确认接受未知主机密钥、持久化密码、复制或引用 `third_package/axshell` 源码。
+- 当前范围：`src/config.rs`、`src/app.rs`、`src/app/`、`src/ssh/worker.rs`、`ui/`、双语 README/架构/开发文档和 `docs/project-implementation-tracker/`。
+- 不在本轮范围内：SFTP、SSH agent 转发、持久化终端输出或凭据、无确认接受未知主机密钥、完整全屏终端属性引擎、复制或依赖 `third_package/axshell` 源码。
 
 ## 当前状态
 
@@ -23,44 +23,39 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | 登录阻断根因和本地 API/依赖基线 | 源码路径、锁文件和本机缓存核对 | russh 0.62.2、Slint 1.17.1、tracing-appender 0.2.5 API 已确认 |
-| P2 | completed | 主机指纹确认与临时密码 UI 流程 | Slint/Rust 类型检查和策略单元测试 | 未知/变更主机密钥均在认证前拒绝 |
-| P3 | completed | 有界命令通道与可取消 SSH worker | loopback 登录、断开和 join 测试 | worker 独占 russh handle |
-| P4 | completed | 进程级滚动文件日志生命周期 | 私有日志目录和退出 flush 测试 | 密码和终端内容不得进入日志 |
-| P5 | completed | 双语文档、实施记录与最终回归 | 全部可用仓库门禁和 tracker validator | 主窗口及真实 SSH 登录已有运行证据 |
+| P1 | completed | 唯一 Tab ID、工作区 Tab 类型和参数化 JSON 设置 schema | 配置迁移与 Tab 领域单测 | 设置继续使用现有私有原子 JSON 存储 |
+| P2 | completed | 按 `tab_id + attempt_id` 隔离的多 SSH worker、终端缓冲和关闭生命周期 | 同 profile 多实例、迟到事件、关闭和 shutdown 测试 | worker/receiver 不暴露给 Slint |
+| P3 | completed | 顶部 Tab bar、终端 Tab、Settings Tab 和 New Session Tab | Slint/Cargo 联合编译和最小/常用窗口走查 | 安全确认和一次性 secret 仍为短期提示层 |
+| P4 | completed | 设置保存、活动 Tab 快照、输入/resize/断开接线 | focused 应用状态与配置测试 | 非活动 Tab 不重建整个 Slint 输出模型 |
+| P5 | completed | 双语架构、开发说明和项目地图更新 | Markdown 相对链接与边界扫描 | 明确 JSON schema 和多实例所有权 |
+| P6 | completed | 最终格式、Cargo、tracker、差异和 GUI 回归 | 仓库要求的完整验证命令 | 记录本机缺失工具或平台验收限制 |
 
 ## 已完成
 
-- 已确认连接按钮当前固定向密码认证传入 `None`，没有认证成功路径。
-- 已确认新建 profile 的主机指纹为 `None`，安全 handler 会在认证前拒绝所有未知主机。
-- 已确认即使认证成功，当前 callback 也会立即丢弃 `SshConnection`，没有持续连接所有者或显式关闭路径。
-- 已确认 `main` 仅安装控制台 tracing subscriber，没有文件日志、滚动保留或退出 flush guard。
-- 已确认 `tracing-appender 0.2.5` 已在本机 Cargo 缓存，可保持 locked/offline 验证。
-- 已确定 app 只持有 SSH worker 控制器；有界事件 receiver 不进入 Slint，russh handle 始终由 `src/ssh.rs` 的 worker 独占。
-- 已确定未知主机先执行拒绝式指纹探测，变更主机在认证前返回独立事件；二者都必须经 UI 明确确认后才能更新 profile。
-- 已实现主机指纹确认、临时密码弹窗和 profile 原子更新；密码不进入 `AppState`、配置或 tracing 字段。
-- 已实现有界命令/事件 channel；取消可中断探测、连接和认证，认证后的 russh handle 由 worker 持有到显式断开或窗口关闭。
-- 已根据真实运行日志加入 20 秒 keepalive、三次未响应上限和 90 秒 inactivity 边界，避免健康空闲连接在原 60 秒超时后自动关闭。
-- 已实现 `LoggingGuard`：每日 UTC 滚动、最多 15 个文件、1024 行有界无损队列、stderr 镜像和退出 flush/join。
-- 已增加 loopback russh 回归，真实执行未知密钥拒绝/探测、精确指纹信任、密码认证、worker 断开与 join。
+- 已确认参考布局的顶部 Tab、左侧导航和右侧内容区结构；仅参考行为与布局，不复制参考项目源码。
+- 已确认现有单活动连接限制位于 `AppState.active_session`、全局终端输出和设置弹窗，需要跨应用状态与 UI 契约重构。
+- 已实现 Settings/New Session 单例 Tab 和每次创建新 UUID 的终端 Tab；同 profile 使用独立标题序号、worker、attempt 和终端模型。
+- 已把字体、scrollback、默认 PTY 尺寸、侧栏宽度和 Tab 宽度写入版本化 `settings` JSON，并兼容迁移旧版顶层 `appearance`。
+- 已按 `tab_id + attempt_id` 路由连接、认证重试、输入、resize、输出和关闭；非活动终端输出保留在 Rust 状态。
+- 已拆分 `ui/terminal-pane.slint`、`ui/settings.slint` 和 `ui/session-editor.slint`，并加入可横向滚动的顶部 Tab 条。
 
 ## 验证
 
-- 已完成：`rustfmt --edition 2024 --check`；`cargo check --locked --offline`；`cargo test --locked --offline`（9 passed）；Slint 重新编译；Cargo metadata/tree 边界审阅；18 个 Markdown 文件相对链接检查；tracking validator；`git diff --check` 和未跟踪文本空白/冲突标记扫描；macOS 900x560 主窗口渲染截图；运行日志记录真实局域网 SSH 密码认证成功、worker connected 和远端关闭；日志文件实际落盘。
-- 未完成：本机没有 `cargo-clippy`/`clippy-driver`，无法运行 Clippy；主机密钥和密码弹窗的键盘/焦点仍需完整手工走查；Windows/Linux GUI 和真实 SSH 平台验收留给对应环境。
+- 已完成：项目 skill/reference 与参考图检查；直接 `rustfmt --edition 2024 --check`；`cargo check --locked --offline`；完整测试（库 29 passed、1 ignored，应用 7 passed）；Slint 多文件与生成 Rust 接口联合编译；默认窗口实际启动和窗口级截图；Markdown 相对链接、Cargo metadata、tracking validator、参考耦合/无界 channel 扫描和 `git diff --check`。
+- 未完成：本机未安装 `cargo-fmt` 和 `cargo-clippy`；系统未授予辅助功能权限，无法自动点击 Settings/New Session、缩放到最小窗口或走查真实同服务器多连接，需手工验收。
 
 ## 风险与阻塞
 
-- 未知主机必须先展示 SHA-256 指纹并由用户明确确认，不能为了恢复登录而改成全量接受。
-- 密码必须只作为短生命周期 worker 输入；任何错误、日志、配置和 tracker 都不得包含密码。
-- 当前产品尚无终端模拟；本轮只保证认证后的连接由 worker 持有并可显式断开，不把原始终端输出推向 UI。
-- 本机 Cargo 未安装 `cargo-fmt`；需用可用的 `rustfmt` 替代格式门禁并如实记录。Clippy wrapper 待单独确认。
-- 本机锁文件与依赖缓存足够，最终构建和测试保持 `--locked --offline`，不需要联网解析依赖。
+- 每个终端 Tab 必须独占 worker、attempt ID 和有界终端模型；同 profile ID 不能作为运行实例键。
+- 关闭 Tab 必须先让事件路由失效，再请求对应 worker shutdown，防止迟到事件污染其他 Tab。
+- 设置只持久化非敏感参数；密码、passphrase、私钥内容、终端输出和运行时 handle 不得进入 JSON。
+- 未知或变化主机密钥继续默认拒绝，并要求明确确认。
+- 当前顶部 Tab 区支持 Flickable 横向滚动，但鼠标/触控板滚动手感仍需在目标平台手工确认。
 
 ## 下一步
 
-- 下一阶段接入 shell channel、VT/ANSI 终端模型和有界 scrollback，并复用当前 worker、trust 和日志生命周期。
+- 手工走查 Settings/New Session Tab、横向 Tab 滚动、窗口最小尺寸和两个真实同 profile 终端；后续可单独增加重连与工作区恢复。
 
 ## 最后更新时间
 
-- 2026-07-29 10:13 +0800
+- 2026-07-29 13:05 +0800

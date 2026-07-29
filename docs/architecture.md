@@ -17,11 +17,15 @@ Slint UI (.slint)
        │ generated callbacks / properties
        ▼
 Application controller (src/app.rs)
-       │ domain values + UI event-loop dispatch
+       │ tab IDs + domain values + UI event-loop dispatch
        ├──────────────► Config store (src/config.rs)
-       │                 JSON schema + atomic replace
+       │                 versioned settings/profile JSON + atomic replace
+       ├──────────────► Credential store (src/credentials.rs)
+       │                 blocking platform keyring API
+       ├──────────────► Terminal model (src/terminal.rs)
+       │                 bounded ANSI state + scrollback
        └──────────────► SSH boundary (src/ssh.rs)
-                         Tokio tasks + russh handles/channels
+                         Tokio tasks + russh handles/channels + key loading
 
 Process startup (src/main.rs)
        └──────────────► Logging lifecycle (src/logging.rs)
@@ -32,28 +36,50 @@ Process startup (src/main.rs)
 
 | Area | Owns | Must not own |
 | --- | --- | --- |
-| `ui/` | Layout, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
+| `ui/` | Top tab bar, page layout, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
 | `src/app.rs` | Slint setup, domain-to-row mapping, callback wiring, event-loop updates | SSH protocol details or JSON schema details |
-| `src/config.rs` | `SessionProfile`, validation, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
+| `src/app/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, group aggregation, and blocking credential task boundary | Generated Slint component/model types |
+| `src/config.rs` | `SessionProfile`, versioned `AppSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
+| `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
+| `src/terminal.rs` and `src/terminal/input.rs` | Bounded ANSI parsing, cursor state, text scrollback, and terminal key encoding | Slint types, network handles, credentials |
 | `src/ssh.rs` | russh handler, host-key decision, authentication, shell channel boundary | Window updates, persistent session mutation, UI formatting |
+| `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
+| `src/ssh/worker.rs` | Bounded shell input commands, coalesced resize state, batched output events, cancellation, and shutdown | UI state or profile persistence |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
 | `src/main.rs` | Process startup and logging-guard lifetime | Feature logic |
 
 ## Event flow
 
-1. A Slint callback produces a small value such as a session ID, draft fields,
-   a trust decision, or one transient password.
-2. The application controller validates and maps that value to a domain type.
-   An unknown host starts a cancellable probe that records the SHA-256
-   fingerprint while the transport is still rejected.
+1. A Slint callback produces a small value such as a saved profile ID, unique
+   tab ID, group name, terminal key/modifier tuple, draft fields, a trust
+   decision, or one transient password.
+2. Opening a profile always creates a new terminal tab UUID, even when another
+   tab uses the same profile. The application controller routes input, resize,
+   output, retry, and close operations by `tab_id + attempt_id`. An unknown
+   host starts a cancellable probe tied to that tab while transport remains
+   rejected.
 3. After explicit confirmation, the controller atomically persists the exact
-   fingerprint and opens the password prompt. The password moves directly into
-   one worker command and is never added to application state or configuration.
-4. File operations run synchronously only for the short configuration path. SSH
-   connection, authentication, health checks, and disconnect run on Tokio.
-5. A worker sends bounded results back as owned values. UI updates are re-entered with
-   `slint::invoke_from_event_loop` and use a `Weak<AppWindow>` so shutdown does
-   not keep a window alive.
+   fingerprint. Password profiles load a remembered credential on a Tokio
+   blocking boundary or open a password prompt. Private-key profiles load the
+   selected path off the UI thread and request a transient passphrase only when
+   the encrypted key cannot be opened without one.
+4. A password explicitly saved with a new profile is written together with
+   that profile operation. A password entered in the authentication prompt is
+   written only after SSH authentication succeeds. Missing or rejected stored
+   credentials clear the non-secret marker and fall back to one manual prompt.
+5. The terminal surface maps Slint special keys to UI-independent terminal key
+   values. `src/terminal/input.rs` emits control bytes and conventional CSI or
+   xterm modified sequences; selection copy remains local while paste becomes
+   bounded shell input.
+6. After authentication, each terminal tab owns one worker, and that worker
+   exclusively owns one PTY shell plus its russh handle/channel. Bounded command
+   queues and single-slot watched sizes remain independent between duplicate
+   profile tabs. Closing a tab removes its routing state before asynchronously
+   shutting down that worker, so late events cannot update another tab.
+7. Each terminal tab also owns one bounded `TerminalModel`. Output for inactive
+   tabs stays in Rust state; only the active tab snapshot crosses the Slint
+   event loop. UI updates use `slint::invoke_from_event_loop` and
+   `Weak<AppWindow>` so shutdown does not keep a window alive.
 
 ## SSH security contract
 
@@ -62,20 +88,29 @@ mismatched keys are rejected before authentication. A rejected first-contact
 handshake may expose its SHA-256 fingerprint to the confirmation UI, but only
 an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback
-inputs and are not part of `SessionStore`; private-key loading and OS keychain
-integration remain follow-up work.
+inputs and are not part of `SessionStore`. The profile contains only a
+`credential_stored` marker; the password itself is keyed by the stable profile
+UUID in the platform credential store. Private-key profiles persist only a
+path. The key bytes and optional passphrase are loaded in one blocking task,
+used for one authentication attempt,
+and then dropped without entering configuration, tracing fields, or UI models.
 
-The authenticated connection follows this lifecycle:
+Authenticated connections follow this lifecycle:
 
-- one worker owns the russh handle for its full lifetime;
-- the current bounded command channel carries disconnect/cancel intent;
-- bounded worker events report connected, disconnected, host-key rejection, or
-  a capped error message;
+- every terminal tab has a unique runtime UUID and one worker owns its russh
+  handle for the full lifetime;
+- the bounded command channel carries shell input, disconnect, and cancel
+  intent; a watched terminal size coalesces high-frequency resize updates;
+- terminal output is capped per batch and backpressured through a bounded event
+  channel before entering the bounded terminal model;
+- worker events report connected, resize, output, disconnected, host-key
+  rejection, credential failure, or a capped error message;
 - cancel interrupts connection/authentication as well as an established session;
 - a 20-second keepalive with three missed-reply limit keeps healthy idle
   sessions open while retaining a 90-second inactivity bound;
-- window shutdown requests disconnect, waits for the worker join with a timeout,
-  and only then shuts down Tokio.
+- tab close invalidates the tab/attempt route before requesting worker shutdown;
+- window shutdown requests disconnect for every remaining worker, waits for
+  each join with a timeout, and only then shuts down Tokio.
 
 ## Logging lifecycle
 
@@ -87,14 +122,29 @@ the shutdown event, drains the queue, flushes the active file, and joins the
 writer thread. Operational fields may include session ID, host, port, and host
 fingerprint; credentials and terminal contents are forbidden.
 
+## Persistent settings and font resources
+
+`assets/fonts/JetBrainsMono-Regular.ttf` is a project-owned static resource
+registered by the Slint compiler. Its OFL license and author notice are kept in
+the same directory. No font is loaded from `third_package/axshell` during build
+or runtime. `SessionStore` writes a versioned `settings` object to the existing
+private `sessions.json`. It contains normalized terminal font/size, scrollback,
+default PTY dimensions, sidebar width, and tab width. Older top-level
+`appearance` data migrates during deserialization. Passwords, passphrases,
+private-key contents, terminal output, tab runtime IDs, and workers are never
+serialized.
+
 ## Staged scope
 
 The current application validates and persists profiles, confirms per-profile
-host fingerprints, authenticates with transient passwords, and owns one live
-connection through disconnect. The following remain separate steps:
+host fingerprints, authenticates with transient passwords or local private
+keys, and owns multiple independent tab-scoped PTY shells, including duplicate
+tabs for one profile. Settings and new-session editing are workspace tabs; only
+short-lived trust and secret prompts remain overlays. The following remain
+separate steps:
 
-- private-key loading and OS credential integration;
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;
-- a VT/ANSI terminal model and bounded scrollback;
 - SFTP as a separate worker sharing an authenticated transport policy;
-- shell channel commands, resize, reconnect, and multi-session lifecycle tests.
+- SSH agent integration, reconnect, and persisted workspace restoration;
+- richer full-screen terminal compatibility, color/attribute rendering,
+  application cursor modes, and mouse reporting.
