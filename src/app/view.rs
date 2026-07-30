@@ -180,6 +180,9 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
             color_scheme: TerminalColorScheme::from_setting(
                 ui.get_terminal_color_scheme().as_str(),
             ),
+            default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
+            default_background: to_rgb_color(ui.get_theme_terminal_background()),
+            selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
             brightness_percent: ui.get_terminal_brightness_percent().clamp(60, 140) as u16,
             bright_bold_text: ui.get_bright_bold_text(),
         },
@@ -194,18 +197,12 @@ pub(super) fn apply_settings(ui: &slint::Weak<AppWindow>, settings: AppSettings)
 }
 
 pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
+    apply_theme_to_component(ui, settings);
     ui.set_terminal_font_family(settings.appearance.terminal_font_family.clone().into());
     ui.set_terminal_font_size(i32::from(settings.appearance.terminal_font_size));
     ui.set_terminal_line_height_percent(i32::from(
         settings.appearance.terminal_line_height_percent,
     ));
-    ui.set_terminal_color_scheme(
-        settings
-            .appearance
-            .terminal_color_scheme
-            .as_setting()
-            .into(),
-    );
     ui.set_terminal_brightness_percent(i32::from(settings.appearance.terminal_brightness_percent));
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
@@ -229,6 +226,41 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
 }
 
+fn apply_theme_to_component(ui: &AppWindow, settings: &AppSettings) {
+    let palette = &settings.appearance.theme.custom;
+    let theme = ui.global::<Theme>();
+    theme.set_mode(settings.appearance.theme.mode.as_setting().into());
+    theme.set_custom_background(theme_color(&palette.background));
+    theme.set_custom_panel(theme_color(&palette.panel));
+    theme.set_custom_panel_alt(theme_color(&palette.panel_alt));
+    theme.set_custom_border(theme_color(&palette.border));
+    theme.set_custom_text(theme_color(&palette.text));
+    theme.set_custom_muted(theme_color(&palette.muted));
+    theme.set_custom_accent(theme_color(&palette.accent));
+    theme.set_custom_success(theme_color(&palette.success));
+    theme.set_custom_danger(theme_color(&palette.danger));
+    theme.set_custom_overlay(theme_color(&palette.overlay));
+    theme.set_custom_terminal_foreground(theme_color(&palette.terminal_foreground));
+    theme.set_custom_terminal_background(theme_color(&palette.terminal_background));
+    theme.set_custom_terminal_selection(theme_color(&palette.terminal_selection));
+
+    ui.set_theme_mode(settings.appearance.theme.mode.as_setting().into());
+    ui.set_theme_background(palette.background.clone().into());
+    ui.set_theme_panel(palette.panel.clone().into());
+    ui.set_theme_panel_alt(palette.panel_alt.clone().into());
+    ui.set_theme_border(palette.border.clone().into());
+    ui.set_theme_text(palette.text.clone().into());
+    ui.set_theme_muted(palette.muted.clone().into());
+    ui.set_theme_accent(palette.accent.clone().into());
+    ui.set_theme_success(palette.success.clone().into());
+    ui.set_theme_danger(palette.danger.clone().into());
+    ui.set_theme_overlay(palette.overlay.clone().into());
+    ui.set_theme_terminal_foreground_value(palette.terminal_foreground.clone().into());
+    ui.set_theme_terminal_background_value(palette.terminal_background.clone().into());
+    ui.set_theme_terminal_selection_value(palette.terminal_selection.clone().into());
+    ui.set_theme_revision(ui.get_theme_revision().wrapping_add(1));
+}
+
 pub(super) fn empty_terminal_snapshot() -> TerminalSnapshot {
     TerminalSnapshot {
         text: String::new(),
@@ -247,9 +279,9 @@ pub(super) fn apply_rendered_terminal(ui: &AppWindow, rendered: terminal_render:
     ui.set_terminal_cursor_column(rendered.cursor_column.min(i32::MAX as usize) as i32);
     ui.set_terminal_cursor_visible(rendered.cursor_visible);
     ui.set_terminal_cursor_text(rendered.cursor_text.into());
-    ui.set_terminal_foreground(to_slint_color(rendered.foreground));
-    ui.set_terminal_background(to_slint_color(rendered.background));
-    ui.set_terminal_selection_background(to_slint_color(rendered.selection_background));
+    ui.set_terminal_render_foreground(to_slint_color(rendered.foreground));
+    ui.set_terminal_render_background(to_slint_color(rendered.background));
+    ui.set_terminal_render_selection_background(to_slint_color(rendered.selection_background));
     let lines = rendered
         .lines
         .into_iter()
@@ -285,6 +317,61 @@ pub(super) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalRenderRun
 
 pub(super) fn to_slint_color(color: RgbColor) -> Color {
     Color::from_rgb_u8(color.red, color.green, color.blue)
+}
+
+fn to_rgb_color(color: Color) -> RgbColor {
+    let rgba = color.to_argb_u8();
+    RgbColor::new(rgba.red, rgba.green, rgba.blue)
+}
+
+fn theme_color(value: &str) -> Color {
+    let value = value.trim().trim_start_matches('#');
+    let fallback = Color::from_rgb_u8(23, 25, 24);
+    let (red, green, blue, alpha) = match value.as_bytes() {
+        [red_a, red_b, green_a, green_b, blue_a, blue_b] => (
+            hex_byte(*red_a, *red_b),
+            hex_byte(*green_a, *green_b),
+            hex_byte(*blue_a, *blue_b),
+            Some(255),
+        ),
+        [
+            red_a,
+            red_b,
+            green_a,
+            green_b,
+            blue_a,
+            blue_b,
+            alpha_a,
+            alpha_b,
+        ] => (
+            hex_byte(*red_a, *red_b),
+            hex_byte(*green_a, *green_b),
+            hex_byte(*blue_a, *blue_b),
+            hex_byte(*alpha_a, *alpha_b),
+        ),
+        _ => return fallback,
+    };
+    match (red, green, blue, alpha) {
+        (Some(red), Some(green), Some(blue), Some(alpha)) => {
+            Color::from_argb_u8(alpha, red, green, blue)
+        }
+        _ => fallback,
+    }
+}
+
+fn hex_byte(high: u8, low: u8) -> Option<u8> {
+    let high = hex_digit(high)?;
+    let low = hex_digit(low)?;
+    Some(high * 16 + low)
+}
+
+fn hex_digit(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Copy)]

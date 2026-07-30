@@ -13,13 +13,17 @@ pub(super) struct RgbColor {
 }
 
 impl RgbColor {
-    const fn new(red: u8, green: u8, blue: u8) -> Self {
+    pub(super) const fn new(red: u8, green: u8, blue: u8) -> Self {
         Self { red, green, blue }
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct TerminalRenderSettings {
     pub(super) color_scheme: TerminalColorScheme,
+    pub(super) default_foreground: RgbColor,
+    pub(super) default_background: RgbColor,
+    pub(super) selection_background: RgbColor,
     pub(super) brightness_percent: u16,
     pub(super) bright_bold_text: bool,
 }
@@ -56,7 +60,10 @@ pub(super) fn render_terminal(
     snapshot: TerminalSnapshot,
     settings: TerminalRenderSettings,
 ) -> RenderedTerminal {
-    let palette = TerminalPalette::for_scheme(settings.color_scheme);
+    let mut palette = TerminalPalette::for_scheme(settings.color_scheme);
+    palette.foreground = settings.default_foreground;
+    palette.background = settings.default_background;
+    palette.selection_background = settings.selection_background;
     let foreground = adjust_contrast(
         palette.foreground,
         palette.background,
@@ -312,6 +319,9 @@ mod tests {
     fn settings() -> TerminalRenderSettings {
         TerminalRenderSettings {
             color_scheme: TerminalColorScheme::Dark,
+            default_foreground: RgbColor::new(204, 204, 204),
+            default_background: RgbColor::new(30, 30, 30),
+            selection_background: RgbColor::new(38, 79, 120),
             brightness_percent: 100,
             bright_bold_text: true,
         }
@@ -353,6 +363,33 @@ mod tests {
         assert_eq!(
             rendered.lines[0].runs[0].background,
             RgbColor::new(255, 135, 0)
+        );
+    }
+
+    #[test]
+    fn theme_defaults_override_only_terminal_defaults() {
+        let mut themed = settings();
+        themed.default_foreground = RgbColor::new(170, 187, 204);
+        themed.default_background = RgbColor::new(16, 32, 48);
+        themed.selection_background = RgbColor::new(48, 64, 80);
+        let default_rendered = render_terminal(snapshot(TerminalStyle::default()), themed);
+        let indexed_rendered = render_terminal(
+            snapshot(TerminalStyle {
+                foreground: TerminalColor::Indexed(1),
+                ..TerminalStyle::default()
+            }),
+            themed,
+        );
+
+        assert_eq!(default_rendered.foreground, RgbColor::new(170, 187, 204));
+        assert_eq!(default_rendered.background, RgbColor::new(16, 32, 48));
+        assert_eq!(
+            default_rendered.selection_background,
+            RgbColor::new(48, 64, 80)
+        );
+        assert_eq!(
+            indexed_rendered.lines[0].runs[0].foreground,
+            RgbColor::new(205, 49, 49)
         );
     }
 

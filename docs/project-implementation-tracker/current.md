@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260730-tab-drag-visual-feedback
-- 目标：让拖动中的工作区 Tab 跟随鼠标，并持续显示源槽与目标槽。
-- 交付物：Slint 拖拽视觉状态、双语架构说明和回归验证。
+- 目标 ID：20260730-configurable-themes
+- 目标：将应用主题做成可持久化设置，支持预设、完整自定义调色板、固定明暗模式和实时跟随系统。
+- 交付物：版本化主题设置与迁移、Rust-Slint 映射、Appearance 设置页、双语架构说明和回归验证。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/components/workspace-titlebar.slint`、`ui/theme.slint`、`docs/architecture*.md`、`docs/project-implementation-tracker/`。
-- 不在本轮范围内：Tab 排序域状态、配置 schema、终端模型、PTY/SSH worker、macOS 原生窗口设置、SSH 信任/认证和凭据。
+- 当前范围：`src/config.rs`、`src/app/{settings_bridge,terminal_render,view}.rs`、`ui/{app,settings,theme}.slint`、`ui/settings/appearance.slint`、`docs/architecture*.md`、`docs/project-implementation-tracker/`。
+- 不在本轮范围内：SSH 信任/认证、凭据内容、Session Profile schema、Tab 生命周期、PTY/local shell/SSH worker 传输、窗口拖拽与静态几何 token。
 
 ## 当前状态
 
@@ -23,28 +23,33 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | 跟随鼠标的 Tab 副本、源槽与目标槽 | Slint/Cargo 联合编译 | 视觉状态只在 WorkspaceTitlebar 内存中存在 |
-| P2 | completed | 双语文档、tracker 和完整回归 | locked/offline Cargo、tracker、Markdown 链接与差异检查 | 不改变 Tab 排序或运行时 Tab 生命周期 |
+| P1 | completed | 主题领域契约、系统配色能力和迁移策略 | 现有配置/UI/锁定 Slint 后端审查 | 旧设置固定迁移至现有深色预设；不新增依赖 |
+| P2 | completed | 版本化主题设置、调色板解析、终端/UI 映射 | 20 个配置单测、4 个终端渲染单测、Slint/Cargo 联合编译 | 配置只保存领域色值，不引用 Slint 类型 |
+| P3 | completed | Appearance 主题模式、预设和自定义颜色编辑 | Slint/Cargo 联合编译 | Settings 草稿在 Save 前不持久化，Appearance 页面可独立滚动 |
+| P4 | completed | 双语文档、tracker 和完整离线回归 | locked/offline Cargo、tracker、Markdown 与 diff 检查 | 已记录可用与不可用的本机验证 |
 
 ## 已完成
 
-- 拖动中的 Tab 显示为跟随鼠标的不可交互副本，源位置保持半透明占位，目标位置保留强调边框。
-- 工作区 Tab 的内存排序、UUID、稳定实例编号和 worker 生命周期均未调整。
-- 标准原生标题栏、Tab 手势隔离和最右侧已保存 SSH 连接选择器保持原有行为。
+- 已确定预设包含 AxSSH 深色（现有默认）、浅色和 Solarized 深色；自定义主题覆盖完整语义 UI 调色板及终端默认色。
+- 已实现 schema 版本 9：旧终端配色迁移到对应固定主题；主题模式与 13 个规范化颜色字段持久化在私有 `sessions.json`，不含密码或其它 secret。
+- 已实现跟随系统：Slint `Palette.color-scheme` 实时解析深浅色，未知系统配色安全回退到深色；刷新只重新渲染当前终端快照，不触发 PTY resize 或 worker 命令。
+- 已实现 Appearance 的 Follow system/Dark/Light/Solarized Dark/Custom 选择器、13 个自定义色输入和滚动布局；主题草稿仍只在 Save 时跨越 UI 边界。
+- 已核对 `third_package/axshell` 的主题产品模型，仅作为行为参考，未导入或复制其源码、资源和依赖。
 
 ## 验证
 
-- 已完成：根指令、AxSSH Rust/Slint skill、项目地图、双语架构与 Slint 手势路径审查；`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 47 passed、1 ignored；应用 21 passed）、tracker validator、Markdown 相对链接与 `git diff --check`。
-- 未完成：`cargo fmt --all -- --check` 与 `cargo clippy --all-targets --locked --offline -- -D warnings` 因本机未安装对应 Cargo 组件无法执行；实际 macOS 拖拽视觉与手势仍需用户验收。
+- 已完成：根指令、AxSSH Rust/Slint skill、项目地图、双语架构、项目环境 quick scan，锁定 Slint 1.17.1/winit 的 `Palette.color-scheme` 系统配色更新路径审查，`cargo check --locked --offline`，完整 `cargo test --locked --offline`（库 52 passed、1 ignored；应用 22 passed），直接 `rustfmt --edition 2024 --check`，tracker validator、Markdown 相对链接和 `git diff --check`。
+- 未完成：`cargo fmt --all -- --check` 与 `cargo clippy --all-targets --locked --offline -- -D warnings` 因本机没有对应 Cargo 组件无法执行；目标平台的主题视觉验收仍需用户完成。
 
 ## 风险与阻塞
 
-- 浮动副本限制在可滚动 Tab 视口内，避免覆盖最右侧的保存 SSH 连接 `+`；实际 macOS 指针跟随与窄窗口下的截断位置仍需用户验收。
+- Slint/winit 后端若无法报告系统配色，将按深色回退；实际 macOS/Windows/Linux 系统切换反馈需用户在目标平台验收。
+- 主题切换必须重新渲染活动终端，保持活动终端 Tab 与其背景视觉连接，不得改变 ANSI 16/256 色、PTY resize 或 worker 队列。
 
 ## 下一步
 
-- 用户在 macOS 上确认 Tab 副本随指针移动、目标槽正确提示，且拖拽不移动窗口。
+- 用户在目标平台验收固定主题、自定义主题、运行中系统主题切换和窄窗口 Appearance 滚动；若有视觉反馈，仅调整 Slint 呈现层。
 
 ## 最后更新时间
 
-- 2026-07-30 16:11 +0800
+- 2026-07-30 18:50 +0800

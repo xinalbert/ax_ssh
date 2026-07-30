@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use ax_ssh::config::{
     AppSettings, AuthMethod, ConfigStore, SessionProfile, SessionStore, ShortcutSettings,
-    TerminalColorScheme, normalize_group_name,
+    TerminalColorScheme, ThemePalette, ThemeSettings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};

@@ -41,9 +41,10 @@ const DEFAULT_TERMINAL_ROWS: u16 = 36;
 const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
-const CURRENT_SCHEMA_VERSION: u32 = 8;
+const CURRENT_SCHEMA_VERSION: u32 = 9;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;
+const THEME_SETTINGS_SCHEMA_VERSION: u32 = 9;
 const MAX_FONT_FAMILY_CHARS: usize = 128;
 const MAX_SHORTCUT_CHARS: usize = 64;
 const MAX_KNOWN_SHELLS: usize = 32;
@@ -108,6 +109,216 @@ impl TerminalColorScheme {
     }
 }
 
+/// User-selectable application theme source.
+///
+/// The UI resolves `System` from Slint's current system color scheme; this
+/// domain value deliberately has no dependency on a windowing toolkit.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemeMode {
+    System,
+    #[default]
+    Dark,
+    Light,
+    SolarizedDark,
+    Custom,
+}
+
+impl ThemeMode {
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "system" | "follow-system" | "auto" => Self::System,
+            "light" => Self::Light,
+            "solarized-dark" | "solarized dark" => Self::SolarizedDark,
+            "custom" => Self::Custom,
+            _ => Self::Dark,
+        }
+    }
+
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::SolarizedDark => "solarized-dark",
+            Self::Custom => "custom",
+        }
+    }
+
+    pub(crate) const fn terminal_color_scheme(self) -> TerminalColorScheme {
+        match self {
+            Self::Light => TerminalColorScheme::Light,
+            Self::SolarizedDark => TerminalColorScheme::SolarizedDark,
+            Self::System | Self::Dark | Self::Custom => TerminalColorScheme::Dark,
+        }
+    }
+
+    const fn from_terminal_color_scheme(scheme: TerminalColorScheme) -> Self {
+        match scheme {
+            TerminalColorScheme::Dark => Self::Dark,
+            TerminalColorScheme::Light => Self::Light,
+            TerminalColorScheme::SolarizedDark => Self::SolarizedDark,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemeMode {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_setting(&value))
+    }
+}
+
+/// Complete semantic color palette for a user-defined application theme.
+///
+/// Values are canonical CSS-like hex strings so persistence remains independent
+/// from Slint's `Color` type. The overlay accepts alpha (`#RRGGBBAA`); all other
+/// roles also accept it to keep a future visual token expansion compatible.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ThemePalette {
+    #[serde(default = "default_theme_background")]
+    pub background: String,
+    #[serde(default = "default_theme_panel")]
+    pub panel: String,
+    #[serde(default = "default_theme_panel_alt")]
+    pub panel_alt: String,
+    #[serde(default = "default_theme_border")]
+    pub border: String,
+    #[serde(default = "default_theme_text")]
+    pub text: String,
+    #[serde(default = "default_theme_muted")]
+    pub muted: String,
+    #[serde(default = "default_theme_accent")]
+    pub accent: String,
+    #[serde(default = "default_theme_success")]
+    pub success: String,
+    #[serde(default = "default_theme_danger")]
+    pub danger: String,
+    #[serde(default = "default_theme_overlay")]
+    pub overlay: String,
+    #[serde(default = "default_theme_terminal_foreground")]
+    pub terminal_foreground: String,
+    #[serde(default = "default_theme_terminal_background")]
+    pub terminal_background: String,
+    #[serde(default = "default_theme_terminal_selection")]
+    pub terminal_selection: String,
+}
+
+impl ThemePalette {
+    pub fn normalized(
+        background: &str,
+        panel: &str,
+        panel_alt: &str,
+        border: &str,
+        text: &str,
+        muted: &str,
+        accent: &str,
+        success: &str,
+        danger: &str,
+        overlay: &str,
+        terminal_foreground: &str,
+        terminal_background: &str,
+        terminal_selection: &str,
+    ) -> Self {
+        let defaults = Self::default();
+        Self {
+            background: normalize_theme_color(background, &defaults.background),
+            panel: normalize_theme_color(panel, &defaults.panel),
+            panel_alt: normalize_theme_color(panel_alt, &defaults.panel_alt),
+            border: normalize_theme_color(border, &defaults.border),
+            text: normalize_theme_color(text, &defaults.text),
+            muted: normalize_theme_color(muted, &defaults.muted),
+            accent: normalize_theme_color(accent, &defaults.accent),
+            success: normalize_theme_color(success, &defaults.success),
+            danger: normalize_theme_color(danger, &defaults.danger),
+            overlay: normalize_theme_color(overlay, &defaults.overlay),
+            terminal_foreground: normalize_theme_color(
+                terminal_foreground,
+                &defaults.terminal_foreground,
+            ),
+            terminal_background: normalize_theme_color(
+                terminal_background,
+                &defaults.terminal_background,
+            ),
+            terminal_selection: normalize_theme_color(
+                terminal_selection,
+                &defaults.terminal_selection,
+            ),
+        }
+    }
+
+    fn normalize_in_place(&mut self) {
+        *self = Self::normalized(
+            &self.background,
+            &self.panel,
+            &self.panel_alt,
+            &self.border,
+            &self.text,
+            &self.muted,
+            &self.accent,
+            &self.success,
+            &self.danger,
+            &self.overlay,
+            &self.terminal_foreground,
+            &self.terminal_background,
+            &self.terminal_selection,
+        );
+    }
+}
+
+impl Default for ThemePalette {
+    fn default() -> Self {
+        Self {
+            background: default_theme_background(),
+            panel: default_theme_panel(),
+            panel_alt: default_theme_panel_alt(),
+            border: default_theme_border(),
+            text: default_theme_text(),
+            muted: default_theme_muted(),
+            accent: default_theme_accent(),
+            success: default_theme_success(),
+            danger: default_theme_danger(),
+            overlay: default_theme_overlay(),
+            terminal_foreground: default_theme_terminal_foreground(),
+            terminal_background: default_theme_terminal_background(),
+            terminal_selection: default_theme_terminal_selection(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ThemeSettings {
+    #[serde(default)]
+    pub mode: ThemeMode,
+    #[serde(default)]
+    pub custom: ThemePalette,
+}
+
+impl ThemeSettings {
+    pub fn normalized(mode: &str, custom: ThemePalette) -> Self {
+        let mut custom = custom;
+        custom.normalize_in_place();
+        Self {
+            mode: ThemeMode::from_setting(mode),
+            custom,
+        }
+    }
+}
+
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            // Preserve the historical AxSSH appearance for both upgrades and
+            // clean installs. Following the system remains an explicit choice.
+            mode: ThemeMode::Dark,
+            custom: ThemePalette::default(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppearanceSettings {
     #[serde(default = "default_terminal_font_family")]
@@ -118,6 +329,8 @@ pub struct AppearanceSettings {
     pub terminal_line_height_percent: u16,
     #[serde(default)]
     pub terminal_color_scheme: TerminalColorScheme,
+    #[serde(default)]
+    pub theme: ThemeSettings,
     #[serde(default = "default_terminal_brightness")]
     pub terminal_brightness_percent: u16,
     #[serde(default = "default_true")]
@@ -135,6 +348,32 @@ impl AppearanceSettings {
         brightness_percent: i32,
         bright_bold_text: bool,
         right_click_copy_or_paste: bool,
+    ) -> Self {
+        let terminal_color_scheme = TerminalColorScheme::from_setting(color_scheme);
+        Self::normalized_with_theme(
+            font_family,
+            terminal_font_size,
+            terminal_line_height_percent,
+            terminal_color_scheme,
+            brightness_percent,
+            bright_bold_text,
+            right_click_copy_or_paste,
+            ThemeSettings {
+                mode: ThemeMode::from_terminal_color_scheme(terminal_color_scheme),
+                custom: ThemePalette::default(),
+            },
+        )
+    }
+
+    fn normalized_with_theme(
+        font_family: &str,
+        terminal_font_size: i32,
+        terminal_line_height_percent: i32,
+        terminal_color_scheme: TerminalColorScheme,
+        brightness_percent: i32,
+        bright_bold_text: bool,
+        right_click_copy_or_paste: bool,
+        theme: ThemeSettings,
     ) -> Self {
         let font_family = font_family.trim();
         let terminal_font_family = if font_family.is_empty()
@@ -155,7 +394,8 @@ impl AppearanceSettings {
                 i32::from(MIN_TERMINAL_LINE_HEIGHT),
                 i32::from(MAX_TERMINAL_LINE_HEIGHT),
             ) as u16,
-            terminal_color_scheme: TerminalColorScheme::from_setting(color_scheme),
+            terminal_color_scheme,
+            theme,
             terminal_brightness_percent: brightness_percent.clamp(
                 i32::from(MIN_TERMINAL_BRIGHTNESS),
                 i32::from(MAX_TERMINAL_BRIGHTNESS),
@@ -163,6 +403,21 @@ impl AppearanceSettings {
             bright_bold_text,
             right_click_copy_or_paste,
         }
+    }
+
+    fn normalize_in_place(&mut self) {
+        let theme =
+            ThemeSettings::normalized(self.theme.mode.as_setting(), self.theme.custom.clone());
+        *self = Self::normalized_with_theme(
+            &self.terminal_font_family,
+            i32::from(self.terminal_font_size),
+            i32::from(self.terminal_line_height_percent),
+            theme.mode.terminal_color_scheme(),
+            i32::from(self.terminal_brightness_percent),
+            self.bright_bold_text,
+            self.right_click_copy_or_paste,
+            theme,
+        );
     }
 }
 
@@ -173,6 +428,7 @@ impl Default for AppearanceSettings {
             terminal_font_size: default_terminal_font_size(),
             terminal_line_height_percent: default_terminal_line_height(),
             terminal_color_scheme: TerminalColorScheme::default(),
+            theme: ThemeSettings::default(),
             terminal_brightness_percent: default_terminal_brightness(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
@@ -484,16 +740,14 @@ impl AppSettings {
         }
     }
 
+    pub fn set_theme(&mut self, theme: ThemeSettings) {
+        let theme = ThemeSettings::normalized(theme.mode.as_setting(), theme.custom);
+        self.appearance.terminal_color_scheme = theme.mode.terminal_color_scheme();
+        self.appearance.theme = theme;
+    }
+
     fn normalize_in_place(&mut self) {
-        self.appearance = AppearanceSettings::normalized(
-            &self.appearance.terminal_font_family,
-            i32::from(self.appearance.terminal_font_size),
-            i32::from(self.appearance.terminal_line_height_percent),
-            self.appearance.terminal_color_scheme.as_setting(),
-            i32::from(self.appearance.terminal_brightness_percent),
-            self.appearance.bright_bold_text,
-            self.appearance.right_click_copy_or_paste,
-        );
+        self.appearance.normalize_in_place();
         self.terminal.normalize_in_place();
         self.workspace.normalize_in_place();
         self.shortcuts = ShortcutSettings::normalized(
@@ -519,6 +773,83 @@ const fn default_terminal_line_height() -> u16 {
 
 const fn default_terminal_brightness() -> u16 {
     DEFAULT_TERMINAL_BRIGHTNESS
+}
+
+fn default_theme_background() -> String {
+    "#171918".to_owned()
+}
+
+fn default_theme_panel() -> String {
+    "#202321".to_owned()
+}
+
+fn default_theme_panel_alt() -> String {
+    "#292D2A".to_owned()
+}
+
+fn default_theme_border() -> String {
+    "#3B423E".to_owned()
+}
+
+fn default_theme_text() -> String {
+    "#EDF1EE".to_owned()
+}
+
+fn default_theme_muted() -> String {
+    "#A8B2AC".to_owned()
+}
+
+fn default_theme_accent() -> String {
+    "#52C7A5".to_owned()
+}
+
+fn default_theme_success() -> String {
+    "#63D6A9".to_owned()
+}
+
+fn default_theme_danger() -> String {
+    "#FF8E88".to_owned()
+}
+
+fn default_theme_overlay() -> String {
+    "#00000099".to_owned()
+}
+
+fn default_theme_terminal_foreground() -> String {
+    "#CCCCCC".to_owned()
+}
+
+fn default_theme_terminal_background() -> String {
+    "#1E1E1E".to_owned()
+}
+
+fn default_theme_terminal_selection() -> String {
+    "#264F78".to_owned()
+}
+
+fn normalize_theme_color(value: &str, fallback: &str) -> String {
+    let value = value.trim().trim_start_matches('#');
+    let valid_length = matches!(value.len(), 3 | 4 | 6 | 8);
+    if !valid_length || !value.bytes().all(|digit| digit.is_ascii_hexdigit()) {
+        return fallback.to_owned();
+    }
+
+    let mut normalized = String::with_capacity(9);
+    normalized.push('#');
+    if value.len() <= 4 {
+        for digit in value.bytes() {
+            let digit = (digit as char).to_ascii_uppercase();
+            normalized.push(digit);
+            normalized.push(digit);
+        }
+    } else {
+        normalized.extend(
+            value
+                .bytes()
+                .map(|digit| (digit as char).to_ascii_uppercase()),
+        );
+    }
+    normalized
 }
 
 const fn default_true() -> bool {
@@ -684,7 +1015,7 @@ impl Default for SessionStore {
 
 #[derive(Deserialize)]
 struct SessionStoreWire {
-    #[serde(default = "current_schema_version")]
+    #[serde(default)]
     version: u32,
     #[serde(default)]
     sessions: Vec<SessionProfile>,
@@ -720,6 +1051,14 @@ impl<'de> Deserialize<'de> for SessionStore {
         {
             settings.workspace.sidebar_width = DEFAULT_SIDEBAR_WIDTH;
         }
+        if wire.version < THEME_SETTINGS_SCHEMA_VERSION {
+            settings.appearance.theme = ThemeSettings {
+                mode: ThemeMode::from_terminal_color_scheme(
+                    settings.appearance.terminal_color_scheme,
+                ),
+                custom: ThemePalette::default(),
+            };
+        }
         settings.normalize_in_place();
         Ok(Self {
             version: wire.version.max(CURRENT_SCHEMA_VERSION),
@@ -743,10 +1082,6 @@ impl SessionStore {
         self.sessions.retain(|item| item.id != id);
         before != self.sessions.len()
     }
-}
-
-const fn current_schema_version() -> u32 {
-    CURRENT_SCHEMA_VERSION
 }
 
 #[derive(Clone, Debug)]
@@ -955,6 +1290,10 @@ mod tests {
                 terminal_font_size: 18,
                 terminal_line_height_percent: 135,
                 terminal_color_scheme: TerminalColorScheme::Light,
+                theme: ThemeSettings {
+                    mode: ThemeMode::Light,
+                    custom: ThemePalette::default(),
+                },
                 terminal_brightness_percent: 115,
                 bright_bold_text: false,
                 right_click_copy_or_paste: true,
@@ -967,6 +1306,7 @@ mod tests {
                 terminal_font_size: MAX_TERMINAL_FONT_SIZE,
                 terminal_line_height_percent: MAX_TERMINAL_LINE_HEIGHT,
                 terminal_color_scheme: TerminalColorScheme::Dark,
+                theme: ThemeSettings::default(),
                 terminal_brightness_percent: MAX_TERMINAL_BRIGHTNESS,
                 bright_bold_text: true,
                 right_click_copy_or_paste: false,
@@ -1012,6 +1352,115 @@ mod tests {
             serialized["settings"]["appearance"]["terminal_line_height_percent"],
             DEFAULT_TERMINAL_LINE_HEIGHT
         );
+    }
+
+    #[test]
+    fn theme_mode_normalizes_aliases_and_unknown_values() {
+        assert_eq!(ThemeMode::from_setting("follow-system"), ThemeMode::System);
+        assert_eq!(ThemeMode::from_setting("AUTO"), ThemeMode::System);
+        assert_eq!(
+            ThemeMode::from_setting("Solarized Dark"),
+            ThemeMode::SolarizedDark
+        );
+        assert_eq!(ThemeMode::from_setting("unexpected"), ThemeMode::Dark);
+    }
+
+    #[test]
+    fn persisted_theme_mode_accepts_system_aliases() {
+        for alias in ["system", "follow-system", "auto"] {
+            let json = format!(
+                r#"{{"version":9,"settings":{{"appearance":{{"theme":{{"mode":"{alias}"}}}}}}}}"#
+            );
+            let store: SessionStore =
+                serde_json::from_str(&json).expect("system mode alias should deserialize");
+
+            assert_eq!(store.settings.appearance.theme.mode, ThemeMode::System);
+        }
+    }
+
+    #[test]
+    fn custom_palette_normalizes_each_hex_value_independently() {
+        let palette = ThemePalette::normalized(
+            " #abc ",
+            "#abcd",
+            "#1a2b3c",
+            "not-a-color",
+            "#12345678",
+            "#0A0B0C",
+            "#112233",
+            "#445566",
+            "#778899",
+            "#AABBCCDD",
+            "#010203",
+            "#040506",
+            "#070809",
+        );
+
+        assert_eq!(palette.background, "#AABBCC");
+        assert_eq!(palette.panel, "#AABBCCDD");
+        assert_eq!(palette.panel_alt, "#1A2B3C");
+        assert_eq!(palette.border, default_theme_border());
+        assert_eq!(palette.text, "#12345678");
+        assert_eq!(palette.terminal_selection, "#070809");
+    }
+
+    #[test]
+    fn version_eight_terminal_palette_migrates_to_theme_mode() {
+        for (legacy_scheme, expected_mode) in [
+            ("dark", ThemeMode::Dark),
+            ("light", ThemeMode::Light),
+            ("solarized-dark", ThemeMode::SolarizedDark),
+        ] {
+            let json = format!(
+                r#"{{"version":8,"settings":{{"appearance":{{"terminal_color_scheme":"{legacy_scheme}"}}}}}}"#
+            );
+            let store: SessionStore =
+                serde_json::from_str(&json).expect("version eight settings should migrate");
+
+            assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+            assert_eq!(store.settings.appearance.theme.mode, expected_mode);
+            assert_eq!(
+                store.settings.appearance.terminal_color_scheme.as_setting(),
+                legacy_scheme
+            );
+        }
+    }
+
+    #[test]
+    fn version_nine_custom_theme_round_trips_without_secrets() {
+        let mut settings = AppSettings::default();
+        settings.set_theme(ThemeSettings::normalized(
+            "custom",
+            ThemePalette::normalized(
+                "#102030",
+                "#203040",
+                "#304050",
+                "#405060",
+                "#506070",
+                "#607080",
+                "#708090",
+                "#8090A0",
+                "#90A0B0",
+                "#00000080",
+                "#A0B0C0",
+                "#0A0B0C",
+                "#102938",
+            ),
+        ));
+        let store = SessionStore {
+            version: CURRENT_SCHEMA_VERSION,
+            sessions: Vec::new(),
+            settings,
+        };
+
+        let encoded = serde_json::to_string(&store).expect("custom theme should serialize");
+        let decoded: SessionStore =
+            serde_json::from_str(&encoded).expect("custom theme should deserialize");
+
+        assert_eq!(decoded, store);
+        assert!(encoded.contains("\"theme\""));
+        assert!(!encoded.contains("password"));
+        assert!(!encoded.contains("passphrase"));
     }
 
     #[test]

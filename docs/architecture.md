@@ -43,8 +43,8 @@ Process startup (src/main.rs)
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | Private application-bridge feature wiring, worker-event consumption, and Slint model/snapshot mapping | Generated type declaration, transport implementation, or persistence schema |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
-| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
-| `src/config.rs` | `SessionProfile`, versioned `AppSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
+| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
+| `src/config.rs` | `SessionProfile`, versioned `AppSettings` and `ThemeSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
@@ -235,26 +235,31 @@ and floor-based PTY dimensions; the terminal batches the resulting resize only
 after those metrics and its layout have settled.
 
 `SessionStore` writes a versioned `settings` object to the existing private
-`sessions.json`. It contains normalized font, size, line height, color scheme,
+`sessions.json`. It contains normalized font, size, line height, terminal
 brightness, bold-color and right-click behavior, scrollback, default PTY
 dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
-widths, session mask character, and shortcuts. Shell discovery validates the
-saved cache and appends only newly available names after load. Older settings
-migrate during deserialization; schema version 7 replaces only the previous
-260px sidebar default with the compact 220px default and preserves custom
-widths. Schema version 8 adds the mask setting with `*` as its default.
-Passwords,
-passphrases, private-key contents, terminal output, tab runtime IDs, child
-processes, and workers are never serialized.
+widths, session mask character, shortcuts, and `ThemeSettings`. The theme has
+fixed Dark, Light, and Solarized Dark presets, an explicit Custom mode with
+canonical `#RRGGBB` or `#RRGGBBAA` semantic UI/terminal-default colors, and a
+Follow system mode. Schema version 9 migrates the former terminal color scheme
+into its matching fixed theme so an upgrade preserves the prior appearance.
+Shell discovery validates the saved cache and appends only newly available names
+after load. Earlier migrations retain the schema version 7 compact 220px
+sidebar default and the schema version 8 `*` mask default without overwriting
+custom values. Passwords, passphrases, private-key contents, terminal output,
+tab runtime IDs, child processes, and workers are never serialized.
 
 The expanded session sidebar participates in layout only when the session model
 is not empty and the user has not collapsed it. Otherwise the narrow rail keeps
 Local Shell and new-session actions available. Settings and About remain in the
 platform menu and shortcuts instead of the rail.
 
-Static interface styling is configured only by semantic tokens in
-`ui/theme.slint`: palette roles, type scale, spacing, radii, standard workspace
-geometry, Settings control dimensions, editor widths, and overlay sizes.
+`ui/theme.slint` resolves semantic visual tokens from persisted theme values:
+fixed presets stay declarative, Custom receives validated colors from the
+application bridge, and Follow system reacts to Slint's runtime platform color
+scheme with a dark fallback. It also owns type scale, spacing, radii, standard
+workspace geometry, Settings control dimensions, editor widths, and overlay
+sizes.
 `ui/components/settings-controls.slint` consumes those tokens to provide the
 shared Settings glyph, navigation, page, compact right-aligned field, row,
 toggle, shortcut, and action header primitives. Setting rows keep a stable
@@ -262,9 +267,13 @@ title and metadata column while standard controls use one theme-configured heigh
 `ui/settings.slint` owns the shared draft and one Save transaction, while the
 category layouts live in `ui/settings/*.slint` with only their relevant draft
 properties and callbacks.
-Runtime terminal geometry and user choices remain in versioned
-`AppSettings`; the Theme global is visual configuration, not mutable domain
-state.
+`src/app/view.rs` maps a saved theme into the Slint global and re-renders only
+the active terminal snapshot when its resolved colors change. Terminal rendering
+uses the resolved default foreground, background, and selection colors while
+retaining the existing ANSI 16/256 palette semantics. A theme refresh never
+resizes a PTY, sends worker commands, or changes SSH/local-shell lifetimes.
+Runtime terminal geometry and user choices remain in versioned `AppSettings`;
+the Theme global remains a visual resolver rather than a persistence owner.
 
 ## Staged scope
 

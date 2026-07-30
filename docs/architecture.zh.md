@@ -41,8 +41,8 @@ Slint UI（.slint）
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏设置和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | 私有 application bridge 功能接线、worker 事件消费和 Slint model/snapshot 映射 | 生成类型声明、传输实现或持久化 schema |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
-| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
-| `src/config.rs` | `SessionProfile`、版本化 `AppSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
+| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
+| `src/config.rs` | `SessionProfile`、版本化 `AppSettings`/`ThemeSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
 | `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
@@ -172,25 +172,30 @@ UI model。
 渲染、选区、光标和向下取整的 PTY 尺寸；终端只会在这些度量和布局稳定后合并发送 resize。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，包括经过约束
-的字体、字号、行高、配色、亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
-本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度、会话遮蔽字符和快捷键。启动时会
-验证已有 shell 缓存并只追加新发现项。旧设置会在反序列化时迁移；schema 版本 7 只把
-旧默认 260px 侧栏替换为紧凑的 220px，自定义宽度保持不变；schema 版本 8 新增默认
-为 `*` 的遮蔽设置。密码、passphrase、私钥内容、
-终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
+的字体、字号、行高、终端亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
+本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度、会话遮蔽字符、快捷键及
+`ThemeSettings`。主题提供固定的深色、浅色和 Solarized 深色预设，也提供保存完整语义
+UI/终端默认色（规范化为 `#RRGGBB` 或 `#RRGGBBAA`）的自定义模式，以及跟随系统模式。
+schema 版本 9 会把旧终端配色迁移到对应的固定主题，以保持升级前的外观。启动时会验证
+已有 shell 缓存并只追加新发现项；更早的迁移继续只将 schema 版本 7 的旧默认 260px
+侧栏改为紧凑 220px，并增加 schema 版本 8 默认 `*` 的遮蔽设置，不覆盖用户自定义值。
+密码、passphrase、私钥内容、终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
 只有会话模型非空且用户没有手动收起时，展开会话侧栏才参与布局；否则窄栏仍保留
 Local Shell 和新建会话入口。Settings/About 只保留在平台菜单和快捷键中，不再进入
 左侧栏。
 
-静态界面样式只由 `ui/theme.slint` 的语义 token 配置，包括调色板角色、字号层级、
-间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
+`ui/theme.slint` 根据已保存主题解析语义视觉 token：固定预设保持声明式解析，自定义色
+由应用 bridge 传入，跟随系统模式响应 Slint 的运行时平台配色并在未知时回退深色；它还
+统一字号层级、间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
 列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 持有统一草稿和一次 Save
 事务，各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的草稿属性和 callback。
-运行时终端几何与用户选项仍进入版本化
-`AppSettings`；Theme global 只负责视觉配置，不是可变领域状态。
+`src/app/view.rs` 将保存的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端
+快照。终端渲染使用解析后的默认前景、背景和选区色，仍保留既有 ANSI 16/256 色语义。
+主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。运行时终端
+几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 
 ## 分阶段范围
 

@@ -1,116 +1,276 @@
-import { ComboBox, LineEdit, Slider, SpinBox } from "std-widgets.slint";
+import { ComboBox, LineEdit, ScrollView, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
+import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
 
-export component AppearanceSettingsPage inherits SettingsPage {
+export component AppearanceSettingsPage inherits Rectangle {
     in-out property <string> draft-font-family;
     in-out property <int> draft-font-size;
     in-out property <int> draft-line-height-percent;
-    in-out property <string> draft-color-scheme;
     in-out property <int> draft-brightness-percent;
     in-out property <bool> draft-bright-bold-text;
-    SettingsSectionHeading { label: "TYPOGRAPHY"; }
-    SettingsRow {
-        label: "Font family";
-        description: "Terminal font family";
-        SettingsField {
-            settings-font-edit := LineEdit {
-                height: Theme.settings-control-height;
-                text <=> root.draft-font-family;
-                accessible-label: "Terminal font family";
-            }
-        }
-    }
-    SettingsRow {
-        label: "Font size";
-        description: "9-32 px";
-        SettingsField {
-            settings-font-size := SpinBox {
-                width: Theme.settings-number-width;
-                height: Theme.settings-control-height;
-                minimum: 9;
-                maximum: 32;
-                value <=> root.draft-font-size;
-                accessible-label: "Terminal font size";
-            }
-            Text {
-                width: Theme.settings-unit-width;
-                text: "px";
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-    }
-    SettingsRow {
-        label: "Line height";
-        description: "100-200 percent";
-        show-divider: false;
-        SettingsField {
-            SpinBox {
-                width: Theme.settings-number-width;
-                height: Theme.settings-control-height;
-                minimum: 100;
-                maximum: 200;
-                value <=> root.draft-line-height-percent;
-                accessible-label: "Terminal line height percentage";
-            }
-            Text {
-                width: Theme.settings-unit-width;
-                text: "%";
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-    }
+    in-out property <string> draft-theme-mode;
+    in-out property <string> draft-theme-background;
+    in-out property <string> draft-theme-panel;
+    in-out property <string> draft-theme-panel-alt;
+    in-out property <string> draft-theme-border;
+    in-out property <string> draft-theme-text;
+    in-out property <string> draft-theme-muted;
+    in-out property <string> draft-theme-accent;
+    in-out property <string> draft-theme-success;
+    in-out property <string> draft-theme-danger;
+    in-out property <string> draft-theme-overlay;
+    in-out property <string> draft-theme-terminal-foreground;
+    in-out property <string> draft-theme-terminal-background;
+    in-out property <string> draft-theme-terminal-selection;
 
-    SettingsSectionHeading { label: "COLOR"; }
-    SettingsRow {
-        label: "Color scheme";
-        description: "Terminal color palette";
-        SettingsField {
-            ComboBox {
-                height: Theme.settings-control-height;
-                model: ["Dark", "Light", "Solarized Dark"];
-                current-index: root.draft-color-scheme == "light"
-                    ? 1 : (root.draft-color-scheme == "solarized-dark" ? 2 : 0);
-                accessible-label: "Terminal color scheme";
-                selected(value) => {
-                    root.draft-color-scheme = value == "Light"
-                        ? "light" : (value == "Solarized Dark" ? "solarized-dark" : "dark");
+    background: Theme.background;
+
+    appearance-scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        viewport-width: self.visible-width;
+
+        appearance-page := Rectangle {
+            width: appearance-scroll.visible-width;
+            height: max(
+                appearance-scroll.visible-height,
+                appearance-content.preferred-height + 2 * Theme.space-xl,
+            );
+            background: Theme.background;
+
+            appearance-content := VerticalLayout {
+                x: Theme.page-padding;
+                y: Theme.space-xl;
+                width: min(
+                    Theme.settings-content-width,
+                    parent.width - 2 * Theme.page-padding,
+                );
+                height: self.preferred-height;
+                spacing: 0px;
+
+                SettingsSectionHeading { label: "APPLICATION THEME"; }
+                SettingsRow {
+                    label: "Theme";
+                    description: "Follow system updates while AxSSH is running";
+                    SettingsField {
+                        ComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: ["Follow system", "Dark", "Light", "Solarized Dark", "Custom"];
+                            current-index: root.draft-theme-mode == "system" ? 0
+                                : (root.draft-theme-mode == "light" ? 2
+                                : (root.draft-theme-mode == "solarized-dark" ? 3
+                                : (root.draft-theme-mode == "custom" ? 4 : 1)));
+                            accessible-label: "Application theme";
+                            selected(value) => {
+                                root.draft-theme-mode = value == "Follow system" ? "system"
+                                    : (value == "Light" ? "light"
+                                    : (value == "Solarized Dark" ? "solarized-dark"
+                                    : (value == "Custom" ? "custom" : "dark")));
+                            }
+                        }
+                    }
+                }
+
+                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
+                    label: "CUSTOM PALETTE";
+                }
+                if root.draft-theme-mode == "custom" : Text {
+                    height: Theme.settings-section-height;
+                    text: "Enter #RRGGBB or #RRGGBBAA values. Changes apply when you save.";
+                    color: Theme.muted;
+                    font-size: Theme.font-caption;
+                    vertical-alignment: center;
+                }
+                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
+                    label: "SURFACES";
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Background";
+                    description: "Primary workspace surface";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-background; height: Theme.settings-control-height; accessible-label: "Custom background color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Panel";
+                    description: "Navigation and title surfaces";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-panel; height: Theme.settings-control-height; accessible-label: "Custom panel color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Panel alternative";
+                    description: "Hover and secondary surfaces";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-panel-alt; height: Theme.settings-control-height; accessible-label: "Custom secondary panel color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Border";
+                    description: "Dividers and control outlines";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-border; height: Theme.settings-control-height; accessible-label: "Custom border color"; }
+                    }
+                }
+
+                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
+                    label: "CONTENT";
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Text";
+                    description: "Primary readable text";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-text; height: Theme.settings-control-height; accessible-label: "Custom text color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Muted text";
+                    description: "Secondary labels and metadata";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-muted; height: Theme.settings-control-height; accessible-label: "Custom muted text color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Accent";
+                    description: "Focus, selection, and active indicators";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-accent; height: Theme.settings-control-height; accessible-label: "Custom accent color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Success";
+                    description: "Positive status indicators";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-success; height: Theme.settings-control-height; accessible-label: "Custom success color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Danger";
+                    description: "Error and destructive indicators";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-danger; height: Theme.settings-control-height; accessible-label: "Custom danger color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Overlay";
+                    description: "Dialog and transient overlay tint";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-overlay; height: Theme.settings-control-height; accessible-label: "Custom overlay color"; }
+                    }
+                }
+
+                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
+                    label: "TERMINAL DEFAULTS";
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Foreground";
+                    description: "Default terminal text color";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-terminal-foreground; height: Theme.settings-control-height; accessible-label: "Custom terminal foreground color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Background";
+                    description: "Default terminal background color";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-terminal-background; height: Theme.settings-control-height; accessible-label: "Custom terminal background color"; }
+                    }
+                }
+                if root.draft-theme-mode == "custom" : SettingsRow {
+                    label: "Selection";
+                    description: "Terminal text selection background";
+                    SettingsField {
+                        LineEdit { text <=> root.draft-theme-terminal-selection; height: Theme.settings-control-height; accessible-label: "Custom terminal selection color"; }
+                    }
+                }
+
+                SettingsSectionHeading { label: "TYPOGRAPHY"; }
+                SettingsRow {
+                    label: "Font family";
+                    description: "Terminal font family";
+                    SettingsField {
+                        LineEdit {
+                            height: Theme.settings-control-height;
+                            text <=> root.draft-font-family;
+                            accessible-label: "Terminal font family";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Font size";
+                    description: "9-32 px";
+                    SettingsField {
+                        SpinBox {
+                            width: Theme.settings-number-width;
+                            height: Theme.settings-control-height;
+                            minimum: 9;
+                            maximum: 32;
+                            value <=> root.draft-font-size;
+                            accessible-label: "Terminal font size";
+                        }
+                        Text {
+                            width: Theme.settings-unit-width;
+                            text: "px";
+                            color: Theme.muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Line height";
+                    description: "100-200 percent";
+                    SettingsField {
+                        SpinBox {
+                            width: Theme.settings-number-width;
+                            height: Theme.settings-control-height;
+                            minimum: 100;
+                            maximum: 200;
+                            value <=> root.draft-line-height-percent;
+                            accessible-label: "Terminal line height percentage";
+                        }
+                        Text {
+                            width: Theme.settings-unit-width;
+                            text: "%";
+                            color: Theme.muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                SettingsSectionHeading { label: "TERMINAL DISPLAY"; }
+                SettingsRow {
+                    label: "Brightness";
+                    description: "60-140 percent";
+                    SettingsField {
+                        Slider {
+                            width: Theme.settings-slider-width;
+                            height: Theme.settings-control-height;
+                            minimum: 60;
+                            maximum: 140;
+                            step: 5;
+                            value: root.draft-brightness-percent;
+                            accessible-label: "Terminal brightness";
+                            changed(value) => { root.draft-brightness-percent = round(value); }
+                        }
+                        Text {
+                            width: Theme.settings-value-width;
+                            text: "\{root.draft-brightness-percent}%";
+                            color: Theme.muted;
+                            font-size: Theme.font-small;
+                            horizontal-alignment: right;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                SettingsToggleRow {
+                    label: "Bright colors for bold text";
+                    description: "Use the bright ANSI palette for bold text";
+                    checked <=> root.draft-bright-bold-text;
+                    show-divider: false;
                 }
             }
         }
-    }
-    SettingsRow {
-        label: "Brightness";
-        description: "60-140 percent";
-        SettingsField {
-            Slider {
-                width: Theme.settings-slider-width;
-                height: Theme.settings-control-height;
-                minimum: 60;
-                maximum: 140;
-                step: 5;
-                value: root.draft-brightness-percent;
-                accessible-label: "Terminal brightness";
-                changed(value) => {
-                    root.draft-brightness-percent = round(value);
-                }
-            }
-            Text {
-                width: Theme.settings-value-width;
-                text: "\{root.draft-brightness-percent}%";
-                color: Theme.muted;
-                font-size: Theme.font-small;
-                horizontal-alignment: right;
-                vertical-alignment: center;
-            }
-        }
-    }
-    SettingsToggleRow {
-        label: "Bright colors for bold text";
-        description: "Use the bright ANSI palette for bold text";
-        checked <=> root.draft-bright-bold-text;
-        show-divider: false;
     }
 }

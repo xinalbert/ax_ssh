@@ -26,6 +26,14 @@ pub(super) fn start_local_shell(
 }
 
 pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
+    let ui_for_theme = ui.as_weak();
+    let state_for_theme = state.clone();
+    ui.on_refresh_terminal_appearance(move || {
+        // A theme change only changes the visual snapshot; it must not resize or
+        // otherwise disturb the PTY worker that owns the active terminal.
+        dispatch_active_snapshot(&ui_for_theme, &state_for_theme);
+    });
+
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
     ui.on_terminal_key(move |text, alt, control, meta, shift| {

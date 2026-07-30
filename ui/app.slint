@@ -1,5 +1,6 @@
 import "../assets/fonts/JetBrainsMono-Regular.ttf";
 import { Theme } from "theme.slint";
+export { Theme } from "theme.slint";
 import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
 import { SettingsPane } from "settings.slint";
 import { SessionEditorPane } from "session-editor.slint";
@@ -51,13 +52,34 @@ export component AppWindow inherits Window {
     in property <string> terminal-font-family: "JetBrains Mono";
     in property <int> terminal-font-size: 14;
     in property <int> terminal-line-height-percent: 120;
-    in property <string> terminal-color-scheme: "dark";
+    out property <string> terminal-color-scheme: Theme.terminal-color-scheme;
     in property <int> terminal-brightness-percent: 100;
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
-    in property <color> terminal-foreground: Theme.terminal-foreground;
-    in property <color> terminal-background: Theme.terminal-background;
-    in property <color> terminal-selection-background: Theme.terminal-selection;
+    in property <color> terminal-render-foreground: Theme.terminal-foreground;
+    in property <color> terminal-render-background: Theme.terminal-background;
+    in property <color> terminal-render-selection-background: Theme.terminal-selection;
+    out property <color> terminal-foreground: terminal-render-foreground;
+    out property <color> terminal-background: terminal-render-background;
+    out property <color> terminal-selection-background: terminal-render-selection-background;
+    out property <color> theme-terminal-foreground: Theme.terminal-foreground;
+    out property <color> theme-terminal-background: Theme.terminal-background;
+    out property <color> theme-terminal-selection: Theme.terminal-selection;
+    in property <int> theme-revision: 0;
+    in property <string> theme-mode: "dark";
+    in property <string> theme-background: "#171918";
+    in property <string> theme-panel: "#202321";
+    in property <string> theme-panel-alt: "#292D2A";
+    in property <string> theme-border: "#3B423E";
+    in property <string> theme-text: "#EDF1EE";
+    in property <string> theme-muted: "#A8B2AC";
+    in property <string> theme-accent: "#52C7A5";
+    in property <string> theme-success: "#63D6A9";
+    in property <string> theme-danger: "#FF8E88";
+    in property <string> theme-overlay: "#00000099";
+    in property <string> theme-terminal-foreground-value: "#CCCCCC";
+    in property <string> theme-terminal-background-value: "#1E1E1E";
+    in property <string> theme-terminal-selection-value: "#264F78";
     in property <int> scrollback-lines: 2000;
     in property <int> default-terminal-columns: 120;
     in property <int> default-terminal-rows: 36;
@@ -89,7 +111,8 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, int, int, string, int, bool, bool, string, int, int, int, int, int,
+        string, int, int, int, bool, string, string, string, string, string, string,
+        string, string, string, string, string, string, string, string, bool, string, int, int, int, int, int,
         string, string, string, string, string,
     );
     callback cancel-settings();
@@ -109,6 +132,10 @@ export component AppWindow inherits Window {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    callback refresh-terminal-appearance();
+
+    changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
+    changed theme-revision => { root.refresh-terminal-appearance(); }
 
     MenuBar {
         Menu {
@@ -306,9 +333,22 @@ export component AppWindow inherits Window {
                     terminal-font-family: root.terminal-font-family;
                     terminal-font-size: root.terminal-font-size;
                     terminal-line-height-percent: root.terminal-line-height-percent;
-                    terminal-color-scheme: root.terminal-color-scheme;
                     terminal-brightness-percent: root.terminal-brightness-percent;
                     bright-bold-text: root.bright-bold-text;
+                    theme-mode: root.theme-mode;
+                    theme-background: root.theme-background;
+                    theme-panel: root.theme-panel;
+                    theme-panel-alt: root.theme-panel-alt;
+                    theme-border: root.theme-border;
+                    theme-text: root.theme-text;
+                    theme-muted: root.theme-muted;
+                    theme-accent: root.theme-accent;
+                    theme-success: root.theme-success;
+                    theme-danger: root.theme-danger;
+                    theme-overlay: root.theme-overlay;
+                    theme-terminal-foreground: root.theme-terminal-foreground-value;
+                    theme-terminal-background: root.theme-terminal-background-value;
+                    theme-terminal-selection: root.theme-terminal-selection-value;
                     right-click-copy-or-paste: root.right-click-copy-or-paste;
                     scrollback-lines: root.scrollback-lines;
                     default-terminal-columns: root.default-terminal-columns;
@@ -327,16 +367,32 @@ export component AppWindow inherits Window {
                     default-copy-selection-shortcut: root.default-copy-selection-shortcut;
                     default-paste-shortcut: root.default-paste-shortcut;
                     status: root.status;
-                    save(font, size, line-height, color-scheme, brightness, bright-bold, right-click-copy, shell,
+                    save(font, size, line-height, brightness, bright-bold, theme-mode, theme-background,
+                         theme-panel, theme-panel-alt, theme-border, theme-text, theme-muted, theme-accent,
+                         theme-success, theme-danger, theme-overlay, theme-terminal-foreground,
+                         theme-terminal-background, theme-terminal-selection, right-click-copy, shell,
                          scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
                          toggle-sidebar-key, copy-key, paste-key) => {
                         root.save-settings(
                             font,
                             size,
                             line-height,
-                            color-scheme,
                             brightness,
                             bright-bold,
+                            theme-mode,
+                            theme-background,
+                            theme-panel,
+                            theme-panel-alt,
+                            theme-border,
+                            theme-text,
+                            theme-muted,
+                            theme-accent,
+                            theme-success,
+                            theme-danger,
+                            theme-overlay,
+                            theme-terminal-foreground,
+                            theme-terminal-background,
+                            theme-terminal-selection,
                             right-click-copy,
                             shell,
                             scrollback,

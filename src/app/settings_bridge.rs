@@ -24,9 +24,22 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
         move |font_family,
               font_size,
               line_height_percent,
-              color_scheme,
               brightness_percent,
               bright_bold_text,
+              theme_mode,
+              theme_background,
+              theme_panel,
+              theme_panel_alt,
+              theme_border,
+              theme_text,
+              theme_muted,
+              theme_accent,
+              theme_success,
+              theme_danger,
+              theme_overlay,
+              theme_terminal_foreground,
+              theme_terminal_background,
+              theme_terminal_selection,
               right_click_copy_or_paste,
               local_shell,
               scrollback_lines,
@@ -60,7 +73,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 font_family.as_str(),
                 font_size,
                 line_height_percent,
-                color_scheme.as_str(),
+                terminal_color_scheme_for_theme(theme_mode.as_str()),
                 brightness_percent,
                 bright_bold_text,
                 right_click_copy_or_paste,
@@ -77,6 +90,25 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 &shortcuts.copy_selection,
                 &shortcuts.paste,
             );
+            let mut settings = settings;
+            settings.set_theme(ThemeSettings::normalized(
+                theme_mode.as_str(),
+                ThemePalette::normalized(
+                    theme_background.as_str(),
+                    theme_panel.as_str(),
+                    theme_panel_alt.as_str(),
+                    theme_border.as_str(),
+                    theme_text.as_str(),
+                    theme_muted.as_str(),
+                    theme_accent.as_str(),
+                    theme_success.as_str(),
+                    theme_danger.as_str(),
+                    theme_overlay.as_str(),
+                    theme_terminal_foreground.as_str(),
+                    theme_terminal_background.as_str(),
+                    theme_terminal_selection.as_str(),
+                ),
+            ));
             let state = state.clone();
             let ui = ui_for_save.clone();
             set_status(&ui_for_save, "Saving workspace settings...");
@@ -106,4 +138,12 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
             });
         },
     );
+}
+
+fn terminal_color_scheme_for_theme(mode: &str) -> &'static str {
+    match mode.trim().to_ascii_lowercase().as_str() {
+        "light" => "light",
+        "solarized-dark" | "solarized dark" => "solarized-dark",
+        _ => "dark",
+    }
 }

@@ -1,18 +1,70 @@
+import { Palette } from "std-widgets.slint";
+
 export global Theme {
-    // Semantic palette. Pages consume roles instead of literal colors.
-    out property <brush> background: #171918;
-    out property <brush> panel: #202321;
-    out property <brush> panel-alt: #292d2a;
-    out property <brush> border: #3b423e;
-    out property <brush> text: #edf1ee;
-    out property <brush> muted: #a8b2ac;
-    out property <brush> accent: #52c7a5;
-    out property <brush> success: #63d6a9;
-    out property <brush> danger: #ff8e88;
-    out property <brush> overlay: #00000099;
-    out property <color> terminal-foreground: #cccccc;
-    out property <color> terminal-background: #1e1e1e;
-    out property <color> terminal-selection: #264f78;
+    // Semantic palette. Rust stores only custom colors; these bindings keep
+    // built-in presets and the system-following mode reactive in Slint.
+    in-out property <string> mode: "dark";
+    in-out property <color> custom-background: #171918;
+    in-out property <color> custom-panel: #202321;
+    in-out property <color> custom-panel-alt: #292d2a;
+    in-out property <color> custom-border: #3b423e;
+    in-out property <color> custom-text: #edf1ee;
+    in-out property <color> custom-muted: #a8b2ac;
+    in-out property <color> custom-accent: #52c7a5;
+    in-out property <color> custom-success: #63d6a9;
+    in-out property <color> custom-danger: #ff8e88;
+    in-out property <color> custom-overlay: #00000099;
+    in-out property <color> custom-terminal-foreground: #cccccc;
+    in-out property <color> custom-terminal-background: #1e1e1e;
+    in-out property <color> custom-terminal-selection: #264f78;
+
+    // Palette tracks the platform scheme through Slint's active backend. Treat
+    // an unavailable/unknown value as dark to preserve AxSSH's historic default.
+    out property <bool> system-dark: Palette.color-scheme != ColorScheme.light;
+    private property <string> resolved-mode: mode == "system"
+        ? (system-dark ? "dark" : "light") : mode;
+
+    out property <color> background: resolved-mode == "custom"
+        ? custom-background : (resolved-mode == "light" ? #f7f8f7
+        : (resolved-mode == "solarized-dark" ? #002b36 : #171918));
+    out property <color> panel: resolved-mode == "custom"
+        ? custom-panel : (resolved-mode == "light" ? #ffffff
+        : (resolved-mode == "solarized-dark" ? #073642 : #202321));
+    out property <color> panel-alt: resolved-mode == "custom"
+        ? custom-panel-alt : (resolved-mode == "light" ? #edf1ee
+        : (resolved-mode == "solarized-dark" ? #0b4652 : #292d2a));
+    out property <color> border: resolved-mode == "custom"
+        ? custom-border : (resolved-mode == "light" ? #c9d1cc
+        : (resolved-mode == "solarized-dark" ? #245664 : #3b423e));
+    out property <color> text: resolved-mode == "custom"
+        ? custom-text : (resolved-mode == "light" ? #1c2520
+        : (resolved-mode == "solarized-dark" ? #eee8d5 : #edf1ee));
+    out property <color> muted: resolved-mode == "custom"
+        ? custom-muted : (resolved-mode == "light" ? #5e6c64
+        : (resolved-mode == "solarized-dark" ? #93a1a1 : #a8b2ac));
+    out property <color> accent: resolved-mode == "custom"
+        ? custom-accent : (resolved-mode == "light" ? #16795f
+        : (resolved-mode == "solarized-dark" ? #2aa198 : #52c7a5));
+    out property <color> success: resolved-mode == "custom"
+        ? custom-success : (resolved-mode == "light" ? #18794e
+        : (resolved-mode == "solarized-dark" ? #859900 : #63d6a9));
+    out property <color> danger: resolved-mode == "custom"
+        ? custom-danger : (resolved-mode == "light" ? #c33832
+        : (resolved-mode == "solarized-dark" ? #dc322f : #ff8e88));
+    out property <color> overlay: resolved-mode == "custom"
+        ? custom-overlay : (resolved-mode == "light" ? #10201899
+        : (resolved-mode == "solarized-dark" ? #001e26a8 : #00000099));
+    out property <color> terminal-foreground: resolved-mode == "custom"
+        ? custom-terminal-foreground : (resolved-mode == "light" ? #333333
+        : (resolved-mode == "solarized-dark" ? #839496 : #cccccc));
+    out property <color> terminal-background: resolved-mode == "custom"
+        ? custom-terminal-background : (resolved-mode == "light" ? #ffffff
+        : (resolved-mode == "solarized-dark" ? #002b36 : #1e1e1e));
+    out property <color> terminal-selection: resolved-mode == "custom"
+        ? custom-terminal-selection : (resolved-mode == "light" ? #add6ff
+        : (resolved-mode == "solarized-dark" ? #073642 : #264f78));
+    out property <string> terminal-color-scheme: resolved-mode == "light"
+        ? "light" : (resolved-mode == "solarized-dark" ? "solarized-dark" : "dark");
 
     // Type scale.
     out property <length> font-micro: 10px;
