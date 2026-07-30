@@ -2,16 +2,24 @@
 
 # AxSSH Documentation
 
-This directory keeps the durable design and development contract for AxSSH.
-Start with the architecture page before adding a feature, then use the
-development page for commands and verification boundaries.
+Use this index to find the stable user and engineering documentation for
+AxSSH. English pages use `name.md`; Chinese counterparts use `name.zh.md`.
 
-## Core documents
+## Using AxSSH
 
-- [Architecture](architecture.md): module ownership, event flow, and staged scope
-- [Development](development.md): toolchain, local run, tests, and security rules
-- [Implementation tracker](project-implementation-tracker/current.md): current goal and decisions
-- [Environment audit](project-env-audit/current.md): repository and toolchain evidence
+- [Usage guide](usage.md): run the application, create sessions, use terminal
+  controls, manage settings, and understand local data storage
 
-English pages use `name.md`; Chinese counterparts use `name.zh.md`. Keep the
-two language pages structurally aligned and use repository-relative links.
+## Contributing
+
+- [Architecture](architecture.md): ownership boundaries, event flow, SSH
+  security contract, and staged scope
+- [Development](development.md): toolchain, commands, change rules, and
+  verification boundaries
+
+## Project records
+
+- [Implementation tracker](project-implementation-tracker/current.md): active
+  work, decisions, risks, and verification status
+- [Environment audit](project-env-audit/current.md): repository, dependency,
+  and local toolchain evidence

@@ -1,4 +1,4 @@
-[中文说明](architecture.zh.md)
+[简体中文](architecture.zh.md) · [Documentation index](README.md)
 
 # AxSSH Architecture
 
@@ -57,13 +57,19 @@ Process startup (src/main.rs)
 ## Event flow
 
 1. A Slint callback produces a small value such as a saved profile ID, unique
-   tab ID, group name, terminal key/modifier tuple, draft fields, a trust
+   tab ID, terminal key/modifier tuple, draft fields, a trust
    decision, or one transient password.
 2. Opening a profile or local shell always creates a new terminal tab UUID,
    even when another tab uses the same target. SSH input, resize, output, retry,
    and close operations route by `tab_id + attempt_id`; local operations route
    by `tab_id`. An unknown SSH host starts a cancellable probe tied to that tab
-   while transport remains rejected.
+   while transport remains rejected. Workspace Tab order is in-memory
+   presentation state: a drag completion passes a tab UUID and bounded target
+   index to `AppState`, which reorders only the existing Tab list. While held,
+   Slint keeps a translucent source slot, highlights the prospective target,
+   and renders a non-interactive Tab copy at the pointer; it never creates a
+   second runtime Tab. The leading UI ordinal derives from that list index,
+   while an instance suffix such as `#1` remains part of the Tab's stable title.
 3. After explicit confirmation, the controller atomically persists the exact
    fingerprint. Password profiles load a remembered credential on a Tokio
    blocking boundary or open a password prompt. Private-key profiles load the
@@ -97,24 +103,50 @@ Process startup (src/main.rs)
    queues, cancellation flag, and timeout-bounded join for the tab lifetime.
 8. Each terminal tab also owns one bounded `TerminalModel`. `vt100` owns the
    rows, cell styles, cursor, scrollback, wide characters, and application
-   cursor mode. Output for inactive tabs stays in Rust state; only the active
-   cell snapshot crosses the Slint event loop. UI updates use
+   cursor mode. The checked-in `vendor/vt100` patch keeps its locked `0.16.2`
+   API but clears a wide character whose continuation cell would be removed
+   during a column shrink, for both normal and alternate screens. Output for
+   inactive tabs stays in Rust state; only the active cell snapshot crosses the
+   Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
    keep a window alive.
-9. On macOS, the application bridge enables full-size title-bar content but
-   disables AppKit's movable-window-background behavior. Slint reports a
-   mouse-down only from the empty zero-tab strip or dedicated trailing space,
-   and the UI-thread callback hands the current event to
-   `NSWindow::performWindowDragWithEvent`. Tabs, the activity bar, sidebar,
-   and terminal never invoke that callback.
+   The small-screen window floor is `520x360`; terminal layout, persisted
+   default sizes, and the model use the same non-zero `10x3` grid floor. This
+   permits a compact window without ever issuing an invalid PTY resize. Users
+   can collapse the existing session sidebar to reserve additional terminal
+   columns on narrow displays.
+   `TerminalPane` coalesces changes to its measured grid, configured font
+   metrics, active terminal-tab identity, and connection state until the next
+   UI turn, then requests one final PTY size. This keeps a Settings font
+   change and a later return to a connected terminal on the same current-grid
+   path as a window resize.
+   Once a local or SSH worker accepts a resize request, the application resizes
+   the active `TerminalModel` and schedules an active-terminal refresh. When
+   that UI task executes, it copies the current snapshot from `AppState` rather
+   than applying a snapshot captured by an earlier worker event. Therefore an
+   already queued Output update cannot restore an older grid while the user is
+   still dragging the window. The worker's later `Resized` acknowledgement
+   remains transport confirmation only.
+9. On macOS, AxSSH keeps the standard native title bar and disables
+   movable-window-background behavior. AppKit alone owns window movement from
+   that title bar; the Slint workspace Tab strip is regular client content
+   immediately below it. This prevents native window dragging from competing
+   with a Tab reorder gesture.
 10. Platform-menu Settings and About intents open one singleton Settings
-    workbench view at General or About respectively. The bridge omits that
-    internal singleton from the visible workspace-tab model, and Slint replaces
-    the tab strip with a drag-only title-bar region while Settings is active.
-    Unsaved drafts stay in Slint while pages change; only the header Save action
-    crosses the application boundary. About presents a static product-purpose
-    description and receives the compile-time package version as read-only UI
-    metadata. The session sidebar does not duplicate Settings or About.
+    workbench tab at General or About respectively. It remains in the visible
+    workspace-tab model alongside running SSH and local-terminal tabs, so
+    activating Settings never removes the route back to a live terminal. Its
+    Close action removes only that singleton tab; it never affects a terminal
+    worker. Unsaved drafts stay in Slint while pages change; only the header
+    Save action crosses the application boundary. About presents a static
+    product-purpose description and receives the compile-time package version
+   as read-only UI metadata. The session sidebar does not duplicate Settings
+   or About. It spans the full client height directly below the native title
+   bar, while the workspace Tab strip occupies only the column to its right.
+   Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
+   masked, read-only snapshot of every saved SSH profile; selection routes only
+   the profile UUID through the existing connection callback. The sidebar `+`
+   and File > New Session remain the distinct session-editor action.
 11. One declarative Slint `MenuBar` owns the cross-platform business-menu tree.
     The locked winit/muda backend installs it in the macOS screen menu bar and
     the Windows native window menu; Linux backends without native menu support
@@ -130,13 +162,26 @@ Process startup (src/main.rs)
     close-tab enabled state, keep Settings in Edit, and keep About in Help. File,
     View, Pane, Window, and Help reuse existing new-session, sidebar, local-shell,
     close-tab, and shortcut intents.
-12. The session navigator has one Slint-owned expanded/collapsed state. Expanded
-    mode renders a Local Shell card and bordered group/session rows; collapsed
-    mode renders the same flattened model as terminal, folder, and two-character
-    labels. Group expansion controls which child sessions exist in both forms.
-    Ungrouped profiles receive an explicit `Ungrouped` group row. Static glyph
-    and card geometry lives in `ui/theme.slint`; no navigation presentation state
-    enters `SessionStore`.
+12. The session navigator has one Slint-owned sidebar expanded/collapsed state
+    and application-owned, in-memory group expansion state. `AppState` stores
+    normalized expanded group names in a `BTreeSet`; that set is neither a new
+    dependency nor persisted configuration. The expanded view renders a Local
+    Shell card, then collapsible parent group rows and their single-line server
+    children. The expanded parent shows its name, count, and a centered drawn
+    down chevron; a collapsed parent shows the matching up chevron. The compact
+    rail alone uses a two-character badge derived from the group name rather
+    than a folder icon.
+    A separate compact panel control is the only action that expands or
+    collapses the sidebar. In the expanded sidebar it sits at the trailing
+    edge of the Local Shell row; in the collapsed rail it remains a top control.
+    Custom group rows are keyboard focusable and use
+    Enter/Space for the same group-toggle intent as a click; this never changes
+    the sidebar state. Server rows only connect. The collapsed rail renders a
+    larger Group badge and smaller, tightly stacked server badges, while Local
+    Shell keeps its dedicated entry. The application formatter masks usernames
+    and IPv4 middle octets before data enters the Slint model. Static geometry
+    is in `ui/theme.slint`; the persisted single-character mask setting is owned
+    by `WorkspaceSettings`.
 
 ## SSH security contract
 
@@ -186,16 +231,19 @@ registered by the Slint compiler. Its OFL license and author notice are kept in
 the same directory. No font is loaded from `third_package/axshell` during build
 or runtime. Slint measures the configured font and uses the measured cell width
 plus the configured line-height percentage for rendering, selection, cursor,
-and floor-based PTY dimensions.
+and floor-based PTY dimensions; the terminal batches the resulting resize only
+after those metrics and its layout have settled.
 
 `SessionStore` writes a versioned `settings` object to the existing private
 `sessions.json`. It contains normalized font, size, line height, color scheme,
 brightness, bold-color and right-click behavior, scrollback, default PTY
 dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
-widths, and shortcuts. Shell discovery validates the saved cache and appends
-only newly available names after load. Older settings migrate during
-deserialization; schema version 7 replaces only the previous 260px sidebar
-default with the compact 220px default and preserves custom widths. Passwords,
+widths, session mask character, and shortcuts. Shell discovery validates the
+saved cache and appends only newly available names after load. Older settings
+migrate during deserialization; schema version 7 replaces only the previous
+260px sidebar default with the compact 220px default and preserves custom
+widths. Schema version 8 adds the mask setting with `*` as its default.
+Passwords,
 passphrases, private-key contents, terminal output, tab runtime IDs, child
 processes, and workers are never serialized.
 
@@ -223,9 +271,9 @@ state.
 The current application validates and persists profiles, confirms per-profile
 host fingerprints, authenticates with transient passwords or local private
 keys, and owns multiple independent SSH or local tab-scoped PTY shells,
-including duplicate targets. New-session editing remains a workspace tab;
-Settings is a singleton workbench view outside the visible tab strip, and only
-short-lived trust and secret prompts remain overlays. The following remain
+including duplicate targets. New-session editing and the singleton Settings
+workbench remain visible workspace tabs; only short-lived trust and secret
+prompts remain overlays. The following remain
 separate steps:
 
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;

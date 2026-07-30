@@ -1,10 +1,10 @@
-[中文说明](development.zh.md)
+[简体中文](development.zh.md) · [Documentation index](README.md)
 
 # Development
 
 ## Requirements
 
-- Rust `1.92.0` or newer (the local verification environment uses `1.96.1`)
+- Rust `1.92.0` or newer
 - Cargo
 - A desktop backend supported by Slint's winit backend
 
@@ -15,7 +15,7 @@ or build dependency.
 ## Commands
 
 ```bash
-cargo run
+cargo run --locked
 cargo fmt --all -- --check
 cargo check --locked --offline
 cargo clippy --all-targets --locked --offline -- -D warnings
@@ -23,9 +23,9 @@ cargo test --locked --offline
 git diff --check
 ```
 
-`cargo check` / `cargo test` without `--offline` may need registry access. The
-local environment could reach crates.io when `keyring 4.1.5` was resolved on
-2026-07-29; offline commands still require a populated Cargo cache.
+Offline commands require the dependencies in `Cargo.lock` to be present in the
+local Cargo cache. Remove `--offline` when the cache must be populated from the
+registry.
 
 ## Change rules
 
@@ -47,6 +47,9 @@ local environment could reach crates.io when `keyring 4.1.5` was resolved on
   instance key. Route input, resize, output, retry, close, and late events by
   `tab_id + attempt_id`.
 - Keep terminal input, output batches, event queues, and scrollback bounded.
+- `vendor/vt100` is the minimal local patch for locked `vt100 0.16.2` wide-cell
+  shrinking. Keep its MIT files, change only the documented resize path with a
+  regression test, and remove the patch when an upstream release contains it.
 - Keep Slint key values out of `src/terminal/input.rs`; map them in `src/app.rs`
   and test normal/application-cursor byte sequences without constructing a
   window. Platform-specific printable-key fallbacks belong in the Slint bridge.
@@ -91,9 +94,8 @@ application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
 events, and Apple modifier normalization.
 The ignored `platform_credential_store_round_trips_and_deletes` test performs a
 real platform credential write/read/delete and may trigger an OS authorization
-prompt. It passed against macOS Keychain; Unix Secret Service and Windows
-Credential Manager still require platform-specific verification. Manual
+prompt. Run it deliberately on each supported credential backend. Manual
 follow-up is also required for window rendering, horizontal tab scrolling,
 native title-bar drag hit testing, keyboard/focus input, the visible
-group/host-key/authentication flows,
-concurrent login against real SSH servers, and full-screen terminal programs.
+group/host-key/authentication flows, concurrent login against real SSH servers,
+and full-screen terminal programs.

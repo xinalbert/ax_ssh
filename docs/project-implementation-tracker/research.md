@@ -39,3 +39,33 @@
 - 关键结论：`isMovableByWindowBackground=true` 明确定义为任意窗口背景均可拖动，不适合终端；AppKit `performWindowDragWithEvent` 应在命中的 mouse-down 期间接收原始事件。常规代码编辑器把窗口拖动限制在标题栏未被 Tab/按钮占用的空白，Tab 条溢出通过横向 viewport 滚动处理。
 - 对实施计划的影响：关闭全背景拖动，只在 macOS 红绿灯旁和 Tab 后方空白注册 Slint pointer-down callback；Tab、关闭按钮、侧栏和终端不注册该 callback；用现有有界 Tab 模型驱动 Flickable 横向滚动，不新增框架。
 - 未解决问题：系统辅助功能权限关闭，无法自动完成真实拖动手势；最终需结合窗口截图和目标平台手工拖动验收。
+
+## 2026-07-30 会话侧栏的 Group 折叠层级
+
+- 时间：2026-07-30 11:27 +0800
+- 检索问题：数据密集型会话侧栏应如何保留 Group，同时让服务器条目保持可扫描的单行，并避免 `v / >` 形式的折叠符？
+- 检索原因：用户要求恢复 Group 折叠、以组名而非文件夹图标区分分组，并保持服务器单行与隐私遮蔽。
+- 来源列表：Apple Human Interface Guidelines 的 Sidebars <https://developer.apple.com/design/human-interface-guidelines/sidebars>；Material Design 的 Lists <https://m3.material.io/components/lists/overview>；Fluent 2 Tree <https://fluent2.microsoft.design/components/web/react/core/tree/usage>。
+- 关键结论：Sidebar 适合提供顶层集合导航，垂直列表适合连续可扫描的条目；Tree 的父项承担层级展开/收起，叶子项不承担该动作。因此 Group 是唯一的可折叠 parent，服务器是单行连接 leaf。
+- 对实施计划的影响：以组名的前两个字符生成 Group 文字徽标，采用 `⌄ / ⌃` 上下尖角而非 `v / >`，并使 Group 具备可聚焦、Enter/Space 等价于点击的操作；运行期 `BTreeSet` 仅保存已展开的规范化 Group 名称。
+- 未解决问题：不同目标平台字体对 `⌄ / ⌃` 的视觉字重、基线和辨识度仍需用户在实际窗口中确认。
+
+## 2026-07-30 vt100 宽字符缩窄越界
+
+- 时间：2026-07-30 12:10 +0800
+- 检索问题：`vt100 0.16.2` 在缩窄终端列数、宽字符续位格被截断时是否已有可安全升级的修复？
+- 检索原因：本地 Shell 缩放后触发 `Row::clear_wide` 的越界 panic；共享终端模型也服务远程 SSH，不能只绕过本地 PTY。
+- 来源列表：锁定的 `vt100 0.16.2` `src/grid.rs`、`src/row.rs` 和 `CHANGELOG.md`；crates.io sparse index 的 `vt100` 发布记录；上游 <https://github.com/doy/vt100-rust> 主分支 `src/row.rs`、发布记录和 commits API。
+- 关键结论：`0.16.2` 是当前最新发布版本；其 `Grid::set_size` 直接以 `Row::resize` 截断 cells，可能保留最后一格的宽字符首格。后续 `clear_wide` 访问不存在的下一格而 panic。上游主分支仍包含该实现，故没有可安全升级版本。`Row::truncate` 已包含预期修复：缩窄后清除新的行尾宽字符首格。
+- 对实施计划的影响：保持 `vt100 0.16.2` API 与依赖版本，使用保留 MIT 许可的 `vendor/vt100` 受控 patch，只在列数缩窄时改为 `Row::truncate`；新增普通与备用屏幕回归，不以重建 parser、丢弃 scrollback 或 `catch_unwind` 规避问题。
+- 未解决问题：需要在 macOS 实机对本地 Shell 以及真实 SSH 会话反复缩放验收；上游发布修复后应删除本地 patch。
+
+## 2026-07-30 终端缩放的渲染状态顺序
+
+- 时间：2026-07-30 12:48 +0800
+- 检索问题：主流终端在窗口缩放和异步 PTY 输出交错时，如何确保终端不会在变宽后重新显示旧列数的渲染结果？
+- 检索原因：用户提供的截图显示窗口内容区已变宽，但 `ls -l` 仍按约 40 列排版，说明 UI event loop 中较晚执行的旧输出 snapshot 覆盖了已经 resize 的模型。
+- 来源列表：xterm.js `BufferService` <https://github.com/xtermjs/xterm.js/blob/master/src/common/services/BufferService.ts>；xterm.js `RenderService` <https://github.com/xtermjs/xterm.js/blob/master/src/browser/services/RenderService.ts>；WezTerm `termwindow/resize.rs` <https://github.com/wez/wezterm/blob/main/wezterm-gui/src/termwindow/resize.rs>。
+- 关键结论：xterm.js 在 `BufferService.resize` 内先同步更新 buffer 的 `cols`/`rows`，随后才发送 resize 通知；其 renderer 在排队渲染前后均核对当前 viewport 尺寸。WezTerm 在同一窗口 resize 路径中计算 canonical `TerminalSize`、写入 window state、对所有 tab 执行 resize，随后使相关渲染失效。两者都不把过期的已序列化渲染快照作为之后事件的权威状态。
+- 对实施计划的影响：AxSSH 的 Local PTY 与 SSH worker 事件只请求活动终端 UI 刷新；`slint::invoke_from_event_loop` 实际执行时才从 `AppState` 复制当前活动 snapshot。这样先排队的旧 Output 无法在 resize 后覆盖新网格，且保持 worker 不直接接触 Slint。
+- 未解决问题：仍需在目标 macOS 上对高频 PTY 输出、连续窗口拖动和真实 SSH 输出组合进行人工验收；若快照复制成为性能热点，再按测量结果增加有界刷新合并，而不改变状态所有权。

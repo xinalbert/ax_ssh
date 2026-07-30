@@ -113,3 +113,8 @@ git diff --check
   dependency facts, module paths, or build commands are changed.
 - GUI rendering, keyboard/focus behavior, and real SSH lifecycle changes also
   require manual verification on the affected platform.
+- GUI visual acceptance belongs to the user. Agents must not capture or inspect
+  their own application screenshots as evidence that a UI change is correct.
+  Complete compilation, tests, and static checks, then rely on explicit user
+  confirmation and screenshots supplied by the user for visual review and
+  further layout iteration.

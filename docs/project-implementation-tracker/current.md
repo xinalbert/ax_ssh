@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260730-macos-settings-menu-retention
-- 目标：修复 macOS 标准应用菜单中的 `Settings...` 消失问题，并把过大的 Rust/Slint 入口按功能拆分。
-- 交付物：可持续保留的 macOS `Settings...`/About 原生入口；独立的 Rust 输入映射模块；Slint 标题栏、会话导航和安全弹窗组件；回归验证和实施记录。
+- 目标 ID：20260730-tab-drag-visual-feedback
+- 目标：让拖动中的工作区 Tab 跟随鼠标，并持续显示源槽与目标槽。
+- 交付物：Slint 拖拽视觉状态、双语架构说明和回归验证。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app.rs`、`src/app/`、`ui/app.slint`、`ui/settings.slint`、`ui/settings/`、`ui/components/`、成对架构文档、项目地图和实施/环境记录。
-- 不在本轮范围内：Windows/Linux 菜单视觉重构、侧边栏布局、设置 schema、SSH 认证、host-key、凭据、worker 或终端生命周期。
+- 当前范围：`ui/components/workspace-titlebar.slint`、`ui/theme.slint`、`docs/architecture*.md`、`docs/project-implementation-tracker/`。
+- 不在本轮范围内：Tab 排序域状态、配置 schema、终端模型、PTY/SSH worker、macOS 原生窗口设置、SSH 信任/认证和凭据。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -23,34 +23,28 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | macOS Settings 消失的根因与边界结论 | 锁定 Slint 1.17.1 winit/Muda 源码、运行日志和现有 AppKit bridge 审查 | Muda 在动态菜单属性变化时重建整棵原生菜单，删除额外插入项 |
-| P2 | completed | 不受活动 Tab 状态重建影响的 macOS 应用菜单 | Slint/Cargo 联合编译与 AppKit 主线程/弱引用审查 | macOS 关闭 Tab 项静态，Windows/Linux 保留动态 enabled |
-| P3 | completed | application bridge、Settings 分类和主窗口 Slint 功能拆分 | focused tests、Slint/Cargo 联合编译和文件规模复核 | MenuBar 受 Slint 语法约束保留在 Window 入口 |
-| P4 | in_progress | 完整回归、运行时菜单检查和配套记录 | locked/offline check/test、格式、validator、差异检查和 macOS 进程检查 | 自动菜单点击仍受系统辅助功能权限影响 |
+| P1 | completed | 跟随鼠标的 Tab 副本、源槽与目标槽 | Slint/Cargo 联合编译 | 视觉状态只在 WorkspaceTitlebar 内存中存在 |
+| P2 | completed | 双语文档、tracker 和完整回归 | locked/offline Cargo、tracker、Markdown 链接与差异检查 | 不改变 Tab 排序或运行时 Tab 生命周期 |
 
 ## 已完成
 
-- 已确认初次 AppKit 菜单安装没有错误日志，问题不是菜单查找或插入失败。
-- 已确认锁定的 Slint 1.17.1 Muda adapter 会跟踪 `MenuItem.enabled`；`active-tab-id` 或 `active-tab-kind` 变化会重建原生菜单，重建过程重新创建默认应用菜单，因此删除 AppKit bridge 额外插入的 `Settings...` 并解除 About 绑定。
-- 已确认修复只需留在 UI/application bridge，SSH、安全、凭据和持久化边界均不变化。
-- 已放弃定时重绑 workaround；macOS `Close Current Tab` 不绑定活动 Tab 动态状态，因此 Muda 不会因 Tab 身份/类型变化重建原生菜单，Settings/About 只由 AppKit bridge 安装一次。
-- 已通过 `cargo check --locked --offline`，生成的 Slint callback、AppKit target 生命周期和主线程边界保持不变。
-- 已完成结构拆分：`src/app.rs` 从约 2257 行降到 232 行，工作区、连接、worker monitor、终端、设置和 view 映射各自进入私有功能模块；状态转换与测试进入 `src/app/state/`。
-- `ui/app.slint` 从约 866 行降到 399 行，标题栏、会话导航和安全弹窗进入组件；`ui/settings.slint` 从约 603 行降到 262 行，六类设置页面进入 `ui/settings/`。
+- 拖动中的 Tab 显示为跟随鼠标的不可交互副本，源位置保持半透明占位，目标位置保留强调边框。
+- 工作区 Tab 的内存排序、UUID、稳定实例编号和 worker 生命周期均未调整。
+- 标准原生标题栏、Tab 手势隔离和最右侧已保存 SSH 连接选择器保持原有行为。
 
 ## 验证
 
-- 已完成：根指令、项目 skill/reference、环境记忆、锁定后端根因审查、功能拆分、连续 locked/offline check 和 5 个状态 focused tests。
-- 未完成：完整测试、格式/clippy、运行时菜单保留检查、文档 validator 和最终差异审查。
+- 已完成：根指令、AxSSH Rust/Slint skill、项目地图、双语架构与 Slint 手势路径审查；`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 47 passed、1 ignored；应用 21 passed）、tracker validator、Markdown 相对链接与 `git diff --check`。
+- 未完成：`cargo fmt --all -- --check` 与 `cargo clippy --all-targets --locked --offline -- -D warnings` 因本机未安装对应 Cargo 组件无法执行；实际 macOS 拖拽视觉与手势仍需用户验收。
 
 ## 风险与阻塞
 
-- 无实现阻塞。macOS AppKit 操作必须继续只在主线程执行并只捕获 `Weak<AppWindow>`；原生菜单自动点击受 Screen Recording/Accessibility 权限限制。
+- 浮动副本限制在可滚动 Tab 视口内，避免覆盖最右侧的保存 SSH 连接 `+`；实际 macOS 指针跟随与窄窗口下的截断位置仍需用户验收。
 
 ## 下一步
 
-- 运行完整回归、validator 和最新 macOS 进程/菜单检查。
+- 用户在 macOS 上确认 Tab 副本随指针移动、目标槽正确提示，且拖拽不移动窗口。
 
 ## 最后更新时间
 
-- 2026-07-30 07:49 +0800
+- 2026-07-30 16:11 +0800

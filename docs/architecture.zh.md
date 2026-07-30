@@ -1,4 +1,4 @@
-[English](architecture.md)
+[English](architecture.md) · [文档导航](README.zh.md)
 
 # AxSSH 架构说明
 
@@ -54,11 +54,15 @@ Slint UI（.slint）
 
 ## 事件流
 
-1. Slint callback 只产生已保存 profile ID、唯一 Tab ID、组名、终端按键/修饰键、
+1. Slint callback 只产生已保存 profile ID、唯一 Tab ID、终端按键/修饰键、
    草稿字段、信任决策或一次性临时密码等小值。
 2. 每次打开 profile 或本地 shell 都会创建新的终端 Tab UUID，即使另一个 Tab 使用
    相同目标。SSH 输入、resize、输出、重试和关闭按 `tab_id + attempt_id` 路由；本地
    操作按 `tab_id` 路由。未知 SSH 主机会启动绑定该 Tab 的可取消探测，但传输仍拒绝。
+   工作区 Tab 顺序是仅在内存中的展示状态：拖拽释放会把 Tab UUID 和受限目标位置交给
+   `AppState`，它只重排现有 Tab 列表。按住期间 Slint 保留半透明的源槽、高亮目标槽，
+   并在指针位置绘制不可交互的 Tab 副本；不会创建第二个运行时 Tab。前置 UI 序号从当前
+   列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；私钥 profile 在 UI 线程外加载所选路径，
    只有加密密钥无法空口令打开时才请求一次性 passphrase。
@@ -80,18 +84,33 @@ Slint UI（.slint）
 7. 本地终端 Tab 改为持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占
    child、reader、writer、resize 状态、有界命令/事件队列、取消标记和超时 join。
 8. 每个终端 Tab 还持有一个有界 `TerminalModel`。`vt100` 负责行、字符格样式、光标、
-   scrollback、宽字符和 application-cursor 模式。非活动 Tab 的输出留在 Rust 状态，
-   只有活动字符格快照进入 Slint event loop；更新统一使用
+   scrollback、宽字符和 application-cursor 模式。仓库内的 `vendor/vt100` 补丁保持锁定
+   的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
+   同时覆盖普通与备用屏幕。非活动 Tab 的输出留在 Rust 状态，只有活动字符格快照进入
+   Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
-9. macOS 应用 bridge 会启用铺满标题栏的内容，但关闭 AppKit 的整窗背景拖动。Slint
-   只从零 Tab 空白条或最右侧专用留白报告 mouse-down，并由 UI 线程 callback 把当前
-   事件交给 `NSWindow::performWindowDragWithEvent`；Tab、Activity Bar、侧栏和终端
-   都不会调用该 callback。
-10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台打开到 General
-    或 About。应用 bridge 不把该内部单例放入可见工作区 Tab model；Settings 激活时，
-    Slint 用仅可拖动的标题栏区域替换 Tab 条。页面切换时未保存草稿仍由 Slint 持有；
-    只有标题栏 Save 会跨入应用边界。About 展示静态产品用途说明，并只接收编译期
-    package 版本作为只读 UI 元数据。会话侧边栏不再重复 Settings/About。
+   小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
+   网格下限，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
+   现有侧栏收起动作优先为终端让出列数。
+   `TerminalPane` 会把测得的网格、配置字体度量、活动终端 Tab 身份和连接状态变化合并到
+   下一次 UI 轮转后，再请求一次最终 PTY 尺寸。因此 Settings 修改字体后返回已连接终端时，
+   与窗口缩放会走同一条当前网格更新路径。
+   本地或 SSH worker 接受 resize 请求后，应用会立即调整活动 `TerminalModel` 并安排
+   活动终端刷新。该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
+   worker 事件已捕获的旧快照；因此已经排队的 Output 不会在用户持续拖动窗口时把界面
+   恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
+9. macOS 应用保留标准原生标题栏，并关闭 AppKit 的整窗背景拖动。窗口移动只由该原生
+   标题栏处理；Slint 工作区 Tab 条作为其下方的普通客户端内容呈现，因此原生窗口拖动
+   不会再与 Tab 重排手势竞争。
+10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
+    General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
+    中，因此激活 Settings 不会移除返回活动终端的路径。Close 只移除该单例 Tab，绝不
+    影响任何终端 worker。页面切换时未保存草稿仍由 Slint 持有；只有标题栏 Save 会跨入
+    应用边界。About 展示静态产品用途说明，并只接收编译期 package 版本作为只读 UI
+   元数据。会话侧边栏不再重复 Settings/About，并从原生标题栏下方贯穿整个客户端高度；
+   工作区 Tab 条只占其右侧的工作区列。`+` 固定在最右边缘，打开由 Slint 本地持有的
+    选择器，显示全部已保存 SSH profile 的遮蔽只读快照，选择后只将 profile UUID 传入
+    现有连接 callback。侧栏 `+` 与 File > New Session 仍是独立的新建会话编辑器动作。
 11. 单一声明式 Slint `MenuBar` 持有跨平台业务菜单树。锁定的 winit/muda 后端把它安装
     到 macOS 屏幕顶部和 Windows 原生窗口菜单；没有 native menu 支持的 Linux 后端在
     客户区顶部渲染同一棵树。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
@@ -102,10 +121,17 @@ Slint UI（.slint）
     AppKit bridge 安装一次。Windows/Linux 仍保留动态关闭 Tab enabled 状态，并在
     Edit/Help 提供 Settings/About；其他菜单复用已有的新建会话、侧栏、本地 shell、
     关闭 Tab 和快捷键意图。
-12. 会话导航只持有一个 Slint 展开/收起状态。展开态渲染 Local Shell 卡片和带边框的
-    分组/会话行；收起态把同一扁平模型渲染为终端、文件夹和两字标签。分组展开状态决定
-    两种形态中是否存在子会话，未分组 profile 也生成显式 Ungrouped 分组行。静态图标和
-    卡片尺寸全部进入 `ui/theme.slint`，导航展示状态不进入 `SessionStore`。
+12. 会话导航持有一个 Slint 侧边栏展开/收起状态，以及应用层所有、仅在内存中的 Group
+    展开状态。`AppState` 用 `BTreeSet` 保存规范化 Group 名称；它不引入新依赖，也不会
+    写入持久化配置。展开态先渲染 Local Shell 卡片，再渲染可折叠的 Group 父行及其单行
+    服务器子项。展开的父行显示名称、数量和居中的绘制下尖角；收起父行显示对应的上
+    尖角。只有紧凑栏以 Group 名称的两个字符生成文字徽标而非文件夹图标。自定义 Group
+    行可通过键盘获得焦点，Enter/Space 与点击发出相同的 Group 切换意图；这个动作不再
+    改变侧栏状态，只有独立的紧凑面板按钮负责展开或收起侧栏；展开态中它位于 Local Shell
+    行的最右侧，收起态仍位于 rail 顶部。服务器行只负责连接。收起态
+    用更大的 Group 徽标和更小、连续排列的服务器徽标保留层级，Local Shell 保持专用入口。
+    应用层 formatter 会在数据进入 Slint model 前遮蔽用户名和 IPv4 的中间段。静态尺寸进入
+    `ui/theme.slint`，持久化的单字符遮蔽设置由 `WorkspaceSettings` 持有。
 
 ## SSH 安全契约
 
@@ -143,13 +169,14 @@ UI model。
 `assets/fonts/JetBrainsMono-Regular.ttf` 是由 Slint 编译器注册的项目自有静态资源，
 同目录保留 OFL 许可证和作者声明。构建和运行时都不会从 `third_package/axshell`
 加载字体。Slint 测量配置字体，并用测得的字符格宽度和配置的行高百分比统一计算
-渲染、选区、光标和向下取整的 PTY 尺寸。
+渲染、选区、光标和向下取整的 PTY 尺寸；终端只会在这些度量和布局稳定后合并发送 resize。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，包括经过约束
 的字体、字号、行高、配色、亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
-本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度与快捷键。启动时会验证已有 shell
-缓存并只追加新发现项。旧设置会在反序列化时迁移；schema 版本 7 只把旧默认
-260px 侧栏替换为紧凑的 220px，自定义宽度保持不变。密码、passphrase、私钥内容、
+本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度、会话遮蔽字符和快捷键。启动时会
+验证已有 shell 缓存并只追加新发现项。旧设置会在反序列化时迁移；schema 版本 7 只把
+旧默认 260px 侧栏替换为紧凑的 220px，自定义宽度保持不变；schema 版本 8 新增默认
+为 `*` 的遮蔽设置。密码、passphrase、私钥内容、
 终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
 
 只有会话模型非空且用户没有手动收起时，展开会话侧栏才参与布局；否则窄栏仍保留
@@ -169,8 +196,8 @@ Local Shell 和新建会话入口。Settings/About 只保留在平台菜单和�
 
 当前应用可校验并持久化 profile、确认逐 profile 主机指纹、使用临时密码或本机
 私钥认证，并持有多个逐 Tab 隔离的 SSH 或本地交互式 PTY shell，相同目标也可重复
-打开。新建会话编辑器仍属于工作区 Tab；Settings 是可见 Tab 条之外的单例工作台页面，
-只有短期信任和 secret 提示保留为覆盖层。
+打开。新建会话编辑器和单例 Settings 工作台都属于可见工作区 Tab；只有短期信任和
+secret 提示保留为覆盖层。
 以下内容仍作为独立步骤：
 
 - 共享的 OpenSSH 兼容 known_hosts 存储和主机密钥撤销；

@@ -1,114 +1,46 @@
-[中文说明](README.zh.md)
+[简体中文](README.zh.md)
 
 # AxSSH
 
-AxSSH is a cross-platform SSH workspace built with Rust, Slint, Tokio, and
-russh. Saved sessions can be organized into collapsible groups. The activity
-bar group icons open the session sidebar, and clicking the active group again
-closes it. An empty session list keeps the sidebar hidden. The Local Shell icon
-only opens a new local terminal tab and never changes the sidebar. Ungrouped
-sessions appear as compact top-level sidebar entries and reveal their endpoint
-after a short pointer hover. Every local or SSH terminal tab has a unique
-runtime ID, worker, and bounded terminal model, so opening the same server or
-local shell repeatedly does not share output or process state.
+AxSSH is a cross-platform desktop SSH workspace built with Rust, Slint, Tokio,
+and russh. It combines saved sessions, independent local and remote
+terminal tabs, and persistent workspace settings in one native application.
 
-The SSH workflow verifies a server's SHA-256 host-key fingerprint, accepts a
-transient password, and can optionally remember it in the platform credential
-store. Sessions may instead use a private key discovered from the user's
-`.ssh` directory or a manually entered path; encrypted keys request a transient
-passphrase. The authenticated worker opens a PTY shell and uses the same
-terminal surface as local tabs.
-
-The terminal is rendered as a font-linked cell grid with bounded scrollback,
-ANSI colors, cell-coordinate selection, and a block cursor. Enter, Backspace,
-Tab, Escape, arrows, Home/End, Insert/Delete, Page keys, Ctrl control bytes, and
-xterm-style modified navigation are encoded for the active PTY. Unmodified
-arrows follow the terminal's normal or application-cursor mode, so shell
-history and full-screen programs receive the expected CSI or SS3 sequence.
-Terminals and the new-session editor share one top tab bar. Overflowing tabs
-scroll horizontally with a touchpad or mouse wheel, while mouse-drag scrolling
-is disabled. Settings uses a dedicated workbench view instead of another
-visible tab; its title-bar area remains available for window dragging. On
-macOS, the empty zero-tab strip and a dedicated trailing title-bar space move
-the window; tabs, the activity bar, the session sidebar, and terminal content
-remain interaction-only regions.
-
-Terminal, shortcut, local-shell, and workspace settings are managed in a
-Settings view opened from the platform menu or its shortcut. On macOS, the
-standard `ax_ssh` application menu owns Settings and About; Windows and Linux
-place them under Edit and Help. The sidebar no longer duplicates either entry.
-General, Appearance, Terminal, Workspace, Shortcuts, and About remain navigable
-inside Settings. Save and Close stay in the Settings page header. Saved values
-are persisted in the versioned `sessions.json`;
-discovered shell names are cached and only newly available names are added
-later. JetBrains Mono is bundled under the SIL Open Font License. SFTP and full
-mouse-oriented terminal protocol support remain staged.
-
-The session navigator switches between two exclusive forms. Expanded mode
-shows a Local Shell card followed by bordered group and session cards;
-collapsed mode shows a compact terminal icon, folder initials, expanded child
-session initials, and the new-session action. Ungrouped profiles use the same
-group behavior instead of bypassing the hierarchy.
-
-The application menu bar declares File, Edit, View, Pane, Window, and Help as
-stable extension points. Slint installs the business menus in the system-wide
-menu bar on macOS, uses the native window menu on Windows, and renders them at
-the top of the window on Linux. The macOS bridge reuses the existing standard
-application menu, binds About to the internal page, and inserts `Settings...`
-with `Cmd+,`. File opens a new session, View toggles the session navigator,
-Pane opens a local shell, Window closes the current tab, and Help opens keyboard
-shortcuts. Windows/Linux additionally expose Settings in Edit and About in Help.
+Current functionality includes password and private-key authentication,
+explicit SHA-256 host-key confirmation, optional password storage in the
+platform credential store, bounded terminal scrollback, ANSI rendering, text
+selection, clipboard shortcuts, and native input-method support. SFTP, SSH
+agent integration, reconnect, workspace restoration, and full terminal mouse
+reporting are not implemented yet.
 
 ## Quick start
 
-```bash
-cargo run
-```
-
-AxSSH writes daily logs to the `logs` subdirectory of its platform-local
-application data directory and retains at most 15 files. Set `RUST_LOG` to
-override the default `ax_ssh=info,russh=warn` filter.
-
-Remembered passwords use macOS Keychain, Windows Credential Manager, or the
-Unix Secret Service through the platform backend. Session JSON stores profiles,
-non-secret settings, and only a credential-availability marker; it never stores
-the password, passphrase, private-key contents, terminal output, or worker state.
-
-Private-key profiles store only the selected filesystem path. Key contents and
-passphrases are never persisted or logged.
-
-Terminal selection uses normal pointer interaction. macOS keeps `Cmd+C`/`Cmd+V`
-for clipboard actions; other platforms use `Ctrl+Shift+C`/`Ctrl+Shift+V`.
-Plain `Ctrl+C` remains the terminal interrupt byte and other Ctrl combinations
-remain available to shells and tools such as tmux. Workspace commands use the
-platform modifier, including `Cmd+S` on macOS or `Ctrl+S` elsewhere to toggle
-the sidebar. AxSSH restores physical Control/Command semantics after Slint's
-Apple-platform modifier mapping, so macOS `Ctrl+B` reaches tmux while `Cmd+B`
-remains a UI shortcut candidate. Terminal Ctrl input takes priority over a
-conflicting workspace shortcut. The configurable right-click quick action
-copies an active selection or pastes when none exists.
-
-The visible terminal is a rendered grid rather than a text editor. A fully
-transparent input-method proxy follows the terminal cursor so Chinese IME
-preedit and candidate UI remain native; only committed text crosses into the
-bounded PTY input path.
-
-For an offline check when the Cargo cache is already populated:
+Install Rust `1.92.0` or newer and use a desktop environment supported by
+Slint's winit backend, then run:
 
 ```bash
-cargo check --offline
-cargo test --offline
+cargo run --locked
 ```
+
+The first connection to a host is rejected until you verify and explicitly
+confirm its SHA-256 host-key fingerprint. See the [usage guide](docs/usage.md)
+for session setup, terminal controls, settings, and data-storage behavior.
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
+- [Usage guide](docs/usage.md)
 - [Architecture](docs/architecture.md)
-- [Development](docs/development.md)
+- [Development and verification](docs/development.md)
+- [Documentation index](docs/README.md)
 - [Implementation tracker](docs/project-implementation-tracker/current.md)
 
-## Repository boundary
+## Security and repository boundary
 
-`third_package/axshell` is a reference-only submodule. It is not included in
-the Cargo workspace, is not imported by `src/`, and must not become a runtime
-or build dependency. AxSSH uses Slint for UI and russh for SSH transport.
+Unknown and changed host keys are denied by default. Remembered passwords are
+stored by macOS Keychain, Windows Credential Manager, or Unix Secret Service;
+passwords, private-key passphrases, private-key contents, terminal output, and
+live worker state are never written to the session JSON.
+
+`third_package/axshell` is reference material only. It is not a Cargo workspace
+member, source import, runtime dependency, build input, or documentation
+dependency. AxSSH uses Slint for its UI and russh for SSH transport.

@@ -1,10 +1,10 @@
-[English](development.md)
+[English](development.md) · [文档导航](README.zh.md)
 
 # 开发说明
 
 ## 环境要求
 
-- Rust `1.92.0` 或更高版本（本机验证环境为 `1.96.1`）
+- Rust `1.92.0` 或更高版本
 - Cargo
 - Slint winit 后端支持的桌面环境
 
@@ -14,7 +14,7 @@
 ## 常用命令
 
 ```bash
-cargo run
+cargo run --locked
 cargo fmt --all -- --check
 cargo check --locked --offline
 cargo clippy --all-targets --locked --offline -- -D warnings
@@ -22,8 +22,8 @@ cargo test --locked --offline
 git diff --check
 ```
 
-`cargo check` / `cargo test` 不带 `--offline` 时可能需要访问 registry。2026-07-29
-解析 `keyring 4.1.5` 时本机可以访问 crates.io；离线命令仍要求 Cargo 缓存已准备好。
+离线命令要求本机 Cargo 缓存中已有 `Cargo.lock` 锁定的依赖；需要从 registry 填充
+缓存时移除 `--offline`。
 
 ## 修改规则
 
@@ -40,6 +40,8 @@ git diff --check
 - 运行实例必须使用终端 Tab UUID，而不是已保存的 profile UUID；输入、resize、输出、
   重试、关闭和迟到事件都按 `tab_id + attempt_id` 路由。
 - 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
+- `vendor/vt100` 是锁定 `vt100 0.16.2` 宽字符缩窄问题的最小本地补丁。保留其中的 MIT
+  文件；只可在有回归测试时调整已说明的 resize 路径，并在上游发布对应修复后移除该补丁。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
   窗口的条件下测试普通/application-cursor 终端字节序列；平台可打印键后备转换归
   Slint bridge 所有。
@@ -74,8 +76,7 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
 方向键、Shift 可打印键后备转换、原始 C0 控制字节事件和 Apple 修饰键还原。忽略测试
 `platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
-写入、读取和删除，并可能触发系统授权提示；该测试已在 macOS Keychain 通过，Unix
-Secret Service 和 Windows Credential Manager 仍需对应平台验证。窗口渲染、键盘/
-焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH 服务器登录仍需
-GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实 SSH 并发连接和切换后的终端
-焦点保持，以及原生标题栏拖动命中区域。
+写入、读取和删除，并可能触发系统授权提示；应在每个受支持的凭据后端上主动运行。
+窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH
+服务器登录仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实 SSH 并发连接、
+切换后的终端焦点保持和原生标题栏拖动命中区域。
