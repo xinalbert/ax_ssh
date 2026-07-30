@@ -1,10 +1,11 @@
-import { SpinBox } from "std-widgets.slint";
+import { LineEdit, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 
 export component WorkspaceSettingsPage inherits SettingsPage {
     in-out property <int> draft-sidebar-width;
     in-out property <int> draft-tab-width;
+    in-out property <string> draft-session-mask-character;
     SettingsSectionHeading { label: "LAYOUT"; }
     SettingsRow {
         label: "Session sidebar width";
@@ -29,7 +30,6 @@ export component WorkspaceSettingsPage inherits SettingsPage {
     SettingsRow {
         label: "Workspace tab width";
         description: "120-260 px";
-        show-divider: false;
         SettingsField {
             settings-tab-width := SpinBox {
                 width: Theme.settings-wide-number-width;
@@ -44,6 +44,19 @@ export component WorkspaceSettingsPage inherits SettingsPage {
                 text: "px";
                 color: Theme.muted;
                 vertical-alignment: center;
+            }
+        }
+    }
+    SettingsRow {
+        label: "Session mask character";
+        description: "Masks usernames and the middle IPv4 octets in the session sidebar";
+        show-divider: false;
+        SettingsField {
+            LineEdit {
+                width: Theme.settings-number-width;
+                height: Theme.settings-control-height;
+                text <=> root.draft-session-mask-character;
+                accessible-label: "Session mask character";
             }
         }
     }

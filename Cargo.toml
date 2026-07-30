@@ -38,6 +38,10 @@ slint-build = "1.17.1"
 [dev-dependencies]
 rand = "0.10"
 
+[patch.crates-io]
+# Keep the locked vt100 API while applying a minimal wide-cell resize fix.
+vt100 = { path = "vendor/vt100" }
+
 [profile.dev]
 opt-level = 1
 

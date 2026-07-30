@@ -4,10 +4,7 @@ use anyhow::{Context, Result};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
-use objc2_app_kit::{
-    NSApplication, NSEventModifierFlags, NSMenuItem, NSView, NSWindow, NSWindowStyleMask,
-    NSWindowTitleVisibility,
-};
+use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenuItem, NSView, NSWindow};
 use objc2_foundation::{MainThreadMarker, NSObject, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
@@ -62,10 +59,6 @@ impl NativeMenuTarget {
 
 pub(super) fn configure(window: &slint::Window) -> Result<()> {
     with_native_window(window, |native_window| {
-        native_window
-            .setStyleMask(native_window.styleMask() | NSWindowStyleMask::FullSizeContentView);
-        native_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
-        native_window.setTitlebarAppearsTransparent(true);
         native_window.setMovableByWindowBackground(false);
         Ok(())
     })
@@ -114,16 +107,6 @@ pub(super) fn configure_application_menu(
     settings_item.setKeyEquivalentModifierMask(NSEventModifierFlags::Command);
     bind_menu_item(&settings_item, &target, sel!(openSettings:));
     Ok(())
-}
-
-pub(super) fn start_drag(window: &slint::Window) -> Result<()> {
-    with_native_window(window, |native_window| {
-        let event = native_window
-            .currentEvent()
-            .context("AppKit has no current mouse-down event")?;
-        native_window.performWindowDragWithEvent(&event);
-        Ok(())
-    })
 }
 
 fn with_native_window<T>(

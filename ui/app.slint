@@ -5,7 +5,12 @@ import { SettingsPane } from "settings.slint";
 import { SessionEditorPane } from "session-editor.slint";
 import { SessionNavigation, SessionRow } from "components/session-navigation.slint";
 import { AuthenticationDialog, HostKeyDialog } from "components/security-dialogs.slint";
-import { WorkspaceTitlebar, WorkspaceTabRow } from "components/workspace-titlebar.slint";
+import {
+    ConnectableSessionRow,
+    ConnectionPicker,
+    WorkspaceTitlebar,
+    WorkspaceTabRow,
+} from "components/workspace-titlebar.slint";
 
 export component AppWindow inherits Window {
     title: "AxSSH";
@@ -17,14 +22,15 @@ export component AppWindow inherits Window {
 
     in property <[SessionRow]> sessions;
     in property <[WorkspaceTabRow]> workspace-tabs;
+    in property <[ConnectableSessionRow]> connection-options;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
     in property <[string]> local-shell-options;
-    in property <string> status: "Ready";
+    in property <string> status: "";
     in property <string> active-tab-id: "";
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
-    in property <string> active-tab-status: "Ready";
+    in property <string> active-tab-status: "";
     in property <bool> host-key-dialog-open: false;
     in property <string> host-key-endpoint: "";
     in property <string> host-key-fingerprint: "";
@@ -59,6 +65,7 @@ export component AppWindow inherits Window {
     in property <int> local-shell-index: 0;
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
+    in property <string> session-mask-character: "*";
     in property <string> open-settings-shortcut;
     in property <string> toggle-sidebar-shortcut;
     in property <string> copy-selection-shortcut;
@@ -68,31 +75,26 @@ export component AppWindow inherits Window {
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
     in property <bool> apple-platform: false;
-    in property <bool> unified-titlebar: false;
     in property <string> app-version;
 
     private property <bool> sidebar-collapsed: false;
+    private property <bool> connection-picker-open: false;
     in-out property <string> settings-section: "General";
     private property <bool> shortcut-recording: false;
-    private property <bool> sidebar-content-visible:
-        !root.sidebar-collapsed && root.sessions.length > 0;
-    private property <length> navigation-width:
-        root.sidebar-content-visible ? root.sidebar-width * 1px : Theme.activity-bar-width;
 
     callback new-session();
     callback open-local-shell();
     callback open-settings();
-    callback drag-window();
     callback activate-tab(string);
     callback close-tab(string);
+    callback move-tab(string, int);
     callback save-settings(
         string, int, int, string, int, bool, bool, string, int, int, int, int, int,
-        string, string, string, string,
+        string, string, string, string, string,
     );
     callback cancel-settings();
     callback connect-session(string);
     callback toggle-group(string);
-    callback activate-group(string);
     callback save-session(string, string, string, string, string, string, string, string, bool);
     callback cancel-session-dialog();
     callback confirm-host-key();
@@ -152,7 +154,7 @@ export component AppWindow inherits Window {
             }
             if !root.apple-platform : MenuItem {
                 title: "Close Current Tab";
-                enabled: !root.active-tab-id.is-empty && root.active-tab-kind != "settings";
+                enabled: !root.active-tab-id.is-empty;
                 activated => { root.close-tab(root.active-tab-id); }
             }
         }
@@ -179,6 +181,10 @@ export component AppWindow inherits Window {
         capture-key-pressed(event) => {
             if root.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
                 return EventResult.reject;
+            }
+            if root.connection-picker-open && event.text == Key.Escape {
+                root.connection-picker-open = false;
+                return EventResult.accept;
             }
             // Slint swaps Command and Control on Apple platforms for Qt compatibility.
             let physical-control = root.apple-platform
@@ -214,42 +220,53 @@ export component AppWindow inherits Window {
             return EventResult.reject;
         }
 
-        VerticalLayout {
+        HorizontalLayout {
             spacing: 0px;
 
-            WorkspaceTitlebar {
-                tabs: root.workspace-tabs;
-                active-tab-id: root.active-tab-id;
-                active-tab-kind: root.active-tab-kind;
-                tab-width: root.tab-width;
-                navigation-width: root.navigation-width;
-                unified-titlebar: root.unified-titlebar;
-                activate-tab(id) => { root.activate-tab(id); }
-                close-tab(id) => { root.close-tab(id); }
+            SessionNavigation {
+                sessions: root.sessions;
+                sidebar-width: root.sidebar-width;
+                collapsed <=> root.sidebar-collapsed;
+                open-local-shell => { root.open-local-shell(); }
                 new-session => { root.new-session(); }
-                drag-window => { root.drag-window(); }
+                connect-session(id) => { root.connect-session(id); }
+                toggle-group(group-name) => { root.toggle-group(group-name); }
             }
 
-            HorizontalLayout {
+            VerticalLayout {
+                horizontal-stretch: 1;
                 spacing: 0px;
 
-                SessionNavigation {
-                    sessions: root.sessions;
-                    sidebar-width: root.sidebar-width;
-                    collapsed <=> root.sidebar-collapsed;
-                    open-local-shell => { root.open-local-shell(); }
-                    new-session => { root.new-session(); }
-                    connect-session(id) => { root.connect-session(id); }
-                    toggle-group(group-name) => { root.toggle-group(group-name); }
-                    activate-group(group-name) => { root.activate-group(group-name); }
+                WorkspaceTitlebar {
+                    tabs: root.workspace-tabs;
+                    active-tab-id: root.active-tab-id;
+                    tab-width: root.tab-width;
+                    terminal-background: root.terminal-background;
+                    connection-picker-open: root.connection-picker-open;
+                    activate-tab(id) => {
+                        root.connection-picker-open = false;
+                        root.activate-tab(id);
+                    }
+                    close-tab(id) => {
+                        root.connection-picker-open = false;
+                        root.close-tab(id);
+                    }
+                    move-tab(id, target-index) => {
+                        root.connection-picker-open = false;
+                        root.move-tab(id, target-index);
+                    }
+                    toggle-connection-picker => {
+                        root.connection-picker-open = !root.connection-picker-open;
+                    }
                 }
 
                 Rectangle {
-                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
                     background: Theme.background;
 
                 if root.active-tab-kind == "terminal" : terminal-pane := TerminalPane {
                     connected: root.connected;
+                    terminal-id: root.active-tab-id;
                     render-lines: root.terminal-render-lines;
                     content-columns: root.terminal-content-columns;
                     cursor-row: root.terminal-cursor-row;
@@ -300,6 +317,7 @@ export component AppWindow inherits Window {
                     local-shell-index: root.local-shell-index;
                     sidebar-width: root.sidebar-width;
                     tab-width: root.tab-width;
+                    session-mask-character: root.session-mask-character;
                     open-settings-shortcut: root.open-settings-shortcut;
                     toggle-sidebar-shortcut: root.toggle-sidebar-shortcut;
                     copy-selection-shortcut: root.copy-selection-shortcut;
@@ -310,7 +328,7 @@ export component AppWindow inherits Window {
                     default-paste-shortcut: root.default-paste-shortcut;
                     status: root.status;
                     save(font, size, line-height, color-scheme, brightness, bright-bold, right-click-copy, shell,
-                         scrollback, columns, rows, sidebar, tab-size, open-settings-key,
+                         scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
                          toggle-sidebar-key, copy-key, paste-key) => {
                         root.save-settings(
                             font,
@@ -326,6 +344,7 @@ export component AppWindow inherits Window {
                             rows,
                             sidebar,
                             tab-size,
+                            mask-character,
                             open-settings-key,
                             toggle-sidebar-key,
                             copy-key,
@@ -366,7 +385,7 @@ export component AppWindow inherits Window {
                         font-size: Theme.font-body;
                     }
                     Rectangle { vertical-stretch: 1; }
-                    Text {
+                    if !root.status.is-empty : Text {
                         text: root.status;
                         color: Theme.accent;
                         font-size: Theme.font-small;
@@ -376,6 +395,27 @@ export component AppWindow inherits Window {
             }
         }
     }
+    }
+
+    if root.connection-picker-open : TouchArea {
+        y: Theme.titlebar-fallback-height;
+        width: parent.width;
+        height: parent.height - self.y;
+        clicked => { root.connection-picker-open = false; }
+    }
+
+    if root.connection-picker-open : ConnectionPicker {
+        x: max(
+            Theme.space-xs,
+            parent.width - self.width,
+        );
+        y: Theme.titlebar-fallback-height;
+        sessions: root.connection-options;
+        connect-session(id) => {
+            root.connection-picker-open = false;
+            root.connect-session(id);
+        }
+        dismiss => { root.connection-picker-open = false; }
     }
 
     if root.host-key-dialog-open : HostKeyDialog {

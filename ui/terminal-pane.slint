@@ -18,6 +18,7 @@ export struct TerminalRenderLine {
 
 export component TerminalPane inherits Rectangle {
     in property <bool> connected;
+    in property <string> terminal-id;
     in property <[TerminalRenderLine]> render-lines;
     in property <int> content-columns;
     in property <int> cursor-row;
@@ -50,9 +51,12 @@ export component TerminalPane inherits Rectangle {
         max(root.font-cell-height,
             root.font-cell-height * root.terminal-line-height-percent / 100);
     private property <int> terminal-columns:
-        max(20, min(300, floor(grid-clip.width / root.cell-width)));
+        max(Theme.terminal-grid-min-columns,
+            min(Theme.terminal-grid-max-columns, floor(grid-clip.width / root.cell-width)));
     private property <int> terminal-rows:
-        max(5, min(100, floor(grid-clip.height / root.cell-height)));
+        max(Theme.terminal-grid-min-rows,
+            min(Theme.terminal-grid-max-rows, floor(grid-clip.height / root.cell-height)));
+    private property <bool> terminal-resize-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
     private property <int> selection-anchor-row: 0;
@@ -105,6 +109,10 @@ export component TerminalPane inherits Rectangle {
         }
     }
 
+    function schedule-terminal-size-update() {
+        root.terminal-resize-pending = true;
+    }
+
     function clear-selection() {
         root.selecting = false;
         root.selection-focus-row = root.selection-anchor-row;
@@ -139,10 +147,14 @@ export component TerminalPane inherits Rectangle {
         ime-input.focus();
     }
 
-    changed terminal-columns => { root.update-terminal-size(); }
-    changed terminal-rows => { root.update-terminal-size(); }
+    changed terminal-columns => { root.schedule-terminal-size-update(); }
+    changed terminal-rows => { root.schedule-terminal-size-update(); }
+    changed terminal-font-family => { root.schedule-terminal-size-update(); }
+    changed terminal-font-size => { root.schedule-terminal-size-update(); }
+    changed terminal-line-height-percent => { root.schedule-terminal-size-update(); }
+    changed terminal-id => { root.schedule-terminal-size-update(); }
     changed connected => {
-        root.update-terminal-size();
+        root.schedule-terminal-size-update();
         if root.connected {
             root.focus-terminal();
         }
@@ -154,8 +166,7 @@ export component TerminalPane inherits Rectangle {
     }
 
     background: root.terminal-background;
-    border-width: Theme.hairline;
-    border-color: Theme.border;
+    border-width: 0px;
     forward-focus: ime-input;
     accessible-role: text;
     accessible-label: "Terminal";
@@ -177,6 +188,16 @@ export component TerminalPane inherits Rectangle {
         running: root.connected && ime-input.has-focus && root.cursor-visible;
         interval: 530ms;
         triggered => { root.cursor-blink = !root.cursor-blink; }
+    }
+
+    // Let font measurement and layout settle before one coalesced PTY resize.
+    Timer {
+        running: root.terminal-resize-pending;
+        interval: 1ms;
+        triggered => {
+            root.terminal-resize-pending = false;
+            root.update-terminal-size();
+        }
     }
 
     ime-input := TextInput {
@@ -254,7 +275,10 @@ export component TerminalPane inherits Rectangle {
     }
 
     VerticalLayout {
-        padding: Theme.space-md;
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-md;
+        padding-bottom: Theme.space-xxs;
 
         grid-clip := Rectangle {
             vertical-stretch: 1;

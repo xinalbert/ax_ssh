@@ -41,37 +41,50 @@ export global Theme {
     out property <length> empty-page-padding: 28px;
 
     // Main workspace geometry.
-    out property <length> window-min-width: 940px;
-    out property <length> window-min-height: 580px;
+    out property <length> window-min-width: 520px;
+    out property <length> window-min-height: 360px;
     out property <length> window-preferred-width: 1180px;
     out property <length> window-preferred-height: 740px;
-    out property <length> titlebar-height: 34px;
     out property <length> titlebar-fallback-height: 38px;
-    out property <length> titlebar-leading-width: 76px;
-    out property <length> titlebar-drag-width: 72px;
     out property <length> activity-bar-width: 52px;
     out property <length> tab-status-size: 7px;
+    out property <length> tab-order-width: 20px;
     out property <length> tab-close-size: 24px;
-    out property <length> sidebar-rail-row-height: 54px;
-    out property <length> sidebar-rail-card-size: 42px;
+    out property <length> tab-content-leading-padding: 8px;
+    out property <length> tab-content-spacing: 4px;
+    out property <length> tab-surface-inset: 3px;
+    out property <length> tab-surface-radius: 8px;
+    out property <float> tab-drag-source-opacity: 0.32;
+    out property <float> tab-drag-ghost-opacity: 0.96;
+    out property <length> titlebar-connection-picker-width: 300px;
+    out property <length> titlebar-connection-picker-padding: 6px;
+    out property <length> titlebar-connection-picker-row-height: 42px;
+    out property <length> titlebar-connection-picker-empty-height: 56px;
+    out property <length> titlebar-connection-picker-max-height: 264px;
+    out property <length> sidebar-rail-toggle-row-height: 36px;
+    out property <length> sidebar-rail-toggle-size: 26px;
+    out property <length> sidebar-rail-local-row-height: 46px;
+    out property <length> sidebar-rail-local-card-size: 36px;
+    out property <length> sidebar-rail-group-row-height: 40px;
+    out property <length> sidebar-rail-group-card-size: 32px;
+    out property <length> sidebar-rail-session-row-height: 34px;
+    out property <length> sidebar-rail-session-card-size: 26px;
     out property <length> sidebar-glyph-size: 20px;
     out property <length> sidebar-glyph-inset: 1px;
-    out property <length> sidebar-folder-body-top: 6px;
-    out property <length> sidebar-folder-tab-left: 3px;
-    out property <length> sidebar-folder-tab-top: 3px;
-    out property <length> sidebar-folder-tab-width: 8px;
-    out property <length> sidebar-folder-tab-height: 5px;
-    out property <length> sidebar-rail-folder-top: 5px;
-    out property <length> sidebar-rail-label-top: 25px;
-    out property <length> sidebar-rail-label-height: 13px;
-    out property <length> sidebar-local-card-height: 58px;
-    out property <length> sidebar-group-card-height: 48px;
-    out property <length> sidebar-session-card-height: 54px;
-    out property <length> sidebar-card-padding: 12px;
-    out property <length> sidebar-session-name-width: 88px;
+    out property <length> sidebar-local-card-height: 46px;
+    out property <length> sidebar-group-card-height: 34px;
+    out property <length> sidebar-session-card-height: 36px;
+    out property <length> sidebar-card-padding: 10px;
+    out property <length> sidebar-leading-icon-slot-width: 20px;
+    out property <length> sidebar-group-chevron-width: 20px;
+    out property <length> sidebar-group-chevron-size: 14px;
+    out property <length> sidebar-group-chevron-stroke: 1.5px;
+    out property <length> sidebar-session-indent: 42px;
+    out property <length> sidebar-session-endpoint-width: 132px;
 
     // Settings workbench geometry.
     out property <length> settings-nav-width: 212px;
+    out property <length> settings-content-width: 900px;
     out property <length> settings-nav-item-height: 34px;
     out property <length> settings-nav-indicator-height: 20px;
     out property <length> settings-nav-icon-width: 22px;
@@ -102,11 +115,22 @@ export global Theme {
     out property <length> settings-about-mark-size: 52px;
     out property <length> settings-about-description-height: 34px;
     // Editor and overlay geometry.
-    out property <length> editor-field-width: 200px;
-    out property <length> editor-port-width: 100px;
-    out property <length> editor-auth-width: 220px;
-    out property <length> editor-input-row-height: 34px;
+    out property <length> editor-content-width: 680px;
+    out property <length> editor-section-gap: 16px;
+    out property <length> editor-title-height: 28px;
+    out property <length> editor-subtitle-height: 20px;
+    out property <length> editor-section-heading-height: 40px;
+    out property <length> editor-section-title-height: 20px;
+    out property <length> editor-section-description-height: 18px;
+    out property <length> editor-label-height: 16px;
+    out property <length> editor-port-width: 104px;
+    out property <length> editor-secondary-picker-width: 124px;
+    out property <length> editor-detected-key-width: 360px;
+    out property <length> editor-auth-indicator-height: 2px;
+    out property <length> editor-input-row-height: 32px;
     out property <length> editor-check-row-height: 32px;
+    out property <length> editor-status-height: 28px;
+    out property <length> editor-action-row-height: 32px;
     out property <length> dialog-padding: 20px;
     out property <length> host-dialog-width: 500px;
     out property <length> host-dialog-height: 320px;
@@ -114,4 +138,9 @@ export global Theme {
     out property <length> password-dialog-height: 270px;
     out property <length> password-private-key-dialog-height: 310px;
     out property <length> terminal-underline-offset: 2px;
+    // Keep these non-zero floors aligned with config.rs and terminal.rs.
+    out property <int> terminal-grid-min-columns: 10;
+    out property <int> terminal-grid-max-columns: 300;
+    out property <int> terminal-grid-min-rows: 3;
+    out property <int> terminal-grid-max-rows: 100;
 }

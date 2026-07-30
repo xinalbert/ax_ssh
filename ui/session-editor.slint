@@ -1,5 +1,7 @@
-import { Button, CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
+import { SessionEditorField, SessionEditorSectionHeading } from "components/session-editor-controls.slint";
 
 export component SessionEditorPane inherits Rectangle {
     in property <[string]> group-options;
@@ -9,103 +11,252 @@ export component SessionEditorPane inherits Rectangle {
     callback save(string, string, string, string, string, string, string, string, bool);
     callback cancel();
 
+    private property <string> auth-method: "Password";
+    private property <string> password-draft;
+    private property <string> private-key-draft;
+    private property <bool> remember-password-draft;
+
     background: Theme.background;
 
-    VerticalLayout {
-        padding: Theme.page-padding;
-        spacing: Theme.space-xl;
+    editor-scroll := ScrollView {
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        viewport-width: self.visible-width;
 
-        Text {
-            text: "New SSH session";
-            color: Theme.text;
-            font-size: Theme.font-page-title;
-            font-weight: 700;
-        }
-        Rectangle { height: Theme.hairline; background: Theme.border; }
+        editor-page := Rectangle {
+            width: editor-scroll.visible-width;
+            height: max(
+                editor-scroll.visible-height,
+                editor-content.preferred-height + 2 * Theme.page-padding,
+            );
+            background: Theme.background;
 
-        Text { text: "Identity"; color: Theme.muted; font-size: Theme.font-small; }
-        name-edit := LineEdit { placeholder-text: "Name"; }
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            group-edit := LineEdit {
-                horizontal-stretch: 1;
-                placeholder-text: "Group (optional)";
-            }
-            if root.group-options.length > 0 : ComboBox {
-                width: Theme.editor-field-width;
-                model: root.group-options;
-                selected(value) => { group-edit.text = value == "Ungrouped" ? "" : value; }
-            }
-        }
+            editor-content := VerticalLayout {
+                x: max(Theme.page-padding, (parent.width - self.width) / 2);
+                y: Theme.page-padding;
+                width: min(
+                    Theme.editor-content-width,
+                    parent.width - 2 * Theme.page-padding,
+                );
+                height: self.preferred-height;
+                spacing: Theme.editor-section-gap;
 
-        Text { text: "Endpoint"; color: Theme.muted; font-size: Theme.font-small; }
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            host-edit := LineEdit {
-                horizontal-stretch: 1;
-                placeholder-text: "Host";
-            }
-            port-edit := LineEdit {
-                width: Theme.editor-port-width;
-                text: "22";
-                placeholder-text: "Port";
-            }
-        }
-        user-edit := LineEdit { placeholder-text: "Username"; }
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-xs;
+                    Text {
+                        height: Theme.editor-title-height;
+                        text: "New SSH session";
+                        color: Theme.text;
+                        font-size: Theme.font-page-title;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        height: Theme.editor-subtitle-height;
+                        text: "Save a reusable connection profile.";
+                        color: Theme.muted;
+                        font-size: Theme.font-small;
+                        vertical-alignment: center;
+                    }
+                }
 
-        Text { text: "Authentication"; color: Theme.muted; font-size: Theme.font-small; }
-        auth-method := ComboBox { model: ["Password", "Private key"]; }
-        key-row := HorizontalLayout {
-            visible: auth-method.current-value == "Private key";
-            height: self.visible ? Theme.editor-input-row-height : 0px;
-            spacing: Theme.space-md;
-            key-edit := LineEdit {
-                horizontal-stretch: 1;
-                placeholder-text: "Private key path";
-            }
-            if root.private-key-options.length > 0 : ComboBox {
-                width: Theme.editor-auth-width;
-                model: root.private-key-options;
-                selected(value) => { key-edit.text = value; }
-            }
-        }
-        new-password-edit := LineEdit {
-            visible: auth-method.current-value == "Password";
-            height: self.visible ? Theme.editor-input-row-height : 0px;
-            placeholder-text: "Password";
-            input-type: InputType.password;
-        }
-        remember-new-password := CheckBox {
-            visible: auth-method.current-value == "Password";
-            height: self.visible ? Theme.editor-check-row-height : 0px;
-            text: "Save password in system credential store";
-        }
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
+                        label: "Identity";
+                        description: "Choose how this connection appears in the workspace.";
+                    }
+                    HorizontalLayout {
+                        height: Theme.editor-label-height
+                            + Theme.space-xs
+                            + Theme.editor-input-row-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 3;
+                            label: "Name";
+                            name-edit := LineEdit {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                placeholder-text: "Production server";
+                                accessible-label: "Session name";
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 2;
+                            label: "Group";
+                            HorizontalLayout {
+                                height: Theme.editor-input-row-height;
+                                spacing: Theme.space-md;
+                                group-edit := LineEdit {
+                                    horizontal-stretch: 1;
+                                    height: Theme.editor-input-row-height;
+                                    placeholder-text: "Optional";
+                                    accessible-label: "Session group";
+                                }
+                                if root.group-options.length > 0 : ComboBox {
+                                    width: Theme.editor-secondary-picker-width;
+                                    height: Theme.editor-input-row-height;
+                                    model: root.group-options;
+                                    accessible-label: "Existing session groups";
+                                    selected(value) => {
+                                        group-edit.text = value == "Ungrouped" ? "" : value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
-        Rectangle { vertical-stretch: 1; }
-        Text {
-            text: root.status;
-            color: Theme.accent;
-            font-size: Theme.font-small;
-            wrap: word-wrap;
-        }
-        HorizontalLayout {
-            alignment: end;
-            spacing: Theme.space-md;
-            Button { text: "Cancel"; clicked => { root.cancel(); } }
-            Button {
-                text: "Save session";
-                clicked => {
-                    root.save(
-                        name-edit.text,
-                        group-edit.text,
-                        host-edit.text,
-                        port-edit.text,
-                        user-edit.text,
-                        auth-method.current-value,
-                        key-edit.text,
-                        new-password-edit.text,
-                        remember-new-password.checked,
-                    );
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
+                        label: "Endpoint";
+                        description: "Enter the host address and SSH account.";
+                    }
+                    HorizontalLayout {
+                        height: Theme.editor-label-height
+                            + Theme.space-xs
+                            + Theme.editor-input-row-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Host";
+                            host-edit := LineEdit {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                placeholder-text: "server.example.com";
+                                accessible-label: "SSH host";
+                            }
+                        }
+                        SessionEditorField {
+                            width: Theme.editor-port-width;
+                            horizontal-stretch: 0;
+                            label: "Port";
+                            port-edit := LineEdit {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text: "22";
+                                placeholder-text: "22";
+                                accessible-label: "SSH port";
+                            }
+                        }
+                    }
+                    SessionEditorField {
+                        label: "Username";
+                        user-edit := LineEdit {
+                            width: parent.width;
+                            height: Theme.editor-input-row-height;
+                            placeholder-text: "root";
+                            accessible-label: "SSH username";
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
+                        label: "Authentication";
+                        description: "Credentials are passed to the SSH worker only when connecting.";
+                    }
+                    AuthenticationMethodSelector {
+                        options: [
+                            { label: "Password", value: "Password" },
+                            { label: "Private key", value: "Private key" },
+                        ];
+                        selected-method <=> root.auth-method;
+                        accessible-name: "SSH authentication method";
+                    }
+
+                    if root.auth-method == "Password" : VerticalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xs;
+                        SessionEditorField {
+                            label: "Password";
+                            new-password-edit := LineEdit {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.password-draft;
+                                placeholder-text: "Password";
+                                input-type: InputType.password;
+                                accessible-label: "SSH password";
+                            }
+                        }
+                        remember-new-password := CheckBox {
+                            height: Theme.editor-check-row-height;
+                            text: "Save password in system credential store";
+                            checked <=> root.remember-password-draft;
+                            accessible-label: self.text;
+                        }
+                    }
+
+                    if root.auth-method == "Private key" : VerticalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.space-md;
+                        SessionEditorField {
+                            label: "Private key path";
+                            key-edit := LineEdit {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.private-key-draft;
+                                placeholder-text: "~/.ssh/id_ed25519";
+                                accessible-label: "Private key path";
+                            }
+                        }
+                        if root.private-key-options.length > 0 : SessionEditorField {
+                            label: "Detected key";
+                            ComboBox {
+                                width: min(parent.width, Theme.editor-detected-key-width);
+                                height: Theme.editor-input-row-height;
+                                model: root.private-key-options;
+                                accessible-label: "Detected private keys";
+                                selected(value) => { root.private-key-draft = value; }
+                            }
+                        }
+                    }
+                }
+
+                if !root.status.is-empty : Text {
+                    height: Theme.editor-status-height;
+                    text: root.status;
+                    color: Theme.accent;
+                    font-size: Theme.font-small;
+                    wrap: word-wrap;
+                    vertical-alignment: center;
+                }
+
+                HorizontalLayout {
+                    min-height: Theme.editor-action-row-height;
+                    max-height: Theme.editor-action-row-height;
+                    vertical-stretch: 0;
+                    alignment: end;
+                    spacing: Theme.space-md;
+                    Button {
+                        height: Theme.editor-input-row-height;
+                        text: "Cancel";
+                        clicked => { root.cancel(); }
+                    }
+                    Button {
+                        height: Theme.editor-input-row-height;
+                        text: "Save session";
+                        clicked => {
+                            root.save(
+                                name-edit.text,
+                                group-edit.text,
+                                host-edit.text,
+                                port-edit.text,
+                                user-edit.text,
+                                root.auth-method,
+                                root.private-key-draft,
+                                root.password-draft,
+                                root.remember-password-draft,
+                            );
+                        }
+                    }
                 }
             }
         }

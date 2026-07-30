@@ -135,6 +135,19 @@ impl AppState {
         }
     }
 
+    pub(super) fn move_tab(&mut self, tab_id: Uuid, target_index: usize) -> bool {
+        let Some(source_index) = self.tabs.iter().position(|tab| tab.id == tab_id) else {
+            return false;
+        };
+        let target_index = target_index.min(self.tabs.len().saturating_sub(1));
+        if source_index == target_index {
+            return true;
+        }
+        let tab = self.tabs.remove(source_index);
+        self.tabs.insert(target_index, tab);
+        true
+    }
+
     pub(super) fn close_tab(&mut self, tab_id: Uuid) -> Option<ClosedTab> {
         let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
         let mut tab = self.tabs.remove(index);
@@ -255,6 +268,15 @@ impl AppState {
 
     pub(super) fn active_terminal_mut(&mut self) -> Option<&mut TerminalTabState> {
         self.active_tab_id.and_then(|id| self.terminal_mut(id))
+    }
+
+    pub(super) fn resize_active_terminal_model(
+        &mut self,
+        columns: usize,
+        rows: usize,
+    ) -> Option<()> {
+        self.active_terminal_mut()?.terminal.resize(columns, rows);
+        Some(())
     }
 
     pub(super) fn terminal(&self, tab_id: Uuid) -> Option<&TerminalTabState> {
@@ -424,7 +446,7 @@ impl Default for ActiveTabSnapshot {
             id: None,
             kind: "empty",
             title: "Workspace".to_owned(),
-            status: "Ready".to_owned(),
+            status: String::new(),
             terminal: None,
             connected: false,
             worker_running: false,

@@ -31,9 +31,8 @@ export component SidebarTerminalGlyph inherits Rectangle {
     }
 }
 
-export component SidebarFolderGlyph inherits Rectangle {
-    in property <brush> glyph-color: Theme.text;
-    in property <brush> surface-color: transparent;
+export component SidebarToggleGlyph inherits Rectangle {
+    in property <bool> expanded;
 
     width: Theme.sidebar-glyph-size;
     height: Theme.sidebar-glyph-size;
@@ -41,81 +40,135 @@ export component SidebarFolderGlyph inherits Rectangle {
 
     Rectangle {
         x: Theme.sidebar-glyph-inset;
-        y: Theme.sidebar-folder-body-top;
+        y: Theme.sidebar-glyph-inset;
         width: parent.width - 2 * Theme.sidebar-glyph-inset;
-        height: parent.height - Theme.sidebar-folder-body-top - Theme.sidebar-glyph-inset;
+        height: parent.height - 2 * Theme.sidebar-glyph-inset;
         background: transparent;
         border-width: Theme.hairline;
-        border-color: root.glyph-color;
+        border-color: Theme.muted;
         border-radius: Theme.radius-small;
     }
-
     Rectangle {
-        x: Theme.sidebar-folder-tab-left;
-        y: Theme.sidebar-folder-tab-top;
-        width: Theme.sidebar-folder-tab-width;
-        height: Theme.sidebar-folder-tab-height;
-        background: root.surface-color;
-        border-width: Theme.hairline;
-        border-color: root.glyph-color;
-        border-radius: Theme.radius-small;
+        x: Theme.sidebar-glyph-inset + 5px;
+        y: Theme.sidebar-glyph-inset + 2px;
+        width: Theme.hairline;
+        height: parent.height - 2 * Theme.sidebar-glyph-inset - 4px;
+        background: Theme.muted;
+    }
+    Path {
+        x: Theme.sidebar-glyph-inset + 8px;
+        y: Theme.sidebar-glyph-inset + 4px;
+        width: 7px;
+        height: 10px;
+        commands: root.expanded
+            ? "M 5 1 L 1 5 L 5 9"
+            : "M 2 1 L 6 5 L 2 9";
+        fill: transparent;
+        stroke: Theme.muted;
+        stroke-width: Theme.hairline;
+        stroke-line-cap: round;
+        stroke-line-join: round;
     }
 }
 
-export component SidebarRailItem inherits Rectangle {
+export component SidebarRailToggle inherits FocusScope {
+    in property <bool> expanded;
+    callback activated();
+
+    height: Theme.sidebar-rail-toggle-row-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.expanded
+        ? "Collapse session sidebar"
+        : "Expand session sidebar";
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    toggle-card := Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sidebar-rail-toggle-size;
+        height: Theme.sidebar-rail-toggle-size;
+        background: toggle-touch.has-hover || root.has-focus ? Theme.panel-alt : transparent;
+        border-width: root.has-focus ? Theme.hairline : 0px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-small;
+
+        SidebarToggleGlyph {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            expanded: root.expanded;
+        }
+        toggle-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.activated(); }
+        }
+    }
+}
+
+export component SidebarRailItem inherits FocusScope {
     in property <string> label;
     in property <string> accessible-name;
     in property <bool> group: false;
     in property <bool> local: false;
-    in property <bool> selected: false;
     callback activated();
 
-    height: Theme.sidebar-rail-row-height;
-    background: transparent;
+    private property <length> card-size: root.local
+        ? Theme.sidebar-rail-local-card-size
+        : (root.group
+            ? Theme.sidebar-rail-group-card-size
+            : Theme.sidebar-rail-session-card-size);
+
+    height: root.local
+        ? Theme.sidebar-rail-local-row-height
+        : (root.group
+            ? Theme.sidebar-rail-group-row-height
+            : Theme.sidebar-rail-session-row-height);
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
 
     item-card := Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: Theme.sidebar-rail-card-size;
-        height: Theme.sidebar-rail-card-size;
-        background: root.selected || item-touch.has-hover ? Theme.panel : transparent;
-        border-width: Theme.hairline;
-        border-color: root.selected ? Theme.accent : Theme.border;
+        width: root.card-size;
+        height: root.card-size;
+        background: root.group || item-touch.has-hover || root.has-focus ? Theme.panel : transparent;
+        border-width: root.group || item-touch.has-hover || root.has-focus
+            ? Theme.hairline
+            : 0px;
+        border-color: root.has-focus
+            ? Theme.accent
+            : (root.group ? Theme.accent : Theme.border);
         border-radius: Theme.radius;
 
         if root.local : SidebarTerminalGlyph {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            glyph-color: root.selected ? Theme.accent : Theme.text;
+            glyph-color: Theme.text;
         }
 
-        if root.group : SidebarFolderGlyph {
-            x: (parent.width - self.width) / 2;
-            y: Theme.sidebar-rail-folder-top;
-            glyph-color: root.selected ? Theme.accent : Theme.muted;
-            surface-color: item-card.background;
-        }
-
-        if root.group : Text {
-            x: Theme.space-xs;
-            y: Theme.sidebar-rail-label-top;
-            width: parent.width - 2 * Theme.space-xs;
-            height: Theme.sidebar-rail-label-height;
-            text: root.label;
-            color: root.selected ? Theme.accent : Theme.text;
-            font-family: "JetBrains Mono";
-            font-size: Theme.font-micro;
-            font-weight: 700;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-
-        if !root.local && !root.group : Text {
+        if !root.local : Text {
             width: parent.width;
             height: parent.height;
             text: root.label;
-            color: Theme.text;
+            color: root.group ? Theme.accent : Theme.text;
             font-family: "JetBrains Mono";
             font-size: Theme.font-body;
             font-weight: 700;
@@ -126,8 +179,6 @@ export component SidebarRailItem inherits Rectangle {
 
         item-touch := TouchArea {
             mouse-cursor: pointer;
-            accessible-role: button;
-            accessible-label: root.accessible-name;
             clicked => { root.activated(); }
         }
     }

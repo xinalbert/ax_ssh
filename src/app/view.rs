@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 pub(super) fn session_rows(
@@ -24,18 +26,40 @@ pub(super) fn session_rows(
             expanded,
         });
         if expanded {
-            rows.extend(profiles.into_iter().map(|profile| SessionRow {
-                id: profile.id.to_string().into(),
-                group_name: group_name.clone().into(),
-                name: profile.name.clone().into(),
-                endpoint: profile_endpoint(profile).into(),
-                icon: compact_label(&profile.name, "--").into(),
-                is_group: false,
-                expanded: false,
+            rows.extend(profiles.into_iter().map(|profile| {
+                SessionRow {
+                    id: profile.id.to_string().into(),
+                    group_name: group_name.clone().into(),
+                    name: profile.name.clone().into(),
+                    endpoint: profile_sidebar_endpoint(
+                        profile,
+                        &sessions.settings.workspace.session_mask_character,
+                    )
+                    .into(),
+                    icon: compact_label(&profile.name, "--").into(),
+                    is_group: false,
+                    expanded: false,
+                }
             }));
         }
     }
     rows
+}
+
+pub(super) fn connection_option_rows(sessions: &SessionStore) -> Vec<ConnectableSessionRow> {
+    sessions
+        .sessions
+        .iter()
+        .map(|profile| ConnectableSessionRow {
+            id: profile.id.to_string().into(),
+            name: profile.name.clone().into(),
+            endpoint: profile_sidebar_endpoint(
+                profile,
+                &sessions.settings.workspace.session_mask_character,
+            )
+            .into(),
+        })
+        .collect()
 }
 
 pub(super) fn group_option_rows(sessions: &SessionStore) -> Vec<SharedString> {
@@ -56,10 +80,11 @@ pub(super) fn shell_option_rows(settings: &AppSettings) -> Vec<SharedString> {
 }
 
 pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    let (rows, groups) = match state.lock() {
+    let (rows, groups, options) = match state.lock() {
         Ok(app) => (
             session_rows(&app.sessions, &app.expanded_groups),
             group_option_rows(&app.sessions),
+            connection_option_rows(&app.sessions),
         ),
         Err(_) => {
             set_status(ui, "State lock poisoned");
@@ -69,21 +94,23 @@ pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mu
     dispatch_ui(ui, move |ui| {
         ui.set_sessions(ModelRc::new(VecModel::from(rows)));
         ui.set_group_options(ModelRc::new(VecModel::from(groups)));
+        ui.set_connection_options(ModelRc::new(VecModel::from(options)));
     });
 }
 
 pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    let (tabs, snapshot) = match state.lock() {
-        Ok(app) => (
-            visible_workspace_tab_rows(app.tab_summaries()),
-            app.active_snapshot(),
-        ),
-        Err(_) => {
-            set_status(ui, "State lock poisoned");
-            return;
-        }
-    };
+    let state = Arc::clone(state);
     dispatch_ui(ui, move |ui| {
+        let (tabs, snapshot) = match state.lock() {
+            Ok(app) => (
+                visible_workspace_tab_rows(app.tab_summaries()),
+                app.active_snapshot(),
+            ),
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
         apply_active_snapshot(ui, snapshot);
     });
@@ -91,7 +118,6 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
 
 pub(super) fn visible_workspace_tab_rows(tabs: Vec<WorkspaceTabSummary>) -> Vec<WorkspaceTabRow> {
     tabs.into_iter()
-        .filter(|tab| tab.kind != "settings")
         .map(|tab| WorkspaceTabRow {
             id: tab.id.to_string().into(),
             title: tab.title.into(),
@@ -107,26 +133,38 @@ pub(super) fn set_tab_status(
     tab_id: Uuid,
     message: &str,
 ) {
-    let snapshot = match state.lock() {
+    let active = match state.lock() {
         Ok(mut app) => {
             let Some(terminal) = app.terminal_mut(tab_id) else {
                 return;
             };
             terminal.status = message.to_owned();
-            (app.active_tab_id() == Some(tab_id)).then(|| app.active_snapshot())
+            app.active_tab_id() == Some(tab_id)
         }
         Err(_) => {
             set_status(ui, "State lock poisoned");
             return;
         }
     };
-    if let Some(snapshot) = snapshot {
-        dispatch_active_snapshot(ui, snapshot);
+    if active {
+        dispatch_active_snapshot(ui, state);
     }
 }
 
-pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, snapshot: ActiveTabSnapshot) {
-    dispatch_ui(ui, move |ui| apply_active_snapshot(ui, snapshot));
+pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    let state = Arc::clone(state);
+    dispatch_ui(ui, move |ui| {
+        // Worker output and resize events can queue faster than the UI event loop runs.
+        // Resolve the snapshot here so an older queued event cannot restore stale dimensions.
+        let snapshot = match state.lock() {
+            Ok(app) => app.active_snapshot(),
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
+        apply_active_snapshot(ui, snapshot);
+    });
 }
 
 pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot) {
@@ -184,6 +222,7 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_local_shell_index(local_shell_index.min(i32::MAX as usize) as i32);
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
+    ui.set_session_mask_character(settings.workspace.session_mask_character.clone().into());
     ui.set_open_settings_shortcut(settings.shortcuts.open_settings.clone().into());
     ui.set_toggle_sidebar_shortcut(settings.shortcuts.toggle_sidebar.clone().into());
     ui.set_copy_selection_shortcut(settings.shortcuts.copy_selection.clone().into());
@@ -347,7 +386,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn settings_workbench_is_not_exposed_as_a_workspace_tab() {
+    fn settings_workbench_is_exposed_as_a_workspace_tab() {
         let rows = visible_workspace_tab_rows(vec![
             WorkspaceTabSummary {
                 id: Uuid::new_v4(),
@@ -363,36 +402,63 @@ mod tests {
             },
         ]);
 
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].kind.as_str(), "session-editor");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].kind.as_str(), "settings");
+        assert_eq!(rows[1].kind.as_str(), "session-editor");
     }
 
     #[test]
     fn session_rows_group_profiles_and_respect_expansion() {
         let mut production_a = SessionProfile::new("prod-a", "a.example", "alice");
         production_a.group_name = " Production ".into();
-        let mut production_b = SessionProfile::new("prod-b", "b.example", "bob");
+        let mut production_b = SessionProfile::new("prod-b", "192.168.1.202", "zhushixin");
         production_b.group_name = "Production".into();
         let ungrouped = SessionProfile::new("local", "local.example", "carol");
         let sessions = SessionStore {
             sessions: vec![production_a, production_b, ungrouped],
             ..SessionStore::default()
         };
-        let expanded = BTreeSet::from(["Production".to_owned()]);
-
-        let rows = session_rows(&sessions, &expanded);
+        let expanded_groups = BTreeSet::from(["Production".to_owned()]);
+        let rows = session_rows(&sessions, &expanded_groups);
 
         assert_eq!(rows.len(), 4);
         assert!(rows[0].is_group);
-        assert_eq!(rows[0].name.as_str(), "Production");
         assert!(rows[0].expanded);
+        assert_eq!(rows[0].name.as_str(), "Production");
+        assert_eq!(rows[0].icon.as_str(), "Pr");
+        assert_eq!(rows[0].endpoint.as_str(), "2");
+
         assert!(!rows[1].is_group);
         assert_eq!(rows[1].name.as_str(), "prod-a");
+        assert_eq!(rows[1].endpoint.as_str(), "al*ce@a.example:22");
         assert!(!rows[2].is_group);
         assert_eq!(rows[2].name.as_str(), "prod-b");
+        assert_eq!(rows[2].endpoint.as_str(), "zh*in@192.*.202:22");
+
         assert!(rows[3].is_group);
+        assert!(!rows[3].expanded);
         assert_eq!(rows[3].name.as_str(), "Ungrouped");
         assert_eq!(rows[3].icon.as_str(), "Un");
-        assert!(!rows[3].expanded);
+        assert_eq!(rows[3].endpoint.as_str(), "1");
+    }
+
+    #[test]
+    fn connection_options_include_collapsed_profiles_with_masked_endpoints() {
+        let visible = SessionProfile::new("visible", "server.example", "alice");
+        let hidden = SessionProfile::new("hidden", "192.168.1.202", "zhushixin");
+        let sessions = SessionStore {
+            sessions: vec![visible.clone(), hidden.clone()],
+            ..SessionStore::default()
+        };
+
+        let options = connection_option_rows(&sessions);
+
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].id.as_str(), visible.id.to_string());
+        assert_eq!(options[0].name.as_str(), "visible");
+        assert_eq!(options[0].endpoint.as_str(), "al*ce@server.example:22");
+        assert_eq!(options[1].id.as_str(), hidden.id.to_string());
+        assert_eq!(options[1].name.as_str(), "hidden");
+        assert_eq!(options[1].endpoint.as_str(), "zh*in@192.*.202:22");
     }
 }

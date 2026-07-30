@@ -4,9 +4,9 @@ pub use self::input::{TerminalKey, TerminalModifiers, encode_key};
 
 mod input;
 
-const MIN_COLUMNS: usize = 20;
+const MIN_COLUMNS: usize = 10;
 const MAX_COLUMNS: usize = 300;
-const MIN_ROWS: usize = 5;
+const MIN_ROWS: usize = 3;
 const MAX_ROWS: usize = 100;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -324,6 +324,49 @@ mod tests {
         assert_eq!(snapshot.lines[0].runs[1].cells, 2);
         assert_eq!(snapshot.lines[0].runs[2].column, 3);
         assert_eq!(snapshot.cursor_column, 4);
+    }
+
+    #[test]
+    fn terminal_grid_clamps_to_the_small_screen_floor() {
+        let mut terminal = TerminalModel::new(1, 1, 10);
+        let snapshot = terminal.snapshot();
+        assert_eq!(
+            (snapshot.max_columns, snapshot.lines.len()),
+            (MIN_COLUMNS, MIN_ROWS)
+        );
+
+        terminal.resize(0, 0);
+        let snapshot = terminal.snapshot();
+        assert_eq!(
+            (snapshot.max_columns, snapshot.lines.len()),
+            (MIN_COLUMNS, MIN_ROWS)
+        );
+    }
+
+    #[test]
+    fn narrowing_past_a_wide_character_keeps_the_grid_writable() {
+        let mut terminal = TerminalModel::new(30, 5, 10);
+        terminal.process("\x1b[1;20H中".as_bytes());
+        terminal.process("\x1b[?47h\x1b[1;20H中".as_bytes());
+
+        terminal.resize(20, 5);
+        terminal.process(b"x");
+
+        let alternate_snapshot = terminal.snapshot();
+        assert_eq!(alternate_snapshot.max_columns, 20);
+        assert!(snapshot_contains_suffix(&alternate_snapshot, 'x'));
+
+        terminal.process(b"\x1b[?47l");
+        terminal.process(b"x");
+        assert!(snapshot_contains_suffix(&terminal.snapshot(), 'x'));
+    }
+
+    fn snapshot_contains_suffix(snapshot: &TerminalSnapshot, suffix: char) -> bool {
+        snapshot
+            .lines
+            .iter()
+            .flat_map(|line| &line.runs)
+            .any(|run| run.text.ends_with(suffix))
     }
 
     #[test]

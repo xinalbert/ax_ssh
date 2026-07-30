@@ -1,6 +1,7 @@
 import { Theme } from "theme.slint";
 import {
     SettingsHeader,
+    SettingsNavIcon,
     SettingsNavItem,
 } from "components/settings-controls.slint";
 import { GeneralSettingsPage } from "settings/general.slint";
@@ -26,6 +27,7 @@ export component SettingsPane inherits Rectangle {
     in property <int> local-shell-index;
     in property <int> sidebar-width;
     in property <int> tab-width;
+    in property <string> session-mask-character;
     in property <string> open-settings-shortcut;
     in property <string> toggle-sidebar-shortcut;
     in property <string> copy-selection-shortcut;
@@ -39,7 +41,7 @@ export component SettingsPane inherits Rectangle {
 
     callback save(
         string, int, int, string, int, bool, bool, string, int, int, int, int, int,
-        string, string, string, string,
+        string, string, string, string, string,
     );
     callback cancel();
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
@@ -67,6 +69,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-local-shell-index: root.local-shell-index;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
+    private property <string> draft-session-mask-character: root.session-mask-character;
     private property <string> draft-open-settings-shortcut: root.open-settings-shortcut;
     private property <string> draft-toggle-sidebar-shortcut: root.toggle-sidebar-shortcut;
     private property <string> draft-copy-selection-shortcut: root.copy-selection-shortcut;
@@ -93,6 +96,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-rows,
             root.draft-sidebar-width,
             root.draft-tab-width,
+            root.draft-session-mask-character,
             root.draft-open-settings-shortcut,
             root.draft-toggle-sidebar-shortcut,
             root.draft-copy-selection-shortcut,
@@ -133,31 +137,31 @@ export component SettingsPane inherits Rectangle {
                 }
 
                 SettingsNavItem {
-                    settings-icon: true;
+                    icon: SettingsNavIcon.General;
                     label: "General";
                     selected: root.selected-section == "General";
                     activated => { root.select-section("General"); }
                 }
                 SettingsNavItem {
-                    icon: "Aa";
+                    icon: SettingsNavIcon.Appearance;
                     label: "Appearance";
                     selected: root.selected-section == "Appearance";
                     activated => { root.select-section("Appearance"); }
                 }
                 SettingsNavItem {
-                    icon: ">_";
+                    icon: SettingsNavIcon.Terminal;
                     label: "Terminal";
                     selected: root.selected-section == "Terminal";
                     activated => { root.select-section("Terminal"); }
                 }
                 SettingsNavItem {
-                    icon: "[]";
+                    icon: SettingsNavIcon.Workspace;
                     label: "Workspace";
                     selected: root.selected-section == "Workspace";
                     activated => { root.select-section("Workspace"); }
                 }
                 SettingsNavItem {
-                    icon: "K";
+                    icon: SettingsNavIcon.Shortcuts;
                     label: "Shortcuts";
                     selected: root.selected-section == "Shortcuts";
                     activated => { root.select-section("Shortcuts"); }
@@ -166,7 +170,7 @@ export component SettingsPane inherits Rectangle {
                 Rectangle { vertical-stretch: 1; }
                 Rectangle { height: Theme.hairline; background: Theme.border; }
                 SettingsNavItem {
-                    icon: "i";
+                    icon: SettingsNavIcon.About;
                     label: "About";
                     selected: root.selected-section == "About";
                     activated => { root.select-section("About"); }
@@ -183,7 +187,7 @@ export component SettingsPane inherits Rectangle {
 
                 SettingsHeader {
                     title: root.section-title;
-                    status: root.status == "Ready" ? "" : root.status;
+                    status: root.status;
                     close => {
                         root.shortcut-recording-changed(false);
                         root.cancel();
@@ -228,6 +232,7 @@ export component SettingsPane inherits Rectangle {
                         height: parent.height;
                         draft-sidebar-width <=> root.draft-sidebar-width;
                         draft-tab-width <=> root.draft-tab-width;
+                        draft-session-mask-character <=> root.draft-session-mask-character;
                     }
 
                     if root.selected-section == "Shortcuts" : ShortcutsSettingsPage {

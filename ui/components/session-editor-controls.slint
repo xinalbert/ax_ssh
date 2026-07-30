@@ -1,0 +1,68 @@
+import { Theme } from "../theme.slint";
+
+export component SessionEditorSectionHeading inherits Rectangle {
+    in property <string> label;
+    in property <string> description;
+    private property <length> heading-height: root.description.is-empty
+        ? Theme.editor-section-title-height
+        : Theme.editor-section-heading-height;
+
+    min-height: root.heading-height;
+    max-height: root.heading-height;
+    vertical-stretch: 0;
+    background: transparent;
+
+    Text {
+        width: parent.width;
+        height: Theme.editor-section-title-height;
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-body-strong;
+        font-weight: 700;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if !root.description.is-empty : Text {
+        y: Theme.editor-section-title-height + Theme.space-xxs;
+        width: parent.width;
+        height: Theme.editor-section-description-height;
+        text: root.description;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+export component SessionEditorField inherits Rectangle {
+    in property <string> label;
+    in property <length> control-height: Theme.editor-input-row-height;
+    private property <length> field-height:
+        Theme.editor-label-height + Theme.space-xs + root.control-height;
+
+    min-height: root.field-height;
+    max-height: root.field-height;
+    vertical-stretch: 0;
+    background: transparent;
+
+    VerticalLayout {
+        spacing: Theme.space-xs;
+
+        Text {
+            height: Theme.editor-label-height;
+            text: root.label;
+            color: Theme.muted;
+            font-size: Theme.font-caption;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            height: root.control-height;
+            background: transparent;
+
+            @children
+        }
+    }
+}

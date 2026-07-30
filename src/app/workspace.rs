@@ -44,22 +44,6 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
         }
     });
 
-    let ui_for_group = ui.as_weak();
-    let state_for_group = state.clone();
-    ui.on_activate_group(move |group_name| {
-        let group_name = normalize_group_name(group_name.as_str());
-        match state_for_group.lock() {
-            Ok(mut app) => {
-                app.expanded_groups.insert(group_name);
-            }
-            Err(_) => {
-                set_status(&ui_for_group, "Cannot update group state");
-                return;
-            }
-        }
-        refresh_session_models(&ui_for_group, &state_for_group);
-    });
-
     let ui_for_activate = ui.as_weak();
     let state_for_activate = state.clone();
     ui.on_activate_tab(move |id| {
@@ -75,6 +59,23 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             return;
         }
         refresh_workspace(&ui_for_activate, &state_for_activate);
+    });
+
+    let ui_for_move = ui.as_weak();
+    let state_for_move = state.clone();
+    ui.on_move_tab(move |id, target_index| {
+        let id = match parse_uuid(id.as_str(), "tab", &ui_for_move) {
+            Some(id) => id,
+            None => return,
+        };
+        let moved = state_for_move
+            .lock()
+            .is_ok_and(|mut app| app.move_tab(id, target_index.max(0) as usize));
+        if !moved {
+            set_status(&ui_for_move, "Tab not found");
+            return;
+        }
+        refresh_workspace(&ui_for_move, &state_for_move);
     });
 
     let ui_for_close = ui.as_weak();

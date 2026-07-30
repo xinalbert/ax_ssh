@@ -41,7 +41,7 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
                     .terminal
                     .application_cursor();
                 let Some(data) = encode_terminal_key(&key, modifiers, application_cursor) else {
-                    return Ok((false, None));
+                    return Ok((false, false));
                 };
                 let viewport_changed = {
                     let terminal = app.active_terminal_mut().context("no active terminal")?;
@@ -53,14 +53,14 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
                         .request_send(data)?;
                     viewport_changed
                 };
-                Ok((true, viewport_changed.then(|| app.active_snapshot())))
+                Ok((true, viewport_changed))
             });
         match result {
-            Ok((handled, Some(snapshot))) => {
-                dispatch_active_snapshot(&ui_for_key, snapshot);
+            Ok((handled, true)) => {
+                dispatch_active_snapshot(&ui_for_key, &state_for_key);
                 handled
             }
-            Ok((handled, None)) => handled,
+            Ok((handled, false)) => handled,
             Err(error) => {
                 set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
                 true
@@ -74,29 +74,41 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
         let result = state_for_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-            .and_then(|app| {
+            .and_then(|mut app| {
+                let columns = columns.max(1) as u32;
+                let rows = rows.max(1) as u32;
                 app.active_terminal()
                     .context("no active terminal")?
                     .worker
                     .as_ref()
                     .context("active terminal has no worker")?
-                    .request_resize(columns.max(1) as u32, rows.max(1) as u32)
+                    .request_resize(columns, rows)?;
+                app.resize_active_terminal_model(columns as usize, rows as usize)
+                    .context("active terminal disappeared while resizing")?;
+                Ok(())
             });
-        if let Err(error) = result {
-            debug!(%error, "terminal resize ignored");
-            set_status(&ui_for_resize, &format!("Cannot resize terminal: {error}"));
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_resize, &state_for_resize),
+            Err(error) => {
+                debug!(%error, "terminal resize ignored");
+                set_status(&ui_for_resize, &format!("Cannot resize terminal: {error}"));
+            }
         }
     });
 
     let ui_for_scroll = ui.as_weak();
     let state_for_scroll = state.clone();
     ui.on_scroll_terminal(move |lines| {
-        let snapshot = state_for_scroll.lock().ok().and_then(|mut app| {
-            let changed = app.active_terminal_mut()?.terminal.scroll(lines);
-            changed.then(|| app.active_snapshot())
-        });
-        if let Some(snapshot) = snapshot {
-            dispatch_active_snapshot(&ui_for_scroll, snapshot);
+        let changed = state_for_scroll
+            .lock()
+            .ok()
+            .and_then(|mut app| {
+                app.active_terminal_mut()
+                    .map(|terminal| terminal.terminal.scroll(lines))
+            })
+            .unwrap_or(false);
+        if changed {
+            dispatch_active_snapshot(&ui_for_scroll, &state_for_scroll);
         }
     });
 
@@ -131,7 +143,7 @@ pub(super) fn spawn_local_shell_monitor(
         while let Some(event) = events.recv().await {
             match event {
                 LocalShellEvent::Started { shell } => {
-                    let Some(snapshot) = mutate_local_terminal(&state, tab_id, |terminal| {
+                    let Some(active) = mutate_local_terminal(&state, tab_id, |terminal| {
                         terminal.connected = true;
                         terminal.worker_running = true;
                         terminal.status = format!("Local shell: {shell}");
@@ -139,29 +151,21 @@ pub(super) fn spawn_local_shell_monitor(
                         continue;
                     };
                     info!(tab_id = %tab_id, shell = %shell, "local shell started");
-                    if let Some(snapshot) = snapshot {
-                        dispatch_active_snapshot(&ui, snapshot);
+                    if active {
+                        dispatch_active_snapshot(&ui, &state);
                     }
                     refresh_workspace(&ui, &state);
                 }
                 LocalShellEvent::Output(data) => {
-                    if let Some(Some(snapshot)) =
-                        mutate_local_terminal(&state, tab_id, |terminal| {
-                            terminal.terminal.process(&data);
-                        })
-                    {
-                        dispatch_active_snapshot(&ui, snapshot);
+                    if let Some(true) = mutate_local_terminal(&state, tab_id, |terminal| {
+                        terminal.terminal.process(&data);
+                    }) {
+                        dispatch_active_snapshot(&ui, &state);
                     }
                 }
-                LocalShellEvent::Resized { columns, rows } => {
-                    if let Some(Some(snapshot)) =
-                        mutate_local_terminal(&state, tab_id, |terminal| {
-                            terminal.terminal.resize(columns as usize, rows as usize);
-                        })
-                    {
-                        dispatch_active_snapshot(&ui, snapshot);
-                    }
-                }
+                // The UI updates its terminal snapshot as soon as this resize request is accepted.
+                // Ignoring this later acknowledgement prevents a stale worker event from reverting it.
+                LocalShellEvent::Resized { .. } => {}
                 LocalShellEvent::Exited { status } => {
                     terminal_event = true;
                     if finish_local_terminal(
@@ -195,13 +199,13 @@ pub(super) fn mutate_local_terminal(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     action: impl FnOnce(&mut TerminalTabState),
-) -> Option<Option<ActiveTabSnapshot>> {
+) -> Option<bool> {
     let mut app = state.lock().ok()?;
     if !app.terminal(tab_id).is_some_and(TerminalTabState::is_local) {
         return None;
     }
     action(app.terminal_mut(tab_id)?);
-    Some((app.active_tab_id() == Some(tab_id)).then(|| app.active_snapshot()))
+    Some(app.active_tab_id() == Some(tab_id))
 }
 
 pub(super) fn finish_local_terminal(

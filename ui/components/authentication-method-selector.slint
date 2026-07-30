@@ -1,0 +1,95 @@
+import { Theme } from "../theme.slint";
+
+export struct AuthenticationMethodOptionData {
+    label: string,
+    value: string,
+}
+
+component AuthenticationMethodOption inherits FocusScope {
+    in property <string> label;
+    in property <string> accessible-name: root.label;
+    in property <bool> selected;
+    callback activated();
+
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: radio-button;
+    accessible-label: root.accessible-name;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: root.selected
+            ? Theme.panel-alt
+            : (option-touch.has-hover || root.has-focus ? Theme.panel : transparent);
+        border-width: root.has-focus ? Theme.hairline : 0px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-small;
+
+        Text {
+            x: Theme.space-lg;
+            width: parent.width - 2 * Theme.space-lg;
+            height: parent.height - Theme.editor-auth-indicator-height;
+            text: root.label;
+            color: root.selected ? Theme.text : Theme.muted;
+            font-size: Theme.font-body;
+            font-weight: root.selected ? 700 : 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            x: Theme.space-md;
+            y: parent.height - Theme.editor-auth-indicator-height;
+            width: parent.width - 2 * Theme.space-md;
+            height: Theme.editor-auth-indicator-height;
+            border-radius: Theme.hairline;
+            background: root.selected ? Theme.accent : transparent;
+        }
+
+        option-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.activated(); }
+        }
+    }
+}
+
+export component AuthenticationMethodSelector inherits Rectangle {
+    in property <[AuthenticationMethodOptionData]> options;
+    in-out property <string> selected-method: "Password";
+    in property <string> accessible-name: "Authentication method";
+
+    min-height: Theme.editor-input-row-height;
+    max-height: Theme.editor-input-row-height;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    background: Theme.background;
+    border-width: Theme.hairline;
+    border-color: Theme.border;
+    border-radius: Theme.radius-small;
+    accessible-role: list;
+    accessible-label: root.accessible-name;
+    accessible-item-count: root.options.length;
+
+    HorizontalLayout {
+        padding: Theme.space-xs;
+        spacing: Theme.space-xs;
+
+        for option in root.options : AuthenticationMethodOption {
+            horizontal-stretch: 1;
+            label: option.label;
+            accessible-name: option.label + " authentication method";
+            selected: root.selected-method == option.value;
+            activated => { root.selected-method = option.value; }
+        }
+    }
+}

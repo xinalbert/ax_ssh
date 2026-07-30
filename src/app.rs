@@ -4,7 +4,6 @@
 //! maps user intent to domain operations and returns owned worker events to the
 //! Slint event loop.
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -30,7 +29,9 @@ use self::credential_tasks::{
     save_password as save_stored_password,
 };
 use self::input::{format_shortcut_event, normalize_slint_modifiers, terminal_key_from_slint};
-use self::session_groups::{compact_label, group_options, profile_endpoint, session_groups};
+use self::session_groups::{
+    compact_label, group_options, profile_endpoint, profile_sidebar_endpoint, session_groups,
+};
 use self::state::{
     ActiveTabSnapshot, AppState, ConnectionStart, PendingAuth, PendingHostKey, PendingProbe,
     TerminalTabState, TerminalWorker, WorkspaceTabSummary, prepare_authentication_retry,
@@ -80,18 +81,20 @@ pub fn run() -> Result<()> {
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let ui = AppWindow::new().context("failed to create Slint window")?;
 
-    let (rows, groups, settings) = {
+    let (rows, groups, connection_options, settings) = {
         let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
         (
             session_rows(&app.sessions, &app.expanded_groups),
             group_option_rows(&app.sessions),
+            connection_option_rows(&app.sessions),
             app.sessions.settings.clone(),
         )
     };
     ui.set_sessions(ModelRc::new(VecModel::from(rows)));
     ui.set_group_options(ModelRc::new(VecModel::from(groups)));
+    ui.set_connection_options(ModelRc::new(VecModel::from(connection_options)));
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
         Vec::<TerminalRenderLine>::new(),
@@ -107,9 +110,7 @@ pub fn run() -> Result<()> {
     apply_settings_to_component(&ui, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default());
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
-    ui.set_status("Ready".into());
-    ui.set_unified_titlebar(false);
-
+    ui.set_status("".into());
     wire_callbacks(&ui, state.clone(), runtime.handle().clone());
     load_private_key_options(runtime.handle(), ui.as_weak());
     #[cfg(target_os = "macos")]
@@ -120,9 +121,8 @@ pub fn run() -> Result<()> {
             let Some(ui) = ui_for_window.upgrade() else {
                 return;
             };
-            match macos_window::configure(ui.window()) {
-                Ok(()) => ui.set_unified_titlebar(true),
-                Err(error) => warn!(%error, "falling back to the standard macOS title bar"),
+            if let Err(error) = macos_window::configure(ui.window()) {
+                warn!(%error, "failed to configure the standard macOS title bar");
             }
             configure_macos_application_menu(&ui);
         });
@@ -176,18 +176,6 @@ fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) 
             .unwrap_or_default()
             .into()
     });
-    #[cfg(target_os = "macos")]
-    {
-        let ui_for_drag = ui.as_weak();
-        ui.on_drag_window(move || {
-            let Some(ui) = ui_for_drag.upgrade() else {
-                return;
-            };
-            if let Err(error) = macos_window::start_drag(ui.window()) {
-                warn!(%error, "failed to start native macOS window drag");
-            }
-        });
-    }
     wire_workspace_tabs(ui, state.clone(), runtime.clone());
     wire_session_editor(ui, state.clone(), runtime.clone());
     wire_connection_request(ui, state.clone(), runtime.clone());

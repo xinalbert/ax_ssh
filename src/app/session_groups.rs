@@ -1,6 +1,7 @@
 //! UI-independent grouping of saved session profiles.
 
 use std::collections::BTreeSet;
+use std::net::Ipv4Addr;
 
 use ax_ssh::config::{SessionProfile, SessionStore, normalize_group_name};
 
@@ -41,6 +42,44 @@ pub(super) fn profile_endpoint(profile: &SessionProfile) -> String {
     format!("{}@{}:{}", profile.username, profile.host, profile.port)
 }
 
+pub(super) fn profile_sidebar_endpoint(profile: &SessionProfile, mask_character: &str) -> String {
+    format!(
+        "{}@{}:{}",
+        mask_username(&profile.username, mask_character),
+        mask_ipv4_host(&profile.host, mask_character),
+        profile.port,
+    )
+}
+
+fn mask_username(username: &str, mask_character: &str) -> String {
+    let characters = username.chars().collect::<Vec<_>>();
+    match characters.len() {
+        0 => mask_character.to_owned(),
+        1 => format!("{}{}", characters[0], mask_character),
+        2..=4 => format!(
+            "{}{}{}",
+            characters[0],
+            mask_character,
+            characters[characters.len() - 1],
+        ),
+        _ => {
+            let prefix = characters[..2].iter().collect::<String>();
+            let suffix = characters[characters.len() - 2..]
+                .iter()
+                .collect::<String>();
+            format!("{prefix}{mask_character}{suffix}")
+        }
+    }
+}
+
+fn mask_ipv4_host(host: &str, mask_character: &str) -> String {
+    let Ok(address) = host.parse::<Ipv4Addr>() else {
+        return host.to_owned();
+    };
+    let [first, _, _, last] = address.octets();
+    format!("{first}.{mask_character}.{last}")
+}
+
 pub(super) fn compact_label(value: &str, fallback: &str) -> String {
     let value = value.trim();
     let value = if value.is_empty() { fallback } else { value };
@@ -75,5 +114,23 @@ mod tests {
         assert_eq!(compact_label("Production", "Un"), "Pr");
         assert_eq!(compact_label("生产环境", "Un"), "生产");
         assert_eq!(compact_label("", "Un"), "Un");
+    }
+
+    #[test]
+    fn sidebar_endpoints_mask_username_and_ipv4_middle_octets() {
+        let mut profile = SessionProfile::new("private", "192.168.1.202", "zhushixin");
+        profile.port = 22;
+
+        assert_eq!(
+            profile_sidebar_endpoint(&profile, "*"),
+            "zh*in@192.*.202:22"
+        );
+
+        profile.host = "server.example.com".into();
+        profile.username = "root".into();
+        assert_eq!(
+            profile_sidebar_endpoint(&profile, "#"),
+            "r#t@server.example.com:22"
+        );
     }
 }

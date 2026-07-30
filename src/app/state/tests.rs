@@ -47,6 +47,35 @@ fn closing_active_tab_selects_a_neighbor() {
 }
 
 #[test]
+fn moving_workspace_tabs_changes_position_without_renumbering_instances() {
+    let mut state = test_state();
+    let first = state.open_local_shell_tab();
+    let second = state.open_local_shell_tab();
+    let third = state.open_local_shell_tab();
+
+    assert!(state.move_tab(third, 0));
+    let summaries = state.tab_summaries();
+    assert_eq!(
+        summaries
+            .iter()
+            .map(|tab| tab.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Local Shell #3", "Local Shell #1", "Local Shell #2"]
+    );
+    assert_eq!(state.active_tab_id(), Some(third));
+
+    assert!(state.move_tab(first, 2));
+    assert_eq!(
+        state
+            .tab_summaries()
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        vec![third, second, first]
+    );
+}
+
+#[test]
 fn retiring_one_duplicate_profile_attempt_does_not_touch_the_other() {
     let mut state = test_state();
     let profile = SessionProfile::new("Local", "localhost", "alice");
@@ -100,5 +129,56 @@ fn local_shell_tabs_have_unique_ids_and_independent_numbers() {
         state
             .terminal(second)
             .is_some_and(TerminalTabState::is_local)
+    );
+}
+
+#[test]
+fn resizing_the_active_terminal_updates_its_snapshot_immediately() {
+    let mut state = test_state();
+    state.open_local_shell_tab();
+
+    state
+        .resize_active_terminal_model(12, 4)
+        .expect("active terminal should be resized");
+    let snapshot = state.active_snapshot();
+    let terminal = snapshot
+        .terminal
+        .expect("active terminal snapshot should contain the terminal grid");
+
+    assert_eq!(terminal.max_columns, 12);
+    assert_eq!(terminal.lines.len(), 4);
+}
+
+#[test]
+fn switching_terminal_tabs_exposes_each_tab_grid_size() {
+    let mut state = test_state();
+    let first = state.open_local_shell_tab();
+    state
+        .resize_active_terminal_model(12, 4)
+        .expect("first terminal should be resized");
+
+    let second = state.open_local_shell_tab();
+    state
+        .resize_active_terminal_model(20, 6)
+        .expect("second terminal should be resized");
+
+    assert!(state.activate_tab(first));
+    let first_snapshot = state
+        .active_snapshot()
+        .terminal
+        .expect("first terminal snapshot should be present");
+    assert_eq!(
+        (first_snapshot.max_columns, first_snapshot.lines.len()),
+        (12, 4)
+    );
+
+    assert!(state.activate_tab(second));
+    let second_snapshot = state
+        .active_snapshot()
+        .terminal
+        .expect("second terminal snapshot should be present");
+    assert_eq!(
+        (second_snapshot.max_columns, second_snapshot.lines.len()),
+        (20, 6)
     );
 }

@@ -18,7 +18,7 @@ pub(super) fn spawn_session_monitor(
         while let Some(event) = events.recv().await {
             match event {
                 SshSessionEvent::Connected => {
-                    let Some(snapshot) = mutate_terminal_attempt(
+                    let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
@@ -32,8 +32,8 @@ pub(super) fn spawn_session_monitor(
                         continue;
                     };
                     info!(tab_id = %tab_id, session_id = %profile.id, "SSH worker reported connected");
-                    if let Some(snapshot) = snapshot {
-                        dispatch_active_snapshot(&ui, snapshot);
+                    if active {
+                        dispatch_active_snapshot(&ui, &state);
                     }
                     refresh_workspace(&ui, &state);
                     if let Some(secret) = credential_to_store.take() {
@@ -49,27 +49,19 @@ pub(super) fn spawn_session_monitor(
                     }
                 }
                 SshSessionEvent::Output(data) => {
-                    if let Some(Some(snapshot)) = mutate_terminal_attempt(
+                    if let Some(true) = mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
                         |terminal| terminal.terminal.process(&data),
                     ) {
-                        dispatch_active_snapshot(&ui, snapshot);
+                        dispatch_active_snapshot(&ui, &state);
                     }
                 }
-                SshSessionEvent::Resized { columns, rows } => {
-                    if let Some(Some(snapshot)) = mutate_terminal_attempt(
-                        &state,
-                        tab_id,
-                        profile.id,
-                        attempt_id,
-                        |terminal| terminal.terminal.resize(columns as usize, rows as usize),
-                    ) {
-                        dispatch_active_snapshot(&ui, snapshot);
-                    }
-                }
+                // The resize callback updates the active model immediately after its request is
+                // accepted. A delayed worker acknowledgement must not restore an older grid.
+                SshSessionEvent::Resized { .. } => {}
                 SshSessionEvent::Disconnected => {
                     terminal_event = true;
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
@@ -266,7 +258,7 @@ pub(super) fn mutate_terminal_attempt(
     profile_id: Uuid,
     attempt_id: Uuid,
     action: impl FnOnce(&mut TerminalTabState),
-) -> Option<Option<ActiveTabSnapshot>> {
+) -> Option<bool> {
     let mut app = state.lock().ok()?;
     let current = app
         .terminal(tab_id)
@@ -276,5 +268,5 @@ pub(super) fn mutate_terminal_attempt(
         return None;
     }
     action(app.terminal_mut(tab_id)?);
-    Some((app.active_tab_id() == Some(tab_id)).then(|| app.active_snapshot()))
+    Some(app.active_tab_id() == Some(tab_id))
 }

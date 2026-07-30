@@ -22,15 +22,16 @@ pub const MIN_TERMINAL_BRIGHTNESS: u16 = 60;
 pub const MAX_TERMINAL_BRIGHTNESS: u16 = 140;
 pub const MIN_SCROLLBACK_LINES: u32 = 100;
 pub const MAX_SCROLLBACK_LINES: u32 = 50_000;
-pub const MIN_TERMINAL_COLUMNS: u16 = 20;
+pub const MIN_TERMINAL_COLUMNS: u16 = 10;
 pub const MAX_TERMINAL_COLUMNS: u16 = 300;
-pub const MIN_TERMINAL_ROWS: u16 = 5;
+pub const MIN_TERMINAL_ROWS: u16 = 3;
 pub const MAX_TERMINAL_ROWS: u16 = 100;
 pub const MIN_SIDEBAR_WIDTH: u16 = 180;
 pub const MAX_SIDEBAR_WIDTH: u16 = 420;
 pub const MIN_TAB_WIDTH: u16 = 120;
 pub const MAX_TAB_WIDTH: u16 = 260;
 pub const SYSTEM_DEFAULT_SHELL: &str = "System default";
+pub const DEFAULT_SESSION_MASK_CHARACTER: &str = "*";
 const DEFAULT_TERMINAL_FONT_SIZE: u16 = 14;
 const DEFAULT_TERMINAL_LINE_HEIGHT: u16 = 120;
 const DEFAULT_TERMINAL_BRIGHTNESS: u16 = 100;
@@ -40,7 +41,7 @@ const DEFAULT_TERMINAL_ROWS: u16 = 36;
 const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
-const CURRENT_SCHEMA_VERSION: u32 = 7;
+const CURRENT_SCHEMA_VERSION: u32 = 8;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;
 const MAX_FONT_FAMILY_CHARS: usize = 128;
@@ -293,19 +294,26 @@ pub struct WorkspaceSettings {
     pub sidebar_width: u16,
     #[serde(default = "default_tab_width")]
     pub tab_width: u16,
+    #[serde(default = "default_session_mask_character")]
+    pub session_mask_character: String,
 }
 
 impl WorkspaceSettings {
-    pub fn normalized(sidebar_width: i32, tab_width: i32) -> Self {
+    pub fn normalized(sidebar_width: i32, tab_width: i32, session_mask_character: &str) -> Self {
         Self {
             sidebar_width: sidebar_width.clamp(MIN_SIDEBAR_WIDTH.into(), MAX_SIDEBAR_WIDTH.into())
                 as u16,
             tab_width: tab_width.clamp(MIN_TAB_WIDTH.into(), MAX_TAB_WIDTH.into()) as u16,
+            session_mask_character: normalize_session_mask_character(session_mask_character),
         }
     }
 
     fn normalize_in_place(&mut self) {
-        *self = Self::normalized(i32::from(self.sidebar_width), i32::from(self.tab_width));
+        *self = Self::normalized(
+            i32::from(self.sidebar_width),
+            i32::from(self.tab_width),
+            &self.session_mask_character,
+        );
     }
 }
 
@@ -314,6 +322,7 @@ impl Default for WorkspaceSettings {
         Self {
             sidebar_width: default_sidebar_width(),
             tab_width: default_tab_width(),
+            session_mask_character: default_session_mask_character(),
         }
     }
 }
@@ -438,6 +447,7 @@ impl AppSettings {
         known_shells: &[String],
         sidebar_width: i32,
         tab_width: i32,
+        session_mask_character: &str,
         open_settings_shortcut: &str,
         toggle_sidebar_shortcut: &str,
         copy_selection_shortcut: &str,
@@ -460,7 +470,11 @@ impl AppSettings {
                 local_shell,
                 known_shells,
             ),
-            workspace: WorkspaceSettings::normalized(sidebar_width, tab_width),
+            workspace: WorkspaceSettings::normalized(
+                sidebar_width,
+                tab_width,
+                session_mask_character,
+            ),
             shortcuts: ShortcutSettings::normalized(
                 open_settings_shortcut,
                 toggle_sidebar_shortcut,
@@ -537,6 +551,23 @@ const fn default_sidebar_width() -> u16 {
 
 const fn default_tab_width() -> u16 {
     DEFAULT_TAB_WIDTH
+}
+
+fn default_session_mask_character() -> String {
+    DEFAULT_SESSION_MASK_CHARACTER.to_owned()
+}
+
+fn normalize_session_mask_character(value: &str) -> String {
+    let value = value.trim();
+    if value.chars().count() == 1
+        && !value
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
+        value.to_owned()
+    } else {
+        default_session_mask_character()
+    }
 }
 
 fn default_open_settings_shortcut() -> String {
@@ -1020,6 +1051,7 @@ mod tests {
             &[SYSTEM_DEFAULT_SHELL.into(), "zsh".into()],
             20,
             9_000,
+            "  #  ",
             "Ctrl+,",
             "Ctrl+Shift+B",
             "Ctrl+Shift+C",
@@ -1058,7 +1090,28 @@ mod tests {
         );
         assert_eq!(settings.workspace.sidebar_width, MIN_SIDEBAR_WIDTH);
         assert_eq!(settings.workspace.tab_width, MAX_TAB_WIDTH);
+        assert_eq!(settings.workspace.session_mask_character, "#");
         assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
+    }
+
+    #[test]
+    fn workspace_mask_character_is_one_visible_character() {
+        assert_eq!(
+            WorkspaceSettings::normalized(220, 172, "#").session_mask_character,
+            "#"
+        );
+        assert_eq!(
+            WorkspaceSettings::normalized(220, 172, "  $  ").session_mask_character,
+            "$"
+        );
+        assert_eq!(
+            WorkspaceSettings::normalized(220, 172, "").session_mask_character,
+            DEFAULT_SESSION_MASK_CHARACTER
+        );
+        assert_eq!(
+            WorkspaceSettings::normalized(220, 172, "**").session_mask_character,
+            DEFAULT_SESSION_MASK_CHARACTER
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export struct WorkspaceTabRow {
@@ -7,18 +8,219 @@ export struct WorkspaceTabRow {
     connected: bool,
 }
 
+export struct ConnectableSessionRow {
+    id: string,
+    name: string,
+    endpoint: string,
+}
+
+component WorkspaceTabContent inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> kind;
+    in property <bool> connected;
+    in property <bool> active: false;
+    in property <int> order;
+    in property <bool> close-enabled: false;
+    callback close();
+    callback scroll-tabs(length, length);
+
+    padding-left: Theme.tab-content-leading-padding;
+    padding-right: Theme.space-xs;
+    spacing: Theme.tab-content-spacing;
+
+    Rectangle {
+        width: Theme.tab-status-size;
+        background: transparent;
+        Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: Theme.tab-status-size;
+            height: Theme.tab-status-size;
+            border-radius: Theme.radius-small;
+            background: root.connected
+                ? Theme.success
+                : (root.kind == "terminal" ? Theme.accent : Theme.muted);
+        }
+    }
+    Text {
+        width: Theme.tab-order-width;
+        text: "\{root.order}";
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: root.title;
+        color: Theme.text;
+        font-size: Theme.font-small;
+        font-weight: root.active ? 700 : 400;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        width: Theme.tab-close-size;
+        height: Theme.tab-close-size;
+        border-radius: Theme.radius;
+        background: close-touch.has-hover && root.close-enabled ? Theme.panel-alt : transparent;
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: "x";
+            color: Theme.muted;
+            font-size: Theme.font-small;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        close-touch := TouchArea {
+            enabled: root.close-enabled;
+            mouse-cursor: pointer;
+            accessible-role: button;
+            accessible-label: "Close tab";
+            clicked => { root.close(); }
+            scroll-event(event) => {
+                root.scroll-tabs(event.delta-x, event.delta-y);
+                return EventResult.accept;
+            }
+        }
+    }
+}
+
+component ConnectionPickerRow inherits FocusScope {
+    in property <string> id;
+    in property <string> name;
+    in property <string> endpoint;
+    callback connect-session(string);
+
+    height: Theme.titlebar-connection-picker-row-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.name + ", " + root.endpoint;
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.connect-session(root.id);
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-small;
+        background: row-touch.has-hover || root.has-focus ? Theme.panel-alt : transparent;
+
+        VerticalLayout {
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
+            padding-top: Theme.space-xs;
+            padding-bottom: Theme.space-xs;
+            spacing: 0px;
+
+            Text {
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.font-body;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.endpoint;
+                color: Theme.muted;
+                font-family: "JetBrains Mono";
+                font-size: Theme.font-caption;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+
+        row-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.connect-session(root.id); }
+        }
+    }
+}
+
+export component ConnectionPicker inherits FocusScope {
+    in property <[ConnectableSessionRow]> sessions;
+    callback connect-session(string);
+    callback dismiss();
+
+    width: Theme.titlebar-connection-picker-width;
+    height: root.sessions.length == 0
+        ? Theme.titlebar-connection-picker-empty-height
+        : min(
+            Theme.titlebar-connection-picker-max-height,
+            root.sessions.length * Theme.titlebar-connection-picker-row-height
+                + 2 * Theme.titlebar-connection-picker-padding,
+        );
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: list;
+    accessible-label: "Saved SSH sessions";
+
+    key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.dismiss();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: Theme.panel;
+        border-width: Theme.hairline;
+        border-color: Theme.border;
+        border-radius: Theme.radius;
+        clip: true;
+
+        VerticalLayout {
+            padding: Theme.titlebar-connection-picker-padding;
+            spacing: 0px;
+
+            if root.sessions.length == 0 : Text {
+                text: "No saved SSH sessions";
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if root.sessions.length > 0 : ListView {
+                vertical-stretch: 1;
+                for session in root.sessions : ConnectionPickerRow {
+                    id: session.id;
+                    name: session.name;
+                    endpoint: session.endpoint;
+                    connect-session(id) => { root.connect-session(id); }
+                }
+            }
+        }
+    }
+}
+
 export component WorkspaceTitlebar inherits Rectangle {
     in property <[WorkspaceTabRow]> tabs;
     in property <string> active-tab-id;
-    in property <string> active-tab-kind;
     in property <int> tab-width;
-    in property <length> navigation-width;
-    in property <bool> unified-titlebar;
+    in property <color> terminal-background;
+    in property <bool> connection-picker-open;
 
     callback activate-tab(string);
     callback close-tab(string);
-    callback new-session();
-    callback drag-window();
+    callback move-tab(string, int);
+    callback toggle-connection-picker();
+
+    private property <int> drag-source-index: -1;
+    private property <int> drag-target-index: -1;
+    private property <length> drag-pointer-content-x: 0px;
+    private property <length> drag-pointer-offset-x: 0px;
+    private property <string> drag-title;
+    private property <string> drag-kind;
+    private property <bool> drag-connected: false;
+    private property <int> drag-order: 0;
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -28,39 +230,70 @@ export component WorkspaceTitlebar inherits Rectangle {
         );
     }
 
-    height: root.unified-titlebar
-        ? Theme.titlebar-height : Theme.titlebar-fallback-height;
+    function tab-index-at(content-x: length) -> int {
+        return max(
+            0,
+            min(
+                root.tabs.length - 1,
+                floor(content-x / (root.tab-width * 1px)),
+            ),
+        );
+    }
+
+    function begin-tab-drag(
+        index: int, title: string, kind: string, connected: bool, pointer-x: length,
+    ) {
+        root.drag-source-index = index;
+        root.drag-target-index = index;
+        root.drag-pointer-content-x = index * root.tab-width * 1px + pointer-x;
+        root.drag-pointer-offset-x = pointer-x;
+        root.drag-title = title;
+        root.drag-kind = kind;
+        root.drag-connected = connected;
+        root.drag-order = index + 1;
+    }
+
+    function update-tab-drag(index: int, pointer-x: length) {
+        root.drag-pointer-content-x = index * root.tab-width * 1px + pointer-x;
+        root.drag-target-index = root.tab-index-at(root.drag-pointer-content-x);
+    }
+
+    function clear-tab-drag() {
+        root.drag-source-index = -1;
+        root.drag-target-index = -1;
+    }
+
+    function finish-tab-drag(id: string, source-index: int, pointer-x: length) {
+        let target-index = root.tab-index-at(
+            source-index * root.tab-width * 1px + pointer-x,
+        );
+        root.clear-tab-drag();
+        if target-index == source-index {
+            root.activate-tab(id);
+        } else {
+            root.move-tab(id, target-index);
+        }
+    }
+
+    height: Theme.titlebar-fallback-height;
     background: Theme.panel;
-    border-width: Theme.hairline;
-    border-color: Theme.border;
+    border-width: 0px;
 
     HorizontalLayout {
         spacing: 0px;
 
         Rectangle {
-            width: root.unified-titlebar
-                ? Theme.titlebar-leading-width : root.navigation-width;
-            background: Theme.panel;
-        }
-
-        if root.active-tab-kind == "settings" : Rectangle {
-            horizontal-stretch: 1;
-            background: Theme.panel;
-            TouchArea {
-                pointer-event(event) => {
-                    if root.unified-titlebar
-                            && event.kind == PointerEventKind.down
-                            && event.button == PointerEventButton.left {
-                        root.drag-window();
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            visible: root.active-tab-kind != "settings";
             horizontal-stretch: 1;
             clip: true;
+
+            // The active tab paints over this separator to join its content pane.
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.border;
+            }
+
             tabs-flick := Flickable {
                 width: parent.width;
                 height: parent.height;
@@ -76,97 +309,143 @@ export component WorkspaceTitlebar inherits Rectangle {
                     y: 0px;
                     width: root.tab-width * 1px;
                     height: parent.height;
-                    background: tab.id == root.active-tab-id ? Theme.background : Theme.panel;
-                    border-width: Theme.hairline;
-                    border-color: Theme.border;
+                    background: transparent;
+                    opacity: root.drag-source-index == index
+                        ? Theme.tab-drag-source-opacity
+                        : 1;
+
+                    if tab.id == root.active-tab-id
+                            || (root.drag-source-index >= 0
+                                && root.drag-target-index == index) : Rectangle {
+                        y: Theme.tab-surface-inset + Theme.tab-surface-radius;
+                        width: parent.width;
+                        height: parent.height - self.y;
+                        background: tab.kind == "terminal"
+                            ? root.terminal-background
+                            : Theme.background;
+                    }
+                    if tab.id == root.active-tab-id
+                            || (root.drag-source-index >= 0
+                                && root.drag-target-index == index) : Rectangle {
+                        y: Theme.tab-surface-inset;
+                        width: parent.width;
+                        height: parent.height - Theme.tab-surface-inset;
+                        border-radius: Theme.tab-surface-radius;
+                        background: tab.kind == "terminal"
+                            ? root.terminal-background
+                            : Theme.background;
+                    }
+                    if root.drag-source-index >= 0
+                            && root.drag-target-index == index : Rectangle {
+                        x: Theme.tab-surface-radius;
+                        y: Theme.tab-surface-inset;
+                        width: parent.width - 2 * Theme.tab-surface-radius;
+                        height: Theme.hairline;
+                        background: Theme.accent;
+                    }
 
                     tab-touch := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.activate-tab(tab.id); }
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down
+                                    && event.button == PointerEventButton.left {
+                                root.begin-tab-drag(
+                                    index, tab.title, tab.kind, tab.connected, self.mouse-x,
+                                );
+                            } else if event.kind == PointerEventKind.up
+                                    && root.drag-source-index == index {
+                                root.finish-tab-drag(tab.id, index, self.mouse-x);
+                            } else if event.kind == PointerEventKind.cancel
+                                    && root.drag-source-index == index {
+                                root.clear-tab-drag();
+                            }
+                        }
+                        moved => {
+                            if root.drag-source-index == index {
+                                root.update-tab-drag(index, self.mouse-x);
+                            }
+                        }
                         scroll-event(event) => {
                             root.scroll-tabs(event.delta-x, event.delta-y);
                             return EventResult.accept;
                         }
                     }
-                    HorizontalLayout {
-                        padding-left: Theme.space-lg;
-                        padding-right: Theme.space-xs;
-                        spacing: Theme.space-sm;
-                        Rectangle {
-                            width: Theme.tab-status-size;
-                            background: transparent;
-                            Rectangle {
-                                y: (parent.height - self.height) / 2;
-                                width: Theme.tab-status-size;
-                                height: Theme.tab-status-size;
-                                border-radius: Theme.radius-small;
-                                background: tab.connected
-                                    ? Theme.success
-                                    : (tab.kind == "terminal" ? Theme.accent : Theme.muted);
-                            }
-                        }
-                        Text {
-                            horizontal-stretch: 1;
-                            text: tab.title;
-                            color: Theme.text;
-                            font-size: Theme.font-small;
-                            overflow: elide;
-                            vertical-alignment: center;
-                        }
-                        Rectangle {
-                            width: Theme.tab-close-size;
-                            height: Theme.tab-close-size;
-                            border-radius: Theme.radius;
-                            background: close-touch.has-hover ? Theme.panel-alt : transparent;
-                            Text {
-                                width: parent.width;
-                                height: parent.height;
-                                text: "x";
-                                color: Theme.muted;
-                                font-size: Theme.font-small;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                            close-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                accessible-role: button;
-                                accessible-label: "Close tab";
-                                clicked => { root.close-tab(tab.id); }
-                                scroll-event(event) => {
-                                    root.scroll-tabs(event.delta-x, event.delta-y);
-                                    return EventResult.accept;
-                                }
-                            }
+                    WorkspaceTabContent {
+                        title: tab.title;
+                        kind: tab.kind;
+                        connected: tab.connected;
+                        active: tab.id == root.active-tab-id;
+                        order: index + 1;
+                        close-enabled: true;
+                        close => { root.close-tab(tab.id); }
+                        scroll-tabs(delta-x, delta-y) => {
+                            root.scroll-tabs(delta-x, delta-y);
                         }
                     }
                 }
 
+            }
+
+            if root.drag-source-index >= 0 : Rectangle {
+                x: max(
+                    0px,
+                    min(
+                        parent.width - self.width,
+                        root.drag-pointer-content-x + tabs-flick.viewport-x
+                            - root.drag-pointer-offset-x,
+                    ),
+                );
+                y: 0px;
+                width: root.tab-width * 1px;
+                height: parent.height;
+                background: transparent;
+                opacity: Theme.tab-drag-ghost-opacity;
+
                 Rectangle {
-                    x: root.tabs.length * root.tab-width * 1px;
-                    y: 0px;
-                    width: max(0px, tabs-flick.width - self.x);
-                    height: parent.height;
-                    background: Theme.panel;
-                    TouchArea {
-                        pointer-event(event) => {
-                            if root.unified-titlebar
-                                    && root.tabs.length == 0
-                                    && event.kind == PointerEventKind.down
-                                    && event.button == PointerEventButton.left {
-                                root.drag-window();
-                            }
-                        }
-                        scroll-event(event) => {
-                            root.scroll-tabs(event.delta-x, event.delta-y);
-                            return EventResult.accept;
-                        }
-                    }
+                    y: Theme.tab-surface-inset + Theme.tab-surface-radius;
+                    width: parent.width;
+                    height: parent.height - self.y;
+                    background: root.drag-kind == "terminal"
+                        ? root.terminal-background
+                        : Theme.background;
+                }
+                Rectangle {
+                    y: Theme.tab-surface-inset;
+                    width: parent.width;
+                    height: parent.height - Theme.tab-surface-inset;
+                    border-radius: Theme.tab-surface-radius;
+                    background: root.drag-kind == "terminal"
+                        ? root.terminal-background
+                        : Theme.background;
+                }
+                Rectangle {
+                    x: Theme.tab-surface-radius;
+                    y: Theme.tab-surface-inset;
+                    width: parent.width - 2 * Theme.tab-surface-radius;
+                    height: Theme.hairline;
+                    background: Theme.accent;
+                }
+
+                WorkspaceTabContent {
+                    title: root.drag-title;
+                    kind: root.drag-kind;
+                    connected: root.drag-connected;
+                    active: true;
+                    order: root.drag-order;
                 }
             }
         }
-        if root.active-tab-kind != "settings" : Rectangle {
+        Rectangle {
             width: parent.height;
-            background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
+            background: add-touch.has-hover || root.connection-picker-open
+                ? Theme.panel-alt
+                : Theme.panel;
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.border;
+            }
             Text {
                 width: parent.width;
                 height: parent.height;
@@ -179,21 +458,8 @@ export component WorkspaceTitlebar inherits Rectangle {
             add-touch := TouchArea {
                 mouse-cursor: pointer;
                 accessible-role: button;
-                accessible-label: "New session tab";
-                clicked => { root.new-session(); }
-            }
-        }
-        Rectangle {
-            width: root.unified-titlebar ? Theme.titlebar-drag-width : 0px;
-            background: Theme.panel;
-            TouchArea {
-                pointer-event(event) => {
-                    if root.unified-titlebar
-                            && event.kind == PointerEventKind.down
-                            && event.button == PointerEventButton.left {
-                        root.drag-window();
-                    }
-                }
+                accessible-label: "Open saved SSH session";
+                clicked => { root.toggle-connection-picker(); }
             }
         }
     }

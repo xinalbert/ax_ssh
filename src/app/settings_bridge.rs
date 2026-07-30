@@ -34,6 +34,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
               default_rows,
               sidebar_width,
               tab_width,
+              session_mask_character,
               open_settings_shortcut,
               toggle_sidebar_shortcut,
               copy_selection_shortcut,
@@ -70,6 +71,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 &known_shells,
                 sidebar_width,
                 tab_width,
+                session_mask_character.as_str(),
                 &shortcuts.open_settings,
                 &shortcuts.toggle_sidebar,
                 &shortcuts.copy_selection,
@@ -93,6 +95,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 match save_result {
                     Ok(()) => {
                         apply_settings(&ui, settings);
+                        refresh_session_models(&ui, &state);
                         refresh_workspace(&ui, &state);
                         set_status(&ui, "Workspace settings saved");
                     }
