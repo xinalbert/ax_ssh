@@ -1,0 +1,200 @@
+import { Theme } from "../theme.slint";
+
+export struct WorkspaceTabRow {
+    id: string,
+    title: string,
+    kind: string,
+    connected: bool,
+}
+
+export component WorkspaceTitlebar inherits Rectangle {
+    in property <[WorkspaceTabRow]> tabs;
+    in property <string> active-tab-id;
+    in property <string> active-tab-kind;
+    in property <int> tab-width;
+    in property <length> navigation-width;
+    in property <bool> unified-titlebar;
+
+    callback activate-tab(string);
+    callback close-tab(string);
+    callback new-session();
+    callback drag-window();
+
+    function scroll-tabs(delta-x: length, delta-y: length) {
+        let delta = delta-x != 0px ? delta-x : delta-y;
+        tabs-flick.viewport-x = max(
+            tabs-flick.width - tabs-flick.viewport-width,
+            min(0px, tabs-flick.viewport-x + delta),
+        );
+    }
+
+    height: root.unified-titlebar
+        ? Theme.titlebar-height : Theme.titlebar-fallback-height;
+    background: Theme.panel;
+    border-width: Theme.hairline;
+    border-color: Theme.border;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            width: root.unified-titlebar
+                ? Theme.titlebar-leading-width : root.navigation-width;
+            background: Theme.panel;
+        }
+
+        if root.active-tab-kind == "settings" : Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.panel;
+            TouchArea {
+                pointer-event(event) => {
+                    if root.unified-titlebar
+                            && event.kind == PointerEventKind.down
+                            && event.button == PointerEventButton.left {
+                        root.drag-window();
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            visible: root.active-tab-kind != "settings";
+            horizontal-stretch: 1;
+            clip: true;
+            tabs-flick := Flickable {
+                width: parent.width;
+                height: parent.height;
+                interactive: false;
+                viewport-width: max(
+                    self.width,
+                    root.tabs.length * root.tab-width * 1px,
+                );
+                viewport-height: self.height;
+
+                for tab[index] in root.tabs : Rectangle {
+                    x: index * root.tab-width * 1px;
+                    y: 0px;
+                    width: root.tab-width * 1px;
+                    height: parent.height;
+                    background: tab.id == root.active-tab-id ? Theme.background : Theme.panel;
+                    border-width: Theme.hairline;
+                    border-color: Theme.border;
+
+                    tab-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.activate-tab(tab.id); }
+                        scroll-event(event) => {
+                            root.scroll-tabs(event.delta-x, event.delta-y);
+                            return EventResult.accept;
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: Theme.space-lg;
+                        padding-right: Theme.space-xs;
+                        spacing: Theme.space-sm;
+                        Rectangle {
+                            width: Theme.tab-status-size;
+                            background: transparent;
+                            Rectangle {
+                                y: (parent.height - self.height) / 2;
+                                width: Theme.tab-status-size;
+                                height: Theme.tab-status-size;
+                                border-radius: Theme.radius-small;
+                                background: tab.connected
+                                    ? Theme.success
+                                    : (tab.kind == "terminal" ? Theme.accent : Theme.muted);
+                            }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: tab.title;
+                            color: Theme.text;
+                            font-size: Theme.font-small;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            width: Theme.tab-close-size;
+                            height: Theme.tab-close-size;
+                            border-radius: Theme.radius;
+                            background: close-touch.has-hover ? Theme.panel-alt : transparent;
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: "x";
+                                color: Theme.muted;
+                                font-size: Theme.font-small;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            close-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                accessible-role: button;
+                                accessible-label: "Close tab";
+                                clicked => { root.close-tab(tab.id); }
+                                scroll-event(event) => {
+                                    root.scroll-tabs(event.delta-x, event.delta-y);
+                                    return EventResult.accept;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: root.tabs.length * root.tab-width * 1px;
+                    y: 0px;
+                    width: max(0px, tabs-flick.width - self.x);
+                    height: parent.height;
+                    background: Theme.panel;
+                    TouchArea {
+                        pointer-event(event) => {
+                            if root.unified-titlebar
+                                    && root.tabs.length == 0
+                                    && event.kind == PointerEventKind.down
+                                    && event.button == PointerEventButton.left {
+                                root.drag-window();
+                            }
+                        }
+                        scroll-event(event) => {
+                            root.scroll-tabs(event.delta-x, event.delta-y);
+                            return EventResult.accept;
+                        }
+                    }
+                }
+            }
+        }
+        if root.active-tab-kind != "settings" : Rectangle {
+            width: parent.height;
+            background: add-touch.has-hover ? Theme.panel-alt : Theme.panel;
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: "+";
+                color: Theme.text;
+                font-size: Theme.font-page-title;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            add-touch := TouchArea {
+                mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: "New session tab";
+                clicked => { root.new-session(); }
+            }
+        }
+        Rectangle {
+            width: root.unified-titlebar ? Theme.titlebar-drag-width : 0px;
+            background: Theme.panel;
+            TouchArea {
+                pointer-event(event) => {
+                    if root.unified-titlebar
+                            && event.kind == PointerEventKind.down
+                            && event.button == PointerEventButton.left {
+                        root.drag-window();
+                    }
+                }
+            }
+        }
+    }
+}

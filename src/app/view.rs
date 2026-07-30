@@ -1,0 +1,398 @@
+use super::*;
+
+pub(super) fn session_rows(
+    sessions: &SessionStore,
+    expanded_groups: &BTreeSet<String>,
+) -> Vec<SessionRow> {
+    let mut rows = Vec::new();
+    for group in session_groups(sessions) {
+        let group_name = group.name;
+        let display_name = if group_name.is_empty() {
+            "Ungrouped".to_owned()
+        } else {
+            group_name.clone()
+        };
+        let profiles = group.profiles;
+        let expanded = expanded_groups.contains(&group_name);
+        rows.push(SessionRow {
+            id: "".into(),
+            group_name: group_name.clone().into(),
+            name: display_name.clone().into(),
+            endpoint: profiles.len().to_string().into(),
+            icon: compact_label(&display_name, "Un").into(),
+            is_group: true,
+            expanded,
+        });
+        if expanded {
+            rows.extend(profiles.into_iter().map(|profile| SessionRow {
+                id: profile.id.to_string().into(),
+                group_name: group_name.clone().into(),
+                name: profile.name.clone().into(),
+                endpoint: profile_endpoint(profile).into(),
+                icon: compact_label(&profile.name, "--").into(),
+                is_group: false,
+                expanded: false,
+            }));
+        }
+    }
+    rows
+}
+
+pub(super) fn group_option_rows(sessions: &SessionStore) -> Vec<SharedString> {
+    group_options(sessions)
+        .into_iter()
+        .map(SharedString::from)
+        .collect()
+}
+
+pub(super) fn shell_option_rows(settings: &AppSettings) -> Vec<SharedString> {
+    settings
+        .terminal
+        .known_shells
+        .iter()
+        .cloned()
+        .map(SharedString::from)
+        .collect()
+}
+
+pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    let (rows, groups) = match state.lock() {
+        Ok(app) => (
+            session_rows(&app.sessions, &app.expanded_groups),
+            group_option_rows(&app.sessions),
+        ),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    dispatch_ui(ui, move |ui| {
+        ui.set_sessions(ModelRc::new(VecModel::from(rows)));
+        ui.set_group_options(ModelRc::new(VecModel::from(groups)));
+    });
+}
+
+pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    let (tabs, snapshot) = match state.lock() {
+        Ok(app) => (
+            visible_workspace_tab_rows(app.tab_summaries()),
+            app.active_snapshot(),
+        ),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    dispatch_ui(ui, move |ui| {
+        ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
+        apply_active_snapshot(ui, snapshot);
+    });
+}
+
+pub(super) fn visible_workspace_tab_rows(tabs: Vec<WorkspaceTabSummary>) -> Vec<WorkspaceTabRow> {
+    tabs.into_iter()
+        .filter(|tab| tab.kind != "settings")
+        .map(|tab| WorkspaceTabRow {
+            id: tab.id.to_string().into(),
+            title: tab.title.into(),
+            kind: tab.kind.into(),
+            connected: tab.connected,
+        })
+        .collect()
+}
+
+pub(super) fn set_tab_status(
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    message: &str,
+) {
+    let snapshot = match state.lock() {
+        Ok(mut app) => {
+            let Some(terminal) = app.terminal_mut(tab_id) else {
+                return;
+            };
+            terminal.status = message.to_owned();
+            (app.active_tab_id() == Some(tab_id)).then(|| app.active_snapshot())
+        }
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if let Some(snapshot) = snapshot {
+        dispatch_active_snapshot(ui, snapshot);
+    }
+}
+
+pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, snapshot: ActiveTabSnapshot) {
+    dispatch_ui(ui, move |ui| apply_active_snapshot(ui, snapshot));
+}
+
+pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot) {
+    let active_tab_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
+    ui.set_active_tab_id(active_tab_id.into());
+    ui.set_active_tab_kind(snapshot.kind.into());
+    ui.set_active_tab_title(snapshot.title.into());
+    ui.set_active_tab_status(snapshot.status.into());
+    let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
+    let rendered = render_terminal(
+        terminal,
+        TerminalRenderSettings {
+            color_scheme: TerminalColorScheme::from_setting(
+                ui.get_terminal_color_scheme().as_str(),
+            ),
+            brightness_percent: ui.get_terminal_brightness_percent().clamp(60, 140) as u16,
+            bright_bold_text: ui.get_bright_bold_text(),
+        },
+    );
+    apply_rendered_terminal(ui, rendered);
+    ui.set_connected(snapshot.connected);
+    ui.set_worker_running(snapshot.worker_running);
+}
+
+pub(super) fn apply_settings(ui: &slint::Weak<AppWindow>, settings: AppSettings) {
+    dispatch_ui(ui, move |ui| apply_settings_to_component(ui, &settings));
+}
+
+pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
+    ui.set_terminal_font_family(settings.appearance.terminal_font_family.clone().into());
+    ui.set_terminal_font_size(i32::from(settings.appearance.terminal_font_size));
+    ui.set_terminal_line_height_percent(i32::from(
+        settings.appearance.terminal_line_height_percent,
+    ));
+    ui.set_terminal_color_scheme(
+        settings
+            .appearance
+            .terminal_color_scheme
+            .as_setting()
+            .into(),
+    );
+    ui.set_terminal_brightness_percent(i32::from(settings.appearance.terminal_brightness_percent));
+    ui.set_bright_bold_text(settings.appearance.bright_bold_text);
+    ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
+    ui.set_scrollback_lines(settings.terminal.scrollback_lines as i32);
+    ui.set_default_terminal_columns(i32::from(settings.terminal.default_columns));
+    ui.set_default_terminal_rows(i32::from(settings.terminal.default_rows));
+    ui.set_local_shell(settings.terminal.local_shell.clone().into());
+    let local_shell_index = settings
+        .terminal
+        .known_shells
+        .iter()
+        .position(|shell| shell.eq_ignore_ascii_case(&settings.terminal.local_shell))
+        .unwrap_or(0);
+    ui.set_local_shell_index(local_shell_index.min(i32::MAX as usize) as i32);
+    ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
+    ui.set_tab_width(i32::from(settings.workspace.tab_width));
+    ui.set_open_settings_shortcut(settings.shortcuts.open_settings.clone().into());
+    ui.set_toggle_sidebar_shortcut(settings.shortcuts.toggle_sidebar.clone().into());
+    ui.set_copy_selection_shortcut(settings.shortcuts.copy_selection.clone().into());
+    ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
+}
+
+pub(super) fn empty_terminal_snapshot() -> TerminalSnapshot {
+    TerminalSnapshot {
+        text: String::new(),
+        lines: vec![Default::default()],
+        max_columns: 0,
+        cursor_row: 0,
+        cursor_column: 0,
+        cursor_visible: false,
+        cursor_text: " ".to_owned(),
+    }
+}
+
+pub(super) fn apply_rendered_terminal(ui: &AppWindow, rendered: terminal_render::RenderedTerminal) {
+    ui.set_terminal_content_columns(rendered.max_columns.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_row(rendered.cursor_row.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_column(rendered.cursor_column.min(i32::MAX as usize) as i32);
+    ui.set_terminal_cursor_visible(rendered.cursor_visible);
+    ui.set_terminal_cursor_text(rendered.cursor_text.into());
+    ui.set_terminal_foreground(to_slint_color(rendered.foreground));
+    ui.set_terminal_background(to_slint_color(rendered.background));
+    ui.set_terminal_selection_background(to_slint_color(rendered.selection_background));
+    let lines = rendered
+        .lines
+        .into_iter()
+        .map(terminal_render_line)
+        .collect::<Vec<_>>();
+    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(lines)));
+}
+
+pub(super) fn terminal_render_line(line: RenderedTerminalLine) -> TerminalRenderLine {
+    let runs = line
+        .runs
+        .into_iter()
+        .map(terminal_render_run)
+        .collect::<Vec<_>>();
+    TerminalRenderLine {
+        runs: ModelRc::new(VecModel::from(runs)),
+    }
+}
+
+pub(super) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalRenderRun {
+    TerminalRenderRun {
+        text: run.text.into(),
+        column: run.column.min(i32::MAX as usize) as i32,
+        cells: run.cells.min(i32::MAX as usize) as i32,
+        foreground: to_slint_color(run.foreground),
+        background: to_slint_color(run.background),
+        bold: run.bold,
+        italic: run.italic,
+        underline: run.underline,
+        strikethrough: run.strikethrough,
+    }
+}
+
+pub(super) fn to_slint_color(color: RgbColor) -> Color {
+    Color::from_rgb_u8(color.red, color.green, color.blue)
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Dialog {
+    HostKey,
+    Password,
+}
+
+pub(super) fn set_dialog_open(ui: &slint::Weak<AppWindow>, dialog: Dialog, open: bool) {
+    dispatch_ui(ui, move |ui| match dialog {
+        Dialog::HostKey => ui.set_host_key_dialog_open(open),
+        Dialog::Password => ui.set_password_dialog_open(open),
+    });
+}
+
+pub(super) fn show_host_key_prompt(ui: &slint::Weak<AppWindow>, prompt: &PendingHostKey) {
+    let endpoint = format!("{}:{}", prompt.host, prompt.port);
+    let fingerprint = prompt.fingerprint.clone();
+    let changed = prompt.changed;
+    dispatch_ui(ui, move |ui| {
+        ui.set_host_key_endpoint(endpoint.into());
+        ui.set_host_key_fingerprint(fingerprint.into());
+        ui.set_host_key_changed(changed);
+        ui.set_host_key_dialog_open(true);
+    });
+}
+
+pub(super) fn show_auth_prompt(
+    ui: &slint::Weak<AppWindow>,
+    profile: &SessionProfile,
+    remember_password: bool,
+) {
+    let endpoint = profile_endpoint(profile);
+    let (private_key, key_path) = match &profile.auth {
+        AuthMethod::Password => (false, String::new()),
+        AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
+    };
+    dispatch_ui(ui, move |ui| {
+        ui.set_password_endpoint(endpoint.into());
+        ui.set_password_remember_default(!private_key && remember_password);
+        ui.set_password_private_key(private_key);
+        ui.set_password_key_path(key_path.into());
+        ui.set_password_dialog_open(true);
+    });
+}
+
+pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+    runtime.spawn(async move {
+        let result = tokio::task::spawn_blocking(discover_private_keys).await;
+        match result {
+            Ok(Ok(paths)) => {
+                let options = paths
+                    .into_iter()
+                    .map(|path| SharedString::from(path.display().to_string()))
+                    .collect::<Vec<_>>();
+                dispatch_ui(&ui, move |ui| {
+                    ui.set_private_key_options(ModelRc::new(VecModel::from(options)));
+                });
+            }
+            Ok(Err(error)) => warn!(%error, "failed to discover local SSH private keys"),
+            Err(error) => warn!(%error, "private-key discovery task failed"),
+        }
+    });
+}
+
+pub(super) fn parse_uuid(value: &str, label: &str, ui: &slint::Weak<AppWindow>) -> Option<Uuid> {
+    match value.parse::<Uuid>() {
+        Ok(id) => Some(id),
+        Err(error) => {
+            set_status(ui, &format!("Invalid {label} id: {error}"));
+            None
+        }
+    }
+}
+
+pub(super) fn set_status(ui: &slint::Weak<AppWindow>, message: &str) {
+    let message = message.to_owned();
+    dispatch_ui(ui, move |ui| ui.set_status(message.into()));
+}
+
+pub(super) fn dispatch_ui(
+    ui: &slint::Weak<AppWindow>,
+    action: impl FnOnce(&AppWindow) + Send + 'static,
+) {
+    let ui = ui.clone();
+    if slint::invoke_from_event_loop(move || {
+        if let Some(ui) = ui.upgrade() {
+            action(&ui);
+        }
+    })
+    .is_err()
+    {
+        debug!("Slint event loop is no longer available for UI update");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_workbench_is_not_exposed_as_a_workspace_tab() {
+        let rows = visible_workspace_tab_rows(vec![
+            WorkspaceTabSummary {
+                id: Uuid::new_v4(),
+                title: "Settings".to_owned(),
+                kind: "settings",
+                connected: false,
+            },
+            WorkspaceTabSummary {
+                id: Uuid::new_v4(),
+                title: "New session".to_owned(),
+                kind: "session-editor",
+                connected: false,
+            },
+        ]);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].kind.as_str(), "session-editor");
+    }
+
+    #[test]
+    fn session_rows_group_profiles_and_respect_expansion() {
+        let mut production_a = SessionProfile::new("prod-a", "a.example", "alice");
+        production_a.group_name = " Production ".into();
+        let mut production_b = SessionProfile::new("prod-b", "b.example", "bob");
+        production_b.group_name = "Production".into();
+        let ungrouped = SessionProfile::new("local", "local.example", "carol");
+        let sessions = SessionStore {
+            sessions: vec![production_a, production_b, ungrouped],
+            ..SessionStore::default()
+        };
+        let expanded = BTreeSet::from(["Production".to_owned()]);
+
+        let rows = session_rows(&sessions, &expanded);
+
+        assert_eq!(rows.len(), 4);
+        assert!(rows[0].is_group);
+        assert_eq!(rows[0].name.as_str(), "Production");
+        assert!(rows[0].expanded);
+        assert!(!rows[1].is_group);
+        assert_eq!(rows[1].name.as_str(), "prod-a");
+        assert!(!rows[2].is_group);
+        assert_eq!(rows[2].name.as_str(), "prod-b");
+        assert!(rows[3].is_group);
+        assert_eq!(rows[3].name.as_str(), "Ungrouped");
+        assert_eq!(rows[3].icon.as_str(), "Un");
+        assert!(!rows[3].expanded);
+    }
+}

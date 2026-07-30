@@ -38,10 +38,12 @@ Process startup (src/main.rs)
 
 | Area | Owns | Must not own |
 | --- | --- | --- |
-| `ui/` | Top tab bar, page layout, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
-| `src/app.rs` | Slint setup, domain-to-row mapping, callback wiring, event-loop updates | SSH protocol details or JSON schema details |
+| `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
+| `src/app.rs` | Generated Slint type declaration, process-level UI startup, and top-level callback composition | Feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
-| `src/app/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, group aggregation, and blocking credential task boundary | Generated Slint component/model types |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | Private application-bridge feature wiring, worker-event consumption, and Slint model/snapshot mapping | Generated type declaration, transport implementation, or persistence schema |
+| `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
+| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
 | `src/config.rs` | `SessionProfile`, versioned `AppSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
@@ -121,9 +123,13 @@ Process startup (src/main.rs)
     menu, binds its existing About item to the internal page, and inserts
     `Settings...` with `Cmd+,`. The AppKit target is main-thread-only, captures
     only `Weak<AppWindow>`, and is retained by each menu item's represented
-    object because AppKit target references are weak. Windows/Linux keep
-    Settings in Edit and About in Help. File, View, Pane, Window, and Help reuse
-    existing new-session, sidebar, local-shell, close-tab, and shortcut intents.
+    object because AppKit target references are weak. The macOS close-tab item
+    intentionally has no dynamic active-tab binding, so Muda does not rebuild
+    the native menu when tab identity or kind changes; Settings and About are
+    installed once through the AppKit bridge. Windows/Linux retain the dynamic
+    close-tab enabled state, keep Settings in Edit, and keep About in Help. File,
+    View, Pane, Window, and Help reuse existing new-session, sidebar, local-shell,
+    close-tab, and shortcut intents.
 12. The session navigator has one Slint-owned expanded/collapsed state. Expanded
     mode renders a Local Shell card and bordered group/session rows; collapsed
     mode renders the same flattened model as terminal, folder, and two-character
@@ -205,6 +211,9 @@ geometry, Settings control dimensions, editor widths, and overlay sizes.
 shared Settings glyph, navigation, page, compact right-aligned field, row,
 toggle, shortcut, and action header primitives. Setting rows keep a stable
 title and metadata column while standard controls use one theme-configured height.
+`ui/settings.slint` owns the shared draft and one Save transaction, while the
+category layouts live in `ui/settings/*.slint` with only their relevant draft
+properties and callbacks.
 Runtime terminal geometry and user choices remain in versioned
 `AppSettings`; the Theme global is visual configuration, not mutable domain
 state.

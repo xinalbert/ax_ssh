@@ -36,10 +36,12 @@ Slint UI（.slint）
 
 | 区域 | 负责 | 不得负责 |
 | --- | --- | --- |
-| `ui/` | 顶部 Tab、页面布局、视觉状态、用户手势、生成的 callback 契约 | 文件系统、Tokio task、russh handle |
-| `src/app.rs` | Slint 初始化、领域值到行模型的转换、callback 接线、event loop 更新 | SSH 协议细节或 JSON schema 细节 |
+| `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
+| `src/app.rs` | 生成 Slint 类型的声明、进程级 UI 启动和顶层 callback 编排 | 功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏设置和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
-| `src/app/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换、分组聚合和阻塞式凭据 task 边界 | 生成的 Slint component/model 类型 |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | 私有 application bridge 功能接线、worker 事件消费和 Slint model/snapshot 映射 | 生成类型声明、传输实现或持久化 schema |
+| `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
+| `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
 | `src/config.rs` | `SessionProfile`、版本化 `AppSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
 | `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
@@ -95,8 +97,11 @@ Slint UI（.slint）
     客户区顶部渲染同一棵树。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
     应用菜单，把现有 About 接到内部页面，并插入带 `Cmd+,` 的 `Settings...`。AppKit
     target 只在主线程运行且只捕获 `Weak<AppWindow>`；由于 target 为弱引用，菜单项用
-    represented object 保持其生命周期。Windows/Linux 在 Edit/Help 提供 Settings/About，
-    其他菜单复用已有的新建会话、侧栏、本地 shell、关闭 Tab 和快捷键意图。
+    represented object 保持其生命周期。macOS 的关闭 Tab 菜单项刻意不绑定动态活动
+    Tab 状态，因此 Tab 身份或类型变化时 Muda 不会重建原生菜单；Settings/About 只由
+    AppKit bridge 安装一次。Windows/Linux 仍保留动态关闭 Tab enabled 状态，并在
+    Edit/Help 提供 Settings/About；其他菜单复用已有的新建会话、侧栏、本地 shell、
+    关闭 Tab 和快捷键意图。
 12. 会话导航只持有一个 Slint 展开/收起状态。展开态渲染 Local Shell 卡片和带边框的
     分组/会话行；收起态把同一扁平模型渲染为终端、文件夹和两字标签。分组展开状态决定
     两种形态中是否存在子会话，未分组 profile 也生成显式 Ungrouped 分组行。静态图标和
@@ -155,7 +160,9 @@ Local Shell 和新建会话入口。Settings/About 只保留在平台菜单和�
 间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
-列，标准控件统一使用 Theme 配置的高度。运行时终端几何与用户选项仍进入版本化
+列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 持有统一草稿和一次 Save
+事务，各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的草稿属性和 callback。
+运行时终端几何与用户选项仍进入版本化
 `AppSettings`；Theme global 只负责视觉配置，不是可变领域状态。
 
 ## 分阶段范围

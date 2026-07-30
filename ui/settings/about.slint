@@ -1,0 +1,62 @@
+import { Theme } from "../theme.slint";
+import { SettingsInfoRow, SettingsPage, SettingsSectionHeading } from "../components/settings-controls.slint";
+
+export component AboutSettingsPage inherits SettingsPage {
+    in property <string> app-version;
+    HorizontalLayout {
+        height: Theme.settings-about-header-height;
+        spacing: Theme.space-xxl;
+        Rectangle {
+            width: Theme.settings-about-mark-size;
+            height: Theme.settings-about-mark-size;
+            border-radius: Theme.radius;
+            background: Theme.panel-alt;
+            border-width: Theme.hairline;
+            border-color: Theme.border;
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: ">_";
+                color: Theme.accent;
+                font-family: "JetBrains Mono";
+                font-size: Theme.font-section;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            spacing: Theme.space-xxs;
+            Text {
+                text: "AxSSH";
+                color: Theme.text;
+                font-size: Theme.font-title;
+                font-weight: 700;
+                vertical-alignment: bottom;
+            }
+            Text {
+                text: "Version \{root.app-version}";
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                vertical-alignment: center;
+            }
+            Text {
+                height: Theme.settings-about-description-height;
+                text: "A focused desktop SSH workspace for saved servers, local shells, and terminal sessions.";
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                wrap: word-wrap;
+                vertical-alignment: top;
+            }
+        }
+    }
+    SettingsSectionHeading { label: "APPLICATION"; }
+    SettingsInfoRow { label: "Interface"; value: "Slint"; }
+    SettingsInfoRow { label: "SSH transport"; value: "russh"; }
+    SettingsInfoRow {
+        label: "Async runtime";
+        value: "Tokio";
+        show-divider: false;
+    }
+    Rectangle { vertical-stretch: 1; }
+}

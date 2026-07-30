@@ -1,0 +1,39 @@
+import { SpinBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
+
+export component TerminalSettingsPage inherits SettingsPage {
+    in-out property <int> draft-scrollback-lines;
+    in-out property <bool> draft-right-click-copy-or-paste;
+    SettingsSectionHeading { label: "BUFFER"; }
+    SettingsRow {
+        label: "Scrollback";
+        description: "100-50,000 retained lines";
+        show-divider: false;
+        SettingsField {
+            settings-scrollback := SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 100;
+                maximum: 50000;
+                value <=> root.draft-scrollback-lines;
+                accessible-label: "Terminal scrollback lines";
+            }
+            Text {
+                width: Theme.settings-unit-width;
+                text: "lines";
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    SettingsSectionHeading { label: "MOUSE"; }
+    SettingsToggleRow {
+        label: "Right-click copy or paste";
+        description: "Copy a selection; otherwise paste";
+        checked <=> root.draft-right-click-copy-or-paste;
+        show-divider: false;
+    }
+    Rectangle { vertical-stretch: 1; }
+}

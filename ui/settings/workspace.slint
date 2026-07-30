@@ -1,0 +1,51 @@
+import { SpinBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+
+export component WorkspaceSettingsPage inherits SettingsPage {
+    in-out property <int> draft-sidebar-width;
+    in-out property <int> draft-tab-width;
+    SettingsSectionHeading { label: "LAYOUT"; }
+    SettingsRow {
+        label: "Session sidebar width";
+        description: "180-420 px when sessions are available";
+        SettingsField {
+            settings-sidebar-width := SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 180;
+                maximum: 420;
+                value <=> root.draft-sidebar-width;
+                accessible-label: "Session sidebar width";
+            }
+            Text {
+                width: Theme.settings-unit-width;
+                text: "px";
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+    }
+    SettingsRow {
+        label: "Workspace tab width";
+        description: "120-260 px";
+        show-divider: false;
+        SettingsField {
+            settings-tab-width := SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 120;
+                maximum: 260;
+                value <=> root.draft-tab-width;
+                accessible-label: "Workspace tab width";
+            }
+            Text {
+                width: Theme.settings-unit-width;
+                text: "px";
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

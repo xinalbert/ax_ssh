@@ -1,0 +1,116 @@
+import { ComboBox, LineEdit, Slider, SpinBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
+
+export component AppearanceSettingsPage inherits SettingsPage {
+    in-out property <string> draft-font-family;
+    in-out property <int> draft-font-size;
+    in-out property <int> draft-line-height-percent;
+    in-out property <string> draft-color-scheme;
+    in-out property <int> draft-brightness-percent;
+    in-out property <bool> draft-bright-bold-text;
+    SettingsSectionHeading { label: "TYPOGRAPHY"; }
+    SettingsRow {
+        label: "Font family";
+        description: "Terminal font family";
+        SettingsField {
+            settings-font-edit := LineEdit {
+                height: Theme.settings-control-height;
+                text <=> root.draft-font-family;
+                accessible-label: "Terminal font family";
+            }
+        }
+    }
+    SettingsRow {
+        label: "Font size";
+        description: "9-32 px";
+        SettingsField {
+            settings-font-size := SpinBox {
+                width: Theme.settings-number-width;
+                height: Theme.settings-control-height;
+                minimum: 9;
+                maximum: 32;
+                value <=> root.draft-font-size;
+                accessible-label: "Terminal font size";
+            }
+            Text {
+                width: Theme.settings-unit-width;
+                text: "px";
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+    }
+    SettingsRow {
+        label: "Line height";
+        description: "100-200 percent";
+        show-divider: false;
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-number-width;
+                height: Theme.settings-control-height;
+                minimum: 100;
+                maximum: 200;
+                value <=> root.draft-line-height-percent;
+                accessible-label: "Terminal line height percentage";
+            }
+            Text {
+                width: Theme.settings-unit-width;
+                text: "%";
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    SettingsSectionHeading { label: "COLOR"; }
+    SettingsRow {
+        label: "Color scheme";
+        description: "Terminal color palette";
+        SettingsField {
+            ComboBox {
+                height: Theme.settings-control-height;
+                model: ["Dark", "Light", "Solarized Dark"];
+                current-index: root.draft-color-scheme == "light"
+                    ? 1 : (root.draft-color-scheme == "solarized-dark" ? 2 : 0);
+                accessible-label: "Terminal color scheme";
+                selected(value) => {
+                    root.draft-color-scheme = value == "Light"
+                        ? "light" : (value == "Solarized Dark" ? "solarized-dark" : "dark");
+                }
+            }
+        }
+    }
+    SettingsRow {
+        label: "Brightness";
+        description: "60-140 percent";
+        SettingsField {
+            Slider {
+                width: Theme.settings-slider-width;
+                height: Theme.settings-control-height;
+                minimum: 60;
+                maximum: 140;
+                step: 5;
+                value: root.draft-brightness-percent;
+                accessible-label: "Terminal brightness";
+                changed(value) => {
+                    root.draft-brightness-percent = round(value);
+                }
+            }
+            Text {
+                width: Theme.settings-value-width;
+                text: "\{root.draft-brightness-percent}%";
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+    }
+    SettingsToggleRow {
+        label: "Bright colors for bold text";
+        description: "Use the bright ANSI palette for bold text";
+        checked <=> root.draft-bright-bold-text;
+        show-divider: false;
+    }
+}

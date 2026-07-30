@@ -1,0 +1,235 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SidebarFolderGlyph, SidebarRailItem, SidebarTerminalGlyph } from "sidebar-controls.slint";
+
+export struct SessionRow {
+    id: string,
+    group-name: string,
+    name: string,
+    endpoint: string,
+    icon: string,
+    is-group: bool,
+    expanded: bool,
+}
+
+export component SessionNavigation inherits Rectangle {
+    in property <[SessionRow]> sessions;
+    in property <int> sidebar-width;
+    in-out property <bool> collapsed;
+
+    callback open-local-shell();
+    callback new-session();
+    callback connect-session(string);
+    callback toggle-group(string);
+    callback activate-group(string);
+
+    private property <bool> group-selected: false;
+    private property <string> active-group: "";
+    private property <bool> expanded: !root.collapsed && root.sessions.length > 0;
+
+    width: root.expanded ? root.sidebar-width * 1px : Theme.activity-bar-width;
+
+    if !root.expanded : Rectangle {
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            padding-top: Theme.space-sm;
+            padding-bottom: Theme.space-sm;
+            spacing: Theme.space-xs;
+
+            SidebarRailItem {
+                local: true;
+                accessible-name: "Open local shell";
+                activated => { root.open-local-shell(); }
+            }
+            Rectangle { height: Theme.hairline; background: Theme.border; }
+            ListView {
+                vertical-stretch: 1;
+                for row in root.sessions : SidebarRailItem {
+                    label: row.icon;
+                    group: row.is-group;
+                    selected: row.is-group
+                        && root.group-selected
+                        && root.active-group == row.group-name;
+                    accessible-name: row.is-group
+                        ? "Open " + row.name + " group"
+                        : "Connect to " + row.name;
+                    activated => {
+                        if row.is-group {
+                            root.group-selected = true;
+                            root.active-group = row.group-name;
+                            root.collapsed = false;
+                            root.activate-group(row.group-name);
+                        } else {
+                            root.connect-session(row.id);
+                        }
+                    }
+                }
+            }
+            Rectangle { height: Theme.hairline; background: Theme.border; }
+            SidebarRailItem {
+                label: "+";
+                accessible-name: "New session tab";
+                activated => { root.new-session(); }
+            }
+        }
+    }
+
+    if root.expanded : Rectangle {
+        background: Theme.panel;
+        border-width: Theme.hairline;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
+            padding-top: Theme.space-sm;
+            padding-bottom: Theme.space-sm;
+            spacing: Theme.space-xs;
+
+            Rectangle {
+                height: Theme.sidebar-local-card-height;
+                background: Theme.panel-alt;
+                border-width: Theme.hairline;
+                border-color: local-card-touch.has-hover ? Theme.accent : Theme.border;
+                border-radius: Theme.radius;
+
+                HorizontalLayout {
+                    padding-left: Theme.sidebar-card-padding;
+                    padding-right: Theme.sidebar-card-padding;
+                    spacing: Theme.space-lg;
+
+                    SidebarTerminalGlyph {
+                        glyph-color: local-card-touch.has-hover ? Theme.accent : Theme.text;
+                    }
+                    VerticalLayout {
+                        padding-top: Theme.space-lg;
+                        padding-bottom: Theme.space-lg;
+                        spacing: Theme.space-xxs;
+                        Text {
+                            text: "Local Shell";
+                            color: Theme.text;
+                            font-size: Theme.font-body-strong;
+                            font-weight: 700;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: "Open a new local shell tab";
+                            color: Theme.muted;
+                            font-size: Theme.font-caption;
+                            overflow: elide;
+                        }
+                    }
+                }
+                local-card-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    accessible-role: button;
+                    accessible-label: "Open local shell";
+                    clicked => { root.open-local-shell(); }
+                }
+            }
+
+            ListView {
+                vertical-stretch: 1;
+                for row in root.sessions : Rectangle {
+                    height: row.is-group
+                        ? Theme.sidebar-group-card-height + Theme.space-xs
+                        : Theme.sidebar-session-card-height + Theme.space-xs;
+                    background: transparent;
+
+                    session-card := Rectangle {
+                        width: parent.width;
+                        height: parent.height - Theme.space-xs;
+                        background: Theme.panel-alt;
+                        border-width: Theme.hairline;
+                        border-color: session-touch.has-hover ? Theme.accent : Theme.border;
+                        border-radius: Theme.radius;
+
+                        session-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            accessible-role: button;
+                            accessible-label: row.is-group
+                                ? "Toggle " + row.name + " group"
+                                : "Connect to " + row.name;
+                            clicked => {
+                                if row.is-group {
+                                    root.group-selected = true;
+                                    root.active-group = row.group-name;
+                                    root.toggle-group(row.group-name);
+                                } else {
+                                    root.connect-session(row.id);
+                                }
+                            }
+                        }
+
+                        if row.is-group : HorizontalLayout {
+                            padding-left: Theme.sidebar-card-padding;
+                            padding-right: Theme.sidebar-card-padding;
+                            spacing: Theme.space-sm;
+
+                            Text {
+                                width: Theme.space-lg;
+                                text: row.expanded ? "v" : ">";
+                                color: Theme.muted;
+                                font-size: Theme.font-small;
+                                vertical-alignment: center;
+                            }
+                            SidebarFolderGlyph {
+                                glyph-color: root.group-selected
+                                        && root.active-group == row.group-name
+                                    ? Theme.accent : Theme.muted;
+                                surface-color: session-card.background;
+                            }
+                            Text {
+                                horizontal-stretch: 1;
+                                text: row.name;
+                                color: Theme.text;
+                                font-size: Theme.font-body-strong;
+                                font-weight: 700;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: row.endpoint;
+                                color: Theme.muted;
+                                font-size: Theme.font-caption;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if !row.is-group : HorizontalLayout {
+                            padding-left: Theme.sidebar-card-padding + Theme.space-lg;
+                            padding-right: Theme.sidebar-card-padding;
+                            spacing: Theme.space-md;
+
+                            Text {
+                                width: Theme.sidebar-session-name-width;
+                                text: row.name;
+                                color: Theme.text;
+                                font-family: "JetBrains Mono";
+                                font-size: Theme.font-body;
+                                font-weight: 700;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                horizontal-stretch: 1;
+                                text: row.endpoint;
+                                color: Theme.muted;
+                                font-family: "JetBrains Mono";
+                                font-size: Theme.font-caption;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if !row.is-group : Tooltip {
+                            text: @markdown("\{row.endpoint}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

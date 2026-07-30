@@ -1,16 +1,14 @@
-import { Button, ComboBox, LineEdit, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import {
-    SettingsField,
     SettingsHeader,
-    SettingsInfoRow,
     SettingsNavItem,
-    SettingsPage,
-    SettingsRow,
-    SettingsSectionHeading,
-    SettingsToggleRow,
-    ShortcutRecorder,
 } from "components/settings-controls.slint";
+import { GeneralSettingsPage } from "settings/general.slint";
+import { AppearanceSettingsPage } from "settings/appearance.slint";
+import { TerminalSettingsPage } from "settings/terminal.slint";
+import { WorkspaceSettingsPage } from "settings/workspace.slint";
+import { ShortcutsSettingsPage } from "settings/shortcuts.slint";
+import { AboutSettingsPage } from "settings/about.slint";
 
 export component SettingsPane inherits Rectangle {
     in property <[string]> local-shell-options;
@@ -197,403 +195,64 @@ export component SettingsPane inherits Rectangle {
                     vertical-stretch: 1;
                     background: Theme.background;
 
-                    if root.selected-section == "General" : SettingsPage {
+                    if root.selected-section == "General" : GeneralSettingsPage {
                         width: parent.width;
                         height: parent.height;
-
-                        SettingsSectionHeading { label: "DEFAULTS"; }
-                        SettingsRow {
-                            label: "Local shell";
-                            description: "Executable used for new local terminal tabs";
-                            SettingsField {
-                                ComboBox {
-                                    height: Theme.settings-control-height;
-                                    model: root.local-shell-options;
-                                    current-index <=> root.draft-local-shell-index;
-                                    accessible-label: "Local shell";
-                                    selected(value) => { root.draft-local-shell = value; }
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Default terminal size";
-                            description: "20-300 columns, 5-100 rows";
-                            show-divider: false;
-                            SettingsField {
-                                settings-columns := SpinBox {
-                                    width: Theme.settings-terminal-size-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 20;
-                                    maximum: 300;
-                                    value <=> root.draft-columns;
-                                    accessible-label: "Default terminal columns";
-                                }
-                                Text { text: "x"; color: Theme.muted; vertical-alignment: center; }
-                                settings-rows := SpinBox {
-                                    width: Theme.settings-terminal-size-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 5;
-                                    maximum: 100;
-                                    value <=> root.draft-rows;
-                                    accessible-label: "Default terminal rows";
-                                }
-                            }
-                        }
-                        Rectangle { vertical-stretch: 1; }
+                        local-shell-options: root.local-shell-options;
+                        draft-local-shell <=> root.draft-local-shell;
+                        draft-local-shell-index <=> root.draft-local-shell-index;
+                        draft-columns <=> root.draft-columns;
+                        draft-rows <=> root.draft-rows;
                     }
 
-                    if root.selected-section == "Appearance" : SettingsPage {
+                    if root.selected-section == "Appearance" : AppearanceSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        draft-font-family <=> root.draft-font-family;
+                        draft-font-size <=> root.draft-font-size;
+                        draft-line-height-percent <=> root.draft-line-height-percent;
+                        draft-color-scheme <=> root.draft-color-scheme;
+                        draft-brightness-percent <=> root.draft-brightness-percent;
+                        draft-bright-bold-text <=> root.draft-bright-bold-text;
+                    }
 
-                        SettingsSectionHeading { label: "TYPOGRAPHY"; }
-                        SettingsRow {
-                            label: "Font family";
-                            description: "Terminal font family";
-                            SettingsField {
-                                settings-font-edit := LineEdit {
-                                    height: Theme.settings-control-height;
-                                    text <=> root.draft-font-family;
-                                    accessible-label: "Terminal font family";
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Font size";
-                            description: "9-32 px";
-                            SettingsField {
-                                settings-font-size := SpinBox {
-                                    width: Theme.settings-number-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 9;
-                                    maximum: 32;
-                                    value <=> root.draft-font-size;
-                                    accessible-label: "Terminal font size";
-                                }
-                                Text {
-                                    width: Theme.settings-unit-width;
-                                    text: "px";
-                                    color: Theme.muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Line height";
-                            description: "100-200 percent";
-                            show-divider: false;
-                            SettingsField {
-                                SpinBox {
-                                    width: Theme.settings-number-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 100;
-                                    maximum: 200;
-                                    value <=> root.draft-line-height-percent;
-                                    accessible-label: "Terminal line height percentage";
-                                }
-                                Text {
-                                    width: Theme.settings-unit-width;
-                                    text: "%";
-                                    color: Theme.muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
+                    if root.selected-section == "Terminal" : TerminalSettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+                        draft-scrollback-lines <=> root.draft-scrollback-lines;
+                        draft-right-click-copy-or-paste <=> root.draft-right-click-copy-or-paste;
+                    }
 
-                        SettingsSectionHeading { label: "COLOR"; }
-                        SettingsRow {
-                            label: "Color scheme";
-                            description: "Terminal color palette";
-                            SettingsField {
-                                ComboBox {
-                                    height: Theme.settings-control-height;
-                                    model: ["Dark", "Light", "Solarized Dark"];
-                                    current-index: root.draft-color-scheme == "light"
-                                        ? 1 : (root.draft-color-scheme == "solarized-dark" ? 2 : 0);
-                                    accessible-label: "Terminal color scheme";
-                                    selected(value) => {
-                                        root.draft-color-scheme = value == "Light"
-                                            ? "light" : (value == "Solarized Dark" ? "solarized-dark" : "dark");
-                                    }
-                                }
-                            }
+                    if root.selected-section == "Workspace" : WorkspaceSettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+                        draft-sidebar-width <=> root.draft-sidebar-width;
+                        draft-tab-width <=> root.draft-tab-width;
+                    }
+
+                    if root.selected-section == "Shortcuts" : ShortcutsSettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+                        draft-open-settings-shortcut <=> root.draft-open-settings-shortcut;
+                        draft-toggle-sidebar-shortcut <=> root.draft-toggle-sidebar-shortcut;
+                        draft-copy-selection-shortcut <=> root.draft-copy-selection-shortcut;
+                        draft-paste-shortcut <=> root.draft-paste-shortcut;
+                        default-open-settings-shortcut: root.default-open-settings-shortcut;
+                        default-toggle-sidebar-shortcut: root.default-toggle-sidebar-shortcut;
+                        default-copy-selection-shortcut: root.default-copy-selection-shortcut;
+                        default-paste-shortcut: root.default-paste-shortcut;
+                        format-shortcut(text, alt, control, meta, shift) => {
+                            return root.format-shortcut(text, alt, control, meta, shift);
                         }
-                        SettingsRow {
-                            label: "Brightness";
-                            description: "60-140 percent";
-                            SettingsField {
-                                Slider {
-                                    width: Theme.settings-slider-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 60;
-                                    maximum: 140;
-                                    step: 5;
-                                    value: root.draft-brightness-percent;
-                                    accessible-label: "Terminal brightness";
-                                    changed(value) => {
-                                        root.draft-brightness-percent = round(value);
-                                    }
-                                }
-                                Text {
-                                    width: Theme.settings-value-width;
-                                    text: "\{root.draft-brightness-percent}%";
-                                    color: Theme.muted;
-                                    font-size: Theme.font-small;
-                                    horizontal-alignment: right;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        SettingsToggleRow {
-                            label: "Bright colors for bold text";
-                            description: "Use the bright ANSI palette for bold text";
-                            checked <=> root.draft-bright-bold-text;
-                            show-divider: false;
+                        shortcut-recording-changed(recording) => {
+                            root.shortcut-recording-changed(recording);
                         }
                     }
 
-                    if root.selected-section == "Terminal" : SettingsPage {
+                    if root.selected-section == "About" : AboutSettingsPage {
                         width: parent.width;
                         height: parent.height;
-
-                        SettingsSectionHeading { label: "BUFFER"; }
-                        SettingsRow {
-                            label: "Scrollback";
-                            description: "100-50,000 retained lines";
-                            show-divider: false;
-                            SettingsField {
-                                settings-scrollback := SpinBox {
-                                    width: Theme.settings-wide-number-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 100;
-                                    maximum: 50000;
-                                    value <=> root.draft-scrollback-lines;
-                                    accessible-label: "Terminal scrollback lines";
-                                }
-                                Text {
-                                    width: Theme.settings-unit-width;
-                                    text: "lines";
-                                    color: Theme.muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-
-                        SettingsSectionHeading { label: "MOUSE"; }
-                        SettingsToggleRow {
-                            label: "Right-click copy or paste";
-                            description: "Copy a selection; otherwise paste";
-                            checked <=> root.draft-right-click-copy-or-paste;
-                            show-divider: false;
-                        }
-                        Rectangle { vertical-stretch: 1; }
-                    }
-
-                    if root.selected-section == "Workspace" : SettingsPage {
-                        width: parent.width;
-                        height: parent.height;
-
-                        SettingsSectionHeading { label: "LAYOUT"; }
-                        SettingsRow {
-                            label: "Session sidebar width";
-                            description: "180-420 px when sessions are available";
-                            SettingsField {
-                                settings-sidebar-width := SpinBox {
-                                    width: Theme.settings-wide-number-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 180;
-                                    maximum: 420;
-                                    value <=> root.draft-sidebar-width;
-                                    accessible-label: "Session sidebar width";
-                                }
-                                Text {
-                                    width: Theme.settings-unit-width;
-                                    text: "px";
-                                    color: Theme.muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Workspace tab width";
-                            description: "120-260 px";
-                            show-divider: false;
-                            SettingsField {
-                                settings-tab-width := SpinBox {
-                                    width: Theme.settings-wide-number-width;
-                                    height: Theme.settings-control-height;
-                                    minimum: 120;
-                                    maximum: 260;
-                                    value <=> root.draft-tab-width;
-                                    accessible-label: "Workspace tab width";
-                                }
-                                Text {
-                                    width: Theme.settings-unit-width;
-                                    text: "px";
-                                    color: Theme.muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-                        Rectangle { vertical-stretch: 1; }
-                    }
-
-                    if root.selected-section == "Shortcuts" : SettingsPage {
-                        width: parent.width;
-                        height: parent.height;
-
-                        HorizontalLayout {
-                            height: Theme.settings-nav-title-height;
-                            SettingsSectionHeading {
-                                horizontal-stretch: 1;
-                                label: "WORKSPACE";
-                            }
-                            Button {
-                                width: Theme.settings-reset-button-width;
-                                height: Theme.settings-control-height;
-                                text: "Reset defaults";
-                                clicked => {
-                                    root.draft-open-settings-shortcut = root.default-open-settings-shortcut;
-                                    root.draft-toggle-sidebar-shortcut = root.default-toggle-sidebar-shortcut;
-                                    root.draft-copy-selection-shortcut = root.default-copy-selection-shortcut;
-                                    root.draft-paste-shortcut = root.default-paste-shortcut;
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Open Settings";
-                            description: "Application command";
-                            SettingsField {
-                                open-settings-recorder := ShortcutRecorder {
-                                    width: Theme.settings-field-width;
-                                    shortcut <=> root.draft-open-settings-shortcut;
-                                    accessible-name: "Open Settings shortcut";
-                                    format-shortcut(text, alt, control, meta, shift) => {
-                                        return root.format-shortcut(text, alt, control, meta, shift);
-                                    }
-                                    recording-changed(recording) => {
-                                        root.shortcut-recording-changed(recording);
-                                    }
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Toggle Session Sidebar";
-                            description: "Workspace command";
-                            show-divider: false;
-                            SettingsField {
-                                toggle-sidebar-recorder := ShortcutRecorder {
-                                    width: Theme.settings-field-width;
-                                    shortcut <=> root.draft-toggle-sidebar-shortcut;
-                                    accessible-name: "Toggle Session Sidebar shortcut";
-                                    format-shortcut(text, alt, control, meta, shift) => {
-                                        return root.format-shortcut(text, alt, control, meta, shift);
-                                    }
-                                    recording-changed(recording) => {
-                                        root.shortcut-recording-changed(recording);
-                                    }
-                                }
-                            }
-                        }
-
-                        SettingsSectionHeading { label: "TERMINAL"; }
-                        SettingsRow {
-                            label: "Copy Terminal Selection";
-                            description: "Terminal command";
-                            SettingsField {
-                                copy-recorder := ShortcutRecorder {
-                                    width: Theme.settings-field-width;
-                                    shortcut <=> root.draft-copy-selection-shortcut;
-                                    accessible-name: "Copy Terminal Selection shortcut";
-                                    format-shortcut(text, alt, control, meta, shift) => {
-                                        return root.format-shortcut(text, alt, control, meta, shift);
-                                    }
-                                    recording-changed(recording) => {
-                                        root.shortcut-recording-changed(recording);
-                                    }
-                                }
-                            }
-                        }
-                        SettingsRow {
-                            label: "Paste Into Terminal";
-                            description: "Terminal command";
-                            show-divider: false;
-                            SettingsField {
-                                paste-recorder := ShortcutRecorder {
-                                    width: Theme.settings-field-width;
-                                    shortcut <=> root.draft-paste-shortcut;
-                                    accessible-name: "Paste Into Terminal shortcut";
-                                    format-shortcut(text, alt, control, meta, shift) => {
-                                        return root.format-shortcut(text, alt, control, meta, shift);
-                                    }
-                                    recording-changed(recording) => {
-                                        root.shortcut-recording-changed(recording);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if root.selected-section == "About" : SettingsPage {
-                        width: parent.width;
-                        height: parent.height;
-
-                        HorizontalLayout {
-                            height: Theme.settings-about-header-height;
-                            spacing: Theme.space-xxl;
-                            Rectangle {
-                                width: Theme.settings-about-mark-size;
-                                height: Theme.settings-about-mark-size;
-                                border-radius: Theme.radius;
-                                background: Theme.panel-alt;
-                                border-width: Theme.hairline;
-                                border-color: Theme.border;
-                                Text {
-                                    width: parent.width;
-                                    height: parent.height;
-                                    text: ">_";
-                                    color: Theme.accent;
-                                    font-family: "JetBrains Mono";
-                                    font-size: Theme.font-section;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            VerticalLayout {
-                                spacing: Theme.space-xxs;
-                                Text {
-                                    text: "AxSSH";
-                                    color: Theme.text;
-                                    font-size: Theme.font-title;
-                                    font-weight: 700;
-                                    vertical-alignment: bottom;
-                                }
-                                Text {
-                                    text: "Version \{root.app-version}";
-                                    color: Theme.muted;
-                                    font-size: Theme.font-small;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    height: Theme.settings-about-description-height;
-                                    text: "A focused desktop SSH workspace for saved servers, local shells, and terminal sessions.";
-                                    color: Theme.muted;
-                                    font-size: Theme.font-small;
-                                    wrap: word-wrap;
-                                    vertical-alignment: top;
-                                }
-                            }
-                        }
-                        SettingsSectionHeading { label: "APPLICATION"; }
-                        SettingsInfoRow { label: "Interface"; value: "Slint"; }
-                        SettingsInfoRow { label: "SSH transport"; value: "russh"; }
-                        SettingsInfoRow {
-                            label: "Async runtime";
-                            value: "Tokio";
-                            show-divider: false;
-                        }
-                        Rectangle { vertical-stretch: 1; }
+                        app-version: root.app-version;
                     }
                 }
 

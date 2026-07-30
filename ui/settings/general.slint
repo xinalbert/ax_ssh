@@ -1,0 +1,50 @@
+import { ComboBox, SpinBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+
+export component GeneralSettingsPage inherits SettingsPage {
+    in property <[string]> local-shell-options;
+    in-out property <string> draft-local-shell;
+    in-out property <int> draft-local-shell-index;
+    in-out property <int> draft-columns;
+    in-out property <int> draft-rows;
+    SettingsSectionHeading { label: "DEFAULTS"; }
+    SettingsRow {
+        label: "Local shell";
+        description: "Executable used for new local terminal tabs";
+        SettingsField {
+            ComboBox {
+                height: Theme.settings-control-height;
+                model: root.local-shell-options;
+                current-index <=> root.draft-local-shell-index;
+                accessible-label: "Local shell";
+                selected(value) => { root.draft-local-shell = value; }
+            }
+        }
+    }
+    SettingsRow {
+        label: "Default terminal size";
+        description: "20-300 columns, 5-100 rows";
+        show-divider: false;
+        SettingsField {
+            settings-columns := SpinBox {
+                width: Theme.settings-terminal-size-width;
+                height: Theme.settings-control-height;
+                minimum: 20;
+                maximum: 300;
+                value <=> root.draft-columns;
+                accessible-label: "Default terminal columns";
+            }
+            Text { text: "x"; color: Theme.muted; vertical-alignment: center; }
+            settings-rows := SpinBox {
+                width: Theme.settings-terminal-size-width;
+                height: Theme.settings-control-height;
+                minimum: 5;
+                maximum: 100;
+                value <=> root.draft-rows;
+                accessible-label: "Default terminal rows";
+            }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

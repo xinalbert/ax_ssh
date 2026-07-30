@@ -1,0 +1,131 @@
+import { Button, CheckBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component HostKeyDialog inherits Rectangle {
+    in property <string> endpoint;
+    in property <string> fingerprint;
+    in property <bool> changed;
+    in property <string> monospace-font-family;
+
+    callback confirm();
+    callback cancel();
+
+    background: Theme.overlay;
+    TouchArea { }
+
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: Theme.host-dialog-width;
+        height: Theme.host-dialog-height;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: root.changed ? Theme.danger : Theme.border;
+        border-radius: Theme.radius;
+
+        VerticalLayout {
+            padding: Theme.dialog-padding;
+            spacing: Theme.space-xl;
+            Text {
+                text: root.changed ? "SSH host key changed" : "Unknown SSH host key";
+                color: root.changed ? Theme.danger : Theme.text;
+                font-size: Theme.font-title;
+                font-weight: 700;
+            }
+            Text { text: root.endpoint; color: Theme.muted; font-size: Theme.font-body; }
+            Text { text: "SHA-256 fingerprint"; color: Theme.muted; font-size: Theme.font-small; }
+            Text {
+                text: root.fingerprint;
+                color: Theme.text;
+                font-family: root.monospace-font-family;
+                font-size: Theme.font-small;
+                wrap: word-wrap;
+            }
+            Rectangle { vertical-stretch: 1; }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-md;
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button {
+                    text: root.changed ? "Trust new key" : "Trust and continue";
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}
+
+export component AuthenticationDialog inherits Rectangle {
+    in property <string> endpoint;
+    in property <bool> remember-default;
+    in property <bool> private-key;
+    in property <string> key-path;
+
+    callback authenticate(string, bool);
+    callback cancel();
+
+    background: Theme.overlay;
+    TouchArea { }
+
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: Theme.password-dialog-width;
+        height: root.private-key
+            ? Theme.password-private-key-dialog-height
+            : Theme.password-dialog-height;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: Theme.border;
+        border-radius: Theme.radius;
+
+        VerticalLayout {
+            padding: Theme.dialog-padding;
+            spacing: Theme.space-xl;
+            Text {
+                text: root.private-key
+                    ? "Private key authentication"
+                    : "Password authentication";
+                color: Theme.text;
+                font-size: Theme.font-title;
+                font-weight: 700;
+            }
+            Text {
+                text: root.endpoint;
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                overflow: elide;
+            }
+            if root.private-key : Text {
+                text: root.key-path;
+                color: Theme.text;
+                font-size: Theme.font-small;
+                overflow: elide;
+            }
+            password-edit := LineEdit {
+                placeholder-text: root.private-key
+                    ? "Private key passphrase (optional)"
+                    : "Password";
+                input-type: InputType.password;
+                accepted(value) => { root.authenticate(value, remember-password.checked); }
+            }
+            remember-password := CheckBox {
+                visible: !root.private-key;
+                height: self.visible ? Theme.editor-check-row-height : 0px;
+                text: "Save password in system credential store";
+                checked: root.remember-default;
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-md;
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button {
+                    text: "Connect";
+                    clicked => {
+                        root.authenticate(password-edit.text, remember-password.checked);
+                    }
+                }
+            }
+        }
+    }
+}

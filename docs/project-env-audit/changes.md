@@ -31,3 +31,11 @@
 - 受影响文件：`Cargo.toml`、`Cargo.lock`、`src/app/macos_window.rs`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
 - 更新后的命令或环境：继续使用 locked/offline Cargo 门禁；macOS 原生菜单编译不需要新增系统包或网络服务。
 - 验证结果：`cargo check --locked --offline` 通过，最新二进制成功进入 Slint event loop，AppKit 菜单桥接没有运行时错误。
+
+## 2026-07-30 复核 macOS 菜单恢复环境
+
+- 日期：2026-07-30 07:18 +0800
+- 变化摘要：最终改为消除 macOS 菜单对活动 Tab 动态状态的依赖，避免 Slint/Muda 重建后 Settings/About 丢失；运行环境、依赖版本和测试命令没有变化。
+- 受影响文件：`src/app.rs`、`docs/architecture.md`、`docs/architecture.zh.md`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 更新后的命令或环境：继续使用 Rust 2024、锁定依赖和 locked/offline Cargo 门禁；AppKit 菜单安装仍只在 macOS UI 主线程执行。
+- 验证结果：`cargo check --locked --offline` 通过；未新增依赖、系统服务或网络要求。

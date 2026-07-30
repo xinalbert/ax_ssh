@@ -33,9 +33,18 @@
 | `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
 | `src/main.rs` | 进程入口 | `LoggingGuard`、`app::run` | 启动、退出和进程级生命周期 |
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh` | 领域、系统服务、进程服务和传输公共边界 |
-| `src/app.rs` | Slint/Rust bridge | `run`、`wire_callbacks`、`set_status` | callback、模型/编译期 UI 元数据映射和 event loop |
+| `src/app.rs` | Slint/Rust bridge 入口 | `slint::include_modules!`、`run`、`wire_callbacks` | 生成类型声明、UI 启停和功能 callback 总编排 |
+| `src/app/workspace.rs` | 工作区与 profile bridge | `wire_workspace_tabs`、`wire_session_editor`、`close_workspace_tab` | Tab 命令、会话保存和关闭时资源回收 |
+| `src/app/connection.rs` | SSH 连接控制器 | `wire_connection_request`、`begin_authentication`、`start_session_worker` | 主机探测、信任确认、认证和 worker 启动 |
+| `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential` | attempt 路由、输出/失败事件和认证成功后的凭据保存 |
+| `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 终端输入/resize/selection 和本地 worker 事件 |
+| `src/app/settings_bridge.rs` | 设置保存 bridge | `wire_settings` | 校验并原子保存 Settings 草稿 |
+| `src/app/view.rs` | Slint model/snapshot 映射 | `refresh_workspace`、`apply_active_snapshot`、`dispatch_ui` | UI model、终端渲染 DTO、弹窗和 event-loop 更新 |
+| `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event` | 特殊键、快捷键和 Apple 修饰键还原 |
 | `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`configure_application_menu`、`NativeMenuTarget` | 标题栏拖动、标准应用菜单 Settings/About action 与主线程生命周期 |
-| `src/app/state.rs` | 应用状态转换和工作区 Tab 所有权 | `AppState`、`WorkspaceTab`、`TerminalTabState`、attempt 生命周期 | Tab 创建/切换/关闭、同 profile 多实例和迟到 worker 隔离 |
+| `src/app/state.rs` | 工作区 Tab 与终端状态所有权 | `AppState`、`WorkspaceTab`、`TerminalTabState` | Tab 创建/切换/关闭和同 profile 多实例 |
+| `src/app/state/transitions.rs` | SSH attempt 状态转换 | retry/retire/credential marker helpers | 迟到 worker 隔离、认证/host-key 重试和非敏感 marker 保存 |
+| `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、attempt isolation tests | 修改 Tab 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组领域逻辑 | `session_groups`、`group_options` | 分组聚合、已有组选项和 endpoint 格式 |
 | `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout | 从 UI 线程外调用系统凭据库 |
 | `src/config.rs` | 会话/设置 schema 和持久化 | `SessionProfile`、`AppSettings`、`ConfigStore` | profile、终端/工作区参数、旧配置迁移、校验和版本化 JSON 写入 |
@@ -48,27 +57,31 @@
 | `src/ssh/worker.rs` | SSH worker 生命周期 | `SshSessionHandle`、`SshSessionEvent` | 有界 shell 输入/resize/输出、取消和退出 join |
 | `src/ssh/tests.rs` | 确定性 SSH 回归 | loopback russh server | 主机密钥、密码/私钥认证、PTY shell 和 worker 生命周期测试 |
 | `ui/app.slint` | 主窗口、菜单栏和 Tab 交互契约 | `AppWindow`、`MenuBar`、`WorkspaceTabRow`、安全提示层 | 平台顶部菜单、Tab、会话侧栏、活动页面和 callback |
+| `ui/components/workspace-titlebar.slint` | 工作区标题栏组件 | `WorkspaceTitlebar`、`WorkspaceTabRow` | Tab 布局、滚动、关闭、新建与标题栏拖动 |
+| `ui/components/session-navigation.slint` | 会话导航组件 | `SessionNavigation`、`SessionRow` | 展开/收起侧栏、分组和会话行交互 |
+| `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog` | host-key 确认、密码和私钥 passphrase UI |
 | `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane` | 终端焦点、复制粘贴、输出跟随和 PTY resize |
 | `ui/theme.slint` | 集中式视觉配置 | `Theme` semantic palette/type/spacing/geometry tokens | 修改颜色、字号、间距、圆角或标准界面尺寸 |
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarFolderGlyph`、`SidebarRailItem` | 修改 Local Shell/分组图标和收起态卡片交互 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 图标、导航、标题操作、紧凑字段和行布局 |
-| `ui/settings.slint` | Settings 工作台页面 | `SettingsPane` | 分类页面、About、参数草稿和保存意图 |
+| `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、统一草稿、`commit-settings` | 分类导航、跨页草稿和一次 Save 事务 |
+| `ui/settings/` | Settings 分类页面 | General/Appearance/Terminal/Workspace/Shortcuts/About components | 修改单一设置分类布局或字段组合 |
 | `ui/session-editor.slint` | New Session Tab | `SessionEditorPane` | profile、分组、密码/私钥表单 |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
 ## 常用定位
 
-- 修改会话或设置字段：`src/config.rs`，再同步 `src/app.rs` 和对应 `ui/*.slint` 映射。
+- 修改会话或设置字段：`src/config.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射。
 - 修改连接或认证：`src/ssh.rs`，保持未知主机密钥默认拒绝。
 - 修改终端解析或 scrollback：`src/terminal.rs`；修改按键序列：`src/terminal/input.rs`；修改 shell I/O：`src/ssh/worker.rs`。
 - 修改终端/工作区设置：`src/config.rs`、`src/app.rs`、`ui/settings.slint`；字体资源同时检查 `assets/fonts/` 的许可证/声明。
-- 修改 Tab 生命周期：`src/app/state.rs` 和 `src/app.rs`；运行实例键保持为 Tab UUID，不能退回 profile UUID。
+- 修改 Tab 生命周期：`src/app/state.rs`、`src/app/state/transitions.rs` 和 `src/app/workspace.rs`；运行实例键保持为 Tab UUID，不能退回 profile UUID。
 - 修改本机私钥发现或加载：`src/ssh/private_keys.rs`，不得持久化私钥内容或 passphrase。
 - 修改日志初始化、滚动或刷新：`src/logging.rs`，由 `src/main.rs` 持有唯一 guard。
-- 修改 UI callback：先改 `ui/app.slint`，再改 `src/app.rs::wire_callbacks`。
+- 修改 UI callback：先改对应 `ui/*.slint` 契约，再改 `src/app.rs::wire_callbacks` 调用的功能 bridge 模块。
 - 修改平台顶部菜单：业务菜单在 `ui/app.slint`，macOS 标准应用菜单 action 在 `src/app/macos_window.rs`；优先复用现有 callback 和 Slint 状态。
-- 修改会话导航：`src/app.rs::session_rows` 生成统一分组/子会话模型，`ui/app.slint` 选择展开或收起形态，图标基础件在 `ui/components/sidebar-controls.slint`。
-- 修改主题或静态界面尺寸：只改 `ui/theme.slint` token；新增 Settings 行优先组合 `ui/components/settings-controls.slint`。
+- 修改会话导航：`src/app/view.rs::session_rows` 生成统一模型，`ui/components/session-navigation.slint` 选择展开或收起形态，图标基础件在 `ui/components/sidebar-controls.slint`。
+- 修改主题或静态界面尺寸：只改 `ui/theme.slint` token；新增 Settings 行优先在 `ui/settings/` 组合 `ui/components/settings-controls.slint`。
 - 修改 Rust/Slint 工程规则：先读根 `AGENTS.md`，再由项目 skill 选择 Rust 或 Slint reference。
 - 修改工程边界：同步根 README、`docs/architecture*.md` 和本项目地图。
 
@@ -81,8 +94,8 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-07-29 macOS 标准应用菜单 bridge、互斥展开/收起会话导航、无重复 Tab 的 Settings 工作台与集中式 Theme token。
+- 最近依据：2026-07-30 静态 macOS 原生菜单结构、application bridge 功能拆分、Settings 分类页面组件和集中式 Theme token。
 
 ## 最后更新时间
 
-- 2026-07-29 23:44 +0800
+- 2026-07-30 07:49 +0800
