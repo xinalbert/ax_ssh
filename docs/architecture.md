@@ -44,7 +44,7 @@ Process startup (src/main.rs)
 | `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | Private application-bridge feature wiring, worker-event consumption, and Slint model/snapshot mapping | Generated type declaration, transport implementation, or persistence schema |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
-| `src/config.rs` | `SessionProfile`, versioned `AppSettings` and `ThemeSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
+| `src/config.rs` | `SessionProfile`, persistent group names, versioned `AppSettings` and `ThemeSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
@@ -75,10 +75,16 @@ Process startup (src/main.rs)
    blocking boundary or open a password prompt. Private-key profiles load the
    selected path off the UI thread and request a transient passphrase only when
    the encrypted key cannot be opened without one.
-4. A password explicitly saved with a new profile is written together with
-   that profile operation. A password entered in the authentication prompt is
-   written only after SSH authentication succeeds. Missing or rejected stored
-   credentials clear the non-secret marker and fall back to one manual prompt.
+4. A password explicitly saved with a new or edited profile is changed through
+   the blocking credential boundary before the profile transaction commits; a
+   failed profile write restores the prior credential value. Editing never
+   loads that value into Slint: an empty password with the saved marker retained
+   means keep the existing credential. Removing the marker or deleting the
+   profile deletes its credential, while deleting a profile does not stop an
+   already-open terminal worker. A password entered in the authentication
+   prompt is written only after SSH authentication succeeds. Missing or
+   rejected stored credentials clear the non-secret marker and fall back to one
+   manual prompt.
 5. The terminal surface maps Slint special keys to UI-independent terminal key
    values and applies a narrow shifted-hyphen fallback when the platform still
    reports `-` for `Shift+-`. `src/terminal/input.rs` emits control bytes,
@@ -145,8 +151,9 @@ Process startup (src/main.rs)
    bar, while the workspace Tab strip occupies only the column to its right.
    Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
    masked, read-only snapshot of every saved SSH profile; selection routes only
-   the profile UUID through the existing connection callback. The sidebar `+`
-   and File > New Session remain the distinct session-editor action.
+   the profile UUID through the existing connection callback. File > New
+   Session and the sidebar blank-area context menu remain distinct
+   session-editor actions.
 11. One declarative Slint `MenuBar` owns the cross-platform business-menu tree.
     The locked winit/muda backend installs it in the macOS screen menu bar and
     the Windows native window menu; Linux backends without native menu support
@@ -164,24 +171,33 @@ Process startup (src/main.rs)
     close-tab, and shortcut intents.
 12. The session navigator has one Slint-owned sidebar expanded/collapsed state
     and application-owned, in-memory group expansion state. `AppState` stores
-    normalized expanded group names in a `BTreeSet`; that set is neither a new
-    dependency nor persisted configuration. The expanded view renders a Local
-    Shell card, then collapsible parent group rows and their single-line server
-    children. The expanded parent shows its name, count, and a centered drawn
-    down chevron; a collapsed parent shows the matching up chevron. The compact
-    rail alone uses a two-character badge derived from the group name rather
-    than a folder icon.
+    normalized expanded group names in a `BTreeSet`; persisted group names
+    belong to `SessionStore` instead, so empty groups survive restart. The
+    expanded view renders a Local Shell card, then collapsible parent group rows
+    and their single-line server children. Only the masked endpoint crosses into
+    Slint. The expanded parent shows its
+    name, count, and a centered drawn down chevron; a collapsed parent shows the
+    matching up chevron. The compact rail alone uses a two-character badge
+    derived from the group name rather than a folder icon.
     A separate compact panel control is the only action that expands or
     collapses the sidebar. In the expanded sidebar it sits at the trailing
     edge of the Local Shell row; in the collapsed rail it remains a top control.
-    Custom group rows are keyboard focusable and use
-    Enter/Space for the same group-toggle intent as a click; this never changes
-    the sidebar state. Server rows only connect. The collapsed rail renders a
-    larger Group badge and smaller, tightly stacked server badges, while Local
-    Shell keeps its dedicated entry. The application formatter masks usernames
-    and IPv4 middle octets before data enters the Slint model. Static geometry
-    is in `ui/theme.slint`; the persisted single-character mask setting is owned
-    by `WorkspaceSettings`.
+    Custom group rows are keyboard focusable and use Enter/Space for the same
+    group-toggle intent as a click; this never changes the sidebar state. Native
+    row context menus create a server in a group, rename or delete a group, and
+    connect, edit, or delete a server. Ungrouped exposes only its add-server
+    action. Right-clicking blank list space creates an empty group or an
+    Ungrouped server. `SessionActionMenu` maps these four menu shapes to flat
+    `ActionMenuItem` lists. `FlatActionMenu` composes exactly one
+    `ContextMenuArea`, emits only an action ID, and exposes `show-at(Point)` so
+    the same action list can also back a button-triggered dropdown. Deleting a
+    group moves its profiles to Ungrouped; deleting
+    a profile removes only its persisted definition and credential. The
+    collapsed rail renders a larger Group badge and smaller, tightly stacked
+    server badges, while Local Shell keeps its dedicated entry. The application
+    formatter masks usernames and IPv4 middle octets before data enters the
+    Slint model. Static geometry is in `ui/theme.slint`; the persisted
+    single-character mask setting is owned by `WorkspaceSettings`.
 
 ## SSH security contract
 
@@ -234,32 +250,57 @@ plus the configured line-height percentage for rendering, selection, cursor,
 and floor-based PTY dimensions; the terminal batches the resulting resize only
 after those metrics and its layout have settled.
 
-`SessionStore` writes a versioned `settings` object to the existing private
-`sessions.json`. It contains normalized font, size, line height, terminal
+`SessionStore` writes versioned profiles, non-secret group names, and a
+`settings` object to the existing private `sessions.json`. It contains
+normalized font, size, line height, terminal
 brightness, bold-color and right-click behavior, scrollback, default PTY
 dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
-widths, session mask character, shortcuts, and `ThemeSettings`. The theme has
-fixed Dark, Light, and Solarized Dark presets, an explicit Custom mode with
-canonical `#RRGGBB` or `#RRGGBBAA` semantic UI/terminal-default colors, and a
-Follow system mode. Schema version 9 migrates the former terminal color scheme
-into its matching fixed theme so an upgrade preserves the prior appearance.
-Shell discovery validates the saved cache and appends only newly available names
-after load. Earlier migrations retain the schema version 7 compact 220px
-sidebar default and the schema version 8 `*` mask default without overwriting
-custom values. Passwords, passphrases, private-key contents, terminal output,
-tab runtime IDs, child processes, and workers are never serialized.
+widths, session mask character, shortcuts, and `ThemeSettings`. Display strategy
+is persisted independently as System, Light, or Dark; the selected color family
+is AxSSH, Solarized, or Custom. Custom stores separate Light and Dark sets of 13
+canonical `#RRGGBB` or `#RRGGBBAA` semantic UI/terminal-default colors. Schema
+version 11 splits the former combined modes: Solarized Dark becomes Dark plus
+Solarized, while a legacy Custom palette is assigned to its matching brightness
+side and the other side receives a safe AxSSH default. Theme normalization keeps
+Light surfaces light and Dark surfaces dark, requires 4.5:1 contrast for text,
+focus/accent and status roles, requires 3:1 for essential borders, and repairs
+unsafe terminal foreground/selection combinations with same-side defaults.
+Schema version 10 promotes legacy profile group values into a normalized,
+de-duplicated group list so empty groups and group renames can be persisted.
+Schema version 9 migrates the former terminal color scheme into its matching
+fixed theme so an upgrade preserves the prior appearance. Shell
+discovery validates the saved cache and appends only newly available names after
+load. Earlier migrations retain the schema version 7 compact 220px sidebar
+default and the schema version 8 `*` mask default without overwriting custom
+values. Passwords, passphrases, private-key contents, terminal output, tab
+runtime IDs, child processes, and workers are never serialized.
 
-The expanded session sidebar participates in layout only when the session model
-is not empty and the user has not collapsed it. Otherwise the narrow rail keeps
-Local Shell and new-session actions available. Settings and About remain in the
-platform menu and shortcuts instead of the rail.
+The expanded session sidebar remains available even with no saved profiles so
+its blank-area context menu can create an empty group or add a first server.
+Manual collapse switches it to the narrow rail, which keeps Local Shell and the
+same row/list context menus available. Settings and About remain in the platform
+menu and shortcuts instead of the rail.
 
-`ui/theme.slint` resolves semantic visual tokens from persisted theme values:
-fixed presets stay declarative, Custom receives validated colors from the
-application bridge, and Follow system reacts to Slint's runtime platform color
-scheme with a dark fallback. It also owns type scale, spacing, radii, standard
-workspace geometry, Settings control dimensions, editor widths, and overlay
-sizes.
+`src/app/view.rs` sends both validated Light and Dark sides of the selected
+palette to `ui/theme.slint`. System leaves the standard-widget
+`Palette.color-scheme` as `ColorScheme.unknown` so Slint follows the runtime
+platform palette; manual Light and Dark modes set it explicitly. One
+`resolved-dark` selects the matching palette side, standard-widget direction,
+custom AxSSH surfaces, and terminal ANSI palette. Theme state tokens name
+dividers, frame/control borders, focus, hover, and selected surfaces so shared
+components do not reinterpret base colors independently. Native
+`ContextMenuArea` rendering remains
+platform-owned, so its exact colors can differ even though its mode selection is
+consistent. The theme also owns type scale, spacing, radii, standard workspace
+geometry, Settings control dimensions, editor widths, and overlay sizes.
+`ui/components/themed-combo-box.slint` owns every in-app selection control that
+requires exact AxSSH colors. Its control surface, popup, hover and selected
+rows, focus border, chevron, and scroll indicator consume semantic `Theme`
+tokens rather than the Slint widget palette. It preserves the bounded string
+model, current-index, selected callback, keyboard navigation, outside-click
+close behavior, and combobox accessibility contract. Other standard widgets
+continue to use the synchronized Slint `Palette`; native `ContextMenuArea`
+menus remain platform-owned.
 `ui/components/settings-controls.slint` consumes those tokens to provide the
 shared Settings glyph, navigation, page, compact right-aligned field, row,
 toggle, shortcut, and action header primitives. Setting rows keep a stable
@@ -267,6 +308,9 @@ title and metadata column while standard controls use one theme-configured heigh
 `ui/settings.slint` owns the shared draft and one Save transaction, while the
 category layouts live in `ui/settings/*.slint` with only their relevant draft
 properties and callbacks.
+`ui/settings/appearance.slint` separates Display mode from Color palette and
+uses one shared `ThemePaletteEditor` component for the Custom Light and Dark
+fields, preventing the two editors from drifting structurally.
 `src/app/view.rs` maps a saved theme into the Slint global and re-renders only
 the active terminal snapshot when its resolved colors change. Terminal rendering
 uses the resolved default foreground, background, and selection colors while

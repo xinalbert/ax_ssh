@@ -42,7 +42,7 @@ Slint UI（.slint）
 | `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | 私有 application bridge 功能接线、worker 事件消费和 Slint model/snapshot 映射 | 生成类型声明、传输实现或持久化 schema |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
-| `src/config.rs` | `SessionProfile`、版本化 `AppSettings`/`ThemeSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
+| `src/config.rs` | `SessionProfile`、持久化 Group 名称、版本化 `AppSettings`/`ThemeSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
 | `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
@@ -66,9 +66,11 @@ Slint UI（.slint）
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；私钥 profile 在 UI 线程外加载所选路径，
    只有加密密钥无法空口令打开时才请求一次性 passphrase。
-4. 新建 profile 时明确选择保存的密码会随该 profile 操作写入系统凭据库；在认证
-   弹窗输入的密码只在 SSH 认证成功后写入。已存凭据缺失或被拒绝时清除非敏感
-   标记，并回退到一次手工密码提示。
+4. 新建或编辑 profile 时明确保存的密码会先通过 blocking 凭据边界修改，再提交
+   profile 事务；profile 写入失败会恢复原凭据。编辑时旧密码绝不加载进 Slint：保持
+   已保存标记且密码留空表示继续使用现有凭据。取消保存标记或删除 profile 会删除其
+   系统凭据，但删除 profile 不会停止已经打开的终端 worker。在认证弹窗输入的密码只在
+   SSH 认证成功后写入。已存凭据缺失或被拒绝时清除非敏感标记，并回退到一次手工密码提示。
 5. 终端表面把 Slint 特殊键转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
    `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI
    或 application-cursor SS3 方向键，以及带修饰键的 xterm 序列。macOS 在应用边界
@@ -110,7 +112,8 @@ Slint UI（.slint）
    元数据。会话侧边栏不再重复 Settings/About，并从原生标题栏下方贯穿整个客户端高度；
    工作区 Tab 条只占其右侧的工作区列。`+` 固定在最右边缘，打开由 Slint 本地持有的
     选择器，显示全部已保存 SSH profile 的遮蔽只读快照，选择后只将 profile UUID 传入
-    现有连接 callback。侧栏 `+` 与 File > New Session 仍是独立的新建会话编辑器动作。
+    现有连接 callback。File > New Session 与侧栏列表空白区域的右键菜单仍是独立的新建
+    会话编辑器动作。
 11. 单一声明式 Slint `MenuBar` 持有跨平台业务菜单树。锁定的 winit/muda 后端把它安装
     到 macOS 屏幕顶部和 Windows 原生窗口菜单；没有 native menu 支持的 Linux 后端在
     客户区顶部渲染同一棵树。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
@@ -122,16 +125,22 @@ Slint UI（.slint）
     Edit/Help 提供 Settings/About；其他菜单复用已有的新建会话、侧栏、本地 shell、
     关闭 Tab 和快捷键意图。
 12. 会话导航持有一个 Slint 侧边栏展开/收起状态，以及应用层所有、仅在内存中的 Group
-    展开状态。`AppState` 用 `BTreeSet` 保存规范化 Group 名称；它不引入新依赖，也不会
-    写入持久化配置。展开态先渲染 Local Shell 卡片，再渲染可折叠的 Group 父行及其单行
-    服务器子项。展开的父行显示名称、数量和居中的绘制下尖角；收起父行显示对应的上
-    尖角。只有紧凑栏以 Group 名称的两个字符生成文字徽标而非文件夹图标。自定义 Group
-    行可通过键盘获得焦点，Enter/Space 与点击发出相同的 Group 切换意图；这个动作不再
-    改变侧栏状态，只有独立的紧凑面板按钮负责展开或收起侧栏；展开态中它位于 Local Shell
-    行的最右侧，收起态仍位于 rail 顶部。服务器行只负责连接。收起态
-    用更大的 Group 徽标和更小、连续排列的服务器徽标保留层级，Local Shell 保持专用入口。
-    应用层 formatter 会在数据进入 Slint model 前遮蔽用户名和 IPv4 的中间段。静态尺寸进入
-    `ui/theme.slint`，持久化的单字符遮蔽设置由 `WorkspaceSettings` 持有。
+    展开状态。`AppState` 用 `BTreeSet` 保存规范化的展开名称；持久化 Group 名称改由
+    `SessionStore` 持有，因此空 Group 也能跨重启保留。展开态先渲染 Local Shell 卡片，
+    再渲染可折叠的 Group 父行及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。
+    展开父行显示名称、数量和居中的绘制下尖角；收起
+    父行显示对应的上尖角。只有紧凑栏以 Group 名称的两个字符生成文字徽标而非文件夹图标。
+    自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击发出相同的 Group 切换意图；
+    只有独立的紧凑面板按钮负责展开或收起侧栏。原生行右键菜单可在 Group 内新增服务器、
+    重命名或删除 Group，以及连接、编辑或删除服务器；Ungrouped 只提供新增服务器。右击
+    列表空白区域可新建空 Group 或 Ungrouped 服务器。`SessionActionMenu` 把四种菜单形态
+    映射为扁平 `ActionMenuItem` 列表；`FlatActionMenu` 只组合一个 `ContextMenuArea`，只发出
+    action ID，并暴露 `show-at(Point)`，使同一动作列表也能由按钮触发为下拉菜单。删除 Group
+    会把 profile 移入 Ungrouped；删除 profile 只移除持久化定义和凭据。收起态用更大的
+    Group 徽标和更小、连续排列的服务器徽标保留层级，Local Shell 保持专用入口。应用层
+    formatter 会在数据进入 Slint model
+    前遮蔽用户名和 IPv4 的中间段。静态尺寸进入 `ui/theme.slint`，持久化的单字符遮蔽设置
+    由 `WorkspaceSettings` 持有。
 
 ## SSH 安全契约
 
@@ -171,27 +180,45 @@ UI model。
 加载字体。Slint 测量配置字体，并用测得的字符格宽度和配置的行高百分比统一计算
 渲染、选区、光标和向下取整的 PTY 尺寸；终端只会在这些度量和布局稳定后合并发送 resize。
 
-`SessionStore` 在现有私有 `sessions.json` 中写入版本化 `settings` 对象，包括经过约束
-的字体、字号、行高、终端亮度、粗体亮色和右键行为、scrollback、默认 PTY 尺寸、
+`SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
+`settings` 对象，包括经过约束的字体、字号、行高、终端亮度、粗体亮色和右键行为、
+scrollback、默认 PTY 尺寸、
 本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度、会话遮蔽字符、快捷键及
-`ThemeSettings`。主题提供固定的深色、浅色和 Solarized 深色预设，也提供保存完整语义
-UI/终端默认色（规范化为 `#RRGGBB` 或 `#RRGGBBAA`）的自定义模式，以及跟随系统模式。
-schema 版本 9 会把旧终端配色迁移到对应的固定主题，以保持升级前的外观。启动时会验证
-已有 shell 缓存并只追加新发现项；更早的迁移继续只将 schema 版本 7 的旧默认 260px
-侧栏改为紧凑 220px，并增加 schema 版本 8 默认 `*` 的遮蔽设置，不覆盖用户自定义值。
-密码、passphrase、私钥内容、终端输出、Tab 运行时 ID、子进程和 worker 永远不会序列化。
+`ThemeSettings`。显示策略独立保存为 System、Light 或 Dark，配色方案独立选择 AxSSH、
+Solarized 或 Custom。Custom 分别保存 Light/Dark 两套 13 个语义 UI/终端默认色，并规范化为
+`#RRGGBB` 或 `#RRGGBBAA`。schema 版本 11 会拆分旧的组合模式：Solarized Dark 迁移为
+Dark + Solarized；旧 Custom 按背景亮度进入对应的一侧，另一侧使用安全 AxSSH 默认。
+主题规范化会保证 Light 表面保持浅色、Dark 表面保持深色；正文、焦点/强调和状态色至少
+4.5:1，必要边框至少 3:1，不安全的终端前景/选区组合回退到相同明暗侧的安全默认。
+schema 版本 10 会把旧 profile 中的 Group 值提升为规范化、去重后的 Group 列表，从而
+持久化空 Group 和重命名结果。schema 版本 9 会把旧终端配色迁移到对应的固定主题，以保持
+升级前的外观。启动时会验证已有 shell 缓存并只追加新发现项；更早的迁移继续只将 schema
+版本 7 的旧默认 260px 侧栏改为紧凑 220px，并增加 schema 版本 8 默认 `*` 的遮蔽设置，
+不覆盖用户自定义值。密码、passphrase、私钥内容、终端输出、Tab 运行时 ID、子进程和
+worker 永远不会序列化。
 
-只有会话模型非空且用户没有手动收起时，展开会话侧栏才参与布局；否则窄栏仍保留
-Local Shell 和新建会话入口。Settings/About 只保留在平台菜单和快捷键中，不再进入
-左侧栏。
+即使没有已保存 profile，展开会话侧栏也会保留列表空白区域的右键菜单，用于新建空 Group
+或添加第一台服务器。用户手动收起后切换为窄栏，窄栏仍保留 Local Shell 和相同的行/列表
+右键菜单。Settings/About 只保留在平台菜单和快捷键中，不再进入左侧栏。
 
-`ui/theme.slint` 根据已保存主题解析语义视觉 token：固定预设保持声明式解析，自定义色
-由应用 bridge 传入，跟随系统模式响应 Slint 的运行时平台配色并在未知时回退深色；它还
-统一字号层级、间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
+`src/app/view.rs` 将已选 palette 经过校验的 Light/Dark 两侧同时送入 `ui/theme.slint`。
+System 模式把标准控件 `Palette.color-scheme` 保持为 `ColorScheme.unknown`，由 Slint 跟随
+运行时平台 palette；手动 Light/Dark 则显式设置。唯一的 `resolved-dark` 同时选择对应 palette
+侧、标准控件方向、AxSSH 自绘表面和终端 ANSI palette。Theme 还显式命名 divider、frame/
+control border、focus、hover 和 selected 状态 token，避免共享组件各自重新解释基础色。
+原生 `ContextMenuArea` 仍由平台绘制，所以它的具体色值可能不同，但明暗选择保持一致。主题
+还统一字号层级、间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
+`ui/components/themed-combo-box.slint` 统一拥有所有需要 AxSSH 精确配色的应用内选择控件；
+控件表面、弹层、hover/选中行、焦点边框、箭头和滚动指示全部消费语义 `Theme` token，不再
+使用 Slint 标准控件 palette。组件保留有界字符串 model、current-index、selected callback、
+键盘导航、点击外部关闭和 combobox 可访问性契约。其它标准控件继续使用已同步的 Slint
+`Palette`，原生 `ContextMenuArea` 菜单仍由平台拥有。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
 列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 持有统一草稿和一次 Save
 事务，各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的草稿属性和 callback。
+`ui/settings/appearance.slint` 将 Display mode 与 Color palette 分开，并用一个共享
+`ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将保存的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端
 快照。终端渲染使用解析后的默认前景、背景和选区色，仍保留既有 ANSI 16/256 色语义。
 主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。运行时终端

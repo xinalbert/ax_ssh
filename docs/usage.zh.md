@@ -13,7 +13,7 @@ cargo run --locked
 
 ## 创建并连接会话
 
-1. 选择 **File > New Session**，或使用侧栏的新建会话控件。
+1. 选择 **File > New Session**，或右击侧栏列表空白区域并选择 **New Server**。
 2. 填写名称、可选分组、主机、端口和用户名，然后选择密码或私钥认证。可以选择从
    用户 `.ssh` 目录发现的私钥，也可以手工输入路径。
 3. 保存会话并在会话导航中选择它。重复打开同一个已保存会话会创建彼此独立的终端
@@ -23,23 +23,31 @@ cargo run --locked
 5. 根据提示输入临时密码或私钥 passphrase。密码可以选择保存到系统凭据库；私钥
    passphrase 永远不会持久化。
 
+右击 Group 可新增服务器、重命名或删除 Group；右击 Ungrouped 只提供新增服务器。右击
+服务器可连接、编辑或删除，编辑操作复用同一会话编辑器。修改 host 或 port 会清除已确认
+的主机密钥指纹，下次连接必须重新明确确认。编辑已有密码 profile 时，密码留空会保留原
+系统凭据；取消保存密码的勾选会从系统凭据库删除该密码。
+
 选择 **Pane > New Local Shell** 或 Local Shell 控件可打开独立的本地终端。通过 Tab
 关闭控件或 **Window > Close Current Tab** 关闭终端。
 
 ## 工作区与终端操作
 
-展开的会话导航以可折叠的 Group 行组织服务器。展开后的 Group 行只显示名称、数量和
+展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时创建
+空 Group 或 Ungrouped 服务器。展开后的 Group 行显示名称、数量和
 居中的绘制下尖角；收起后显示对应的绘制上尖角，避免名称与文字徽标重复。点击 Group
 行，或将焦点移到该行后按 Enter/Space，可切换状态。每台可见服务器仍只占一行：左侧为
 名称，右侧为遮蔽后的 endpoint。**View > Toggle Session Sidebar** 可在此视图和紧凑
 Activity Bar 之间切换；只有紧凑栏使用 Group 名称前两个字符作为文字徽标，打开 Group
-时会同时展开侧边栏和该 Group。
+时会同时展开侧边栏和该 Group，紧凑栏行也提供相同的右键菜单。删除 Group 会把其中
+服务器移入 Ungrouped；删除 profile 也会删除记住的密码，但不会关闭已经打开的终端 Tab。
 
 侧边栏默认遮蔽用户名与 IPv4 地址：用户名尽可能保留前后各两个字符，
 `192.168.1.202` 显示为 `192.*.202`。可在 **Settings > Workspace** 中修改单个遮蔽
 字符。主机名保持可见，便于快速区分目标服务器。新建会话编辑器与终端共用工作区
 Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+` 会列出全部已保存 SSH
-会话，选择后连接对应 profile；侧栏 `+` 和 **File > New Session** 仍只打开会话编辑器。
+会话，选择后连接对应 profile；**File > New Session** 和侧栏列表空白区域的右键菜单
+仍只打开会话编辑器。
 可拖拽工作区 Tab 调整顺序。前置数字会随当前位置变化，而 `#1` 这类实例后缀保持不变。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法和常见 xterm 风格控制/导航序列。
@@ -51,9 +59,14 @@ macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单；Windows 和 Linux
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、
 Workspace、Shortcuts 和 About 页面；只有选择 **Save** 后修改才会持久化。
 
+在 **Settings > Appearance** 中，Display mode 单独选择 **Follow system**、**Light** 或
+**Dark**；Color palette 单独选择 **AxSSH**、**Solarized** 或 **Custom**，因此固定配色都能
+同时用于浅色和深色。Custom 会展开 Light/Dark 两套语义色。保存时，无效十六进制值或会让
+文字、必要边框、焦点/状态及终端文字看不清的颜色，会回退到对应明暗侧的可读默认。
+
 ## 本地数据与凭据
 
-AxSSH 把 profile 和非敏感设置写入平台本地应用数据目录中的版本化
+AxSSH 把 profile、非敏感 Group 名称和设置写入平台本地应用数据目录中的版本化
 `sessions.json`。profile 可以包含已确认的主机密钥指纹、私钥路径和密码可用性标记，
 但不包含密码、私钥 passphrase、私钥内容、终端输出或运行中的进程状态。
 

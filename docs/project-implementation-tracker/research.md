@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-07-30 主题明暗与控件 palette 统一
+
+- 时间：2026-07-30 21:12 +0800
+- 检索问题：应用明暗模式、主题配色和标准控件 palette 应如何分层，并怎样避免自定义主题导致控件不可读或下拉颜色错配？
+- 检索原因：用户要求参考 AxShell 和网络规范检查主题结构，并继续实施 AxSSH、Slint 标准控件和终端的统一解析。
+- 来源列表：AxShell 固定提交的 `src/app/theme.rs` 与 `docs/features/appearance-settings.zh.md`；W3C WCAG 2.2 Contrast Minimum、Non-text Contrast 和 Use of Color；Microsoft Fluent 2 Color；Cargo.lock 锁定的 Slint 1.17.1 `widgets/{cupertino,fluent,material}/style-base.slint` 与 `styling.slint`。
+- 关键结论：显示策略、Light/Dark 模式和 palette 是独立维度；标准控件必须与应用最终明暗状态一致。Slint `Palette.color-scheme` 可写，`ColorScheme.unknown` 会让内置 palette 使用后端系统状态；因此 System 模式应保留 `unknown`，手动模式再显式写 Light/Dark。正文和关键控件状态仍需分别满足 WCAG 4.5:1 与 3:1。
+- 对实施计划的影响：本轮先建立单一 `resolved-dark` 并同步标准控件与终端；后续 schema 重构再把模式和 palette 拆开，并为自定义颜色增加成对 token 与对比度校验。
+- 未解决问题：原生 `ContextMenuArea` 的具体色值仍由目标平台决定；自定义 Light/Dark 双 palette 和完整对比度门禁需要后续独立迁移。
+
 ## 2026-07-29 Rust 与 Slint 工程规范依据
 
 - 时间：2026-07-29 09:34 +0800
@@ -69,3 +79,13 @@
 - 关键结论：xterm.js 在 `BufferService.resize` 内先同步更新 buffer 的 `cols`/`rows`，随后才发送 resize 通知；其 renderer 在排队渲染前后均核对当前 viewport 尺寸。WezTerm 在同一窗口 resize 路径中计算 canonical `TerminalSize`、写入 window state、对所有 tab 执行 resize，随后使相关渲染失效。两者都不把过期的已序列化渲染快照作为之后事件的权威状态。
 - 对实施计划的影响：AxSSH 的 Local PTY 与 SSH worker 事件只请求活动终端 UI 刷新；`slint::invoke_from_event_loop` 实际执行时才从 `AppState` 复制当前活动 snapshot。这样先排队的旧 Output 无法在 resize 后覆盖新网格，且保持 worker 不直接接触 Slint。
 - 未解决问题：仍需在目标 macOS 上对高频 PTY 输出、连续窗口拖动和真实 SSH 输出组合进行人工验收；若快照复制成为性能热点，再按测量结果增加有界刷新合并，而不改变状态所有权。
+
+## 2026-07-30 Slint 扁平右键与下拉动作菜单
+
+- 时间：2026-07-30 20:22 +0800
+- 检索问题：Slint 1.17.1 能否用一个扁平动作组件同时支持右键菜单和按钮触发的下拉菜单，并由 model 动态生成菜单项？
+- 检索原因：用户要求把当前重复的 Group/服务器右键菜单抽成扁平组件，并同时覆盖下拉菜单触发方式。
+- 来源列表：Slint 1.17.1 `ContextMenuArea` 官方文档 <https://docs.slint.dev/1.17.1/docs/slint/reference/window/contextmenuarea/>；Slint latest 组件组合文档 <https://docs.slint.dev/latest/docs/slint/guide/language/coding/file/>；本机锁定 `i-slint-compiler 1.17.1` 的 `builtins.slint`、`passes/lower_menus.rs` 和 `tests/syntax/elements/menu-shortcuts.slint`。
+- 关键结论：`ContextMenuArea` 自动处理右键/Menu 键/长按，并允许通过 `show(Point)` 主动显示同一原生菜单；每个 area 必须有且仅有一个非条件/非重复的根 `Menu`，但根菜单内部支持 `if` 和 `for` 动态生成 `MenuItem`。Slint 组件适合通过组合复用；当前项目实测继承 `ContextMenuArea` 会触发 1.17.1 inlining panic，因此必须组合而非继承。
+- 对实施计划的影响：新增普通 Rectangle 组件持有 `[ActionMenuItem]` 和内部 `ContextMenuArea`，暴露 action ID callback 与 `show-at(Point)`；会话导航只负责把 Group/服务器/空白区域语义映射为扁平 action 列表和既有 callback。
+- 未解决问题：原生菜单的屏幕边缘定位和 macOS/Windows/Linux 平台外观需目标平台验收；可搜索或富内容下拉不在本轮范围内。
