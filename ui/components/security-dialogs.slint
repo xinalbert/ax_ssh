@@ -1,4 +1,5 @@
-import { Button, CheckBox, LineEdit } from "std-widgets.slint";
+import { Button, CheckBox } from "std-widgets.slint";
+import { SecretTextInput } from "secret-text-input.slint";
 import { Theme } from "../theme.slint";
 
 export component HostKeyDialog inherits Rectangle {
@@ -57,12 +58,38 @@ export component HostKeyDialog inherits Rectangle {
 
 export component AuthenticationDialog inherits Rectangle {
     in property <string> endpoint;
-    in property <bool> remember-default;
     in property <bool> private-key;
+    in property <bool> vault-storage;
+    in property <bool> vault-unlock-only;
+    in property <string> default-credential-storage;
     in property <string> key-path;
+    in property <string> prompt-id;
 
-    callback authenticate(string, bool);
+    callback authenticate(string, string, bool) -> bool;
     callback cancel();
+
+    function submit() {
+        if root.authenticate(
+            secret-edit.text,
+            vault-password-edit.text,
+            remember-password.checked,
+        ) {
+            secret-edit.clear();
+            vault-password-edit.clear();
+        }
+    }
+
+    function cancel-and-clear() {
+        secret-edit.clear();
+        vault-password-edit.clear();
+        root.cancel();
+    }
+
+    changed prompt-id => {
+        secret-edit.clear();
+        vault-password-edit.clear();
+        remember-password.checked = false;
+    }
 
     background: Theme.overlay;
     TouchArea { }
@@ -73,7 +100,9 @@ export component AuthenticationDialog inherits Rectangle {
         width: Theme.password-dialog-width;
         height: root.private-key
             ? Theme.password-private-key-dialog-height
-            : Theme.password-dialog-height;
+            : (root.vault-storage || root.default-credential-storage == "encrypted-vault"
+                ? Theme.password-private-key-dialog-height
+                : Theme.password-dialog-height);
         background: Theme.panel-alt;
         border-width: Theme.hairline;
         border-color: Theme.frame-border;
@@ -85,7 +114,7 @@ export component AuthenticationDialog inherits Rectangle {
             Text {
                 text: root.private-key
                     ? "Private key authentication"
-                    : "Password authentication";
+                    : (root.vault-unlock-only ? "Unlock encrypted credentials" : "Password authentication");
                 color: Theme.text;
                 font-size: Theme.font-title;
                 font-weight: 700;
@@ -102,27 +131,43 @@ export component AuthenticationDialog inherits Rectangle {
                 font-size: Theme.font-small;
                 overflow: elide;
             }
-            password-edit := LineEdit {
+            secret-edit := SecretTextInput {
+                visible: !root.vault-unlock-only;
+                height: self.visible ? Theme.editor-input-row-height : 0px;
                 placeholder-text: root.private-key
                     ? "Private key passphrase (optional)"
                     : "Password";
-                input-type: InputType.password;
-                accepted(value) => { root.authenticate(value, remember-password.checked); }
+                accessible-label: root.private-key
+                    ? "Private key passphrase"
+                    : "SSH password";
+                accepted => { root.submit(); }
+            }
+            vault-password-edit := SecretTextInput {
+                visible: !root.private-key
+                    && (root.vault-storage || root.default-credential-storage == "encrypted-vault");
+                height: self.visible ? Theme.editor-input-row-height : 0px;
+                placeholder-text: root.vault-unlock-only
+                    ? "Vault password"
+                    : "Vault password (only needed when remembering)";
+                accessible-label: "Vault password";
+                accepted => { root.submit(); }
             }
             remember-password := CheckBox {
-                visible: !root.private-key;
+                visible: !root.private-key && !root.vault-unlock-only;
                 height: self.visible ? Theme.editor-check-row-height : 0px;
-                text: "Save password in system credential store";
-                checked: root.remember-default;
+                text: root.default-credential-storage == "encrypted-vault"
+                    ? "Remember password in encrypted application vault"
+                    : "Remember password in system credential store";
+                checked: false;
             }
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.space-md;
-                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: "Cancel"; clicked => { root.cancel-and-clear(); } }
                 Button {
                     text: "Connect";
                     clicked => {
-                        root.authenticate(password-edit.text, remember-password.checked);
+                        root.submit();
                     }
                 }
             }

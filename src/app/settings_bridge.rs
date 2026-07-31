@@ -55,6 +55,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
               theme_dark_terminal_background,
               theme_dark_terminal_selection,
               right_click_copy_or_paste,
+              option_as_meta,
               local_shell,
               scrollback_lines,
               default_columns,
@@ -65,7 +66,8 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
               open_settings_shortcut,
               toggle_sidebar_shortcut,
               copy_selection_shortcut,
-              paste_shortcut| {
+              paste_shortcut,
+              credential_storage| {
             let shortcuts = ShortcutSettings {
                 open_settings: open_settings_shortcut.as_str().to_owned(),
                 toggle_sidebar: toggle_sidebar_shortcut.as_str().to_owned(),
@@ -96,6 +98,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 default_rows,
                 local_shell.as_str(),
                 &known_shells,
+                option_as_meta,
                 sidebar_width,
                 tab_width,
                 session_mask_character.as_str(),
@@ -103,6 +106,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 &shortcuts.toggle_sidebar,
                 &shortcuts.copy_selection,
                 &shortcuts.paste,
+                credential_storage.as_str(),
             );
             let mut settings = settings;
             settings.set_theme(ThemeSettings::normalized(

@@ -16,24 +16,51 @@ export struct TerminalRenderLine {
     runs: [TerminalRenderRun],
 }
 
+// Rust owns the rendered terminal snapshot and connection lifecycle. The pane
+// owns only selection, focus, cursor blink, and measured layout state.
+export struct TerminalViewState {
+    terminal_id: string,
+    connected: bool,
+    render_lines: [TerminalRenderLine],
+    content_columns: int,
+    cursor_row: int,
+    cursor_column: int,
+    cursor_visible: bool,
+    cursor_text: string,
+    font_family: string,
+    font_size: length,
+    line_height_percent: int,
+    foreground: color,
+    background: color,
+    selection_background: color,
+    right_click_copy_or_paste: bool,
+    option_as_meta: bool,
+    apple_platform: bool,
+    copy_selection_shortcut: string,
+    paste_shortcut: string,
+}
+
 export component TerminalPane inherits Rectangle {
-    in property <bool> connected;
-    in property <string> terminal-id;
-    in property <[TerminalRenderLine]> render-lines;
-    in property <int> content-columns;
-    in property <int> cursor-row;
-    in property <int> cursor-column;
-    in property <bool> cursor-visible;
-    in property <string> cursor-text;
-    in property <string> terminal-font-family;
-    in property <length> terminal-font-size;
-    in property <int> terminal-line-height-percent;
-    in property <color> terminal-foreground;
-    in property <color> terminal-background;
-    in property <color> terminal-selection-background;
-    in property <bool> right-click-copy-or-paste;
-    in property <string> copy-selection-shortcut;
-    in property <string> paste-shortcut;
+    in property <TerminalViewState> view;
+    private property <bool> connected: root.view.connected;
+    private property <string> terminal-id: root.view.terminal_id;
+    private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
+    private property <int> content-columns: root.view.content_columns;
+    private property <int> cursor-row: root.view.cursor_row;
+    private property <int> cursor-column: root.view.cursor_column;
+    private property <bool> cursor-visible: root.view.cursor_visible;
+    private property <string> cursor-text: root.view.cursor_text;
+    private property <string> terminal-font-family: root.view.font_family;
+    private property <length> terminal-font-size: root.view.font_size;
+    private property <int> terminal-line-height-percent: root.view.line_height_percent;
+    private property <color> terminal-foreground: root.view.foreground;
+    private property <color> terminal-background: root.view.background;
+    private property <color> terminal-selection-background: root.view.selection_background;
+    private property <bool> right-click-copy-or-paste: root.view.right_click_copy_or_paste;
+    private property <bool> option-as-meta: root.view.option_as_meta;
+    private property <bool> apple-platform: root.view.apple_platform;
+    private property <string> copy-selection-shortcut: root.view.copy_selection_shortcut;
+    private property <string> paste-shortcut: root.view.paste_shortcut;
 
     callback terminal-key(string, bool, bool, bool, bool) -> bool;
     callback resized(int, int);
@@ -79,10 +106,9 @@ export component TerminalPane inherits Rectangle {
     private property <int> selection-last-column:
         root.anchor-first ? root.selection-focus-column : root.selection-anchor-column;
 
-    function direct-terminal-key(text: string, alt: bool, control: bool,
-                                 meta: bool, shift: bool) -> bool {
-        return alt || control || meta || shift
-            || text == Key.Return
+    // Special keys bypass IME; printable and committed IME text use edited.
+    function special-terminal-key(text: string) -> bool {
+        return text == Key.Return
             || text == Key.Backspace
             || text == Key.Tab
             || text == Key.Backtab
@@ -96,7 +122,37 @@ export component TerminalPane inherits Rectangle {
             || text == Key.Home
             || text == Key.End
             || text == Key.PageUp
-            || text == Key.PageDown;
+            || text == Key.PageDown
+            || text == Key.F1
+            || text == Key.F2
+            || text == Key.F3
+            || text == Key.F4
+            || text == Key.F5
+            || text == Key.F6
+            || text == Key.F7
+            || text == Key.F8
+            || text == Key.F9
+            || text == Key.F10
+            || text == Key.F11
+            || text == Key.F12;
+    }
+
+    function direct-terminal-key(text: string, alt: bool, control: bool,
+                                 meta: bool, shift: bool) -> bool {
+        if root.special-terminal-key(text) {
+            return true;
+        }
+        // Slint swaps physical Control and Command on Apple platforms.
+        let physical-control = root.apple-platform ? meta : control;
+        let physical-meta = root.apple-platform ? control : meta;
+        if root.apple-platform {
+            return physical-control || physical-meta
+                || (root.option-as-meta && alt && !physical-meta);
+        }
+        // Ctrl+Alt printable text is commonly AltGr and must reach TextInput.
+        return (physical-control && !(alt && !text.is-empty))
+            || (alt && !physical-control)
+            || physical-meta;
     }
 
     public function focus-terminal() {

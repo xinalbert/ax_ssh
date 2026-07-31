@@ -1,4 +1,5 @@
 use super::*;
+use ax_ssh::config::CredentialStorage;
 
 fn test_state() -> AppState {
     AppState::new(
@@ -23,6 +24,221 @@ fn same_profile_opens_independent_terminal_tabs() {
 }
 
 #[test]
+fn each_ssh_tab_keeps_its_own_authentication_prompt() {
+    let mut state = test_state();
+    let mut first_profile = SessionProfile::new("first", "first.example", "alice");
+    first_profile.host_key_fingerprint = Some("SHA256:first".into());
+    let mut second_profile = SessionProfile::new("second", "second.example", "bob");
+    second_profile.host_key_fingerprint = Some("SHA256:second".into());
+    state.sessions.upsert(first_profile.clone());
+    state.sessions.upsert(second_profile.clone());
+
+    let first_tab = state.open_terminal_tab(&first_profile);
+    let second_tab = state.open_terminal_tab(&second_profile);
+    state
+        .terminal_mut(first_tab)
+        .expect("first terminal should exist")
+        .set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: false,
+        });
+    state
+        .terminal_mut(second_tab)
+        .expect("second terminal should exist")
+        .set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: true,
+        });
+
+    assert!(state.activate_tab(first_tab));
+    match state.active_security_prompt() {
+        ActiveSecurityPrompt::Authentication {
+            tab_id,
+            profile,
+            vault_unlock_only,
+        } => {
+            assert_eq!(tab_id, first_tab);
+            assert_eq!(profile.id, first_profile.id);
+            assert!(!vault_unlock_only);
+        }
+        ActiveSecurityPrompt::None | ActiveSecurityPrompt::HostKey(_) => {
+            panic!("first tab should render its authentication prompt")
+        }
+    }
+
+    assert!(state.activate_tab(second_tab));
+    match state.active_security_prompt() {
+        ActiveSecurityPrompt::Authentication {
+            tab_id,
+            profile,
+            vault_unlock_only,
+        } => {
+            assert_eq!(tab_id, second_tab);
+            assert_eq!(profile.id, second_profile.id);
+            assert!(vault_unlock_only);
+        }
+        ActiveSecurityPrompt::None | ActiveSecurityPrompt::HostKey(_) => {
+            panic!("second tab should render its authentication prompt")
+        }
+    }
+}
+
+#[test]
+fn closing_one_pending_tab_keeps_another_tabs_authentication_prompt() {
+    let mut state = test_state();
+    let first_profile = SessionProfile::new("first", "first.example", "alice");
+    let mut second_profile = SessionProfile::new("second", "second.example", "bob");
+    second_profile.host_key_fingerprint = Some("SHA256:second".into());
+    state.sessions.upsert(first_profile.clone());
+    state.sessions.upsert(second_profile.clone());
+
+    let first_tab = state.open_terminal_tab(&first_profile);
+    let second_tab = state.open_terminal_tab(&second_profile);
+    let (first_cancel, mut first_cancelled) = oneshot::channel();
+    state
+        .terminal_mut(first_tab)
+        .expect("first terminal should exist")
+        .set_ssh_phase(SshConnectionPhase::Probing(PendingProbe {
+            tab_id: first_tab,
+            profile_id: first_profile.id,
+            cancel: first_cancel,
+        }));
+    state
+        .terminal_mut(second_tab)
+        .expect("second terminal should exist")
+        .set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: false,
+        });
+
+    let closed = state.close_tab(first_tab).expect("first tab should close");
+    closed
+        .pending_probe
+        .expect("closing a probing tab should return its cancellation sender")
+        .cancel
+        .send(())
+        .expect("probe task should still receive cancellation");
+    assert!(first_cancelled.try_recv().is_ok());
+    assert!(state.activate_tab(second_tab));
+    assert!(matches!(
+        state.active_security_prompt(),
+        ActiveSecurityPrompt::Authentication { tab_id, profile, .. }
+            if tab_id == second_tab && profile.id == second_profile.id
+    ));
+}
+
+#[test]
+fn stale_retry_from_a_closed_duplicate_tab_is_ignored() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("duplicate", "duplicate.example", "alice");
+    let first_tab = state.open_terminal_tab(&profile);
+    let second_tab = state.open_terminal_tab(&profile);
+    let first_attempt = Uuid::new_v4();
+    let second_attempt = Uuid::new_v4();
+    state
+        .terminal_mut(first_tab)
+        .expect("first terminal should exist")
+        .set_ssh_attempt(Some(first_attempt));
+    state
+        .terminal_mut(second_tab)
+        .expect("second terminal should exist")
+        .set_ssh_attempt(Some(second_attempt));
+    state.close_tab(first_tab).expect("first tab should close");
+    let state = Arc::new(Mutex::new(state));
+
+    assert!(
+        !prepare_authentication_retry(&state, first_tab, profile.id, first_attempt,)
+            .expect("stale retry should be ignored without error")
+    );
+    let state = state.lock().expect("state should remain readable");
+    assert_eq!(
+        state
+            .terminal(second_tab)
+            .and_then(TerminalTabState::ssh_route),
+        Some((profile.id, Some(second_attempt)))
+    );
+    assert!(matches!(
+        state
+            .terminal(second_tab)
+            .and_then(TerminalTabState::ssh_phase),
+        Some(SshConnectionPhase::Idle)
+    ));
+}
+
+#[test]
+fn stale_stored_credential_cleanup_cannot_reopen_a_closed_tab() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("duplicate", "duplicate.example", "alice");
+    let first_tab = state.open_terminal_tab(&profile);
+    let second_tab = state.open_terminal_tab(&profile);
+    let first_attempt = Uuid::new_v4();
+    let second_attempt = Uuid::new_v4();
+    state
+        .terminal_mut(first_tab)
+        .expect("first terminal should exist")
+        .set_ssh_attempt(Some(first_attempt));
+    state
+        .terminal_mut(second_tab)
+        .expect("second terminal should exist")
+        .set_ssh_attempt(Some(second_attempt));
+    let state = Arc::new(Mutex::new(state));
+
+    assert!(
+        prepare_stored_credential_retry(&state, first_tab, profile.id, first_attempt,)
+            .expect("current stored credential retry should transition")
+    );
+    state
+        .lock()
+        .expect("state should remain writable")
+        .close_tab(first_tab)
+        .expect("first tab should close");
+
+    assert!(!finish_stored_credential_retry(
+        &state, first_tab, profile.id,
+    ));
+    let state = state.lock().expect("state should remain readable");
+    assert_eq!(
+        state
+            .terminal(second_tab)
+            .and_then(TerminalTabState::ssh_route),
+        Some((profile.id, Some(second_attempt)))
+    );
+    assert!(matches!(
+        state
+            .terminal(second_tab)
+            .and_then(TerminalTabState::ssh_phase),
+        Some(SshConnectionPhase::Idle)
+    ));
+}
+
+#[test]
+fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
+    let mut state = test_state();
+    let mut profile = SessionProfile::new("duplicate", "duplicate.example", "alice");
+    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    state.sessions.upsert(profile.clone());
+    let tab_id = state.open_terminal_tab(&profile);
+    state
+        .terminal_mut(tab_id)
+        .expect("terminal should exist")
+        .set_ssh_phase(SshConnectionPhase::LoadingStoredCredential);
+    let state = Arc::new(Mutex::new(state));
+
+    state
+        .lock()
+        .expect("state should remain writable")
+        .close_tab(tab_id)
+        .expect("tab should close");
+
+    assert!(
+        !set_credential_storage_while_loading(&state, tab_id, profile.id, None)
+            .expect("stale credential result should be ignored without error")
+    );
+    let state = state.lock().expect("state should remain readable");
+    assert_eq!(
+        state.sessions.sessions[0].credential_storage,
+        Some(CredentialStorage::SystemKeyring)
+    );
+}
+
+#[test]
 fn settings_and_session_editor_tabs_are_singletons() {
     let mut state = test_state();
 
@@ -39,7 +255,7 @@ fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
     let mut state = test_state();
     let mut profile = SessionProfile::new("Production", "prod.example", "alice");
     profile.group_name = "Critical".into();
-    profile.credential_stored = true;
+    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
     state.sessions.upsert(profile.clone());
 
     let editor_id = state.open_session_editor_for_group(" Staging ");
@@ -55,7 +271,10 @@ fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
     assert_ne!(profile_editor.draft_id, group_draft_id);
     assert_eq!(profile_editor.name, "Production");
     assert_eq!(profile_editor.group_name, "Critical");
-    assert!(profile_editor.credential_stored);
+    assert_eq!(
+        state.sessions.sessions[0].credential_storage,
+        Some(CredentialStorage::SystemKeyring)
+    );
 }
 
 #[test]

@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::credential_tasks::CredentialRollback;
 
 pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
     let ui_for_settings = ui.as_weak();
@@ -161,10 +162,6 @@ pub(super) fn close_workspace_tab(
     {
         debug!(tab_id = %tab_id, "host-key probe already stopped while closing tab");
     }
-    if closed.dismissed_prompt {
-        set_dialog_open(ui, Dialog::HostKey, false);
-        set_dialog_open(ui, Dialog::Password, false);
-    }
     if let Some(worker) = closed.worker {
         let ui = ui.clone();
         runtime.spawn(async move {
@@ -190,9 +187,7 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               port,
               username,
               auth_method,
-              private_key_path,
-              password,
-              remember_password| {
+              private_key_path| {
             let parsed_port = match port.trim().parse::<u16>() {
                 Ok(port) if port > 0 => port,
                 _ => {
@@ -233,8 +228,6 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 username.as_str(),
                 auth_method.as_str(),
                 private_key_path.as_str(),
-                password.as_str(),
-                remember_password,
             ) {
                 Ok(result) => result,
                 Err(error) => {
@@ -273,7 +266,6 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     candidate.upsert(profile.clone());
                     app.config.save(&candidate)?;
                     app.sessions = candidate;
-                    app.expanded_groups.insert(profile.group_name.clone());
                     Ok(())
                 })();
 
@@ -289,7 +281,7 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
 
                 info!(
                     session_id = %profile_id,
-                    credential_stored = profile.credential_stored,
+                    credential_storage = ?profile.credential_storage,
                     private_key = matches!(profile.auth, AuthMethod::PrivateKey { .. }),
                     "session profile saved"
                 );
@@ -302,23 +294,6 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             });
         },
     );
-
-    let ui_for_group = ui.as_weak();
-    ui.on_toggle_group(move |group_name| {
-        let group_name = normalize_group_name(group_name.as_str());
-        match state.lock() {
-            Ok(mut app) => {
-                if !app.expanded_groups.insert(group_name.clone()) {
-                    app.expanded_groups.remove(&group_name);
-                }
-            }
-            Err(_) => {
-                set_status(&ui_for_group, "Cannot update group state");
-                return;
-            }
-        }
-        refresh_session_models(&ui_for_group, &state);
-    });
 }
 
 pub(super) fn wire_session_management(
@@ -387,22 +362,6 @@ fn update_session_group(
     }
     app.config.save(&candidate)?;
     app.sessions = candidate;
-    match action {
-        "new-group" => {
-            app.expanded_groups.insert(normalize_group_name(value));
-        }
-        "rename-group" => {
-            let was_expanded = app.expanded_groups.remove(&normalize_group_name(target));
-            if was_expanded {
-                app.expanded_groups.insert(normalize_group_name(value));
-            }
-        }
-        "delete-group" => {
-            app.expanded_groups.remove(&normalize_group_name(target));
-            app.expanded_groups.insert(String::new());
-        }
-        _ => {}
-    }
     Ok(message)
 }
 
@@ -419,8 +378,8 @@ async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) 
         .context("session not found")?;
     let credential_rollback = apply_credential_change(
         session_id,
-        if profile.credential_stored {
-            CredentialChange::Delete
+        if let Some(storage) = profile.credential_storage {
+            CredentialChange::Delete(storage)
         } else {
             CredentialChange::None
         },
@@ -457,23 +416,7 @@ async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) 
 
 enum CredentialChange {
     None,
-    Store(String),
-    Delete,
-}
-
-struct CredentialRollback {
-    session_id: Uuid,
-    previous_password: Option<String>,
-}
-
-impl CredentialRollback {
-    async fn restore(self) -> Result<()> {
-        if let Some(password) = self.previous_password {
-            save_stored_password(self.session_id, password).await
-        } else {
-            delete_stored_password(self.session_id).await
-        }
-    }
+    Delete(CredentialStorage),
 }
 
 async fn apply_credential_change(
@@ -482,22 +425,7 @@ async fn apply_credential_change(
 ) -> Result<Option<CredentialRollback>> {
     match change {
         CredentialChange::None => Ok(None),
-        CredentialChange::Store(password) => {
-            let previous_password = load_stored_password(session_id).await?;
-            save_stored_password(session_id, password).await?;
-            Ok(Some(CredentialRollback {
-                session_id,
-                previous_password,
-            }))
-        }
-        CredentialChange::Delete => {
-            let previous_password = load_stored_password(session_id).await?;
-            delete_stored_password(session_id).await?;
-            Ok(Some(CredentialRollback {
-                session_id,
-                previous_password,
-            }))
-        }
+        CredentialChange::Delete(storage) => delete_password(session_id, storage).await.map(Some),
     }
 }
 
@@ -511,32 +439,14 @@ fn profile_from_editor(
     username: &str,
     auth_method: &str,
     private_key_path: &str,
-    password: &str,
-    remember_password: bool,
 ) -> Result<(SessionProfile, CredentialChange)> {
     let private_key = auth_method == "Private key";
-    let previous_credential_stored = existing.is_some_and(|profile| profile.credential_stored);
-    let credential_stored = if private_key {
-        false
-    } else if remember_password {
-        if password.is_empty() && !previous_credential_stored {
-            anyhow::bail!("enter a password before enabling password storage");
-        }
-        true
-    } else {
-        false
-    };
-    let credential_change = if private_key || !remember_password {
-        if previous_credential_stored {
-            CredentialChange::Delete
-        } else {
-            CredentialChange::None
-        }
-    } else if password.is_empty() {
-        CredentialChange::None
-    } else {
-        CredentialChange::Store(password.to_owned())
-    };
+    let credential_change = existing
+        .and_then(|profile| profile.credential_storage)
+        .filter(|_| private_key)
+        .map_or(CredentialChange::None, |storage| {
+            CredentialChange::Delete(storage)
+        });
 
     let normalized_host = host.trim();
     let mut profile = SessionProfile::new(name.trim(), normalized_host, username.trim());
@@ -556,7 +466,11 @@ fn profile_from_editor(
     } else {
         AuthMethod::Password
     };
-    profile.credential_stored = credential_stored;
+    profile.credential_storage = if private_key {
+        None
+    } else {
+        existing.and_then(|existing| existing.credential_storage)
+    };
     Ok((profile, credential_change))
 }
 
@@ -567,7 +481,7 @@ mod tests {
     #[test]
     fn editing_without_a_password_preserves_an_existing_credential() {
         let mut existing = SessionProfile::new("old", "old.example", "alice");
-        existing.credential_stored = true;
+        existing.credential_storage = Some(CredentialStorage::EncryptedVault);
         existing.host_key_fingerprint = Some("SHA256:trusted".into());
 
         let (profile, change) = profile_from_editor(
@@ -579,41 +493,43 @@ mod tests {
             "alice",
             "Password",
             "",
-            "",
-            true,
         )
         .expect("profile should update");
 
         assert_eq!(profile.id, existing.id);
-        assert!(profile.credential_stored);
+        assert_eq!(
+            profile.credential_storage,
+            Some(CredentialStorage::EncryptedVault)
+        );
         assert_eq!(profile.host_key_fingerprint, existing.host_key_fingerprint);
         assert!(matches!(change, CredentialChange::None));
     }
 
     #[test]
-    fn endpoint_changes_clear_trust_and_disabling_storage_deletes_the_credential() {
+    fn switching_to_private_key_clears_trust_and_deletes_the_credential() {
         let mut existing = SessionProfile::new("old", "old.example", "alice");
-        existing.credential_stored = true;
+        existing.credential_storage = Some(CredentialStorage::SystemKeyring);
         existing.host_key_fingerprint = Some("SHA256:trusted".into());
 
         let (profile, change) = profile_from_editor(
             Some(&existing),
             "new",
             "",
-            "new.example",
-            2222,
+            "old.example",
+            22,
             "alice",
-            "Password",
-            "",
-            "",
-            false,
+            "Private key",
+            "/tmp/id_ed25519",
         )
         .expect("profile should update");
 
         assert_eq!(profile.id, existing.id);
-        assert!(!profile.credential_stored);
-        assert_eq!(profile.host_key_fingerprint, None);
-        assert!(matches!(change, CredentialChange::Delete));
+        assert_eq!(profile.credential_storage, None);
+        assert_eq!(profile.host_key_fingerprint, existing.host_key_fingerprint);
+        assert!(matches!(
+            change,
+            CredentialChange::Delete(CredentialStorage::SystemKeyring)
+        ));
     }
 
     #[test]

@@ -2,19 +2,14 @@ import "../assets/fonts/JetBrainsMono-Regular.ttf";
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
-import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
-import { SettingsPane } from "settings.slint";
-import { SessionEditorPane } from "session-editor.slint";
-import { SessionNavigation, SessionRow } from "components/session-navigation.slint";
-import { AuthenticationDialog, HostKeyDialog } from "components/security-dialogs.slint";
-import { SessionManagementDialog } from "components/session-management-dialog.slint";
-import {
-    ConnectableSessionRow,
-    ConnectionPicker,
-    WorkspaceTitlebar,
-    WorkspaceTabRow,
-} from "components/workspace-titlebar.slint";
+import { SessionGroupRow } from "components/session-navigation.slint";
+import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
+import { TerminalRenderLine } from "terminal-pane.slint";
+import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
+import { WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
 
+// AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
+// read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
     title: "AxSSH";
     min-width: Theme.window-min-width;
@@ -24,21 +19,20 @@ export component AppWindow inherits Window {
     background: Theme.background;
     private property <ColorScheme> standard-widget-color-scheme: Theme.widget-color-scheme;
 
-    in property <[SessionRow]> sessions;
+    in property <[SessionGroupRow]> sessions;
     in property <[WorkspaceTabRow]> workspace-tabs;
     in property <[ConnectableSessionRow]> connection-options;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
-    in-out property <string> editor-draft-id;
-    in-out property <string> editor-profile-id;
-    in-out property <string> editor-name;
-    in-out property <string> editor-group-name;
-    in-out property <string> editor-host;
-    in-out property <string> editor-port: "22";
-    in-out property <string> editor-username;
-    in-out property <string> editor-auth-method: "Password";
-    in-out property <string> editor-private-key-path;
-    in-out property <bool> editor-credential-stored;
+    in property <string> editor-draft-id;
+    in property <string> editor-profile-id;
+    in property <string> editor-name;
+    in property <string> editor-group-name;
+    in property <string> editor-host;
+    in property <string> editor-port: "22";
+    in property <string> editor-username;
+    in property <string> editor-auth-method: "Password";
+    in property <string> editor-private-key-path;
     in property <[string]> local-shell-options;
     in property <string> status: "";
     in property <string> active-tab-id: "";
@@ -51,9 +45,11 @@ export component AppWindow inherits Window {
     in property <bool> host-key-changed: false;
     in property <bool> password-dialog-open: false;
     in property <string> password-endpoint: "";
-    in property <bool> password-remember-default: false;
     in property <bool> password-private-key: false;
+    in property <bool> password-vault-storage: false;
+    in property <bool> password-vault-unlock-only: false;
     in property <string> password-key-path: "";
+    in property <string> password-dialog-tab-id: "";
     in property <bool> worker-running: false;
     in property <bool> connected: false;
     in property <[TerminalRenderLine]> terminal-render-lines;
@@ -69,6 +65,7 @@ export component AppWindow inherits Window {
     in property <int> terminal-brightness-percent: 100;
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
+    in property <bool> option-as-meta: false;
     in property <color> terminal-render-foreground: Theme.terminal-foreground;
     in property <color> terminal-render-background: Theme.terminal-background;
     in property <color> terminal-render-selection-background: Theme.terminal-selection;
@@ -112,6 +109,7 @@ export component AppWindow inherits Window {
     in property <int> default-terminal-rows: 36;
     in property <string> local-shell: "System default";
     in property <int> local-shell-index: 0;
+    in property <string> credential-storage: "system-keyring";
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
     in property <string> session-mask-character: "*";
@@ -125,17 +123,81 @@ export component AppWindow inherits Window {
     in property <string> default-paste-shortcut;
     in property <bool> apple-platform: false;
     in property <string> app-version;
-
-    private property <bool> sidebar-collapsed: false;
-    private property <bool> connection-picker-open: false;
-    in-out property <string> settings-section: "General";
-    private property <bool> shortcut-recording: false;
-    private property <bool> session-management-dialog-open: false;
-    private property <string> session-management-action;
-    private property <string> session-management-target;
-    private property <string> session-management-title;
-    private property <string> session-management-message;
-    private property <string> session-management-value;
+    private property <string> settings-section: "General";
+    private property <int> settings-section-request-revision: 0;
+    private property <WorkspaceViewState> workspace-view: {
+        sessions: root.sessions,
+        workspace_tabs: root.workspace-tabs,
+        connection_options: root.connection-options,
+        active_tab_id: root.active-tab-id,
+        active_tab_kind: root.active-tab-kind,
+        status: root.status,
+        sidebar_width: root.sidebar-width,
+        tab_width: root.tab-width,
+        terminal_background: root.terminal-background,
+        terminal: {
+            terminal_id: root.active-tab-id, connected: root.connected,
+            render_lines: root.terminal-render-lines, content_columns: root.terminal-content-columns,
+            cursor_row: root.terminal-cursor-row, cursor_column: root.terminal-cursor-column,
+            cursor_visible: root.terminal-cursor-visible, cursor_text: root.terminal-cursor-text,
+            font_family: root.terminal-font-family, font_size: root.terminal-font-size * 1px,
+            line_height_percent: root.terminal-line-height-percent, foreground: root.terminal-foreground,
+            background: root.terminal-background, selection_background: root.terminal-selection-background,
+            right_click_copy_or_paste: root.right-click-copy-or-paste,
+            option_as_meta: root.option-as-meta, apple_platform: root.apple-platform,
+            copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
+        },
+        settings: {
+            local_shell_options: root.local-shell-options, terminal_font_family: root.terminal-font-family,
+            terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
+            terminal_brightness_percent: root.terminal-brightness-percent, bright_bold_text: root.bright-bold-text,
+            theme_mode: root.theme-mode, theme_palette: root.theme-palette,
+            theme_light_background: root.theme-light-background, theme_light_panel: root.theme-light-panel,
+            theme_light_panel_alt: root.theme-light-panel-alt, theme_light_border: root.theme-light-border,
+            theme_light_text: root.theme-light-text, theme_light_muted: root.theme-light-muted,
+            theme_light_accent: root.theme-light-accent, theme_light_success: root.theme-light-success,
+            theme_light_danger: root.theme-light-danger, theme_light_overlay: root.theme-light-overlay,
+            theme_light_terminal_foreground: root.theme-light-terminal-foreground,
+            theme_light_terminal_background: root.theme-light-terminal-background,
+            theme_light_terminal_selection: root.theme-light-terminal-selection,
+            theme_dark_background: root.theme-dark-background, theme_dark_panel: root.theme-dark-panel,
+            theme_dark_panel_alt: root.theme-dark-panel-alt, theme_dark_border: root.theme-dark-border,
+            theme_dark_text: root.theme-dark-text, theme_dark_muted: root.theme-dark-muted,
+            theme_dark_accent: root.theme-dark-accent, theme_dark_success: root.theme-dark-success,
+            theme_dark_danger: root.theme-dark-danger, theme_dark_overlay: root.theme-dark-overlay,
+            theme_dark_terminal_foreground: root.theme-dark-terminal-foreground,
+            theme_dark_terminal_background: root.theme-dark-terminal-background,
+            theme_dark_terminal_selection: root.theme-dark-terminal-selection,
+            right_click_copy_or_paste: root.right-click-copy-or-paste, option_as_meta: root.option-as-meta,
+            apple_platform: root.apple-platform, scrollback_lines: root.scrollback-lines,
+            default_terminal_columns: root.default-terminal-columns, default_terminal_rows: root.default-terminal-rows,
+            local_shell: root.local-shell, local_shell_index: root.local-shell-index,
+            credential_storage: root.credential-storage, sidebar_width: root.sidebar-width,
+            tab_width: root.tab-width, session_mask_character: root.session-mask-character,
+            open_settings_shortcut: root.open-settings-shortcut,
+            toggle_sidebar_shortcut: root.toggle-sidebar-shortcut,
+            copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
+            default_open_settings_shortcut: root.default-open-settings-shortcut,
+            default_toggle_sidebar_shortcut: root.default-toggle-sidebar-shortcut,
+            default_copy_selection_shortcut: root.default-copy-selection-shortcut,
+            default_paste_shortcut: root.default-paste-shortcut, app_version: root.app-version, status: root.status,
+        },
+        session_editor: {
+            draft_id: root.editor-draft-id, profile_id: root.editor-profile-id, name: root.editor-name,
+            group_name: root.editor-group-name, host: root.editor-host, port: root.editor-port,
+            username: root.editor-username, auth_method: root.editor-auth-method,
+            private_key_path: root.editor-private-key-path, group_options: root.group-options,
+            private_key_options: root.private-key-options, status: root.status,
+        },
+    };
+    private property <SecurityOverlayViewState> security-overlay: {
+        host_key_open: root.host-key-dialog-open, host_key_endpoint: root.host-key-endpoint,
+        host_key_fingerprint: root.host-key-fingerprint, host_key_changed: root.host-key-changed,
+        password_open: root.password-dialog-open, password_endpoint: root.password-endpoint,
+        password_private_key: root.password-private-key, password_vault_storage: root.password-vault-storage,
+        password_vault_unlock_only: root.password-vault-unlock-only, password_key_path: root.password-key-path,
+        password_prompt_id: root.password-dialog-tab-id, default_credential_storage: root.credential-storage,
+    };
 
     callback new-session();
     callback new-session-in-group(string);
@@ -150,16 +212,15 @@ export component AppWindow inherits Window {
         string, int, int, int, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, string, int, int, int, int, int, string, string, string, string, string,
+        bool, bool, string, int, int, int, int, int, string, string, string, string, string, string,
     );
     callback cancel-settings();
     callback connect-session(string);
-    callback toggle-group(string);
-    callback save-session(string, string, string, string, string, string, string, string, bool);
+    callback save-session(string, string, string, string, string, string, string);
     callback cancel-session-dialog();
     callback confirm-host-key();
     callback reject-host-key();
-    callback authenticate-session(string, bool);
+    callback authenticate-session(string, string, bool) -> bool;
     callback cancel-password-dialog();
     callback disconnect-session();
     callback terminal-key(string, bool, bool, bool, bool) -> bool;
@@ -171,48 +232,40 @@ export component AppWindow inherits Window {
     callback read-clipboard() -> string;
     callback refresh-terminal-appearance();
 
+    public function request-settings-section(section: string) {
+        root.settings-section = section;
+        root.settings-section-request-revision += 1;
+    }
+
     init => { Palette.color-scheme = root.standard-widget-color-scheme; }
     changed standard-widget-color-scheme => {
         Palette.color-scheme = root.standard-widget-color-scheme;
     }
     changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
     changed theme-revision => { root.refresh-terminal-appearance(); }
-
     MenuBar {
         Menu {
             title: "File";
-            MenuItem {
-                title: "New Session";
-                activated => { root.new-session(); }
-            }
+            MenuItem { title: "New Session"; activated => { root.new-session(); } }
         }
         Menu {
             title: "Edit";
-            MenuItem {
-                title: "Undo";
-                enabled: false;
-            }
+            MenuItem { title: "Undo"; enabled: false; }
             if !root.apple-platform : MenuItem {
                 title: "Settings...";
-                activated => {
-                    root.settings-section = "General";
-                    root.open-settings();
-                }
+                activated => { root.request-settings-section("General"); root.open-settings(); }
             }
         }
         Menu {
             title: "View";
             MenuItem {
                 title: "Toggle Session Sidebar";
-                activated => { root.sidebar-collapsed = !root.sidebar-collapsed; }
+                activated => { workspace-shell.toggle-sidebar(); }
             }
         }
         Menu {
             title: "Pane";
-            MenuItem {
-                title: "New Local Shell";
-                activated => { root.open-local-shell(); }
-            }
+            MenuItem { title: "New Local Shell"; activated => { root.open-local-shell(); } }
         }
         Menu {
             title: "Window";
@@ -230,28 +283,21 @@ export component AppWindow inherits Window {
             title: "Help";
             MenuItem {
                 title: "Keyboard Shortcuts";
-                activated => {
-                    root.settings-section = "Shortcuts";
-                    root.open-settings();
-                }
+                activated => { root.request-settings-section("Shortcuts"); root.open-settings(); }
             }
             if !root.apple-platform : MenuItem {
                 title: "About AxSSH";
-                activated => {
-                    root.settings-section = "About";
-                    root.open-settings();
-                }
+                activated => { root.request-settings-section("About"); root.open-settings(); }
             }
         }
     }
 
     shortcut-scope := FocusScope {
         capture-key-pressed(event) => {
-            if root.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
+            if workspace-shell.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
                 return EventResult.reject;
             }
-            if root.connection-picker-open && event.text == Key.Escape {
-                root.connection-picker-open = false;
+            if event.text == Key.Escape && workspace-shell.dismiss-transient-controls() {
                 return EventResult.accept;
             }
             // Slint swaps Command and Control on Apple platforms for Qt compatibility.
@@ -259,372 +305,99 @@ export component AppWindow inherits Window {
                 ? event.modifiers.meta : event.modifiers.control;
             let physical-meta = root.apple-platform
                 ? event.modifiers.control : event.modifiers.meta;
-            if root.active-tab-kind == "terminal"
-                    && physical-control
-                    && !physical-meta {
+            if root.active-tab-kind == "terminal" && physical-control && !physical-meta {
                 return EventResult.reject;
             }
-            if root.format-shortcut(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            ) == root.open-settings-shortcut {
-                root.settings-section = "General";
+            if root.format-shortcut(event.text, event.modifiers.alt, event.modifiers.control,
+                                    event.modifiers.meta, event.modifiers.shift)
+                    == root.open-settings-shortcut {
+                root.request-settings-section("General");
                 root.open-settings();
                 return EventResult.accept;
             }
-            if root.format-shortcut(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            ) == root.toggle-sidebar-shortcut {
-                root.sidebar-collapsed = !root.sidebar-collapsed;
+            if root.format-shortcut(event.text, event.modifiers.alt, event.modifiers.control,
+                                    event.modifiers.meta, event.modifiers.shift)
+                    == root.toggle-sidebar-shortcut {
+                workspace-shell.toggle-sidebar();
                 return EventResult.accept;
             }
             return EventResult.reject;
         }
 
-        HorizontalLayout {
-            spacing: 0px;
-
-            SessionNavigation {
-                sessions: root.sessions;
-                sidebar-width: root.sidebar-width;
-                collapsed <=> root.sidebar-collapsed;
-                open-local-shell => { root.open-local-shell(); }
-                new-session => { root.new-session(); }
-                connect-session(id) => { root.connect-session(id); }
-                toggle-group(group-name) => { root.toggle-group(group-name); }
-                new-group => {
-                    root.session-management-action = "new-group";
-                    root.session-management-target = "";
-                    root.session-management-title = "New group";
-                    root.session-management-message = "";
-                    root.session-management-value = "";
-                    root.session-management-dialog-open = true;
-                }
-                new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                rename-group(group-name) => {
-                    root.session-management-action = "rename-group";
-                    root.session-management-target = group-name;
-                    root.session-management-title = "Rename group";
-                    root.session-management-message = "";
-                    root.session-management-value = group-name;
-                    root.session-management-dialog-open = true;
-                }
-                delete-group(group-name) => {
-                    root.session-management-action = "delete-group";
-                    root.session-management-target = group-name;
-                    root.session-management-title = "Delete group";
-                    root.session-management-message = "Delete " + group-name
-                        + "? Servers in this group will move to Ungrouped.";
-                    root.session-management-value = "";
-                    root.session-management-dialog-open = true;
-                }
-                edit-session(id) => { root.edit-session(id); }
-                delete-session(id, name) => {
-                    root.session-management-action = "delete-session";
-                    root.session-management-target = id;
-                    root.session-management-title = "Delete server";
-                    root.session-management-message = "Delete " + name + " and its saved system credential?";
-                    root.session-management-value = "";
-                    root.session-management-dialog-open = true;
-                }
+        workspace-shell := WorkspaceShell {
+            width: parent.width;
+            height: parent.height;
+            view: root.workspace-view;
+            requested-settings-section: root.settings-section;
+            settings-section-request-revision: root.settings-section-request-revision;
+            new-session => { root.new-session(); }
+            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+            edit-session(id) => { root.edit-session(id); }
+            request-session-management(action, target, subject) => {
+                overlay-host.show-session-management(action, target, subject);
             }
-
-            VerticalLayout {
-                horizontal-stretch: 1;
-                spacing: 0px;
-
-                WorkspaceTitlebar {
-                    tabs: root.workspace-tabs;
-                    active-tab-id: root.active-tab-id;
-                    tab-width: root.tab-width;
-                    terminal-background: root.terminal-background;
-                    connection-picker-open: root.connection-picker-open;
-                    activate-tab(id) => {
-                        root.connection-picker-open = false;
-                        root.activate-tab(id);
-                    }
-                    close-tab(id) => {
-                        root.connection-picker-open = false;
-                        root.close-tab(id);
-                    }
-                    move-tab(id, target-index) => {
-                        root.connection-picker-open = false;
-                        root.move-tab(id, target-index);
-                    }
-                    toggle-connection-picker => {
-                        root.connection-picker-open = !root.connection-picker-open;
-                    }
-                }
-
-                Rectangle {
-                    vertical-stretch: 1;
-                    background: Theme.background;
-
-                if root.active-tab-kind == "terminal" : terminal-pane := TerminalPane {
-                    connected: root.connected;
-                    terminal-id: root.active-tab-id;
-                    render-lines: root.terminal-render-lines;
-                    content-columns: root.terminal-content-columns;
-                    cursor-row: root.terminal-cursor-row;
-                    cursor-column: root.terminal-cursor-column;
-                    cursor-visible: root.terminal-cursor-visible;
-                    cursor-text: root.terminal-cursor-text;
-                    terminal-font-family: root.terminal-font-family;
-                    terminal-font-size: root.terminal-font-size * 1px;
-                    terminal-line-height-percent: root.terminal-line-height-percent;
-                    terminal-foreground: root.terminal-foreground;
-                    terminal-background: root.terminal-background;
-                    terminal-selection-background: root.terminal-selection-background;
-                    right-click-copy-or-paste: root.right-click-copy-or-paste;
-                    copy-selection-shortcut: root.copy-selection-shortcut;
-                    paste-shortcut: root.paste-shortcut;
-                    format-shortcut(text, alt, control, meta, shift) => {
-                        return root.format-shortcut(text, alt, control, meta, shift);
-                    }
-                    terminal-key(text, alt, control, meta, shift) => {
-                        return root.terminal-key(text, alt, control, meta, shift);
-                    }
-                    resized(columns, rows) => { root.resize-terminal(columns, rows); }
-                    scrolled(lines) => { root.scroll-terminal(lines); }
-                    selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
-                        return root.terminal-selection-text(
-                            anchor-row, anchor-column, focus-row, focus-column,
-                        );
-                    }
-                    write-clipboard(text) => { root.write-clipboard(text); }
-                    read-clipboard() => { return root.read-clipboard(); }
-                }
-
-                if root.active-tab-kind == "settings" : SettingsPane {
-                    selected-section <=> root.settings-section;
-                    app-version: root.app-version;
-                    local-shell-options: root.local-shell-options;
-                    terminal-font-family: root.terminal-font-family;
-                    terminal-font-size: root.terminal-font-size;
-                    terminal-line-height-percent: root.terminal-line-height-percent;
-                    terminal-brightness-percent: root.terminal-brightness-percent;
-                    bright-bold-text: root.bright-bold-text;
-                    theme-mode: root.theme-mode;
-                    theme-palette: root.theme-palette;
-                    theme-light-background: root.theme-light-background;
-                    theme-light-panel: root.theme-light-panel;
-                    theme-light-panel-alt: root.theme-light-panel-alt;
-                    theme-light-border: root.theme-light-border;
-                    theme-light-text: root.theme-light-text;
-                    theme-light-muted: root.theme-light-muted;
-                    theme-light-accent: root.theme-light-accent;
-                    theme-light-success: root.theme-light-success;
-                    theme-light-danger: root.theme-light-danger;
-                    theme-light-overlay: root.theme-light-overlay;
-                    theme-light-terminal-foreground: root.theme-light-terminal-foreground;
-                    theme-light-terminal-background: root.theme-light-terminal-background;
-                    theme-light-terminal-selection: root.theme-light-terminal-selection;
-                    theme-dark-background: root.theme-dark-background;
-                    theme-dark-panel: root.theme-dark-panel;
-                    theme-dark-panel-alt: root.theme-dark-panel-alt;
-                    theme-dark-border: root.theme-dark-border;
-                    theme-dark-text: root.theme-dark-text;
-                    theme-dark-muted: root.theme-dark-muted;
-                    theme-dark-accent: root.theme-dark-accent;
-                    theme-dark-success: root.theme-dark-success;
-                    theme-dark-danger: root.theme-dark-danger;
-                    theme-dark-overlay: root.theme-dark-overlay;
-                    theme-dark-terminal-foreground: root.theme-dark-terminal-foreground;
-                    theme-dark-terminal-background: root.theme-dark-terminal-background;
-                    theme-dark-terminal-selection: root.theme-dark-terminal-selection;
-                    right-click-copy-or-paste: root.right-click-copy-or-paste;
-                    scrollback-lines: root.scrollback-lines;
-                    default-terminal-columns: root.default-terminal-columns;
-                    default-terminal-rows: root.default-terminal-rows;
-                    local-shell: root.local-shell;
-                    local-shell-index: root.local-shell-index;
-                    sidebar-width: root.sidebar-width;
-                    tab-width: root.tab-width;
-                    session-mask-character: root.session-mask-character;
-                    open-settings-shortcut: root.open-settings-shortcut;
-                    toggle-sidebar-shortcut: root.toggle-sidebar-shortcut;
-                    copy-selection-shortcut: root.copy-selection-shortcut;
-                    paste-shortcut: root.paste-shortcut;
-                    default-open-settings-shortcut: root.default-open-settings-shortcut;
-                    default-toggle-sidebar-shortcut: root.default-toggle-sidebar-shortcut;
-                    default-copy-selection-shortcut: root.default-copy-selection-shortcut;
-                    default-paste-shortcut: root.default-paste-shortcut;
-                    status: root.status;
-                    save(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
-                         theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
-                         theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
-                         theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
-                         theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
-                         theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
-                         theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
-                         theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                         theme-dark-terminal-selection, right-click-copy, shell,
-                         scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
-                         toggle-sidebar-key, copy-key, paste-key) => {
-                        root.save-settings(
-                            font,
-                            size,
-                            line-height,
-                            brightness,
-                            bright-bold,
-                            theme-mode,
-                            theme-palette,
-                            theme-light-background,
-                            theme-light-panel,
-                            theme-light-panel-alt,
-                            theme-light-border,
-                            theme-light-text,
-                            theme-light-muted,
-                            theme-light-accent,
-                            theme-light-success,
-                            theme-light-danger,
-                            theme-light-overlay,
-                            theme-light-terminal-foreground,
-                            theme-light-terminal-background,
-                            theme-light-terminal-selection,
-                            theme-dark-background,
-                            theme-dark-panel,
-                            theme-dark-panel-alt,
-                            theme-dark-border,
-                            theme-dark-text,
-                            theme-dark-muted,
-                            theme-dark-accent,
-                            theme-dark-success,
-                            theme-dark-danger,
-                            theme-dark-overlay,
-                            theme-dark-terminal-foreground,
-                            theme-dark-terminal-background,
-                            theme-dark-terminal-selection,
-                            right-click-copy,
-                            shell,
-                            scrollback,
-                            columns,
-                            rows,
-                            sidebar,
-                            tab-size,
-                            mask-character,
-                            open-settings-key,
-                            toggle-sidebar-key,
-                            copy-key,
-                            paste-key,
-                        );
-                    }
-                    format-shortcut(text, alt, control, meta, shift) => {
-                        return root.format-shortcut(text, alt, control, meta, shift);
-                    }
-                    shortcut-recording-changed(recording) => {
-                        root.shortcut-recording = recording;
-                    }
-                    cancel => { root.cancel-settings(); }
-                }
-
-                if root.active-tab-kind == "session-editor" : SessionEditorPane {
-                    group-options: root.group-options;
-                    private-key-options: root.private-key-options;
-                    status: root.status;
-                    draft-id: root.editor-draft-id;
-                    profile-id: root.editor-profile-id;
-                    name-draft <=> root.editor-name;
-                    group-draft <=> root.editor-group-name;
-                    host-draft <=> root.editor-host;
-                    port-draft <=> root.editor-port;
-                    username-draft <=> root.editor-username;
-                    auth-method <=> root.editor-auth-method;
-                    private-key-draft <=> root.editor-private-key-path;
-                    remember-password-draft <=> root.editor-credential-stored;
-                    save(name, group, host, port, username, auth, key-path, password, remember) => {
-                        root.save-session(name, group, host, port, username, auth, key-path, password, remember);
-                    }
-                    cancel => { root.cancel-session-dialog(); }
-                }
-
-                if root.active-tab-kind == "empty" : VerticalLayout {
-                    padding: Theme.empty-page-padding;
-                    spacing: Theme.space-lg;
-                    Text {
-                        text: "Workspace";
-                        color: Theme.text;
-                        font-size: Theme.font-page-title;
-                        font-weight: 700;
-                    }
-                    Text {
-                        text: "Open a saved session or create a new tab.";
-                        color: Theme.muted;
-                        font-size: Theme.font-body;
-                    }
-                    Rectangle { vertical-stretch: 1; }
-                    if !root.status.is-empty : Text {
-                        text: root.status;
-                        color: Theme.accent;
-                        font-size: Theme.font-small;
-                        wrap: word-wrap;
-                    }
-                }
+            open-local-shell => { root.open-local-shell(); }
+            activate-tab(id) => { root.activate-tab(id); }
+            close-tab(id) => { root.close-tab(id); }
+            move-tab(id, target-index) => { root.move-tab(id, target-index); }
+            save-settings(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                          theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
+                          theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
+                          theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
+                          theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
+                          theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
+                          theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
+                          theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
+                          theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows,
+                          sidebar, tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key,
+                          paste-key, credential-storage) => {
+                root.save-settings(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                    theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
+                    theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
+                    theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
+                    theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
+                    theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
+                    theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
+                    theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
+                    theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows, sidebar,
+                    tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key, paste-key,
+                    credential-storage);
             }
+            cancel-settings => { root.cancel-settings(); }
+            connect-session(id) => { root.connect-session(id); }
+            save-session(name, group, host, port, username, auth, key-path) => {
+                root.save-session(name, group, host, port, username, auth, key-path);
+            }
+            cancel-session-dialog => { root.cancel-session-dialog(); }
+            terminal-key(text, alt, control, meta, shift) => {
+                return root.terminal-key(text, alt, control, meta, shift);
+            }
+            resize-terminal(columns, rows) => { root.resize-terminal(columns, rows); }
+            scroll-terminal(lines) => { root.scroll-terminal(lines); }
+            terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+                return root.terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column);
+            }
+            format-shortcut(text, alt, control, meta, shift) => {
+                return root.format-shortcut(text, alt, control, meta, shift);
+            }
+            write-clipboard(text) => { root.write-clipboard(text); }
+            read-clipboard() => { return root.read-clipboard(); }
         }
     }
-    }
 
-    if root.connection-picker-open : TouchArea {
-        y: Theme.titlebar-fallback-height;
+    overlay-host := OverlayHost {
         width: parent.width;
-        height: parent.height - self.y;
-        clicked => { root.connection-picker-open = false; }
-    }
-
-    if root.connection-picker-open : ConnectionPicker {
-        x: max(
-            Theme.space-xs,
-            parent.width - self.width,
-        );
-        y: Theme.titlebar-fallback-height;
-        sessions: root.connection-options;
-        connect-session(id) => {
-            root.connection-picker-open = false;
-            root.connect-session(id);
-        }
-        dismiss => { root.connection-picker-open = false; }
-    }
-
-    if root.session-management-dialog-open : SessionManagementDialog {
-        action: root.session-management-action;
-        title: root.session-management-title;
-        message: root.session-management-message;
-        value <=> root.session-management-value;
-        confirm(value) => {
-            root.session-management-dialog-open = false;
-            root.manage-session-action(
-                root.session-management-action,
-                root.session-management-target,
-                value,
-            );
-        }
-        cancel => { root.session-management-dialog-open = false; }
-    }
-
-    if root.host-key-dialog-open : HostKeyDialog {
-        endpoint: root.host-key-endpoint;
-        fingerprint: root.host-key-fingerprint;
-        changed: root.host-key-changed;
+        height: parent.height;
+        security: root.security-overlay;
         monospace-font-family: root.terminal-font-family;
-        confirm => { root.confirm-host-key(); }
-        cancel => { root.reject-host-key(); }
+        manage-session-action(action, target, value) => {
+            root.manage-session-action(action, target, value);
+        }
+        confirm-host-key => { root.confirm-host-key(); }
+        reject-host-key => { root.reject-host-key(); }
+        authenticate-session(secret, vault-password, remember) => {
+            return root.authenticate-session(secret, vault-password, remember);
+        }
+        cancel-password-dialog => { root.cancel-password-dialog(); }
     }
-
-    if root.password-dialog-open : AuthenticationDialog {
-        endpoint: root.password-endpoint;
-        remember-default: root.password-remember-default;
-        private-key: root.password-private-key;
-        key-path: root.password-key-path;
-        authenticate(secret, remember) => { root.authenticate-session(secret, remember); }
-        cancel => { root.cancel-password-dialog(); }
-    }
-
 }

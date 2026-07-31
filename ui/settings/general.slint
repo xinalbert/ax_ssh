@@ -9,6 +9,7 @@ export component GeneralSettingsPage inherits SettingsPage {
     in-out property <int> draft-local-shell-index;
     in-out property <int> draft-columns;
     in-out property <int> draft-rows;
+    in-out property <string> draft-credential-storage;
     SettingsSectionHeading { label: "DEFAULTS"; }
     SettingsRow {
         label: "Local shell";
@@ -20,6 +21,23 @@ export component GeneralSettingsPage inherits SettingsPage {
                 current-index <=> root.draft-local-shell-index;
                 accessible-label: "Local shell";
                 selected(value) => { root.draft-local-shell = value; }
+            }
+        }
+    }
+    SettingsRow {
+        label: "Remembered password storage";
+        description: "Used only after you choose Remember password while connecting";
+        SettingsField {
+            ThemedComboBox {
+                height: Theme.settings-control-height;
+                model: ["System credential store", "Encrypted application vault"];
+                current-index: root.draft-credential-storage == "encrypted-vault" ? 1 : 0;
+                accessible-label: "Remembered password storage";
+                selected(value) => {
+                    root.draft-credential-storage = value == "Encrypted application vault"
+                        ? "encrypted-vault"
+                        : "system-keyring";
+                }
             }
         }
     }

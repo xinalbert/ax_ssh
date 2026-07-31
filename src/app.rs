@@ -17,26 +17,26 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use ax_ssh::config::{
-    AppSettings, AuthMethod, ConfigStore, SessionProfile, SessionStore, ShortcutSettings,
-    TerminalColorScheme, ThemePalette, ThemeSettings, normalize_group_name,
+    AppSettings, AuthMethod, ConfigStore, CredentialStorage, SessionProfile, SessionStore,
+    ShortcutSettings, TerminalColorScheme, ThemePalette, ThemeSettings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};
 use ax_ssh::terminal::{TerminalSnapshot, encode_key as encode_terminal_key};
 
 use self::credential_tasks::{
-    delete_password as delete_stored_password, load_password as load_stored_password,
-    save_password as save_stored_password,
+    delete_password, load_system_password, load_vault_password, save_password,
 };
 use self::input::{format_shortcut_event, normalize_slint_modifiers, terminal_key_from_slint};
 use self::session_groups::{
     compact_label, group_options, profile_endpoint, profile_sidebar_endpoint, session_groups,
 };
 use self::state::{
-    ActiveTabSnapshot, AppState, ConnectionStart, PendingAuth, PendingHostKey, PendingProbe,
-    TerminalTabState, TerminalWorker, WorkspaceTabSummary, prepare_authentication_retry,
-    prepare_host_key_retry, retire_session_attempt, session_attempt_is_active,
-    set_credential_marker,
+    ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ConnectionStart, PendingHostKey,
+    PendingProbe, SshConnectionPhase, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
+    finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
+    prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
+    set_credential_storage, set_credential_storage_while_loading,
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, TerminalRenderSettings, render_terminal,
@@ -86,7 +86,7 @@ pub fn run() -> Result<()> {
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
         (
-            session_rows(&app.sessions, &app.expanded_groups),
+            session_group_rows(&app.sessions),
             group_option_rows(&app.sessions),
             connection_option_rows(&app.sessions),
             app.sessions.settings.clone(),
@@ -130,20 +130,20 @@ pub fn run() -> Result<()> {
     info!("AxSSH UI initialized");
     let ui_result = ui.run().context("Slint event loop failed");
 
-    let (workers, pending_probe) = {
+    let (workers, pending_probes) = {
         let mut app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned during shutdown"))?;
         app.drain_runtime_resources()
     };
-    if let Some(pending_probe) = pending_probe
-        && pending_probe.cancel.send(()).is_err()
-    {
-        debug!(
-            tab_id = %pending_probe.tab_id,
-            session_id = %pending_probe.profile_id,
-            "host-key probe already stopped during shutdown"
-        );
+    for pending_probe in pending_probes {
+        if pending_probe.cancel.send(()).is_err() {
+            debug!(
+                tab_id = %pending_probe.tab_id,
+                session_id = %pending_probe.profile_id,
+                "host-key probe already stopped during shutdown"
+            );
+        }
     }
     for worker in workers {
         if let Err(error) = runtime.block_on(worker.shutdown()) {
@@ -213,7 +213,7 @@ fn configure_macos_application_menu(ui: &AppWindow) {
             macos_window::NativeMenuSection::Settings => "General",
             macos_window::NativeMenuSection::About => "About",
         };
-        ui.set_settings_section(section.into());
+        ui.invoke_request_settings_section(section.into());
         ui.invoke_open_settings();
     }) {
         warn!(%error, "failed to connect the standard macOS application menu");

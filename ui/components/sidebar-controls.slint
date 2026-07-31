@@ -118,6 +118,8 @@ export component SidebarRailItem inherits FocusScope {
     in property <string> accessible-name;
     in property <bool> group: false;
     in property <bool> local: false;
+    in property <bool> expandable: false;
+    in property <bool> expanded: false;
     callback activated();
 
     private property <length> card-size: root.local
@@ -135,6 +137,8 @@ export component SidebarRailItem inherits FocusScope {
     focus-on-tab-navigation: true;
     accessible-role: button;
     accessible-label: root.accessible-name;
+    accessible-expandable: root.expandable;
+    accessible-expanded: root.expanded;
 
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {

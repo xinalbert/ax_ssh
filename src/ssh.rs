@@ -8,6 +8,7 @@ use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
 use russh::{Channel, ChannelMsg};
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
+use zeroize::Zeroizing;
 
 use crate::config::{AuthMethod, SessionProfile};
 
@@ -205,7 +206,10 @@ pub struct SshConnection {
 }
 
 impl SshConnection {
-    pub async fn connect(profile: &SessionProfile, secret: String) -> Result<Self> {
+    pub(crate) async fn connect(
+        profile: &SessionProfile,
+        secret: Zeroizing<String>,
+    ) -> Result<Self> {
         profile.validate()?;
         info!(
             session_id = %profile.id,
@@ -221,7 +225,7 @@ impl SshConnection {
         let authenticated = match &profile.auth {
             AuthMethod::Password => timeout(
                 AUTH_TIMEOUT,
-                handle.authenticate_password(profile.username.clone(), secret),
+                handle.authenticate_password(profile.username.clone(), secret.as_str()),
             )
             .await
             .context("SSH password authentication timed out")?
@@ -315,7 +319,8 @@ impl SshShell {
 
     pub async fn next_event(&mut self) -> Result<Option<SshEvent>> {
         loop {
-            let Some(message) = timeout(Duration::from_secs(30), self.channel.wait()).await? else {
+            // Transport keepalive/inactivity owns liveness. A quiet interactive shell is valid.
+            let Some(message) = self.channel.wait().await else {
                 return Ok(None);
             };
             match message {

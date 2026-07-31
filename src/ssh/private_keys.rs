@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use directories::UserDirs;
 use russh::keys::PrivateKey;
+use zeroize::Zeroizing;
 
 const HEADER_SCAN_BYTES: u64 = 512;
 
@@ -50,10 +51,13 @@ fn looks_like_private_key(path: &Path) -> bool {
     String::from_utf8_lossy(&header).contains("PRIVATE KEY-----")
 }
 
-pub(super) async fn load_private_key(path: PathBuf, passphrase: String) -> Result<PrivateKey> {
+pub(super) async fn load_private_key(
+    path: PathBuf,
+    passphrase: Zeroizing<String>,
+) -> Result<PrivateKey> {
     tokio::task::spawn_blocking(move || {
         let passphrase = (!passphrase.is_empty()).then_some(passphrase);
-        russh::keys::load_secret_key(&path, passphrase.as_deref())
+        russh::keys::load_secret_key(&path, passphrase.as_deref().map(String::as_str))
             .with_context(|| format!("cannot read {}", path.display()))
     })
     .await
@@ -106,13 +110,17 @@ mod tests {
         )
         .expect("encrypted key fixture should be written");
 
-        assert!(load_private_key(path.clone(), String::new()).await.is_err());
         assert!(
-            load_private_key(path.clone(), "wrong-passphrase".into())
+            load_private_key(path.clone(), Zeroizing::new(String::new()))
                 .await
                 .is_err()
         );
-        let loaded = load_private_key(path.clone(), "correct-passphrase".into())
+        assert!(
+            load_private_key(path.clone(), Zeroizing::new("wrong-passphrase".into()),)
+                .await
+                .is_err()
+        );
+        let loaded = load_private_key(path.clone(), Zeroizing::new("correct-passphrase".into()))
             .await
             .expect("matching passphrase should load the key");
         assert_eq!(loaded.public_key(), key.public_key());

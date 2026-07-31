@@ -9,7 +9,7 @@ pub(super) fn spawn_session_monitor(
     profile: SessionProfile,
     attempt_id: Uuid,
     mut events: mpsc::Receiver<SshSessionEvent>,
-    mut credential_to_store: Option<String>,
+    mut credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
 ) {
     let runtime_for_monitor = runtime.clone();
@@ -36,7 +36,7 @@ pub(super) fn spawn_session_monitor(
                         dispatch_active_snapshot(&ui, &state);
                     }
                     refresh_workspace(&ui, &state);
-                    if let Some(secret) = credential_to_store.take() {
+                    if let Some(credential) = credential_to_store.take() {
                         persist_authenticated_credential(
                             &runtime_for_monitor,
                             state.clone(),
@@ -44,7 +44,7 @@ pub(super) fn spawn_session_monitor(
                             tab_id,
                             profile.id,
                             attempt_id,
-                            secret,
+                            credential,
                         );
                     }
                 }
@@ -103,7 +103,6 @@ pub(super) fn spawn_session_monitor(
                             continue;
                         }
                     }
-                    show_host_key_prompt(&ui, &prompt);
                     set_tab_status(
                         &state,
                         &ui,
@@ -114,13 +113,12 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::AuthenticationFailed => {
                     terminal_event = true;
-                    let retry_current = match prepare_authentication_retry(
-                        &state,
-                        tab_id,
-                        profile.id,
-                        attempt_id,
-                        used_stored_credential,
-                    ) {
+                    let retry = if used_stored_credential {
+                        prepare_stored_credential_retry(&state, tab_id, profile.id, attempt_id)
+                    } else {
+                        prepare_authentication_retry(&state, tab_id, profile.id, attempt_id)
+                    };
+                    let retry_current = match retry {
                         Ok(current) => current,
                         Err(error) => {
                             error!(tab_id = %tab_id, %attempt_id, %error, "failed to prepare authentication retry");
@@ -130,17 +128,51 @@ pub(super) fn spawn_session_monitor(
                     if !retry_current {
                         continue;
                     }
-                    let remember_password =
-                        used_stored_credential || credential_to_store.take().is_some();
                     if used_stored_credential {
-                        let session_id = profile.id;
-                        runtime_for_monitor.spawn(async move {
-                            if let Err(error) = delete_stored_password(session_id).await {
-                                warn!(session_id = %session_id, %error, "failed to remove rejected stored credential");
+                        if let Some(storage) = profile.credential_storage {
+                            match delete_password(profile.id, storage).await {
+                                Ok(rollback) => {
+                                    if !session_is_loading_stored_credential(
+                                        &state,
+                                        tab_id,
+                                        profile.id,
+                                    ) {
+                                        if let Err(error) = rollback.restore().await {
+                                            warn!(session_id = %profile.id, %error, "failed to restore stale rejected credential");
+                                        }
+                                        continue;
+                                    }
+                                    match set_credential_storage_while_loading(
+                                        &state,
+                                        tab_id,
+                                        profile.id,
+                                        None,
+                                    ) {
+                                        Ok(true) => {}
+                                        Ok(false) => {
+                                            if let Err(error) = rollback.restore().await {
+                                                warn!(session_id = %profile.id, %error, "failed to restore stale rejected credential");
+                                            }
+                                            continue;
+                                        }
+                                        Err(error) => {
+                                            warn!(session_id = %profile.id, %error, "failed to clear rejected credential storage reference");
+                                            if let Err(restore_error) = rollback.restore().await {
+                                                warn!(session_id = %profile.id, %restore_error, "failed to restore rejected credential after storage reference save failure");
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(error) => {
+                                    warn!(session_id = %profile.id, %error, "failed to remove rejected stored credential");
+                                }
                             }
-                        });
+                        }
+                        if !finish_stored_credential_retry(&state, tab_id, profile.id) {
+                            debug!(tab_id = %tab_id, %attempt_id, "stale saved-credential cleanup ignored");
+                            continue;
+                        }
                     }
-                    show_auth_prompt(&ui, &profile, remember_password);
                     set_tab_status(
                         &state,
                         &ui,
@@ -162,11 +194,9 @@ pub(super) fn spawn_session_monitor(
                         tab_id,
                         profile.id,
                         attempt_id,
-                        false,
                     )
                     .unwrap_or(false);
                     if retry_current {
-                        show_auth_prompt(&ui, &profile, false);
                         set_tab_status(
                             &state,
                             &ui,
@@ -208,26 +238,40 @@ pub(super) fn persist_authenticated_credential(
     tab_id: Uuid,
     session_id: Uuid,
     attempt_id: Uuid,
-    secret: String,
+    credential: PendingCredentialStore,
 ) {
     runtime.spawn(async move {
-        if let Err(error) = save_stored_password(session_id, secret).await {
-            warn!(session_id = %session_id, %error, "failed to save authenticated credential");
-            if session_attempt_is_active(&state, tab_id, session_id, attempt_id) {
-                set_tab_status(
-                    &state,
-                    &ui,
-                    tab_id,
-                    &format!("Connected, but password could not be saved: {error}"),
-                );
+        let rollback = match save_password(
+            credential.storage,
+            session_id,
+            credential.secret,
+            credential.vault_password,
+            credential.previous_storage,
+        )
+        .await {
+            Ok(rollback) => rollback,
+            Err(error) => {
+                warn!(session_id = %session_id, %error, "failed to save authenticated credential");
+                if session_attempt_is_active(&state, tab_id, session_id, attempt_id) {
+                    set_tab_status(
+                        &state,
+                        &ui,
+                        tab_id,
+                        &format!("Connected, but password could not be saved: {error}"),
+                    );
+                }
+                return;
             }
-            return;
-        }
+        };
 
-        if let Err(error) = set_credential_marker(&state, session_id, true) {
-            warn!(session_id = %session_id, %error, "failed to persist credential marker");
-            if let Err(cleanup_error) = delete_stored_password(session_id).await {
-                warn!(session_id = %session_id, %cleanup_error, "failed to roll back credential after marker save failure");
+        if let Err(error) = set_credential_storage(
+            &state,
+            session_id,
+            Some(credential.storage),
+        ) {
+            warn!(session_id = %session_id, %error, "failed to persist credential storage policy");
+            if let Err(cleanup_error) = rollback.restore().await {
+                warn!(session_id = %session_id, %cleanup_error, "failed to restore credential after storage reference save failure");
             }
             if session_attempt_is_active(&state, tab_id, session_id, attempt_id) {
                 set_tab_status(
@@ -240,16 +284,24 @@ pub(super) fn persist_authenticated_credential(
             return;
         }
 
-        info!(session_id = %session_id, "authenticated password stored in system credential store");
+        let storage = credential.storage;
+        info!(session_id = %session_id, storage = storage.as_setting(), "authenticated password stored");
         if session_attempt_is_active(&state, tab_id, session_id, attempt_id) {
             set_tab_status(
                 &state,
                 &ui,
                 tab_id,
-                "Connected; password saved in system credential store",
+                &format!("Connected; password saved in {}", storage.as_setting()),
             );
         }
     });
+}
+
+pub(super) struct PendingCredentialStore {
+    pub(super) storage: CredentialStorage,
+    pub(super) previous_storage: Option<CredentialStorage>,
+    pub(super) secret: zeroize::Zeroizing<String>,
+    pub(super) vault_password: Option<zeroize::Zeroizing<String>>,
 }
 
 pub(super) fn mutate_terminal_attempt(
@@ -269,4 +321,22 @@ pub(super) fn mutate_terminal_attempt(
     }
     action(app.terminal_mut(tab_id)?);
     Some(app.active_tab_id() == Some(tab_id))
+}
+
+fn session_is_loading_stored_credential(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+) -> bool {
+    state.lock().is_ok_and(|app| {
+        app.terminal(tab_id).is_some_and(|terminal| {
+            terminal
+                .ssh_route()
+                .is_some_and(|route| route.0 == profile_id)
+                && matches!(
+                    terminal.ssh_phase(),
+                    Some(SshConnectionPhase::LoadingStoredCredential)
+                )
+        })
+    })
 }

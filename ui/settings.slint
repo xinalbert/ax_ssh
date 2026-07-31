@@ -11,72 +11,139 @@ import { WorkspaceSettingsPage } from "settings/workspace.slint";
 import { ShortcutsSettingsPage } from "settings/shortcuts.slint";
 import { AboutSettingsPage } from "settings/about.slint";
 
+// Rust supplies one immutable settings snapshot. The pane owns its editable
+// draft and emits the complete candidate only when Save is requested.
+export struct SettingsViewState {
+    local_shell_options: [string],
+    terminal_font_family: string,
+    terminal_font_size: int,
+    terminal_line_height_percent: int,
+    terminal_brightness_percent: int,
+    bright_bold_text: bool,
+    theme_mode: string,
+    theme_palette: string,
+    theme_light_background: string,
+    theme_light_panel: string,
+    theme_light_panel_alt: string,
+    theme_light_border: string,
+    theme_light_text: string,
+    theme_light_muted: string,
+    theme_light_accent: string,
+    theme_light_success: string,
+    theme_light_danger: string,
+    theme_light_overlay: string,
+    theme_light_terminal_foreground: string,
+    theme_light_terminal_background: string,
+    theme_light_terminal_selection: string,
+    theme_dark_background: string,
+    theme_dark_panel: string,
+    theme_dark_panel_alt: string,
+    theme_dark_border: string,
+    theme_dark_text: string,
+    theme_dark_muted: string,
+    theme_dark_accent: string,
+    theme_dark_success: string,
+    theme_dark_danger: string,
+    theme_dark_overlay: string,
+    theme_dark_terminal_foreground: string,
+    theme_dark_terminal_background: string,
+    theme_dark_terminal_selection: string,
+    right_click_copy_or_paste: bool,
+    option_as_meta: bool,
+    apple_platform: bool,
+    scrollback_lines: int,
+    default_terminal_columns: int,
+    default_terminal_rows: int,
+    local_shell: string,
+    local_shell_index: int,
+    credential_storage: string,
+    sidebar_width: int,
+    tab_width: int,
+    session_mask_character: string,
+    open_settings_shortcut: string,
+    toggle_sidebar_shortcut: string,
+    copy_selection_shortcut: string,
+    paste_shortcut: string,
+    default_open_settings_shortcut: string,
+    default_toggle_sidebar_shortcut: string,
+    default_copy_selection_shortcut: string,
+    default_paste_shortcut: string,
+    app_version: string,
+    status: string,
+}
+
 export component SettingsPane inherits Rectangle {
-    in property <[string]> local-shell-options;
-    in property <string> terminal-font-family;
-    in property <int> terminal-font-size;
-    in property <int> terminal-line-height-percent;
-    in property <int> terminal-brightness-percent;
-    in property <bool> bright-bold-text;
-    in property <string> theme-mode;
-    in property <string> theme-palette;
-    in property <string> theme-light-background;
-    in property <string> theme-light-panel;
-    in property <string> theme-light-panel-alt;
-    in property <string> theme-light-border;
-    in property <string> theme-light-text;
-    in property <string> theme-light-muted;
-    in property <string> theme-light-accent;
-    in property <string> theme-light-success;
-    in property <string> theme-light-danger;
-    in property <string> theme-light-overlay;
-    in property <string> theme-light-terminal-foreground;
-    in property <string> theme-light-terminal-background;
-    in property <string> theme-light-terminal-selection;
-    in property <string> theme-dark-background;
-    in property <string> theme-dark-panel;
-    in property <string> theme-dark-panel-alt;
-    in property <string> theme-dark-border;
-    in property <string> theme-dark-text;
-    in property <string> theme-dark-muted;
-    in property <string> theme-dark-accent;
-    in property <string> theme-dark-success;
-    in property <string> theme-dark-danger;
-    in property <string> theme-dark-overlay;
-    in property <string> theme-dark-terminal-foreground;
-    in property <string> theme-dark-terminal-background;
-    in property <string> theme-dark-terminal-selection;
-    in property <bool> right-click-copy-or-paste;
-    in property <int> scrollback-lines;
-    in property <int> default-terminal-columns;
-    in property <int> default-terminal-rows;
-    in property <string> local-shell;
-    in property <int> local-shell-index;
-    in property <int> sidebar-width;
-    in property <int> tab-width;
-    in property <string> session-mask-character;
-    in property <string> open-settings-shortcut;
-    in property <string> toggle-sidebar-shortcut;
-    in property <string> copy-selection-shortcut;
-    in property <string> paste-shortcut;
-    in property <string> default-open-settings-shortcut;
-    in property <string> default-toggle-sidebar-shortcut;
-    in property <string> default-copy-selection-shortcut;
-    in property <string> default-paste-shortcut;
-    in property <string> app-version;
-    in property <string> status;
+    in property <SettingsViewState> source;
+    in property <string> requested-section: "General";
+    in property <int> requested-section-revision: 0;
+    private property <[string]> local-shell-options: root.source.local_shell_options;
+    private property <string> terminal-font-family: root.source.terminal_font_family;
+    private property <int> terminal-font-size: root.source.terminal_font_size;
+    private property <int> terminal-line-height-percent: root.source.terminal_line_height_percent;
+    private property <int> terminal-brightness-percent: root.source.terminal_brightness_percent;
+    private property <bool> bright-bold-text: root.source.bright_bold_text;
+    private property <string> theme-mode: root.source.theme_mode;
+    private property <string> theme-palette: root.source.theme_palette;
+    private property <string> theme-light-background: root.source.theme_light_background;
+    private property <string> theme-light-panel: root.source.theme_light_panel;
+    private property <string> theme-light-panel-alt: root.source.theme_light_panel_alt;
+    private property <string> theme-light-border: root.source.theme_light_border;
+    private property <string> theme-light-text: root.source.theme_light_text;
+    private property <string> theme-light-muted: root.source.theme_light_muted;
+    private property <string> theme-light-accent: root.source.theme_light_accent;
+    private property <string> theme-light-success: root.source.theme_light_success;
+    private property <string> theme-light-danger: root.source.theme_light_danger;
+    private property <string> theme-light-overlay: root.source.theme_light_overlay;
+    private property <string> theme-light-terminal-foreground: root.source.theme_light_terminal_foreground;
+    private property <string> theme-light-terminal-background: root.source.theme_light_terminal_background;
+    private property <string> theme-light-terminal-selection: root.source.theme_light_terminal_selection;
+    private property <string> theme-dark-background: root.source.theme_dark_background;
+    private property <string> theme-dark-panel: root.source.theme_dark_panel;
+    private property <string> theme-dark-panel-alt: root.source.theme_dark_panel_alt;
+    private property <string> theme-dark-border: root.source.theme_dark_border;
+    private property <string> theme-dark-text: root.source.theme_dark_text;
+    private property <string> theme-dark-muted: root.source.theme_dark_muted;
+    private property <string> theme-dark-accent: root.source.theme_dark_accent;
+    private property <string> theme-dark-success: root.source.theme_dark_success;
+    private property <string> theme-dark-danger: root.source.theme_dark_danger;
+    private property <string> theme-dark-overlay: root.source.theme_dark_overlay;
+    private property <string> theme-dark-terminal-foreground: root.source.theme_dark_terminal_foreground;
+    private property <string> theme-dark-terminal-background: root.source.theme_dark_terminal_background;
+    private property <string> theme-dark-terminal-selection: root.source.theme_dark_terminal_selection;
+    private property <bool> right-click-copy-or-paste: root.source.right_click_copy_or_paste;
+    private property <bool> option-as-meta: root.source.option_as_meta;
+    private property <bool> apple-platform: root.source.apple_platform;
+    private property <int> scrollback-lines: root.source.scrollback_lines;
+    private property <int> default-terminal-columns: root.source.default_terminal_columns;
+    private property <int> default-terminal-rows: root.source.default_terminal_rows;
+    private property <string> local-shell: root.source.local_shell;
+    private property <int> local-shell-index: root.source.local_shell_index;
+    private property <string> credential-storage: root.source.credential_storage;
+    private property <int> sidebar-width: root.source.sidebar_width;
+    private property <int> tab-width: root.source.tab_width;
+    private property <string> session-mask-character: root.source.session_mask_character;
+    private property <string> open-settings-shortcut: root.source.open_settings_shortcut;
+    private property <string> toggle-sidebar-shortcut: root.source.toggle_sidebar_shortcut;
+    private property <string> copy-selection-shortcut: root.source.copy_selection_shortcut;
+    private property <string> paste-shortcut: root.source.paste_shortcut;
+    private property <string> default-open-settings-shortcut: root.source.default_open_settings_shortcut;
+    private property <string> default-toggle-sidebar-shortcut: root.source.default_toggle_sidebar_shortcut;
+    private property <string> default-copy-selection-shortcut: root.source.default_copy_selection_shortcut;
+    private property <string> default-paste-shortcut: root.source.default_paste_shortcut;
+    private property <string> app-version: root.source.app_version;
+    private property <string> status: root.source.status;
 
     callback save(
         string, int, int, int, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, string, int, int, int, int, int, string, string, string, string, string,
+        bool, bool, string, int, int, int, int, int, string, string, string, string, string, string,
     );
     callback cancel();
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
 
-    in-out property <string> selected-section: "General";
+    private property <string> selected-section: root.requested-section;
     private property <string> section-title:
         root.selected-section == "Appearance" ? "Appearance"
         : (root.selected-section == "Terminal" ? "Terminal"
@@ -118,11 +185,13 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-theme-dark-terminal-selection: root.theme-dark-terminal-selection;
     private property <bool> draft-right-click-copy-or-paste:
         root.right-click-copy-or-paste;
+    private property <bool> draft-option-as-meta: root.option-as-meta;
     private property <int> draft-scrollback-lines: root.scrollback-lines;
     private property <int> draft-columns: root.default-terminal-columns;
     private property <int> draft-rows: root.default-terminal-rows;
     private property <string> draft-local-shell: root.local-shell;
     private property <int> draft-local-shell-index: root.local-shell-index;
+    private property <string> draft-credential-storage: root.credential-storage;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
     private property <string> draft-session-mask-character: root.session-mask-character;
@@ -135,6 +204,9 @@ export component SettingsPane inherits Rectangle {
         root.shortcut-recording-changed(false);
         root.selected-section = section;
     }
+
+    changed requested-section => { root.selected-section = root.requested-section; }
+    changed requested-section-revision => { root.selected-section = root.requested-section; }
 
     function commit-settings() {
         root.shortcut-recording-changed(false);
@@ -173,6 +245,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-theme-dark-terminal-background,
             root.draft-theme-dark-terminal-selection,
             root.draft-right-click-copy-or-paste,
+            root.draft-option-as-meta,
             root.draft-local-shell,
             root.draft-scrollback-lines,
             root.draft-columns,
@@ -184,6 +257,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-toggle-sidebar-shortcut,
             root.draft-copy-selection-shortcut,
             root.draft-paste-shortcut,
+            root.draft-credential-storage,
         );
     }
 
@@ -290,6 +364,7 @@ export component SettingsPane inherits Rectangle {
                         draft-local-shell-index <=> root.draft-local-shell-index;
                         draft-columns <=> root.draft-columns;
                         draft-rows <=> root.draft-rows;
+                        draft-credential-storage <=> root.draft-credential-storage;
                     }
 
                     if root.selected-section == "Appearance" : AppearanceSettingsPage {
@@ -335,6 +410,8 @@ export component SettingsPane inherits Rectangle {
                         height: parent.height;
                         draft-scrollback-lines <=> root.draft-scrollback-lines;
                         draft-right-click-copy-or-paste <=> root.draft-right-click-copy-or-paste;
+                        apple-platform: root.apple-platform;
+                        draft-option-as-meta <=> root.draft-option-as-meta;
                     }
 
                     if root.selected-section == "Workspace" : WorkspaceSettingsPage {

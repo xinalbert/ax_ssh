@@ -7,14 +7,18 @@ import {
     SidebarTerminalGlyph,
 } from "sidebar-controls.slint";
 
-export struct SessionRow {
+export struct SessionProfileRow {
     id: string,
-    group-name: string,
     name: string,
     endpoint: string,
     icon: string,
-    is-group: bool,
-    expanded: bool,
+}
+
+export struct SessionGroupRow {
+    group-name: string,
+    name: string,
+    icon: string,
+    profiles: [SessionProfileRow],
 }
 
 enum SessionActionMenuKind {
@@ -123,7 +127,7 @@ component SessionNavigationRow inherits FocusScope {
     in property <bool> expanded;
 
     callback connect-session(string);
-    callback toggle-group(string);
+    callback toggle-expanded();
     callback new-session-in-group(string);
     callback rename-group(string);
     callback delete-group(string);
@@ -147,7 +151,7 @@ component SessionNavigationRow inherits FocusScope {
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {
             if root.group {
-                root.toggle-group(root.group-name);
+                root.toggle-expanded();
             } else {
                 root.connect-session(root.id);
             }
@@ -166,7 +170,7 @@ component SessionNavigationRow inherits FocusScope {
             mouse-cursor: pointer;
             clicked => {
                 if root.group {
-                    root.toggle-group(root.group-name);
+                    root.toggle-expanded();
                 } else {
                     root.connect-session(root.id);
                 }
@@ -254,8 +258,148 @@ component SessionNavigationRow inherits FocusScope {
     }
 }
 
+// Each group owns its disclosure state. The Rust model supplies only the
+// immutable group/profile snapshot, so expanding a group never crosses the UI
+// boundary or mutates application state.
+component SessionNavigationGroup inherits Rectangle {
+    in property <SessionGroupRow> source;
+
+    callback connect-session(string);
+    callback new-session-in-group(string);
+    callback rename-group(string);
+    callback delete-group(string);
+    callback edit-session(string);
+    callback delete-session(string, string);
+
+    private property <bool> group-expanded: true;
+
+    height: Theme.sidebar-group-card-height
+        + (root.group-expanded
+            ? root.source.profiles.length * Theme.sidebar-session-card-height
+            : 0px);
+
+    SessionNavigationRow {
+        width: parent.width;
+        id: "";
+        group-name: root.source.group-name;
+        name: root.source.name;
+        endpoint: "\{root.source.profiles.length}";
+        icon: root.source.icon;
+        group: true;
+        expanded: root.group-expanded;
+        toggle-expanded => { root.group-expanded = !root.group-expanded; }
+        connect-session(id) => { root.connect-session(id); }
+        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+        rename-group(group-name) => { root.rename-group(group-name); }
+        delete-group(group-name) => { root.delete-group(group-name); }
+        edit-session(id) => { root.edit-session(id); }
+        delete-session(id, name) => { root.delete-session(id, name); }
+    }
+
+    if root.group-expanded : Rectangle {
+        y: Theme.sidebar-group-card-height;
+        width: parent.width;
+        height: root.source.profiles.length * Theme.sidebar-session-card-height;
+        background: transparent;
+
+        for profile[index] in root.source.profiles : SessionNavigationRow {
+            y: index * Theme.sidebar-session-card-height;
+            width: parent.width;
+            id: profile.id;
+            group-name: root.source.group-name;
+            name: profile.name;
+            endpoint: profile.endpoint;
+            icon: profile.icon;
+            group: false;
+            expanded: false;
+            connect-session(id) => { root.connect-session(id); }
+            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+            rename-group(group-name) => { root.rename-group(group-name); }
+            delete-group(group-name) => { root.delete-group(group-name); }
+            edit-session(id) => { root.edit-session(id); }
+            delete-session(id, name) => { root.delete-session(id, name); }
+        }
+    }
+}
+
+component CompactSessionNavigationGroup inherits Rectangle {
+    in property <SessionGroupRow> source;
+
+    callback connect-session(string);
+    callback new-session-in-group(string);
+    callback rename-group(string);
+    callback delete-group(string);
+    callback edit-session(string);
+    callback delete-session(string, string);
+
+    private property <bool> group-expanded: true;
+
+    height: Theme.sidebar-rail-group-row-height
+        + (root.group-expanded
+            ? root.source.profiles.length * Theme.sidebar-rail-session-row-height
+            : 0px);
+
+    SidebarRailItem {
+        width: parent.width;
+        height: Theme.sidebar-rail-group-row-height;
+        label: root.source.icon;
+        group: true;
+        expandable: true;
+        expanded: root.group-expanded;
+        accessible-name: root.group-expanded
+            ? "Collapse " + root.source.name + " group"
+            : "Expand " + root.source.name + " group";
+        activated => { root.group-expanded = !root.group-expanded; }
+    }
+    SessionActionMenu {
+        group-name: root.source.group-name;
+        name: root.source.name;
+        kind: root.source.group-name.is-empty
+            ? SessionActionMenuKind.ungrouped
+            : SessionActionMenuKind.group;
+        connect-session(id) => { root.connect-session(id); }
+        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+        rename-group(group-name) => { root.rename-group(group-name); }
+        delete-group(group-name) => { root.delete-group(group-name); }
+        edit-session(id) => { root.edit-session(id); }
+        delete-session(id, name) => { root.delete-session(id, name); }
+    }
+
+    if root.group-expanded : Rectangle {
+        y: Theme.sidebar-rail-group-row-height;
+        width: parent.width;
+        height: root.source.profiles.length * Theme.sidebar-rail-session-row-height;
+
+        for profile[index] in root.source.profiles : Rectangle {
+            y: index * Theme.sidebar-rail-session-row-height;
+            width: parent.width;
+            height: Theme.sidebar-rail-session-row-height;
+
+            SidebarRailItem {
+                width: parent.width;
+                label: profile.icon;
+                group: false;
+                accessible-name: "Connect to " + profile.name;
+                activated => { root.connect-session(profile.id); }
+            }
+            SessionActionMenu {
+                target-id: profile.id;
+                group-name: root.source.group-name;
+                name: profile.name;
+                kind: SessionActionMenuKind.server;
+                connect-session(id) => { root.connect-session(id); }
+                new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                rename-group(group-name) => { root.rename-group(group-name); }
+                delete-group(group-name) => { root.delete-group(group-name); }
+                edit-session(id) => { root.edit-session(id); }
+                delete-session(id, name) => { root.delete-session(id, name); }
+            }
+        }
+    }
+}
+
 export component SessionNavigation inherits Rectangle {
-    in property <[SessionRow]> sessions;
+    in property <[SessionGroupRow]> sessions;
     in property <int> sidebar-width;
     in-out property <bool> collapsed;
     in property <string> local-shell-title: "Local Shell";
@@ -265,7 +409,6 @@ export component SessionNavigation inherits Rectangle {
     callback open-local-shell();
     callback new-session();
     callback connect-session(string);
-    callback toggle-group(string);
     callback new-group();
     callback new-session-in-group(string);
     callback rename-group(string);
@@ -310,44 +453,15 @@ export component SessionNavigation inherits Rectangle {
                 }
 
                 if root.sessions.length > 0 : ListView {
-                    for row in root.sessions : Rectangle {
+                    for group in root.sessions : CompactSessionNavigationGroup {
                         width: parent.width;
-                        height: row.is-group
-                            ? Theme.sidebar-rail-group-row-height
-                            : Theme.sidebar-rail-session-row-height;
-                        background: transparent;
-
-                        SidebarRailItem {
-                            width: parent.width;
-                            label: row.icon;
-                            group: row.is-group;
-                            accessible-name: row.is-group
-                                ? "Open " + row.name + " group"
-                                : "Connect to " + row.name;
-                            activated => {
-                                if row.is-group {
-                                    root.toggle-group(row.group-name);
-                                } else {
-                                    root.connect-session(row.id);
-                                }
-                            }
-                        }
-                        SessionActionMenu {
-                            kind: row.is-group
-                                ? (row.group-name.is-empty
-                                    ? SessionActionMenuKind.ungrouped
-                                    : SessionActionMenuKind.group)
-                                : SessionActionMenuKind.server;
-                            target-id: row.id;
-                            group-name: row.group-name;
-                            name: row.name;
-                            connect-session(id) => { root.connect-session(id); }
-                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                            rename-group(group-name) => { root.rename-group(group-name); }
-                            delete-group(group-name) => { root.delete-group(group-name); }
-                            edit-session(id) => { root.edit-session(id); }
-                            delete-session(id, name) => { root.delete-session(id, name); }
-                        }
+                        source: group;
+                        connect-session(id) => { root.connect-session(id); }
+                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                        rename-group(group-name) => { root.rename-group(group-name); }
+                        delete-group(group-name) => { root.delete-group(group-name); }
+                        edit-session(id) => { root.edit-session(id); }
+                        delete-session(id, name) => { root.delete-session(id, name); }
                     }
                 }
                 if root.sessions.length == 0 : Text {
@@ -455,17 +569,10 @@ export component SessionNavigation inherits Rectangle {
                 }
 
                 if root.sessions.length > 0 : ListView {
-                    for row in root.sessions : SessionNavigationRow {
+                    for group in root.sessions : SessionNavigationGroup {
                         width: parent.width;
-                        id: row.id;
-                        group-name: row.group-name;
-                        name: row.name;
-                        endpoint: row.endpoint;
-                        icon: row.icon;
-                        group: row.is-group;
-                        expanded: row.expanded;
+                        source: group;
                         connect-session(id) => { root.connect-session(id); }
-                        toggle-group(group-name) => { root.toggle-group(group-name); }
                         new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
                         rename-group(group-name) => { root.rename-group(group-name); }
                         delete-group(group-name) => { root.delete-group(group-name); }

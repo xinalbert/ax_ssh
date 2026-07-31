@@ -1,5 +1,6 @@
-import { LineEdit, ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { ScrollView, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
@@ -26,71 +27,71 @@ component ThemePaletteEditor inherits VerticalLayout {
     SettingsRow {
         label: "Background";
         description: "Primary workspace surface";
-        SettingsField { LineEdit { text <=> root.background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} background color"; } }
+        SettingsField { FlatTextInput { text <=> root.background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} background color"; } }
     }
     SettingsRow {
         label: "Panel";
         description: "Navigation and title surfaces";
-        SettingsField { LineEdit { text <=> root.panel-color; height: Theme.settings-control-height; accessible-label: "\{root.title} panel color"; } }
+        SettingsField { FlatTextInput { text <=> root.panel-color; height: Theme.settings-control-height; accessible-label: "\{root.title} panel color"; } }
     }
     SettingsRow {
         label: "Panel alternative";
         description: "Hover and secondary surfaces";
-        SettingsField { LineEdit { text <=> root.panel-alt-color; height: Theme.settings-control-height; accessible-label: "\{root.title} secondary panel color"; } }
+        SettingsField { FlatTextInput { text <=> root.panel-alt-color; height: Theme.settings-control-height; accessible-label: "\{root.title} secondary panel color"; } }
     }
     SettingsRow {
         label: "Border";
         description: "Dividers and control outlines";
-        SettingsField { LineEdit { text <=> root.border-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} border color"; } }
+        SettingsField { FlatTextInput { text <=> root.border-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} border color"; } }
     }
 
     SettingsSectionHeading { label: "CONTENT AND STATES"; }
     SettingsRow {
         label: "Text";
         description: "Primary readable text";
-        SettingsField { LineEdit { text <=> root.text-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} text color"; } }
+        SettingsField { FlatTextInput { text <=> root.text-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} text color"; } }
     }
     SettingsRow {
         label: "Muted text";
         description: "Secondary labels and metadata";
-        SettingsField { LineEdit { text <=> root.muted-color; height: Theme.settings-control-height; accessible-label: "\{root.title} muted text color"; } }
+        SettingsField { FlatTextInput { text <=> root.muted-color; height: Theme.settings-control-height; accessible-label: "\{root.title} muted text color"; } }
     }
     SettingsRow {
         label: "Accent / focus";
         description: "Focus rings, selection, and active indicators";
-        SettingsField { LineEdit { text <=> root.accent-color; height: Theme.settings-control-height; accessible-label: "\{root.title} accent color"; } }
+        SettingsField { FlatTextInput { text <=> root.accent-color; height: Theme.settings-control-height; accessible-label: "\{root.title} accent color"; } }
     }
     SettingsRow {
         label: "Success";
         description: "Positive status indicators";
-        SettingsField { LineEdit { text <=> root.success-color; height: Theme.settings-control-height; accessible-label: "\{root.title} success color"; } }
+        SettingsField { FlatTextInput { text <=> root.success-color; height: Theme.settings-control-height; accessible-label: "\{root.title} success color"; } }
     }
     SettingsRow {
         label: "Danger";
         description: "Error and destructive indicators";
-        SettingsField { LineEdit { text <=> root.danger-color; height: Theme.settings-control-height; accessible-label: "\{root.title} danger color"; } }
+        SettingsField { FlatTextInput { text <=> root.danger-color; height: Theme.settings-control-height; accessible-label: "\{root.title} danger color"; } }
     }
     SettingsRow {
         label: "Overlay";
         description: "Dialog and transient overlay tint";
-        SettingsField { LineEdit { text <=> root.overlay-color; height: Theme.settings-control-height; accessible-label: "\{root.title} overlay color"; } }
+        SettingsField { FlatTextInput { text <=> root.overlay-color; height: Theme.settings-control-height; accessible-label: "\{root.title} overlay color"; } }
     }
 
     SettingsSectionHeading { label: "TERMINAL DEFAULTS"; }
     SettingsRow {
         label: "Foreground";
         description: "Default terminal text color";
-        SettingsField { LineEdit { text <=> root.terminal-foreground-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal foreground color"; } }
+        SettingsField { FlatTextInput { text <=> root.terminal-foreground-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal foreground color"; } }
     }
     SettingsRow {
         label: "Background";
         description: "Default terminal background color";
-        SettingsField { LineEdit { text <=> root.terminal-background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal background color"; } }
+        SettingsField { FlatTextInput { text <=> root.terminal-background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal background color"; } }
     }
     SettingsRow {
         label: "Selection";
         description: "Terminal text selection background";
-        SettingsField { LineEdit { text <=> root.terminal-selection-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal selection color"; } }
+        SettingsField { FlatTextInput { text <=> root.terminal-selection-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal selection color"; } }
     }
 }
 
@@ -238,7 +239,7 @@ export component AppearanceSettingsPage inherits Rectangle {
                     label: "Font family";
                     description: "Terminal font family";
                     SettingsField {
-                        LineEdit {
+                        FlatTextInput {
                             height: Theme.settings-control-height;
                             text <=> root.draft-font-family;
                             accessible-label: "Terminal font family";

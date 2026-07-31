@@ -8,7 +8,10 @@ publish = false
 readme = "README.md"
 
 [dependencies]
+argon2 = "0.5.3"
 anyhow = "1"
+base64 = "0.22"
+chacha20poly1305 = "0.10.1"
 directories = "6"
 keyring = "4.1.5"
 portable-pty = "0.9.0"
@@ -22,6 +25,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 vt100 = "0.16.2"
+zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
@@ -37,6 +41,7 @@ slint-build = "1.17.1"
 
 [dev-dependencies]
 rand = "0.10"
+tokio = { version = "1", features = ["test-util"] }
 
 [patch.crates-io]
 # Keep the locked vt100 API while applying a minimal wide-cell resize fix.

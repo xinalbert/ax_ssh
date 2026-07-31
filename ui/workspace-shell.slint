@@ -1,0 +1,244 @@
+import { Theme } from "theme.slint";
+import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
+import { SettingsPane, SettingsViewState } from "settings.slint";
+import { TerminalPane, TerminalViewState } from "terminal-pane.slint";
+import { SessionGroupRow, SessionNavigation } from "components/session-navigation.slint";
+import {
+    ConnectableSessionRow,
+    ConnectionPicker,
+    WorkspaceTabRow,
+    WorkspaceTitlebar,
+} from "components/workspace-titlebar.slint";
+
+// This is the only AppWindow-to-workspace visual contract. Rust-owned values
+// arrive as immutable data; all sidebar, picker, and page-local state stays here.
+export struct WorkspaceViewState {
+    sessions: [SessionGroupRow],
+    workspace_tabs: [WorkspaceTabRow],
+    connection_options: [ConnectableSessionRow],
+    active_tab_id: string,
+    active_tab_kind: string,
+    status: string,
+    sidebar_width: int,
+    tab_width: int,
+    terminal_background: color,
+    terminal: TerminalViewState,
+    settings: SettingsViewState,
+    session_editor: SessionEditorViewState,
+}
+
+export component WorkspaceShell inherits Rectangle {
+    in property <WorkspaceViewState> view;
+    in property <string> requested-settings-section: "General";
+    in property <int> settings-section-request-revision: 0;
+
+    out property <bool> shortcut-recording: false;
+    private property <bool> sidebar-collapsed: false;
+    private property <bool> connection-picker-open: false;
+
+    callback new-session();
+    callback new-session-in-group(string);
+    callback edit-session(string);
+    callback request-session-management(string, string, string);
+    callback open-local-shell();
+    callback activate-tab(string);
+    callback close-tab(string);
+    callback move-tab(string, int);
+    callback save-settings(
+        string, int, int, int, bool, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        bool, bool, string, int, int, int, int, int, string, string, string, string, string, string,
+    );
+    callback cancel-settings();
+    callback connect-session(string);
+    callback save-session(string, string, string, string, string, string, string);
+    callback cancel-session-dialog();
+    callback terminal-key(string, bool, bool, bool, bool) -> bool;
+    callback resize-terminal(int, int);
+    callback scroll-terminal(int);
+    callback terminal-selection-text(int, int, int, int) -> string;
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback write-clipboard(string);
+    callback read-clipboard() -> string;
+
+    public function toggle-sidebar() {
+        root.sidebar-collapsed = !root.sidebar-collapsed;
+    }
+
+    public function dismiss-transient-controls() -> bool {
+        if root.connection-picker-open {
+            root.connection-picker-open = false;
+            return true;
+        }
+        return false;
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        SessionNavigation {
+            sessions: root.view.sessions;
+            sidebar-width: root.view.sidebar_width;
+            collapsed <=> root.sidebar-collapsed;
+            open-local-shell => { root.open-local-shell(); }
+            new-session => { root.new-session(); }
+            connect-session(id) => { root.connect-session(id); }
+            new-group => { root.request-session-management("new-group", "", ""); }
+            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+            rename-group(group-name) => {
+                root.request-session-management("rename-group", group-name, group-name);
+            }
+            delete-group(group-name) => {
+                root.request-session-management("delete-group", group-name, group-name);
+            }
+            edit-session(id) => { root.edit-session(id); }
+            delete-session(id, name) => {
+                root.request-session-management("delete-session", id, name);
+            }
+        }
+
+        workspace-area := Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.background;
+
+            VerticalLayout {
+                spacing: 0px;
+
+                WorkspaceTitlebar {
+                    tabs: root.view.workspace_tabs;
+                    active-tab-id: root.view.active_tab_id;
+                    tab-width: root.view.tab_width;
+                    terminal-background: root.view.terminal_background;
+                    connection-picker-open: root.connection-picker-open;
+                    activate-tab(id) => {
+                        root.connection-picker-open = false;
+                        root.activate-tab(id);
+                    }
+                    close-tab(id) => {
+                        root.connection-picker-open = false;
+                        root.close-tab(id);
+                    }
+                    move-tab(id, target-index) => {
+                        root.connection-picker-open = false;
+                        root.move-tab(id, target-index);
+                    }
+                    toggle-connection-picker => {
+                        root.connection-picker-open = !root.connection-picker-open;
+                    }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: Theme.background;
+
+                    if root.view.active_tab_kind == "terminal" : TerminalPane {
+                        view: root.view.terminal;
+                        format-shortcut(text, alt, control, meta, shift) => {
+                            return root.format-shortcut(text, alt, control, meta, shift);
+                        }
+                        terminal-key(text, alt, control, meta, shift) => {
+                            return root.terminal-key(text, alt, control, meta, shift);
+                        }
+                        resized(columns, rows) => { root.resize-terminal(columns, rows); }
+                        scrolled(lines) => { root.scroll-terminal(lines); }
+                        selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+                            return root.terminal-selection-text(
+                                anchor-row, anchor-column, focus-row, focus-column,
+                            );
+                        }
+                        write-clipboard(text) => { root.write-clipboard(text); }
+                        read-clipboard() => { return root.read-clipboard(); }
+                    }
+
+                    if root.view.active_tab_kind == "settings" : SettingsPane {
+                        source: root.view.settings;
+                        requested-section: root.requested-settings-section;
+                        requested-section-revision: root.settings-section-request-revision;
+                        save(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                             theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
+                             theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
+                             theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
+                             theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
+                             theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
+                             theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
+                             theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
+                             theme-dark-terminal-selection, right-click-copy, option-as-meta, shell,
+                             scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
+                             toggle-sidebar-key, copy-key, paste-key, credential-storage) => {
+                            root.save-settings(
+                                font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                                theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
+                                theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
+                                theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
+                                theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
+                                theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
+                                theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
+                                theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
+                                theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows,
+                                sidebar, tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key,
+                                paste-key, credential-storage,
+                            );
+                        }
+                        format-shortcut(text, alt, control, meta, shift) => {
+                            return root.format-shortcut(text, alt, control, meta, shift);
+                        }
+                        shortcut-recording-changed(recording) => {
+                            root.shortcut-recording = recording;
+                        }
+                        cancel => { root.cancel-settings(); }
+                    }
+
+                    if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
+                        source: root.view.session_editor;
+                        save(name, group, host, port, username, auth, key-path) => {
+                            root.save-session(name, group, host, port, username, auth, key-path);
+                        }
+                        cancel => { root.cancel-session-dialog(); }
+                    }
+
+                    if root.view.active_tab_kind == "empty" : VerticalLayout {
+                        padding: Theme.empty-page-padding;
+                        spacing: Theme.space-lg;
+                        Text {
+                            text: "Workspace";
+                            color: Theme.text;
+                            font-size: Theme.font-page-title;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: "Open a saved session or create a new tab.";
+                            color: Theme.muted;
+                            font-size: Theme.font-body;
+                        }
+                        Rectangle { vertical-stretch: 1; }
+                        if !root.view.status.is-empty : Text {
+                            text: root.view.status;
+                            color: Theme.accent;
+                            font-size: Theme.font-small;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            if root.connection-picker-open : TouchArea {
+                y: Theme.titlebar-fallback-height;
+                width: parent.width;
+                height: parent.height - self.y;
+                clicked => { root.connection-picker-open = false; }
+            }
+
+            if root.connection-picker-open : ConnectionPicker {
+                x: max(Theme.space-xs, parent.width - self.width);
+                y: Theme.titlebar-fallback-height;
+                sessions: root.view.connection_options;
+                connect-session(id) => {
+                    root.connection-picker-open = false;
+                    root.connect-session(id);
+                }
+                dismiss => { root.connection-picker-open = false; }
+            }
+        }
+    }
+}

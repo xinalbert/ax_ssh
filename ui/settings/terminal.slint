@@ -5,6 +5,8 @@ import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, Setti
 export component TerminalSettingsPage inherits SettingsPage {
     in-out property <int> draft-scrollback-lines;
     in-out property <bool> draft-right-click-copy-or-paste;
+    in property <bool> apple-platform: false;
+    in-out property <bool> draft-option-as-meta;
     SettingsSectionHeading { label: "BUFFER"; }
     SettingsRow {
         label: "Scrollback";
@@ -33,6 +35,14 @@ export component TerminalSettingsPage inherits SettingsPage {
         label: "Right-click copy or paste";
         description: "Copy a selection; otherwise paste";
         checked <=> root.draft-right-click-copy-or-paste;
+        show-divider: false;
+    }
+
+    if root.apple-platform : SettingsSectionHeading { label: "KEYBOARD"; }
+    if root.apple-platform : SettingsToggleRow {
+        label: "Option acts as Meta";
+        description: "Send Option+key as an Escape-prefixed Meta key";
+        checked <=> root.draft-option-as-meta;
         show-divider: false;
     }
     Rectangle { vertical-stretch: 1; }

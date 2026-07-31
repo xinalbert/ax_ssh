@@ -1,11 +1,11 @@
 //! Application state, workspace tabs, and connection-attempt transitions.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use tokio::sync::oneshot;
-use tracing::{error, warn};
+use tracing::error;
 use uuid::Uuid;
 
 use ax_ssh::config::{ConfigStore, SessionProfile, SessionStore, normalize_group_name};
@@ -16,10 +16,6 @@ use ax_ssh::terminal::{TerminalModel, TerminalSnapshot};
 pub(super) struct AppState {
     pub(super) config: ConfigStore,
     pub(super) sessions: SessionStore,
-    pub(super) pending_probe: Option<PendingProbe>,
-    pub(super) pending_trust: Option<PendingHostKey>,
-    pub(super) pending_auth: Option<PendingAuth>,
-    pub(super) expanded_groups: BTreeSet<String>,
     tabs: Vec<WorkspaceTab>,
     active_tab_id: Option<Uuid>,
     terminal_numbers: HashMap<Uuid, u32>,
@@ -28,33 +24,14 @@ pub(super) struct AppState {
 
 impl AppState {
     pub(super) fn new(config: ConfigStore, sessions: SessionStore) -> Self {
-        let expanded_groups = sessions
-            .groups
-            .iter()
-            .cloned()
-            .chain(
-                sessions
-                    .sessions
-                    .iter()
-                    .map(|profile| normalize_group_name(&profile.group_name)),
-            )
-            .collect();
         Self {
             config,
             sessions,
-            pending_probe: None,
-            pending_trust: None,
-            pending_auth: None,
-            expanded_groups,
             tabs: Vec::new(),
             active_tab_id: None,
             terminal_numbers: HashMap::new(),
             local_terminal_number: 0,
         }
-    }
-
-    pub(super) fn prompt_flow_busy(&self) -> bool {
-        self.pending_probe.is_some() || self.pending_trust.is_some() || self.pending_auth.is_some()
     }
 
     pub(super) fn open_settings_tab(&mut self) -> Uuid {
@@ -158,6 +135,7 @@ impl AppState {
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
+                ssh_phase: SshConnectionPhase::Idle,
             }),
         });
         self.active_tab_id = Some(id);
@@ -182,6 +160,7 @@ impl AppState {
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
+                ssh_phase: SshConnectionPhase::Idle,
             }),
         });
         self.active_tab_id = Some(id);
@@ -213,38 +192,12 @@ impl AppState {
     pub(super) fn close_tab(&mut self, tab_id: Uuid) -> Option<ClosedTab> {
         let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
         let mut tab = self.tabs.remove(index);
-        let worker = match &mut tab.kind {
-            WorkspaceTabKind::Terminal(terminal) => terminal.worker.take(),
-            WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
+        let (worker, pending_probe) = match &mut tab.kind {
+            WorkspaceTabKind::Terminal(terminal) => {
+                (terminal.worker.take(), terminal.take_pending_probe())
+            }
+            WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => (None, None),
         };
-        let pending_probe = self
-            .pending_probe
-            .as_ref()
-            .is_some_and(|pending| pending.tab_id == tab_id)
-            .then(|| self.pending_probe.take())
-            .flatten();
-        let dismissed_prompt = self
-            .pending_trust
-            .as_ref()
-            .is_some_and(|pending| pending.tab_id == tab_id)
-            || self
-                .pending_auth
-                .as_ref()
-                .is_some_and(|pending| pending.tab_id == tab_id);
-        if self
-            .pending_trust
-            .as_ref()
-            .is_some_and(|pending| pending.tab_id == tab_id)
-        {
-            self.pending_trust = None;
-        }
-        if self
-            .pending_auth
-            .as_ref()
-            .is_some_and(|pending| pending.tab_id == tab_id)
-        {
-            self.pending_auth = None;
-        }
         if self.active_tab_id == Some(tab_id) {
             self.active_tab_id = self
                 .tabs
@@ -255,22 +208,24 @@ impl AppState {
         Some(ClosedTab {
             worker,
             pending_probe,
-            dismissed_prompt,
         })
     }
 
-    pub(super) fn drain_runtime_resources(
-        &mut self,
-    ) -> (Vec<TerminalWorker>, Option<PendingProbe>) {
-        let workers = self
-            .tabs
-            .iter_mut()
-            .filter_map(|tab| match &mut tab.kind {
-                WorkspaceTabKind::Terminal(terminal) => terminal.worker.take(),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
-            })
-            .collect();
-        (workers, self.pending_probe.take())
+    pub(super) fn drain_runtime_resources(&mut self) -> (Vec<TerminalWorker>, Vec<PendingProbe>) {
+        let mut workers = Vec::new();
+        let mut pending_probes = Vec::new();
+        for tab in &mut self.tabs {
+            let WorkspaceTabKind::Terminal(terminal) = &mut tab.kind else {
+                continue;
+            };
+            if let Some(worker) = terminal.worker.take() {
+                workers.push(worker);
+            }
+            if let Some(probe) = terminal.take_pending_probe() {
+                pending_probes.push(probe);
+            }
+        }
+        (workers, pending_probes)
     }
 
     pub(super) fn tab_summaries(&self) -> Vec<WorkspaceTabSummary> {
@@ -305,6 +260,7 @@ impl AppState {
                 terminal: Some(terminal.terminal.snapshot()),
                 connected: terminal.connected,
                 worker_running: terminal.worker_running,
+                security_prompt: self.active_security_prompt(),
             },
             WorkspaceTabKind::Settings => ActiveTabSnapshot {
                 id: Some(tab.id),
@@ -387,6 +343,48 @@ impl AppState {
             }
         }
     }
+
+    pub(super) fn active_security_prompt(&self) -> ActiveSecurityPrompt {
+        let Some(tab_id) = self.active_tab_id else {
+            return ActiveSecurityPrompt::None;
+        };
+        let Some(terminal) = self.terminal(tab_id) else {
+            return ActiveSecurityPrompt::None;
+        };
+        let Some((profile_id, _)) = terminal.ssh_route() else {
+            return ActiveSecurityPrompt::None;
+        };
+        let Some(profile) = self
+            .sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .cloned()
+        else {
+            return ActiveSecurityPrompt::None;
+        };
+        match terminal.ssh_phase() {
+            Some(SshConnectionPhase::AwaitingHostKey(prompt))
+                if prompt.tab_id == tab_id && prompt.profile_id == profile_id =>
+            {
+                ActiveSecurityPrompt::HostKey(prompt.clone())
+            }
+            Some(SshConnectionPhase::AwaitingAuthentication { vault_unlock_only }) => {
+                ActiveSecurityPrompt::Authentication {
+                    tab_id,
+                    profile,
+                    vault_unlock_only: *vault_unlock_only,
+                }
+            }
+            Some(
+                SshConnectionPhase::Idle
+                | SshConnectionPhase::Probing(_)
+                | SshConnectionPhase::AwaitingHostKey(_)
+                | SshConnectionPhase::LoadingStoredCredential,
+            )
+            | None => ActiveSecurityPrompt::None,
+        }
+    }
 }
 
 enum WorkspaceTabKind {
@@ -458,7 +456,6 @@ impl SessionEditorState {
             username: profile.username.clone(),
             auth_method,
             private_key_path,
-            credential_stored: profile.credential_stored,
         }
     }
 }
@@ -476,6 +473,7 @@ pub(super) struct TerminalTabState {
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+    pub(super) ssh_phase: SshConnectionPhase,
 }
 
 impl TerminalTabState {
@@ -504,6 +502,32 @@ impl TerminalTabState {
 
     pub(super) fn is_local(&self) -> bool {
         matches!(self.backend, TerminalBackend::Local)
+    }
+
+    pub(super) fn ssh_phase(&self) -> Option<&SshConnectionPhase> {
+        matches!(self.backend, TerminalBackend::Ssh { .. }).then_some(&self.ssh_phase)
+    }
+
+    pub(super) fn set_ssh_phase(&mut self, phase: SshConnectionPhase) -> bool {
+        if !matches!(self.backend, TerminalBackend::Ssh { .. }) {
+            return false;
+        }
+        self.ssh_phase = phase;
+        true
+    }
+
+    pub(super) fn take_pending_probe(&mut self) -> Option<PendingProbe> {
+        if !matches!(self.backend, TerminalBackend::Ssh { .. }) {
+            return None;
+        }
+        let phase = std::mem::replace(&mut self.ssh_phase, SshConnectionPhase::Idle);
+        match phase {
+            SshConnectionPhase::Probing(probe) => Some(probe),
+            phase => {
+                self.ssh_phase = phase;
+                None
+            }
+        }
     }
 }
 
@@ -566,6 +590,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+    pub(super) security_prompt: ActiveSecurityPrompt,
 }
 
 impl Default for ActiveTabSnapshot {
@@ -579,6 +604,7 @@ impl Default for ActiveTabSnapshot {
             terminal: None,
             connected: false,
             worker_running: false,
+            security_prompt: ActiveSecurityPrompt::None,
         }
     }
 }
@@ -593,7 +619,6 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) username: String,
     pub(super) auth_method: &'static str,
     pub(super) private_key_path: String,
-    pub(super) credential_stored: bool,
 }
 
 impl Default for SessionEditorSnapshot {
@@ -608,7 +633,6 @@ impl Default for SessionEditorSnapshot {
             username: String::new(),
             auth_method: "Password",
             private_key_path: String::new(),
-            credential_stored: false,
         }
     }
 }
@@ -616,7 +640,6 @@ impl Default for SessionEditorSnapshot {
 pub(super) struct ClosedTab {
     pub(super) worker: Option<TerminalWorker>,
     pub(super) pending_probe: Option<PendingProbe>,
-    pub(super) dismissed_prompt: bool,
 }
 
 #[derive(Clone)]
@@ -635,10 +658,22 @@ pub(super) struct PendingProbe {
     pub(super) cancel: oneshot::Sender<()>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct PendingAuth {
-    pub(super) tab_id: Uuid,
-    pub(super) profile_id: Uuid,
+pub(super) enum SshConnectionPhase {
+    Idle,
+    Probing(PendingProbe),
+    AwaitingHostKey(PendingHostKey),
+    AwaitingAuthentication { vault_unlock_only: bool },
+    LoadingStoredCredential,
+}
+
+pub(super) enum ActiveSecurityPrompt {
+    None,
+    HostKey(PendingHostKey),
+    Authentication {
+        tab_id: Uuid,
+        profile: SessionProfile,
+        vault_unlock_only: bool,
+    },
 }
 
 pub(super) enum ConnectionStart {
@@ -656,8 +691,9 @@ pub(super) enum ConnectionStart {
 mod transitions;
 
 pub(super) use self::transitions::{
-    prepare_authentication_retry, prepare_host_key_retry, retire_session_attempt,
-    session_attempt_is_active, set_credential_marker,
+    finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
+    prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
+    set_credential_storage, set_credential_storage_while_loading,
 };
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{Duration, MissedTickBehavior, interval, timeout};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::config::SessionProfile;
 
@@ -64,7 +65,7 @@ impl SshSessionHandle {
         runtime: &Handle,
         session_id: Uuid,
         profile: SessionProfile,
-        secret: String,
+        secret: Zeroizing<String>,
         columns: u32,
         rows: u32,
     ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
@@ -152,7 +153,7 @@ fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
 async fn run_session(
     session_id: Uuid,
     profile: SessionProfile,
-    secret: String,
+    secret: Zeroizing<String>,
     mut command_rx: mpsc::Receiver<SshCommand>,
     mut resize_rx: watch::Receiver<TerminalSize>,
     event_tx: mpsc::Sender<SshSessionEvent>,

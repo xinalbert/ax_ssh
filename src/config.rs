@@ -41,7 +41,7 @@ const DEFAULT_TERMINAL_ROWS: u16 = 36;
 const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
-const CURRENT_SCHEMA_VERSION: u32 = 11;
+const CURRENT_SCHEMA_VERSION: u32 = 13;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;
 const THEME_SETTINGS_SCHEMA_VERSION: u32 = 9;
@@ -50,7 +50,32 @@ const MAX_SHORTCUT_CHARS: usize = 64;
 const MAX_KNOWN_SHELLS: usize = 32;
 const MAX_SHELL_NAME_CHARS: usize = 256;
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum CredentialStorage {
+    #[default]
+    SystemKeyring,
+    EncryptedVault,
+}
+
+impl CredentialStorage {
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "system-keyring" | "system keyring" | "keyring" | "stored" => Self::SystemKeyring,
+            "encrypted-vault" | "encrypted vault" | "vault" => Self::EncryptedVault,
+            _ => Self::SystemKeyring,
+        }
+    }
+
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::SystemKeyring => "system-keyring",
+            Self::EncryptedVault => "encrypted-vault",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct SessionProfile {
     pub id: Uuid,
     pub name: String,
@@ -60,14 +85,63 @@ pub struct SessionProfile {
     pub port: u16,
     pub username: String,
     pub auth: AuthMethod,
-    /// Whether a password is expected in the platform credential store.
-    /// The credential itself is never serialized in this profile.
-    #[serde(default)]
-    pub credential_stored: bool,
+    /// The backend containing an already remembered password. The credential
+    /// itself is never serialized in this profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_storage: Option<CredentialStorage>,
     /// A SHA-256 SSH public-key fingerprint. The empty value means unknown;
     /// the SSH layer must refuse the connection until it is trusted.
     #[serde(default)]
     pub host_key_fingerprint: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SessionProfileWire {
+    id: Uuid,
+    name: String,
+    #[serde(default)]
+    group_name: String,
+    host: String,
+    port: u16,
+    username: String,
+    auth: AuthMethod,
+    #[serde(default)]
+    credential_storage: Option<CredentialStorage>,
+    #[serde(default)]
+    credential_stored: Option<bool>,
+    #[serde(default)]
+    host_key_fingerprint: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for SessionProfile {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = SessionProfileWire::deserialize(deserializer)?;
+        let credential_storage = wire.credential_storage.or_else(|| {
+            wire.credential_stored
+                .unwrap_or(false)
+                .then_some(CredentialStorage::SystemKeyring)
+        });
+        let auth = wire.auth;
+        if credential_storage.is_some() && matches!(auth, AuthMethod::PrivateKey { .. }) {
+            return Err(serde::de::Error::custom(
+                "private-key profiles cannot store password credentials",
+            ));
+        }
+        Ok(Self {
+            id: wire.id,
+            name: wire.name,
+            group_name: wire.group_name,
+            host: wire.host,
+            port: wire.port,
+            username: wire.username,
+            auth,
+            credential_storage,
+            host_key_fingerprint: wire.host_key_fingerprint,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -717,6 +791,9 @@ pub struct TerminalSettings {
     pub local_shell: String,
     #[serde(default = "default_known_shells")]
     pub known_shells: Vec<String>,
+    /// Whether macOS Option-modified keys should be encoded as terminal Meta.
+    #[serde(default)]
+    pub option_as_meta: bool,
 }
 
 impl TerminalSettings {
@@ -726,6 +803,7 @@ impl TerminalSettings {
         default_rows: i32,
         local_shell: &str,
         known_shells: &[String],
+        option_as_meta: bool,
     ) -> Self {
         let (local_shell, known_shells) = normalize_shell_settings(local_shell, known_shells);
         Self {
@@ -739,6 +817,7 @@ impl TerminalSettings {
                 as u16,
             local_shell,
             known_shells,
+            option_as_meta,
         }
     }
 
@@ -749,6 +828,7 @@ impl TerminalSettings {
             i32::from(self.default_rows),
             &self.local_shell,
             &self.known_shells,
+            self.option_as_meta,
         );
     }
 
@@ -771,6 +851,7 @@ impl Default for TerminalSettings {
             default_rows: default_terminal_rows(),
             local_shell: default_local_shell(),
             known_shells: default_known_shells(),
+            option_as_meta: false,
         }
     }
 }
@@ -954,6 +1035,9 @@ pub struct AppSettings {
     pub workspace: WorkspaceSettings,
     #[serde(default)]
     pub shortcuts: ShortcutSettings,
+    /// Backend used when the user chooses to remember a password after login.
+    #[serde(default)]
+    pub credential_storage: CredentialStorage,
 }
 
 impl AppSettings {
@@ -970,6 +1054,7 @@ impl AppSettings {
         default_rows: i32,
         local_shell: &str,
         known_shells: &[String],
+        option_as_meta: bool,
         sidebar_width: i32,
         tab_width: i32,
         session_mask_character: &str,
@@ -977,6 +1062,7 @@ impl AppSettings {
         toggle_sidebar_shortcut: &str,
         copy_selection_shortcut: &str,
         paste_shortcut: &str,
+        credential_storage: &str,
     ) -> Self {
         Self {
             appearance: AppearanceSettings::normalized(
@@ -994,6 +1080,7 @@ impl AppSettings {
                 default_rows,
                 local_shell,
                 known_shells,
+                option_as_meta,
             ),
             workspace: WorkspaceSettings::normalized(
                 sidebar_width,
@@ -1006,6 +1093,7 @@ impl AppSettings {
                 copy_selection_shortcut,
                 paste_shortcut,
             ),
+            credential_storage: CredentialStorage::from_setting(credential_storage),
         }
     }
 
@@ -1030,6 +1118,8 @@ impl AppSettings {
             &self.shortcuts.copy_selection,
             &self.shortcuts.paste,
         );
+        self.credential_storage =
+            CredentialStorage::from_setting(self.credential_storage.as_setting());
     }
 }
 
@@ -1318,7 +1408,7 @@ impl SessionProfile {
             port: 22,
             username: username.into(),
             auth: AuthMethod::default(),
-            credential_stored: false,
+            credential_storage: None,
             host_key_fingerprint: None,
         }
     }
@@ -1341,7 +1431,7 @@ impl SessionProfile {
             if path.as_os_str().is_empty() {
                 anyhow::bail!("private key path cannot be empty");
             }
-            if self.credential_stored {
+            if self.credential_storage.is_some() {
                 anyhow::bail!("private-key profiles cannot store password credentials");
             }
         }
@@ -1563,46 +1653,50 @@ impl ConfigStore {
     }
 
     pub fn save(&self, store: &SessionStore) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create {}", parent.display()))?;
-            set_private_directory_permissions(parent);
-        }
         let bytes = serde_json::to_vec_pretty(store).context("failed to encode session store")?;
-        let temporary = self.path.with_extension("json.tmp");
-        let mut options = OpenOptions::new();
-        options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt as _;
-            options.mode(0o600);
-        }
-        // ReplaceFileW requires the replacement file handle to be closed first.
-        {
-            let mut file = options
-                .open(&temporary)
-                .with_context(|| format!("failed to open {}", temporary.display()))?;
-            file.write_all(&bytes)
-                .and_then(|_| file.sync_all())
-                .with_context(|| format!("failed to write {}", temporary.display()))?;
-        }
-        replace_file_atomically(&temporary, &self.path).with_context(|| {
-            format!(
-                "failed to atomically replace {} with {}",
-                self.path.display(),
-                temporary.display()
-            )
-        })?;
-        set_private_file_permissions(&self.path);
-        if let Some(parent) = self.path.parent() {
-            sync_parent_directory(parent);
-        }
-        Ok(())
+        write_private_file_atomically(&self.path, &bytes)
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
+}
+
+pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+        set_private_directory_permissions(parent);
+    }
+    let temporary = path.with_extension("tmp");
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    // ReplaceFileW requires the replacement file handle to be closed first.
+    {
+        let mut file = options
+            .open(&temporary)
+            .with_context(|| format!("failed to open {}", temporary.display()))?;
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .with_context(|| format!("failed to write {}", temporary.display()))?;
+    }
+    replace_file_atomically(&temporary, path).with_context(|| {
+        format!(
+            "failed to atomically replace {} with {}",
+            path.display(),
+            temporary.display()
+        )
+    })?;
+    set_private_file_permissions(path);
+    if let Some(parent) = path.parent() {
+        sync_parent_directory(parent);
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -1708,7 +1802,7 @@ mod tests {
         );
         let mut profile = SessionProfile::new("demo", "host.example", "alice");
         profile.group_name = "Production".into();
-        profile.credential_stored = true;
+        profile.credential_storage = Some(CredentialStorage::SystemKeyring);
         data.upsert(profile.clone());
         data.upsert(SessionProfile {
             name: "renamed".into(),
@@ -1725,7 +1819,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_profile_defaults_group_and_credential_marker() {
+    fn legacy_profile_defaults_group_and_migrates_credential_marker() {
         let id = Uuid::new_v4();
         let json = format!(
             r#"{{"sessions":[{{"id":"{id}","name":"legacy","host":"host.example","port":22,"username":"alice","auth":"Password"}}]}}"#
@@ -1735,8 +1829,46 @@ mod tests {
             serde_json::from_str(&json).expect("legacy profile should deserialize");
         assert_eq!(store.sessions[0].group_name, "");
         assert!(store.groups.is_empty());
-        assert!(!store.sessions[0].credential_stored);
+        assert_eq!(store.sessions[0].credential_storage, None);
         assert_eq!(store.settings, AppSettings::default());
+    }
+
+    #[test]
+    fn legacy_credential_marker_migrates_to_the_system_keyring() {
+        let id = Uuid::new_v4();
+        let json = format!(
+            r#"{{"sessions":[{{"id":"{id}","name":"legacy","host":"host.example","port":22,"username":"alice","auth":"Password","credential_stored":true}}]}}"#
+        );
+
+        let store: SessionStore =
+            serde_json::from_str(&json).expect("legacy profile should deserialize");
+
+        assert_eq!(
+            store.sessions[0].credential_storage,
+            Some(CredentialStorage::SystemKeyring)
+        );
+        let encoded = serde_json::to_string(&store).expect("migrated store should serialize");
+        assert!(encoded.contains("credential_storage"));
+        assert!(!encoded.contains("credential_stored"));
+    }
+
+    #[test]
+    fn global_default_does_not_change_an_existing_credential_reference() {
+        let mut store = SessionStore::default();
+        let mut profile = SessionProfile::new("demo", "host.example", "alice");
+        profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+        store.upsert(profile);
+
+        store.settings.credential_storage = CredentialStorage::EncryptedVault;
+
+        assert_eq!(
+            store.sessions[0].credential_storage,
+            Some(CredentialStorage::SystemKeyring)
+        );
+        assert_eq!(
+            store.settings.credential_storage,
+            CredentialStorage::EncryptedVault
+        );
     }
 
     #[test]
@@ -2070,6 +2202,7 @@ mod tests {
             1_000,
             "zsh",
             &[SYSTEM_DEFAULT_SHELL.into(), "zsh".into()],
+            true,
             20,
             9_000,
             "  #  ",
@@ -2077,6 +2210,7 @@ mod tests {
             "Ctrl+Shift+B",
             "Ctrl+Shift+C",
             "Ctrl+Shift+V",
+            "encrypted-vault",
         );
 
         assert_eq!(
@@ -2105,6 +2239,7 @@ mod tests {
         assert_eq!(settings.terminal.default_columns, MIN_TERMINAL_COLUMNS);
         assert_eq!(settings.terminal.default_rows, MAX_TERMINAL_ROWS);
         assert_eq!(settings.terminal.local_shell, "zsh");
+        assert!(settings.terminal.option_as_meta);
         assert_eq!(
             settings.terminal.known_shells,
             [SYSTEM_DEFAULT_SHELL, "zsh"]
@@ -2113,6 +2248,25 @@ mod tests {
         assert_eq!(settings.workspace.tab_width, MAX_TAB_WIDTH);
         assert_eq!(settings.workspace.session_mask_character, "#");
         assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
+    }
+
+    #[test]
+    fn legacy_terminal_option_meta_defaults_disabled_and_round_trips() {
+        let json = r#"{
+            "version": 12,
+            "settings": {
+                "terminal": {
+                    "scrollback_lines": 4000
+                }
+            }
+        }"#;
+        let store: SessionStore =
+            serde_json::from_str(json).expect("legacy terminal settings should deserialize");
+
+        assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+        assert!(!store.settings.terminal.option_as_meta);
+        let serialized = serde_json::to_value(store).expect("settings should serialize");
+        assert_eq!(serialized["settings"]["terminal"]["option_as_meta"], false);
     }
 
     #[test]
@@ -2243,9 +2397,11 @@ mod tests {
             36,
             " zsh ",
             &["zsh".into(), "ZSH".into(), "bad\nshell".into()],
+            true,
         );
         assert_eq!(settings.local_shell, "zsh");
         assert_eq!(settings.known_shells, [SYSTEM_DEFAULT_SHELL, "zsh"]);
+        assert!(settings.option_as_meta);
         assert!(!settings.merge_known_shells(["ZSH".into()]));
         assert!(settings.merge_known_shells(["bash".into()]));
         assert_eq!(settings.known_shells, [SYSTEM_DEFAULT_SHELL, "zsh", "bash"]);
@@ -2254,7 +2410,7 @@ mod tests {
     #[test]
     fn profile_json_contains_no_secret_fields() {
         let mut profile = SessionProfile::new("demo", "host.example", "alice");
-        profile.credential_stored = true;
+        profile.credential_storage = Some(CredentialStorage::EncryptedVault);
         let value = serde_json::to_value(profile).expect("profile should serialize");
         let object = value.as_object().expect("profile should be an object");
 
@@ -2262,9 +2418,10 @@ mod tests {
         assert!(!object.contains_key("passphrase"));
         assert!(!object.contains_key("secret"));
         assert_eq!(
-            object.get("credential_stored"),
-            Some(&serde_json::json!(true))
+            object.get("credential_storage"),
+            Some(&serde_json::json!("encrypted-vault"))
         );
+        assert!(!object.contains_key("credential_stored"));
     }
 
     #[test]
@@ -2324,7 +2481,7 @@ mod tests {
     }
 
     #[test]
-    fn private_key_profiles_require_a_path_and_never_store_password_markers() {
+    fn private_key_profiles_require_a_path_and_never_store_password_references() {
         let mut profile = SessionProfile::new("demo", "host.example", "alice");
         profile.auth = AuthMethod::PrivateKey {
             path: PathBuf::new(),
@@ -2334,10 +2491,20 @@ mod tests {
         profile.auth = AuthMethod::PrivateKey {
             path: PathBuf::from("/tmp/id_ed25519"),
         };
-        profile.credential_stored = true;
+        profile.credential_storage = Some(CredentialStorage::SystemKeyring);
         assert!(profile.validate().is_err());
 
-        profile.credential_stored = false;
+        profile.credential_storage = None;
         assert!(profile.validate().is_ok());
+    }
+
+    #[test]
+    fn persisted_private_key_profile_rejects_a_password_reference() {
+        let id = Uuid::new_v4();
+        let json = format!(
+            r#"{{"id":"{id}","name":"demo","host":"host.example","port":22,"username":"alice","auth":{{"PrivateKey":{{"path":"/tmp/id_ed25519"}}}},"credential_storage":"system-keyring"}}"#
+        );
+
+        assert!(serde_json::from_str::<SessionProfile>(&json).is_err());
     }
 }

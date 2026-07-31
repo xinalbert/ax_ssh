@@ -1,49 +1,39 @@
-use std::collections::BTreeSet;
-
 use super::*;
 
-pub(super) fn session_rows(
-    sessions: &SessionStore,
-    expanded_groups: &BTreeSet<String>,
-) -> Vec<SessionRow> {
-    let mut rows = Vec::new();
-    for group in session_groups(sessions) {
-        let group_name = group.name;
-        let display_name = if group_name.is_empty() {
-            "Ungrouped".to_owned()
-        } else {
-            group_name.clone()
-        };
-        let profile_count = group.profiles.len();
-        let expanded = expanded_groups.contains(&group_name);
-        rows.push(SessionRow {
-            id: "".into(),
-            group_name: group_name.clone().into(),
-            name: display_name.clone().into(),
-            endpoint: profile_count.to_string().into(),
-            icon: compact_label(&display_name, "Un").into(),
-            is_group: true,
-            expanded,
-        });
-        if expanded {
-            rows.extend(group.profiles.into_iter().map(|profile| {
-                SessionRow {
-                    id: profile.id.to_string().into(),
-                    group_name: group_name.clone().into(),
-                    name: profile.name.clone().into(),
-                    endpoint: profile_sidebar_endpoint(
-                        profile,
-                        &sessions.settings.workspace.session_mask_character,
-                    )
-                    .into(),
-                    icon: compact_label(&profile.name, "--").into(),
-                    is_group: false,
-                    expanded: false,
-                }
-            }));
-        }
-    }
-    rows
+pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow> {
+    session_groups(sessions)
+        .into_iter()
+        .map(|group| {
+            let group_name = group.name;
+            let display_name = if group_name.is_empty() {
+                "Ungrouped".to_owned()
+            } else {
+                group_name.clone()
+            };
+            let profiles = ModelRc::new(VecModel::from(
+                group
+                    .profiles
+                    .into_iter()
+                    .map(|profile| SessionProfileRow {
+                        id: profile.id.to_string().into(),
+                        name: profile.name.clone().into(),
+                        endpoint: profile_sidebar_endpoint(
+                            profile,
+                            &sessions.settings.workspace.session_mask_character,
+                        )
+                        .into(),
+                        icon: compact_label(&profile.name, "--").into(),
+                    })
+                    .collect::<Vec<_>>(),
+            ));
+            SessionGroupRow {
+                group_name: group_name.into(),
+                name: display_name.clone().into(),
+                icon: compact_label(&display_name, "Un").into(),
+                profiles,
+            }
+        })
+        .collect()
 }
 
 pub(super) fn connection_option_rows(sessions: &SessionStore) -> Vec<ConnectableSessionRow> {
@@ -84,7 +74,7 @@ pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mu
     dispatch_ui(ui, move |ui| {
         let (rows, groups, options) = match state.lock() {
             Ok(app) => (
-                session_rows(&app.sessions, &app.expanded_groups),
+                session_group_rows(&app.sessions),
                 group_option_rows(&app.sessions),
                 connection_option_rows(&app.sessions),
             ),
@@ -177,7 +167,6 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     if let Some(editor) = snapshot.editor {
         let draft_id = editor.draft_id.to_string();
         if ui.get_editor_draft_id().as_str() != draft_id {
-            ui.set_editor_draft_id(draft_id.into());
             ui.set_editor_profile_id(
                 editor
                     .profile_id
@@ -192,7 +181,9 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
             ui.set_editor_username(editor.username.into());
             ui.set_editor_auth_method(editor.auth_method.into());
             ui.set_editor_private_key_path(editor.private_key_path.into());
-            ui.set_editor_credential_stored(editor.credential_stored);
+            // The Slint editor resets its local fields when this identity changes.
+            // Publish it last so all source values form one coherent draft.
+            ui.set_editor_draft_id(draft_id.into());
         }
     }
     let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
@@ -212,6 +203,46 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
+    apply_security_prompt(ui, snapshot.security_prompt);
+}
+
+fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
+    match prompt {
+        ActiveSecurityPrompt::None => {
+            ui.set_host_key_dialog_open(false);
+            ui.set_password_dialog_open(false);
+            ui.set_password_dialog_tab_id("".into());
+        }
+        ActiveSecurityPrompt::HostKey(prompt) => {
+            ui.set_host_key_endpoint(format!("{}:{}", prompt.host, prompt.port).into());
+            ui.set_host_key_fingerprint(prompt.fingerprint.into());
+            ui.set_host_key_changed(prompt.changed);
+            ui.set_password_dialog_open(false);
+            ui.set_password_dialog_tab_id("".into());
+            ui.set_host_key_dialog_open(true);
+        }
+        ActiveSecurityPrompt::Authentication {
+            tab_id,
+            profile,
+            vault_unlock_only,
+        } => {
+            let (private_key, key_path) = match &profile.auth {
+                AuthMethod::Password => (false, String::new()),
+                AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
+            };
+            let vault_storage = vault_unlock_only
+                && !private_key
+                && profile.credential_storage == Some(CredentialStorage::EncryptedVault);
+            ui.set_host_key_dialog_open(false);
+            ui.set_password_endpoint(profile_endpoint(&profile).into());
+            ui.set_password_private_key(private_key);
+            ui.set_password_vault_storage(vault_storage);
+            ui.set_password_vault_unlock_only(vault_unlock_only);
+            ui.set_password_key_path(key_path.into());
+            ui.set_password_dialog_tab_id(tab_id.to_string().into());
+            ui.set_password_dialog_open(true);
+        }
+    }
 }
 
 pub(super) fn apply_settings(ui: &slint::Weak<AppWindow>, settings: AppSettings) {
@@ -228,6 +259,7 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_terminal_brightness_percent(i32::from(settings.appearance.terminal_brightness_percent));
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
+    ui.set_option_as_meta(settings.terminal.option_as_meta);
     ui.set_scrollback_lines(settings.terminal.scrollback_lines as i32);
     ui.set_default_terminal_columns(i32::from(settings.terminal.default_columns));
     ui.set_default_terminal_rows(i32::from(settings.terminal.default_rows));
@@ -239,6 +271,7 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
         .position(|shell| shell.eq_ignore_ascii_case(&settings.terminal.local_shell))
         .unwrap_or(0);
     ui.set_local_shell_index(local_shell_index.min(i32::MAX as usize) as i32);
+    ui.set_credential_storage(settings.credential_storage.as_setting().into());
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
     ui.set_session_mask_character(settings.workspace.session_mask_character.clone().into());
@@ -441,50 +474,6 @@ fn hex_digit(value: u8) -> Option<u8> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Dialog {
-    HostKey,
-    Password,
-}
-
-pub(super) fn set_dialog_open(ui: &slint::Weak<AppWindow>, dialog: Dialog, open: bool) {
-    dispatch_ui(ui, move |ui| match dialog {
-        Dialog::HostKey => ui.set_host_key_dialog_open(open),
-        Dialog::Password => ui.set_password_dialog_open(open),
-    });
-}
-
-pub(super) fn show_host_key_prompt(ui: &slint::Weak<AppWindow>, prompt: &PendingHostKey) {
-    let endpoint = format!("{}:{}", prompt.host, prompt.port);
-    let fingerprint = prompt.fingerprint.clone();
-    let changed = prompt.changed;
-    dispatch_ui(ui, move |ui| {
-        ui.set_host_key_endpoint(endpoint.into());
-        ui.set_host_key_fingerprint(fingerprint.into());
-        ui.set_host_key_changed(changed);
-        ui.set_host_key_dialog_open(true);
-    });
-}
-
-pub(super) fn show_auth_prompt(
-    ui: &slint::Weak<AppWindow>,
-    profile: &SessionProfile,
-    remember_password: bool,
-) {
-    let endpoint = profile_endpoint(profile);
-    let (private_key, key_path) = match &profile.auth {
-        AuthMethod::Password => (false, String::new()),
-        AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
-    };
-    dispatch_ui(ui, move |ui| {
-        ui.set_password_endpoint(endpoint.into());
-        ui.set_password_remember_default(!private_key && remember_password);
-        ui.set_password_private_key(private_key);
-        ui.set_password_key_path(key_path.into());
-        ui.set_password_dialog_open(true);
-    });
-}
-
 pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
     runtime.spawn(async move {
         let result = tokio::task::spawn_blocking(discover_private_keys).await;
@@ -538,6 +527,7 @@ pub(super) fn dispatch_ui(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use slint::Model;
 
     #[test]
     fn settings_workbench_is_exposed_as_a_workspace_tab() {
@@ -562,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn session_rows_group_profiles_and_respect_expansion() {
+    fn session_group_rows_keep_profiles_nested_under_their_group() {
         let mut production_a = SessionProfile::new("prod-a", "a.example", "alice");
         production_a.group_name = " Production ".into();
         let mut production_b = SessionProfile::new("prod-b", "192.168.1.202", "zhushixin");
@@ -572,28 +562,23 @@ mod tests {
             sessions: vec![production_a, production_b, ungrouped],
             ..SessionStore::default()
         };
-        let expanded_groups = BTreeSet::from(["Production".to_owned()]);
-        let rows = session_rows(&sessions, &expanded_groups);
+        let rows = session_group_rows(&sessions);
 
-        assert_eq!(rows.len(), 4);
-        assert!(rows[0].is_group);
-        assert!(rows[0].expanded);
+        assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].name.as_str(), "Production");
         assert_eq!(rows[0].icon.as_str(), "Pr");
-        assert_eq!(rows[0].endpoint.as_str(), "2");
+        assert_eq!(rows[0].profiles.row_count(), 2);
+        let production_a = rows[0].profiles.row_data(0).unwrap();
+        assert_eq!(production_a.name.as_str(), "prod-a");
+        assert_eq!(production_a.endpoint.as_str(), "al*ce@a.example:22");
+        let production_b = rows[0].profiles.row_data(1).unwrap();
+        assert_eq!(production_b.name.as_str(), "prod-b");
+        assert_eq!(production_b.endpoint.as_str(), "zh*in@192.*.202:22");
 
-        assert!(!rows[1].is_group);
-        assert_eq!(rows[1].name.as_str(), "prod-a");
-        assert_eq!(rows[1].endpoint.as_str(), "al*ce@a.example:22");
-        assert!(!rows[2].is_group);
-        assert_eq!(rows[2].name.as_str(), "prod-b");
-        assert_eq!(rows[2].endpoint.as_str(), "zh*in@192.*.202:22");
-
-        assert!(rows[3].is_group);
-        assert!(!rows[3].expanded);
-        assert_eq!(rows[3].name.as_str(), "Ungrouped");
-        assert_eq!(rows[3].icon.as_str(), "Un");
-        assert_eq!(rows[3].endpoint.as_str(), "1");
+        assert_eq!(rows[1].name.as_str(), "Ungrouped");
+        assert_eq!(rows[1].icon.as_str(), "Un");
+        assert_eq!(rows[1].profiles.row_count(), 1);
+        assert_eq!(rows[1].profiles.row_data(0).unwrap().name.as_str(), "local");
     }
 
     #[test]
@@ -603,12 +588,11 @@ mod tests {
             ..SessionStore::default()
         };
 
-        let rows = session_rows(&sessions, &BTreeSet::from(["Empty".into()]));
+        let rows = session_group_rows(&sessions);
 
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].is_group);
         assert_eq!(rows[0].name.as_str(), "Empty");
-        assert_eq!(rows[0].endpoint.as_str(), "0");
+        assert_eq!(rows[0].profiles.row_count(), 0);
     }
 
     #[test]

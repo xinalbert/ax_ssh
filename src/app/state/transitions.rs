@@ -1,11 +1,71 @@
 use super::*;
+use ax_ssh::config::{AuthMethod, CredentialStorage};
 
 pub(in crate::app) fn prepare_authentication_retry(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     session_id: Uuid,
     attempt_id: Uuid,
-    clear_credential_marker: bool,
+) -> Result<bool> {
+    prepare_retry_with_phase(
+        state,
+        tab_id,
+        session_id,
+        attempt_id,
+        SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: false,
+        },
+    )
+}
+
+pub(in crate::app) fn prepare_stored_credential_retry(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    session_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<bool> {
+    prepare_retry_with_phase(
+        state,
+        tab_id,
+        session_id,
+        attempt_id,
+        SshConnectionPhase::LoadingStoredCredential,
+    )
+}
+
+pub(in crate::app) fn finish_stored_credential_retry(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    session_id: Uuid,
+) -> bool {
+    let Ok(mut app) = state.lock() else {
+        return false;
+    };
+    let current = app.terminal(tab_id).is_some_and(|terminal| {
+        terminal
+            .ssh_route()
+            .is_some_and(|route| route.0 == session_id)
+            && matches!(
+                terminal.ssh_phase(),
+                Some(SshConnectionPhase::LoadingStoredCredential)
+            )
+    });
+    if !current {
+        return false;
+    }
+    app.terminal_mut(tab_id).is_some_and(|terminal| {
+        terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: false,
+        })
+    })
+}
+
+fn prepare_retry_with_phase(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    session_id: Uuid,
+    attempt_id: Uuid,
+    phase: SshConnectionPhase,
 ) -> Result<bool> {
     let mut app = state
         .lock()
@@ -18,29 +78,9 @@ pub(in crate::app) fn prepare_authentication_retry(
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
+        terminal.set_ssh_phase(phase);
     }
-    app.pending_auth = Some(PendingAuth {
-        tab_id,
-        profile_id: session_id,
-    });
 
-    if clear_credential_marker {
-        let mut candidate = app.sessions.clone();
-        let profile = candidate
-            .sessions
-            .iter_mut()
-            .find(|profile| profile.id == session_id)
-            .context("session not found while clearing credential marker")?;
-        profile.credential_stored = false;
-        match app.config.save(&candidate) {
-            Ok(()) => app.sessions = candidate,
-            Err(error) => warn!(
-                session_id = %session_id,
-                %error,
-                "failed to clear rejected credential marker"
-            ),
-        }
-    }
     Ok(true)
 }
 
@@ -62,8 +102,8 @@ pub(in crate::app) fn prepare_host_key_retry(
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
+        terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(prompt));
     }
-    app.pending_trust = Some(prompt);
     Ok(true)
 }
 
@@ -96,10 +136,10 @@ pub(in crate::app) fn retire_session_attempt(
     }
 }
 
-pub(in crate::app) fn set_credential_marker(
+pub(in crate::app) fn set_credential_storage(
     state: &Arc<Mutex<AppState>>,
     session_id: Uuid,
-    stored: bool,
+    credential_storage: Option<CredentialStorage>,
 ) -> Result<()> {
     let mut app = state
         .lock()
@@ -109,14 +149,57 @@ pub(in crate::app) fn set_credential_marker(
         .sessions
         .iter_mut()
         .find(|profile| profile.id == session_id)
-        .context("session not found while updating credential marker")?;
-    if profile.credential_stored == stored {
+        .context("session not found while updating credential storage")?;
+    if profile.credential_storage == credential_storage {
         return Ok(());
     }
-    profile.credential_stored = stored;
+    if credential_storage.is_some() && matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+        anyhow::bail!("private-key profiles cannot store password credentials");
+    }
+    profile.credential_storage = credential_storage;
     app.config.save(&candidate)?;
     app.sessions = candidate;
     Ok(())
+}
+
+pub(in crate::app) fn set_credential_storage_while_loading(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    session_id: Uuid,
+    credential_storage: Option<CredentialStorage>,
+) -> Result<bool> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let current = app.terminal(tab_id).is_some_and(|terminal| {
+        terminal
+            .ssh_route()
+            .is_some_and(|route| route.0 == session_id)
+            && matches!(
+                terminal.ssh_phase(),
+                Some(SshConnectionPhase::LoadingStoredCredential)
+            )
+    });
+    if !current {
+        return Ok(false);
+    }
+
+    let mut candidate = app.sessions.clone();
+    let profile = candidate
+        .sessions
+        .iter_mut()
+        .find(|profile| profile.id == session_id)
+        .context("session not found while updating credential storage")?;
+    if profile.credential_storage == credential_storage {
+        return Ok(true);
+    }
+    if credential_storage.is_some() && matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+        anyhow::bail!("private-key profiles cannot store password credentials");
+    }
+    profile.credential_storage = credential_storage;
+    app.config.save(&candidate)?;
+    app.sessions = candidate;
+    Ok(true)
 }
 
 pub(in crate::app) fn session_attempt_is_active(

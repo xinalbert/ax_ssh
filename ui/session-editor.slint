@@ -1,31 +1,57 @@
-import { Button, CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
+import { FlatTextInput } from "components/flat-text-input.slint";
 import { SessionEditorField, SessionEditorSectionHeading } from "components/session-editor-controls.slint";
 import { ThemedComboBox } from "components/themed-combo-box.slint";
 
-export component SessionEditorPane inherits Rectangle {
-    in property <[string]> group-options;
-    in property <[string]> private-key-options;
-    in property <string> status;
-    in property <string> draft-id;
-    in property <string> profile-id;
-    in-out property <string> name-draft;
-    in-out property <string> group-draft;
-    in-out property <string> host-draft;
-    in-out property <string> port-draft: "22";
-    in-out property <string> username-draft;
-    in-out property <string> auth-method: "Password";
-    in-out property <string> private-key-draft;
-    in-out property <bool> remember-password-draft;
+// This is a read-only snapshot from the workspace. Edits remain local until
+// the user explicitly saves, so changing input never mutates Rust state.
+export struct SessionEditorViewState {
+    draft_id: string,
+    profile_id: string,
+    name: string,
+    group_name: string,
+    host: string,
+    port: string,
+    username: string,
+    auth_method: string,
+    private_key_path: string,
+    group_options: [string],
+    private_key_options: [string],
+    status: string,
+}
 
-    callback save(string, string, string, string, string, string, string, string, bool);
+export component SessionEditorPane inherits Rectangle {
+    in property <SessionEditorViewState> source;
+    callback save(string, string, string, string, string, string, string);
     callback cancel();
 
-    private property <string> password-draft;
-    private property <bool> editing: !root.profile-id.is-empty;
+    private property <string> incoming-draft-id: root.source.draft_id;
+    private property <bool> editing: !root.source.profile_id.is-empty;
+    private property <[string]> group-options: root.source.group_options;
+    private property <[string]> private-key-options: root.source.private_key_options;
+    private property <string> status: root.source.status;
+    private property <string> name-draft;
+    private property <string> group-draft;
+    private property <string> host-draft;
+    private property <string> port-draft: "22";
+    private property <string> username-draft;
+    private property <string> auth-method: "Password";
+    private property <string> private-key-draft;
 
-    changed draft-id => { root.password-draft = ""; }
+    function reset-draft() {
+        root.name-draft = root.source.name;
+        root.group-draft = root.source.group_name;
+        root.host-draft = root.source.host;
+        root.port-draft = root.source.port;
+        root.username-draft = root.source.username;
+        root.auth-method = root.source.auth_method;
+        root.private-key-draft = root.source.private_key_path;
+    }
+
+    init => { root.reset-draft(); }
+    changed incoming-draft-id => { root.reset-draft(); }
 
     background: Theme.background;
 
@@ -89,7 +115,7 @@ export component SessionEditorPane inherits Rectangle {
                         SessionEditorField {
                             horizontal-stretch: 3;
                             label: "Name";
-                            name-edit := LineEdit {
+                            name-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 placeholder-text: "Production server";
@@ -103,7 +129,7 @@ export component SessionEditorPane inherits Rectangle {
                             HorizontalLayout {
                                 height: Theme.editor-input-row-height;
                                 spacing: Theme.space-md;
-                                group-edit := LineEdit {
+                                group-edit := FlatTextInput {
                                     horizontal-stretch: 1;
                                     height: Theme.editor-input-row-height;
                                     placeholder-text: "Optional";
@@ -140,7 +166,7 @@ export component SessionEditorPane inherits Rectangle {
                         SessionEditorField {
                             horizontal-stretch: 1;
                             label: "Host";
-                            host-edit := LineEdit {
+                            host-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 placeholder-text: "server.example.com";
@@ -152,7 +178,7 @@ export component SessionEditorPane inherits Rectangle {
                             width: Theme.editor-port-width;
                             horizontal-stretch: 0;
                             label: "Port";
-                            port-edit := LineEdit {
+                            port-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.port-draft;
@@ -163,7 +189,7 @@ export component SessionEditorPane inherits Rectangle {
                     }
                     SessionEditorField {
                         label: "Username";
-                        user-edit := LineEdit {
+                        user-edit := FlatTextInput {
                             width: parent.width;
                             height: Theme.editor-input-row-height;
                             placeholder-text: "root";
@@ -192,24 +218,11 @@ export component SessionEditorPane inherits Rectangle {
                     if root.auth-method == "Password" : VerticalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.space-xs;
-                        SessionEditorField {
-                            label: "Password";
-                            new-password-edit := LineEdit {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                text <=> root.password-draft;
-                                placeholder-text: root.editing && root.remember-password-draft
-                                    ? "Leave blank to keep saved password"
-                                    : "Password";
-                                input-type: InputType.password;
-                                accessible-label: "SSH password";
-                            }
-                        }
-                        remember-new-password := CheckBox {
-                            height: Theme.editor-check-row-height;
-                            text: "Save password in system credential store";
-                            checked <=> root.remember-password-draft;
-                            accessible-label: self.text;
+                        Text {
+                            text: "The password is requested when connecting. Its optional storage location is set in Settings.";
+                            color: Theme.muted;
+                            font-size: Theme.font-small;
+                            wrap: word-wrap;
                         }
                     }
 
@@ -218,7 +231,7 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-md;
                         SessionEditorField {
                             label: "Private key path";
-                            key-edit := LineEdit {
+                            key-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.private-key-draft;
@@ -271,8 +284,6 @@ export component SessionEditorPane inherits Rectangle {
                                 user-edit.text,
                                 root.auth-method,
                                 root.private-key-draft,
-                                root.password-draft,
-                                root.remember-password-draft,
                             );
                         }
                     }

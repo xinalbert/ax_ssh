@@ -1,4 +1,5 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
+import { FlatTextInput } from "flat-text-input.slint";
 import { Theme } from "../theme.slint";
 
 export component SessionManagementDialog inherits Rectangle {
@@ -43,7 +44,7 @@ export component SessionManagementDialog inherits Rectangle {
                 font-size: Theme.font-body;
                 wrap: word-wrap;
             }
-            if root.accepts-name : LineEdit {
+            if root.accepts-name : FlatTextInput {
                 text <=> root.value;
                 placeholder-text: "Group name";
                 accessible-label: "Group name";

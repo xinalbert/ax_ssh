@@ -19,13 +19,6 @@ pub(super) fn wire_connection_request(
                     return;
                 }
             };
-            if app.prompt_flow_busy() {
-                set_status(
-                    &ui_for_connect,
-                    "Finish or cancel the current security prompt first",
-                );
-                return;
-            }
             let Some(profile) = app
                 .sessions
                 .sessions
@@ -38,18 +31,26 @@ pub(super) fn wire_connection_request(
             };
             let tab_id = app.open_terminal_tab(&profile);
             if profile.host_key_fingerprint.is_some() {
-                app.pending_auth = Some(PendingAuth {
-                    tab_id,
-                    profile_id: profile.id,
+                let Some(terminal) = app.terminal_mut(tab_id) else {
+                    set_status(&ui_for_connect, "Cannot prepare SSH terminal tab");
+                    return;
+                };
+                terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+                    vault_unlock_only: false,
                 });
                 ConnectionStart::Authenticate { tab_id, profile }
             } else {
                 let (cancel, cancelled) = oneshot::channel();
-                app.pending_probe = Some(PendingProbe {
+                let probe = PendingProbe {
                     tab_id,
                     profile_id: profile.id,
                     cancel,
-                });
+                };
+                let Some(terminal) = app.terminal_mut(tab_id) else {
+                    set_status(&ui_for_connect, "Cannot prepare SSH terminal tab");
+                    return;
+                };
+                terminal.set_ssh_phase(SshConnectionPhase::Probing(probe));
                 ConnectionStart::Probe {
                     tab_id,
                     profile,
@@ -97,42 +98,53 @@ pub(super) fn wire_connection_request(
                 _ = cancelled => None,
                 result = probe_host_key(&profile) => Some(result),
             };
-            let prompt = match state_for_probe.lock() {
-                Ok(mut app)
-                    if app.pending_probe.as_ref().is_some_and(|probe| {
-                        probe.tab_id == tab_id && probe.profile_id == profile.id
-                    }) =>
-                {
-                    app.pending_probe = None;
-                    match result {
-                        Some(Ok(fingerprint)) => {
-                            let prompt = PendingHostKey {
-                                tab_id,
-                                profile_id: profile.id,
-                                host: profile.host.clone(),
-                                port: profile.port,
-                                fingerprint,
-                                changed: false,
-                            };
-                            app.pending_trust = Some(prompt.clone());
-                            Some(Ok(prompt))
+            let outcome = match state_for_probe.lock() {
+                Ok(mut app) => {
+                    let Some(terminal) = app.terminal_mut(tab_id) else {
+                        return;
+                    };
+                    let current = terminal.ssh_route().is_some_and(|route| route.0 == profile.id)
+                        && matches!(
+                            terminal.ssh_phase(),
+                            Some(SshConnectionPhase::Probing(probe))
+                                if probe.tab_id == tab_id && probe.profile_id == profile.id
+                        );
+                    if !current {
+                        None
+                    } else {
+                        match result {
+                            Some(Ok(fingerprint)) => {
+                                terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(
+                                    PendingHostKey {
+                                        tab_id,
+                                        profile_id: profile.id,
+                                        host: profile.host.clone(),
+                                        port: profile.port,
+                                        fingerprint,
+                                        changed: false,
+                                    },
+                                ));
+                                Some(Ok(()))
+                            }
+                            Some(Err(error)) => {
+                                terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                                Some(Err(error))
+                            }
+                            None => None,
                         }
-                        Some(Err(error)) => Some(Err(error)),
-                        None => None,
                     }
                 }
-                Ok(_) => None,
                 Err(_) => Some(Err(anyhow::anyhow!("state lock poisoned"))),
             };
-            match prompt {
-                Some(Ok(prompt)) => {
-                    show_host_key_prompt(&ui_for_probe, &prompt);
+            match outcome {
+                Some(Ok(())) => {
                     set_tab_status(
                         &state_for_probe,
                         &ui_for_probe,
                         tab_id,
                         "Verify the SSH host key before connecting",
                     );
+                    refresh_workspace(&ui_for_probe, &state_for_probe);
                 }
                 Some(Err(error)) => {
                     warn!(tab_id = %tab_id, session_id = %profile.id, %error, "SSH host-key probe failed");
@@ -165,7 +177,31 @@ pub(super) fn wire_host_key_confirmation(
                     return;
                 }
             };
-            let Some(pending) = app.pending_trust.clone() else {
+            let Some(active_tab_id) = app.active_tab_id() else {
+                set_status(&ui_for_confirm, "No host key is awaiting confirmation");
+                return;
+            };
+            let Some(pending) = app
+                .terminal(active_tab_id)
+                .and_then(TerminalTabState::ssh_phase)
+                .and_then(|phase| match phase {
+                    SshConnectionPhase::AwaitingHostKey(prompt)
+                        if app
+                            .terminal(active_tab_id)
+                            .and_then(TerminalTabState::ssh_route)
+                            .is_some_and(|route| {
+                                route.0 == prompt.profile_id && prompt.tab_id == active_tab_id
+                            }) =>
+                    {
+                        Some(prompt.clone())
+                    }
+                    SshConnectionPhase::AwaitingHostKey(_) => None,
+                    SshConnectionPhase::Idle
+                    | SshConnectionPhase::Probing(_)
+                    | SshConnectionPhase::AwaitingAuthentication { .. }
+                    | SshConnectionPhase::LoadingStoredCredential => None,
+                })
+            else {
                 set_status(&ui_for_confirm, "No host key is awaiting confirmation");
                 return;
             };
@@ -178,12 +214,17 @@ pub(super) fn wire_host_key_confirmation(
                 set_status(&ui_for_confirm, "Session not found");
                 return;
             };
-            if app.terminal(pending.tab_id).is_none()
+            if pending.tab_id != active_tab_id
+                || app
+                    .terminal(pending.tab_id)
+                    .and_then(TerminalTabState::ssh_route)
+                    .is_none_or(|route| route.0 != pending.profile_id)
                 || profile.host != pending.host
                 || profile.port != pending.port
             {
-                app.pending_trust = None;
-                set_dialog_open(&ui_for_confirm, Dialog::HostKey, false);
+                if let Some(terminal) = app.terminal_mut(pending.tab_id) {
+                    terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                }
                 set_status(
                     &ui_for_confirm,
                     "Session endpoint or tab changed; check the host key again",
@@ -197,10 +238,27 @@ pub(super) fn wire_host_key_confirmation(
                 return;
             }
             app.sessions = candidate;
-            app.pending_trust = None;
-            app.pending_auth = Some(PendingAuth {
-                tab_id: pending.tab_id,
-                profile_id: profile.id,
+            let Some(terminal) = app.terminal_mut(pending.tab_id) else {
+                set_status(&ui_for_confirm, "SSH terminal tab is no longer available");
+                return;
+            };
+            let still_awaiting_this_key = matches!(
+                terminal.ssh_phase(),
+                Some(SshConnectionPhase::AwaitingHostKey(current))
+                    if current.profile_id == pending.profile_id
+                        && current.host == pending.host
+                        && current.port == pending.port
+                        && current.fingerprint == pending.fingerprint
+            );
+            if !still_awaiting_this_key {
+                set_status(
+                    &ui_for_confirm,
+                    "Host-key confirmation is no longer current",
+                );
+                return;
+            }
+            terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+                vault_unlock_only: false,
             });
             (pending.tab_id, profile)
         };
@@ -211,7 +269,7 @@ pub(super) fn wire_host_key_confirmation(
             fingerprint = ?profile.host_key_fingerprint,
             "SSH host key trusted by user"
         );
-        set_dialog_open(&ui_for_confirm, Dialog::HostKey, false);
+        refresh_workspace(&ui_for_confirm, &state_for_confirm);
         begin_authentication(
             &runtime,
             state_for_confirm.clone(),
@@ -222,22 +280,46 @@ pub(super) fn wire_host_key_confirmation(
     });
 
     let ui_for_reject = ui.as_weak();
+    let state_for_reject = state.clone();
     ui.on_reject_host_key(move || {
-        let pending = match state.lock() {
-            Ok(mut app) => app.pending_trust.take(),
+        let pending = match state_for_reject.lock() {
+            Ok(mut app) => {
+                let active_tab_id = app.active_tab_id();
+                let pending = active_tab_id
+                    .and_then(|tab_id| app.terminal(tab_id).map(|terminal| (tab_id, terminal)))
+                    .and_then(|(tab_id, terminal)| match terminal.ssh_phase() {
+                        Some(SshConnectionPhase::AwaitingHostKey(prompt))
+                            if prompt.tab_id == tab_id =>
+                        {
+                            Some(prompt.clone())
+                        }
+                        Some(SshConnectionPhase::Idle)
+                        | Some(SshConnectionPhase::Probing(_))
+                        | Some(SshConnectionPhase::AwaitingAuthentication { .. })
+                        | Some(SshConnectionPhase::LoadingStoredCredential)
+                        | Some(SshConnectionPhase::AwaitingHostKey(_))
+                        | None => None,
+                    });
+                if let Some(pending) = &pending
+                    && let Some(terminal) = app.terminal_mut(pending.tab_id)
+                {
+                    terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                }
+                pending
+            }
             Err(_) => {
                 set_status(&ui_for_reject, "Cannot update session state");
                 return;
             }
         };
-        set_dialog_open(&ui_for_reject, Dialog::HostKey, false);
         if let Some(pending) = pending {
             set_tab_status(
-                &state,
+                &state_for_reject,
                 &ui_for_reject,
                 pending.tab_id,
                 "Connection cancelled; host key was not trusted",
             );
+            refresh_workspace(&ui_for_reject, &state_for_reject);
         }
     });
 }
@@ -253,46 +335,65 @@ pub(super) fn begin_authentication(
         set_tab_status(&state, &ui, tab_id, "Loading private key...");
         if let Err(error) = start_session_worker(
             runtime,
-            state,
+            state.clone(),
             ui.clone(),
             tab_id,
             profile.id,
-            String::new(),
+            zeroize::Zeroizing::new(String::new()),
+            None,
             false,
-            false,
+            AuthenticationStart::Prompt,
         ) {
-            show_auth_prompt(&ui, &profile, false);
-            set_status(
+            set_awaiting_authentication(&state, tab_id, profile.id, false);
+            set_tab_status(
+                &state,
                 &ui,
+                tab_id,
                 &format!("Cannot start private-key connection: {error}"),
             );
+            refresh_workspace(&ui, &state);
         }
         return;
     }
-    if !profile.credential_stored {
-        show_auth_prompt(&ui, &profile, false);
+    let Some(storage) = profile.credential_storage else {
+        set_awaiting_authentication(&state, tab_id, profile.id, false);
         set_tab_status(&state, &ui, tab_id, "Password required");
+        refresh_workspace(&ui, &state);
+        return;
+    };
+    if storage == CredentialStorage::EncryptedVault {
+        set_awaiting_authentication(&state, tab_id, profile.id, true);
+        set_tab_status(
+            &state,
+            &ui,
+            tab_id,
+            "Unlocking the saved password requires the vault password",
+        );
+        refresh_workspace(&ui, &state);
         return;
     }
 
     let runtime_for_lookup = runtime.clone();
+    if !set_loading_stored_credential(&state, tab_id, profile.id) {
+        debug!(tab_id = %tab_id, session_id = %profile.id, "stale authentication start ignored");
+        return;
+    }
     set_tab_status(
         &state,
         &ui,
         tab_id,
         "Loading password from system credential store...",
     );
+    refresh_workspace(&ui, &state);
     runtime.spawn(async move {
-        let result = load_stored_password(profile.id).await;
+        let result = load_system_password(profile.id).await;
         let current = match state.lock() {
-            Ok(app) => {
-                app.pending_auth
-                    == Some(PendingAuth {
-                        tab_id,
-                        profile_id: profile.id,
-                    })
-                    && app.terminal(tab_id).is_some()
-            }
+            Ok(app) => terminal_has_phase(
+                &app,
+                tab_id,
+                profile.id,
+                |phase| matches!(phase, SshConnectionPhase::LoadingStoredCredential),
+            ),
             Err(_) => {
                 set_status(&ui, "Cannot read session state");
                 return;
@@ -312,33 +413,47 @@ pub(super) fn begin_authentication(
                     tab_id,
                     profile.id,
                     secret,
-                    false,
+                    None,
                     true,
+                    AuthenticationStart::StoredCredential,
                 ) {
                     set_status(&ui, &format!("Cannot start connection: {error}"));
                 }
             }
             Ok(None) => {
-                if let Err(error) = set_credential_marker(&state, profile.id, false) {
-                    warn!(session_id = %profile.id, %error, "failed to clear missing credential marker");
+                match set_credential_storage_while_loading(&state, tab_id, profile.id, None) {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing credential result ignored");
+                        return;
+                    }
+                    Err(error) => {
+                        warn!(session_id = %profile.id, %error, "failed to clear missing credential storage policy");
+                    }
                 }
-                show_auth_prompt(&ui, &profile, false);
+                if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
+                    return;
+                }
                 set_tab_status(
                     &state,
                     &ui,
                     tab_id,
                     "Saved password was not found; enter it again",
                 );
+                refresh_workspace(&ui, &state);
             }
             Err(error) => {
                 warn!(session_id = %profile.id, %error, "system credential lookup failed");
-                show_auth_prompt(&ui, &profile, true);
+                if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
+                    return;
+                }
                 set_tab_status(
                     &state,
                     &ui,
                     tab_id,
                     &format!("System credential unavailable; enter password: {error}"),
                 );
+                refresh_workspace(&ui, &state);
             }
         }
     });
@@ -351,16 +466,24 @@ pub(super) fn start_session_worker(
     ui: slint::Weak<AppWindow>,
     tab_id: Uuid,
     profile_id: Uuid,
-    secret: String,
-    remember_after_connect: bool,
+    secret: zeroize::Zeroizing<String>,
+    credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
+    source: AuthenticationStart,
 ) -> Result<()> {
     let attempt_id = Uuid::new_v4();
-    let (profile, events, secret_to_store) = {
+    let (profile, events, credential_to_store) = {
         let mut app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-        if app.pending_auth != Some(PendingAuth { tab_id, profile_id }) {
+        if !terminal_has_phase(&app, tab_id, profile_id, |phase| match source {
+            AuthenticationStart::Prompt => {
+                matches!(phase, SshConnectionPhase::AwaitingAuthentication { .. })
+            }
+            AuthenticationStart::StoredCredential => {
+                matches!(phase, SshConnectionPhase::LoadingStoredCredential)
+            }
+        }) {
             anyhow::bail!("terminal tab is not awaiting authentication");
         }
         let profile = app
@@ -381,8 +504,6 @@ pub(super) fn start_session_worker(
         }
         let columns = u32::from(app.sessions.settings.terminal.default_columns);
         let rows = u32::from(app.sessions.settings.terminal.default_rows);
-        let password_auth = matches!(profile.auth, AuthMethod::Password);
-        let secret_to_store = (password_auth && remember_after_connect).then(|| secret.clone());
         let (worker, events) =
             SshSessionHandle::spawn(runtime, tab_id, profile.clone(), secret, columns, rows);
         let terminal = app
@@ -395,11 +516,10 @@ pub(super) fn start_session_worker(
         terminal.worker_running = true;
         terminal.connected = false;
         terminal.status = format!("Connecting to {}...", profile_endpoint(&profile));
-        app.pending_auth = None;
-        (profile, events, secret_to_store)
+        terminal.set_ssh_phase(SshConnectionPhase::Idle);
+        (profile, events, credential_to_store)
     };
 
-    set_dialog_open(&ui, Dialog::Password, false);
     refresh_workspace(&ui, &state);
     spawn_session_monitor(
         runtime,
@@ -409,7 +529,7 @@ pub(super) fn start_session_worker(
         profile,
         attempt_id,
         events,
-        secret_to_store,
+        credential_to_store,
         used_stored_credential,
     );
     Ok(())
@@ -419,44 +539,147 @@ pub(super) fn wire_authentication(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
     let ui_for_auth = ui.as_weak();
     let state_for_auth = state.clone();
     let runtime_for_auth = runtime.clone();
-    ui.on_authenticate_session(move |password, remember_password| {
-        let (pending, password_auth) = match state_for_auth.lock() {
+    ui.on_authenticate_session(move |password, vault_password, remember_password| {
+        let password = zeroize::Zeroizing::new(password.as_str().to_owned());
+        let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
+        let (target, default_storage) = match state_for_auth.lock() {
             Ok(app) => {
-                let pending = app.pending_auth;
-                let password_auth = pending
-                    .and_then(|pending| {
-                        app.sessions
-                            .sessions
-                            .iter()
-                            .find(|profile| profile.id == pending.profile_id)
-                    })
-                    .is_some_and(|profile| matches!(profile.auth, AuthMethod::Password));
-                (pending, password_auth)
+                let target = app.active_tab_id().and_then(|tab_id| {
+                    let terminal = app.terminal(tab_id)?;
+                    let (profile_id, _) = terminal.ssh_route()?;
+                    let vault_unlock_only = match terminal.ssh_phase()? {
+                        SshConnectionPhase::AwaitingAuthentication { vault_unlock_only } => {
+                            *vault_unlock_only
+                        }
+                        SshConnectionPhase::Idle
+                        | SshConnectionPhase::Probing(_)
+                        | SshConnectionPhase::AwaitingHostKey(_)
+                        | SshConnectionPhase::LoadingStoredCredential => return None,
+                    };
+                    let profile = app
+                        .sessions
+                        .sessions
+                        .iter()
+                        .find(|profile| profile.id == profile_id)
+                        .cloned()?;
+                    Some((tab_id, profile, vault_unlock_only))
+                });
+                (target, app.sessions.settings.credential_storage)
             }
             Err(_) => {
                 set_status(&ui_for_auth, "Cannot read session state");
-                return;
+                return false;
             }
         };
-        let Some(pending) = pending else {
+        let Some((tab_id, profile, vault_unlock_only)) = target else {
             set_status(&ui_for_auth, "No terminal tab is awaiting authentication");
-            return;
+            return false;
         };
+        let password_auth = matches!(profile.auth, AuthMethod::Password);
+        if vault_unlock_only {
+            if vault_password.is_empty() {
+                set_status(&ui_for_auth, "Enter the vault password to unlock the saved SSH password");
+                return false;
+            }
+            if !set_loading_stored_credential(&state_for_auth, tab_id, profile.id) {
+                set_status(&ui_for_auth, "Authentication request is no longer current");
+                return false;
+            }
+            refresh_workspace(&ui_for_auth, &state_for_auth);
+            let state = state_for_auth.clone();
+            let ui = ui_for_auth.clone();
+            let runtime = runtime_for_auth.clone();
+            runtime_for_auth.spawn(async move {
+                match load_vault_password(profile.id, vault_password).await {
+                    Ok(Some(secret)) => {
+                        if let Err(error) = start_session_worker(
+                            &runtime,
+                            state,
+                            ui.clone(),
+                            tab_id,
+                            profile.id,
+                            secret,
+                            None,
+                            true,
+                            AuthenticationStart::StoredCredential,
+                        ) {
+                            set_status(&ui, &format!("Cannot start connection: {error}"));
+                        }
+                    }
+                    Ok(None) => {
+                        match set_credential_storage_while_loading(&state, tab_id, profile.id, None) {
+                            Ok(true) => {}
+                            Ok(false) => {
+                                debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing vault credential result ignored");
+                                return;
+                            }
+                            Err(error) => {
+                                warn!(session_id = %profile.id, %error, "failed to clear missing vault credential storage reference");
+                            }
+                        }
+                        if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
+                            return;
+                        }
+                        set_tab_status(
+                            &state,
+                            &ui,
+                            tab_id,
+                            "Saved vault password was not found; enter the SSH password",
+                        );
+                        refresh_workspace(&ui, &state);
+                    }
+                    Err(error) => {
+                        if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
+                            return;
+                        }
+                        set_tab_status(
+                            &state,
+                            &ui,
+                            tab_id,
+                            &format!(
+                                "Cannot unlock saved password; enter the SSH password to continue: {error}"
+                            ),
+                        );
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+            });
+            return true;
+        }
         if password_auth && password.is_empty() {
             set_status(&ui_for_auth, "Password cannot be empty");
-            return;
+            return false;
         }
-        if let Err(error) = start_session_worker(
+        let credential_to_store = (password_auth && remember_password).then(|| PendingCredentialStore {
+            storage: default_storage,
+            previous_storage: profile.credential_storage,
+            vault_password: (default_storage == CredentialStorage::EncryptedVault)
+                .then(|| vault_password.clone()),
+            secret: password.clone(),
+        });
+        if credential_to_store.as_ref().is_some_and(|store| {
+            store.storage == CredentialStorage::EncryptedVault
+                && store.vault_password.as_deref().is_none_or(String::is_empty)
+        }) {
+            set_status(&ui_for_auth, "Enter a vault password before remembering this SSH password");
+            return false;
+        }
+        match start_session_worker(
             &runtime_for_auth,
             state_for_auth.clone(),
             ui_for_auth.clone(),
-            pending.tab_id,
-            pending.profile_id,
-            password.as_str().to_owned(),
-            password_auth && remember_password,
+            tab_id,
+            profile.id,
+            password,
+            credential_to_store,
             false,
+            AuthenticationStart::Prompt,
         ) {
-            set_status(&ui_for_auth, &format!("Cannot start connection: {error}"));
+            Ok(()) => true,
+            Err(error) => {
+                set_status(&ui_for_auth, &format!("Cannot start connection: {error}"));
+                false
+            }
         }
     });
 
@@ -464,20 +687,37 @@ pub(super) fn wire_authentication(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
     let state_for_cancel = state.clone();
     ui.on_cancel_password_dialog(move || {
         let pending = match state_for_cancel.lock() {
-            Ok(mut app) => app.pending_auth.take(),
+            Ok(mut app) => {
+                let tab_id = app.active_tab_id();
+                let pending = tab_id.and_then(|tab_id| {
+                    let terminal = app.terminal(tab_id)?;
+                    let (profile_id, _) = terminal.ssh_route()?;
+                    matches!(
+                        terminal.ssh_phase(),
+                        Some(SshConnectionPhase::AwaitingAuthentication { .. })
+                    )
+                    .then_some((tab_id, profile_id))
+                });
+                if let Some((tab_id, _)) = pending
+                    && let Some(terminal) = app.terminal_mut(tab_id)
+                {
+                    terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                }
+                pending
+            }
             Err(_) => {
                 set_status(&ui_for_cancel, "Cannot update session state");
                 return;
             }
         };
-        set_dialog_open(&ui_for_cancel, Dialog::Password, false);
-        if let Some(pending) = pending {
+        if let Some((tab_id, _)) = pending {
             set_tab_status(
                 &state_for_cancel,
                 &ui_for_cancel,
-                pending.tab_id,
+                tab_id,
                 "Authentication cancelled",
             );
+            refresh_workspace(&ui_for_cancel, &state_for_cancel);
         }
     });
 
@@ -502,4 +742,66 @@ pub(super) fn wire_authentication(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             ),
         }
     });
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum AuthenticationStart {
+    Prompt,
+    StoredCredential,
+}
+
+fn terminal_has_phase(
+    app: &AppState,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    predicate: impl FnOnce(&SshConnectionPhase) -> bool,
+) -> bool {
+    app.terminal(tab_id).is_some_and(|terminal| {
+        terminal
+            .ssh_route()
+            .is_some_and(|route| route.0 == profile_id)
+    }) && app
+        .terminal(tab_id)
+        .and_then(TerminalTabState::ssh_phase)
+        .is_some_and(predicate)
+}
+
+fn set_loading_stored_credential(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+) -> bool {
+    let Ok(mut app) = state.lock() else {
+        return false;
+    };
+    if !terminal_has_phase(&app, tab_id, profile_id, |phase| {
+        matches!(phase, SshConnectionPhase::AwaitingAuthentication { .. })
+    }) {
+        return false;
+    }
+    app.terminal_mut(tab_id)
+        .is_some_and(|terminal| terminal.set_ssh_phase(SshConnectionPhase::LoadingStoredCredential))
+}
+
+fn set_awaiting_authentication(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    vault_unlock_only: bool,
+) -> bool {
+    let Ok(mut app) = state.lock() else {
+        return false;
+    };
+    if !terminal_has_phase(&app, tab_id, profile_id, |phase| {
+        matches!(
+            phase,
+            SshConnectionPhase::AwaitingAuthentication { .. }
+                | SshConnectionPhase::LoadingStoredCredential
+        )
+    }) {
+        return false;
+    }
+    app.terminal_mut(tab_id).is_some_and(|terminal| {
+        terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication { vault_unlock_only })
+    })
 }

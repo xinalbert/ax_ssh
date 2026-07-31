@@ -1,0 +1,96 @@
+import { AuthenticationDialog, HostKeyDialog } from "security-dialogs.slint";
+import { SessionManagementDialog } from "session-management-dialog.slint";
+
+// Rust remains authoritative for the security prompt. This DTO is deliberately
+// read-only so the host cannot dismiss an SSH trust/authentication phase early.
+export struct SecurityOverlayViewState {
+    host_key_open: bool,
+    host_key_endpoint: string,
+    host_key_fingerprint: string,
+    host_key_changed: bool,
+    password_open: bool,
+    password_endpoint: string,
+    password_private_key: bool,
+    password_vault_storage: bool,
+    password_vault_unlock_only: bool,
+    password_key_path: string,
+    password_prompt_id: string,
+    default_credential_storage: string,
+}
+
+export component OverlayHost inherits Rectangle {
+    in property <SecurityOverlayViewState> security;
+    in property <string> monospace-font-family;
+
+    callback manage-session-action(string, string, string);
+    callback confirm-host-key();
+    callback reject-host-key();
+    callback authenticate-session(string, string, bool) -> bool;
+    callback cancel-password-dialog();
+
+    private property <bool> session-management-open: false;
+    private property <string> session-management-action;
+    private property <string> session-management-target;
+    private property <string> session-management-subject;
+    private property <string> session-management-value;
+    private property <string> session-management-title:
+        root.session-management-action == "new-group" ? "New group"
+        : (root.session-management-action == "rename-group" ? "Rename group"
+        : (root.session-management-action == "delete-group" ? "Delete group"
+        : "Delete server"));
+    private property <string> session-management-message:
+        root.session-management-action == "delete-group"
+            ? "Delete " + root.session-management-subject
+                + "? Servers in this group will move to Ungrouped."
+            : (root.session-management-action == "delete-session"
+                ? "Delete " + root.session-management-subject
+                    + " and its saved credential?"
+                : "");
+
+    public function show-session-management(action: string, target: string, subject: string) {
+        root.session-management-action = action;
+        root.session-management-target = target;
+        root.session-management-subject = subject;
+        root.session-management-value = action == "rename-group" ? subject : "";
+        root.session-management-open = true;
+    }
+
+    if root.session-management-open : SessionManagementDialog {
+        action: root.session-management-action;
+        title: root.session-management-title;
+        message: root.session-management-message;
+        value <=> root.session-management-value;
+        confirm(value) => {
+            root.session-management-open = false;
+            root.manage-session-action(
+                root.session-management-action,
+                root.session-management-target,
+                value,
+            );
+        }
+        cancel => { root.session-management-open = false; }
+    }
+
+    if root.security.host_key_open : HostKeyDialog {
+        endpoint: root.security.host_key_endpoint;
+        fingerprint: root.security.host_key_fingerprint;
+        changed: root.security.host_key_changed;
+        monospace-font-family: root.monospace-font-family;
+        confirm => { root.confirm-host-key(); }
+        cancel => { root.reject-host-key(); }
+    }
+
+    if root.security.password_open : AuthenticationDialog {
+        endpoint: root.security.password_endpoint;
+        private-key: root.security.password_private_key;
+        vault-storage: root.security.password_vault_storage;
+        vault-unlock-only: root.security.password_vault_unlock_only;
+        prompt-id: root.security.password_prompt_id;
+        default-credential-storage: root.security.default_credential_storage;
+        key-path: root.security.password_key_path;
+        authenticate(secret, vault-password, remember) => {
+            return root.authenticate-session(secret, vault-password, remember);
+        }
+        cancel => { root.cancel-password-dialog(); }
+    }
+}

@@ -1,5 +1,6 @@
-import { LineEdit, SpinBox } from "std-widgets.slint";
+import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 
 export component WorkspaceSettingsPage inherits SettingsPage {
@@ -52,7 +53,7 @@ export component WorkspaceSettingsPage inherits SettingsPage {
         description: "Masks usernames and the middle IPv4 octets in the session sidebar";
         show-divider: false;
         SettingsField {
-            LineEdit {
+            FlatTextInput {
                 width: Theme.settings-number-width;
                 height: Theme.settings-control-height;
                 text <=> root.draft-session-mask-character;
