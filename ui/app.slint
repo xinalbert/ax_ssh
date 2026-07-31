@@ -7,6 +7,7 @@ import { SettingsPane } from "settings.slint";
 import { SessionEditorPane } from "session-editor.slint";
 import { SessionNavigation, SessionRow } from "components/session-navigation.slint";
 import { AuthenticationDialog, HostKeyDialog } from "components/security-dialogs.slint";
+import { SessionManagementDialog } from "components/session-management-dialog.slint";
 import {
     ConnectableSessionRow,
     ConnectionPicker,
@@ -28,6 +29,16 @@ export component AppWindow inherits Window {
     in property <[ConnectableSessionRow]> connection-options;
     in property <[string]> group-options;
     in property <[string]> private-key-options;
+    in-out property <string> editor-draft-id;
+    in-out property <string> editor-profile-id;
+    in-out property <string> editor-name;
+    in-out property <string> editor-group-name;
+    in-out property <string> editor-host;
+    in-out property <string> editor-port: "22";
+    in-out property <string> editor-username;
+    in-out property <string> editor-auth-method: "Password";
+    in-out property <string> editor-private-key-path;
+    in-out property <bool> editor-credential-stored;
     in property <[string]> local-shell-options;
     in property <string> status: "";
     in property <string> active-tab-id: "";
@@ -119,8 +130,17 @@ export component AppWindow inherits Window {
     private property <bool> connection-picker-open: false;
     in-out property <string> settings-section: "General";
     private property <bool> shortcut-recording: false;
+    private property <bool> session-management-dialog-open: false;
+    private property <string> session-management-action;
+    private property <string> session-management-target;
+    private property <string> session-management-title;
+    private property <string> session-management-message;
+    private property <string> session-management-value;
 
     callback new-session();
+    callback new-session-in-group(string);
+    callback edit-session(string);
+    callback manage-session-action(string, string, string);
     callback open-local-shell();
     callback open-settings();
     callback activate-tab(string);
@@ -279,6 +299,41 @@ export component AppWindow inherits Window {
                 new-session => { root.new-session(); }
                 connect-session(id) => { root.connect-session(id); }
                 toggle-group(group-name) => { root.toggle-group(group-name); }
+                new-group => {
+                    root.session-management-action = "new-group";
+                    root.session-management-target = "";
+                    root.session-management-title = "New group";
+                    root.session-management-message = "";
+                    root.session-management-value = "";
+                    root.session-management-dialog-open = true;
+                }
+                new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                rename-group(group-name) => {
+                    root.session-management-action = "rename-group";
+                    root.session-management-target = group-name;
+                    root.session-management-title = "Rename group";
+                    root.session-management-message = "";
+                    root.session-management-value = group-name;
+                    root.session-management-dialog-open = true;
+                }
+                delete-group(group-name) => {
+                    root.session-management-action = "delete-group";
+                    root.session-management-target = group-name;
+                    root.session-management-title = "Delete group";
+                    root.session-management-message = "Delete " + group-name
+                        + "? Servers in this group will move to Ungrouped.";
+                    root.session-management-value = "";
+                    root.session-management-dialog-open = true;
+                }
+                edit-session(id) => { root.edit-session(id); }
+                delete-session(id, name) => {
+                    root.session-management-action = "delete-session";
+                    root.session-management-target = id;
+                    root.session-management-title = "Delete server";
+                    root.session-management-message = "Delete " + name + " and its saved system credential?";
+                    root.session-management-value = "";
+                    root.session-management-dialog-open = true;
+                }
             }
 
             VerticalLayout {
@@ -474,6 +529,16 @@ export component AppWindow inherits Window {
                     group-options: root.group-options;
                     private-key-options: root.private-key-options;
                     status: root.status;
+                    draft-id: root.editor-draft-id;
+                    profile-id: root.editor-profile-id;
+                    name-draft <=> root.editor-name;
+                    group-draft <=> root.editor-group-name;
+                    host-draft <=> root.editor-host;
+                    port-draft <=> root.editor-port;
+                    username-draft <=> root.editor-username;
+                    auth-method <=> root.editor-auth-method;
+                    private-key-draft <=> root.editor-private-key-path;
+                    remember-password-draft <=> root.editor-credential-stored;
                     save(name, group, host, port, username, auth, key-path, password, remember) => {
                         root.save-session(name, group, host, port, username, auth, key-path, password, remember);
                     }
@@ -526,6 +591,22 @@ export component AppWindow inherits Window {
             root.connect-session(id);
         }
         dismiss => { root.connection-picker-open = false; }
+    }
+
+    if root.session-management-dialog-open : SessionManagementDialog {
+        action: root.session-management-action;
+        title: root.session-management-title;
+        message: root.session-management-message;
+        value <=> root.session-management-value;
+        confirm(value) => {
+            root.session-management-dialog-open = false;
+            root.manage-session-action(
+                root.session-management-action,
+                root.session-management-target,
+                value,
+            );
+        }
+        cancel => { root.session-management-dialog-open = false; }
     }
 
     if root.host-key-dialog-open : HostKeyDialog {

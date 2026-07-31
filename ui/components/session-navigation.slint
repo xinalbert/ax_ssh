@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ActionMenuItem, FlatActionMenu } from "flat-action-menu.slint";
 import {
     SidebarRailItem,
     SidebarRailToggle,
@@ -14,6 +15,13 @@ export struct SessionRow {
     icon: string,
     is-group: bool,
     expanded: bool,
+}
+
+enum SessionActionMenuKind {
+    list,
+    group,
+    ungrouped,
+    server,
 }
 
 // Draw the disclosure chevron so its shape does not depend on font coverage.
@@ -32,6 +40,79 @@ component GroupDisclosureChevron inherits Path {
     stroke-line-join: round;
 }
 
+component SessionActionMenu inherits Rectangle {
+    in property <SessionActionMenuKind> kind: SessionActionMenuKind.list;
+    in property <string> target-id;
+    in property <string> group-name;
+    in property <string> name;
+
+    callback connect-session(string);
+    callback new-group();
+    callback new-session();
+    callback new-session-in-group(string);
+    callback rename-group(string);
+    callback delete-group(string);
+    callback edit-session(string);
+    callback delete-session(string, string);
+
+    function action(action-id: string, title: string) -> ActionMenuItem {
+        {
+            action-id: action-id,
+            title: title,
+            enabled: true,
+        }
+    }
+
+    private property <[ActionMenuItem]> actions:
+        root.kind == SessionActionMenuKind.list
+            ? [
+                root.action("new-group", "New Group"),
+                root.action("new-server", "New Server"),
+            ]
+            : (root.kind == SessionActionMenuKind.group
+                ? [
+                    root.action("add-server", "Add Server"),
+                    root.action("rename-group", "Rename Group"),
+                    root.action("delete-group", "Delete Group"),
+                ]
+                : (root.kind == SessionActionMenuKind.ungrouped
+                    ? [
+                        root.action("add-server", "Add Server"),
+                    ]
+                    : [
+                        root.action("connect", "Connect"),
+                        root.action("edit-server", "Edit Server"),
+                        root.action("delete-server", "Delete Server"),
+                    ]));
+
+    public function show-at(position: Point) {
+        action-menu.show-at(position);
+    }
+
+    action-menu := FlatActionMenu {
+        actions: root.actions;
+        triggered(action-id) => {
+            if action-id == "new-group" {
+                root.new-group();
+            } else if action-id == "new-server" {
+                root.new-session();
+            } else if action-id == "add-server" {
+                root.new-session-in-group(root.group-name);
+            } else if action-id == "rename-group" {
+                root.rename-group(root.group-name);
+            } else if action-id == "delete-group" {
+                root.delete-group(root.group-name);
+            } else if action-id == "connect" {
+                root.connect-session(root.target-id);
+            } else if action-id == "edit-server" {
+                root.edit-session(root.target-id);
+            } else if action-id == "delete-server" {
+                root.delete-session(root.target-id, root.name);
+            }
+        }
+    }
+}
+
 component SessionNavigationRow inherits FocusScope {
     in property <string> id;
     in property <string> group-name;
@@ -43,6 +124,11 @@ component SessionNavigationRow inherits FocusScope {
 
     callback connect-session(string);
     callback toggle-group(string);
+    callback new-session-in-group(string);
+    callback rename-group(string);
+    callback delete-group(string);
+    callback edit-session(string);
+    callback delete-session(string, string);
 
     height: root.group
         ? Theme.sidebar-group-card-height
@@ -71,10 +157,21 @@ component SessionNavigationRow inherits FocusScope {
     }
 
     Rectangle {
-        background: row-touch.has-hover || root.has-focus ? Theme.panel-alt : transparent;
+        background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
         border-width: root.has-focus ? Theme.hairline : 0px;
-        border-color: Theme.accent;
+        border-color: Theme.focus;
         border-radius: Theme.radius-small;
+
+        row-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                if root.group {
+                    root.toggle-group(root.group-name);
+                } else {
+                    root.connect-session(root.id);
+                }
+            }
+        }
 
         if root.group : HorizontalLayout {
             padding-left: Theme.sidebar-card-padding;
@@ -112,7 +209,7 @@ component SessionNavigationRow inherits FocusScope {
         if !root.group : HorizontalLayout {
             padding-left: Theme.sidebar-session-indent;
             padding-right: Theme.sidebar-card-padding;
-            spacing: Theme.space-md;
+            spacing: Theme.space-sm;
 
             Text {
                 horizontal-stretch: 1;
@@ -138,15 +235,21 @@ component SessionNavigationRow inherits FocusScope {
             }
         }
 
-        row-touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => {
-                if root.group {
-                    root.toggle-group(root.group-name);
-                } else {
-                    root.connect-session(root.id);
-                }
-            }
+        SessionActionMenu {
+            kind: root.group
+                ? (root.group-name.is-empty
+                    ? SessionActionMenuKind.ungrouped
+                    : SessionActionMenuKind.group)
+                : SessionActionMenuKind.server;
+            target-id: root.id;
+            group-name: root.group-name;
+            name: root.name;
+            connect-session(id) => { root.connect-session(id); }
+            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+            rename-group(group-name) => { root.rename-group(group-name); }
+            delete-group(group-name) => { root.delete-group(group-name); }
+            edit-session(id) => { root.edit-session(id); }
+            delete-session(id, name) => { root.delete-session(id, name); }
         }
     }
 }
@@ -158,21 +261,26 @@ export component SessionNavigation inherits Rectangle {
     in property <string> local-shell-title: "Local Shell";
     in property <string> local-shell-description: "Open a new local shell tab";
     in property <string> local-shell-accessible-name: "Open local shell";
-    in property <string> new-session-accessible-name: "New session tab";
 
     callback open-local-shell();
     callback new-session();
     callback connect-session(string);
     callback toggle-group(string);
+    callback new-group();
+    callback new-session-in-group(string);
+    callback rename-group(string);
+    callback delete-group(string);
+    callback edit-session(string);
+    callback delete-session(string, string);
 
-    private property <bool> expanded: !root.collapsed && root.sessions.length > 0;
+    private property <bool> expanded: !root.collapsed;
 
     width: root.expanded ? root.sidebar-width * 1px : Theme.activity-bar-width;
 
     if !root.expanded : Rectangle {
         background: Theme.panel-alt;
         border-width: Theme.hairline;
-        border-color: Theme.border;
+        border-color: Theme.frame-border;
 
         VerticalLayout {
             padding-top: Theme.space-xs;
@@ -183,36 +291,73 @@ export component SessionNavigation inherits Rectangle {
                 expanded: false;
                 activated => { root.collapsed = false; }
             }
-            Rectangle { height: Theme.hairline; background: Theme.border; }
+            Rectangle { height: Theme.hairline; background: Theme.divider; }
 
             SidebarRailItem {
                 local: true;
                 accessible-name: root.local-shell-accessible-name;
                 activated => { root.open-local-shell(); }
             }
-            Rectangle { height: Theme.hairline; background: Theme.border; }
-            ListView {
+            Rectangle { height: Theme.hairline; background: Theme.divider; }
+            Rectangle {
                 vertical-stretch: 1;
-                for row in root.sessions : SidebarRailItem {
-                    label: row.icon;
-                    group: row.is-group;
-                    accessible-name: row.is-group
-                        ? "Open " + row.name + " group"
-                        : "Connect to " + row.name;
-                    activated => {
-                        if row.is-group {
-                            root.toggle-group(row.group-name);
-                        } else {
-                            root.connect-session(row.id);
+                background: transparent;
+
+                SessionActionMenu {
+                    kind: SessionActionMenuKind.list;
+                    new-group => { root.new-group(); }
+                    new-session => { root.new-session(); }
+                }
+
+                if root.sessions.length > 0 : ListView {
+                    for row in root.sessions : Rectangle {
+                        width: parent.width;
+                        height: row.is-group
+                            ? Theme.sidebar-rail-group-row-height
+                            : Theme.sidebar-rail-session-row-height;
+                        background: transparent;
+
+                        SidebarRailItem {
+                            width: parent.width;
+                            label: row.icon;
+                            group: row.is-group;
+                            accessible-name: row.is-group
+                                ? "Open " + row.name + " group"
+                                : "Connect to " + row.name;
+                            activated => {
+                                if row.is-group {
+                                    root.toggle-group(row.group-name);
+                                } else {
+                                    root.connect-session(row.id);
+                                }
+                            }
+                        }
+                        SessionActionMenu {
+                            kind: row.is-group
+                                ? (row.group-name.is-empty
+                                    ? SessionActionMenuKind.ungrouped
+                                    : SessionActionMenuKind.group)
+                                : SessionActionMenuKind.server;
+                            target-id: row.id;
+                            group-name: row.group-name;
+                            name: row.name;
+                            connect-session(id) => { root.connect-session(id); }
+                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                            rename-group(group-name) => { root.rename-group(group-name); }
+                            delete-group(group-name) => { root.delete-group(group-name); }
+                            edit-session(id) => { root.edit-session(id); }
+                            delete-session(id, name) => { root.delete-session(id, name); }
                         }
                     }
                 }
-            }
-            Rectangle { height: Theme.hairline; background: Theme.border; }
-            SidebarRailItem {
-                label: "+";
-                accessible-name: root.new-session-accessible-name;
-                activated => { root.new-session(); }
+                if root.sessions.length == 0 : Text {
+                    text: "No saved servers";
+                    color: Theme.muted;
+                    font-size: Theme.font-small;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
             }
         }
     }
@@ -220,7 +365,7 @@ export component SessionNavigation inherits Rectangle {
     if root.expanded : Rectangle {
         background: Theme.panel;
         border-width: Theme.hairline;
-        border-color: Theme.border;
+        border-color: Theme.frame-border;
 
         VerticalLayout {
             padding-left: Theme.space-md;
@@ -231,7 +376,7 @@ export component SessionNavigation inherits Rectangle {
 
             Rectangle {
                 height: Theme.sidebar-local-card-height;
-                background: local-card-touch.has-hover ? Theme.panel-alt : transparent;
+                background: local-card-touch.has-hover ? Theme.hover : transparent;
                 border-radius: Theme.radius-small;
 
                 local-card-touch := TouchArea {
@@ -297,21 +442,44 @@ export component SessionNavigation inherits Rectangle {
                 }
             }
 
-            Rectangle { height: Theme.hairline; background: Theme.border; }
+            Rectangle { height: Theme.hairline; background: Theme.divider; }
 
-            ListView {
+            Rectangle {
                 vertical-stretch: 1;
-                for row in root.sessions : SessionNavigationRow {
-                    width: parent.width;
-                    id: row.id;
-                    group-name: row.group-name;
-                    name: row.name;
-                    endpoint: row.endpoint;
-                    icon: row.icon;
-                    group: row.is-group;
-                    expanded: row.expanded;
-                    connect-session(id) => { root.connect-session(id); }
-                    toggle-group(group-name) => { root.toggle-group(group-name); }
+                background: transparent;
+
+                SessionActionMenu {
+                    kind: SessionActionMenuKind.list;
+                    new-group => { root.new-group(); }
+                    new-session => { root.new-session(); }
+                }
+
+                if root.sessions.length > 0 : ListView {
+                    for row in root.sessions : SessionNavigationRow {
+                        width: parent.width;
+                        id: row.id;
+                        group-name: row.group-name;
+                        name: row.name;
+                        endpoint: row.endpoint;
+                        icon: row.icon;
+                        group: row.is-group;
+                        expanded: row.expanded;
+                        connect-session(id) => { root.connect-session(id); }
+                        toggle-group(group-name) => { root.toggle-group(group-name); }
+                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                        rename-group(group-name) => { root.rename-group(group-name); }
+                        delete-group(group-name) => { root.delete-group(group-name); }
+                        edit-session(id) => { root.edit-session(id); }
+                        delete-session(id, name) => { root.delete-session(id, name); }
+                    }
+                }
+                if root.sessions.length == 0 : Text {
+                    text: "No saved servers";
+                    color: Theme.muted;
+                    font-size: Theme.font-small;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
                 }
             }
         }

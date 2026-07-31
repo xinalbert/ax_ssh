@@ -1336,12 +1336,7 @@ impl SessionProfile {
         if self.port == 0 {
             anyhow::bail!("port must be between 1 and 65535");
         }
-        if self.group_name.chars().count() > 64 {
-            anyhow::bail!("group name cannot exceed 64 characters");
-        }
-        if self.group_name.chars().any(char::is_control) {
-            anyhow::bail!("group name cannot contain control characters");
-        }
+        validate_group_name(&self.group_name, true)?;
         if let AuthMethod::PrivateKey { path } = &self.auth {
             if path.as_os_str().is_empty() {
                 anyhow::bail!("private key path cannot be empty");
@@ -1355,12 +1350,33 @@ impl SessionProfile {
 }
 
 pub fn normalize_group_name(value: &str) -> String {
-    value.trim().to_owned()
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("Ungrouped") {
+        String::new()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn validate_group_name(value: &str, allow_empty: bool) -> Result<()> {
+    let value = normalize_group_name(value);
+    if !allow_empty && value.is_empty() {
+        anyhow::bail!("group name cannot be empty");
+    }
+    if value.chars().count() > 64 {
+        anyhow::bail!("group name cannot exceed 64 characters");
+    }
+    if value.chars().any(char::is_control) {
+        anyhow::bail!("group name cannot contain control characters");
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct SessionStore {
     pub version: u32,
+    #[serde(default)]
+    pub groups: Vec<String>,
     #[serde(default)]
     pub sessions: Vec<SessionProfile>,
     pub settings: AppSettings,
@@ -1370,6 +1386,7 @@ impl Default for SessionStore {
     fn default() -> Self {
         Self {
             version: CURRENT_SCHEMA_VERSION,
+            groups: Vec::new(),
             sessions: Vec::new(),
             settings: AppSettings::default(),
         }
@@ -1380,6 +1397,8 @@ impl Default for SessionStore {
 struct SessionStoreWire {
     #[serde(default)]
     version: u32,
+    #[serde(default)]
+    groups: Vec<String>,
     #[serde(default)]
     sessions: Vec<SessionProfile>,
     #[serde(default)]
@@ -1420,16 +1439,23 @@ impl<'de> Deserialize<'de> for SessionStore {
             );
         }
         settings.normalize_in_place();
-        Ok(Self {
+        let mut store = Self {
             version: wire.version.max(CURRENT_SCHEMA_VERSION),
+            groups: wire.groups,
             sessions: wire.sessions,
             settings,
-        })
+        };
+        store.normalize_groups();
+        Ok(store)
     }
 }
 
 impl SessionStore {
-    pub fn upsert(&mut self, profile: SessionProfile) {
+    pub fn upsert(&mut self, mut profile: SessionProfile) {
+        profile.group_name = normalize_group_name(&profile.group_name);
+        if !profile.group_name.is_empty() && !self.groups.contains(&profile.group_name) {
+            self.groups.push(profile.group_name.clone());
+        }
         if let Some(existing) = self.sessions.iter_mut().find(|item| item.id == profile.id) {
             *existing = profile;
         } else {
@@ -1441,6 +1467,72 @@ impl SessionStore {
         let before = self.sessions.len();
         self.sessions.retain(|item| item.id != id);
         before != self.sessions.len()
+    }
+
+    pub fn add_group(&mut self, name: &str) -> Result<bool> {
+        validate_group_name(name, false)?;
+        let name = normalize_group_name(name);
+        if self.groups.contains(&name) {
+            return Ok(false);
+        }
+        self.groups.push(name);
+        Ok(true)
+    }
+
+    pub fn rename_group(&mut self, old_name: &str, new_name: &str) -> Result<bool> {
+        let old_name = normalize_group_name(old_name);
+        validate_group_name(&old_name, false)?;
+        validate_group_name(new_name, false)?;
+        let new_name = normalize_group_name(new_name);
+        if old_name == new_name {
+            return Ok(false);
+        }
+        if self.groups.contains(&new_name) {
+            anyhow::bail!("group already exists");
+        }
+        let Some(group) = self.groups.iter_mut().find(|group| **group == old_name) else {
+            return Ok(false);
+        };
+        *group = new_name.clone();
+        for profile in &mut self.sessions {
+            if normalize_group_name(&profile.group_name) == old_name {
+                profile.group_name = new_name.clone();
+            }
+        }
+        Ok(true)
+    }
+
+    pub fn remove_group(&mut self, name: &str) -> bool {
+        let name = normalize_group_name(name);
+        let before = self.groups.len();
+        self.groups.retain(|group| group != &name);
+        if self.groups.len() == before {
+            return false;
+        }
+        for profile in &mut self.sessions {
+            if normalize_group_name(&profile.group_name) == name {
+                profile.group_name.clear();
+            }
+        }
+        true
+    }
+
+    fn normalize_groups(&mut self) {
+        let mut normalized = Vec::new();
+        for name in self
+            .groups
+            .iter()
+            .chain(self.sessions.iter().map(|profile| &profile.group_name))
+        {
+            let name = normalize_group_name(name);
+            if !name.is_empty() && !normalized.contains(&name) {
+                normalized.push(name);
+            }
+        }
+        self.groups = normalized;
+        for profile in &mut self.sessions {
+            profile.group_name = normalize_group_name(&profile.group_name);
+        }
     }
 }
 
@@ -1610,6 +1702,10 @@ mod tests {
         let temp = std::env::temp_dir().join(format!("ax-ssh-{}", Uuid::new_v4()));
         let store = ConfigStore::new(&temp);
         let mut data = SessionStore::default();
+        assert!(
+            data.add_group(" Empty group ")
+                .expect("group should be valid")
+        );
         let mut profile = SessionProfile::new("demo", "host.example", "alice");
         profile.group_name = "Production".into();
         profile.credential_stored = true;
@@ -1619,6 +1715,7 @@ mod tests {
             ..profile.clone()
         });
         assert_eq!(data.sessions.len(), 1);
+        assert_eq!(data.groups, ["Empty group", "Production"]);
         store.save(&data).expect("save should succeed");
         assert_eq!(store.load().expect("load should succeed"), data);
         data.sessions[0].name = "saved-again".into();
@@ -1637,6 +1734,7 @@ mod tests {
         let store: SessionStore =
             serde_json::from_str(&json).expect("legacy profile should deserialize");
         assert_eq!(store.sessions[0].group_name, "");
+        assert!(store.groups.is_empty());
         assert!(!store.sessions[0].credential_stored);
         assert_eq!(store.settings, AppSettings::default());
     }
@@ -1819,6 +1917,7 @@ mod tests {
         ));
         let store = SessionStore {
             version: CURRENT_SCHEMA_VERSION,
+            groups: Vec::new(),
             sessions: Vec::new(),
             settings,
         };
@@ -2171,9 +2270,57 @@ mod tests {
     #[test]
     fn group_names_are_trimmed_and_bounded() {
         assert_eq!(normalize_group_name("  Production  "), "Production");
+        assert_eq!(normalize_group_name(" ungrouped "), "");
         let mut profile = SessionProfile::new("demo", "host.example", "alice");
         profile.group_name = "x".repeat(65);
         assert!(profile.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_profile_groups_are_promoted_to_persistent_groups() {
+        let id = Uuid::new_v4();
+        let json = format!(
+            r#"{{"version":9,"sessions":[{{"id":"{id}","name":"legacy","group_name":" Production ","host":"host.example","port":22,"username":"alice","auth":"Password"}}]}}"#
+        );
+
+        let store: SessionStore =
+            serde_json::from_str(&json).expect("legacy profile should deserialize");
+
+        assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(store.groups, ["Production"]);
+        assert_eq!(store.sessions[0].group_name, "Production");
+    }
+
+    #[test]
+    fn group_operations_preserve_profiles_without_implicit_deletion() {
+        let mut store = SessionStore::default();
+        assert!(
+            store
+                .add_group("Production")
+                .expect("group should be added")
+        );
+        assert!(!store.add_group(" Production ").expect("duplicate is valid"));
+        let mut profile = SessionProfile::new("demo", "host.example", "alice");
+        profile.group_name = "Production".into();
+        store.upsert(profile.clone());
+
+        assert!(
+            store
+                .rename_group("Production", "Critical")
+                .expect("group should be renamed")
+        );
+        assert_eq!(store.groups, ["Critical"]);
+        assert_eq!(store.sessions[0].group_name, "Critical");
+        assert!(store.remove_group("Critical"));
+        assert!(store.groups.is_empty());
+        assert_eq!(
+            store.sessions,
+            [SessionProfile {
+                group_name: String::new(),
+                ..profile
+            }]
+        );
+        assert!(store.add_group("Ungrouped").is_err());
     }
 
     #[test]

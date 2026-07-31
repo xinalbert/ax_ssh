@@ -29,9 +29,15 @@ pub(super) struct AppState {
 impl AppState {
     pub(super) fn new(config: ConfigStore, sessions: SessionStore) -> Self {
         let expanded_groups = sessions
-            .sessions
+            .groups
             .iter()
-            .map(|profile| normalize_group_name(&profile.group_name))
+            .cloned()
+            .chain(
+                sessions
+                    .sessions
+                    .iter()
+                    .map(|profile| normalize_group_name(&profile.group_name)),
+            )
             .collect();
         Self {
             config,
@@ -56,7 +62,63 @@ impl AppState {
     }
 
     pub(super) fn open_session_editor_tab(&mut self) -> Uuid {
-        self.open_singleton_tab(WorkspaceTabKind::SessionEditor, "New session")
+        self.open_session_editor(SessionEditorState::default())
+    }
+
+    pub(super) fn open_session_editor_for_group(&mut self, group_name: &str) -> Uuid {
+        self.open_session_editor(SessionEditorState {
+            draft_id: Uuid::new_v4(),
+            group_name: normalize_group_name(group_name),
+            profile_id: None,
+        })
+    }
+
+    pub(super) fn open_session_editor_for_profile(&mut self, profile_id: Uuid) -> bool {
+        if !self
+            .sessions
+            .sessions
+            .iter()
+            .any(|profile| profile.id == profile_id)
+        {
+            return false;
+        }
+        self.open_session_editor(SessionEditorState {
+            draft_id: Uuid::new_v4(),
+            profile_id: Some(profile_id),
+            group_name: String::new(),
+        });
+        true
+    }
+
+    fn open_session_editor(&mut self, editor: SessionEditorState) -> Uuid {
+        let title = editor
+            .profile_id
+            .and_then(|profile_id| {
+                self.sessions
+                    .sessions
+                    .iter()
+                    .find(|profile| profile.id == profile_id)
+                    .map(|profile| format!("Edit {}", profile.name))
+            })
+            .unwrap_or_else(|| "New session".to_owned());
+        if let Some(tab) = self
+            .tabs
+            .iter_mut()
+            .find(|tab| matches!(tab.kind, WorkspaceTabKind::SessionEditor(_)))
+        {
+            tab.title = title;
+            tab.kind = WorkspaceTabKind::SessionEditor(editor);
+            self.active_tab_id = Some(tab.id);
+            return tab.id;
+        }
+        let id = Uuid::new_v4();
+        self.tabs.push(WorkspaceTab {
+            id,
+            title,
+            kind: WorkspaceTabKind::SessionEditor(editor),
+        });
+        self.active_tab_id = Some(id);
+        id
     }
 
     fn open_singleton_tab(&mut self, kind: WorkspaceTabKind, title: &str) -> Uuid {
@@ -153,7 +215,7 @@ impl AppState {
         let mut tab = self.tabs.remove(index);
         let worker = match &mut tab.kind {
             WorkspaceTabKind::Terminal(terminal) => terminal.worker.take(),
-            WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor => None,
+            WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
         };
         let pending_probe = self
             .pending_probe
@@ -205,7 +267,7 @@ impl AppState {
             .iter_mut()
             .filter_map(|tab| match &mut tab.kind {
                 WorkspaceTabKind::Terminal(terminal) => terminal.worker.take(),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor => None,
+                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
             })
             .collect();
         (workers, self.pending_probe.take())
@@ -239,6 +301,7 @@ impl AppState {
                 kind: "terminal",
                 title: tab.title.clone(),
                 status: terminal.status.clone(),
+                editor: None,
                 terminal: Some(terminal.terminal.snapshot()),
                 connected: terminal.connected,
                 worker_running: terminal.worker_running,
@@ -249,17 +312,30 @@ impl AppState {
                 title: tab.title.clone(),
                 ..ActiveTabSnapshot::default()
             },
-            WorkspaceTabKind::SessionEditor => ActiveTabSnapshot {
-                id: Some(tab.id),
-                kind: "session-editor",
-                title: tab.title.clone(),
-                ..ActiveTabSnapshot::default()
-            },
+            WorkspaceTabKind::SessionEditor(editor) => {
+                let editor = editor.snapshot(&self.sessions);
+                ActiveTabSnapshot {
+                    id: Some(tab.id),
+                    kind: "session-editor",
+                    title: tab.title.clone(),
+                    editor: Some(editor),
+                    ..ActiveTabSnapshot::default()
+                }
+            }
         }
     }
 
     pub(super) fn active_tab_id(&self) -> Option<Uuid> {
         self.active_tab_id
+    }
+
+    pub(super) fn active_editor_profile_id(&self) -> Option<Option<Uuid>> {
+        let active_id = self.active_tab_id?;
+        let tab = self.tabs.iter().find(|tab| tab.id == active_id)?;
+        let WorkspaceTabKind::SessionEditor(editor) = &tab.kind else {
+            return None;
+        };
+        Some(editor.profile_id)
     }
 
     pub(super) fn active_terminal(&self) -> Option<&TerminalTabState> {
@@ -286,7 +362,7 @@ impl AppState {
             }
             match &tab.kind {
                 WorkspaceTabKind::Terminal(terminal) => Some(terminal),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor => None,
+                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
             }
         })
     }
@@ -298,7 +374,7 @@ impl AppState {
             }
             match &mut tab.kind {
                 WorkspaceTabKind::Terminal(terminal) => Some(terminal),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor => None,
+                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
             }
         })
     }
@@ -316,14 +392,14 @@ impl AppState {
 enum WorkspaceTabKind {
     Terminal(TerminalTabState),
     Settings,
-    SessionEditor,
+    SessionEditor(SessionEditorState),
 }
 
 impl WorkspaceTabKind {
     fn same_page(&self, other: &Self) -> bool {
         matches!(
             (self, other),
-            (Self::Settings, Self::Settings) | (Self::SessionEditor, Self::SessionEditor)
+            (Self::Settings, Self::Settings) | (Self::SessionEditor(_), Self::SessionEditor(_))
         )
     }
 
@@ -331,7 +407,58 @@ impl WorkspaceTabKind {
         match self {
             Self::Terminal(_) => "terminal",
             Self::Settings => "settings",
-            Self::SessionEditor => "session-editor",
+            Self::SessionEditor(_) => "session-editor",
+        }
+    }
+}
+
+struct SessionEditorState {
+    draft_id: Uuid,
+    profile_id: Option<Uuid>,
+    group_name: String,
+}
+
+impl Default for SessionEditorState {
+    fn default() -> Self {
+        Self {
+            draft_id: Uuid::new_v4(),
+            profile_id: None,
+            group_name: String::new(),
+        }
+    }
+}
+
+impl SessionEditorState {
+    fn snapshot(&self, sessions: &SessionStore) -> SessionEditorSnapshot {
+        let Some(profile) = self.profile_id.and_then(|profile_id| {
+            sessions
+                .sessions
+                .iter()
+                .find(|profile| profile.id == profile_id)
+        }) else {
+            return SessionEditorSnapshot {
+                draft_id: self.draft_id,
+                group_name: self.group_name.clone(),
+                ..SessionEditorSnapshot::default()
+            };
+        };
+        let (auth_method, private_key_path) = match &profile.auth {
+            ax_ssh::config::AuthMethod::Password => ("Password", String::new()),
+            ax_ssh::config::AuthMethod::PrivateKey { path } => {
+                ("Private key", path.to_string_lossy().into_owned())
+            }
+        };
+        SessionEditorSnapshot {
+            draft_id: self.draft_id,
+            profile_id: Some(profile.id),
+            name: profile.name.clone(),
+            group_name: profile.group_name.clone(),
+            host: profile.host.clone(),
+            port: profile.port.to_string(),
+            username: profile.username.clone(),
+            auth_method,
+            private_key_path,
+            credential_stored: profile.credential_stored,
         }
     }
 }
@@ -435,6 +562,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) kind: &'static str,
     pub(super) title: String,
     pub(super) status: String,
+    pub(super) editor: Option<SessionEditorSnapshot>,
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
@@ -447,9 +575,40 @@ impl Default for ActiveTabSnapshot {
             kind: "empty",
             title: "Workspace".to_owned(),
             status: String::new(),
+            editor: None,
             terminal: None,
             connected: false,
             worker_running: false,
+        }
+    }
+}
+
+pub(super) struct SessionEditorSnapshot {
+    pub(super) draft_id: Uuid,
+    pub(super) profile_id: Option<Uuid>,
+    pub(super) name: String,
+    pub(super) group_name: String,
+    pub(super) host: String,
+    pub(super) port: String,
+    pub(super) username: String,
+    pub(super) auth_method: &'static str,
+    pub(super) private_key_path: String,
+    pub(super) credential_stored: bool,
+}
+
+impl Default for SessionEditorSnapshot {
+    fn default() -> Self {
+        Self {
+            draft_id: Uuid::nil(),
+            profile_id: None,
+            name: String::new(),
+            group_name: String::new(),
+            host: String::new(),
+            port: "22".to_owned(),
+            username: String::new(),
+            auth_method: "Password",
+            private_key_path: String::new(),
+            credential_stored: false,
         }
     }
 }

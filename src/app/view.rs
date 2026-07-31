@@ -14,19 +14,19 @@ pub(super) fn session_rows(
         } else {
             group_name.clone()
         };
-        let profiles = group.profiles;
+        let profile_count = group.profiles.len();
         let expanded = expanded_groups.contains(&group_name);
         rows.push(SessionRow {
             id: "".into(),
             group_name: group_name.clone().into(),
             name: display_name.clone().into(),
-            endpoint: profiles.len().to_string().into(),
+            endpoint: profile_count.to_string().into(),
             icon: compact_label(&display_name, "Un").into(),
             is_group: true,
             expanded,
         });
         if expanded {
-            rows.extend(profiles.into_iter().map(|profile| {
+            rows.extend(group.profiles.into_iter().map(|profile| {
                 SessionRow {
                     id: profile.id.to_string().into(),
                     group_name: group_name.clone().into(),
@@ -80,18 +80,19 @@ pub(super) fn shell_option_rows(settings: &AppSettings) -> Vec<SharedString> {
 }
 
 pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    let (rows, groups, options) = match state.lock() {
-        Ok(app) => (
-            session_rows(&app.sessions, &app.expanded_groups),
-            group_option_rows(&app.sessions),
-            connection_option_rows(&app.sessions),
-        ),
-        Err(_) => {
-            set_status(ui, "State lock poisoned");
-            return;
-        }
-    };
+    let state = Arc::clone(state);
     dispatch_ui(ui, move |ui| {
+        let (rows, groups, options) = match state.lock() {
+            Ok(app) => (
+                session_rows(&app.sessions, &app.expanded_groups),
+                group_option_rows(&app.sessions),
+                connection_option_rows(&app.sessions),
+            ),
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
         ui.set_sessions(ModelRc::new(VecModel::from(rows)));
         ui.set_group_options(ModelRc::new(VecModel::from(groups)));
         ui.set_connection_options(ModelRc::new(VecModel::from(options)));
@@ -173,6 +174,27 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     ui.set_active_tab_kind(snapshot.kind.into());
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());
+    if let Some(editor) = snapshot.editor {
+        let draft_id = editor.draft_id.to_string();
+        if ui.get_editor_draft_id().as_str() != draft_id {
+            ui.set_editor_draft_id(draft_id.into());
+            ui.set_editor_profile_id(
+                editor
+                    .profile_id
+                    .map(|profile_id| profile_id.to_string())
+                    .unwrap_or_default()
+                    .into(),
+            );
+            ui.set_editor_name(editor.name.into());
+            ui.set_editor_group_name(editor.group_name.into());
+            ui.set_editor_host(editor.host.into());
+            ui.set_editor_port(editor.port.into());
+            ui.set_editor_username(editor.username.into());
+            ui.set_editor_auth_method(editor.auth_method.into());
+            ui.set_editor_private_key_path(editor.private_key_path.into());
+            ui.set_editor_credential_stored(editor.credential_stored);
+        }
+    }
     let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
     let rendered = render_terminal(
         terminal,
@@ -572,6 +594,21 @@ mod tests {
         assert_eq!(rows[3].name.as_str(), "Ungrouped");
         assert_eq!(rows[3].icon.as_str(), "Un");
         assert_eq!(rows[3].endpoint.as_str(), "1");
+    }
+
+    #[test]
+    fn empty_persistent_groups_remain_visible() {
+        let sessions = SessionStore {
+            groups: vec!["Empty".into()],
+            ..SessionStore::default()
+        };
+
+        let rows = session_rows(&sessions, &BTreeSet::from(["Empty".into()]));
+
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].is_group);
+        assert_eq!(rows[0].name.as_str(), "Empty");
+        assert_eq!(rows[0].endpoint.as_str(), "0");
     }
 
     #[test]

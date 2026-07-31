@@ -11,7 +11,14 @@ pub(super) struct SessionGroup<'a> {
 }
 
 pub(super) fn session_groups(sessions: &SessionStore) -> Vec<SessionGroup<'_>> {
-    let mut groups: Vec<SessionGroup<'_>> = Vec::new();
+    let mut groups = sessions
+        .groups
+        .iter()
+        .map(|name| SessionGroup {
+            name: normalize_group_name(name),
+            profiles: Vec::new(),
+        })
+        .collect::<Vec<_>>();
     for profile in &sessions.sessions {
         let group_name = normalize_group_name(&profile.group_name);
         if let Some(group) = groups.iter_mut().find(|group| group.name == group_name) {
@@ -29,6 +36,12 @@ pub(super) fn session_groups(sessions: &SessionStore) -> Vec<SessionGroup<'_>> {
 pub(super) fn group_options(sessions: &SessionStore) -> Vec<String> {
     let mut seen = BTreeSet::new();
     let mut options = vec!["Ungrouped".to_owned()];
+    for group_name in &sessions.groups {
+        let group_name = normalize_group_name(group_name);
+        if !group_name.is_empty() && seen.insert(group_name.clone()) {
+            options.push(group_name);
+        }
+    }
     for profile in &sessions.sessions {
         let group_name = normalize_group_name(&profile.group_name);
         if !group_name.is_empty() && seen.insert(group_name.clone()) {
@@ -99,13 +112,14 @@ mod tests {
         let mut production_again = SessionProfile::new("prod-2", "prod-2.example", "carol");
         production_again.group_name = "Production".into();
         let sessions = SessionStore {
+            groups: vec!["Empty".into(), "Production".into()],
             sessions: vec![production, staging, production_again],
             ..SessionStore::default()
         };
 
         assert_eq!(
             group_options(&sessions),
-            ["Ungrouped", "Production", "Staging"]
+            ["Ungrouped", "Empty", "Production", "Staging"]
         );
     }
 

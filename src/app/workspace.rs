@@ -31,6 +31,38 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
         refresh_workspace(&ui_for_new, &state_for_new);
     });
 
+    let ui_for_new_in_group = ui.as_weak();
+    let state_for_new_in_group = state.clone();
+    ui.on_new_session_in_group(move |group_name| {
+        match state_for_new_in_group.lock() {
+            Ok(mut app) => {
+                app.open_session_editor_for_group(group_name.as_str());
+            }
+            Err(_) => {
+                set_status(&ui_for_new_in_group, "Cannot update workspace tabs");
+                return;
+            }
+        }
+        refresh_workspace(&ui_for_new_in_group, &state_for_new_in_group);
+    });
+
+    let ui_for_edit = ui.as_weak();
+    let state_for_edit = state.clone();
+    ui.on_edit_session(move |id| {
+        let id = match parse_uuid(id.as_str(), "session", &ui_for_edit) {
+            Some(id) => id,
+            None => return,
+        };
+        let opened = state_for_edit
+            .lock()
+            .is_ok_and(|mut app| app.open_session_editor_for_profile(id));
+        if !opened {
+            set_status(&ui_for_edit, "Session not found");
+            return;
+        }
+        refresh_workspace(&ui_for_edit, &state_for_edit);
+    });
+
     let ui_for_local = ui.as_weak();
     let state_for_local = state.clone();
     let runtime_for_local = runtime.clone();
@@ -168,51 +200,70 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     return;
                 }
             };
-            let private_key = auth_method.as_str() == "Private key";
-            if !private_key && remember_password && password.is_empty() {
-                set_status(
-                    &ui_for_save,
-                    "Enter a password before enabling password storage",
-                );
-                return;
-            }
-
-            let mut profile = SessionProfile::new(name.as_str(), host.as_str(), username.as_str());
-            profile = SessionProfile {
-                group_name: normalize_group_name(group_name.as_str()),
-                port: parsed_port,
-                auth: if private_key {
-                    AuthMethod::PrivateKey {
-                        path: PathBuf::from(private_key_path.trim()),
+            let (editor_tab_id, existing_profile) = match state_for_save.lock() {
+                Ok(app) => {
+                    let Some(profile_id) = app.active_editor_profile_id() else {
+                        set_status(&ui_for_save, "Session editor is not active");
+                        return;
+                    };
+                    let existing_profile = profile_id.and_then(|profile_id| {
+                        app.sessions
+                            .sessions
+                            .iter()
+                            .find(|profile| profile.id == profile_id)
+                            .cloned()
+                    });
+                    if profile_id.is_some() && existing_profile.is_none() {
+                        set_status(&ui_for_save, "Session not found");
+                        return;
                     }
-                } else {
-                    AuthMethod::Password
-                },
-                credential_stored: !private_key && remember_password,
-                ..profile
+                    (app.active_tab_id(), existing_profile)
+                }
+                Err(_) => {
+                    set_status(&ui_for_save, "Cannot read session state");
+                    return;
+                }
+            };
+            let (profile, credential_change) = match profile_from_editor(
+                existing_profile.as_ref(),
+                name.as_str(),
+                group_name.as_str(),
+                host.as_str(),
+                parsed_port,
+                username.as_str(),
+                auth_method.as_str(),
+                private_key_path.as_str(),
+                password.as_str(),
+                remember_password,
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    set_status(&ui_for_save, &format!("Cannot save session: {error}"));
+                    return;
+                }
             };
             let profile_id = profile.id;
             if let Err(error) = profile.validate() {
                 set_status(&ui_for_save, &format!("Cannot save session: {error}"));
                 return;
             }
-            let editor_tab_id = state_for_save
-                .lock()
-                .ok()
-                .and_then(|app| app.active_tab_id());
-            let secret = password.as_str().to_owned();
             let state = state_for_save.clone();
             let ui = ui_for_save.clone();
             set_status(&ui_for_save, "Saving session...");
             runtime.spawn(async move {
-                if !private_key
-                    && remember_password
-                    && let Err(error) = save_stored_password(profile_id, secret).await
+                let credential_rollback = match apply_credential_change(
+                    profile_id,
+                    credential_change,
+                )
+                .await
                 {
-                    warn!(session_id = %profile_id, %error, "failed to save session credential");
-                    set_status(&ui, &format!("Cannot save password: {error}"));
-                    return;
-                }
+                    Ok(rollback) => rollback,
+                    Err(error) => {
+                        warn!(session_id = %profile_id, %error, "failed to update session credential");
+                        set_status(&ui, &format!("Cannot update password: {error}"));
+                        return;
+                    }
+                };
 
                 let save_result = (|| -> Result<()> {
                     let mut app = state
@@ -227,15 +278,10 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 })();
 
                 if let Err(error) = save_result {
-                    if !private_key
-                        && remember_password
-                        && let Err(cleanup_error) = delete_stored_password(profile_id).await
+                    if let Some(rollback) = credential_rollback
+                        && let Err(rollback_error) = rollback.restore().await
                     {
-                        warn!(
-                            session_id = %profile_id,
-                            %cleanup_error,
-                            "failed to roll back credential after profile save failure"
-                        );
+                        warn!(session_id = %profile_id, %rollback_error, "failed to restore credential after profile save failure");
                     }
                     set_status(&ui, &format!("Cannot save session: {error}"));
                     return;
@@ -243,8 +289,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
 
                 info!(
                     session_id = %profile_id,
-                    credential_stored = !private_key && remember_password,
-                    private_key,
+                    credential_stored = profile.credential_stored,
+                    private_key = matches!(profile.auth, AuthMethod::PrivateKey { .. }),
                     "session profile saved"
                 );
                 refresh_session_models(&ui, &state);
@@ -273,4 +319,347 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
         }
         refresh_session_models(&ui_for_group, &state);
     });
+}
+
+pub(super) fn wire_session_management(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+) {
+    let ui_for_action = ui.as_weak();
+    ui.on_manage_session_action(move |action, target, value| {
+        let action = action.as_str().to_owned();
+        let target = target.as_str().to_owned();
+        let value = value.as_str().to_owned();
+        let ui = ui_for_action.clone();
+        let state = state.clone();
+        runtime.spawn(async move {
+            let result = if action == "delete-session" {
+                delete_session_profile(&state, &target).await
+            } else {
+                update_session_group(&state, &action, &target, &value)
+            };
+            match result {
+                Ok(message) => {
+                    refresh_session_models(&ui, &state);
+                    refresh_workspace(&ui, &state);
+                    set_status(&ui, &message);
+                }
+                Err(error) => {
+                    set_status(&ui, &format!("Cannot update sessions: {error}"));
+                }
+            }
+        });
+    });
+}
+
+fn update_session_group(
+    state: &Arc<Mutex<AppState>>,
+    action: &str,
+    target: &str,
+    value: &str,
+) -> Result<String> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let mut candidate = app.sessions.clone();
+    let (changed, message) = match action {
+        "new-group" => {
+            let group_name = normalize_group_name(value);
+            let changed = candidate.add_group(&group_name)?;
+            (changed, format!("Group {group_name} created"))
+        }
+        "rename-group" => {
+            let old_name = normalize_group_name(target);
+            let new_name = normalize_group_name(value);
+            let changed = candidate.rename_group(&old_name, &new_name)?;
+            (changed, format!("Group renamed to {new_name}"))
+        }
+        "delete-group" => {
+            let group_name = normalize_group_name(target);
+            let changed = candidate.remove_group(&group_name);
+            (changed, format!("Group {group_name} removed"))
+        }
+        _ => anyhow::bail!("unknown session action"),
+    };
+    if !changed {
+        anyhow::bail!("group was not changed");
+    }
+    app.config.save(&candidate)?;
+    app.sessions = candidate;
+    match action {
+        "new-group" => {
+            app.expanded_groups.insert(normalize_group_name(value));
+        }
+        "rename-group" => {
+            let was_expanded = app.expanded_groups.remove(&normalize_group_name(target));
+            if was_expanded {
+                app.expanded_groups.insert(normalize_group_name(value));
+            }
+        }
+        "delete-group" => {
+            app.expanded_groups.remove(&normalize_group_name(target));
+            app.expanded_groups.insert(String::new());
+        }
+        _ => {}
+    }
+    Ok(message)
+}
+
+async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) -> Result<String> {
+    let session_id = Uuid::parse_str(session_id).context("invalid session id")?;
+    let profile = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?
+        .sessions
+        .sessions
+        .iter()
+        .find(|profile| profile.id == session_id)
+        .cloned()
+        .context("session not found")?;
+    let credential_rollback = apply_credential_change(
+        session_id,
+        if profile.credential_stored {
+            CredentialChange::Delete
+        } else {
+            CredentialChange::None
+        },
+    )
+    .await?;
+    let save_result = (|| -> Result<()> {
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        let mut candidate = app.sessions.clone();
+        if !candidate.remove(session_id) {
+            anyhow::bail!("session not found");
+        }
+        app.config.save(&candidate)?;
+        app.sessions = candidate;
+        if app.active_editor_profile_id() == Some(Some(session_id))
+            && let Some(tab_id) = app.active_tab_id()
+        {
+            let _ = app.close_tab(tab_id);
+        }
+        Ok(())
+    })();
+    if let Err(error) = save_result {
+        if let Some(rollback) = credential_rollback
+            && let Err(rollback_error) = rollback.restore().await
+        {
+            warn!(session_id = %session_id, %rollback_error, "failed to restore credential after session delete failure");
+        }
+        return Err(error);
+    }
+    info!(session_id = %session_id, "session profile deleted");
+    Ok(format!("Session {} deleted", profile.name))
+}
+
+enum CredentialChange {
+    None,
+    Store(String),
+    Delete,
+}
+
+struct CredentialRollback {
+    session_id: Uuid,
+    previous_password: Option<String>,
+}
+
+impl CredentialRollback {
+    async fn restore(self) -> Result<()> {
+        if let Some(password) = self.previous_password {
+            save_stored_password(self.session_id, password).await
+        } else {
+            delete_stored_password(self.session_id).await
+        }
+    }
+}
+
+async fn apply_credential_change(
+    session_id: Uuid,
+    change: CredentialChange,
+) -> Result<Option<CredentialRollback>> {
+    match change {
+        CredentialChange::None => Ok(None),
+        CredentialChange::Store(password) => {
+            let previous_password = load_stored_password(session_id).await?;
+            save_stored_password(session_id, password).await?;
+            Ok(Some(CredentialRollback {
+                session_id,
+                previous_password,
+            }))
+        }
+        CredentialChange::Delete => {
+            let previous_password = load_stored_password(session_id).await?;
+            delete_stored_password(session_id).await?;
+            Ok(Some(CredentialRollback {
+                session_id,
+                previous_password,
+            }))
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn profile_from_editor(
+    existing: Option<&SessionProfile>,
+    name: &str,
+    group_name: &str,
+    host: &str,
+    port: u16,
+    username: &str,
+    auth_method: &str,
+    private_key_path: &str,
+    password: &str,
+    remember_password: bool,
+) -> Result<(SessionProfile, CredentialChange)> {
+    let private_key = auth_method == "Private key";
+    let previous_credential_stored = existing.is_some_and(|profile| profile.credential_stored);
+    let credential_stored = if private_key {
+        false
+    } else if remember_password {
+        if password.is_empty() && !previous_credential_stored {
+            anyhow::bail!("enter a password before enabling password storage");
+        }
+        true
+    } else {
+        false
+    };
+    let credential_change = if private_key || !remember_password {
+        if previous_credential_stored {
+            CredentialChange::Delete
+        } else {
+            CredentialChange::None
+        }
+    } else if password.is_empty() {
+        CredentialChange::None
+    } else {
+        CredentialChange::Store(password.to_owned())
+    };
+
+    let normalized_host = host.trim();
+    let mut profile = SessionProfile::new(name.trim(), normalized_host, username.trim());
+    if let Some(existing) = existing {
+        profile.id = existing.id;
+        profile.host_key_fingerprint = (existing.host.trim() == normalized_host
+            && existing.port == port)
+            .then(|| existing.host_key_fingerprint.clone())
+            .flatten();
+    }
+    profile.group_name = normalize_group_name(group_name);
+    profile.port = port;
+    profile.auth = if private_key {
+        AuthMethod::PrivateKey {
+            path: PathBuf::from(private_key_path.trim()),
+        }
+    } else {
+        AuthMethod::Password
+    };
+    profile.credential_stored = credential_stored;
+    Ok((profile, credential_change))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editing_without_a_password_preserves_an_existing_credential() {
+        let mut existing = SessionProfile::new("old", "old.example", "alice");
+        existing.credential_stored = true;
+        existing.host_key_fingerprint = Some("SHA256:trusted".into());
+
+        let (profile, change) = profile_from_editor(
+            Some(&existing),
+            "new",
+            "Production",
+            "old.example",
+            22,
+            "alice",
+            "Password",
+            "",
+            "",
+            true,
+        )
+        .expect("profile should update");
+
+        assert_eq!(profile.id, existing.id);
+        assert!(profile.credential_stored);
+        assert_eq!(profile.host_key_fingerprint, existing.host_key_fingerprint);
+        assert!(matches!(change, CredentialChange::None));
+    }
+
+    #[test]
+    fn endpoint_changes_clear_trust_and_disabling_storage_deletes_the_credential() {
+        let mut existing = SessionProfile::new("old", "old.example", "alice");
+        existing.credential_stored = true;
+        existing.host_key_fingerprint = Some("SHA256:trusted".into());
+
+        let (profile, change) = profile_from_editor(
+            Some(&existing),
+            "new",
+            "",
+            "new.example",
+            2222,
+            "alice",
+            "Password",
+            "",
+            "",
+            false,
+        )
+        .expect("profile should update");
+
+        assert_eq!(profile.id, existing.id);
+        assert!(!profile.credential_stored);
+        assert_eq!(profile.host_key_fingerprint, None);
+        assert!(matches!(change, CredentialChange::Delete));
+    }
+
+    #[test]
+    fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-groups-{}.json", Uuid::new_v4()));
+        let mut sessions = SessionStore::default();
+        let mut profile = SessionProfile::new("server", "server.example", "alice");
+        profile.group_name = "Production".into();
+        sessions.upsert(profile.clone());
+        let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
+
+        update_session_group(&state, "new-group", "", "Staging").expect("group should be added");
+        update_session_group(&state, "rename-group", "Staging", "QA")
+            .expect("group should be renamed");
+        update_session_group(&state, "delete-group", "Production", "")
+            .expect("group should be removed");
+
+        let app = state.lock().expect("state should remain readable");
+        assert_eq!(app.sessions.groups, ["QA"]);
+        assert_eq!(app.sessions.sessions[0].group_name, "");
+        assert_eq!(
+            app.config.load().expect("saved state should load"),
+            app.sessions
+        );
+        drop(app);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn deleting_a_profile_keeps_open_terminal_tabs() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-delete-{}.json", Uuid::new_v4()));
+        let mut sessions = SessionStore::default();
+        let profile = SessionProfile::new("server", "server.example", "alice");
+        sessions.upsert(profile.clone());
+        let mut app = AppState::new(ConfigStore::new(&path), sessions);
+        let terminal_id = app.open_terminal_tab(&profile);
+        let state = Arc::new(Mutex::new(app));
+
+        delete_session_profile(&state, &profile.id.to_string())
+            .await
+            .expect("profile should be deleted");
+
+        let app = state.lock().expect("state should remain readable");
+        assert!(app.sessions.sessions.is_empty());
+        assert!(app.terminal(terminal_id).is_some());
+        drop(app);
+        let _ = std::fs::remove_file(path);
+    }
 }

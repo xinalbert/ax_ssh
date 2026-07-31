@@ -35,6 +35,30 @@ fn settings_and_session_editor_tabs_are_singletons() {
 }
 
 #[test]
+fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
+    let mut state = test_state();
+    let mut profile = SessionProfile::new("Production", "prod.example", "alice");
+    profile.group_name = "Critical".into();
+    profile.credential_stored = true;
+    state.sessions.upsert(profile.clone());
+
+    let editor_id = state.open_session_editor_for_group(" Staging ");
+    let group_editor = state.active_snapshot().editor.expect("editor should exist");
+    assert_eq!(group_editor.profile_id, None);
+    assert_eq!(group_editor.group_name, "Staging");
+    let group_draft_id = group_editor.draft_id;
+
+    assert!(state.open_session_editor_for_profile(profile.id));
+    assert_eq!(state.active_tab_id(), Some(editor_id));
+    let profile_editor = state.active_snapshot().editor.expect("editor should exist");
+    assert_eq!(profile_editor.profile_id, Some(profile.id));
+    assert_ne!(profile_editor.draft_id, group_draft_id);
+    assert_eq!(profile_editor.name, "Production");
+    assert_eq!(profile_editor.group_name, "Critical");
+    assert!(profile_editor.credential_stored);
+}
+
+#[test]
 fn closing_active_tab_selects_a_neighbor() {
     let mut state = test_state();
     let profile = SessionProfile::new("Local", "localhost", "alice");

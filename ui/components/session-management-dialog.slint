@@ -1,0 +1,70 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component SessionManagementDialog inherits Rectangle {
+    in property <string> action;
+    in property <string> title;
+    in property <string> message;
+    in-out property <string> value;
+
+    callback confirm(string);
+    callback cancel();
+
+    private property <bool> accepts-name: root.action == "new-group"
+        || root.action == "rename-group";
+
+    background: Theme.overlay;
+    TouchArea { }
+
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: min(Theme.session-management-dialog-width, root.width - 2 * Theme.space-xxl);
+        height: Theme.session-management-dialog-height;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: root.action == "delete-group" || root.action == "delete-session"
+            ? Theme.danger : Theme.frame-border;
+        border-radius: Theme.radius;
+
+        VerticalLayout {
+            padding: Theme.dialog-padding;
+            spacing: Theme.space-xl;
+            Text {
+                text: root.title;
+                color: root.action == "delete-group" || root.action == "delete-session"
+                    ? Theme.danger : Theme.text;
+                font-size: Theme.font-title;
+                font-weight: 700;
+            }
+            if !root.message.is-empty : Text {
+                text: root.message;
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                wrap: word-wrap;
+            }
+            if root.accepts-name : LineEdit {
+                text <=> root.value;
+                placeholder-text: "Group name";
+                accessible-label: "Group name";
+                accepted(value) => {
+                    if !value.is-empty {
+                        root.confirm(value);
+                    }
+                }
+            }
+            Rectangle { vertical-stretch: 1; }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-md;
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button {
+                    text: root.action == "delete-group" || root.action == "delete-session"
+                        ? "Delete" : "Save";
+                    enabled: !root.accepts-name || !root.value.is-empty;
+                    clicked => { root.confirm(root.value); }
+                }
+            }
+        }
+    }
+}

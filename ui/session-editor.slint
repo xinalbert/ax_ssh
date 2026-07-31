@@ -8,14 +8,24 @@ export component SessionEditorPane inherits Rectangle {
     in property <[string]> group-options;
     in property <[string]> private-key-options;
     in property <string> status;
+    in property <string> draft-id;
+    in property <string> profile-id;
+    in-out property <string> name-draft;
+    in-out property <string> group-draft;
+    in-out property <string> host-draft;
+    in-out property <string> port-draft: "22";
+    in-out property <string> username-draft;
+    in-out property <string> auth-method: "Password";
+    in-out property <string> private-key-draft;
+    in-out property <bool> remember-password-draft;
 
     callback save(string, string, string, string, string, string, string, string, bool);
     callback cancel();
 
-    private property <string> auth-method: "Password";
     private property <string> password-draft;
-    private property <string> private-key-draft;
-    private property <bool> remember-password-draft;
+    private property <bool> editing: !root.profile-id.is-empty;
+
+    changed draft-id => { root.password-draft = ""; }
 
     background: Theme.background;
 
@@ -46,7 +56,7 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-xs;
                     Text {
                         height: Theme.editor-title-height;
-                        text: "New SSH session";
+                        text: root.editing ? "Edit SSH session" : "New SSH session";
                         color: Theme.text;
                         font-size: Theme.font-page-title;
                         font-weight: 700;
@@ -54,7 +64,9 @@ export component SessionEditorPane inherits Rectangle {
                     }
                     Text {
                         height: Theme.editor-subtitle-height;
-                        text: "Save a reusable connection profile.";
+                        text: root.editing
+                            ? "Update this reusable connection profile."
+                            : "Save a reusable connection profile.";
                         color: Theme.muted;
                         font-size: Theme.font-small;
                         vertical-alignment: center;
@@ -81,6 +93,7 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 placeholder-text: "Production server";
+                                text <=> root.name-draft;
                                 accessible-label: "Session name";
                             }
                         }
@@ -94,6 +107,7 @@ export component SessionEditorPane inherits Rectangle {
                                     horizontal-stretch: 1;
                                     height: Theme.editor-input-row-height;
                                     placeholder-text: "Optional";
+                                    text <=> root.group-draft;
                                     accessible-label: "Session group";
                                 }
                                 if root.group-options.length > 0 : ThemedComboBox {
@@ -130,6 +144,7 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 placeholder-text: "server.example.com";
+                                text <=> root.host-draft;
                                 accessible-label: "SSH host";
                             }
                         }
@@ -140,7 +155,7 @@ export component SessionEditorPane inherits Rectangle {
                             port-edit := LineEdit {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
-                                text: "22";
+                                text <=> root.port-draft;
                                 placeholder-text: "22";
                                 accessible-label: "SSH port";
                             }
@@ -152,6 +167,7 @@ export component SessionEditorPane inherits Rectangle {
                             width: parent.width;
                             height: Theme.editor-input-row-height;
                             placeholder-text: "root";
+                            text <=> root.username-draft;
                             accessible-label: "SSH username";
                         }
                     }
@@ -182,7 +198,9 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.password-draft;
-                                placeholder-text: "Password";
+                                placeholder-text: root.editing && root.remember-password-draft
+                                    ? "Leave blank to keep saved password"
+                                    : "Password";
                                 input-type: InputType.password;
                                 accessible-label: "SSH password";
                             }
@@ -243,7 +261,7 @@ export component SessionEditorPane inherits Rectangle {
                     }
                     Button {
                         height: Theme.editor-input-row-height;
-                        text: "Save session";
+                        text: root.editing ? "Update session" : "Save session";
                         clicked => {
                             root.save(
                                 name-edit.text,

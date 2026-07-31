@@ -178,6 +178,7 @@ fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) 
     });
     wire_workspace_tabs(ui, state.clone(), runtime.clone());
     wire_session_editor(ui, state.clone(), runtime.clone());
+    wire_session_management(ui, state.clone(), runtime.clone());
     wire_connection_request(ui, state.clone(), runtime.clone());
     wire_host_key_confirmation(ui, state.clone(), runtime.clone());
     wire_authentication(ui, state.clone(), runtime.clone());

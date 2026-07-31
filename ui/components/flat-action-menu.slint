@@ -1,0 +1,29 @@
+export struct ActionMenuItem {
+    action-id: string,
+    title: string,
+    enabled: bool,
+}
+
+export component FlatActionMenu inherits Rectangle {
+    in property <[ActionMenuItem]> actions;
+    in property <bool> context-enabled: true;
+    callback triggered(string);
+
+    public function show-at(position: Point) {
+        menu-area.show(position);
+    }
+
+    background: transparent;
+
+    menu-area := ContextMenuArea {
+        enabled: root.context-enabled;
+
+        Menu {
+            for action in root.actions : MenuItem {
+                title: action.title;
+                enabled: action.enabled;
+                activated => { root.triggered(action.action-id); }
+            }
+        }
+    }
+}
