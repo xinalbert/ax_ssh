@@ -21,7 +21,7 @@ Application controller (src/app.rs)
        ├──────────────► Config store (src/config.rs)
        │                 versioned settings/profile JSON + atomic replace
        ├──────────────► Credential store (src/credentials.rs)
-       │                 blocking platform keyring API
+       │                 blocking system-keyring and encrypted-vault APIs
        ├──────────────► Terminal model (src/terminal.rs)
        │                 bounded vt100 grid + scrollback
        ├──────────────► Local PTY (src/local_shell.rs)
@@ -45,7 +45,7 @@ Process startup (src/main.rs)
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
 | `src/config.rs` | `SessionProfile`, persistent group names, versioned `AppSettings` and `ThemeSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
-| `src/credentials.rs` | Profile-scoped access to the platform credential store | UI state, plaintext configuration, SSH transport handles |
+| `src/credentials.rs` | Profile-scoped system-keyring and encrypted-vault records | UI state, plaintext configuration, SSH transport handles |
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
 | `src/ssh.rs` | russh handler, host-key decision, authentication, shell channel boundary | Window updates, persistent session mutation, UI formatting |
@@ -54,11 +54,57 @@ Process startup (src/main.rs)
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
 | `src/main.rs` | Process startup and logging-guard lifetime | Feature logic |
 
+## Slint component state ownership
+
+`ui/app.slint` exports `AppWindow` as the sole Rust-facing Slint contract. It
+owns top-level composition, the cross-platform menu tree, and generated
+callbacks/properties only. The root maps the existing Rust-facing flat snapshot
+properties declaratively into small UI DTOs, rather than letting Rust reach into
+arbitrary internal component instances:
+
+```text
+Rust
+  <-> AppWindow properties / callbacks
+  <-> WorkspaceShell / OverlayHost
+  <-> TerminalPane / SettingsPane / SessionEditorPane
+```
+
+`WorkspaceShell` owns the sidebar collapse state, saved-connection picker
+visibility, picker dismissal, and sidebar/tab/content composition. Its tab,
+profile, terminal, and settings data is a read-only `WorkspaceViewState`; it
+sends user intent such as activation, close, connect, save, or cancel upward by
+callback. `TerminalPane` receives a read-only `TerminalViewState` and owns only
+terminal-local focus, IME proxy, selection, cursor blink, and measured sizing.
+It never owns a worker, a terminal buffer, or connection state.
+Its `key-pressed` handler sends only special keys and terminal control chords to
+Rust; printable keys, Shift text, and committed IME text remain in the native
+`TextInput.edited` path.
+
+`SettingsPane` receives a read-only `SettingsViewState`, copies it into its
+private editable draft, and emits the candidate only from Save. A menu or native
+platform request provides a read-only requested section; the pane owns the
+currently selected section while navigating. `SessionEditorPane` follows the
+same pattern with `SessionEditorViewState`: it resets its private fields only
+when the incoming draft identity changes, and never mutates the Rust snapshot
+while the user types. `in-out` properties remain inside components only where
+two nested controls are editing the same local draft. Derived labels, dialog
+copy, and visual states are bindings, not duplicate mutable storage.
+
+`OverlayHost` owns the local group/profile-management dialog open state and
+draft, deriving its title, message, and button presentation from one action
+value. It forwards a management command only after confirmation. It also
+composes the SSH host-key and authentication dialogs, but these are intentionally
+different: their visibility and prompt identity are read-only Rust-owned
+security phase. The UI may submit confirm/reject/authenticate/cancel intent, but
+must not locally hide either dialog before the Rust state transition accepts it.
+
 ## Event flow
 
 1. A Slint callback produces a small value such as a saved profile ID, unique
    tab ID, terminal key/modifier tuple, draft fields, a trust
-   decision, or one transient password.
+   decision, or one transient secret. Authentication secrets travel through the
+   dedicated SecretTextInput, whose UI value is cleared after the application
+   accepts it or when the prompt is cancelled.
 2. Opening a profile or local shell always creates a new terminal tab UUID,
    even when another tab uses the same target. SSH input, resize, output, retry,
    and close operations route by `tab_id + attempt_id`; local operations route
@@ -70,35 +116,48 @@ Process startup (src/main.rs)
    and renders a non-interactive Tab copy at the pointer; it never creates a
    second runtime Tab. The leading UI ordinal derives from that list index,
    while an instance suffix such as `#1` remains part of the Tab's stable title.
+   Each SSH Tab also owns its current connection phase: idle, cancellable host-key
+   probe, pending host-key confirmation, pending authentication, or stored-
+   credential loading. There is no global pending-probe, trust, or authentication
+   slot.
 3. After explicit confirmation, the controller atomically persists the exact
    fingerprint. Password profiles load a remembered credential on a Tokio
    blocking boundary or open a password prompt. Private-key profiles load the
    selected path off the UI thread and request a transient passphrase only when
-   the encrypted key cannot be opened without one.
-4. A password explicitly saved with a new or edited profile is changed through
-   the blocking credential boundary before the profile transaction commits; a
-   failed profile write restores the prior credential value. Editing never
-   loads that value into Slint: an empty password with the saved marker retained
-   means keep the existing credential. Removing the marker or deleting the
-   profile deletes its credential, while deleting a profile does not stop an
-   already-open terminal worker. A password entered in the authentication
-   prompt is written only after SSH authentication succeeds. Missing or
-   rejected stored credentials clear the non-secret marker and fall back to one
-   manual prompt.
-5. The terminal surface maps Slint special keys to UI-independent terminal key
-   values and applies a narrow shifted-hyphen fallback when the platform still
-   reports `-` for `Shift+-`. `src/terminal/input.rs` emits control bytes,
-   normal CSI or application-cursor SS3 arrows, and xterm modified sequences.
-   At the application boundary, macOS restores physical Control and Command
-   after Slint's Apple mapping swaps their semantic modifier fields. A
-   transparent, cursor-positioned `TextInput` is used only as the native IME
-   proxy; committed text enters the terminal encoder while preedit remains UI
-   state.
-   Terminal Ctrl combinations take priority while the terminal is focused;
-   `Ctrl+C` remains PTY input. Clipboard actions keep `Cmd+C/V` on macOS and
-   `Ctrl+Shift+C/V` elsewhere. Workspace commands use the platform modifier.
-   Selection copy remains local while paste becomes bounded shell input; the
-   optional right-click action chooses between them based on selection state.
+   the encrypted key cannot be opened without one. The security overlay renders
+   only the active Tab's pending phase; inactive Tabs retain their own prompt
+   until activated, and changing an authentication prompt clears its secret
+   inputs before it becomes visible.
+4. Settings > General owns the default backend for a newly remembered SSH
+   password: the platform credential store or the encrypted application vault.
+   The session editor never receives a password. A profile stores only an
+   optional backend reference after a successful remembered-password write, so
+   changing the default neither migrates nor breaks an existing credential.
+   The application writes the selected backend only after SSH authentication;
+   the backend record and profile reference are rolled back together if either
+   persistence step fails. Deleting a profile, switching it to private-key
+   authentication, or rejecting a stored password removes its referenced
+   credential transactionally without stopping an already-open terminal worker.
+5. The terminal surface maps Slint special keys, including F1-F12, to
+   UI-independent terminal key values and applies a narrow shifted-hyphen
+   fallback when the platform still reports `-` for `Shift+-`.
+   `src/terminal/input.rs` emits control bytes, normal CSI or
+   application-cursor SS3 arrow/Home/End sequences, and modified xterm
+   navigation/function-key sequences. A transparent, cursor-positioned
+   `TextInput` is the native text and IME proxy: special keys and terminal
+   control chords use `key-pressed`, while printable text, Shift text, and IME
+   commits enter only through `edited`; preedit remains local UI state. At the
+   application boundary, macOS restores physical Control and Command after
+   Slint's Apple mapping swaps their semantic modifier fields.
+   `TerminalSettings.option_as_meta` is disabled by default, so Option text and
+   dead keys use the text path; when enabled, Option-modified keys are terminal
+   Meta input. Windows/Linux retain Alt terminal input while Ctrl+Alt printable
+   text can remain AltGr text. Terminal Ctrl combinations take priority while
+   the terminal is focused; `Ctrl+C` remains PTY input. Clipboard actions keep
+   `Cmd+C/V` on macOS and `Ctrl+Shift+C/V` elsewhere. Workspace commands use the
+   platform modifier. Selection copy remains local while paste becomes bounded
+   shell input; the optional right-click action chooses between them based on
+   selection state.
 6. After authentication, each terminal tab owns one worker, and that worker
    exclusively owns one PTY shell plus its russh handle/channel. Bounded command
    queues and single-slot watched sizes remain independent between duplicate
@@ -169,21 +228,24 @@ Process startup (src/main.rs)
     close-tab enabled state, keep Settings in Edit, and keep About in Help. File,
     View, Pane, Window, and Help reuse existing new-session, sidebar, local-shell,
     close-tab, and shortcut intents.
-12. The session navigator has one Slint-owned sidebar expanded/collapsed state
-    and application-owned, in-memory group expansion state. `AppState` stores
-    normalized expanded group names in a `BTreeSet`; persisted group names
-    belong to `SessionStore` instead, so empty groups survive restart. The
-    expanded view renders a Local Shell card, then collapsible parent group rows
-    and their single-line server children. Only the masked endpoint crosses into
-    Slint. The expanded parent shows its
-    name, count, and a centered drawn down chevron; a collapsed parent shows the
-    matching up chevron. The compact rail alone uses a two-character badge
-    derived from the group name rather than a folder icon.
+12. The session navigator owns the Slint-local sidebar expanded/collapsed state
+    and each Group's disclosure state. Rust supplies a complete, read-only
+    `SessionGroupRow` snapshot with a nested bounded profile model; it does not
+    retain an expanded-group set or receive a group-toggle callback.
+    `SessionNavigationGroup` and `CompactSessionNavigationGroup` independently
+    expand/collapse their own Group rows, so either click or Enter/Space changes
+    only that component's presentation state. Persisted group names belong to
+    `SessionStore`, so empty groups survive restart. The expanded view renders a
+    Local Shell card, then collapsible parent group rows and their single-line
+    server children. Only the masked endpoint crosses into Slint. The expanded
+    parent shows its name, count, and a centered drawn down chevron; a collapsed
+    parent shows the matching up chevron. The compact rail alone uses a
+    two-character badge derived from the group name rather than a folder icon.
     A separate compact panel control is the only action that expands or
     collapses the sidebar. In the expanded sidebar it sits at the trailing
     edge of the Local Shell row; in the collapsed rail it remains a top control.
     Custom group rows are keyboard focusable and use Enter/Space for the same
-    group-toggle intent as a click; this never changes the sidebar state. Native
+    local disclosure action as a click; this never changes the sidebar state. Native
     row context menus create a server in a group, rename or delete a group, and
     connect, edit, or delete a server. Ungrouped exposes only its add-server
     action. Right-clicking blank list space creates an empty group or an
@@ -206,12 +268,29 @@ mismatched keys are rejected before authentication. A rejected first-contact
 handshake may expose its SHA-256 fingerprint to the confirmation UI, but only
 an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback
-inputs and are not part of `SessionStore`. The profile contains only a
-`credential_stored` marker; the password itself is keyed by the stable profile
-UUID in the platform credential store. Private-key profiles persist only a
-path. The key bytes and optional passphrase are loaded in one blocking task,
-used for one authentication attempt,
-and then dropped without entering configuration, tracing fields, or UI models.
+inputs and are not part of `SessionStore`. A password profile contains only an
+optional `credential_storage` reference keyed by its stable UUID, never the
+password or a vault password. Settings > General selects the backend used by a
+future checked **Remember password** action: macOS Keychain, Windows Credential
+Manager, or Unix Secret Service for the system backend; or a per-profile
+application-vault record. The vault derives a per-record key with Argon2id,
+encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
+keeps the vault password transient. Private-key profiles persist only a path.
+The key bytes and optional passphrase are loaded in one blocking task, used for
+one authentication attempt, and then dropped without entering configuration,
+tracing fields, or UI models.
+
+Authentication secrets use `ui/components/secret-text-input.slint`, not the
+general-purpose text input. It retains native password masking, IME, focus, and
+password-input accessibility semantics, but does not publish an
+`accessible-value`, offer an edit context menu, allow copy/cut shortcuts, or
+allow pointer selection to reach the platform selection clipboard. Its
+accessibility contract permits setting a value, not reading one. At the Slint to
+application boundary the accepted `SharedString` is copied immediately into
+`Zeroizing<String>`; the SSH worker, private-key loader, vault task, and
+credential rollback keep AxSSH-owned secret buffers zeroized on drop. This
+shortens AxSSH-owned lifetimes, but does not claim to erase temporary copies
+inside Slint, the IME, russh, or a platform credential backend.
 
 Authenticated connections follow this lifecycle:
 
@@ -223,9 +302,13 @@ Authenticated connections follow this lifecycle:
   channel before entering the bounded terminal model;
 - worker events report connected, resize, output, disconnected, host-key
   rejection, credential failure, or a capped error message;
+- each SSH Tab independently owns probe cancellation and its authentication
+  phase; every UI callback and delayed probe, credential, or worker result
+  revalidates the Tab, profile, attempt, and expected phase before changing it;
 - cancel interrupts connection/authentication as well as an established session;
-- a 20-second keepalive with three missed-reply limit keeps healthy idle
-  sessions open while retaining a 90-second inactivity bound;
+- a 20-second keepalive with three missed-reply limit and the 90-second
+  transport inactivity boundary decide connection liveness; a quiet shell data
+  channel is valid and never has its own output timeout;
 - tab close invalidates the tab/attempt route before requesting worker shutdown;
 - window shutdown requests disconnect for every remaining worker, waits for
   each join with a timeout, and only then shuts down Tokio.
@@ -254,8 +337,17 @@ after those metrics and its layout have settled.
 `settings` object to the existing private `sessions.json`. It contains
 normalized font, size, line height, terminal
 brightness, bold-color and right-click behavior, scrollback, default PTY
-dimensions, local-shell choice and bounded discovered-shell cache, sidebar/tab
-widths, session mask character, shortcuts, and `ThemeSettings`. Display strategy
+dimensions, local-shell choice and bounded discovered-shell cache, the macOS
+Option-as-Meta preference, sidebar/tab widths, session mask character,
+shortcuts, `ThemeSettings`, and the default remembered-password backend. Schema
+version 13 adds `terminal.option_as_meta`; missing values from prior files
+remain `false` so Option continues to produce native characters and IME/dead-key
+input by default. Schema version 12 replaces the legacy
+`credential_stored: true` profile marker with
+`credential_storage: "system-keyring"`; profiles without a remembered password
+omit that field. The alternative encrypted-vault record is stored separately in
+the private application configuration directory and never includes its vault
+password. Display strategy
 is persisted independently as System, Light, or Dark; the selected color family
 is AxSSH, Solarized, or Custom. Custom stores separate Light and Dark sets of 13
 canonical `#RRGGBB` or `#RRGGBBAA` semantic UI/terminal-default colors. Schema
@@ -301,13 +393,23 @@ model, current-index, selected callback, keyboard navigation, outside-click
 close behavior, and combobox accessibility contract. Other standard widgets
 continue to use the synchronized Slint `Palette`; native `ContextMenuArea`
 menus remain platform-owned.
+`ui/components/flat-text-input.slint` owns the matching theme-native single-line
+control for non-secret Settings, session-editor, and management-dialog fields.
+It keeps native cursor placement, selection, IME, keyboard focus, accessibility,
+and the standard edit context menu.
+`ui/components/secret-text-input.slint` is the separate password-only control
+for SSH passwords, vault passwords, and private-key passphrases; it deliberately
+does not inherit ordinary selection or copy/cut behavior. Numeric inputs remain
+standard `SpinBox` controls so their range and increment semantics are not
+reimplemented.
 `ui/components/settings-controls.slint` consumes those tokens to provide the
 shared Settings glyph, navigation, page, compact right-aligned field, row,
 toggle, shortcut, and action header primitives. Setting rows keep a stable
 title and metadata column while standard controls use one theme-configured height.
-`ui/settings.slint` owns the shared draft and one Save transaction, while the
-category layouts live in `ui/settings/*.slint` with only their relevant draft
-properties and callbacks.
+`ui/settings.slint` owns the shared draft and one Save transaction behind its
+read-only `SettingsViewState` boundary, while the category layouts live in
+`ui/settings/*.slint` with only their relevant local draft properties and
+callbacks.
 `ui/settings/appearance.slint` separates Display mode from Color palette and
 uses one shared `ThemePaletteEditor` component for the Custom Light and Dark
 fields, preventing the two editors from drifting structurally.

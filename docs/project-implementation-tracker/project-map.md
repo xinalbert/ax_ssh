@@ -36,56 +36,60 @@
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh` | 领域、系统服务、进程服务和传输公共边界 |
 | `src/app.rs` | Slint/Rust bridge 入口 | `slint::include_modules!`、`run`、`wire_callbacks` | 生成类型声明、UI 启停和功能 callback 总编排 |
 | `src/app/workspace.rs` | 工作区与 profile/group bridge | `wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`close_workspace_tab` | Tab 激活/内存排序、会话新增编辑删除、Group CRUD、凭据回滚和关闭时资源回收 |
-| `src/app/connection.rs` | SSH 连接控制器 | `wire_connection_request`、`begin_authentication`、`start_session_worker` | 主机探测、信任确认、认证和 worker 启动 |
-| `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential` | attempt 路由、输出/失败事件和认证成功后的凭据保存 |
+| `src/app/connection.rs` | SSH 连接控制器 | `wire_connection_request`、`begin_authentication`、`start_session_worker` | 主机探测、信任确认、逐 Tab 认证 phase 和 worker 启动；callback 重验活动 Tab/profile/phase |
+| `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential` | attempt 路由、输出/失败事件、认证成功后的凭据保存，以及迟到 worker/凭据结果隔离 |
 | `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 终端输入/resize/selection、本地 worker 事件和仅视觉主题刷新 |
 | `src/app/settings_bridge.rs` | 设置保存 bridge | `wire_settings` | 校验并原子保存 Settings 草稿、独立显示模式、palette 和双 Custom 色板 |
-| `src/app/view.rs` | Slint model/snapshot/主题映射 | `session_rows`、`apply_active_snapshot`、`apply_theme_to_component`、`set_theme_palette` | Group/服务器 model、终端渲染 DTO、Light/Dark 双侧主题和 event-loop 更新 |
-| `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event` | 特殊键、快捷键和 Apple 修饰键还原 |
+| `src/app/view.rs` | Slint model/snapshot/主题映射 | `session_group_rows`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component`、`set_theme_palette` | 嵌套 Group/profile model、终端渲染 DTO、Light/Dark 双侧主题、活动 Tab 安全覆盖层和 event-loop 更新 |
+| `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event` | 特殊键（含 F1-F12）、快捷键和 Apple 修饰键还原 |
 | `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`configure_application_menu`、`NativeMenuTarget` | 标准标题栏、应用菜单 Settings/About action 与主线程生命周期 |
-| `src/app/state.rs` | 工作区 Tab、终端、编辑器 draft 与临时 Group 展开状态所有权 | `AppState`、`SessionEditorState`、`move_tab`、`expanded_groups`、`TerminalTabState` | Tab 创建/切换/内存排序/关闭、同 profile 多实例、编辑草稿身份和 Group 展开状态 |
-| `src/app/state/transitions.rs` | SSH attempt 状态转换 | retry/retire/credential marker helpers | 迟到 worker 隔离、认证/host-key 重试和非敏感 marker 保存 |
-| `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、attempt isolation tests | 修改 Tab 或 attempt 生命周期后 |
+| `src/app/state.rs` | 工作区 Tab、终端、编辑器 draft 与 SSH phase 所有权 | `AppState`、`SessionEditorState`、`move_tab`、`TerminalTabState`、`SshConnectionPhase` | Tab 创建/切换/内存排序/关闭、同 profile 多实例、逐 Tab probe/host-key/authentication phase 和编辑草稿身份；不持有局部 Group 展开 |
+| `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
+| `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、active prompt、attempt/credential isolation tests | 修改 Tab、认证 phase 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`compact_label`、`profile_endpoint`、`profile_sidebar_endpoint` | 持久化空 Group 与 profile 聚合、编辑器组选项、文字徽标和遮蔽侧栏 endpoint 格式 |
-| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout | 从 UI 线程外调用系统凭据库 |
-| `src/config.rs` | 会话/Group/设置 schema 和持久化 | `ThemeMode`、`ThemePaletteKind`、`ThemePalette`、`ThemeSettings`、`SessionStore`、`AppSettings`、`ConfigStore` | schema v11 独立模式/palette、双 Custom 色板、对比度保护、Group/profile 和旧配置迁移 |
-| `src/credentials.rs` | 平台系统凭据边界 | `CredentialStore` | Keychain/Credential Manager/Secret Service 密码读写 |
+| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout、rollback | 在 UI 线程外调用系统凭据库和加密保险库；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时恢复记录 |
+| `src/config.rs` | 会话/Group/设置 schema 和持久化 | `CredentialStorage`、`ThemeMode`、`ThemePaletteKind`、`ThemePalette`、`ThemeSettings`、`SessionStore`、`AppSettings`、`ConfigStore` | schema v13 `TerminalSettings::option_as_meta`、v12 凭据后端引用/旧标记迁移、v11 主题和 Group/profile 迁移 |
+| `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | Keychain/Credential Manager/Secret Service，以及 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs` | 有界终端文本模型 | `TerminalModel`、ANSI `Perform` | shell 输出解析、光标和 scrollback |
 | `vendor/vt100/src/grid.rs` | 终端依赖的受控修复点 | `Grid::set_size` | 宽字符被列缩窄截断时保持 normal/alternate grid 有效 |
-| `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalModifiers`、`encode_key` | 控制字节、导航键和 xterm 修饰序列 |
+| `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalModifiers`、`encode_key` | 控制字节、application-cursor Home/End、导航/Function 键和 xterm 修饰序列 |
 | `src/logging.rs` | 进程级 tracing 生命周期 | `LoggingGuard`、滚动 writer | 日志目录、过滤、保留和退出 flush |
-| `src/ssh.rs` | russh 传输边界 | `ClientHandler`、`SshConnection`、`SshSessionHandle` | 主机密钥、认证、取消和连接 worker |
-| `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 passphrase |
-| `src/ssh/worker.rs` | SSH worker 生命周期 | `SshSessionHandle`、`SshSessionEvent` | 有界 shell 输入/resize/输出、取消和退出 join |
-| `src/ssh/tests.rs` | 确定性 SSH 回归 | loopback russh server | 主机密钥、密码/私钥认证、PTY shell 和 worker 生命周期测试 |
-| `ui/app.slint` | 主窗口、菜单栏和 Tab 交互契约 | `AppWindow`、`Theme`、`MenuBar`、`ConnectionPicker`、安全提示层 | 全高会话侧栏、右侧 Tab 激活/排序 callback、主题保存/终端刷新和活动页面 |
+| `src/ssh.rs` | russh 传输边界 | `ClientHandler`、`SshConnection`、`SshSessionHandle` | 主机密钥、认证、取消和连接 worker；不把静默 shell 当作断连 |
+| `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 `Zeroizing` passphrase |
+| `src/ssh/worker.rs` | SSH worker 生命周期 | `SshSessionHandle`、`SshSessionEvent` | 有界 shell 输入/resize/输出、取消、退出 join 和短期 `Zeroizing` 认证秘密 |
+| `src/ssh/tests.rs` | 确定性 SSH 回归 | loopback russh server | 主机密钥、密码/私钥认证、PTY shell、静默 shell 和 worker 生命周期测试 |
+| `ui/app.slint` | Rust-facing 主窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`SecurityOverlayViewState`、`MenuBar` | Rust property/callback 接口、根级菜单/快捷键、DTO 组装、主题刷新和安全 phase 输入；不在此保存局部草稿或普通弹层状态 |
+| `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`WorkspaceViewState` | 侧栏收起、连接选择器、Tab/内容组合、工作区 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/components/workspace-titlebar.slint` | 工作区标题栏组件 | `WorkspaceTitlebar`、`WorkspaceTabContent`、`WorkspaceTabRow`、`ConnectableSessionRow`、`ConnectionPicker` | 右侧工作区列的左起 Tab strip、跟随指针的拖拽副本/源槽/目标槽、位置序号、最右侧保存连接选择器、滚动和关闭 |
 | `ui/components/flat-action-menu.slint` | 通用扁平动作菜单 | `ActionMenuItem`、`FlatActionMenu`、`show-at` | 用同一 action model 承载原生右键菜单与按钮主动触发的下拉菜单 |
-| `ui/components/session-navigation.slint` | 会话导航组件 | `SessionNavigation`、`SessionNavigationRow`、`SessionActionMenu`、`SessionRow` | 全高侧栏 Group 折叠、会话 action 映射、空白区域新建入口和紧凑 rail |
+| `ui/components/session-navigation.slint` | 会话导航组件 | `SessionNavigation`、`SessionNavigationGroup`、`CompactSessionNavigationGroup`、`SessionProfileRow`、`SessionGroupRow`、`SessionActionMenu` | 全高/紧凑侧栏的组件本地 Group 展开、会话 action 映射、空白区域新建入口和嵌套 profile model |
 | `ui/components/session-management-dialog.slint` | Group/profile 管理覆盖层 | `SessionManagementDialog` | 新建/重命名 Group 输入，以及删除 Group/profile 的明确确认语义 |
+| `ui/components/overlay-host.slint` | 覆盖层组合与普通会话管理弹层状态 | `OverlayHost`、`SecurityOverlayViewState` | Group/Profile 管理 action、标题/文案/草稿；HostKey/Authentication 只读消费 Rust 安全 phase 并转发确认/取消意图 |
 | `ui/components/themed-combo-box.slint` | AxSSH 主题化共享下拉 | `ThemedComboBox`、`ComboBoxChevron` | 需要控件本体、弹层、选中/hover、焦点和滚动指示完全消费语义主题色时 |
-| `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog` | host-key 确认、密码和私钥 passphrase UI |
-| `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane` | 终端焦点、复制粘贴、输出跟随和 PTY resize |
+| `ui/components/flat-text-input.slint` | AxSSH 主题化共享非秘密文本输入 | `FlatTextInput` | Settings、会话编辑器和管理弹窗的单行编辑、原生文本选择和编辑菜单 |
+| `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、禁止复制/剪切/鼠标选择泄漏 |
+| `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；提交接收、取消或切换 prompt 时清空秘密 |
+| `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane`、`TerminalViewState` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、复制粘贴和 PTY resize callback |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`resolved-dark`、状态/type/spacing/geometry tokens | 修改系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
-| `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及可键盘操作的收起态 Group/服务器项 |
+| `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 矢量图标、导航、标题操作、紧凑字段和行布局 |
-| `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、统一草稿、`commit-settings` | 分类导航、跨页主题草稿和一次 Save 事务 |
+| `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsViewState`、统一草稿、`commit-settings` | 只读设置源、组件私有分类选择/跨页草稿和一次 Save 事务 |
 | `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`ThemePaletteEditor`、General/Terminal/Workspace/Shortcuts/About | 修改显示模式、palette、Custom 双侧字段或其它单一设置分类布局 |
-| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`draft-id` | profile 新增编辑、预选 Group、密码 marker/私钥草稿和未保存输入保持 |
+| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`draft-id` | 只读传入 draft identity、组件私有 profile 草稿、预选 Group 和私钥路径；密码只在连接弹窗输入 |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
 ## 常用定位
 
-- 修改会话或设置字段：`src/config.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射。
-- 修改连接或认证：`src/ssh.rs`，保持未知主机密钥默认拒绝。
-- 修改终端解析或 scrollback：`src/terminal.rs`；宽字符缩窄补丁在 `vendor/vt100/src/grid.rs`；修改按键序列：`src/terminal/input.rs`；修改 shell I/O：`src/ssh/worker.rs`。
-- 修改终端/工作区设置：`src/config.rs`、`src/app.rs`、`ui/settings.slint`；字体资源同时检查 `assets/fonts/` 的许可证/声明。
-- 修改 Tab 生命周期或排序：`src/app/state.rs`、`src/app/state/transitions.rs` 和 `src/app/workspace.rs`；运行实例键保持为 Tab UUID，不能退回 profile UUID，位置序号只由 Slint 列表索引派生。
+- 修改会话或设置字段：`src/config.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射；默认凭据后端位于 Settings > General，既有 profile 使用自身的非敏感后端引用。
+- 修改连接或认证：`src/app/connection.rs`、`src/ssh.rs`，保持未知主机密钥默认拒绝；秘密输入只可使用 `ui/components/secret-text-input.slint`，不得退回 `FlatTextInput`。
+- 修改终端解析或 scrollback：`src/terminal.rs`；宽字符缩窄补丁在 `vendor/vt100/src/grid.rs`；修改按键序列：`src/terminal/input.rs`，并同步 `src/app/input.rs`、`ui/terminal-pane.slint` 与 `TerminalSettings::option_as_meta`；修改 shell I/O：`src/ssh/worker.rs`。
+- 修改终端/工作区设置：`src/config.rs`、`src/app.rs`、`ui/settings.slint` 和 `ui/workspace-shell.slint`；跨组件新增字段优先扩展相应 `*ViewState`，不要重新逐条透传；字体资源同时检查 `assets/fonts/` 的许可证/声明。
+- 修改 Tab 生命周期或排序：`src/app/state.rs`、`src/app/state/transitions.rs` 和 `src/app/workspace.rs`；运行实例键保持为 Tab UUID，不能退回 profile UUID，位置序号只由 Slint 列表索引派生。SSH probe、host-key 确认、认证与 stored-credential loading 也必须随 Tab 迁移，并让迟到 completion 重验 Tab/profile/attempt/phase。
 - 修改本机私钥发现或加载：`src/ssh/private_keys.rs`，不得持久化私钥内容或 passphrase。
 - 修改日志初始化、滚动或刷新：`src/logging.rs`，由 `src/main.rs` 持有唯一 guard。
 - 修改 UI callback：先改对应 `ui/*.slint` 契约，再改 `src/app.rs::wire_callbacks` 调用的功能 bridge 模块。
-- 修改平台顶部菜单：业务菜单在 `ui/app.slint`，macOS 标准应用菜单 action 在 `src/app/macos_window.rs`；优先复用现有 callback 和 Slint 状态。
-- 修改会话管理：`src/config.rs` 持久化 Group/profile，`src/app/workspace.rs` 执行 CRUD 与凭据事务，`src/app/state.rs` 持有编辑 draft/临时展开状态，`src/app/view.rs::session_rows` 生成 Group/遮蔽服务器模型；Slint 入口在 `ui/components/{flat-action-menu,session-navigation,session-management-dialog}.slint` 和 `ui/session-editor.slint`。
+- 修改平台顶部菜单：业务菜单在 `ui/app.slint`，macOS 标准应用菜单 action 在 `src/app/macos_window.rs`；菜单只能调用 `AppWindow` 的公开 property/callback/function，不能越过根组件访问内部实例。
+- 修改会话管理：`src/config.rs` 持久化 Group/profile，`src/app/workspace.rs` 执行 CRUD 与凭据事务，`src/app/state.rs` 只持有编辑 draft identity，`src/app/view.rs::session_group_rows` 生成嵌套的 Group/遮蔽服务器 model；Group 展开留在 `ui/components/session-navigation.slint`。Slint 入口在 `ui/workspace-shell.slint`、`ui/components/{flat-action-menu,flat-text-input,session-navigation,session-management-dialog,overlay-host}.slint` 和 `ui/session-editor.slint`。
 - 修改主题：先改 `src/config.rs` 的领域/迁移/对比度保护，再同步 `src/app/{settings_bridge,view,terminal_bridge}.rs`、`ui/{app,settings,theme}.slint` 和 Appearance 的共享 `ThemePaletteEditor`；系统跟随只能留在 Slint，不能把平台配色写进配置。需要精确弹层配色的选择控件统一使用 `ui/components/themed-combo-box.slint`，边框/分隔线/焦点/hover/selected 使用 `Theme` 状态 token。
 - 修改 Rust/Slint 工程规则：先读根 `AGENTS.md`，再由项目 skill 选择 Rust 或 Slint reference。
 - 修改工程边界：同步根 README、`docs/architecture*.md` 和本项目地图。
@@ -99,8 +103,8 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-07-31 schema v11 独立 System/Light/Dark 与 AxSSH/Solarized/Custom、双 Custom palette 和状态 token；既有 Group/profile 管理、macOS 标题栏/Tab 拖拽和 `vt100 0.16.2` 宽字符缩窄补丁继续有效。
+- 最近依据：2026-07-31 的 `WorkspaceShell`/`OverlayHost`、`TerminalViewState`/`SettingsViewState`/`SessionEditorViewState`、组件私有 picker/普通弹层/草稿/Group 展开与 Rust 单向安全 phase；schema v13 `TerminalSettings::option_as_meta`、特殊键 callback 与文本/IME `edited` 分流、application-cursor Home/End、F1-F12、schema v12 SystemKeyring/EncryptedVault、P1 逐 Tab `SshConnectionPhase`、主题、既有 Group/profile 管理、macOS 标题栏/Tab 拖拽和 `vt100 0.16.2` 宽字符缩窄补丁继续有效。
 
 ## 最后更新时间
 
-- 2026-07-31 07:52 +0800
+- 2026-07-31 15:47 +0800

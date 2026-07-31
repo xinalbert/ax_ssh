@@ -19,7 +19,7 @@ Slint UI（.slint）
        ├──────────────► 配置存储（src/config.rs）
        │                 版本化设置/profile JSON + 原子替换
        ├──────────────► 系统凭据（src/credentials.rs）
-       │                 阻塞式平台 keyring API
+       │                 阻塞式系统 keyring 与加密保险库 API
        ├──────────────► 终端模型（src/terminal.rs）
        │                 有界 vt100 网格 + scrollback
        ├──────────────► 本地 PTY（src/local_shell.rs）
@@ -43,7 +43,7 @@ Slint UI（.slint）
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
 | `src/config.rs` | `SessionProfile`、持久化 Group 名称、版本化 `AppSettings`/`ThemeSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
-| `src/credentials.rs` | 按 profile 访问平台系统凭据库 | UI 状态、明文配置、SSH 传输 handle |
+| `src/credentials.rs` | 按 profile 访问系统凭据库和加密保险库记录 | UI 状态、明文配置、SSH 传输 handle |
 | `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
 | `src/ssh.rs` | russh handler、主机密钥决策、认证、shell channel 边界 | 窗口更新、持久化会话修改、UI 格式化 |
@@ -52,34 +52,73 @@ Slint UI（.slint）
 | `src/logging.rs` | 全局 tracing subscriber、日志目录、按日滚动、保留和 flush guard | 凭据、功能状态、UI 或 SSH handle |
 | `src/main.rs` | 进程启动和日志 guard 生命周期 | 功能逻辑 |
 
+## Slint 组件状态归属
+
+`ui/app.slint` 导出的 `AppWindow` 是 Rust 唯一直接访问的 Slint 契约。它只负责顶层组合、
+跨平台菜单树以及生成的 property/callback；根组件会声明式地把既有 Rust 扁平快照组装成小型
+UI DTO，而不是让 Rust 直接访问任意内部 component 实例：
+
+```text
+Rust
+  <-> AppWindow property / callback
+  <-> WorkspaceShell / OverlayHost
+  <-> TerminalPane / SettingsPane / SessionEditorPane
+```
+
+`WorkspaceShell` 拥有侧栏收起、已保存连接选择器开关、选择器关闭以及侧栏/Tab/内容编排。
+它通过只读 `WorkspaceViewState` 接收 Tab、Profile、终端和设置数据，并用 callback 向上发送
+激活、关闭、连接、保存和取消等用户意图。`TerminalPane` 接收只读
+`TerminalViewState`，只拥有终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有
+worker、终端缓冲区或连接状态。
+它的 `key-pressed` 只把特殊键和终端控制组合键发送给 Rust；可打印字符、Shift 文字和已提交的
+IME 文本继续通过原生 `TextInput.edited` 路径。
+
+`SettingsPane` 接收只读 `SettingsViewState`，复制到私有可编辑草稿，并且只在 Save 时提交
+候选设置。菜单或原生平台只提供只读的目标 section；用户在设置页导航时的当前 section 由
+组件自身持有。`SessionEditorPane` 对 `SessionEditorViewState` 使用同样模式：只有传入的
+draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
+同一局部草稿的嵌套编辑控件；显示文案、dialog 文本和视觉状态都用绑定计算，不重复保存。
+
+`OverlayHost` 拥有 Group/Profile 管理弹层的开关和草稿，并从单个 action 派生标题、消息和
+按钮表现；只有确认后才向上发送管理命令。它也组合 SSH 主机密钥与认证弹层，但二者是刻意
+保留的例外：可见性和 prompt identity 仍是 Rust 安全 phase 的只读输入。UI 只能提交
+confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前自行隐藏弹层。
+
 ## 事件流
 
 1. Slint callback 只产生已保存 profile ID、唯一 Tab ID、终端按键/修饰键、
-   草稿字段、信任决策或一次性临时密码等小值。
+   草稿字段、信任决策或一次性临时秘密等小值。认证秘密经专用
+   `SecretTextInput` 传递，应用接收后或用户取消提示时都会清空 UI 中的值。
 2. 每次打开 profile 或本地 shell 都会创建新的终端 Tab UUID，即使另一个 Tab 使用
    相同目标。SSH 输入、resize、输出、重试和关闭按 `tab_id + attempt_id` 路由；本地
    操作按 `tab_id` 路由。未知 SSH 主机会启动绑定该 Tab 的可取消探测，但传输仍拒绝。
    工作区 Tab 顺序是仅在内存中的展示状态：拖拽释放会把 Tab UUID 和受限目标位置交给
    `AppState`，它只重排现有 Tab 列表。按住期间 Slint 保留半透明的源槽、高亮目标槽，
    并在指针位置绘制不可交互的 Tab 副本；不会创建第二个运行时 Tab。前置 UI 序号从当前
-   列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。
+   列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。每个 SSH Tab 还独占当前
+   连接阶段：idle、可取消的主机密钥探测、等待主机密钥确认、等待认证或读取已存凭据；不再
+   存在全局的 probe、信任或认证等待槽位。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；私钥 profile 在 UI 线程外加载所选路径，
-   只有加密密钥无法空口令打开时才请求一次性 passphrase。
-4. 新建或编辑 profile 时明确保存的密码会先通过 blocking 凭据边界修改，再提交
-   profile 事务；profile 写入失败会恢复原凭据。编辑时旧密码绝不加载进 Slint：保持
-   已保存标记且密码留空表示继续使用现有凭据。取消保存标记或删除 profile 会删除其
-   系统凭据，但删除 profile 不会停止已经打开的终端 worker。在认证弹窗输入的密码只在
-   SSH 认证成功后写入。已存凭据缺失或被拒绝时清除非敏感标记，并回退到一次手工密码提示。
-5. 终端表面把 Slint 特殊键转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
-   `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI
-   或 application-cursor SS3 方向键，以及带修饰键的 xterm 序列。macOS 在应用边界
-   还原 Slint Apple 映射中交换的 Control/Command 语义。一个透明、随光标定位的
-   `TextInput` 只作为原生 IME 代理；提交文本进入终端编码器，预编辑保留在 UI 状态。
-   普通 `Ctrl+C` 保留为 PTY 输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS
-   保留 `Cmd+C/V`，其他平台使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。
-   选区复制留在 UI，粘贴内容作为有界 shell 输入发送；可选右键行为根据是否存在选区
-   选择复制或粘贴。
+   只有加密密钥无法空口令打开时才请求一次性 passphrase。安全覆盖层只渲染活动 Tab 的
+   等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
+4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
+   会话编辑器不接收密码。profile 只会在记住密码成功写入后保存可选的后端引用，因此修改
+   默认值不会迁移或破坏既有凭据。应用只在 SSH 认证成功后写入选中后端；后端记录和
+   profile 引用任一持久化失败都会一起回滚。删除 profile、切换为私钥认证或拒绝已保存
+   密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
+5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
+   `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
+   生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
+   xterm 导航/功能键序列。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：
+   特殊键与终端控制组合键走 `key-pressed`，可打印字符、Shift 文字和 IME 提交只通过
+   `edited` 进入；预编辑保留在局部 UI 状态。macOS 在应用边界还原 Slint Apple 映射中
+   交换的 Control/Command 语义。`TerminalSettings.option_as_meta` 默认关闭，因此 Option
+   文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。Windows/Linux 保持 Alt
+   终端输入，同时 Ctrl+Alt 的可打印文字可保留为 AltGr 文本。普通 `Ctrl+C` 保留为 PTY
+   输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
+   使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为
+   有界 shell 输入发送；可选右键行为根据是否存在选区选择复制或粘贴。
 6. 认证后每个终端 Tab 持有一个 worker，该 worker 独占一个 PTY shell 及其 russh
    handle/channel。同 profile 的重复 Tab 使用彼此独立的有界命令队列和单槽尺寸状态。
    关闭 Tab 时先移除事件路由，再异步 shutdown 对应 worker，迟到事件不会更新其他 Tab。
@@ -124,14 +163,16 @@ Slint UI（.slint）
     AppKit bridge 安装一次。Windows/Linux 仍保留动态关闭 Tab enabled 状态，并在
     Edit/Help 提供 Settings/About；其他菜单复用已有的新建会话、侧栏、本地 shell、
     关闭 Tab 和快捷键意图。
-12. 会话导航持有一个 Slint 侧边栏展开/收起状态，以及应用层所有、仅在内存中的 Group
-    展开状态。`AppState` 用 `BTreeSet` 保存规范化的展开名称；持久化 Group 名称改由
-    `SessionStore` 持有，因此空 Group 也能跨重启保留。展开态先渲染 Local Shell 卡片，
-    再渲染可折叠的 Group 父行及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。
-    展开父行显示名称、数量和居中的绘制下尖角；收起
-    父行显示对应的上尖角。只有紧凑栏以 Group 名称的两个字符生成文字徽标而非文件夹图标。
-    自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击发出相同的 Group 切换意图；
-    只有独立的紧凑面板按钮负责展开或收起侧栏。原生行右键菜单可在 Group 内新增服务器、
+12. 会话导航持有 Slint 本地的侧边栏展开/收起状态，以及每个 Group 自己的展开状态。Rust
+    只提供完整、只读的 `SessionGroupRow` 快照及其嵌套的有界 profile model，不再保存
+    展开 Group 集合，也不接收 Group 切换 callback。`SessionNavigationGroup` 与
+    `CompactSessionNavigationGroup` 分别管理各自的 Group 展开/收起，因此点击或
+    Enter/Space 只改变当前组件的呈现状态。持久化 Group 名称仍由 `SessionStore` 持有，
+    空 Group 也能跨重启保留。展开态先渲染 Local Shell 卡片，再渲染可折叠的 Group 父行
+    及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。展开父行显示名称、数量和
+    居中的绘制下尖角；收起父行显示对应的上尖角。只有紧凑栏以 Group 名称的两个字符生成
+    文字徽标而非文件夹图标。自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击执行
+    相同的本地展开动作；只有独立的紧凑面板按钮负责展开或收起侧栏。原生行右键菜单可在 Group 内新增服务器、
     重命名或删除 Group，以及连接、编辑或删除服务器；Ungrouped 只提供新增服务器。右击
     列表空白区域可新建空 Group 或 Ungrouped 服务器。`SessionActionMenu` 把四种菜单形态
     映射为扁平 `ActionMenuItem` 列表；`FlatActionMenu` 只组合一个 `ContextMenuArea`，只发出
@@ -147,10 +188,21 @@ Slint UI（.slint）
 `russh::client::Handler::check_server_key` 是信任边界。未知和不匹配的主机密钥都在
 认证前拒绝。首次拒绝握手可以把 SHA-256 指纹交给确认 UI，但只有用户明确决定后，
 该精确指纹才进入 profile；密钥变化需要再次明确确认。密码只作为 callback 的临时
-输入，不进入 `SessionStore`。profile 只包含 `credential_stored` 标记；密码本身以稳定
-profile UUID 为键存入平台系统凭据库。私钥 profile 只持久化路径；私钥内容和可选
-passphrase 只在一次 blocking 加载/认证任务中短暂存在，不进入配置、tracing 字段或
-UI model。
+输入，不进入 `SessionStore`。密码 profile 只包含以稳定 UUID 为键的可选
+`credential_storage` 后端引用，绝不包含密码或保险库口令。Settings > General 选择以后
+勾选 **Remember password** 时使用的后端：系统后端使用 macOS Keychain、Windows Credential
+Manager 或 Unix Secret Service；保险库后端使用按 profile 分隔的应用记录。保险库对每条记录
+用 Argon2id 派生密钥、用 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，
+保险库口令始终是短期输入。私钥 profile 只持久化路径；私钥内容和可选 passphrase 只在一次
+blocking 加载/认证任务中短暂存在，不进入配置、tracing 字段或 UI model。
+
+认证秘密使用 `ui/components/secret-text-input.slint`，而不是通用文本输入。它保留
+原生密码遮蔽、IME、焦点和密码输入可访问性语义，但不发布 `accessible-value`、不提供
+编辑右键菜单、不允许复制/剪切快捷键，也不允许鼠标选择进入平台 selection clipboard。
+其可访问性契约允许设置值，不允许读取值。Slint 到应用边界会立即把已接收的
+`SharedString` 复制到 `Zeroizing<String>`；SSH worker、私钥加载、保险库任务和凭据
+回滚会在 drop 时清零 AxSSH 自己拥有的秘密缓冲区。这只能缩短 AxSSH 拥有的秘密寿命，
+不宣称能清除 Slint、输入法、russh 或平台凭据后端内部的临时副本。
 
 认证后连接遵循以下生命周期：
 
@@ -160,8 +212,11 @@ UI model。
 - 终端输出按批次限制大小，并通过有界事件 channel 反压后进入有界终端模型；
 - worker 事件报告 connected、resize、output、disconnected、host-key rejection、
   凭据失败或截断后的错误；
+- 每个 SSH Tab 独立拥有 probe 取消和认证阶段；每个 UI callback 以及迟到的 probe、凭据
+  或 worker 结果都必须重新核验 Tab、profile、attempt 和预期 phase 后才能转换状态；
 - 取消既能中断连接/认证，也能断开已建立会话；
-- 20 秒 keepalive 和三次未响应上限保持健康空闲会话，同时保留 90 秒 inactivity 边界；
+- 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
+  存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
 - 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
 - 窗口退出对所有剩余 worker 请求断开，在超时边界内逐个等待 join，最后再关闭 Tokio。
 
@@ -182,9 +237,13 @@ UI model。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
 `settings` 对象，包括经过约束的字体、字号、行高、终端亮度、粗体亮色和右键行为、
-scrollback、默认 PTY 尺寸、
-本地 shell 选择和有上限的发现缓存、侧栏/Tab 宽度、会话遮蔽字符、快捷键及
-`ThemeSettings`。显示策略独立保存为 System、Light 或 Dark，配色方案独立选择 AxSSH、
+scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
+Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、快捷键、`ThemeSettings` 以及
+记住密码的默认后端。schema 版本 13 新增 `terminal.option_as_meta`；旧文件缺失该字段时
+保持 `false`，所以 Option 默认仍产生原生字符、IME 和死键输入。schema 版本 12 将旧
+`credential_stored: true` profile 标记迁移为 `credential_storage: "system-keyring"`；
+没有已记住密码的 profile 省略该字段。另一种加密保险库记录单独位于私有应用配置目录，
+从不包含保险库口令。显示策略独立保存为 System、Light 或 Dark，配色方案独立选择 AxSSH、
 Solarized 或 Custom。Custom 分别保存 Light/Dark 两套 13 个语义 UI/终端默认色，并规范化为
 `#RRGGBB` 或 `#RRGGBBAA`。schema 版本 11 会拆分旧的组合模式：Solarized Dark 迁移为
 Dark + Solarized；旧 Custom 按背景亮度进入对应的一侧，另一侧使用安全 AxSSH 默认。
@@ -213,10 +272,17 @@ control border、focus、hover 和 selected 状态 token，避免共享组件各
 使用 Slint 标准控件 palette。组件保留有界字符串 model、current-index、selected callback、
 键盘导航、点击外部关闭和 combobox 可访问性契约。其它标准控件继续使用已同步的 Slint
 `Palette`，原生 `ContextMenuArea` 菜单仍由平台拥有。
+`ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
+Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、
+IME、键盘焦点、可访问性和标准文本编辑右键菜单。
+`ui/components/secret-text-input.slint` 是 SSH 密码、保险库口令和私钥 passphrase 专用的
+密码输入，不继承普通字段的选择或复制/剪切行为。数值输入继续使用标准 `SpinBox`，不重复
+实现范围与增减语义。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
-列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 持有统一草稿和一次 Save
-事务，各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的草稿属性和 callback。
+列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 在只读
+`SettingsViewState` 边界后持有统一草稿和一次 Save 事务，各分类布局拆到
+`ui/settings/*.slint`，只接收本分类需要的局部草稿属性和 callback。
 `ui/settings/appearance.slint` 将 Display mode 与 Color palette 分开，并用一个共享
 `ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将保存的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端

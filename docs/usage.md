@@ -20,21 +20,32 @@ cargo run --locked
    directory can be selected, or a path can be entered manually.
 3. Save the session, then select it in the session navigator. Opening the same
    saved session more than once creates independent terminal tabs with separate
-   connections and output.
+   connections and output. Each SSH Tab can independently wait for host-key
+   confirmation or authentication; the security prompt always belongs to the
+   active Tab, and switching Tabs preserves the other pending prompt.
 4. On the first connection, compare the displayed SHA-256 host-key fingerprint
    with a trusted source before confirming it. A changed key requires another
    explicit confirmation and should be investigated before acceptance.
 5. Enter a transient password or private-key passphrase when prompted. A
-   password can optionally be remembered in the platform credential store; a
-   private-key passphrase is never persisted.
+   private-key passphrase is never persisted. To remember an SSH password,
+   first choose **System credential store** or **Encrypted application vault**
+   in **Settings > General**, then select **Remember password** in the password
+   prompt. The encrypted vault also asks for a vault password; later uses ask
+   only for that vault password to unlock the saved SSH password.
+   Password, vault-password, and passphrase fields cannot be copied, cut, or
+   selected, and are cleared after a submitted secret is accepted or the prompt
+   is cancelled.
+   Closing a probing or pending-authentication Tab cancels or discards only that
+   Tab's connection flow.
 
 Right-click a group to add a server, rename the group, or delete it. Right-click
 Ungrouped to add a server. Right-click a server to connect, edit, or delete it;
 the edit action reuses the same session editor. Changing its host or port clears
 the confirmed host-key fingerprint, so the new endpoint must be trusted
-explicitly on its next connection. Leaving an existing saved password blank
-keeps it; clearing the save-password checkbox removes it from the platform
-credential store.
+explicitly on its next connection. The session editor never shows or changes a
+saved password; use the connection prompt to remember a new password. Changing
+the default in **Settings > General** affects only future remembered passwords,
+not the storage backend already referenced by an existing profile.
 
 Choose **Pane > New Local Shell** or the Local Shell control to open an
 independent local terminal. Close a terminal with its tab control or **Window >
@@ -69,15 +80,24 @@ Drag a workspace Tab to reorder it. Its leading number changes with its current
 position, while an instance suffix such as `#1` remains unchanged.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
-input methods, and common xterm-style control and navigation sequences. Plain
+input methods, F1-F12, and common xterm-style control and navigation sequences.
+Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. Default clipboard
 shortcuts are `Cmd+C` / `Cmd+V` on macOS and `Ctrl+Shift+C` / `Ctrl+Shift+V` on
 Windows and Linux. These shortcuts can be changed in Settings.
 
+On macOS, Option continues to enter native characters, dead keys, and IME text
+by default. In **Settings > Terminal**, enable **Option acts as Meta** only when
+you want Option-modified keys sent as Escape-prefixed terminal Meta input.
+Windows/Linux Alt behavior remains terminal Meta input, while local keyboard
+layouts can submit AltGr characters through the text-input path.
+
 On macOS, Settings and About are in the standard AxSSH application menu. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
 contains General, Appearance, Terminal, Workspace, Shortcuts, and About pages;
-changes are persisted only when **Save** is selected.
+changes are persisted only when **Save** is selected. **Settings > General**
+also selects the default backend for a password you choose to remember on a
+future connection.
 
 In **Settings > Appearance**, Display mode selects **Follow system**, **Light**,
 or **Dark**. Color palette independently selects **AxSSH**, **Solarized**, or
@@ -90,15 +110,23 @@ or terminal text are replaced with readable defaults for that side.
 
 AxSSH stores profiles, non-secret group names, and settings in a versioned
 `sessions.json` inside the platform-local application data directory. A profile may contain a
-confirmed host-key fingerprint, a private-key path, and a marker indicating
-that a password is available. It does not contain passwords, private-key
-passphrases, private-key contents, terminal output, or live process state.
+confirmed host-key fingerprint, a private-key path, and an optional non-secret
+reference to the backend holding a remembered password. It does not contain
+passwords, vault passwords, private-key passphrases, private-key contents,
+terminal output, or live process state.
 
 Remembered passwords are stored through macOS Keychain, Windows Credential
-Manager, or Unix Secret Service. Daily logs are written to the `logs`
-subdirectory of the same application data directory, with at most 15 files
-retained. `RUST_LOG` overrides the default `ax_ssh=info,russh=warn` filter.
-Credentials and terminal contents must not be logged.
+Manager, or Unix Secret Service when **System credential store** is selected.
+The **Encrypted application vault** stores one private encrypted record per
+profile in the application configuration directory; its vault password is not
+saved. Daily logs are written to the `logs` subdirectory of the same
+application data directory, with at most 15 files retained. `RUST_LOG`
+overrides the default `ax_ssh=info,russh=warn` filter. Credentials and terminal
+contents must not be logged.
+
+A connected terminal may legitimately have no shell output. AxSSH uses SSH
+transport keepalive and inactivity policy, not a shell-output timer, to decide
+when such a connection is no longer live.
 
 ## Current limitations
 
