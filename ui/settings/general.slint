@@ -1,6 +1,7 @@
-import { ComboBox, SpinBox } from "std-widgets.slint";
+import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
     in property <[string]> local-shell-options;
@@ -13,7 +14,7 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: "Local shell";
         description: "Executable used for new local terminal tabs";
         SettingsField {
-            ComboBox {
+            ThemedComboBox {
                 height: Theme.settings-control-height;
                 model: root.local-shell-options;
                 current-index <=> root.draft-local-shell-index;

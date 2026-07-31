@@ -1,6 +1,98 @@
-import { ComboBox, LineEdit, ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { LineEdit, ScrollView, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
+import { ThemedComboBox } from "../components/themed-combo-box.slint";
+
+component ThemePaletteEditor inherits VerticalLayout {
+    in property <string> title;
+    in-out property <string> background-color;
+    in-out property <string> panel-color;
+    in-out property <string> panel-alt-color;
+    in-out property <string> border-color-value;
+    in-out property <string> text-color-value;
+    in-out property <string> muted-color;
+    in-out property <string> accent-color;
+    in-out property <string> success-color;
+    in-out property <string> danger-color;
+    in-out property <string> overlay-color;
+    in-out property <string> terminal-foreground-color;
+    in-out property <string> terminal-background-color;
+    in-out property <string> terminal-selection-color;
+
+    spacing: 0px;
+
+    SettingsSectionHeading { label: root.title; }
+    SettingsSectionHeading { label: "SURFACES"; }
+    SettingsRow {
+        label: "Background";
+        description: "Primary workspace surface";
+        SettingsField { LineEdit { text <=> root.background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} background color"; } }
+    }
+    SettingsRow {
+        label: "Panel";
+        description: "Navigation and title surfaces";
+        SettingsField { LineEdit { text <=> root.panel-color; height: Theme.settings-control-height; accessible-label: "\{root.title} panel color"; } }
+    }
+    SettingsRow {
+        label: "Panel alternative";
+        description: "Hover and secondary surfaces";
+        SettingsField { LineEdit { text <=> root.panel-alt-color; height: Theme.settings-control-height; accessible-label: "\{root.title} secondary panel color"; } }
+    }
+    SettingsRow {
+        label: "Border";
+        description: "Dividers and control outlines";
+        SettingsField { LineEdit { text <=> root.border-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} border color"; } }
+    }
+
+    SettingsSectionHeading { label: "CONTENT AND STATES"; }
+    SettingsRow {
+        label: "Text";
+        description: "Primary readable text";
+        SettingsField { LineEdit { text <=> root.text-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} text color"; } }
+    }
+    SettingsRow {
+        label: "Muted text";
+        description: "Secondary labels and metadata";
+        SettingsField { LineEdit { text <=> root.muted-color; height: Theme.settings-control-height; accessible-label: "\{root.title} muted text color"; } }
+    }
+    SettingsRow {
+        label: "Accent / focus";
+        description: "Focus rings, selection, and active indicators";
+        SettingsField { LineEdit { text <=> root.accent-color; height: Theme.settings-control-height; accessible-label: "\{root.title} accent color"; } }
+    }
+    SettingsRow {
+        label: "Success";
+        description: "Positive status indicators";
+        SettingsField { LineEdit { text <=> root.success-color; height: Theme.settings-control-height; accessible-label: "\{root.title} success color"; } }
+    }
+    SettingsRow {
+        label: "Danger";
+        description: "Error and destructive indicators";
+        SettingsField { LineEdit { text <=> root.danger-color; height: Theme.settings-control-height; accessible-label: "\{root.title} danger color"; } }
+    }
+    SettingsRow {
+        label: "Overlay";
+        description: "Dialog and transient overlay tint";
+        SettingsField { LineEdit { text <=> root.overlay-color; height: Theme.settings-control-height; accessible-label: "\{root.title} overlay color"; } }
+    }
+
+    SettingsSectionHeading { label: "TERMINAL DEFAULTS"; }
+    SettingsRow {
+        label: "Foreground";
+        description: "Default terminal text color";
+        SettingsField { LineEdit { text <=> root.terminal-foreground-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal foreground color"; } }
+    }
+    SettingsRow {
+        label: "Background";
+        description: "Default terminal background color";
+        SettingsField { LineEdit { text <=> root.terminal-background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal background color"; } }
+    }
+    SettingsRow {
+        label: "Selection";
+        description: "Terminal text selection background";
+        SettingsField { LineEdit { text <=> root.terminal-selection-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal selection color"; } }
+    }
+}
 
 export component AppearanceSettingsPage inherits Rectangle {
     in-out property <string> draft-font-family;
@@ -9,19 +101,33 @@ export component AppearanceSettingsPage inherits Rectangle {
     in-out property <int> draft-brightness-percent;
     in-out property <bool> draft-bright-bold-text;
     in-out property <string> draft-theme-mode;
-    in-out property <string> draft-theme-background;
-    in-out property <string> draft-theme-panel;
-    in-out property <string> draft-theme-panel-alt;
-    in-out property <string> draft-theme-border;
-    in-out property <string> draft-theme-text;
-    in-out property <string> draft-theme-muted;
-    in-out property <string> draft-theme-accent;
-    in-out property <string> draft-theme-success;
-    in-out property <string> draft-theme-danger;
-    in-out property <string> draft-theme-overlay;
-    in-out property <string> draft-theme-terminal-foreground;
-    in-out property <string> draft-theme-terminal-background;
-    in-out property <string> draft-theme-terminal-selection;
+    in-out property <string> draft-theme-palette;
+    in-out property <string> draft-theme-light-background;
+    in-out property <string> draft-theme-light-panel;
+    in-out property <string> draft-theme-light-panel-alt;
+    in-out property <string> draft-theme-light-border;
+    in-out property <string> draft-theme-light-text;
+    in-out property <string> draft-theme-light-muted;
+    in-out property <string> draft-theme-light-accent;
+    in-out property <string> draft-theme-light-success;
+    in-out property <string> draft-theme-light-danger;
+    in-out property <string> draft-theme-light-overlay;
+    in-out property <string> draft-theme-light-terminal-foreground;
+    in-out property <string> draft-theme-light-terminal-background;
+    in-out property <string> draft-theme-light-terminal-selection;
+    in-out property <string> draft-theme-dark-background;
+    in-out property <string> draft-theme-dark-panel;
+    in-out property <string> draft-theme-dark-panel-alt;
+    in-out property <string> draft-theme-dark-border;
+    in-out property <string> draft-theme-dark-text;
+    in-out property <string> draft-theme-dark-muted;
+    in-out property <string> draft-theme-dark-accent;
+    in-out property <string> draft-theme-dark-success;
+    in-out property <string> draft-theme-dark-danger;
+    in-out property <string> draft-theme-dark-overlay;
+    in-out property <string> draft-theme-dark-terminal-foreground;
+    in-out property <string> draft-theme-dark-terminal-background;
+    in-out property <string> draft-theme-dark-terminal-selection;
 
     background: Theme.background;
 
@@ -51,139 +157,80 @@ export component AppearanceSettingsPage inherits Rectangle {
 
                 SettingsSectionHeading { label: "APPLICATION THEME"; }
                 SettingsRow {
-                    label: "Theme";
-                    description: "Follow system updates while AxSSH is running";
+                    label: "Display mode";
+                    description: "Choose system, light, or dark appearance";
                     SettingsField {
-                        ComboBox {
+                        ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
-                            model: ["Follow system", "Dark", "Light", "Solarized Dark", "Custom"];
+                            model: ["Follow system", "Light", "Dark"];
                             current-index: root.draft-theme-mode == "system" ? 0
-                                : (root.draft-theme-mode == "light" ? 2
-                                : (root.draft-theme-mode == "solarized-dark" ? 3
-                                : (root.draft-theme-mode == "custom" ? 4 : 1)));
-                            accessible-label: "Application theme";
+                                : (root.draft-theme-mode == "light" ? 1 : 2);
+                            accessible-label: "Application display mode";
                             selected(value) => {
                                 root.draft-theme-mode = value == "Follow system" ? "system"
-                                    : (value == "Light" ? "light"
-                                    : (value == "Solarized Dark" ? "solarized-dark"
-                                    : (value == "Custom" ? "custom" : "dark")));
+                                    : (value == "Light" ? "light" : "dark");
+                            }
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Color palette";
+                    description: "Apply one color family to both display modes";
+                    SettingsField {
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: ["AxSSH", "Solarized", "Custom"];
+                            current-index: root.draft-theme-palette == "solarized" ? 1
+                                : (root.draft-theme-palette == "custom" ? 2 : 0);
+                            accessible-label: "Application color palette";
+                            selected(value) => {
+                                root.draft-theme-palette = value == "Solarized" ? "solarized"
+                                    : (value == "Custom" ? "custom" : "axssh");
                             }
                         }
                     }
                 }
 
-                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
-                    label: "CUSTOM PALETTE";
-                }
-                if root.draft-theme-mode == "custom" : Text {
+                if root.draft-theme-palette == "custom" : Text {
                     height: Theme.settings-section-height;
-                    text: "Enter #RRGGBB or #RRGGBBAA values. Changes apply when you save.";
+                    text: "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved.";
                     color: Theme.muted;
                     font-size: Theme.font-caption;
                     vertical-alignment: center;
                 }
-                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
-                    label: "SURFACES";
+                if root.draft-theme-palette == "custom" : ThemePaletteEditor {
+                    title: "CUSTOM LIGHT PALETTE";
+                    background-color <=> root.draft-theme-light-background;
+                    panel-color <=> root.draft-theme-light-panel;
+                    panel-alt-color <=> root.draft-theme-light-panel-alt;
+                    border-color-value <=> root.draft-theme-light-border;
+                    text-color-value <=> root.draft-theme-light-text;
+                    muted-color <=> root.draft-theme-light-muted;
+                    accent-color <=> root.draft-theme-light-accent;
+                    success-color <=> root.draft-theme-light-success;
+                    danger-color <=> root.draft-theme-light-danger;
+                    overlay-color <=> root.draft-theme-light-overlay;
+                    terminal-foreground-color <=> root.draft-theme-light-terminal-foreground;
+                    terminal-background-color <=> root.draft-theme-light-terminal-background;
+                    terminal-selection-color <=> root.draft-theme-light-terminal-selection;
                 }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Background";
-                    description: "Primary workspace surface";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-background; height: Theme.settings-control-height; accessible-label: "Custom background color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Panel";
-                    description: "Navigation and title surfaces";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-panel; height: Theme.settings-control-height; accessible-label: "Custom panel color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Panel alternative";
-                    description: "Hover and secondary surfaces";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-panel-alt; height: Theme.settings-control-height; accessible-label: "Custom secondary panel color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Border";
-                    description: "Dividers and control outlines";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-border; height: Theme.settings-control-height; accessible-label: "Custom border color"; }
-                    }
-                }
-
-                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
-                    label: "CONTENT";
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Text";
-                    description: "Primary readable text";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-text; height: Theme.settings-control-height; accessible-label: "Custom text color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Muted text";
-                    description: "Secondary labels and metadata";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-muted; height: Theme.settings-control-height; accessible-label: "Custom muted text color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Accent";
-                    description: "Focus, selection, and active indicators";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-accent; height: Theme.settings-control-height; accessible-label: "Custom accent color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Success";
-                    description: "Positive status indicators";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-success; height: Theme.settings-control-height; accessible-label: "Custom success color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Danger";
-                    description: "Error and destructive indicators";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-danger; height: Theme.settings-control-height; accessible-label: "Custom danger color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Overlay";
-                    description: "Dialog and transient overlay tint";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-overlay; height: Theme.settings-control-height; accessible-label: "Custom overlay color"; }
-                    }
-                }
-
-                if root.draft-theme-mode == "custom" : SettingsSectionHeading {
-                    label: "TERMINAL DEFAULTS";
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Foreground";
-                    description: "Default terminal text color";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-terminal-foreground; height: Theme.settings-control-height; accessible-label: "Custom terminal foreground color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Background";
-                    description: "Default terminal background color";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-terminal-background; height: Theme.settings-control-height; accessible-label: "Custom terminal background color"; }
-                    }
-                }
-                if root.draft-theme-mode == "custom" : SettingsRow {
-                    label: "Selection";
-                    description: "Terminal text selection background";
-                    SettingsField {
-                        LineEdit { text <=> root.draft-theme-terminal-selection; height: Theme.settings-control-height; accessible-label: "Custom terminal selection color"; }
-                    }
+                if root.draft-theme-palette == "custom" : ThemePaletteEditor {
+                    title: "CUSTOM DARK PALETTE";
+                    background-color <=> root.draft-theme-dark-background;
+                    panel-color <=> root.draft-theme-dark-panel;
+                    panel-alt-color <=> root.draft-theme-dark-panel-alt;
+                    border-color-value <=> root.draft-theme-dark-border;
+                    text-color-value <=> root.draft-theme-dark-text;
+                    muted-color <=> root.draft-theme-dark-muted;
+                    accent-color <=> root.draft-theme-dark-accent;
+                    success-color <=> root.draft-theme-dark-success;
+                    danger-color <=> root.draft-theme-dark-danger;
+                    overlay-color <=> root.draft-theme-dark-overlay;
+                    terminal-foreground-color <=> root.draft-theme-dark-terminal-foreground;
+                    terminal-background-color <=> root.draft-theme-dark-terminal-background;
+                    terminal-selection-color <=> root.draft-theme-dark-terminal-selection;
                 }
 
                 SettingsSectionHeading { label: "TYPOGRAPHY"; }

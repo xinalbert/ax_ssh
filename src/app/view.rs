@@ -227,38 +227,83 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
 }
 
 fn apply_theme_to_component(ui: &AppWindow, settings: &AppSettings) {
-    let palette = &settings.appearance.theme.custom;
+    let light = settings.appearance.theme.light_palette();
+    let dark = settings.appearance.theme.dark_palette();
     let theme = ui.global::<Theme>();
     theme.set_mode(settings.appearance.theme.mode.as_setting().into());
-    theme.set_custom_background(theme_color(&palette.background));
-    theme.set_custom_panel(theme_color(&palette.panel));
-    theme.set_custom_panel_alt(theme_color(&palette.panel_alt));
-    theme.set_custom_border(theme_color(&palette.border));
-    theme.set_custom_text(theme_color(&palette.text));
-    theme.set_custom_muted(theme_color(&palette.muted));
-    theme.set_custom_accent(theme_color(&palette.accent));
-    theme.set_custom_success(theme_color(&palette.success));
-    theme.set_custom_danger(theme_color(&palette.danger));
-    theme.set_custom_overlay(theme_color(&palette.overlay));
-    theme.set_custom_terminal_foreground(theme_color(&palette.terminal_foreground));
-    theme.set_custom_terminal_background(theme_color(&palette.terminal_background));
-    theme.set_custom_terminal_selection(theme_color(&palette.terminal_selection));
+    theme.set_palette(settings.appearance.theme.palette.as_setting().into());
+    set_theme_palette(&theme, &light, true);
+    set_theme_palette(&theme, &dark, false);
 
     ui.set_theme_mode(settings.appearance.theme.mode.as_setting().into());
-    ui.set_theme_background(palette.background.clone().into());
-    ui.set_theme_panel(palette.panel.clone().into());
-    ui.set_theme_panel_alt(palette.panel_alt.clone().into());
-    ui.set_theme_border(palette.border.clone().into());
-    ui.set_theme_text(palette.text.clone().into());
-    ui.set_theme_muted(palette.muted.clone().into());
-    ui.set_theme_accent(palette.accent.clone().into());
-    ui.set_theme_success(palette.success.clone().into());
-    ui.set_theme_danger(palette.danger.clone().into());
-    ui.set_theme_overlay(palette.overlay.clone().into());
-    ui.set_theme_terminal_foreground_value(palette.terminal_foreground.clone().into());
-    ui.set_theme_terminal_background_value(palette.terminal_background.clone().into());
-    ui.set_theme_terminal_selection_value(palette.terminal_selection.clone().into());
+    ui.set_theme_palette(settings.appearance.theme.palette.as_setting().into());
+    set_ui_theme_palette(ui, &settings.appearance.theme.custom_light, true);
+    set_ui_theme_palette(ui, &settings.appearance.theme.custom_dark, false);
     ui.set_theme_revision(ui.get_theme_revision().wrapping_add(1));
+}
+
+fn set_theme_palette(theme: &Theme, palette: &ThemePalette, light: bool) {
+    if light {
+        theme.set_light_background(theme_color(&palette.background));
+        theme.set_light_panel(theme_color(&palette.panel));
+        theme.set_light_panel_alt(theme_color(&palette.panel_alt));
+        theme.set_light_border(theme_color(&palette.border));
+        theme.set_light_text(theme_color(&palette.text));
+        theme.set_light_muted(theme_color(&palette.muted));
+        theme.set_light_accent(theme_color(&palette.accent));
+        theme.set_light_success(theme_color(&palette.success));
+        theme.set_light_danger(theme_color(&palette.danger));
+        theme.set_light_overlay(theme_color(&palette.overlay));
+        theme.set_light_terminal_foreground(theme_color(&palette.terminal_foreground));
+        theme.set_light_terminal_background(theme_color(&palette.terminal_background));
+        theme.set_light_terminal_selection(theme_color(&palette.terminal_selection));
+    } else {
+        theme.set_dark_background(theme_color(&palette.background));
+        theme.set_dark_panel(theme_color(&palette.panel));
+        theme.set_dark_panel_alt(theme_color(&palette.panel_alt));
+        theme.set_dark_border(theme_color(&palette.border));
+        theme.set_dark_text(theme_color(&palette.text));
+        theme.set_dark_muted(theme_color(&palette.muted));
+        theme.set_dark_accent(theme_color(&palette.accent));
+        theme.set_dark_success(theme_color(&palette.success));
+        theme.set_dark_danger(theme_color(&palette.danger));
+        theme.set_dark_overlay(theme_color(&palette.overlay));
+        theme.set_dark_terminal_foreground(theme_color(&palette.terminal_foreground));
+        theme.set_dark_terminal_background(theme_color(&palette.terminal_background));
+        theme.set_dark_terminal_selection(theme_color(&palette.terminal_selection));
+    }
+}
+
+fn set_ui_theme_palette(ui: &AppWindow, palette: &ThemePalette, light: bool) {
+    if light {
+        ui.set_theme_light_background(palette.background.clone().into());
+        ui.set_theme_light_panel(palette.panel.clone().into());
+        ui.set_theme_light_panel_alt(palette.panel_alt.clone().into());
+        ui.set_theme_light_border(palette.border.clone().into());
+        ui.set_theme_light_text(palette.text.clone().into());
+        ui.set_theme_light_muted(palette.muted.clone().into());
+        ui.set_theme_light_accent(palette.accent.clone().into());
+        ui.set_theme_light_success(palette.success.clone().into());
+        ui.set_theme_light_danger(palette.danger.clone().into());
+        ui.set_theme_light_overlay(palette.overlay.clone().into());
+        ui.set_theme_light_terminal_foreground(palette.terminal_foreground.clone().into());
+        ui.set_theme_light_terminal_background(palette.terminal_background.clone().into());
+        ui.set_theme_light_terminal_selection(palette.terminal_selection.clone().into());
+    } else {
+        ui.set_theme_dark_background(palette.background.clone().into());
+        ui.set_theme_dark_panel(palette.panel.clone().into());
+        ui.set_theme_dark_panel_alt(palette.panel_alt.clone().into());
+        ui.set_theme_dark_border(palette.border.clone().into());
+        ui.set_theme_dark_text(palette.text.clone().into());
+        ui.set_theme_dark_muted(palette.muted.clone().into());
+        ui.set_theme_dark_accent(palette.accent.clone().into());
+        ui.set_theme_dark_success(palette.success.clone().into());
+        ui.set_theme_dark_danger(palette.danger.clone().into());
+        ui.set_theme_dark_overlay(palette.overlay.clone().into());
+        ui.set_theme_dark_terminal_foreground(palette.terminal_foreground.clone().into());
+        ui.set_theme_dark_terminal_background(palette.terminal_background.clone().into());
+        ui.set_theme_dark_terminal_selection(palette.terminal_selection.clone().into());
+    }
 }
 
 pub(super) fn empty_terminal_snapshot() -> TerminalSnapshot {

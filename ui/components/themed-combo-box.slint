@@ -1,0 +1,306 @@
+import { Theme } from "../theme.slint";
+
+component ComboBoxChevron inherits Path {
+    in property <bool> expanded;
+    in property <brush> color: Theme.muted;
+
+    width: Theme.combo-box-chevron-size;
+    height: Theme.combo-box-chevron-size;
+    commands: root.expanded
+        ? "M 2 9 L 6 5 L 10 9"
+        : "M 2 5 L 6 9 L 10 5";
+    fill: transparent;
+    stroke: root.color;
+    stroke-width: Theme.combo-box-chevron-stroke;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+}
+
+export component ThemedComboBox inherits FocusScope {
+    in property <[string]> model;
+    in-out property <int> current-index: 0;
+    out property <string> current-value: root.current-index >= 0
+        && root.current-index < root.model.length
+        ? root.model[root.current-index]
+        : "";
+    callback selected(string);
+
+    private property <bool> popup-open: false;
+    private property <length> popup-scroll-y: 0px;
+    private property <int> visible-items: min(
+        Theme.combo-box-popup-max-visible-items,
+        root.model.length,
+    );
+
+    min-height: Theme.combo-box-control-height;
+    max-height: Theme.combo-box-control-height;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: combobox;
+    accessible-enabled: root.enabled;
+    accessible-expandable: true;
+    accessible-expanded: root.popup-open;
+    accessible-value: root.current-value;
+
+    function select(index: int) {
+        if !root.enabled || index < 0 || index >= root.model.length {
+            return;
+        }
+        root.current-index = index;
+        root.selected(root.model[index]);
+    }
+
+    function move-selection(delta: int) {
+        if root.model.length == 0 {
+            return;
+        }
+        root.select((root.current-index + delta).clamp(0, root.model.length - 1));
+        root.popup-scroll-y = -max(
+            0,
+            root.current-index - root.visible-items + 1,
+        ) * Theme.combo-box-popup-row-height;
+    }
+
+    function show-popup() {
+        if !root.enabled || root.model.length == 0 {
+            return;
+        }
+        root.popup-scroll-y = -max(
+            0,
+            root.current-index - root.visible-items + 1,
+        ) * Theme.combo-box-popup-row-height;
+        root.popup-open = true;
+        popup.show();
+    }
+
+    function close-popup() {
+        root.popup-open = false;
+        popup.close();
+    }
+
+    accessible-action-expand => { root.show-popup(); }
+
+    changed model => {
+        if root.model.length == 0 {
+            root.current-index = 0;
+        } else {
+            root.current-index = root.current-index.clamp(0, root.model.length - 1);
+        }
+    }
+
+    key-pressed(event) => {
+        if !root.enabled {
+            return EventResult.reject;
+        }
+        if event.text == Key.UpArrow {
+            root.move-selection(-1);
+            return EventResult.accept;
+        }
+        if event.text == Key.DownArrow {
+            root.move-selection(1);
+            return EventResult.accept;
+        }
+        if event.text == Key.Return || event.text == Key.Space {
+            root.show-popup();
+            return EventResult.accept;
+        }
+        if event.text == Key.Escape && root.popup-open {
+            root.close-popup();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    control := Rectangle {
+        background: !root.enabled
+            ? Theme.hover
+            : (control-touch.has-hover || root.popup-open ? Theme.hover : Theme.panel);
+        border-width: Theme.hairline;
+        border-color: root.has-focus || root.popup-open ? Theme.focus : Theme.control-border;
+        border-radius: Theme.radius-small;
+        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+
+        Text {
+            x: Theme.combo-box-horizontal-padding;
+            width: parent.width
+                - 2 * Theme.combo-box-horizontal-padding
+                - Theme.combo-box-chevron-size
+                - Theme.space-sm;
+            height: parent.height;
+            text: root.current-value;
+            color: Theme.text;
+            font-size: Theme.font-body;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        ComboBoxChevron {
+            x: parent.width - Theme.combo-box-horizontal-padding - self.width;
+            y: (parent.height - self.height) / 2;
+            expanded: root.popup-open;
+            color: root.has-focus || control-touch.has-hover ? Theme.text : Theme.muted;
+            accessible-role: none;
+        }
+
+        control-touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: pointer;
+            clicked => {
+                root.focus();
+                if root.popup-open {
+                    root.close-popup();
+                } else {
+                    root.show-popup();
+                }
+            }
+            scroll-event(event) => {
+                if !root.has-focus {
+                    return EventResult.reject;
+                }
+                if event.delta-y < -Theme.combo-box-scroll-delta {
+                    root.move-selection(1);
+                    return EventResult.accept;
+                }
+                if event.delta-y > Theme.combo-box-scroll-delta {
+                    root.move-selection(-1);
+                    return EventResult.accept;
+                }
+                return EventResult.reject;
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.height + Theme.combo-box-popup-offset;
+        width: root.width;
+        height: root.visible-items * Theme.combo-box-popup-row-height
+            + 2 * Theme.combo-box-popup-padding;
+        close-policy: close-on-click-outside;
+        forward-focus: popup-focus;
+
+        popup-focus := FocusScope {
+            focus-changed-event => {
+                root.popup-open = self.has-focus;
+            }
+            key-pressed(event) => {
+                if event.text == Key.UpArrow {
+                    root.move-selection(-1);
+                    return EventResult.accept;
+                }
+                if event.text == Key.DownArrow {
+                    root.move-selection(1);
+                    return EventResult.accept;
+                }
+                if event.text == Key.Return || event.text == Key.Escape {
+                    root.close-popup();
+                    return EventResult.accept;
+                }
+                return EventResult.reject;
+            }
+
+            popup-surface := Rectangle {
+                background: Theme.panel;
+                border-width: Theme.hairline;
+                border-color: Theme.frame-border;
+                border-radius: Theme.radius-small;
+                clip: true;
+                accessible-role: list;
+                accessible-label: root.accessible-label;
+                accessible-item-count: root.model.length;
+
+                options-flick := Flickable {
+                    x: Theme.combo-box-popup-padding;
+                    y: Theme.combo-box-popup-padding;
+                    width: parent.width - 2 * Theme.combo-box-popup-padding;
+                    height: parent.height - 2 * Theme.combo-box-popup-padding;
+                    viewport-width: self.width;
+                    viewport-y <=> root.popup-scroll-y;
+                    viewport-height: max(
+                        self.height,
+                        root.model.length * Theme.combo-box-popup-row-height,
+                    );
+                    interactive: root.model.length > root.visible-items;
+
+                    for value[index] in root.model : Rectangle {
+                        x: 0px;
+                        y: index * Theme.combo-box-popup-row-height;
+                        width: options-flick.width;
+                        height: Theme.combo-box-popup-row-height;
+                        background: index == root.current-index
+                            ? Theme.selected
+                            : (option-touch.has-hover ? Theme.hover : Theme.panel);
+                        border-radius: Theme.radius-small;
+                        accessible-role: list-item;
+                        accessible-label: value;
+
+                        if index == root.current-index : Rectangle {
+                            x: 0px;
+                            y: Theme.space-xs;
+                            width: Theme.combo-box-selection-indicator-width;
+                            height: parent.height - 2 * Theme.space-xs;
+                            background: Theme.accent;
+                            border-radius: Theme.hairline;
+                        }
+
+                        Text {
+                            x: Theme.combo-box-horizontal-padding;
+                            width: parent.width
+                                - 2 * Theme.combo-box-horizontal-padding
+                                - (root.model.length > root.visible-items
+                                    ? Theme.combo-box-scrollbar-width + Theme.space-sm
+                                    : 0px);
+                            height: parent.height;
+                            text: value;
+                            color: Theme.text;
+                            font-size: Theme.font-body;
+                            font-weight: index == root.current-index ? 600 : 400;
+                            horizontal-alignment: left;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            accessible-role: none;
+                        }
+
+                        option-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.select(index);
+                                root.close-popup();
+                            }
+                        }
+                    }
+                }
+
+                if root.model.length > root.visible-items : Rectangle {
+                    x: parent.width
+                        - Theme.combo-box-popup-padding
+                        - Theme.combo-box-scrollbar-width;
+                    y: Theme.combo-box-popup-padding + Theme.space-xs;
+                    width: Theme.combo-box-scrollbar-width;
+                    height: parent.height
+                        - 2 * Theme.combo-box-popup-padding
+                        - 2 * Theme.space-xs;
+                    background: Theme.hover;
+                    border-radius: self.width / 2;
+
+                    scroll-thumb := Rectangle {
+                        y: (-options-flick.viewport-y
+                            / (options-flick.viewport-height - options-flick.height))
+                            * (parent.height - self.height);
+                        width: parent.width;
+                        height: max(
+                            Theme.combo-box-scrollbar-min-thumb-height,
+                            parent.height * root.visible-items / root.model.length,
+                        );
+                        background: Theme.muted;
+                        border-radius: self.width / 2;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,70 +1,79 @@
 import { Palette } from "std-widgets.slint";
 
 export global Theme {
-    // Semantic palette. Rust stores only custom colors; these bindings keep
-    // built-in presets and the system-following mode reactive in Slint.
+    // Rust supplies both validated sides of the selected palette. Slint only
+    // resolves the display strategy, so a system color-scheme change never
+    // requires blocking configuration or filesystem work.
     in-out property <string> mode: "dark";
-    in-out property <color> custom-background: #171918;
-    in-out property <color> custom-panel: #202321;
-    in-out property <color> custom-panel-alt: #292d2a;
-    in-out property <color> custom-border: #3b423e;
-    in-out property <color> custom-text: #edf1ee;
-    in-out property <color> custom-muted: #a8b2ac;
-    in-out property <color> custom-accent: #52c7a5;
-    in-out property <color> custom-success: #63d6a9;
-    in-out property <color> custom-danger: #ff8e88;
-    in-out property <color> custom-overlay: #00000099;
-    in-out property <color> custom-terminal-foreground: #cccccc;
-    in-out property <color> custom-terminal-background: #1e1e1e;
-    in-out property <color> custom-terminal-selection: #264f78;
+    in-out property <string> palette: "axssh";
+    in-out property <color> light-background: #f7f8f7;
+    in-out property <color> light-panel: #ffffff;
+    in-out property <color> light-panel-alt: #edf1ee;
+    in-out property <color> light-border: #6d7972;
+    in-out property <color> light-text: #1c2520;
+    in-out property <color> light-muted: #526058;
+    in-out property <color> light-accent: #116b54;
+    in-out property <color> light-success: #126a43;
+    in-out property <color> light-danger: #a72c28;
+    in-out property <color> light-overlay: #10201899;
+    in-out property <color> light-terminal-foreground: #333333;
+    in-out property <color> light-terminal-background: #ffffff;
+    in-out property <color> light-terminal-selection: #add6ff;
+    in-out property <color> dark-background: #171918;
+    in-out property <color> dark-panel: #202321;
+    in-out property <color> dark-panel-alt: #292d2a;
+    in-out property <color> dark-border: #727c76;
+    in-out property <color> dark-text: #edf1ee;
+    in-out property <color> dark-muted: #a8b2ac;
+    in-out property <color> dark-accent: #52c7a5;
+    in-out property <color> dark-success: #63d6a9;
+    in-out property <color> dark-danger: #ff8e88;
+    in-out property <color> dark-overlay: #00000099;
+    in-out property <color> dark-terminal-foreground: #cccccc;
+    in-out property <color> dark-terminal-background: #1e1e1e;
+    in-out property <color> dark-terminal-selection: #264f78;
 
-    // Palette tracks the platform scheme through Slint's active backend. Treat
-    // an unavailable/unknown value as dark to preserve AxSSH's historic default.
-    out property <bool> system-dark: Palette.color-scheme != ColorScheme.light;
+    // `unknown` lets standard widgets follow the platform. Their resolved
+    // surface remains available here, so AxSSH and the widget palette can share
+    // one direction without binding Palette back to itself.
+    private property <color> platform-background: Palette.background;
+    out property <bool> system-dark:
+        platform-background.to-oklch().lightness < 0.5;
     private property <string> resolved-mode: mode == "system"
-        ? (system-dark ? "dark" : "light") : mode;
+        ? (system-dark ? "dark" : "light") : (mode == "light" ? "light" : "dark");
+    out property <bool> resolved-dark: resolved-mode == "dark";
+    out property <ColorScheme> widget-color-scheme: mode == "system"
+        ? ColorScheme.unknown
+        : (resolved-dark ? ColorScheme.dark : ColorScheme.light);
 
-    out property <color> background: resolved-mode == "custom"
-        ? custom-background : (resolved-mode == "light" ? #f7f8f7
-        : (resolved-mode == "solarized-dark" ? #002b36 : #171918));
-    out property <color> panel: resolved-mode == "custom"
-        ? custom-panel : (resolved-mode == "light" ? #ffffff
-        : (resolved-mode == "solarized-dark" ? #073642 : #202321));
-    out property <color> panel-alt: resolved-mode == "custom"
-        ? custom-panel-alt : (resolved-mode == "light" ? #edf1ee
-        : (resolved-mode == "solarized-dark" ? #0b4652 : #292d2a));
-    out property <color> border: resolved-mode == "custom"
-        ? custom-border : (resolved-mode == "light" ? #c9d1cc
-        : (resolved-mode == "solarized-dark" ? #245664 : #3b423e));
-    out property <color> text: resolved-mode == "custom"
-        ? custom-text : (resolved-mode == "light" ? #1c2520
-        : (resolved-mode == "solarized-dark" ? #eee8d5 : #edf1ee));
-    out property <color> muted: resolved-mode == "custom"
-        ? custom-muted : (resolved-mode == "light" ? #5e6c64
-        : (resolved-mode == "solarized-dark" ? #93a1a1 : #a8b2ac));
-    out property <color> accent: resolved-mode == "custom"
-        ? custom-accent : (resolved-mode == "light" ? #16795f
-        : (resolved-mode == "solarized-dark" ? #2aa198 : #52c7a5));
-    out property <color> success: resolved-mode == "custom"
-        ? custom-success : (resolved-mode == "light" ? #18794e
-        : (resolved-mode == "solarized-dark" ? #859900 : #63d6a9));
-    out property <color> danger: resolved-mode == "custom"
-        ? custom-danger : (resolved-mode == "light" ? #c33832
-        : (resolved-mode == "solarized-dark" ? #dc322f : #ff8e88));
-    out property <color> overlay: resolved-mode == "custom"
-        ? custom-overlay : (resolved-mode == "light" ? #10201899
-        : (resolved-mode == "solarized-dark" ? #001e26a8 : #00000099));
-    out property <color> terminal-foreground: resolved-mode == "custom"
-        ? custom-terminal-foreground : (resolved-mode == "light" ? #333333
-        : (resolved-mode == "solarized-dark" ? #839496 : #cccccc));
-    out property <color> terminal-background: resolved-mode == "custom"
-        ? custom-terminal-background : (resolved-mode == "light" ? #ffffff
-        : (resolved-mode == "solarized-dark" ? #002b36 : #1e1e1e));
-    out property <color> terminal-selection: resolved-mode == "custom"
-        ? custom-terminal-selection : (resolved-mode == "light" ? #add6ff
-        : (resolved-mode == "solarized-dark" ? #073642 : #264f78));
-    out property <string> terminal-color-scheme: resolved-mode == "light"
-        ? "light" : (resolved-mode == "solarized-dark" ? "solarized-dark" : "dark");
+    out property <color> background: resolved-mode == "light" ? light-background : dark-background;
+    out property <color> panel: resolved-mode == "light" ? light-panel : dark-panel;
+    out property <color> panel-alt: resolved-mode == "light" ? light-panel-alt : dark-panel-alt;
+    out property <color> border: resolved-mode == "light" ? light-border : dark-border;
+    out property <color> text: resolved-mode == "light" ? light-text : dark-text;
+    out property <color> muted: resolved-mode == "light" ? light-muted : dark-muted;
+    out property <color> accent: resolved-mode == "light" ? light-accent : dark-accent;
+    out property <color> success: resolved-mode == "light" ? light-success : dark-success;
+    out property <color> danger: resolved-mode == "light" ? light-danger : dark-danger;
+    out property <color> overlay: resolved-mode == "light" ? light-overlay : dark-overlay;
+    out property <color> terminal-foreground: resolved-mode == "light"
+        ? light-terminal-foreground : dark-terminal-foreground;
+    out property <color> terminal-background: resolved-mode == "light"
+        ? light-terminal-background : dark-terminal-background;
+    out property <color> terminal-selection: resolved-mode == "light"
+        ? light-terminal-selection : dark-terminal-selection;
+    out property <string> terminal-color-scheme:
+        palette == "solarized" && resolved-dark ? "solarized-dark"
+        : (resolved-dark ? "dark" : "light");
+
+    // Shared state tokens keep borders, dividers, focus rings and selected rows
+    // on the same contrast-safe semantic surface across all components.
+    out property <color> divider: border;
+    out property <color> frame-border: border;
+    out property <color> control-border: border;
+    out property <color> focus: accent;
+    out property <color> hover: panel-alt;
+    out property <color> selected: accent.with-alpha(0.16);
 
     // Type scale.
     out property <length> font-micro: 10px;
@@ -157,6 +166,19 @@ export global Theme {
     out property <length> settings-field-width: 280px;
     out property <length> settings-terminal-size-width: 128px;
     out property <length> settings-number-width: 128px;
+    out property <length> combo-box-control-height: 32px;
+    out property <length> combo-box-horizontal-padding: 11px;
+    out property <length> combo-box-chevron-size: 12px;
+    out property <length> combo-box-chevron-stroke: 1.5px;
+    out property <length> combo-box-popup-offset: 4px;
+    out property <length> combo-box-popup-padding: 4px;
+    out property <length> combo-box-popup-row-height: 36px;
+    out property <int> combo-box-popup-max-visible-items: 6;
+    out property <length> combo-box-selection-indicator-width: 2px;
+    out property <length> combo-box-scrollbar-width: 3px;
+    out property <length> combo-box-scrollbar-min-thumb-height: 18px;
+    out property <length> combo-box-scroll-delta: 2px;
+    out property <float> combo-box-disabled-opacity: 0.55;
     out property <length> settings-slider-width: 220px;
     out property <length> settings-value-width: 40px;
     out property <length> settings-wide-number-width: 144px;

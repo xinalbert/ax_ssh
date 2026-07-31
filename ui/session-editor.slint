@@ -1,7 +1,8 @@
-import { Button, CheckBox, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
 import { SessionEditorField, SessionEditorSectionHeading } from "components/session-editor-controls.slint";
+import { ThemedComboBox } from "components/themed-combo-box.slint";
 
 export component SessionEditorPane inherits Rectangle {
     in property <[string]> group-options;
@@ -95,7 +96,7 @@ export component SessionEditorPane inherits Rectangle {
                                     placeholder-text: "Optional";
                                     accessible-label: "Session group";
                                 }
-                                if root.group-options.length > 0 : ComboBox {
+                                if root.group-options.length > 0 : ThemedComboBox {
                                     width: Theme.editor-secondary-picker-width;
                                     height: Theme.editor-input-row-height;
                                     model: root.group-options;
@@ -209,7 +210,7 @@ export component SessionEditorPane inherits Rectangle {
                         }
                         if root.private-key-options.length > 0 : SessionEditorField {
                             label: "Detected key";
-                            ComboBox {
+                            ThemedComboBox {
                                 width: min(parent.width, Theme.editor-detected-key-width);
                                 height: Theme.editor-input-row-height;
                                 model: root.private-key-options;

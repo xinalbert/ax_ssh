@@ -233,7 +233,7 @@ export component SettingsNavItem inherits FocusScope {
     Rectangle {
         border-radius: Theme.radius-small;
         background: root.selected
-            ? Theme.panel-alt
+            ? Theme.hover
             : (nav-touch.has-hover || root.has-focus ? Theme.background : transparent);
 
         Rectangle {
@@ -344,7 +344,7 @@ export component SettingsHeader inherits Rectangle {
         y: parent.height - Theme.hairline;
         width: parent.width;
         height: Theme.hairline;
-        background: Theme.border;
+        background: Theme.divider;
     }
 }
 
@@ -424,7 +424,7 @@ export component SettingsRow inherits Rectangle {
         y: parent.height - Theme.hairline;
         width: parent.width;
         height: Theme.hairline;
-        background: root.show-divider ? Theme.border : transparent;
+        background: root.show-divider ? Theme.divider : transparent;
     }
 }
 
@@ -511,9 +511,9 @@ export component ShortcutRecorder inherits FocusScope {
     }
 
     Rectangle {
-        background: root.has-focus ? Theme.panel-alt : Theme.panel;
+        background: root.has-focus ? Theme.hover : Theme.panel;
         border-width: root.has-focus ? 2 * Theme.hairline : Theme.hairline;
-        border-color: root.has-focus ? Theme.accent : Theme.border;
+        border-color: root.has-focus ? Theme.focus : Theme.control-border;
         border-radius: Theme.radius-small;
         Text {
             x: Theme.space-lg;

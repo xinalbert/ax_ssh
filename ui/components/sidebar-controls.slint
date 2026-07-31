@@ -96,9 +96,9 @@ export component SidebarRailToggle inherits FocusScope {
         y: (parent.height - self.height) / 2;
         width: Theme.sidebar-rail-toggle-size;
         height: Theme.sidebar-rail-toggle-size;
-        background: toggle-touch.has-hover || root.has-focus ? Theme.panel-alt : transparent;
+        background: toggle-touch.has-hover || root.has-focus ? Theme.hover : transparent;
         border-width: root.has-focus ? Theme.hairline : 0px;
-        border-color: Theme.accent;
+        border-color: Theme.focus;
         border-radius: Theme.radius-small;
 
         SidebarToggleGlyph {
@@ -154,8 +154,8 @@ export component SidebarRailItem inherits FocusScope {
             ? Theme.hairline
             : 0px;
         border-color: root.has-focus
-            ? Theme.accent
-            : (root.group ? Theme.accent : Theme.border);
+            ? Theme.focus
+            : (root.group ? Theme.accent : Theme.control-border);
         border-radius: Theme.radius;
 
         if root.local : SidebarTerminalGlyph {

@@ -20,7 +20,7 @@ export component HostKeyDialog inherits Rectangle {
         height: Theme.host-dialog-height;
         background: Theme.panel-alt;
         border-width: Theme.hairline;
-        border-color: root.changed ? Theme.danger : Theme.border;
+        border-color: root.changed ? Theme.danger : Theme.frame-border;
         border-radius: Theme.radius;
 
         VerticalLayout {
@@ -76,7 +76,7 @@ export component AuthenticationDialog inherits Rectangle {
             : Theme.password-dialog-height;
         background: Theme.panel-alt;
         border-width: Theme.hairline;
-        border-color: Theme.border;
+        border-color: Theme.frame-border;
         border-radius: Theme.radius;
 
         VerticalLayout {

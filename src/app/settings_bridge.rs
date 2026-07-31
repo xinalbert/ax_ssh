@@ -27,19 +27,33 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
               brightness_percent,
               bright_bold_text,
               theme_mode,
-              theme_background,
-              theme_panel,
-              theme_panel_alt,
-              theme_border,
-              theme_text,
-              theme_muted,
-              theme_accent,
-              theme_success,
-              theme_danger,
-              theme_overlay,
-              theme_terminal_foreground,
-              theme_terminal_background,
-              theme_terminal_selection,
+              theme_palette,
+              theme_light_background,
+              theme_light_panel,
+              theme_light_panel_alt,
+              theme_light_border,
+              theme_light_text,
+              theme_light_muted,
+              theme_light_accent,
+              theme_light_success,
+              theme_light_danger,
+              theme_light_overlay,
+              theme_light_terminal_foreground,
+              theme_light_terminal_background,
+              theme_light_terminal_selection,
+              theme_dark_background,
+              theme_dark_panel,
+              theme_dark_panel_alt,
+              theme_dark_border,
+              theme_dark_text,
+              theme_dark_muted,
+              theme_dark_accent,
+              theme_dark_success,
+              theme_dark_danger,
+              theme_dark_overlay,
+              theme_dark_terminal_foreground,
+              theme_dark_terminal_background,
+              theme_dark_terminal_selection,
               right_click_copy_or_paste,
               local_shell,
               scrollback_lines,
@@ -73,7 +87,7 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
                 font_family.as_str(),
                 font_size,
                 line_height_percent,
-                terminal_color_scheme_for_theme(theme_mode.as_str()),
+                terminal_color_scheme_for_theme(theme_mode.as_str(), theme_palette.as_str()),
                 brightness_percent,
                 bright_bold_text,
                 right_click_copy_or_paste,
@@ -93,21 +107,37 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
             let mut settings = settings;
             settings.set_theme(ThemeSettings::normalized(
                 theme_mode.as_str(),
-                ThemePalette::normalized(
-                    theme_background.as_str(),
-                    theme_panel.as_str(),
-                    theme_panel_alt.as_str(),
-                    theme_border.as_str(),
-                    theme_text.as_str(),
-                    theme_muted.as_str(),
-                    theme_accent.as_str(),
-                    theme_success.as_str(),
-                    theme_danger.as_str(),
-                    theme_overlay.as_str(),
-                    theme_terminal_foreground.as_str(),
-                    theme_terminal_background.as_str(),
-                    theme_terminal_selection.as_str(),
-                ),
+                theme_palette.as_str(),
+                ThemePalette {
+                    background: theme_light_background.to_string(),
+                    panel: theme_light_panel.to_string(),
+                    panel_alt: theme_light_panel_alt.to_string(),
+                    border: theme_light_border.to_string(),
+                    text: theme_light_text.to_string(),
+                    muted: theme_light_muted.to_string(),
+                    accent: theme_light_accent.to_string(),
+                    success: theme_light_success.to_string(),
+                    danger: theme_light_danger.to_string(),
+                    overlay: theme_light_overlay.to_string(),
+                    terminal_foreground: theme_light_terminal_foreground.to_string(),
+                    terminal_background: theme_light_terminal_background.to_string(),
+                    terminal_selection: theme_light_terminal_selection.to_string(),
+                },
+                ThemePalette {
+                    background: theme_dark_background.to_string(),
+                    panel: theme_dark_panel.to_string(),
+                    panel_alt: theme_dark_panel_alt.to_string(),
+                    border: theme_dark_border.to_string(),
+                    text: theme_dark_text.to_string(),
+                    muted: theme_dark_muted.to_string(),
+                    accent: theme_dark_accent.to_string(),
+                    success: theme_dark_success.to_string(),
+                    danger: theme_dark_danger.to_string(),
+                    overlay: theme_dark_overlay.to_string(),
+                    terminal_foreground: theme_dark_terminal_foreground.to_string(),
+                    terminal_background: theme_dark_terminal_background.to_string(),
+                    terminal_selection: theme_dark_terminal_selection.to_string(),
+                },
             ));
             let state = state.clone();
             let ui = ui_for_save.clone();
@@ -140,10 +170,12 @@ pub(super) fn wire_settings(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime
     );
 }
 
-fn terminal_color_scheme_for_theme(mode: &str) -> &'static str {
-    match mode.trim().to_ascii_lowercase().as_str() {
-        "light" => "light",
-        "solarized-dark" | "solarized dark" => "solarized-dark",
-        _ => "dark",
+fn terminal_color_scheme_for_theme(mode: &str, palette: &str) -> &'static str {
+    if mode.trim().eq_ignore_ascii_case("light") {
+        "light"
+    } else if palette.trim().eq_ignore_ascii_case("solarized") {
+        "solarized-dark"
+    } else {
+        "dark"
     }
 }

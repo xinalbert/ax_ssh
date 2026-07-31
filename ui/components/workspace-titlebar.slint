@@ -63,7 +63,7 @@ component WorkspaceTabContent inherits HorizontalLayout {
         width: Theme.tab-close-size;
         height: Theme.tab-close-size;
         border-radius: Theme.radius;
-        background: close-touch.has-hover && root.close-enabled ? Theme.panel-alt : transparent;
+        background: close-touch.has-hover && root.close-enabled ? Theme.hover : transparent;
         Text {
             width: parent.width;
             height: parent.height;
@@ -109,7 +109,7 @@ component ConnectionPickerRow inherits FocusScope {
 
     Rectangle {
         border-radius: Theme.radius-small;
-        background: row-touch.has-hover || root.has-focus ? Theme.panel-alt : transparent;
+        background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
 
         VerticalLayout {
             padding-left: Theme.space-md;
@@ -172,7 +172,7 @@ export component ConnectionPicker inherits FocusScope {
     Rectangle {
         background: Theme.panel;
         border-width: Theme.hairline;
-        border-color: Theme.border;
+        border-color: Theme.frame-border;
         border-radius: Theme.radius;
         clip: true;
 
@@ -291,7 +291,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 y: parent.height - Theme.hairline;
                 width: parent.width;
                 height: Theme.hairline;
-                background: Theme.border;
+                background: Theme.divider;
             }
 
             tabs-flick := Flickable {
@@ -438,13 +438,13 @@ export component WorkspaceTitlebar inherits Rectangle {
         Rectangle {
             width: parent.height;
             background: add-touch.has-hover || root.connection-picker-open
-                ? Theme.panel-alt
+                ? Theme.hover
                 : Theme.panel;
             Rectangle {
                 y: parent.height - Theme.hairline;
                 width: parent.width;
                 height: Theme.hairline;
-                background: Theme.border;
+                background: Theme.divider;
             }
             Text {
                 width: parent.width;

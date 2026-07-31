@@ -28,10 +28,10 @@ component AuthenticationMethodOption inherits FocusScope {
 
     Rectangle {
         background: root.selected
-            ? Theme.panel-alt
+            ? Theme.hover
             : (option-touch.has-hover || root.has-focus ? Theme.panel : transparent);
         border-width: root.has-focus ? Theme.hairline : 0px;
-        border-color: Theme.accent;
+        border-color: Theme.focus;
         border-radius: Theme.radius-small;
 
         Text {
@@ -74,7 +74,7 @@ export component AuthenticationMethodSelector inherits Rectangle {
     vertical-stretch: 0;
     background: Theme.background;
     border-width: Theme.hairline;
-    border-color: Theme.border;
+    border-color: Theme.control-border;
     border-radius: Theme.radius-small;
     accessible-role: list;
     accessible-label: root.accessible-name;

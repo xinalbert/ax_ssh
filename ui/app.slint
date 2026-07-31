@@ -1,4 +1,5 @@
 import "../assets/fonts/JetBrainsMono-Regular.ttf";
+import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
 import { TerminalPane, TerminalRenderLine } from "terminal-pane.slint";
@@ -20,6 +21,7 @@ export component AppWindow inherits Window {
     preferred-width: Theme.window-preferred-width;
     preferred-height: Theme.window-preferred-height;
     background: Theme.background;
+    private property <ColorScheme> standard-widget-color-scheme: Theme.widget-color-scheme;
 
     in property <[SessionRow]> sessions;
     in property <[WorkspaceTabRow]> workspace-tabs;
@@ -67,19 +69,33 @@ export component AppWindow inherits Window {
     out property <color> theme-terminal-selection: Theme.terminal-selection;
     in property <int> theme-revision: 0;
     in property <string> theme-mode: "dark";
-    in property <string> theme-background: "#171918";
-    in property <string> theme-panel: "#202321";
-    in property <string> theme-panel-alt: "#292D2A";
-    in property <string> theme-border: "#3B423E";
-    in property <string> theme-text: "#EDF1EE";
-    in property <string> theme-muted: "#A8B2AC";
-    in property <string> theme-accent: "#52C7A5";
-    in property <string> theme-success: "#63D6A9";
-    in property <string> theme-danger: "#FF8E88";
-    in property <string> theme-overlay: "#00000099";
-    in property <string> theme-terminal-foreground-value: "#CCCCCC";
-    in property <string> theme-terminal-background-value: "#1E1E1E";
-    in property <string> theme-terminal-selection-value: "#264F78";
+    in property <string> theme-palette: "axssh";
+    in property <string> theme-light-background: "#F7F8F7";
+    in property <string> theme-light-panel: "#FFFFFF";
+    in property <string> theme-light-panel-alt: "#EDF1EE";
+    in property <string> theme-light-border: "#6D7972";
+    in property <string> theme-light-text: "#1C2520";
+    in property <string> theme-light-muted: "#526058";
+    in property <string> theme-light-accent: "#116B54";
+    in property <string> theme-light-success: "#126A43";
+    in property <string> theme-light-danger: "#A72C28";
+    in property <string> theme-light-overlay: "#10201899";
+    in property <string> theme-light-terminal-foreground: "#333333";
+    in property <string> theme-light-terminal-background: "#FFFFFF";
+    in property <string> theme-light-terminal-selection: "#ADD6FF";
+    in property <string> theme-dark-background: "#171918";
+    in property <string> theme-dark-panel: "#202321";
+    in property <string> theme-dark-panel-alt: "#292D2A";
+    in property <string> theme-dark-border: "#727C76";
+    in property <string> theme-dark-text: "#EDF1EE";
+    in property <string> theme-dark-muted: "#A8B2AC";
+    in property <string> theme-dark-accent: "#52C7A5";
+    in property <string> theme-dark-success: "#63D6A9";
+    in property <string> theme-dark-danger: "#FF8E88";
+    in property <string> theme-dark-overlay: "#00000099";
+    in property <string> theme-dark-terminal-foreground: "#CCCCCC";
+    in property <string> theme-dark-terminal-background: "#1E1E1E";
+    in property <string> theme-dark-terminal-selection: "#264F78";
     in property <int> scrollback-lines: 2000;
     in property <int> default-terminal-columns: 120;
     in property <int> default-terminal-rows: 36;
@@ -111,9 +127,10 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, int, int, int, bool, string, string, string, string, string, string,
-        string, string, string, string, string, string, string, string, bool, string, int, int, int, int, int,
-        string, string, string, string, string,
+        string, int, int, int, bool, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        bool, string, int, int, int, int, int, string, string, string, string, string,
     );
     callback cancel-settings();
     callback connect-session(string);
@@ -134,6 +151,10 @@ export component AppWindow inherits Window {
     callback read-clipboard() -> string;
     callback refresh-terminal-appearance();
 
+    init => { Palette.color-scheme = root.standard-widget-color-scheme; }
+    changed standard-widget-color-scheme => {
+        Palette.color-scheme = root.standard-widget-color-scheme;
+    }
     changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
     changed theme-revision => { root.refresh-terminal-appearance(); }
 
@@ -336,19 +357,33 @@ export component AppWindow inherits Window {
                     terminal-brightness-percent: root.terminal-brightness-percent;
                     bright-bold-text: root.bright-bold-text;
                     theme-mode: root.theme-mode;
-                    theme-background: root.theme-background;
-                    theme-panel: root.theme-panel;
-                    theme-panel-alt: root.theme-panel-alt;
-                    theme-border: root.theme-border;
-                    theme-text: root.theme-text;
-                    theme-muted: root.theme-muted;
-                    theme-accent: root.theme-accent;
-                    theme-success: root.theme-success;
-                    theme-danger: root.theme-danger;
-                    theme-overlay: root.theme-overlay;
-                    theme-terminal-foreground: root.theme-terminal-foreground-value;
-                    theme-terminal-background: root.theme-terminal-background-value;
-                    theme-terminal-selection: root.theme-terminal-selection-value;
+                    theme-palette: root.theme-palette;
+                    theme-light-background: root.theme-light-background;
+                    theme-light-panel: root.theme-light-panel;
+                    theme-light-panel-alt: root.theme-light-panel-alt;
+                    theme-light-border: root.theme-light-border;
+                    theme-light-text: root.theme-light-text;
+                    theme-light-muted: root.theme-light-muted;
+                    theme-light-accent: root.theme-light-accent;
+                    theme-light-success: root.theme-light-success;
+                    theme-light-danger: root.theme-light-danger;
+                    theme-light-overlay: root.theme-light-overlay;
+                    theme-light-terminal-foreground: root.theme-light-terminal-foreground;
+                    theme-light-terminal-background: root.theme-light-terminal-background;
+                    theme-light-terminal-selection: root.theme-light-terminal-selection;
+                    theme-dark-background: root.theme-dark-background;
+                    theme-dark-panel: root.theme-dark-panel;
+                    theme-dark-panel-alt: root.theme-dark-panel-alt;
+                    theme-dark-border: root.theme-dark-border;
+                    theme-dark-text: root.theme-dark-text;
+                    theme-dark-muted: root.theme-dark-muted;
+                    theme-dark-accent: root.theme-dark-accent;
+                    theme-dark-success: root.theme-dark-success;
+                    theme-dark-danger: root.theme-dark-danger;
+                    theme-dark-overlay: root.theme-dark-overlay;
+                    theme-dark-terminal-foreground: root.theme-dark-terminal-foreground;
+                    theme-dark-terminal-background: root.theme-dark-terminal-background;
+                    theme-dark-terminal-selection: root.theme-dark-terminal-selection;
                     right-click-copy-or-paste: root.right-click-copy-or-paste;
                     scrollback-lines: root.scrollback-lines;
                     default-terminal-columns: root.default-terminal-columns;
@@ -367,10 +402,15 @@ export component AppWindow inherits Window {
                     default-copy-selection-shortcut: root.default-copy-selection-shortcut;
                     default-paste-shortcut: root.default-paste-shortcut;
                     status: root.status;
-                    save(font, size, line-height, brightness, bright-bold, theme-mode, theme-background,
-                         theme-panel, theme-panel-alt, theme-border, theme-text, theme-muted, theme-accent,
-                         theme-success, theme-danger, theme-overlay, theme-terminal-foreground,
-                         theme-terminal-background, theme-terminal-selection, right-click-copy, shell,
+                    save(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                         theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
+                         theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
+                         theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
+                         theme-light-terminal-background, theme-light-terminal-selection, theme-dark-background,
+                         theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
+                         theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
+                         theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
+                         theme-dark-terminal-selection, right-click-copy, shell,
                          scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
                          toggle-sidebar-key, copy-key, paste-key) => {
                         root.save-settings(
@@ -380,19 +420,33 @@ export component AppWindow inherits Window {
                             brightness,
                             bright-bold,
                             theme-mode,
-                            theme-background,
-                            theme-panel,
-                            theme-panel-alt,
-                            theme-border,
-                            theme-text,
-                            theme-muted,
-                            theme-accent,
-                            theme-success,
-                            theme-danger,
-                            theme-overlay,
-                            theme-terminal-foreground,
-                            theme-terminal-background,
-                            theme-terminal-selection,
+                            theme-palette,
+                            theme-light-background,
+                            theme-light-panel,
+                            theme-light-panel-alt,
+                            theme-light-border,
+                            theme-light-text,
+                            theme-light-muted,
+                            theme-light-accent,
+                            theme-light-success,
+                            theme-light-danger,
+                            theme-light-overlay,
+                            theme-light-terminal-foreground,
+                            theme-light-terminal-background,
+                            theme-light-terminal-selection,
+                            theme-dark-background,
+                            theme-dark-panel,
+                            theme-dark-panel-alt,
+                            theme-dark-border,
+                            theme-dark-text,
+                            theme-dark-muted,
+                            theme-dark-accent,
+                            theme-dark-success,
+                            theme-dark-danger,
+                            theme-dark-overlay,
+                            theme-dark-terminal-foreground,
+                            theme-dark-terminal-background,
+                            theme-dark-terminal-selection,
                             right-click-copy,
                             shell,
                             scrollback,

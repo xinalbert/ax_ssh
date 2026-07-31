@@ -41,7 +41,7 @@ const DEFAULT_TERMINAL_ROWS: u16 = 36;
 const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
-const CURRENT_SCHEMA_VERSION: u32 = 9;
+const CURRENT_SCHEMA_VERSION: u32 = 11;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;
 const THEME_SETTINGS_SCHEMA_VERSION: u32 = 9;
@@ -120,8 +120,6 @@ pub enum ThemeMode {
     #[default]
     Dark,
     Light,
-    SolarizedDark,
-    Custom,
 }
 
 impl ThemeMode {
@@ -129,8 +127,6 @@ impl ThemeMode {
         match value.trim().to_ascii_lowercase().as_str() {
             "system" | "follow-system" | "auto" => Self::System,
             "light" => Self::Light,
-            "solarized-dark" | "solarized dark" => Self::SolarizedDark,
-            "custom" => Self::Custom,
             _ => Self::Dark,
         }
     }
@@ -140,29 +136,49 @@ impl ThemeMode {
             Self::System => "system",
             Self::Dark => "dark",
             Self::Light => "light",
-            Self::SolarizedDark => "solarized-dark",
-            Self::Custom => "custom",
-        }
-    }
-
-    pub(crate) const fn terminal_color_scheme(self) -> TerminalColorScheme {
-        match self {
-            Self::Light => TerminalColorScheme::Light,
-            Self::SolarizedDark => TerminalColorScheme::SolarizedDark,
-            Self::System | Self::Dark | Self::Custom => TerminalColorScheme::Dark,
-        }
-    }
-
-    const fn from_terminal_color_scheme(scheme: TerminalColorScheme) -> Self {
-        match scheme {
-            TerminalColorScheme::Dark => Self::Dark,
-            TerminalColorScheme::Light => Self::Light,
-            TerminalColorScheme::SolarizedDark => Self::SolarizedDark,
         }
     }
 }
 
 impl<'de> Deserialize<'de> for ThemeMode {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_setting(&value))
+    }
+}
+
+/// Color family applied independently from the system/light/dark strategy.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ThemePaletteKind {
+    #[default]
+    AxSsh,
+    Solarized,
+    Custom,
+}
+
+impl ThemePaletteKind {
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "solarized" | "solarized-dark" | "solarized dark" => Self::Solarized,
+            "custom" => Self::Custom,
+            _ => Self::AxSsh,
+        }
+    }
+
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::AxSsh => "axssh",
+            Self::Solarized => "solarized",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemePaletteKind {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -250,60 +266,261 @@ impl ThemePalette {
         }
     }
 
-    fn normalize_in_place(&mut self) {
-        *self = Self::normalized(
-            &self.background,
-            &self.panel,
-            &self.panel_alt,
-            &self.border,
-            &self.text,
-            &self.muted,
-            &self.accent,
-            &self.success,
-            &self.danger,
-            &self.overlay,
-            &self.terminal_foreground,
-            &self.terminal_background,
-            &self.terminal_selection,
+    pub fn axssh_light() -> Self {
+        Self::from_hex([
+            "#F7F8F7",
+            "#FFFFFF",
+            "#EDF1EE",
+            "#6D7972",
+            "#1C2520",
+            "#526058",
+            "#116B54",
+            "#126A43",
+            "#A72C28",
+            "#10201899",
+            "#333333",
+            "#FFFFFF",
+            "#ADD6FF",
+        ])
+    }
+
+    pub fn axssh_dark() -> Self {
+        Self::from_hex([
+            "#171918",
+            "#202321",
+            "#292D2A",
+            "#727C76",
+            "#EDF1EE",
+            "#A8B2AC",
+            "#52C7A5",
+            "#63D6A9",
+            "#FF8E88",
+            "#00000099",
+            "#CCCCCC",
+            "#1E1E1E",
+            "#264F78",
+        ])
+    }
+
+    pub fn solarized_light() -> Self {
+        Self::from_hex([
+            "#FDF6E3",
+            "#FFFCF2",
+            "#EEE8D5",
+            "#817A67",
+            "#25363B",
+            "#4B6066",
+            "#006B61",
+            "#5E6D00",
+            "#A62F2C",
+            "#3B352699",
+            "#3B5056",
+            "#FDF6E3",
+            "#B7C8CA",
+        ])
+    }
+
+    pub fn solarized_dark() -> Self {
+        Self::from_hex([
+            "#002B36",
+            "#073642",
+            "#0B4652",
+            "#829294",
+            "#EEE8D5",
+            "#B0BABA",
+            "#3FC8BE",
+            "#B8C84A",
+            "#FF8D86",
+            "#001E26A8",
+            "#BCC6C6",
+            "#002B36",
+            "#0F5362",
+        ])
+    }
+
+    fn from_hex(values: [&str; 13]) -> Self {
+        Self {
+            background: values[0].to_owned(),
+            panel: values[1].to_owned(),
+            panel_alt: values[2].to_owned(),
+            border: values[3].to_owned(),
+            text: values[4].to_owned(),
+            muted: values[5].to_owned(),
+            accent: values[6].to_owned(),
+            success: values[7].to_owned(),
+            danger: values[8].to_owned(),
+            overlay: values[9].to_owned(),
+            terminal_foreground: values[10].to_owned(),
+            terminal_background: values[11].to_owned(),
+            terminal_selection: values[12].to_owned(),
+        }
+    }
+
+    fn normalize_for_brightness(&mut self, brightness: ThemeBrightness) {
+        let fallback = match brightness {
+            ThemeBrightness::Light => Self::axssh_light(),
+            ThemeBrightness::Dark => Self::axssh_dark(),
+        };
+        self.normalize_with_fallback(&fallback);
+        self.protect_contrast(brightness, &fallback);
+    }
+
+    fn normalize_with_fallback(&mut self, fallback: &Self) {
+        self.background = normalize_theme_color(&self.background, &fallback.background);
+        self.panel = normalize_theme_color(&self.panel, &fallback.panel);
+        self.panel_alt = normalize_theme_color(&self.panel_alt, &fallback.panel_alt);
+        self.border = normalize_theme_color(&self.border, &fallback.border);
+        self.text = normalize_theme_color(&self.text, &fallback.text);
+        self.muted = normalize_theme_color(&self.muted, &fallback.muted);
+        self.accent = normalize_theme_color(&self.accent, &fallback.accent);
+        self.success = normalize_theme_color(&self.success, &fallback.success);
+        self.danger = normalize_theme_color(&self.danger, &fallback.danger);
+        self.overlay = normalize_theme_color(&self.overlay, &fallback.overlay);
+        self.terminal_foreground =
+            normalize_theme_color(&self.terminal_foreground, &fallback.terminal_foreground);
+        self.terminal_background =
+            normalize_theme_color(&self.terminal_background, &fallback.terminal_background);
+        self.terminal_selection =
+            normalize_theme_color(&self.terminal_selection, &fallback.terminal_selection);
+    }
+
+    fn protect_contrast(&mut self, brightness: ThemeBrightness, fallback: &Self) {
+        let reference = match brightness {
+            ThemeBrightness::Light => "#000000",
+            ThemeBrightness::Dark => "#FFFFFF",
+        };
+        ensure_surface_direction(&mut self.background, &fallback.background, reference);
+        ensure_surface_direction(&mut self.panel, &fallback.panel, reference);
+        ensure_surface_direction(&mut self.panel_alt, &fallback.panel_alt, reference);
+
+        let surfaces = [&self.background, &self.panel, &self.panel_alt];
+        ensure_role_contrast(
+            &mut self.border,
+            &fallback.border,
+            &surfaces,
+            3.0,
+            reference,
         );
+        ensure_role_contrast(&mut self.text, &fallback.text, &surfaces, 4.5, reference);
+        ensure_role_contrast(&mut self.muted, &fallback.muted, &surfaces, 4.5, reference);
+        ensure_role_contrast(
+            &mut self.accent,
+            &fallback.accent,
+            &surfaces,
+            4.5,
+            reference,
+        );
+        ensure_role_contrast(
+            &mut self.success,
+            &fallback.success,
+            &surfaces,
+            4.5,
+            reference,
+        );
+        ensure_role_contrast(
+            &mut self.danger,
+            &fallback.danger,
+            &surfaces,
+            4.5,
+            reference,
+        );
+
+        ensure_surface_direction(
+            &mut self.terminal_background,
+            &fallback.terminal_background,
+            reference,
+        );
+        let terminal_surfaces = [&self.terminal_background];
+        ensure_role_contrast(
+            &mut self.terminal_foreground,
+            &fallback.terminal_foreground,
+            &terminal_surfaces,
+            4.5,
+            reference,
+        );
+        if theme_contrast_ratio(&self.terminal_selection, &self.terminal_background)
+            .unwrap_or_default()
+            < 1.5
+            || theme_contrast_ratio(&self.terminal_foreground, &self.terminal_selection)
+                .unwrap_or_default()
+                < 4.5
+        {
+            self.terminal_selection = fallback.terminal_selection.clone();
+        }
     }
 }
 
 impl Default for ThemePalette {
     fn default() -> Self {
-        Self {
-            background: default_theme_background(),
-            panel: default_theme_panel(),
-            panel_alt: default_theme_panel_alt(),
-            border: default_theme_border(),
-            text: default_theme_text(),
-            muted: default_theme_muted(),
-            accent: default_theme_accent(),
-            success: default_theme_success(),
-            danger: default_theme_danger(),
-            overlay: default_theme_overlay(),
-            terminal_foreground: default_theme_terminal_foreground(),
-            terminal_background: default_theme_terminal_background(),
-            terminal_selection: default_theme_terminal_selection(),
-        }
+        Self::axssh_dark()
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy)]
+enum ThemeBrightness {
+    Light,
+    Dark,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct ThemeSettings {
-    #[serde(default)]
     pub mode: ThemeMode,
-    #[serde(default)]
-    pub custom: ThemePalette,
+    pub palette: ThemePaletteKind,
+    pub custom_light: ThemePalette,
+    pub custom_dark: ThemePalette,
 }
 
 impl ThemeSettings {
-    pub fn normalized(mode: &str, custom: ThemePalette) -> Self {
-        let mut custom = custom;
-        custom.normalize_in_place();
+    pub fn normalized(
+        mode: &str,
+        palette: &str,
+        mut custom_light: ThemePalette,
+        mut custom_dark: ThemePalette,
+    ) -> Self {
+        custom_light.normalize_for_brightness(ThemeBrightness::Light);
+        custom_dark.normalize_for_brightness(ThemeBrightness::Dark);
         Self {
             mode: ThemeMode::from_setting(mode),
-            custom,
+            palette: ThemePaletteKind::from_setting(palette),
+            custom_light,
+            custom_dark,
+        }
+    }
+
+    fn from_terminal_color_scheme(scheme: TerminalColorScheme) -> Self {
+        let (mode, palette) = match scheme {
+            TerminalColorScheme::Dark => (ThemeMode::Dark, ThemePaletteKind::AxSsh),
+            TerminalColorScheme::Light => (ThemeMode::Light, ThemePaletteKind::AxSsh),
+            TerminalColorScheme::SolarizedDark => (ThemeMode::Dark, ThemePaletteKind::Solarized),
+        };
+        Self {
+            mode,
+            palette,
+            ..Self::default()
+        }
+    }
+
+    pub fn light_palette(&self) -> ThemePalette {
+        match self.palette {
+            ThemePaletteKind::AxSsh => ThemePalette::axssh_light(),
+            ThemePaletteKind::Solarized => ThemePalette::solarized_light(),
+            ThemePaletteKind::Custom => self.custom_light.clone(),
+        }
+    }
+
+    pub fn dark_palette(&self) -> ThemePalette {
+        match self.palette {
+            ThemePaletteKind::AxSsh => ThemePalette::axssh_dark(),
+            ThemePaletteKind::Solarized => ThemePalette::solarized_dark(),
+            ThemePaletteKind::Custom => self.custom_dark.clone(),
+        }
+    }
+
+    const fn terminal_color_scheme(&self) -> TerminalColorScheme {
+        match (self.mode, self.palette) {
+            (ThemeMode::Light, _) => TerminalColorScheme::Light,
+            (ThemeMode::Dark, ThemePaletteKind::Solarized) => TerminalColorScheme::SolarizedDark,
+            (ThemeMode::System | ThemeMode::Dark, _) => TerminalColorScheme::Dark,
         }
     }
 }
@@ -314,8 +531,59 @@ impl Default for ThemeSettings {
             // Preserve the historical AxSSH appearance for both upgrades and
             // clean installs. Following the system remains an explicit choice.
             mode: ThemeMode::Dark,
-            custom: ThemePalette::default(),
+            palette: ThemePaletteKind::AxSsh,
+            custom_light: ThemePalette::axssh_light(),
+            custom_dark: ThemePalette::axssh_dark(),
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct ThemeSettingsWire {
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    palette: Option<ThemePaletteKind>,
+    #[serde(default)]
+    custom_light: Option<ThemePalette>,
+    #[serde(default)]
+    custom_dark: Option<ThemePalette>,
+    #[serde(default)]
+    custom: Option<ThemePalette>,
+}
+
+impl<'de> Deserialize<'de> for ThemeSettings {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = ThemeSettingsWire::deserialize(deserializer)?;
+        let legacy_mode = wire.mode.trim().to_ascii_lowercase();
+        let palette = wire
+            .palette
+            .unwrap_or_else(|| ThemePaletteKind::from_setting(&legacy_mode));
+        let mut resolved_mode = legacy_mode.clone();
+        let mut custom_light = wire.custom_light.unwrap_or_else(ThemePalette::axssh_light);
+        let mut custom_dark = wire.custom_dark.unwrap_or_else(ThemePalette::axssh_dark);
+        if let Some(custom) = wire.custom {
+            if theme_color_is_dark(&custom.background) {
+                custom_dark = custom;
+                if legacy_mode == "custom" {
+                    resolved_mode = "dark".to_owned();
+                }
+            } else {
+                custom_light = custom;
+                if legacy_mode == "custom" {
+                    resolved_mode = "light".to_owned();
+                }
+            }
+        }
+        Ok(Self::normalized(
+            &resolved_mode,
+            palette.as_setting(),
+            custom_light,
+            custom_dark,
+        ))
     }
 }
 
@@ -358,10 +626,7 @@ impl AppearanceSettings {
             brightness_percent,
             bright_bold_text,
             right_click_copy_or_paste,
-            ThemeSettings {
-                mode: ThemeMode::from_terminal_color_scheme(terminal_color_scheme),
-                custom: ThemePalette::default(),
-            },
+            ThemeSettings::from_terminal_color_scheme(terminal_color_scheme),
         )
     }
 
@@ -406,13 +671,17 @@ impl AppearanceSettings {
     }
 
     fn normalize_in_place(&mut self) {
-        let theme =
-            ThemeSettings::normalized(self.theme.mode.as_setting(), self.theme.custom.clone());
+        let theme = ThemeSettings::normalized(
+            self.theme.mode.as_setting(),
+            self.theme.palette.as_setting(),
+            self.theme.custom_light.clone(),
+            self.theme.custom_dark.clone(),
+        );
         *self = Self::normalized_with_theme(
             &self.terminal_font_family,
             i32::from(self.terminal_font_size),
             i32::from(self.terminal_line_height_percent),
-            theme.mode.terminal_color_scheme(),
+            theme.terminal_color_scheme(),
             i32::from(self.terminal_brightness_percent),
             self.bright_bold_text,
             self.right_click_copy_or_paste,
@@ -741,8 +1010,13 @@ impl AppSettings {
     }
 
     pub fn set_theme(&mut self, theme: ThemeSettings) {
-        let theme = ThemeSettings::normalized(theme.mode.as_setting(), theme.custom);
-        self.appearance.terminal_color_scheme = theme.mode.terminal_color_scheme();
+        let theme = ThemeSettings::normalized(
+            theme.mode.as_setting(),
+            theme.palette.as_setting(),
+            theme.custom_light,
+            theme.custom_dark,
+        );
+        self.appearance.terminal_color_scheme = theme.terminal_color_scheme();
         self.appearance.theme = theme;
     }
 
@@ -788,7 +1062,7 @@ fn default_theme_panel_alt() -> String {
 }
 
 fn default_theme_border() -> String {
-    "#3B423E".to_owned()
+    "#727C76".to_owned()
 }
 
 fn default_theme_text() -> String {
@@ -850,6 +1124,95 @@ fn normalize_theme_color(value: &str, fallback: &str) -> String {
         );
     }
     normalized
+}
+
+fn theme_color_is_dark(value: &str) -> bool {
+    let normalized = normalize_theme_color(value, "#171918");
+    parse_theme_rgba(&normalized)
+        .map(|(red, green, blue, _)| relative_luminance(red, green, blue) < 0.18)
+        .unwrap_or(true)
+}
+
+fn ensure_surface_direction(value: &mut String, fallback: &str, reference: &str) {
+    let opaque = parse_theme_rgba(value)
+        .map(|(_, _, _, alpha)| alpha == u8::MAX)
+        .unwrap_or(false);
+    if !opaque || theme_contrast_ratio(reference, value).unwrap_or_default() < 4.5 {
+        *value = fallback.to_owned();
+    }
+}
+
+fn ensure_role_contrast(
+    value: &mut String,
+    fallback: &str,
+    surfaces: &[&String],
+    minimum: f64,
+    reference: &str,
+) {
+    if role_meets_contrast(value, surfaces, minimum) {
+        return;
+    }
+    if role_meets_contrast(fallback, surfaces, minimum) {
+        *value = fallback.to_owned();
+    } else {
+        *value = reference.to_owned();
+    }
+}
+
+fn role_meets_contrast(value: &str, surfaces: &[&String], minimum: f64) -> bool {
+    surfaces.iter().all(|surface| {
+        theme_contrast_ratio(value, surface)
+            .map(|ratio| ratio >= minimum)
+            .unwrap_or(false)
+    })
+}
+
+fn theme_contrast_ratio(foreground: &str, background: &str) -> Option<f64> {
+    let (foreground_red, foreground_green, foreground_blue, foreground_alpha) =
+        parse_theme_rgba(foreground)?;
+    let (background_red, background_green, background_blue, _) = parse_theme_rgba(background)?;
+    let alpha = f64::from(foreground_alpha) / 255.0;
+    let composite = |foreground: u8, background: u8| {
+        ((f64::from(foreground) * alpha) + (f64::from(background) * (1.0 - alpha))).round() as u8
+    };
+    let foreground_luminance = relative_luminance(
+        composite(foreground_red, background_red),
+        composite(foreground_green, background_green),
+        composite(foreground_blue, background_blue),
+    );
+    let background_luminance =
+        relative_luminance(background_red, background_green, background_blue);
+    let lighter = foreground_luminance.max(background_luminance);
+    let darker = foreground_luminance.min(background_luminance);
+    Some((lighter + 0.05) / (darker + 0.05))
+}
+
+fn parse_theme_rgba(value: &str) -> Option<(u8, u8, u8, u8)> {
+    let value = value.strip_prefix('#')?;
+    if !matches!(value.len(), 6 | 8) {
+        return None;
+    }
+    let red = u8::from_str_radix(&value[0..2], 16).ok()?;
+    let green = u8::from_str_radix(&value[2..4], 16).ok()?;
+    let blue = u8::from_str_radix(&value[4..6], 16).ok()?;
+    let alpha = if value.len() == 8 {
+        u8::from_str_radix(&value[6..8], 16).ok()?
+    } else {
+        u8::MAX
+    };
+    Some((red, green, blue, alpha))
+}
+
+fn relative_luminance(red: u8, green: u8, blue: u8) -> f64 {
+    let linear = |channel: u8| {
+        let channel = f64::from(channel) / 255.0;
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    (0.2126 * linear(red)) + (0.7152 * linear(green)) + (0.0722 * linear(blue))
 }
 
 const fn default_true() -> bool {
@@ -1052,12 +1415,9 @@ impl<'de> Deserialize<'de> for SessionStore {
             settings.workspace.sidebar_width = DEFAULT_SIDEBAR_WIDTH;
         }
         if wire.version < THEME_SETTINGS_SCHEMA_VERSION {
-            settings.appearance.theme = ThemeSettings {
-                mode: ThemeMode::from_terminal_color_scheme(
-                    settings.appearance.terminal_color_scheme,
-                ),
-                custom: ThemePalette::default(),
-            };
+            settings.appearance.theme = ThemeSettings::from_terminal_color_scheme(
+                settings.appearance.terminal_color_scheme,
+            );
         }
         settings.normalize_in_place();
         Ok(Self {
@@ -1292,7 +1652,9 @@ mod tests {
                 terminal_color_scheme: TerminalColorScheme::Light,
                 theme: ThemeSettings {
                     mode: ThemeMode::Light,
-                    custom: ThemePalette::default(),
+                    palette: ThemePaletteKind::AxSsh,
+                    custom_light: ThemePalette::axssh_light(),
+                    custom_dark: ThemePalette::axssh_dark(),
                 },
                 terminal_brightness_percent: 115,
                 bright_bold_text: false,
@@ -1358,11 +1720,12 @@ mod tests {
     fn theme_mode_normalizes_aliases_and_unknown_values() {
         assert_eq!(ThemeMode::from_setting("follow-system"), ThemeMode::System);
         assert_eq!(ThemeMode::from_setting("AUTO"), ThemeMode::System);
-        assert_eq!(
-            ThemeMode::from_setting("Solarized Dark"),
-            ThemeMode::SolarizedDark
-        );
+        assert_eq!(ThemeMode::from_setting("Solarized Dark"), ThemeMode::Dark);
         assert_eq!(ThemeMode::from_setting("unexpected"), ThemeMode::Dark);
+        assert_eq!(
+            ThemePaletteKind::from_setting("Solarized Dark"),
+            ThemePaletteKind::Solarized
+        );
     }
 
     #[test]
@@ -1406,10 +1769,14 @@ mod tests {
 
     #[test]
     fn version_eight_terminal_palette_migrates_to_theme_mode() {
-        for (legacy_scheme, expected_mode) in [
-            ("dark", ThemeMode::Dark),
-            ("light", ThemeMode::Light),
-            ("solarized-dark", ThemeMode::SolarizedDark),
+        for (legacy_scheme, expected_mode, expected_palette) in [
+            ("dark", ThemeMode::Dark, ThemePaletteKind::AxSsh),
+            ("light", ThemeMode::Light, ThemePaletteKind::AxSsh),
+            (
+                "solarized-dark",
+                ThemeMode::Dark,
+                ThemePaletteKind::Solarized,
+            ),
         ] {
             let json = format!(
                 r#"{{"version":8,"settings":{{"appearance":{{"terminal_color_scheme":"{legacy_scheme}"}}}}}}"#
@@ -1419,6 +1786,7 @@ mod tests {
 
             assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
             assert_eq!(store.settings.appearance.theme.mode, expected_mode);
+            assert_eq!(store.settings.appearance.theme.palette, expected_palette);
             assert_eq!(
                 store.settings.appearance.terminal_color_scheme.as_setting(),
                 legacy_scheme
@@ -1427,10 +1795,12 @@ mod tests {
     }
 
     #[test]
-    fn version_nine_custom_theme_round_trips_without_secrets() {
+    fn version_eleven_custom_theme_round_trips_without_secrets() {
         let mut settings = AppSettings::default();
         settings.set_theme(ThemeSettings::normalized(
+            "dark",
             "custom",
+            ThemePalette::axssh_light(),
             ThemePalette::normalized(
                 "#102030",
                 "#203040",
@@ -1461,6 +1831,109 @@ mod tests {
         assert!(encoded.contains("\"theme\""));
         assert!(!encoded.contains("password"));
         assert!(!encoded.contains("passphrase"));
+    }
+
+    #[test]
+    fn version_ten_combined_theme_modes_migrate_without_changing_direction() {
+        let solarized: SessionStore = serde_json::from_str(
+            r##"{"version":10,"settings":{"appearance":{"theme":{"mode":"solarized-dark"}}}}"##,
+        )
+        .expect("legacy solarized theme should migrate");
+        assert_eq!(solarized.settings.appearance.theme.mode, ThemeMode::Dark);
+        assert_eq!(
+            solarized.settings.appearance.theme.palette,
+            ThemePaletteKind::Solarized
+        );
+
+        let custom: SessionStore = serde_json::from_str(
+            r##"{"version":10,"settings":{"appearance":{"theme":{"mode":"custom","custom":{"background":"#F8F8F8","panel":"#FFFFFF","panel_alt":"#EEEEEE","border":"#555555","text":"#111111","muted":"#444444","accent":"#005F50","success":"#17633C","danger":"#982A25","overlay":"#00000099","terminal_foreground":"#222222","terminal_background":"#FFFFFF","terminal_selection":"#CDE4F8"}}}}}"##,
+        )
+        .expect("legacy custom theme should migrate");
+        assert_eq!(custom.settings.appearance.theme.mode, ThemeMode::Light);
+        assert_eq!(
+            custom.settings.appearance.theme.palette,
+            ThemePaletteKind::Custom
+        );
+        assert_eq!(
+            custom.settings.appearance.theme.custom_light.background,
+            "#F8F8F8"
+        );
+        assert_eq!(
+            custom.settings.appearance.theme.custom_dark,
+            ThemePalette::axssh_dark()
+        );
+    }
+
+    #[test]
+    fn custom_palettes_repair_invisible_surfaces_and_semantic_roles() {
+        let invisible = ThemePalette::from_hex([
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#111111",
+            "#00000000",
+            "#111111",
+            "#111111",
+            "#111111",
+        ]);
+        let theme =
+            ThemeSettings::normalized("light", "custom", invisible, ThemePalette::axssh_dark());
+        let palette = theme.light_palette();
+        let surfaces = [&palette.background, &palette.panel, &palette.panel_alt];
+
+        assert!(role_meets_contrast(&palette.text, &surfaces, 4.5));
+        assert!(role_meets_contrast(&palette.muted, &surfaces, 4.5));
+        assert!(role_meets_contrast(&palette.accent, &surfaces, 4.5));
+        assert!(role_meets_contrast(&palette.success, &surfaces, 4.5));
+        assert!(role_meets_contrast(&palette.danger, &surfaces, 4.5));
+        assert!(role_meets_contrast(&palette.border, &surfaces, 3.0));
+        assert!(
+            theme_contrast_ratio(&palette.terminal_foreground, &palette.terminal_background)
+                .is_some_and(|ratio| ratio >= 4.5)
+        );
+        assert!(
+            theme_contrast_ratio(&palette.terminal_foreground, &palette.terminal_selection)
+                .is_some_and(|ratio| ratio >= 4.5)
+        );
+    }
+
+    #[test]
+    fn fixed_palettes_keep_text_states_borders_and_terminal_selection_visible() {
+        for palette in [
+            ThemePalette::axssh_light(),
+            ThemePalette::axssh_dark(),
+            ThemePalette::solarized_light(),
+            ThemePalette::solarized_dark(),
+        ] {
+            let surfaces = [&palette.background, &palette.panel, &palette.panel_alt];
+            for role in [
+                &palette.text,
+                &palette.muted,
+                &palette.accent,
+                &palette.success,
+                &palette.danger,
+            ] {
+                assert!(role_meets_contrast(role, &surfaces, 4.5));
+            }
+            assert!(role_meets_contrast(&palette.border, &surfaces, 3.0));
+            assert!(
+                theme_contrast_ratio(&palette.terminal_foreground, &palette.terminal_background)
+                    .is_some_and(|ratio| ratio >= 4.5)
+            );
+            assert!(
+                theme_contrast_ratio(&palette.terminal_foreground, &palette.terminal_selection)
+                    .is_some_and(|ratio| ratio >= 4.5)
+            );
+            assert!(
+                theme_contrast_ratio(&palette.terminal_selection, &palette.terminal_background)
+                    .is_some_and(|ratio| ratio >= 1.5)
+            );
+        }
     }
 
     #[test]

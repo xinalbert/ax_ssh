@@ -19,19 +19,33 @@ export component SettingsPane inherits Rectangle {
     in property <int> terminal-brightness-percent;
     in property <bool> bright-bold-text;
     in property <string> theme-mode;
-    in property <string> theme-background;
-    in property <string> theme-panel;
-    in property <string> theme-panel-alt;
-    in property <string> theme-border;
-    in property <string> theme-text;
-    in property <string> theme-muted;
-    in property <string> theme-accent;
-    in property <string> theme-success;
-    in property <string> theme-danger;
-    in property <string> theme-overlay;
-    in property <string> theme-terminal-foreground;
-    in property <string> theme-terminal-background;
-    in property <string> theme-terminal-selection;
+    in property <string> theme-palette;
+    in property <string> theme-light-background;
+    in property <string> theme-light-panel;
+    in property <string> theme-light-panel-alt;
+    in property <string> theme-light-border;
+    in property <string> theme-light-text;
+    in property <string> theme-light-muted;
+    in property <string> theme-light-accent;
+    in property <string> theme-light-success;
+    in property <string> theme-light-danger;
+    in property <string> theme-light-overlay;
+    in property <string> theme-light-terminal-foreground;
+    in property <string> theme-light-terminal-background;
+    in property <string> theme-light-terminal-selection;
+    in property <string> theme-dark-background;
+    in property <string> theme-dark-panel;
+    in property <string> theme-dark-panel-alt;
+    in property <string> theme-dark-border;
+    in property <string> theme-dark-text;
+    in property <string> theme-dark-muted;
+    in property <string> theme-dark-accent;
+    in property <string> theme-dark-success;
+    in property <string> theme-dark-danger;
+    in property <string> theme-dark-overlay;
+    in property <string> theme-dark-terminal-foreground;
+    in property <string> theme-dark-terminal-background;
+    in property <string> theme-dark-terminal-selection;
     in property <bool> right-click-copy-or-paste;
     in property <int> scrollback-lines;
     in property <int> default-terminal-columns;
@@ -53,9 +67,10 @@ export component SettingsPane inherits Rectangle {
     in property <string> status;
 
     callback save(
-        string, int, int, int, bool, string, string, string, string, string, string,
-        string, string, string, string, string, string, string, string, bool, string,
-        int, int, int, int, int, string, string, string, string, string,
+        string, int, int, int, bool, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        string, string, string, string, string, string, string, string, string, string, string, string, string,
+        bool, string, int, int, int, int, int, string, string, string, string, string,
     );
     callback cancel();
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
@@ -74,22 +89,33 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-brightness-percent: root.terminal-brightness-percent;
     private property <bool> draft-bright-bold-text: root.bright-bold-text;
     private property <string> draft-theme-mode: root.theme-mode;
-    private property <string> draft-theme-background: root.theme-background;
-    private property <string> draft-theme-panel: root.theme-panel;
-    private property <string> draft-theme-panel-alt: root.theme-panel-alt;
-    private property <string> draft-theme-border: root.theme-border;
-    private property <string> draft-theme-text: root.theme-text;
-    private property <string> draft-theme-muted: root.theme-muted;
-    private property <string> draft-theme-accent: root.theme-accent;
-    private property <string> draft-theme-success: root.theme-success;
-    private property <string> draft-theme-danger: root.theme-danger;
-    private property <string> draft-theme-overlay: root.theme-overlay;
-    private property <string> draft-theme-terminal-foreground:
-        root.theme-terminal-foreground;
-    private property <string> draft-theme-terminal-background:
-        root.theme-terminal-background;
-    private property <string> draft-theme-terminal-selection:
-        root.theme-terminal-selection;
+    private property <string> draft-theme-palette: root.theme-palette;
+    private property <string> draft-theme-light-background: root.theme-light-background;
+    private property <string> draft-theme-light-panel: root.theme-light-panel;
+    private property <string> draft-theme-light-panel-alt: root.theme-light-panel-alt;
+    private property <string> draft-theme-light-border: root.theme-light-border;
+    private property <string> draft-theme-light-text: root.theme-light-text;
+    private property <string> draft-theme-light-muted: root.theme-light-muted;
+    private property <string> draft-theme-light-accent: root.theme-light-accent;
+    private property <string> draft-theme-light-success: root.theme-light-success;
+    private property <string> draft-theme-light-danger: root.theme-light-danger;
+    private property <string> draft-theme-light-overlay: root.theme-light-overlay;
+    private property <string> draft-theme-light-terminal-foreground: root.theme-light-terminal-foreground;
+    private property <string> draft-theme-light-terminal-background: root.theme-light-terminal-background;
+    private property <string> draft-theme-light-terminal-selection: root.theme-light-terminal-selection;
+    private property <string> draft-theme-dark-background: root.theme-dark-background;
+    private property <string> draft-theme-dark-panel: root.theme-dark-panel;
+    private property <string> draft-theme-dark-panel-alt: root.theme-dark-panel-alt;
+    private property <string> draft-theme-dark-border: root.theme-dark-border;
+    private property <string> draft-theme-dark-text: root.theme-dark-text;
+    private property <string> draft-theme-dark-muted: root.theme-dark-muted;
+    private property <string> draft-theme-dark-accent: root.theme-dark-accent;
+    private property <string> draft-theme-dark-success: root.theme-dark-success;
+    private property <string> draft-theme-dark-danger: root.theme-dark-danger;
+    private property <string> draft-theme-dark-overlay: root.theme-dark-overlay;
+    private property <string> draft-theme-dark-terminal-foreground: root.theme-dark-terminal-foreground;
+    private property <string> draft-theme-dark-terminal-background: root.theme-dark-terminal-background;
+    private property <string> draft-theme-dark-terminal-selection: root.theme-dark-terminal-selection;
     private property <bool> draft-right-click-copy-or-paste:
         root.right-click-copy-or-paste;
     private property <int> draft-scrollback-lines: root.scrollback-lines;
@@ -119,19 +145,33 @@ export component SettingsPane inherits Rectangle {
             root.draft-brightness-percent,
             root.draft-bright-bold-text,
             root.draft-theme-mode,
-            root.draft-theme-background,
-            root.draft-theme-panel,
-            root.draft-theme-panel-alt,
-            root.draft-theme-border,
-            root.draft-theme-text,
-            root.draft-theme-muted,
-            root.draft-theme-accent,
-            root.draft-theme-success,
-            root.draft-theme-danger,
-            root.draft-theme-overlay,
-            root.draft-theme-terminal-foreground,
-            root.draft-theme-terminal-background,
-            root.draft-theme-terminal-selection,
+            root.draft-theme-palette,
+            root.draft-theme-light-background,
+            root.draft-theme-light-panel,
+            root.draft-theme-light-panel-alt,
+            root.draft-theme-light-border,
+            root.draft-theme-light-text,
+            root.draft-theme-light-muted,
+            root.draft-theme-light-accent,
+            root.draft-theme-light-success,
+            root.draft-theme-light-danger,
+            root.draft-theme-light-overlay,
+            root.draft-theme-light-terminal-foreground,
+            root.draft-theme-light-terminal-background,
+            root.draft-theme-light-terminal-selection,
+            root.draft-theme-dark-background,
+            root.draft-theme-dark-panel,
+            root.draft-theme-dark-panel-alt,
+            root.draft-theme-dark-border,
+            root.draft-theme-dark-text,
+            root.draft-theme-dark-muted,
+            root.draft-theme-dark-accent,
+            root.draft-theme-dark-success,
+            root.draft-theme-dark-danger,
+            root.draft-theme-dark-overlay,
+            root.draft-theme-dark-terminal-foreground,
+            root.draft-theme-dark-terminal-background,
+            root.draft-theme-dark-terminal-selection,
             root.draft-right-click-copy-or-paste,
             root.draft-local-shell,
             root.draft-scrollback-lines,
@@ -160,7 +200,7 @@ export component SettingsPane inherits Rectangle {
                 x: parent.width - Theme.hairline;
                 width: Theme.hairline;
                 height: parent.height;
-                background: Theme.border;
+                background: Theme.divider;
             }
 
             VerticalLayout {
@@ -211,7 +251,7 @@ export component SettingsPane inherits Rectangle {
                 }
 
                 Rectangle { vertical-stretch: 1; }
-                Rectangle { height: Theme.hairline; background: Theme.border; }
+                Rectangle { height: Theme.hairline; background: Theme.divider; }
                 SettingsNavItem {
                     icon: SettingsNavIcon.About;
                     label: "About";
@@ -261,22 +301,33 @@ export component SettingsPane inherits Rectangle {
                         draft-brightness-percent <=> root.draft-brightness-percent;
                         draft-bright-bold-text <=> root.draft-bright-bold-text;
                         draft-theme-mode <=> root.draft-theme-mode;
-                        draft-theme-background <=> root.draft-theme-background;
-                        draft-theme-panel <=> root.draft-theme-panel;
-                        draft-theme-panel-alt <=> root.draft-theme-panel-alt;
-                        draft-theme-border <=> root.draft-theme-border;
-                        draft-theme-text <=> root.draft-theme-text;
-                        draft-theme-muted <=> root.draft-theme-muted;
-                        draft-theme-accent <=> root.draft-theme-accent;
-                        draft-theme-success <=> root.draft-theme-success;
-                        draft-theme-danger <=> root.draft-theme-danger;
-                        draft-theme-overlay <=> root.draft-theme-overlay;
-                        draft-theme-terminal-foreground
-                            <=> root.draft-theme-terminal-foreground;
-                        draft-theme-terminal-background
-                            <=> root.draft-theme-terminal-background;
-                        draft-theme-terminal-selection
-                            <=> root.draft-theme-terminal-selection;
+                        draft-theme-palette <=> root.draft-theme-palette;
+                        draft-theme-light-background <=> root.draft-theme-light-background;
+                        draft-theme-light-panel <=> root.draft-theme-light-panel;
+                        draft-theme-light-panel-alt <=> root.draft-theme-light-panel-alt;
+                        draft-theme-light-border <=> root.draft-theme-light-border;
+                        draft-theme-light-text <=> root.draft-theme-light-text;
+                        draft-theme-light-muted <=> root.draft-theme-light-muted;
+                        draft-theme-light-accent <=> root.draft-theme-light-accent;
+                        draft-theme-light-success <=> root.draft-theme-light-success;
+                        draft-theme-light-danger <=> root.draft-theme-light-danger;
+                        draft-theme-light-overlay <=> root.draft-theme-light-overlay;
+                        draft-theme-light-terminal-foreground <=> root.draft-theme-light-terminal-foreground;
+                        draft-theme-light-terminal-background <=> root.draft-theme-light-terminal-background;
+                        draft-theme-light-terminal-selection <=> root.draft-theme-light-terminal-selection;
+                        draft-theme-dark-background <=> root.draft-theme-dark-background;
+                        draft-theme-dark-panel <=> root.draft-theme-dark-panel;
+                        draft-theme-dark-panel-alt <=> root.draft-theme-dark-panel-alt;
+                        draft-theme-dark-border <=> root.draft-theme-dark-border;
+                        draft-theme-dark-text <=> root.draft-theme-dark-text;
+                        draft-theme-dark-muted <=> root.draft-theme-dark-muted;
+                        draft-theme-dark-accent <=> root.draft-theme-dark-accent;
+                        draft-theme-dark-success <=> root.draft-theme-dark-success;
+                        draft-theme-dark-danger <=> root.draft-theme-dark-danger;
+                        draft-theme-dark-overlay <=> root.draft-theme-dark-overlay;
+                        draft-theme-dark-terminal-foreground <=> root.draft-theme-dark-terminal-foreground;
+                        draft-theme-dark-terminal-background <=> root.draft-theme-dark-terminal-background;
+                        draft-theme-dark-terminal-selection <=> root.draft-theme-dark-terminal-selection;
                     }
 
                     if root.selected-section == "Terminal" : TerminalSettingsPage {
