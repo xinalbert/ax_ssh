@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260731-terminal-keyboard-input-routing
-- 目标：按 Codex 会话 `019fb6bf-aa58-7bd3-abac-91183ca45218` 修正终端按键捕获、IME 分流、Function 键和 macOS Option Meta 策略。
-- 交付物：终端按键编码与映射测试、持久化 `Option acts as Meta` 设置、Slint 输入路由、双语说明和验证记录。
+- 目标 ID：20260731-module-boundary-refactor
+- 目标：按现有 Rust/Slint 所有权边界拆分过大的配置、连接与终端 UI 模块，同时保持行为与安全契约不变。
+- 交付物：职责单一的现代 Rust 子模块、聚合后的 Slint 子组件、保持稳定的根入口/DTO/callback 契约、回归测试和更新后的项目地图。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal/input.rs`、`src/app/{input,terminal_bridge,settings_bridge,view}.rs`、`src/config.rs`、`ui/{app,workspace-shell,terminal-pane,settings}.slint`、`ui/settings/terminal.slint`、`docs/{architecture,usage}*.md` 与 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：SSH 信任策略、凭据记录格式或秘密生命周期、Tokio/worker 生命周期、依赖升级、参考子模块耦合和 GUI 视觉验收。
+- 当前范围：`src/config.rs` 及其子模块、`src/app/connection.rs` 及其子模块、`ui/terminal-pane.slint` 的内部组件，以及 `docs/{architecture,architecture.zh}.md` 和 `docs/project-implementation-tracker/`。
+- 不在本轮范围内：SSH 信任判定、凭据 schema/秘密生命周期、Tokio worker 行为、Slint 根 `AppWindow` 契约、依赖升级、参考子模块耦合和 GUI 视觉验收。
 
 ## 当前状态
 
@@ -23,35 +23,32 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| K1 | completed | 键盘捕获审计与按键/文本分流契约 | Slint/Rust 边界检查 | 特殊键走 callback；可打印与 IME 提交文本走 `TextInput.edited` |
-| K2 | completed | application-cursor Home/End、F1-F12 映射和 xterm 编码 | focused encoder/mapping tests | 不改变 SSH 或 worker 输入队列边界 |
-| K3 | completed | macOS Option-as-Meta 持久化、DTO、Settings 页面和输入路由 | Cargo 联合编译、config tests | 默认保留 Option 字符、死键和 IME 文本提交 |
-| K4 | completed | 双语文档、项目地图与完整门禁 | Rust/Cargo/Markdown/tracker/diff | GUI 平台行为由用户手动验收 |
+| R1 | completed | `config` 拆分为主题、设置、会话域、持久化和测试子模块 | config focused tests、Cargo check | 根 `config.rs` 仅保留明确入口/re-export |
+| R2 | completed | 拆分 SSH 连接回调、探测与认证流程 | application state tests、Cargo check | 不改变逐 Tab phase 或 host-key 默认拒绝 |
+| R3 | completed | 以内部 Slint 组件收敛终端绘制/输入/选择职责 | Slint 联合编译、静态输入契约检查 | `TerminalPane` 对 `WorkspaceShell` 的接口不变 |
+| R4 | completed | 文档/地图/完整验证收口 | Rust/Cargo/tracker/Markdown/diff | 不创建 Worker 记录；GUI 视觉由用户验收 |
 
 ## 已完成
 
-- 已确认原有 `key-pressed` 将 Shift 或 macOS Option 的可打印输入过早直送终端；本轮改为只捕获特殊/控制键。
-- 已确认根 `AppWindow` 仅转发 Rust-facing property/callback，`WorkspaceShell`、`TerminalPane` 和 `SettingsPane` 已有可扩展 DTO 边界。
-- 已确认 macOS Control/Command 还原仍在 Rust `normalize_slint_modifiers`，不改变该既有平台兼容契约。
-- 已确认无需联网或多 agent；不创建 Worker 记录。
-- 已完成 application-cursor Home/End、F1-F12 领域映射和 xterm 编码；测试覆盖未修饰与 Ctrl+F5 序列。
-- 已完成 schema v13 `TerminalSettings::option_as_meta`、Settings > Terminal 开关、Rust/Slint DTO 与输入 bridge；旧文件缺失字段时保持关闭。
-- 已将可打印/Shift/IME committed text 与特殊/控制按键分成 `TextInput.edited` 和 `key-pressed` 两条路径；Windows/Linux Ctrl+Alt 可打印文本保留给 AltGr。
+- 已完成根指令、Rust/Slint 规范、项目地图、架构契约和代码体积盘点；不使用联网或多 agent。
+- `src/config.rs` 已收敛为入口、schema 常量与显式 re-export；`persistence`、`session`、`settings`、`theme` 和 config 回归测试各有独立模块，现有 JSON schema 与公开 config 路径保持稳定。
+- `src/app/connection.rs` 已收敛为连接组装入口；请求/probe、host-key 确认、认证和 worker 启动分离，同时保留逐 Tab phase 重验、未知或变化主机密钥默认拒绝，以及短期秘密边界。
+- `ui/components/terminal-grid.slint` 已接管有界终端快照的绘制、光标/IME preedit 覆盖、选择呈现与指针/菜单意图；`TerminalPane` 保留焦点、IME 代理、选择草稿、尺寸合并和对外 callback，`TerminalViewState` 及上层接口未改变。
 
 ## 验证
 
-- 已完成：按键编码与 Slint mapping focused tests（终端 8、应用 4、配置 1）；`cargo check --locked --offline`；完整 `cargo test --locked --offline`（库 63、应用 33、Doc tests 通过）；直接 `rustfmt --edition 2024 --check`；Markdown 相对链接、tracker validator 和 `git diff --check`。
-- 未完成：`cargo fmt --all -- --check` 与 `cargo clippy --all-targets --locked --offline -- -D warnings`，本机未安装相应 Cargo 子命令；未进行 GUI 截图或平台键盘自动化验收。
+- 已完成：config focused tests（29 passed）；直接 `rustfmt --edition 2024 --check`；`cargo check --locked --offline`；完整 `cargo test --locked --offline`（库 63 passed、应用 33 passed、Doc tests 通过）；Markdown 相对链接、tracker validator 和 `git diff --check`。
+- 未完成：`cargo fmt --all -- --check` 与 `cargo clippy --all-targets --locked --offline -- -D warnings`，本机未安装对应 Cargo 子命令；未进行 GUI 截图或平台交互验收。
 
 ## 风险与阻塞
 
-- SSH host-key 拒绝、短期秘密、Tokio worker 和有界输入队列均不在本轮改变。
-- Slint 不提供跨平台自动化 IME/死键验收；完成联合编译后，仍需用户在目标平台确认 Option、IME、AltGr 和全屏终端行为。
+- 该轮为结构重构，不得改变 SSH host-key 默认拒绝、短期秘密清零、worker 队列上限或已持久化 JSON schema。
+- Slint 文件拆分会保留既有根 callback/property 名称；视觉与焦点验收仍需用户在目标平台完成。
 
 ## 下一步
 
-- 等待用户在目标平台手动验收 macOS Option/死键/中文或日文 IME、Option-as-Meta、Cmd/Ctrl、Windows/Linux AltGr，以及 `vim`、`less`、`tmux` 中的 Home/End 与 F1-F12。
+- 等待用户在目标平台手动确认终端网格的渲染、焦点、拖拽选区、右键菜单、IME preedit 与窗口 resize；后续功能改动继续从各模块入口定位到对应的单一职责子模块。
 
 ## 最后更新时间
 
-- 2026-07-31 16:01 +0800
+- 2026-07-31 17:36 +0800

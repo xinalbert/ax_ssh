@@ -16,7 +16,7 @@ Slint UI（.slint）
        ▼
 应用控制器（src/app.rs）
        │ Tab ID + 领域值 + UI event loop 调度
-       ├──────────────► 配置存储（src/config.rs）
+       ├──────────────► 配置存储（src/config.rs + src/config/）
        │                 版本化设置/profile JSON + 原子替换
        ├──────────────► 系统凭据（src/credentials.rs）
        │                 阻塞式系统 keyring 与加密保险库 API
@@ -39,10 +39,10 @@ Slint UI（.slint）
 | `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
 | `src/app.rs` | 生成 Slint 类型的声明、进程级 UI 启动和顶层 callback 编排 | 功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏设置和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | 私有 application bridge 功能接线、worker 事件消费和 Slint model/snapshot 映射 | 生成类型声明、传输实现或持久化 schema |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` 与 `src/app/connection/` | 私有 application bridge 功能接线，包括单一职责的连接请求/probe、主机密钥、认证和 worker 启动流程 | 生成类型声明、传输实现或持久化 schema |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
-| `src/config.rs` | `SessionProfile`、持久化 Group 名称、版本化 `AppSettings`/`ThemeSettings`、校验、旧配置迁移、JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
+| `src/config.rs` 与 `src/config/` | 稳定的 config 入口和显式导出；session/profile 领域、设置、主题规范化、旧配置迁移、私有 JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问系统凭据库和加密保险库记录 | UI 状态、明文配置、SSH 传输 handle |
 | `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
@@ -70,6 +70,9 @@ Rust
 激活、关闭、连接、保存和取消等用户意图。`TerminalPane` 接收只读
 `TerminalViewState`，只拥有终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有
 worker、终端缓冲区或连接状态。
+其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
+有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
+resize 生命周期仍由 `TerminalPane` 保留。
 它的 `key-pressed` 只把特殊键和终端控制组合键发送给 Rust；可打印字符、Shift 文字和已提交的
 IME 文本继续通过原生 `TextInput.edited` 路径。
 
@@ -114,7 +117,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    特殊键与终端控制组合键走 `key-pressed`，可打印字符、Shift 文字和 IME 提交只通过
    `edited` 进入；预编辑保留在局部 UI 状态。macOS 在应用边界还原 Slint Apple 映射中
    交换的 Control/Command 语义。`TerminalSettings.option_as_meta` 默认关闭，因此 Option
-   文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。Windows/Linux 保持 Alt
+   文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。`TerminalGrid` 只会在
+   已连接光标可见时显示这份局部 preedit 值；组合文本不会经由它的手势 callback 跨越组件边界。
+   Windows/Linux 保持 Alt
    终端输入，同时 Ctrl+Alt 的可打印文字可保留为 AltGr 文本。普通 `Ctrl+C` 保留为 PTY
    输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
    使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为

@@ -18,7 +18,7 @@ Slint UI (.slint)
        ▼
 Application controller (src/app.rs)
        │ tab IDs + domain values + UI event-loop dispatch
-       ├──────────────► Config store (src/config.rs)
+       ├──────────────► Config store (src/config.rs + src/config/)
        │                 versioned settings/profile JSON + atomic replace
        ├──────────────► Credential store (src/credentials.rs)
        │                 blocking system-keyring and encrypted-vault APIs
@@ -41,10 +41,10 @@ Process startup (src/main.rs)
 | `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
 | `src/app.rs` | Generated Slint type declaration, process-level UI startup, and top-level callback composition | Feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` | Private application-bridge feature wiring, worker-event consumption, and Slint model/snapshot mapping | Generated type declaration, transport implementation, or persistence schema |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view}.rs` and `src/app/connection/` | Private application-bridge feature wiring, including focused connection request/probe, host-key, authentication, and worker-start flows | Generated type declaration, transport implementation, or persistence schema |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
-| `src/config.rs` | `SessionProfile`, persistent group names, versioned `AppSettings` and `ThemeSettings`, validation, legacy migration, JSON persistence, atomic replacement | Slint types, network connections, plaintext password storage |
+| `src/config.rs` and `src/config/` | Stable config entry and explicit exports; session/profile domain, settings, theme normalization, legacy migration, private JSON persistence and atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped system-keyring and encrypted-vault records | UI state, plaintext configuration, SSH transport handles |
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
@@ -76,6 +76,10 @@ sends user intent such as activation, close, connect, save, or cancel upward by
 callback. `TerminalPane` receives a read-only `TerminalViewState` and owns only
 terminal-local focus, IME proxy, selection, cursor blink, and measured sizing.
 It never owns a worker, a terminal buffer, or connection state.
+Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
+`TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
+pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
+retains the focus, IME input, selection draft, and resize lifecycle.
 Its `key-pressed` handler sends only special keys and terminal control chords to
 Rust; printable keys, Shift text, and committed IME text remain in the native
 `TextInput.edited` path.
@@ -149,6 +153,8 @@ must not locally hide either dialog before the Rust state transition accepts it.
    commits enter only through `edited`; preedit remains local UI state. At the
    application boundary, macOS restores physical Control and Command after
    Slint's Apple mapping swaps their semantic modifier fields.
+   `TerminalGrid` displays that local preedit value only while the connected
+   cursor is visible; no composition text crosses its gesture callbacks.
    `TerminalSettings.option_as_meta` is disabled by default, so Option text and
    dead keys use the text path; when enabled, Option-modified keys are terminal
    Meta input. Windows/Linux retain Alt terminal input while Ctrl+Alt printable

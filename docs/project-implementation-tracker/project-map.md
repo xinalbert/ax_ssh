@@ -36,7 +36,7 @@
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh` | 领域、系统服务、进程服务和传输公共边界 |
 | `src/app.rs` | Slint/Rust bridge 入口 | `slint::include_modules!`、`run`、`wire_callbacks` | 生成类型声明、UI 启停和功能 callback 总编排 |
 | `src/app/workspace.rs` | 工作区与 profile/group bridge | `wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`close_workspace_tab` | Tab 激活/内存排序、会话新增编辑删除、Group CRUD、凭据回滚和关闭时资源回收 |
-| `src/app/connection.rs` | SSH 连接控制器 | `wire_connection_request`、`begin_authentication`、`start_session_worker` | 主机探测、信任确认、逐 Tab 认证 phase 和 worker 启动；callback 重验活动 Tab/profile/phase |
+| `src/app/connection.rs` 与 `src/app/connection/` | SSH 连接控制器组装入口与单一流程模块 | `wire_connection_request`、`wire_host_key_confirmation`、`wire_authentication`、`start_session_worker` | `request` 负责逐 Tab probe 启动，`host_key` 负责显式信任/拒绝，`authentication` 负责临时凭据输入/读取，`worker_start` 在创建 worker 前校验 phase；未知或变化密钥仍须明确确认才可继续 |
 | `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential` | attempt 路由、输出/失败事件、认证成功后的凭据保存，以及迟到 worker/凭据结果隔离 |
 | `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 终端输入/resize/selection、本地 worker 事件和仅视觉主题刷新 |
 | `src/app/settings_bridge.rs` | 设置保存 bridge | `wire_settings` | 校验并原子保存 Settings 草稿、独立显示模式、palette 和双 Custom 色板 |
@@ -48,7 +48,7 @@
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、active prompt、attempt/credential isolation tests | 修改 Tab、认证 phase 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`compact_label`、`profile_endpoint`、`profile_sidebar_endpoint` | 持久化空 Group 与 profile 聚合、编辑器组选项、文字徽标和遮蔽侧栏 endpoint 格式 |
 | `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout、rollback | 在 UI 线程外调用系统凭据库和加密保险库；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时恢复记录 |
-| `src/config.rs` | 会话/Group/设置 schema 和持久化 | `CredentialStorage`、`ThemeMode`、`ThemePaletteKind`、`ThemePalette`、`ThemeSettings`、`SessionStore`、`AppSettings`、`ConfigStore` | schema v13 `TerminalSettings::option_as_meta`、v12 凭据后端引用/旧标记迁移、v11 主题和 Group/profile 迁移 |
+| `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `CredentialStorage`、`ThemeMode`、`ThemePaletteKind`、`ThemePalette`、`ThemeSettings`、`SessionStore`、`AppSettings`、`ConfigStore` | schema v13 `TerminalSettings::option_as_meta`、v12 凭据后端引用/旧标记迁移、v11 主题和 Group/profile 迁移；根文件保留显式 re-export，私有磁盘替换留在 `persistence` |
 | `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | Keychain/Credential Manager/Secret Service，以及 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs` | 有界终端文本模型 | `TerminalModel`、ANSI `Perform` | shell 输出解析、光标和 scrollback |
 | `vendor/vt100/src/grid.rs` | 终端依赖的受控修复点 | `Grid::set_size` | 宽字符被列缩窄截断时保持 normal/alternate grid 有效 |
@@ -69,6 +69,7 @@
 | `ui/components/flat-text-input.slint` | AxSSH 主题化共享非秘密文本输入 | `FlatTextInput` | Settings、会话编辑器和管理弹窗的单行编辑、原生文本选择和编辑菜单 |
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；提交接收、取消或切换 prompt 时清空秘密 |
+| `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalRenderLine` | 绘制 Rust 所有的可见字符格、选区/光标/preedit 覆盖，并转换指针、滚动、复制/粘贴/全选意图；不持有终端数据、worker 状态、焦点或 IME 输入 |
 | `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane`、`TerminalViewState` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、复制粘贴和 PTY resize callback |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`resolved-dark`、状态/type/spacing/geometry tokens | 修改系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
@@ -80,10 +81,10 @@
 
 ## 常用定位
 
-- 修改会话或设置字段：`src/config.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射；默认凭据后端位于 Settings > General，既有 profile 使用自身的非敏感后端引用。
-- 修改连接或认证：`src/app/connection.rs`、`src/ssh.rs`，保持未知主机密钥默认拒绝；秘密输入只可使用 `ui/components/secret-text-input.slint`，不得退回 `FlatTextInput`。
-- 修改终端解析或 scrollback：`src/terminal.rs`；宽字符缩窄补丁在 `vendor/vt100/src/grid.rs`；修改按键序列：`src/terminal/input.rs`，并同步 `src/app/input.rs`、`ui/terminal-pane.slint` 与 `TerminalSettings::option_as_meta`；修改 shell I/O：`src/ssh/worker.rs`。
-- 修改终端/工作区设置：`src/config.rs`、`src/app.rs`、`ui/settings.slint` 和 `ui/workspace-shell.slint`；跨组件新增字段优先扩展相应 `*ViewState`，不要重新逐条透传；字体资源同时检查 `assets/fonts/` 的许可证/声明。
+- 修改会话或设置字段：先从 `src/config.rs` 定位至 `src/config/{session,settings,theme,persistence}.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射；默认凭据后端位于 Settings > General，既有 profile 使用自身的非敏感后端引用。
+- 修改连接或认证：先从 `src/app/connection.rs` 定位至 `src/app/connection/{request,host_key,authentication,worker_start}.rs`，再检查 `src/ssh.rs`；保持未知主机密钥默认拒绝，秘密输入只可使用 `ui/components/secret-text-input.slint`，不得退回 `FlatTextInput`。
+- 修改终端解析或 scrollback：`src/terminal.rs`；宽字符缩窄补丁在 `vendor/vt100/src/grid.rs`；修改按键序列：`src/terminal/input.rs`，并同步 `src/app/input.rs`、`ui/terminal-pane.slint` 与 `TerminalSettings::option_as_meta`；修改终端网格绘制、指针或菜单意图时还需检查 `ui/components/terminal-grid.slint`；修改 shell I/O：`src/ssh/worker.rs`。
+- 修改终端/工作区设置：`src/config/{settings,theme}.rs`、`src/app.rs`、`ui/settings.slint` 和 `ui/workspace-shell.slint`；跨组件新增字段优先扩展相应 `*ViewState`，不要重新逐条透传；字体资源同时检查 `assets/fonts/` 的许可证/声明。
 - 修改 Tab 生命周期或排序：`src/app/state.rs`、`src/app/state/transitions.rs` 和 `src/app/workspace.rs`；运行实例键保持为 Tab UUID，不能退回 profile UUID，位置序号只由 Slint 列表索引派生。SSH probe、host-key 确认、认证与 stored-credential loading 也必须随 Tab 迁移，并让迟到 completion 重验 Tab/profile/attempt/phase。
 - 修改本机私钥发现或加载：`src/ssh/private_keys.rs`，不得持久化私钥内容或 passphrase。
 - 修改日志初始化、滚动或刷新：`src/logging.rs`，由 `src/main.rs` 持有唯一 guard。
@@ -103,8 +104,8 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-07-31 的 `WorkspaceShell`/`OverlayHost`、`TerminalViewState`/`SettingsViewState`/`SessionEditorViewState`、组件私有 picker/普通弹层/草稿/Group 展开与 Rust 单向安全 phase；schema v13 `TerminalSettings::option_as_meta`、特殊键 callback 与文本/IME `edited` 分流、application-cursor Home/End、F1-F12、schema v12 SystemKeyring/EncryptedVault、P1 逐 Tab `SshConnectionPhase`、主题、既有 Group/profile 管理、macOS 标题栏/Tab 拖拽和 `vt100 0.16.2` 宽字符缩窄补丁继续有效。
+- 最近依据：2026-07-31 的 config/connection/terminal-grid 模块边界重构，`WorkspaceShell`/`OverlayHost`、`TerminalViewState`/`SettingsViewState`/`SessionEditorViewState`、组件私有 picker/普通弹层/草稿/Group 展开与 Rust 单向安全 phase；schema v13 `TerminalSettings::option_as_meta`、特殊键 callback 与文本/IME `edited` 分流、application-cursor Home/End、F1-F12、schema v12 SystemKeyring/EncryptedVault、P1 逐 Tab `SshConnectionPhase`、主题、既有 Group/profile 管理、macOS 标题栏/Tab 拖拽和 `vt100 0.16.2` 宽字符缩窄补丁继续有效。
 
 ## 最后更新时间
 
-- 2026-07-31 15:47 +0800
+- 2026-07-31 17:36 +0800
