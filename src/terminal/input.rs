@@ -17,6 +17,7 @@ pub enum TerminalKey {
     End,
     PageUp,
     PageDown,
+    Function(u8),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -80,6 +81,10 @@ fn encode_key_for_platform(
         return None;
     }
 
+    if let Some(sequence) = function_key_sequence(key, modifiers) {
+        return Some(sequence);
+    }
+
     let sequence = match key {
         TerminalKey::Return if modifiers.is_empty() => Some(b"\r".as_slice()),
         TerminalKey::Return if modifiers.shift && !modifiers.alt && !modifiers.control => {
@@ -117,6 +122,12 @@ fn encode_key_for_platform(
         TerminalKey::Down if modifiers.is_empty() => Some(b"\x1b[B".as_slice()),
         TerminalKey::Right if modifiers.is_empty() => Some(b"\x1b[C".as_slice()),
         TerminalKey::Left if modifiers.is_empty() => Some(b"\x1b[D".as_slice()),
+        TerminalKey::Home if modifiers.is_empty() && application_cursor => {
+            Some(b"\x1bOH".as_slice())
+        }
+        TerminalKey::End if modifiers.is_empty() && application_cursor => {
+            Some(b"\x1bOF".as_slice())
+        }
         TerminalKey::Home if modifiers.is_empty() => Some(b"\x1b[H".as_slice()),
         TerminalKey::End if modifiers.is_empty() => Some(b"\x1b[F".as_slice()),
         TerminalKey::Insert if modifiers.is_empty() => Some(b"\x1b[2~".as_slice()),
@@ -207,6 +218,48 @@ fn modified_navigation_sequence(key: &TerminalKey, modifiers: TerminalModifiers)
     }
 }
 
+fn function_key_sequence(key: &TerminalKey, modifiers: TerminalModifiers) -> Option<Vec<u8>> {
+    let TerminalKey::Function(number) = key else {
+        return None;
+    };
+    let unmodified = match number {
+        1 => Some(b"\x1bOP".as_slice()),
+        2 => Some(b"\x1bOQ".as_slice()),
+        3 => Some(b"\x1bOR".as_slice()),
+        4 => Some(b"\x1bOS".as_slice()),
+        5 => Some(b"\x1b[15~".as_slice()),
+        6 => Some(b"\x1b[17~".as_slice()),
+        7 => Some(b"\x1b[18~".as_slice()),
+        8 => Some(b"\x1b[19~".as_slice()),
+        9 => Some(b"\x1b[20~".as_slice()),
+        10 => Some(b"\x1b[21~".as_slice()),
+        11 => Some(b"\x1b[23~".as_slice()),
+        12 => Some(b"\x1b[24~".as_slice()),
+        _ => None,
+    };
+    if modifiers.is_empty() {
+        return unmodified.map(|sequence| sequence.to_vec());
+    }
+
+    let code = modifiers.xterm_code();
+    let sequence = match number {
+        1 => format!("\x1b[1;{code}P"),
+        2 => format!("\x1b[1;{code}Q"),
+        3 => format!("\x1b[1;{code}R"),
+        4 => format!("\x1b[1;{code}S"),
+        5 => format!("\x1b[15;{code}~"),
+        6 => format!("\x1b[17;{code}~"),
+        7 => format!("\x1b[18;{code}~"),
+        8 => format!("\x1b[19;{code}~"),
+        9 => format!("\x1b[20;{code}~"),
+        10 => format!("\x1b[21;{code}~"),
+        11 => format!("\x1b[23;{code}~"),
+        12 => format!("\x1b[24;{code}~"),
+        _ => return None,
+    };
+    Some(sequence.into_bytes())
+}
+
 fn encode_control_text(text: &str) -> Option<Vec<u8>> {
     let mut characters = text.chars();
     let character = characters.next()?;
@@ -260,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn encodes_unmodified_arrows_for_normal_and_application_cursor_modes() {
+    fn encodes_unmodified_navigation_for_normal_and_application_cursor_modes() {
         let modifiers = TerminalModifiers::default();
         assert_eq!(
             encode_key(&TerminalKey::Up, modifiers, false),
@@ -277,6 +330,22 @@ mod tests {
         assert_eq!(
             encode_key(&TerminalKey::Down, modifiers, true),
             Some(b"\x1bOB".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Home, modifiers, false),
+            Some(b"\x1b[H".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::End, modifiers, false),
+            Some(b"\x1b[F".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Home, modifiers, true),
+            Some(b"\x1bOH".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::End, modifiers, true),
+            Some(b"\x1bOF".to_vec())
         );
     }
 
@@ -369,6 +438,38 @@ mod tests {
         assert_eq!(
             encode_key(&TerminalKey::Delete, modifiers, true),
             Some(b"\x1b[3;6~".to_vec())
+        );
+    }
+
+    #[test]
+    fn encodes_function_keys_with_xterm_sequences() {
+        let modifiers = TerminalModifiers::default();
+        assert_eq!(
+            encode_key(&TerminalKey::Function(1), modifiers, false),
+            Some(b"\x1bOP".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Function(4), modifiers, false),
+            Some(b"\x1bOS".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Function(5), modifiers, false),
+            Some(b"\x1b[15~".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Function(12), modifiers, false),
+            Some(b"\x1b[24~".to_vec())
+        );
+        assert_eq!(
+            encode_key(
+                &TerminalKey::Function(5),
+                TerminalModifiers {
+                    control: true,
+                    ..TerminalModifiers::default()
+                },
+                false,
+            ),
+            Some(b"\x1b[15;5~".to_vec())
         );
     }
 

@@ -37,12 +37,15 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
     ui.on_terminal_key(move |text, alt, control, meta, shift| {
-        let modifiers = normalize_slint_modifiers(alt, control, meta, shift);
+        let mut modifiers = normalize_slint_modifiers(alt, control, meta, shift);
         let key = terminal_key_from_slint(text.as_str(), modifiers);
         let result = state_for_key
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
             .and_then(|mut app| {
+                if cfg!(target_os = "macos") && !app.sessions.settings.terminal.option_as_meta {
+                    modifiers.alt = false;
+                }
                 let application_cursor = app
                     .active_terminal()
                     .context("no active terminal")?

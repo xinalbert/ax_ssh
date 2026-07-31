@@ -18,6 +18,18 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
         (Key::End, TerminalKey::End),
         (Key::PageUp, TerminalKey::PageUp),
         (Key::PageDown, TerminalKey::PageDown),
+        (Key::F1, TerminalKey::Function(1)),
+        (Key::F2, TerminalKey::Function(2)),
+        (Key::F3, TerminalKey::Function(3)),
+        (Key::F4, TerminalKey::Function(4)),
+        (Key::F5, TerminalKey::Function(5)),
+        (Key::F6, TerminalKey::Function(6)),
+        (Key::F7, TerminalKey::Function(7)),
+        (Key::F8, TerminalKey::Function(8)),
+        (Key::F9, TerminalKey::Function(9)),
+        (Key::F10, TerminalKey::Function(10)),
+        (Key::F11, TerminalKey::Function(11)),
+        (Key::F12, TerminalKey::Function(12)),
     ];
     special
         .into_iter()
@@ -181,7 +193,7 @@ mod tests {
     use slint::SharedString;
 
     #[test]
-    fn maps_slint_navigation_and_text_keys_to_terminal_domain() {
+    fn maps_slint_navigation_function_and_text_keys_to_terminal_domain() {
         let up = SharedString::from(Key::UpArrow);
         assert_eq!(
             terminal_key_from_slint(up.as_str(), TerminalModifiers::default()),
@@ -190,6 +202,16 @@ mod tests {
         assert_eq!(
             terminal_key_from_slint("x", TerminalModifiers::default()),
             TerminalKey::Text("x".into())
+        );
+        let f1 = SharedString::from(Key::F1);
+        assert_eq!(
+            terminal_key_from_slint(f1.as_str(), TerminalModifiers::default()),
+            TerminalKey::Function(1)
+        );
+        let f12 = SharedString::from(Key::F12);
+        assert_eq!(
+            terminal_key_from_slint(f12.as_str(), TerminalModifiers::default()),
+            TerminalKey::Function(12)
         );
     }
 
