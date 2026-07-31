@@ -1,10 +1,11 @@
 //! Native macOS title-bar integration for the Slint window.
 
 use anyhow::{Context, Result};
+use ax_ssh::terminal::TerminalModifiers;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, sel};
-use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenuItem, NSView, NSWindow};
+use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSMenuItem, NSView, NSWindow};
 use objc2_foundation::{MainThreadMarker, NSObject, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
@@ -62,6 +63,20 @@ pub(super) fn configure(window: &slint::Window) -> Result<()> {
         native_window.setMovableByWindowBackground(false);
         Ok(())
     })
+}
+
+/// Return AppKit's aggregate physical modifier state for the event currently
+/// being dispatched. Slint intentionally swaps Command and Control on Apple
+/// platforms, and its internal left/right state can miss a `flagsChanged`
+/// event; AppKit remains the authoritative source for the current key chord.
+pub(super) fn current_modifier_state() -> TerminalModifiers {
+    let flags = NSEvent::modifierFlags_class();
+    TerminalModifiers {
+        alt: flags.contains(NSEventModifierFlags::Option),
+        control: flags.contains(NSEventModifierFlags::Control),
+        meta: flags.contains(NSEventModifierFlags::Command),
+        shift: flags.contains(NSEventModifierFlags::Shift),
+    }
 }
 
 pub(super) fn configure_application_menu(

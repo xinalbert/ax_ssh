@@ -144,7 +144,7 @@ export component AppWindow inherits Window {
             line_height_percent: root.terminal-line-height-percent, foreground: root.terminal-foreground,
             background: root.terminal-background, selection_background: root.terminal-selection-background,
             right_click_copy_or_paste: root.right-click-copy-or-paste,
-            option_as_meta: root.option-as-meta, apple_platform: root.apple-platform,
+            option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
         },
         settings: {
@@ -223,7 +223,9 @@ export component AppWindow inherits Window {
     callback authenticate-session(string, string, bool) -> bool;
     callback cancel-password-dialog();
     callback disconnect-session();
-    callback terminal-key(string, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-is-control(bool, bool, bool, bool) -> bool;
     callback resize-terminal(int, int);
     callback scroll-terminal(int);
     callback terminal-selection-text(int, int, int, int) -> string;
@@ -300,12 +302,13 @@ export component AppWindow inherits Window {
             if event.text == Key.Escape && workspace-shell.dismiss-transient-controls() {
                 return EventResult.accept;
             }
-            // Slint swaps Command and Control on Apple platforms for Qt compatibility.
-            let physical-control = root.apple-platform
-                ? event.modifiers.meta : event.modifiers.control;
-            let physical-meta = root.apple-platform
-                ? event.modifiers.control : event.modifiers.meta;
-            if root.active-tab-kind == "terminal" && physical-control && !physical-meta {
+            if root.active-tab-kind == "terminal"
+                    && root.terminal-key-is-control(
+                        event.modifiers.alt,
+                        event.modifiers.control,
+                        event.modifiers.meta,
+                        event.modifiers.shift,
+                    ) {
                 return EventResult.reject;
             }
             if root.format-shortcut(event.text, event.modifiers.alt, event.modifiers.control,
@@ -369,8 +372,13 @@ export component AppWindow inherits Window {
                 root.save-session(name, group, host, port, username, auth, key-path);
             }
             cancel-session-dialog => { root.cancel-session-dialog(); }
-            terminal-key(text, alt, control, meta, shift) => {
-                return root.terminal-key(text, alt, control, meta, shift);
+            terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+                return root.terminal-key(text, alt, control, meta, shift, physical-key-event);
+            }
+            terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
+                return root.terminal-key-direct(
+                    text, alt, control, meta, shift, option-as-meta, preedit-active,
+                );
             }
             resize-terminal(columns, rows) => { root.resize-terminal(columns, rows); }
             scroll-terminal(lines) => { root.scroll-terminal(lines); }

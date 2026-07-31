@@ -57,8 +57,11 @@ registry.
   including `Ctrl+C` and tmux prefixes. Terminal clipboard defaults use `Cmd`
   on macOS and `Ctrl+Shift` elsewhere. Global UI commands use `Cmd` on macOS
   and `Ctrl` elsewhere, and must not shadow terminal control bytes. Slint 1.17
-  swaps Command/Control modifier fields on Apple platforms; normalize them in
-  `src/app.rs` before shortcut matching or terminal encoding.
+  swaps Command/Control modifier fields on Apple platforms. While handling a
+  macOS keyboard event, `src/app.rs` must use AppKit's current physical
+  modifier state before shortcut matching or terminal encoding, so either
+  Control key has the same meaning even when Slint misses a side-specific
+  `flagsChanged` event.
 - Keep the visible terminal as a rendered grid. The hidden Slint `TextInput`
   is an IME proxy only: position it at the terminal cursor, leave unmodified
   preedit keys to the input method, and send committed text exactly once.

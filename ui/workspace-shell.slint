@@ -54,7 +54,8 @@ export component WorkspaceShell inherits Rectangle {
     callback connect-session(string);
     callback save-session(string, string, string, string, string, string, string);
     callback cancel-session-dialog();
-    callback terminal-key(string, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(int, int);
     callback scroll-terminal(int);
     callback terminal-selection-text(int, int, int, int) -> string;
@@ -137,8 +138,15 @@ export component WorkspaceShell inherits Rectangle {
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }
-                        terminal-key(text, alt, control, meta, shift) => {
-                            return root.terminal-key(text, alt, control, meta, shift);
+                        terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+                            return root.terminal-key(
+                                text, alt, control, meta, shift, physical-key-event,
+                            );
+                        }
+                        terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
+                            return root.terminal-key-direct(
+                                text, alt, control, meta, shift, option-as-meta, preedit-active,
+                            );
                         }
                         resized(columns, rows) => { root.resize-terminal(columns, rows); }
                         scrolled(lines) => { root.scroll-terminal(lines); }

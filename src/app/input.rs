@@ -51,14 +51,22 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
         })
 }
 
-pub(super) fn format_shortcut_event(
+#[cfg(test)]
+fn format_shortcut_event(text: &str, alt: bool, control: bool, meta: bool, shift: bool) -> String {
+    format_shortcut_event_with_modifiers(text, normalize_slint_modifiers(alt, control, meta, shift))
+}
+
+pub(super) fn format_shortcut_event_with_current_modifiers(
     text: &str,
     alt: bool,
     control: bool,
     meta: bool,
     shift: bool,
 ) -> String {
-    let modifiers = normalize_slint_modifiers(alt, control, meta, shift);
+    format_shortcut_event_with_modifiers(text, normalize_event_modifiers(alt, control, meta, shift))
+}
+
+fn format_shortcut_event_with_modifiers(text: &str, modifiers: TerminalModifiers) -> String {
     if !modifiers.alt && !modifiers.control && !modifiers.meta && !modifiers.shift {
         return String::new();
     }
@@ -93,6 +101,113 @@ pub(super) fn normalize_slint_modifiers(
     shift: bool,
 ) -> TerminalModifiers {
     normalize_slint_modifiers_for_platform(alt, control, meta, shift, cfg!(target_os = "macos"))
+}
+
+pub(super) fn normalize_event_modifiers(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+) -> TerminalModifiers {
+    normalize_slint_modifiers_with_current(alt, control, meta, shift, current_platform_modifiers())
+}
+
+pub(super) fn terminal_input_modifiers(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+    physical_key_event: bool,
+) -> TerminalModifiers {
+    if physical_key_event {
+        normalize_event_modifiers(alt, control, meta, shift)
+    } else {
+        normalize_slint_modifiers(alt, control, meta, shift)
+    }
+}
+
+fn normalize_slint_modifiers_with_current(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+    current: Option<TerminalModifiers>,
+) -> TerminalModifiers {
+    current.unwrap_or_else(|| normalize_slint_modifiers(alt, control, meta, shift))
+}
+
+#[cfg(target_os = "macos")]
+fn current_platform_modifiers() -> Option<TerminalModifiers> {
+    Some(super::macos_window::current_modifier_state())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_platform_modifiers() -> Option<TerminalModifiers> {
+    None
+}
+
+pub(super) fn terminal_key_is_direct(
+    text: &str,
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+    option_as_meta: bool,
+    preedit_active: bool,
+) -> bool {
+    let modifiers = normalize_event_modifiers(alt, control, meta, shift);
+    terminal_key_is_direct_for_platform(
+        text,
+        modifiers,
+        option_as_meta,
+        preedit_active,
+        cfg!(target_os = "macos"),
+    )
+}
+
+fn terminal_key_is_direct_for_platform(
+    text: &str,
+    modifiers: TerminalModifiers,
+    option_as_meta: bool,
+    preedit_active: bool,
+    apple_platform: bool,
+) -> bool {
+    let direct_modifier = if apple_platform {
+        modifiers.control || modifiers.meta || (option_as_meta && modifiers.alt && !modifiers.meta)
+    } else {
+        modifiers.control || modifiers.alt || modifiers.meta
+    };
+    if preedit_active && !direct_modifier {
+        return false;
+    }
+
+    let key = terminal_key_from_slint(text, modifiers);
+    if !matches!(key, TerminalKey::Text(_)) {
+        return true;
+    }
+
+    if apple_platform {
+        return direct_modifier;
+    }
+
+    // Ctrl+Alt printable text is commonly AltGr and must stay on TextInput.
+    (modifiers.control && !(modifiers.alt && !text.is_empty()))
+        || (modifiers.alt && !modifiers.control)
+        || modifiers.meta
+}
+
+pub(super) fn terminal_key_is_control_chord(
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+) -> bool {
+    let modifiers = normalize_event_modifiers(alt, control, meta, shift);
+    terminal_key_is_control_chord_with_modifiers(modifiers)
+}
+
+fn terminal_key_is_control_chord_with_modifiers(modifiers: TerminalModifiers) -> bool {
+    modifiers.control && !modifiers.meta
 }
 
 fn normalize_slint_modifiers_for_platform(
@@ -287,5 +402,100 @@ mod tests {
                 ..TerminalModifiers::default()
             }
         );
+    }
+
+    #[test]
+    fn current_platform_modifier_state_overrides_stale_slint_modifiers() {
+        let physical_control = TerminalModifiers {
+            control: true,
+            ..TerminalModifiers::default()
+        };
+        assert_eq!(
+            normalize_slint_modifiers_with_current(
+                false,
+                true,
+                false,
+                false,
+                Some(physical_control)
+            ),
+            physical_control
+        );
+    }
+
+    #[test]
+    fn committed_terminal_text_does_not_inherit_the_triggering_shortcut_modifier() {
+        assert_eq!(
+            terminal_input_modifiers(false, false, false, false, false),
+            TerminalModifiers::default()
+        );
+    }
+
+    #[test]
+    fn routes_terminal_input_from_one_normalized_modifier_source() {
+        let control = TerminalModifiers {
+            control: true,
+            ..TerminalModifiers::default()
+        };
+        let command = TerminalModifiers {
+            meta: true,
+            ..TerminalModifiers::default()
+        };
+        let option = TerminalModifiers {
+            alt: true,
+            ..TerminalModifiers::default()
+        };
+        let control_alt = TerminalModifiers {
+            control: true,
+            alt: true,
+            ..TerminalModifiers::default()
+        };
+
+        assert!(!terminal_key_is_direct_for_platform(
+            "c",
+            TerminalModifiers::default(),
+            false,
+            false,
+            true,
+        ));
+        assert!(terminal_key_is_direct_for_platform(
+            "c", control, false, false, true
+        ));
+        assert!(terminal_key_is_direct_for_platform(
+            "c", command, false, false, true
+        ));
+        assert!(!terminal_key_is_direct_for_platform(
+            "c", option, false, false, true
+        ));
+        assert!(terminal_key_is_direct_for_platform(
+            "c", option, true, false, true,
+        ));
+        assert!(!terminal_key_is_direct_for_platform(
+            "@",
+            control_alt,
+            false,
+            false,
+            false
+        ));
+        assert!(terminal_key_is_direct_for_platform(
+            "c", control, false, false, false
+        ));
+
+        let f1 = SharedString::from(Key::F1);
+        assert!(terminal_key_is_direct_for_platform(
+            f1.as_str(),
+            TerminalModifiers::default(),
+            false,
+            false,
+            true,
+        ));
+        assert!(!terminal_key_is_direct_for_platform(
+            f1.as_str(),
+            TerminalModifiers::default(),
+            false,
+            true,
+            true,
+        ));
+        assert!(terminal_key_is_control_chord_with_modifiers(control));
+        assert!(!terminal_key_is_control_chord_with_modifiers(command));
     }
 }

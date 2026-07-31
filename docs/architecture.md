@@ -151,8 +151,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
    `TextInput` is the native text and IME proxy: special keys and terminal
    control chords use `key-pressed`, while printable text, Shift text, and IME
    commits enter only through `edited`; preedit remains local UI state. At the
-   application boundary, macOS restores physical Control and Command after
-   Slint's Apple mapping swaps their semantic modifier fields.
+   application boundary, physical macOS key events read AppKit's current
+   aggregate modifier state before restoring Control and Command semantics
+   after Slint's Apple mapping; this keeps the two Control keys equivalent
+   when a side-specific modifier event is absent. Committed IME and pasted text
+   explicitly use empty modifiers, so they cannot inherit a still-held shortcut
+   key.
    `TerminalGrid` displays that local preedit value only while the connected
    cursor is visible; no composition text crosses its gesture callbacks.
    `TerminalSettings.option_as_meta` is disabled by default, so Option text and

@@ -27,7 +27,10 @@ use ax_ssh::terminal::{TerminalSnapshot, encode_key as encode_terminal_key};
 use self::credential_tasks::{
     delete_password, load_system_password, load_vault_password, save_password,
 };
-use self::input::{format_shortcut_event, normalize_slint_modifiers, terminal_key_from_slint};
+use self::input::{
+    format_shortcut_event_with_current_modifiers, terminal_input_modifiers,
+    terminal_key_from_slint, terminal_key_is_control_chord, terminal_key_is_direct,
+};
 use self::session_groups::{
     compact_label, group_options, profile_endpoint, profile_sidebar_endpoint, session_groups,
 };
@@ -160,7 +163,24 @@ pub fn run() -> Result<()> {
 
 fn wire_callbacks(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
     ui.on_format_shortcut(move |text, alt, control, meta, shift| {
-        format_shortcut_event(text.as_str(), alt, control, meta, shift).into()
+        format_shortcut_event_with_current_modifiers(text.as_str(), alt, control, meta, shift)
+            .into()
+    });
+    ui.on_terminal_key_direct(
+        move |text, alt, control, meta, shift, option_as_meta, preedit_active| {
+            terminal_key_is_direct(
+                text.as_str(),
+                alt,
+                control,
+                meta,
+                shift,
+                option_as_meta,
+                preedit_active,
+            )
+        },
+    );
+    ui.on_terminal_key_is_control(move |alt, control, meta, shift| {
+        terminal_key_is_control_chord(alt, control, meta, shift)
     });
     let ui_for_clipboard_write = ui.as_weak();
     ui.on_write_clipboard(move |text| {

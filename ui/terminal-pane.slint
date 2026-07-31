@@ -25,7 +25,6 @@ export struct TerminalViewState {
     selection_background: color,
     right_click_copy_or_paste: bool,
     option_as_meta: bool,
-    apple_platform: bool,
     copy_selection_shortcut: string,
     paste_shortcut: string,
 }
@@ -48,11 +47,11 @@ export component TerminalPane inherits Rectangle {
     private property <color> terminal-selection-background: root.view.selection_background;
     private property <bool> right-click-copy-or-paste: root.view.right_click_copy_or_paste;
     private property <bool> option-as-meta: root.view.option_as_meta;
-    private property <bool> apple-platform: root.view.apple_platform;
     private property <string> copy-selection-shortcut: root.view.copy_selection_shortcut;
     private property <string> paste-shortcut: root.view.paste_shortcut;
 
-    callback terminal-key(string, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resized(int, int);
     callback scrolled(int);
     callback selection-text(int, int, int, int) -> string;
@@ -110,55 +109,6 @@ export component TerminalPane inherits Rectangle {
         last_column: root.selection-last-column,
     };
 
-    // Special keys bypass IME; printable and committed IME text use edited.
-    function special-terminal-key(text: string) -> bool {
-        return text == Key.Return
-            || text == Key.Backspace
-            || text == Key.Tab
-            || text == Key.Backtab
-            || text == Key.Escape
-            || text == Key.UpArrow
-            || text == Key.DownArrow
-            || text == Key.LeftArrow
-            || text == Key.RightArrow
-            || text == Key.Insert
-            || text == Key.Delete
-            || text == Key.Home
-            || text == Key.End
-            || text == Key.PageUp
-            || text == Key.PageDown
-            || text == Key.F1
-            || text == Key.F2
-            || text == Key.F3
-            || text == Key.F4
-            || text == Key.F5
-            || text == Key.F6
-            || text == Key.F7
-            || text == Key.F8
-            || text == Key.F9
-            || text == Key.F10
-            || text == Key.F11
-            || text == Key.F12;
-    }
-
-    function direct-terminal-key(text: string, alt: bool, control: bool,
-                                 meta: bool, shift: bool) -> bool {
-        if root.special-terminal-key(text) {
-            return true;
-        }
-        // Slint swaps physical Control and Command on Apple platforms.
-        let physical-control = root.apple-platform ? meta : control;
-        let physical-meta = root.apple-platform ? control : meta;
-        if root.apple-platform {
-            return physical-control || physical-meta
-                || (root.option-as-meta && alt && !physical-meta);
-        }
-        // Ctrl+Alt printable text is commonly AltGr and must reach TextInput.
-        return (physical-control && !(alt && !text.is-empty))
-            || (alt && !physical-control)
-            || physical-meta;
-    }
-
     public function focus-terminal() {
         ime-input.focus();
     }
@@ -202,7 +152,7 @@ export component TerminalPane inherits Rectangle {
         let text = root.read-clipboard();
         if root.connected && !text.is-empty {
             root.clear-selection();
-            root.terminal-key(text, false, false, false, false);
+            root.terminal-key(text, false, false, false, false, false);
         }
         ime-input.focus();
     }
@@ -298,19 +248,16 @@ export component TerminalPane inherits Rectangle {
                 root.paste-from-clipboard();
                 return EventResult.accept;
             }
-            if self.preedit-text != ""
-                    && !event.modifiers.control
-                    && !event.modifiers.alt
-                    && !event.modifiers.meta {
-                return EventResult.reject;
-            }
-            if !root.direct-terminal-key(
+            let direct-terminal-key = root.terminal-key-direct(
                 event.text,
                 event.modifiers.alt,
                 event.modifiers.control,
                 event.modifiers.meta,
                 event.modifiers.shift,
-            ) {
+                root.option-as-meta,
+                self.preedit-text != "",
+            );
+            if !direct-terminal-key {
                 return EventResult.reject;
             }
             root.clear-selection();
@@ -320,6 +267,7 @@ export component TerminalPane inherits Rectangle {
                 event.modifiers.control,
                 event.modifiers.meta,
                 event.modifiers.shift,
+                true,
             ) {
                 return EventResult.accept;
             }
@@ -328,7 +276,7 @@ export component TerminalPane inherits Rectangle {
         edited => {
             if self.preedit-text == "" && self.text != "" {
                 root.clear-selection();
-                root.terminal-key(self.text, false, false, false, false);
+                root.terminal-key(self.text, false, false, false, false, false);
                 self.text = "";
             }
         }

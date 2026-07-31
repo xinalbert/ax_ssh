@@ -41,8 +41,8 @@
 | `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 终端输入/resize/selection、本地 worker 事件和仅视觉主题刷新 |
 | `src/app/settings_bridge.rs` | 设置保存 bridge | `wire_settings` | 校验并原子保存 Settings 草稿、独立显示模式、palette 和双 Custom 色板 |
 | `src/app/view.rs` | Slint model/snapshot/主题映射 | `session_group_rows`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component`、`set_theme_palette` | 嵌套 Group/profile model、终端渲染 DTO、Light/Dark 双侧主题、活动 Tab 安全覆盖层和 event-loop 更新 |
-| `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event` | 特殊键（含 F1-F12）、快捷键和 Apple 修饰键还原 |
-| `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`configure_application_menu`、`NativeMenuTarget` | 标准标题栏、应用菜单 Settings/About action 与主线程生命周期 |
+| `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event` | 特殊键（含 F1-F12）、快捷键和 Apple 物理修饰键还原 |
+| `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`current_modifier_state`、`configure_application_menu`、`NativeMenuTarget` | 标准标题栏、当前物理修饰键、应用菜单 Settings/About action 与主线程生命周期 |
 | `src/app/state.rs` | 工作区 Tab、终端、编辑器 draft 与 SSH phase 所有权 | `AppState`、`SessionEditorState`、`move_tab`、`TerminalTabState`、`SshConnectionPhase` | Tab 创建/切换/内存排序/关闭、同 profile 多实例、逐 Tab probe/host-key/authentication phase 和编辑草稿身份；不持有局部 Group 展开 |
 | `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、active prompt、attempt/credential isolation tests | 修改 Tab、认证 phase 或 attempt 生命周期后 |
@@ -108,4 +108,4 @@
 
 ## 最后更新时间
 
-- 2026-07-31 17:36 +0800
+- 2026-07-31 18:21 +0800

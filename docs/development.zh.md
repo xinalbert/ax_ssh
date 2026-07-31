@@ -48,8 +48,9 @@ git diff --check
 - 所有平台都要把 Ctrl 组合留给获得焦点的 PTY，包括 `Ctrl+C` 和 tmux 前缀；终端
   剪贴板默认键在 macOS 使用 `Cmd`，其他平台使用 `Ctrl+Shift`。全局 UI 命令在
   macOS 使用 `Cmd`，其他平台使用 `Ctrl`，不得遮蔽终端控制字节。Slint 1.17 会在
-  Apple 平台交换 Command/Control 修饰键字段，快捷键匹配或终端编码前必须在
-  `src/app.rs` 还原。
+  Apple 平台交换 Command/Control 修饰键字段。处理 macOS 键盘事件时，快捷键匹配或
+  终端编码前必须在 `src/app.rs` 读取 AppKit 当前物理修饰键状态，避免 Slint 漏掉某一侧
+  `flagsChanged` 时左右 Control 语义不一致。
 - 可见终端保持为渲染网格。隐藏的 Slint `TextInput` 只充当 IME 代理：跟随终端光标
   定位，把未修饰的预编辑按键留给输入法，并确保提交文本只发送一次。
 - 本地 PTY 的 child、reader、writer、取消和 join 所有权保留在 `src/local_shell.rs`，

@@ -115,8 +115,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
    xterm 导航/功能键序列。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：
    特殊键与终端控制组合键走 `key-pressed`，可打印字符、Shift 文字和 IME 提交只通过
-   `edited` 进入；预编辑保留在局部 UI 状态。macOS 在应用边界还原 Slint Apple 映射中
-   交换的 Control/Command 语义。`TerminalSettings.option_as_meta` 默认关闭，因此 Option
+   `edited` 进入；预编辑保留在局部 UI 状态。物理 macOS 按键在应用边界先读取 AppKit 当前聚合的
+   修饰键状态，再还原 Slint Apple 映射中交换的 Control/Command 语义，因此即使缺少某一侧修饰键
+   事件，左右 Control 仍保持一致；已提交的 IME 和粘贴文本显式使用空修饰键，不能继承仍按住的快捷键。
+   `TerminalSettings.option_as_meta` 默认关闭，因此 Option
    文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。`TerminalGrid` 只会在
    已连接光标可见时显示这份局部 preedit 值；组合文本不会经由它的手势 callback 跨越组件边界。
    Windows/Linux 保持 Alt

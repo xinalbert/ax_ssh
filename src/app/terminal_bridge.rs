@@ -36,8 +36,10 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
 
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
-    ui.on_terminal_key(move |text, alt, control, meta, shift| {
-        let mut modifiers = normalize_slint_modifiers(alt, control, meta, shift);
+    ui.on_terminal_key(move |text, alt, control, meta, shift, physical_key_event| {
+        // Committed TextInput and pasted text are not physical key events, so
+        // they must not inherit a still-held shortcut modifier such as Cmd+V.
+        let mut modifiers = terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
         let key = terminal_key_from_slint(text.as_str(), modifiers);
         let result = state_for_key
             .lock()
