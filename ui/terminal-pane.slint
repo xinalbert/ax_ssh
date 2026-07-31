@@ -1,20 +1,10 @@
 import { Theme } from "theme.slint";
-
-export struct TerminalRenderRun {
-    text: string,
-    column: int,
-    cells: int,
-    foreground: color,
-    background: color,
-    bold: bool,
-    italic: bool,
-    underline: bool,
-    strikethrough: bool,
-}
-
-export struct TerminalRenderLine {
-    runs: [TerminalRenderRun],
-}
+import {
+    TerminalGrid,
+    TerminalGridView,
+    TerminalRenderLine,
+    TerminalSelectionView,
+} from "components/terminal-grid.slint";
 
 // Rust owns the rendered terminal snapshot and connection lifecycle. The pane
 // owns only selection, focus, cursor blink, and measured layout state.
@@ -105,6 +95,20 @@ export component TerminalPane inherits Rectangle {
         root.anchor-first ? root.selection-focus-row : root.selection-anchor-row;
     private property <int> selection-last-column:
         root.anchor-first ? root.selection-focus-column : root.selection-anchor-column;
+    private property <TerminalGridView> grid-view: {
+        connected: root.connected, render_lines: root.render-lines,
+        content_columns: root.content-columns,
+        cursor_row: root.cursor-row, cursor_column: root.cursor-column,
+        cursor_visible: root.cursor-visible, cursor_text: root.cursor-text,
+        font_family: root.terminal-font-family, font_size: root.terminal-font-size,
+        foreground: root.terminal-foreground, background: root.terminal-background,
+        selection_background: root.terminal-selection-background,
+    };
+    private property <TerminalSelectionView> grid-selection: {
+        active: root.selection-active, first_row: root.selection-first-row,
+        first_column: root.selection-first-column, last_row: root.selection-last-row,
+        last_column: root.selection-last-column,
+    };
 
     // Special keys bypass IME; printable and committed IME text use edited.
     function special-terminal-key(text: string) -> bool {
@@ -338,203 +342,50 @@ export component TerminalPane inherits Rectangle {
 
         grid-clip := Rectangle {
             vertical-stretch: 1;
-            clip: true;
             background: root.terminal-background;
 
-            for line[line-index] in root.render-lines : Rectangle {
-                x: 0px;
-                y: line-index * root.cell-height;
-                width: parent.width;
-                height: root.cell-height;
-                background: root.terminal-background;
-
-                for run in line.runs : Rectangle {
-                    x: run.column * root.cell-width;
-                    width: run.cells * root.cell-width;
-                    height: root.cell-height;
-                    background: run.background;
-                }
-
-                if root.selection-active
-                    && line-index >= root.selection-first-row
-                    && line-index <= root.selection-last-row : Rectangle {
-                    property <int> first-column:
-                        line-index == root.selection-first-row
-                            ? root.selection-first-column : 0;
-                    property <int> last-column:
-                        line-index == root.selection-last-row
-                            ? root.selection-last-column : root.content-columns - 1;
-                    x: max(0, self.first-column) * root.cell-width;
-                    width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
-                    height: root.cell-height;
-                    background: root.terminal-selection-background.with-alpha(0.72);
-                }
-
-                for run in line.runs : Text {
-                    x: run.column * root.cell-width;
-                    y: (root.cell-height - root.font-cell-height) / 2;
-                    width: run.cells * root.cell-width;
-                    height: root.font-cell-height;
-                    text: run.text;
-                    color: run.foreground;
-                    font-family: root.terminal-font-family;
-                    font-size: root.terminal-font-size;
-                    font-weight: run.bold ? 700 : 400;
-                    font-italic: run.italic;
-                    letter-spacing: 0px;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    overflow: clip;
-                }
-
-                for run in line.runs : Rectangle {
-                    x: run.column * root.cell-width;
-                    width: run.cells * root.cell-width;
-                    height: root.cell-height;
-                    background: transparent;
-                    if run.underline : Rectangle {
-                        y: parent.height - Theme.terminal-underline-offset;
-                        width: parent.width;
-                        height: Theme.hairline;
-                        background: run.foreground;
-                    }
-                    if run.strikethrough : Rectangle {
-                        y: parent.height / 2;
-                        width: parent.width;
-                        height: Theme.hairline;
-                        background: run.foreground;
-                    }
-                }
-
-                if root.connected && root.cursor-visible && root.cursor-blink
-                    && line-index == root.cursor-row : Rectangle {
-                    x: root.cursor-column * root.cell-width;
-                    width: root.cell-width;
-                    height: root.cell-height;
-                    background: root.terminal-foreground;
-                    Text {
-                        y: (parent.height - root.font-cell-height) / 2;
-                        width: parent.width;
-                        height: root.font-cell-height;
-                        text: root.cursor-text;
-                        color: root.terminal-background;
-                        font-family: root.terminal-font-family;
-                        font-size: root.terminal-font-size;
-                        letter-spacing: 0px;
-                        horizontal-alignment: left;
-                        vertical-alignment: center;
-                        overflow: clip;
-                    }
-                }
-            }
-
-            if root.connected && root.cursor-visible
-                    && ime-input.preedit-text != "" : preedit-overlay := Rectangle {
-                x: max(0px, min(parent.width - root.cell-width,
-                    root.cursor-column * root.cell-width));
-                y: max(0px, min(parent.height - root.cell-height,
-                    root.cursor-row * root.cell-height));
-                width: min(parent.width - self.x,
-                    max(root.cell-width, preedit-text.preferred-width));
-                height: root.cell-height;
-                background: root.terminal-background;
-
-                preedit-text := Text {
-                    y: (parent.height - root.font-cell-height) / 2;
-                    width: parent.width;
-                    height: root.font-cell-height;
-                    text: ime-input.preedit-text;
-                    color: root.terminal-foreground;
-                    font-family: root.terminal-font-family;
-                    font-size: root.terminal-font-size;
-                    letter-spacing: 0px;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    overflow: clip;
-                }
-                Rectangle {
-                    y: parent.height - 1px;
-                    width: parent.width;
-                    height: Theme.hairline;
-                    background: root.terminal-foreground;
-                }
-            }
-
-            body-touch := TouchArea {
-                mouse-cursor: text;
-                pointer-event(event) => {
-                    if event.kind == PointerEventKind.down {
-                        ime-input.focus();
-                        if event.button == PointerEventButton.left {
-                            root.selection-anchor-row = max(
-                                0,
-                                min(root.render-lines.length - 1,
-                                    floor(self.mouse-y / root.cell-height)),
-                            );
-                            root.selection-anchor-column = max(
-                                0,
-                                min(root.content-columns - 1,
-                                    floor(self.mouse-x / root.cell-width)),
-                            );
-                            root.selection-focus-row = root.selection-anchor-row;
-                            root.selection-focus-column = root.selection-anchor-column;
-                            root.selecting = true;
-                        } else if event.button == PointerEventButton.right
-                            && root.right-click-copy-or-paste {
-                            if root.selection-active {
-                                root.copy-selection();
-                                root.clear-selection();
-                            } else if root.connected {
-                                root.paste-from-clipboard();
-                            }
-                        }
-                    } else if event.kind == PointerEventKind.up
-                        && event.button == PointerEventButton.left {
-                        root.selecting = false;
-                    }
-                }
-                moved => {
-                    if root.selecting {
-                        root.selection-focus-row = max(
-                            0,
-                            min(root.render-lines.length - 1,
-                                floor(self.mouse-y / root.cell-height)),
-                        );
-                        root.selection-focus-column = max(
-                            0,
-                            min(root.content-columns - 1,
-                                floor(self.mouse-x / root.cell-width)),
-                        );
-                    }
-                }
-                scroll-event(event) => {
-                    root.clear-selection();
-                    root.scrolled(event.delta-y > 0 ? 3 : -3);
-                    accept
-                }
-            }
-
-            ContextMenuArea {
+            TerminalGrid {
                 width: parent.width;
                 height: parent.height;
-                enabled: !root.right-click-copy-or-paste;
-                Menu {
-                    MenuItem {
-                        title: "Copy";
-                        enabled: root.selection-active;
-                        activated => { root.copy-selection(); }
-                    }
-                    MenuItem {
-                        title: "Paste";
-                        enabled: root.connected;
-                        activated => { root.paste-from-clipboard(); }
-                    }
-                    MenuItem {
-                        title: "Select All";
-                        enabled: root.render-lines.length > 0;
-                        activated => { root.select-all-visible(); }
+                view: root.grid-view;
+                selection: root.grid-selection;
+                cell-width: root.cell-width;
+                cell-height: root.cell-height;
+                font-cell-height: root.font-cell-height;
+                cursor-blink: root.cursor-blink;
+                preedit-text: ime-input.preedit-text;
+                right-click-copy-or-paste: root.right-click-copy-or-paste;
+                pointer-down(row, column, left, right) => {
+                    root.focus-terminal();
+                    if left {
+                        root.selection-anchor-row = row;
+                        root.selection-anchor-column = column;
+                        root.selection-focus-row = row;
+                        root.selection-focus-column = column;
+                        root.selecting = true;
+                    } else if right && root.right-click-copy-or-paste {
+                        if root.selection-active {
+                            root.copy-selection();
+                            root.clear-selection();
+                        } else if root.connected {
+                            root.paste-from-clipboard();
+                        }
                     }
                 }
+                pointer-moved(row, column) => {
+                    if root.selecting {
+                        root.selection-focus-row = row;
+                        root.selection-focus-column = column;
+                    }
+                }
+                pointer-up => { root.selecting = false; }
+                scrolled(lines) => {
+                    root.clear-selection();
+                    root.scrolled(lines);
+                }
+                copy-request => { root.copy-selection(); }
+                paste-request => { root.paste-from-clipboard(); }
+                select-all-request => { root.select-all-visible(); }
             }
         }
     }
