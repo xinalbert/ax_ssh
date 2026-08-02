@@ -64,6 +64,23 @@ impl Grid {
     }
 
     pub fn set_size(&mut self, size: Size) {
+        self.set_size_inner(size, false);
+    }
+
+    /// Resizes a live, full-screen primary grid from the top so its cursor
+    /// stays visually anchored to the bottom edge. Normal terminal resizes
+    /// retain their existing behavior for alternate screens and non-bottom
+    /// cursors.
+    pub fn set_size_bottom_anchored(&mut self, size: Size) {
+        let anchor_bottom = size.rows != self.size.rows
+            && self.pos.row == self.size.rows - 1
+            && self.scrollback_offset == 0
+            && !self.scroll_region_active();
+        self.set_size_inner(size, anchor_bottom);
+    }
+
+    fn set_size_inner(&mut self, size: Size, anchor_bottom: bool) {
+        let old_size = self.size;
         let shrinking_columns = size.cols < self.size.cols;
         if size.cols != self.size.cols {
             for row in &mut self.rows {
@@ -75,12 +92,46 @@ impl Grid {
             self.scroll_bottom = size.rows - 1;
         }
 
+        let added_rows = if anchor_bottom && size.rows > old_size.rows {
+            size.rows - old_size.rows
+        } else {
+            0
+        };
+        let removed_rows = if anchor_bottom && size.rows < old_size.rows {
+            old_size.rows - size.rows
+        } else {
+            0
+        };
+        let mut restored_rows = Vec::with_capacity(usize::from(added_rows));
+        for _ in 0..added_rows {
+            restored_rows.push(self.scrollback.pop_back().unwrap_or_else(|| self.new_row()));
+        }
+
         self.size = size;
+        if added_rows > 0 {
+            self.rows.splice(0..0, restored_rows.into_iter().rev());
+            self.pos.row = self
+                .pos
+                .row
+                .saturating_add(added_rows)
+                .min(size.rows - 1);
+            self.saved_pos.row = self
+                .saved_pos
+                .row
+                .saturating_add(added_rows)
+                .min(size.rows - 1);
+        }
         for row in &mut self.rows {
             if shrinking_columns {
                 row.truncate(size.cols);
             } else {
                 row.resize(size.cols, crate::Cell::new());
+            }
+        }
+        if removed_rows > 0 {
+            for _ in 0..removed_rows {
+                let removed = self.rows.remove(0);
+                self.push_scrollback(removed);
             }
         }
         self.rows.resize(usize::from(size.rows), self.new_row());
@@ -101,6 +152,16 @@ impl Grid {
         }
         if self.saved_pos.col > self.size.cols - 1 {
             self.saved_pos.col = self.size.cols - 1;
+        }
+    }
+
+    fn push_scrollback(&mut self, row: crate::row::Row) {
+        if self.scrollback_len == 0 {
+            return;
+        }
+        self.scrollback.push_back(row);
+        while self.scrollback.len() > self.scrollback_len {
+            self.scrollback.pop_front();
         }
     }
 
@@ -569,10 +630,7 @@ impl Grid {
                 .insert(usize::from(self.scroll_bottom) + 1, self.new_row());
             let removed = self.rows.remove(usize::from(self.scroll_top));
             if self.scrollback_len > 0 && !self.scroll_region_active() {
-                self.scrollback.push_back(removed);
-                while self.scrollback.len() > self.scrollback_len {
-                    self.scrollback.pop_front();
-                }
+                self.push_scrollback(removed);
                 if self.scrollback_offset > 0 {
                     self.scrollback_offset =
                         self.scrollback.len().min(self.scrollback_offset + 1);

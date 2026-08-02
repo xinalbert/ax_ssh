@@ -91,6 +91,20 @@ impl Screen {
             .set_size(crate::grid::Size { rows, cols });
     }
 
+    /// Resizes the primary screen while preserving a bottom-positioned live
+    /// cursor as the viewport height changes. The alternate screen keeps
+    /// normal resize semantics so full-screen applications remain in control
+    /// of layout.
+    pub fn set_size_bottom_anchored(&mut self, rows: u16, cols: u16) {
+        let size = crate::grid::Size { rows, cols };
+        if self.alternate_screen() {
+            self.grid.set_size(size);
+        } else {
+            self.grid.set_size_bottom_anchored(size);
+        }
+        self.alternate_grid.set_size(size);
+    }
+
     /// Returns the current size of the terminal.
     ///
     /// The return value will be (rows, cols).
