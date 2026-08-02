@@ -89,3 +89,52 @@
 - 关键结论：`ContextMenuArea` 自动处理右键/Menu 键/长按，并允许通过 `show(Point)` 主动显示同一原生菜单；每个 area 必须有且仅有一个非条件/非重复的根 `Menu`，但根菜单内部支持 `if` 和 `for` 动态生成 `MenuItem`。Slint 组件适合通过组合复用；当前项目实测继承 `ContextMenuArea` 会触发 1.17.1 inlining panic，因此必须组合而非继承。
 - 对实施计划的影响：新增普通 Rectangle 组件持有 `[ActionMenuItem]` 和内部 `ContextMenuArea`，暴露 action ID callback 与 `show-at(Point)`；会话导航只负责把 Group/服务器/空白区域语义映射为扁平 action 列表和既有 callback。
 - 未解决问题：原生菜单的屏幕边缘定位和 macOS/Windows/Linux 平台外观需目标平台验收；可搜索或富内容下拉不在本轮范围内。
+
+## 2026-07-31 Telnet 与 Serial transport 依赖
+
+- 时间：2026-07-31 21:12 +0800
+- 检索问题：哪些 Rust crate 能在当前 Tokio/三平台边界内提供异步串口和非裸 TCP 的 Telnet 协议解析？
+- 检索原因：新增依赖会改变 Cargo.lock；仓库要求在修改 Tokio 或 transport 依赖前核对上游元数据、MSRV 和协议能力。
+- 来源列表：crates.io `tokio-serial 5.5.0` 元数据与下载源码 <https://crates.io/crates/tokio-serial/5.5.0>；crates.io `nectar 0.4.0` 元数据、README 与下载源码 <https://crates.io/crates/nectar/0.4.0>；两者的 Cargo manifest 和公开 API。
+- 关键结论：`tokio-serial 5.5.0` 默认 feature 不启用 Linux `libudev`，公开 `available_ports`、USB 元数据、异步 `SerialStream` 与标准串口参数，package metadata 记录 MSRV 1.71。`nectar 0.4.0` 是 Rust 2021 的 Tokio 0.7 codec，解析 DO/DONT/WILL/WONT、NAWS 和未知 subnegotiation，并对出站 IAC 转义；它只声明 partial RFC 854 且未声明 MSRV，因此应用只启用最小协商并以项目 MSRV/loopback tests 约束行为。
+- 对实施计划的影响：锁定 `tokio-serial 5.5.0` 和 `nectar 0.4.0`，直接声明 `tokio-util`/`futures-util` codec 边界；Serial 枚举不启用 `libudev`，Telnet worker 使用 character mode 保留入站字节并只接受应用生成的有效 UTF-8 输入。
+- 未解决问题：`nectar` 没有稳定 `rust-version` 声明；真实 legacy Telnet server 的非标准协商和各平台串口权限仍需目标环境验证。
+
+## 2026-07-31 Telnet 流解析器复审
+
+- 时间：2026-07-31 22:16 +0800
+- 检索问题：`nectar 0.4.0` 暴露真实流边界后，现有 Rust Telnet parser 中哪一个能满足 TCP 分片、转义 IAC、选项协商、NAWS、MSRV、许可证和有界内存要求？
+- 检索原因：`nectar` 字符模式除 LF 不消费外，还会在转义 IAC、两字节命令和不完整 subnegotiation 上丢字节、停滞或越界；继续用窄补丁不能形成可靠的 RFC 854 transport。
+- 来源列表：crates.io 与下载源码：`libmudtelnet-rs 2.0.10` <https://crates.io/crates/libmudtelnet-rs/2.0.10>、`libmudtelnet 2.0.2`、`libtelnet-rs 2.0.0`、`telnet-codec 0.1.0`、`telnet 0.2.5`、`mini-telnet 0.1.8`、`safe-telnet-parser 0.1.0`、`rfc2217-rs 0.1.0`；对应 manifest、parser、事件、协商表与测试源码。
+- 关键结论：`libmudtelnet-rs 2.0.10` 声明 Rust 1.66、MIT，继承 Blightmud/libtelnet 系列生产历史，提供 typed events、选项状态、自动接受/拒绝、IAC escaping 与 subnegotiation 编码；但当前 `receive` 不能直接接收跨调用的不完整 IAC/协商帧，且 `IAC IAC` 后跟数据时与文档不一致。其它候选分别存在不完整帧、无界缓冲、subnegotiation panic/编码错误、同步 I/O 或许可证问题，不能直接替代。
+- 对实施计划的影响：用 `libmudtelnet-rs` 负责完整帧的 RFC 854 事件、协商状态和编码；AxSSH 在 socket 与 parser 之间维护最大 64 KiB 的有界分帧适配，只把完整 IAC 命令/协商/subnegotiation 交给 parser，并将转义 `IAC IAC` 明确还原为终端数据。删除旧 codec 专用直接依赖，新增逐字节分片、CRLF、IAC、NOP、未知选项和 NAWS 转义回归。
+- 未解决问题：真实 legacy Telnet server 的非标准命令仍需目标网络验收；若上游修复跨调用分片与 `IAC IAC`，可删除本地分帧适配并保留同一回归集。
+
+## 2026-08-01 SFTP 参考行为、协议库与共享 SSH 生命周期
+
+- 时间：2026-08-01 00:25 +0800
+- 检索问题：AxSSH 第一阶段 SFTP 应采用什么用户范围和 worker ownership；`russh 0.62.2` 与当前 `russh-sftp` 能否在同一已认证 transport 上安全建立远端文件浏览？
+- 检索原因：用户明确要求参考 AxShell 并联网检索；依赖选择、SSH handle 所有权、目录内存上限和关闭语义会直接改变跨模块实现。
+- 来源列表：AxShell 公开 SFTP 文档与源码树 <https://github.com/xinalbert/axshell/blob/main/docs/features/sftp.zh.md>、<https://github.com/xinalbert/axshell/tree/main/src/sftp>；`russh-sftp` README、manifest 和 client API <https://github.com/AspectUnk/russh-sftp>、<https://github.com/AspectUnk/russh-sftp/blob/master/src/client/session.rs>；SFTP v3 draft <https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02>；本机锁定 `russh 0.62.2` channel/client 源码和缓存的 `russh-sftp 2.3.0` 源码。
+- 关键结论：AxShell 将远端文件浏览、传输和受管编辑拆成独立状态，并对目录采用 250 条/page、2,000 条或 2 MiB 名称/路径预算；其传输完整范围明显大于 AxSSH 的第一阶段。`russh` 认证 handle 可在同一 transport 上继续 `channel_open_session` 并请求 `sftp` subsystem。`russh-sftp 2.3.0` 实现常见 SFTP v3 和高层文件 API，但未声明 MSRV，client packet writer 使用 unbounded channel，高层 `read_dir` 会读完整目录后才返回。
+- 对实施计划的影响：第一阶段只交付当前 SSH Tab 的远端浏览，并由现有 SSH worker 统一拥有 shell 与 SFTP channel；不建立第二套认证，不把 handle 送进 `AppState`。AxSSH 自设 bounded command/event channel、请求超时、250 条/page、2,000 条与 2 MiB 总预算，使用 raw directory cursor 分页而不调用会一次读完的高层 `read_dir`。上传/下载/删除/编辑留到有独立确认、进度与取消模型的后续阶段。
+- 未解决问题：`russh-sftp` 未声明 MSRV，需用项目 MSRV/CI 约束；其内部 unbounded packet sender 无法由外层替换，本轮通过单 session、串行请求和外层有界入口限制风险。真实 OpenSSH/非 OpenSSH SFTP 服务兼容性与 GUI 交互仍需目标环境验收。
+## 2026-08-01 SSH 交互输入延迟与预测回显
+
+- 时间：2026-08-01 12:10 +0800
+- 检索问题：russh/Tokio 交互 SSH 是否默认启用 `TCP_NODELAY`，远端 PTY 回显的 RTT 下限是什么，高 RTT 下有哪些经过验证的改善方案？
+- 检索原因：用户要求检索并评估 SSH 远程输入延迟，随后授权按建议在 AxSSH 中实施低风险方案。
+- 来源列表：russh 0.62.2 client config/source <https://docs.rs/russh/0.62.2/src/russh/client/mod.rs.html#981-988> 与 <https://docs.rs/russh/0.62.2/src/russh/client/mod.rs.html#2093-2116>；Tokio `TcpStream::set_nodelay` <https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.set_nodelay>；PuTTY interactive Nagle 设置 <https://the.earth.li/~sgtatham/putty/latest/htmldoc/Chapter4.html#config-nodelay>；RFC 4254 Sections 5.2/6.2/8 <https://www.rfc-editor.org/rfc/rfc4254.html>；POSIX terminal ECHO <https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap11.html#tag_11_02_05>；Mosh Technical Info <https://mosh.org/#techinfo>。
+- 关键结论：russh 0.62.2 默认 `nodelay: false`，其 `connect()` 只在显式启用时调用 `set_nodelay(true)`；Tokio 说明该选项使小量数据尽快发送，PuTTY 也默认为交互连接禁用 Nagle。普通 SSH 的输入需到达远端 PTY 后由 ECHO 返回，网络 RTT 无法由客户端 socket 选项消除。Mosh 的状态同步与预测回显能改善高 RTT 体感，但需要预测确认、状态校正和不同 transport/server 架构。
+- 对实施计划的影响：本轮明确设置 `Config.nodelay = true`，保留输入立即发送，加入脱敏的 UI/queue/russh/output-dispatch 阶段耗时；不实施朴素本地回显、Mosh、TCP_QUICKACK、压缩或 keepalive 伪优化。
+- 未解决问题：真实网络收益取决于 RTT、服务端和中间网络；russh 调用完成与远端回显不能一一关联，需在同主机上与系统 `ssh` 做 P50/P95 手工对比。
+
+## 2026-08-01 终端横向 resize 重排语义
+
+- 时间：2026-08-01 19:05 +0800
+- 检索问题：为什么终端窗口放宽后右侧旧内容不能恢复，AxShell 的终端模型采用何种 resize 语义？
+- 检索原因：用户在反复横向 resize 后仍观察到文字被裁切，并要求参考 AxShell；终端模拟器选择会直接决定内容保留与软换行语义。
+- 来源列表：AxShell 锁定提交的终端依赖和 `TerminalTab::resize` 参考实现 <https://github.com/xinalbert/axshell/tree/57246689>；Alacritty Terminal 0.26.0 `Term::resize` 与 grid resize 源码 <https://github.com/alacritty/alacritty/tree/v0.16.0/alacritty_terminal/src>；本机锁定 `vt100 0.16.2` 的 `src/grid.rs`。
+- 关键结论：`vt100::Grid::set_size` 列缩窄时会截断每一物理行，右侧 cell 已被删除，之后扩宽无法恢复。AxShell 使用的 `alacritty_terminal` 在普通主屏调用 `Grid::resize(true, ...)`，将软换行的连续逻辑行重新分列；备用屏调用 `Grid::resize(false, ...)`，保持全屏程序期望的非重排语义。其高度 shrink 同时把顶部内容送入有界历史区，保持底部交互内容可见���
+- 对实施计划的影响：以 `alacritty_terminal 0.26.0` 替换 `vt100` 作为 `TerminalModel` 私有实现，保留既有 DTO、UI、worker 和输入编码边界；新增主屏软/硬换行、宽字符、宽窄往返、备用屏与纵向往返回归。
+- 未解决问题：目标平台需用户在真实本地 shell/SSH 全屏程序中确认布局与焦点；本轮不复制 AxShell 或 Alacritty 源码，也不把参考项目加入 Cargo 图。

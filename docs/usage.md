@@ -13,20 +13,27 @@ cargo run --locked
 
 ## Create and connect to a session
 
-1. Choose **File > New Session**, or right-click blank sidebar list space and
-   choose **New Server**.
-2. Enter a name, optional group, host, port, and username. Select password or
-   private-key authentication. Private keys discovered in the user's `.ssh`
-   directory can be selected, or a path can be entered manually.
+1. Choose **File > New Server**, press `Cmd+N` on macOS or `Ctrl+N` on Windows
+   and Linux, or right-click blank sidebar list space and choose **New Server**.
+   Change this shortcut in **Settings > Shortcuts**.
+2. Choose **SSH**, **Telnet**, or **Serial**, then enter the fields for that
+   protocol. SSH accepts host, port, username, and password/private-key
+   authentication. **Forward X11 applications** is SSH-only and defaults to on
+   for new profiles. Telnet accepts host and port and displays an unencrypted
+   transport warning. Serial accepts a port name, baud rate, data bits, stop
+   bits, parity, and flow control. AxSSH lists detected ports automatically at
+   startup; use **Refresh** after a device is attached, or enter a path/name
+   manually.
 3. Save the session, then select it in the session navigator. Opening the same
    saved session more than once creates independent terminal tabs with separate
    connections and output. Each SSH Tab can independently wait for host-key
    confirmation or authentication; the security prompt always belongs to the
    active Tab, and switching Tabs preserves the other pending prompt.
-4. On the first connection, compare the displayed SHA-256 host-key fingerprint
+4. For SSH, compare the displayed SHA-256 host-key fingerprint on the first
+   connection
    with a trusted source before confirming it. A changed key requires another
    explicit confirmation and should be investigated before acceptance.
-5. Enter a transient password or private-key passphrase when prompted. A
+5. For SSH, enter a transient password or private-key passphrase when prompted. A
    private-key passphrase is never persisted. To remember an SSH password,
    first choose **System credential store** or **Encrypted application vault**
    in **Settings > General**, then select **Remember password** in the password
@@ -38,18 +45,84 @@ cargo run --locked
    Closing a probing or pending-authentication Tab cancels or discards only that
    Tab's connection flow.
 
-Right-click a group to add a server, rename the group, or delete it. Right-click
-Ungrouped to add a server. Right-click a server to connect, edit, or delete it;
-the edit action reuses the same session editor. Changing its host or port clears
-the confirmed host-key fingerprint, so the new endpoint must be trusted
-explicitly on its next connection. The session editor never shows or changes a
-saved password; use the connection prompt to remember a new password. Changing
-the default in **Settings > General** affects only future remembered passwords,
-not the storage backend already referenced by an existing profile.
+Choose the local server under **Settings > X11**. macOS offers Auto, XQuartz,
+MacXServer, and Custom; Windows offers Auto, VcXsrv, Xming, and Custom; Linux
+offers System DISPLAY and Custom. AxSSH locates known providers through the
+macOS application database or the Windows executable search path and Program
+Files; only Custom shows an editable executable path. Auto-start is enabled by
+default. The secure default still requires an exact `MIT-MAGIC-COOKIE-1` from
+`xauth`; XQuartz and system X.Org/Xwayland should use this mode. **Allow local
+connections without X authority** is off by default and should be enabled only
+when needed for MacXServer or an AxSSH-started VcXsrv/Xming instance. Those
+compatibility launches are loopback-only; the Windows servers receive `-ac`
+only after this explicit choice.
+
+The remote SSH server must also allow X11 forwarding, normally through
+`X11Forwarding yes` and a usable server-side `xauth`. AxSSH does not change
+`sshd_config`. A remote empty `DISPLAY` means that the forwarding request was not
+established, commonly because local preparation failed or `sshd` rejected it.
+In either case the shell remains connected and reports X11 as unavailable.
+Closing the Tab cancels every active X11 relay.
+
+Telnet traffic, including any login text entered in the terminal, is sent
+without encryption. AxSSH does not fill Telnet credentials. A Serial scan only
+reads the operating system's available-port metadata; it does not open a port,
+send probe bytes, toggle modem lines, or guess communication parameters. After
+you explicitly connect, AxSSH scans again and uses saved USB vendor/product and
+serial-number metadata to follow a device whose OS port name changed. Missing
+or ambiguous matches are rejected so you can select the intended device.
+
+Right-click a group to add a server, copy or duplicate the group, rename the
+group, or delete it. Right-click Ungrouped to add a server. Right-click a server
+to copy its address, copy its AxSSH configuration, or duplicate it. An SSH
+server also provides **Open SFTP** to open a dedicated SFTP Tab without creating
+a terminal shell; Telnet and Serial servers keep that action disabled. The same
+server menu can still connect, edit, or delete the profile; edit reuses the same
+session editor.
+
+Choose **File > Import from Clipboard** to import a versioned AxSSH export. The
+default shortcut is `Cmd+Shift+I` on macOS and `Ctrl+Shift+I` on Windows and
+Linux. Select a group or server in either sidebar mode, then choose **File >
+Export Selected to Clipboard**; its default shortcut is `Cmd+Shift+E` on macOS
+and `Ctrl+Shift+E` elsewhere. Both shortcuts are configurable in **Settings >
+Shortcuts**. Export reports a status message without changing the clipboard
+when no persisted group or server is selected.
+
+**Copy Server** and **Copy Group** write versioned AxSSH JSON to the clipboard.
+The export is limited to 256 KiB and 128 servers and excludes profile identity,
+remembered-password references, and trusted host-key fingerprints. Import only
+adds profiles: it assigns new UUIDs, resolves name/group conflicts, and clears
+credential references and host trust again before persistence. It never imports
+a password, vault password, private-key passphrase, or trusted-host decision.
+
+Changing an SSH host or port
+clears the confirmed host-key fingerprint, so the new endpoint must be trusted
+explicitly on its next connection. Switching an SSH profile to Telnet or Serial
+removes its remembered SSH credential reference. The session editor never shows
+or changes a saved password; use the SSH connection prompt to remember a new
+password. Changing the default in **Settings > General** affects only future
+remembered passwords, not the storage backend referenced by an existing SSH
+profile.
 
 Choose **Pane > New Local Shell** or the Local Shell control to open an
 independent local terminal. Close a terminal with its tab control or **Window >
 Close Current Tab**.
+
+With an SSH or SFTP Tab active, choose **Pane > Open SFTP** to open a dedicated
+SFTP Tab for that server. The default shortcut is `Ctrl+M`; change it in
+**Settings > Shortcuts**. The
+SFTP Tab repeats the normal host-key and authentication flow, then opens only
+the `sftp` subsystem: it never allocates a PTY or terminal shell. Its upper
+area keeps remote and local file browsers side by side with matching Name,
+Size, and Modified columns. Enter an absolute path, a path relative to the
+current directory, or `~` in the remote browser, then use **Open**; double-click
+a folder to enter it. The local browser starts at the platform home directory,
+accepts an explicit local directory path, and reads only bounded file metadata.
+Use **Hidden** and **More** to include dot files or request the next bounded
+remote page. The lower transfer queue intentionally shows no actions while
+transfers are unavailable. Closing the SFTP Tab closes its subsystem and SSH
+transport. This first phase is read-only browsing: upload, download, delete,
+rename, and remote edit sync are not available.
 
 ## Workspace and terminal controls
 
@@ -62,11 +135,16 @@ avoids repeating the name as a badge. Select the group row, or focus it and
 press Enter or Space, to change that state. Every visible server remains a
 single indented row: its name is on the left and its masked endpoint is on the
 right. **View > Toggle Session Sidebar** switches between this view and the
-compact activity bar. Only the compact bar uses the first two characters of the
-group name as a text badge; opening a group there expands the sidebar and that
-group. The same row context menus are available in the compact rail. Deleting a
-group moves its servers to Ungrouped. Deleting a profile also removes its
-remembered password but does not close terminal tabs that are already open.
+compact activity bar. The compact bar uses the first 1-4 characters of each
+group name by default; choose **Full name** in **Settings > Workspace** to show
+the complete group name. Full-name mode widens the collapsed rail to 180px and
+wraps long names instead of clipping them. Opening a group there expands the
+sidebar and that group. The same row context menus are available in the compact
+rail. The most recently selected group or server remains highlighted across
+expanded and compact sidebar views; hover and keyboard focus use separate
+feedback. Deleting a group moves its servers to Ungrouped. Deleting a profile
+also removes its remembered password but does not close terminal tabs that are
+already open.
 
 The sidebar masks usernames and IPv4 addresses by default: a username keeps its
 first and last two characters when available, and `192.168.1.202` becomes
@@ -74,8 +152,8 @@ first and last two characters when available, and `192.168.1.202` becomes
 Hostnames remain visible so they can still be distinguished at a glance.
 New-session editors and terminal sessions share the workspace tab bar, while
 Settings opens as a separate workbench view. The `+` at the right end of that
-bar lists every saved SSH session and connects the selected profile; **File >
-New Session** and the sidebar blank-area context menu open the session editor.
+bar lists every saved connection and connects the selected profile; **File >
+New Server** and the sidebar blank-area context menu open the session editor.
 Drag a workspace Tab to reorder it. Its leading number changes with its current
 position, while an instance suffix such as `#1` remains unchanged.
 
@@ -85,6 +163,11 @@ Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. Default clipboard
 shortcuts are `Cmd+C` / `Cmd+V` on macOS and `Ctrl+Shift+C` / `Ctrl+Shift+V` on
 Windows and Linux. These shortcuts can be changed in Settings.
+The default **New Server** shortcut is `Cmd+N` on macOS and `Ctrl+N` elsewhere.
+The default File-menu transfer shortcuts are `Cmd/Ctrl+Shift+I` for import and
+`Cmd/Ctrl+Shift+E` for export of the selected group or server. Menu commands
+show these configured shortcuts as native accelerators. They are temporarily
+disabled while recording a shortcut or answering a security prompt.
 
 On macOS, Option continues to enter native characters, dead keys, and IME text
 by default. In **Settings > Terminal**, enable **Option acts as Meta** only when
@@ -92,28 +175,52 @@ you want Option-modified keys sent as Escape-prefixed terminal Meta input.
 Windows/Linux Alt behavior remains terminal Meta input, while local keyboard
 layouts can submit AltGr characters through the text-input path.
 
-On macOS, Settings and About are in the standard AxSSH application menu. On
+On macOS, Settings and About are in the standard AxSSH application menu, and
+the Settings item follows its configured shortcut. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
-contains General, Appearance, Terminal, Workspace, Shortcuts, and About pages;
-changes are persisted only when **Save** is selected. **Settings > General**
+contains General, Appearance, Terminal, X11, Workspace, Shortcuts, and About pages.
+Changes take effect immediately in the current application; they are persisted
+when the Settings tab is closed with its tab `x` control. About identifies
+AxSSH as `GPL-3.0-only` and includes Slint's standard, clickable attribution.
+**Settings > General**
 also selects the default backend for a password you choose to remember on a
 future connection.
 
-In **Settings > Appearance**, Display mode selects **Follow system**, **Light**,
-or **Dark**. Color palette independently selects **AxSSH**, **Solarized**, or
-**Custom**, so either fixed palette can be used in both Light and Dark modes.
-Custom exposes separate Light and Dark semantic colors. When saved, invalid hex
-values or colors that would hide text, essential borders, focus/status states,
-or terminal text are replaced with readable defaults for that side.
+In **Settings > Appearance**, Font family changes the application interface
+without changing terminal cell metrics. Display mode selects **Follow system**,
+**Light**, or **Dark**. Color palette independently selects **AxSSH**,
+**Solarized**, **Arctic**, **Tokyo**, **Ember**, **Forest**, or **Custom**, so
+every fixed palette can be used in both Light and Dark modes. Arctic is a cool
+technical palette, Tokyo is a night-oriented palette, Ember is warm, and Forest
+uses green contrast. In Dark mode, each fixed palette also selects its matching
+Terminal ANSI colors; Light mode retains the readable light ANSI palette.
+Custom exposes separate Light and Dark semantic colors. During the immediate
+preview and on persistence, invalid hex values or colors that would hide text,
+essential borders, focus/status states, or terminal text are replaced with
+readable defaults for that side.
+
+**Settings > Terminal** independently controls the Terminal font, font size,
+line height, brightness, bright ANSI colors for bold text, scrollback, mouse
+behavior, and the platform-specific Option-as-Meta preference. Bundled fonts
+appear before discovered system monospace fonts in both font lists.
+
+**Settings > X11** controls the platform-local X server provider,
+launch-on-connect behavior, and the explicit loopback-only no-auth compatibility
+mode. Known providers are located automatically; an application path is shown
+only for Custom and must name an executable file. These settings are non-secret;
+X11 cookies remain transient and are never saved.
 
 ## Local data and credentials
 
 AxSSH stores profiles, non-secret group names, and settings in a versioned
-`sessions.json` inside the platform-local application data directory. A profile may contain a
-confirmed host-key fingerprint, a private-key path, and an optional non-secret
-reference to the backend holding a remembered password. It does not contain
-passwords, vault passwords, private-key passphrases, private-key contents,
-terminal output, or live process state.
+`sessions.json` inside the platform-local application data directory. Each
+profile contains one explicit SSH, Telnet, or Serial configuration. Only SSH
+may contain a confirmed host-key fingerprint, private-key path, or non-secret
+reference to the backend holding a remembered password, plus the non-secret
+X11 forwarding toggle. X11 cookies are never stored. A Serial profile may
+store non-secret USB identity metadata for stable matching. Profiles do not
+contain passwords, vault passwords, private-key passphrases, private-key
+contents, terminal output, or live process state.
 
 Remembered passwords are stored through macOS Keychain, Windows Credential
 Manager, or Unix Secret Service when **System credential store** is selected.
@@ -130,6 +237,9 @@ when such a connection is no longer live.
 
 ## Current limitations
 
-Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP, SSH
-agent integration, reconnect, persisted workspace restoration, and complete
-full-screen terminal mouse reporting remain planned work.
+Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP file
+transfer/mutation/edit sync, SSH agent integration, reconnect, persisted
+workspace restoration, and complete full-screen terminal mouse reporting remain
+planned work. Serial availability, device permissions, and supported parameter
+combinations depend on the target operating system and hardware; Telnet has no
+encryption or automated login.

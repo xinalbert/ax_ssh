@@ -7,6 +7,7 @@
 - Rust `1.92.0` or newer
 - Cargo
 - A desktop backend supported by Slint's winit backend
+- Target-platform serial drivers and device permissions for real Serial tests
 
 The implicit root Cargo workspace contains only the `ax_ssh` package.
 `third_package/axshell` is a reference submodule and is not a workspace member
@@ -44,24 +45,48 @@ registry.
 - Keep payloads crossing the UI boundary bounded and owned; never expose a
   russh channel or Tokio receiver to Slint.
 - Use the terminal tab UUID, not the saved profile UUID, as the runtime
-  instance key. Route input, resize, output, retry, close, and late events by
-  `tab_id + attempt_id`.
+  instance key. Route saved-connection input, resize, output, retry, close, and
+  late events by `tab_id + profile_id + attempt_id`.
 - Keep terminal input, output batches, event queues, and scrollback bounded.
+- Keep SFTP on a child subsystem channel of the authenticated SSH worker. Do
+  not expose the russh handle or `RawSftpSession` to application state or Slint.
+  SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
+  the same host-key and credential gates as terminal Tabs. Preserve the inbound
+  packet, path/name, page, directory-budget, request, and
+  shutdown limits when adding file operations; upload/download/delete/edit also
+  require explicit confirmation, progress, cancellation, and conflict tests.
+- The SFTP local-file pane is a read-only application-bridge snapshot. Directory
+  reads run in a bounded blocking task and return only name, path, type, size,
+  and modification metadata; Slint must not access the filesystem. Reject stale
+  results by Tab and request identity, and preserve entry, name, and path
+  limits before data reaches the UI.
+- Keep Telnet explicitly plaintext. Parse and filter IAC negotiation before
+  terminal output, reject unsupported options, and send NAWS only after peer
+  acceptance. Do not add credential persistence to Telnet profiles.
+- Serial enumeration must remain metadata-only and run outside the UI thread.
+  Never open or probe a device during automatic discovery; only an explicit
+  connect action may resolve the saved identity and create a device worker.
+  Serial resize changes the local terminal grid only.
 - `vendor/vt100` is the minimal local patch for locked `vt100 0.16.2` wide-cell
   shrinking. Keep its MIT files, change only the documented resize path with a
   regression test, and remove the patch when an upstream release contains it.
 - Keep Slint key values out of `src/terminal/input.rs`; map them in `src/app.rs`
   and test normal/application-cursor byte sequences without constructing a
   window. Platform-specific printable-key fallbacks belong in the Slint bridge.
-- Keep Ctrl combinations available to the focused PTY on every platform,
-  including `Ctrl+C` and tmux prefixes. Terminal clipboard defaults use `Cmd`
-  on macOS and `Ctrl+Shift` elsewhere. Global UI commands use `Cmd` on macOS
-  and `Ctrl` elsewhere, and must not shadow terminal control bytes. Slint 1.17
+- Keep unassigned Ctrl combinations available to the focused PTY on every
+  platform, including `Ctrl+C` and tmux prefixes. Terminal clipboard defaults
+  use `Cmd` on macOS and `Ctrl+Shift` elsewhere. Global UI commands use native
+  menu accelerators, which Slint handles before terminal input; do not assign a
+  UI command to a terminal-control chord required by the user's workflow. Slint 1.17
   swaps Command/Control modifier fields on Apple platforms. While handling a
   macOS keyboard event, `src/app.rs` must use AppKit's current physical
   modifier state before shortcut matching or terminal encoding, so either
   Control key has the same meaning even when Slint misses a side-specific
   `flagsChanged` event.
+- Convert persisted menu shortcuts to `slint::Keys` only in `src/app/input.rs`.
+  Map Apple `Cmd` to Slint `Control` and physical `Ctrl` to Slint `Meta`. Keep
+  menu action diagnostics to fixed IDs; `MenuItem.activated` cannot distinguish
+  a pointer click from an accelerator.
 - Keep the visible terminal as a rendered grid. The hidden Slint `TextInput`
   is an IME proxy only: position it at the terminal cursor, leave unmodified
   preedit keys to the input method, and send committed text exactly once.
@@ -72,9 +97,37 @@ registry.
   UI-thread native drag callback; tabs, the activity bar, sidebar, and
   terminal must not become drag regions.
 - Bundled fonts must live under `assets/fonts/` with their independent license
-  and notices. Never load static resources from `third_package/axshell` at
-  build time or runtime.
+  and notices. They are runtime resources: release packages must retain that
+  directory beside the executable or in the platform resource path resolved by
+  `src/app/font_bridge.rs`. Read files on a Tokio blocking task and register
+  their bytes only on the Slint UI thread; never load static resources from
+  `third_package/axshell` at build time or runtime.
+- `assets/ion/terminal_icon.svg` is the canonical application-icon source.
+  Regenerate all PNG, ICO, and ICNS variants from it as one set. The Slint
+  window uses the 256px PNG; Windows embeds the ICO through
+  `packaging/windows/axssh.rc`; macOS bundles the ICNS through
+  `packaging/macos/Info.plist`; Linux installs the hicolor PNG set with its
+  desktop entry. Do not substitute or load an icon from the reference project.
+- Keep `AboutSlint` in the top-level-menu-accessible About page. AxSSH selects
+  Slint's `GPL-3.0-only` option, while the standard component keeps toolkit
+  attribution visible without adding a Rust callback.
 - Update both language pages when changing user-facing documentation.
+
+## Platform packages
+
+Build a macOS application bundle with:
+
+```bash
+packaging/macos/build-app.sh
+```
+
+On Windows, a normal Cargo build embeds the executable resource through
+`build.rs`. On Linux, `cargo deb` uses `[package.metadata.deb]` to install the
+desktop entry, executable, hicolor icon sizes, `LICENSE`, and
+`THIRD_PARTY_NOTICES.md`. The macOS bundle keeps both notice files in
+`Contents/Resources`. A Windows distribution must ship them beside the
+executable or in its installer documentation. Platform shell caches may need
+to be refreshed before a replaced icon appears.
 
 ## Runtime logs
 
@@ -83,6 +136,29 @@ registry.
 and flushes when the process-owned guard is dropped. Logs live in the `logs`
 subdirectory of the platform-local AxSSH application data directory. The
 default filter is `ax_ssh=info,russh=warn`; `RUST_LOG` overrides it.
+
+Enable redacted keyboard/UI diagnostics and SSH latency stages for one run with:
+
+```bash
+RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
+```
+
+Diagnostic records use fixed `event`, `key`, `route`, `action`, and `outcome`
+fields. Special keys have stable names such as `F5` or `ArrowUp`; every
+printable, IME, password, or pasted value is recorded only as `Text`, without
+its value or length. Paths, profile labels, hosts, clipboard contents, and
+credentials are not diagnostic fields. Debug records are written to the
+rolling file; the console writer remains capped at INFO.
+
+Latency records use local `input_sequence`, fixed `stage` values, and
+microsecond durations. `queue_us` measures the bounded worker queue;
+`call_us` measures completion of the russh data call and does not mean the
+server received it. `first-output-after-input` has `association=temporal-only`.
+The UI fields separate output-to-dispatch, event-loop queue, apply, and total
+client output time. They never include terminal content or byte lengths.
+Because the rolling writer is non-lossy, compare latency with this debug target
+disabled as the baseline and use enabled logs to locate stages, not as the sole
+benchmark result.
 
 ## Verification boundaries
 
@@ -94,11 +170,20 @@ bounded scrollback, terminal control/navigation encoding, legacy appearance
 migration into versioned settings, duplicate-profile tab isolation, local key
 discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
 application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
-events, and Apple modifier normalization.
+events, Apple modifier normalization, Telnet negotiation/CRLF/NAWS behavior,
+stable Serial USB identity matching, and duplicate direct-connection attempt
+isolation. SFTP tests cover remote-path/name validation, fragmented and
+oversized packet frames, per-Tab snapshot isolation, and browser event recovery.
 The ignored `platform_credential_store_round_trips_and_deletes` test performs a
 real platform credential write/read/delete and may trigger an OS authorization
 prompt. Run it deliberately on each supported credential backend. Manual
 follow-up is also required for window rendering, horizontal tab scrolling,
 native title-bar drag hit testing, keyboard/focus input, the visible
 group/host-key/authentication flows, concurrent login against real SSH servers,
-and full-screen terminal programs.
+real Telnet servers, target-platform Serial discovery/permissions/hot-plug and
+device input/output, real SFTP server compatibility, SFTP pane focus/layout,
+protocol-specific resize behavior, and full-screen terminal programs.
+For SSH input latency, compare AxSSH and the system `ssh` client against the
+same host and network, preferably with P50/P95 observations. Similar delays in
+both clients indicate network/remote-PTY RTT; a larger AxSSH-only delta should
+be localized with the latency stages above.

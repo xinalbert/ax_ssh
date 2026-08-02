@@ -12,8 +12,8 @@ AxSSH. English pages use `name.md`; Chinese counterparts use `name.zh.md`.
 
 ## Contributing
 
-- [Architecture](architecture.md): ownership boundaries, event flow, SSH
-  security contract, and staged scope
+- [Architecture](architecture.md): ownership boundaries, event flow, transport
+  security contracts, and staged scope
 - [Development](development.md): toolchain, commands, change rules, and
   verification boundaries
 

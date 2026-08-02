@@ -7,6 +7,7 @@
 - Rust `1.92.0` 或更高版本
 - Cargo
 - Slint winit 后端支持的桌面环境
+- 实机 Serial 测试所需的目标平台驱动和设备权限
 
 根 Cargo 隐式 workspace 只包含 `ax_ssh` package。`third_package/axshell` 是
 参考子模块，不是 workspace member 或构建依赖。
@@ -37,29 +38,67 @@ git diff --check
   或终端内容。
 - UI 边界上的 payload 必须是有上限的自有数据；不得把 russh channel 或 Tokio
   receiver 暴露给 Slint。
-- 运行实例必须使用终端 Tab UUID，而不是已保存的 profile UUID；输入、resize、输出、
-  重试、关闭和迟到事件都按 `tab_id + attempt_id` 路由。
+- 运行实例必须使用终端 Tab UUID，而不是已保存的 profile UUID；已保存连接的输入、
+  resize、输出、重试、关闭和迟到事件都按 `tab_id + profile_id + attempt_id` 路由。
 - 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
+- SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
+  `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
+  必须保留与终端 Tab 相同的主机密钥和凭据门禁。增加文件操作时必须保留入站 packet、路径/名称、
+  分页、目录预算、请求和 shutdown 上限；上传/下载/删除/编辑还必须有明确确认、进度、取消
+  和冲突测试。
+- SFTP 本地文件栏是只读 application bridge 快照。目录读取必须放在有界 blocking task 中，且只返回
+  名称、路径、类型、大小和修改时间元数据；Slint 不得访问文件系统。结果回到 UI 前按 Tab 和请求 identity
+  丢弃过期项，并保留条目、名称和路径上限。
+- Telnet 必须明确标记为明文；IAC 协商必须在进入终端前解析和过滤，拒绝不支持的选项，
+  只有对端接受后才发送 NAWS。Telnet profile 不得新增凭据持久化。
+- Serial 枚举必须只读取元数据并在 UI 线程外运行；自动发现期间绝不打开或探测设备，
+  只有用户明确连接后才能解析已保存身份并创建设备 worker。Serial resize 只改变本地终端网格。
 - `vendor/vt100` 是锁定 `vt100 0.16.2` 宽字符缩窄问题的最小本地补丁。保留其中的 MIT
   文件；只可在有回归测试时调整已说明的 resize 路径，并在上游发布对应修复后移除该补丁。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
   窗口的条件下测试普通/application-cursor 终端字节序列；平台可打印键后备转换归
   Slint bridge 所有。
-- 所有平台都要把 Ctrl 组合留给获得焦点的 PTY，包括 `Ctrl+C` 和 tmux 前缀；终端
-  剪贴板默认键在 macOS 使用 `Cmd`，其他平台使用 `Ctrl+Shift`。全局 UI 命令在
-  macOS 使用 `Cmd`，其他平台使用 `Ctrl`，不得遮蔽终端控制字节。Slint 1.17 会在
+- 所有平台都要把未分配的 Ctrl 组合留给获得焦点的 PTY，包括 `Ctrl+C` 和 tmux 前缀；
+  终端剪贴板默认键在 macOS 使用 `Cmd`，其他平台使用 `Ctrl+Shift`。全局 UI 命令使用
+  Slint 在终端输入前处理的原生菜单 accelerator；不要把工作流需要的终端控制组合分配给
+  UI 命令。Slint 1.17 会在
   Apple 平台交换 Command/Control 修饰键字段。处理 macOS 键盘事件时，快捷键匹配或
   终端编码前必须在 `src/app.rs` 读取 AppKit 当前物理修饰键状态，避免 Slint 漏掉某一侧
   `flagsChanged` 时左右 Control 语义不一致。
+- 持久化菜单快捷键只在 `src/app/input.rs` 转换为 `slint::Keys`；Apple 上 `Cmd` 映射为
+  Slint `Control`，物理 `Ctrl` 映射为 Slint `Meta`。菜单 diagnostics 只记录固定 action
+  ID；`MenuItem.activated` 无法区分鼠标点击与 accelerator。
 - 可见终端保持为渲染网格。隐藏的 Slint `TextInput` 只充当 IME 代理：跟随终端光标
   定位，把未修饰的预编辑按键留给输入法，并确保提交文本只发送一次。
 - 本地 PTY 的 child、reader、writer、取消和 join 所有权保留在 `src/local_shell.rs`，
   不得把阻塞式 PTY 操作移到 UI 线程。
 - macOS 必须关闭整窗背景拖动；只有零 Tab 空白条或最右侧专用留白的鼠标左键 down
   可以调用 UI 线程原生拖动 callback，Tab、Activity Bar、侧栏和终端不得成为拖动区域。
-- 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；构建或运行时不得从
-  `third_package/axshell` 加载静态资源。
+- 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；它们是运行时资源，发行包必须把
+  该目录保留在可执行文件旁或 `src/app/font_bridge.rs` 解析的平台资源路径中。文件读取必须在
+  Tokio blocking task，字节只能在 Slint UI 线程注册；构建或运行时不得从 `third_package/axshell`
+  加载静态资源。
+- `assets/ion/terminal_icon.svg` 是应用图标的唯一源文件。PNG、ICO 和 ICNS 必须作为一组从该
+  SVG 重新生成。Slint 窗口使用 256px PNG；Windows 通过
+  `packaging/windows/axssh.rc` 嵌入 ICO；macOS 通过
+  `packaging/macos/Info.plist` 打包 ICNS；Linux 随 desktop entry 安装 hicolor PNG 图标集。
+  不得替换或加载参考工程中的图标。
+- 顶层菜单可访问的 About 页面必须保留 `AboutSlint`。AxSSH 选择 Slint 的
+  `GPL-3.0-only` 许可选项，标准组件直接提供工具包署名，不新增 Rust callback。
 - 修改面向用户的文档时同步维护中英文页面。
+
+## 平台打包
+
+使用以下命令生成 macOS application bundle：
+
+```bash
+packaging/macos/build-app.sh
+```
+
+Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Linux 的 `cargo deb` 会读取
+`[package.metadata.deb]`，安装 desktop entry、可执行文件、各级 hicolor 图标、`LICENSE` 和
+`THIRD_PARTY_NOTICES.md`。macOS bundle 把两份声明放在 `Contents/Resources`；Windows 发行包
+必须把它们放在可执行文件旁或安装器文档中。替换图标后，平台 shell 可能需要刷新缓存才会显示新图标。
 
 ## 运行日志
 
@@ -68,6 +107,23 @@ writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 
 日志位于平台本地 AxSSH 应用数据目录的 `logs` 子目录。默认过滤规则为
 `ax_ssh=info,russh=warn`，可由 `RUST_LOG` 覆盖。
 
+单次运行中可用以下命令开启脱敏键盘/UI diagnostics 和 SSH latency 阶段：
+
+```bash
+RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
+```
+
+diagnostics 只使用固定的 `event`、`key`、`route`、`action` 和 `outcome` 字段。F5、
+ArrowUp 等特殊键使用稳定名称；所有可打印文字、IME、密码和粘贴值都只记录为 `Text`，
+不记录内容或长度。路径、profile 标签、主机、剪贴板内容和凭据不会进入 diagnostics 字段。
+debug 事件写入滚动文件，控制台 writer 仍限制为 INFO。
+
+latency 事件只使用本地 `input_sequence`、固定 `stage` 和微秒耗时。`queue_us` 测量有界
+worker queue；`call_us` 只表示 russh data 调用完成，不代表服务端已收到。
+`first-output-after-input` 明确标记 `association=temporal-only`。UI 字段分别记录输出到调度、
+event-loop queue、应用和客户端输出总耗时，不包含终端内容或字节长度。由于滚动 writer 为
+非丢弃模式，性能基线应关闭该 debug target；开启后的日志用于定位阶段，不应作为唯一 benchmark。
+
 ## 验证边界
 
 自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、日志退出刷新，以及
@@ -75,9 +131,14 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
 发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
-方向键、Shift 可打印键后备转换、原始 C0 控制字节事件和 Apple 修饰键还原。忽略测试
+方向键、Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键还原、Telnet
+协商/CRLF/NAWS、Serial USB 稳定身份匹配和直连 attempt 隔离。SFTP 测试覆盖远端
+路径/名称校验、分片与超大 packet frame、逐 Tab 快照隔离和浏览事件恢复。忽略测试
 `platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
 写入、读取和删除，并可能触发系统授权提示；应在每个受支持的凭据后端上主动运行。
-窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH
-服务器登录仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实 SSH 并发连接、
-切换后的终端焦点保持和原生标题栏拖动命中区域。
+窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH/Telnet
+服务器仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实连接并发、目标平台
+Serial 发现/权限/热插拔与设备输入输出、真实 SFTP 服务兼容性、SFTP 面板焦点/布局、
+协议 resize、切换后的终端焦点保持和原生标题栏拖动命中区域。
+SSH 输入延迟应在同一主机和网络上对比 AxSSH 与系统 `ssh`，优先观察 P50/P95；两者相近通常
+说明网络/远端 PTY RTT，占比明显更大的 AxSSH 差值再用上述 latency 阶段定位。
