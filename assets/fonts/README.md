@@ -1,14 +1,19 @@
-# Bundled Terminal Font
+# Bundled Application And Terminal Fonts
 
-AxSSH bundles `JetBrainsMono-Regular.ttf` as its default terminal font. The
-font is JetBrains Mono 2.304 and is distributed under the SIL Open Font
-License 1.1.
+AxSSH distributes these independently licensed fonts beside the application.
+They are runtime resources, not Slint imports: the independently selected
+application and Terminal families are read from this directory on a blocking
+worker and registered on the Slint UI thread. Both Settings font lists present
+these bundled families before discovered system monospace fonts.
 
-- Font file: `JetBrainsMono-Regular.ttf`
-- License: `LICENSE-JetBrainsMono.txt`
-- Authors: `AUTHORS-JetBrainsMono.txt`
-- Upstream: <https://github.com/JetBrains/JetBrainsMono>
+| Family | Files | License |
+| --- | --- | --- |
+| Maple Mono NF CN | Regular, Bold | `LICENSE-MapleMono.txt` |
+| Iosevka Term | Regular, Bold, Italic, Bold Italic | `LICENSE-Iosevka.txt` |
+| JetBrains Mono | Regular, Bold, Italic, Bold Italic | `LICENSE-JetBrainsMono.txt`, `AUTHORS-JetBrainsMono.txt` |
+| Monaspace Neon Var | Variable | `LICENSE-Monaspace.txt` |
 
-The files were copied into this project as independently licensed static
-resources. AxSSH does not load them from `third_package/axshell` at build time
-or runtime.
+Release packages must retain `assets/fonts/` next to the executable, or under
+the platform resources path resolved by `src/app/font_bridge.rs`. The files
+were imported into this project as static resources; AxSSH never loads them from
+`third_package/axshell` at build time or runtime.

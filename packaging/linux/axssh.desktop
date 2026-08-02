@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AxSSH
+GenericName=SSH Terminal Workspace
+Comment=Cross-platform terminal workspace for SSH, Telnet, and serial sessions
+Exec=ax_ssh %U
+Icon=axssh
+Terminal=false
+Categories=System;Network;TerminalEmulator;
+StartupNotify=true
