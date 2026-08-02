@@ -1,0 +1,620 @@
+import { CheckBox, ListView } from "std-widgets.slint";
+import { FlatTextInput } from "components/flat-text-input.slint";
+import { Theme } from "theme.slint";
+
+export struct SftpEntryRow {
+    name: string,
+    path: string,
+    kind: string,
+    size: string,
+    modified: string,
+    hidden: bool,
+}
+
+export struct SftpViewState {
+    available: bool,
+    open: bool,
+    loading: bool,
+    home: string,
+    path: string,
+    entries: [SftpEntryRow],
+    has_more: bool,
+    truncated: bool,
+    status: string,
+    local_loading: bool,
+    local_path: string,
+    local_entries: [SftpEntryRow],
+    local_truncated: bool,
+    local_status: string,
+}
+
+component SftpActionButton inherits FocusScope {
+    in property <string> text;
+    in property <length> font-size: Theme.sftp-control-font-size;
+    in property <int> font-weight: Theme.sftp-control-font-weight;
+    callback clicked();
+
+    private property <length> text-height:
+        label.font-metrics.ascent - label.font-metrics.descent;
+    out property <length> control-height: max(
+        Theme.sftp-control-min-height,
+        root.text-height + 2 * Theme.sftp-control-padding-y,
+    );
+
+    height: root.control-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.clicked();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        border-width: Theme.hairline;
+        border-color: root.has-focus ? Theme.focus : Theme.control-border;
+        border-radius: Theme.radius-small;
+        background: !root.enabled
+            ? Theme.hover
+            : (touch.has-hover || root.has-focus ? Theme.hover : Theme.panel-alt);
+        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+
+        label := Text {
+            x: Theme.space-md;
+            width: parent.width - 2 * Theme.space-md;
+            height: parent.height;
+            text: root.text;
+            color: Theme.text;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+}
+
+component SftpDirectoryHeader inherits Rectangle {
+    private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
+    private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
+    private property <length> leading-x: Theme.sftp-column-padding;
+    private property <length> icon-x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+    private property <length> name-x: root.icon-x + Theme.sftp-icon-width + Theme.sftp-column-gap;
+    private property <length> modified-x:
+        root.width - Theme.sftp-column-padding - Theme.sftp-time-width;
+    private property <length> size-x: root.show-modified
+        ? root.modified-x - Theme.sftp-column-gap - Theme.sftp-size-width
+        : root.width - Theme.sftp-column-padding - Theme.sftp-size-width;
+    private property <length> name-right: root.show-size
+        ? root.size-x - Theme.sftp-column-gap
+        : root.width - Theme.sftp-column-padding;
+
+    height: Theme.sftp-header-height;
+    background: Theme.panel-alt;
+    clip: true;
+
+    Rectangle {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: Theme.sftp-selection-width;
+        y: (parent.height - self.height) / 2;
+        border-width: Theme.hairline;
+        border-color: Theme.control-border;
+        border-radius: Theme.radius-small;
+    }
+    Text {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: "Name";
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        text: "Size";
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        text: "Modified";
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider;
+    }
+}
+
+component SftpEntry inherits Rectangle {
+    in property <SftpEntryRow> entry;
+    in property <bool> shown: true;
+    callback open-directory(string);
+
+    private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
+    private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
+    private property <length> leading-x: Theme.sftp-column-padding;
+    private property <length> icon-x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+    private property <length> name-x: root.icon-x + Theme.sftp-icon-width + Theme.sftp-column-gap;
+    private property <length> modified-x:
+        root.width - Theme.sftp-column-padding - Theme.sftp-time-width;
+    private property <length> size-x: root.show-modified
+        ? root.modified-x - Theme.sftp-column-gap - Theme.sftp-size-width
+        : root.width - Theme.sftp-column-padding - Theme.sftp-size-width;
+    private property <length> name-right: root.show-size
+        ? root.size-x - Theme.sftp-column-gap
+        : root.width - Theme.sftp-column-padding;
+
+    visible: root.shown;
+    clip: true;
+    background: touch.has-hover ? Theme.hover : transparent;
+    accessible-role: list-item;
+    accessible-label: root.entry.name;
+
+    Rectangle {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: Theme.sftp-selection-width;
+        y: (parent.height - self.height) / 2;
+        border-width: Theme.hairline;
+        border-color: Theme.control-border;
+        border-radius: Theme.radius-small;
+    }
+    Text {
+        x: root.icon-x;
+        width: Theme.sftp-icon-width;
+        height: parent.height;
+        text: root.entry.kind == "folder" ? ">" : (root.entry.kind == "link" ? "@" : "");
+        color: root.entry.kind == "folder" ? Theme.accent : Theme.muted;
+        font-size: Theme.font-body;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: root.entry.name;
+        color: Theme.text;
+        font-size: Theme.font-body;
+        font-weight: root.entry.kind == "folder" ? 600 : 400;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        text: root.entry.size;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        text: root.entry.modified;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+    }
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.shown;
+        mouse-cursor: root.entry.kind == "folder" ? pointer : default;
+        double-clicked => {
+            if root.entry.kind == "folder" {
+                root.open-directory(root.entry.path);
+            }
+        }
+    }
+}
+
+component SftpDirectoryPane inherits Rectangle {
+    in property <string> title;
+    in property <[SftpEntryRow]> entries;
+    in property <bool> loading;
+    in property <string> path;
+    in property <bool> truncated;
+    in property <string> status;
+    in property <bool> has-more: false;
+    in property <bool> allow-hidden: true;
+    in property <bool> allow-refresh: false;
+    callback list-directory(string);
+    callback load-more();
+    callback refresh();
+
+    private property <string> current-path: root.path;
+    private property <string> path-draft: root.current-path;
+    private property <bool> show-hidden: false;
+    private property <length> control-text-height:
+        control-text-probe.font-metrics.ascent - control-text-probe.font-metrics.descent;
+    private property <length> control-height: max(
+        Theme.sftp-control-min-height,
+        root.control-text-height + 2 * Theme.sftp-control-padding-y,
+    );
+    private property <length> path-row-height:
+        root.control-height + 2 * Theme.sftp-path-row-padding-y;
+    private property <length> status-height:
+        root.control-height + 2 * Theme.sftp-status-row-padding-y;
+
+    changed current-path => { root.path-draft = root.current-path; }
+
+    background: Theme.panel;
+    clip: true;
+    min-width: 0px;
+    min-height: 0px;
+
+    control-text-probe := Text {
+        visible: false;
+        text: "Open";
+        font-size: Theme.sftp-control-font-size;
+        font-weight: Theme.sftp-control-font-weight;
+    }
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: Theme.sftp-toolbar-height;
+            background: Theme.panel-alt;
+
+            Text {
+                x: Theme.sftp-column-padding;
+                width: parent.width - 2 * Theme.sftp-column-padding;
+                height: parent.height;
+                text: root.title;
+                color: Theme.accent;
+                font-size: Theme.font-body;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if root.allow-hidden : CheckBox {
+                x: max(Theme.sftp-column-padding, parent.width - self.width - Theme.sftp-column-padding);
+                width: Theme.sftp-hidden-control-width;
+                height: parent.height;
+                text: "Hidden";
+                checked <=> root.show-hidden;
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+
+        Rectangle {
+            height: root.path-row-height;
+            background: Theme.panel;
+
+            HorizontalLayout {
+                padding-left: Theme.sftp-column-padding;
+                padding-right: Theme.sftp-column-padding;
+                padding-top: Theme.sftp-path-row-padding-y;
+                padding-bottom: Theme.sftp-path-row-padding-y;
+                spacing: Theme.space-sm;
+
+                FlatTextInput {
+                    text <=> root.path-draft;
+                    placeholder-text: "Path";
+                    height: root.control-height;
+                    control-min-height: root.control-height;
+                    font-size: Theme.sftp-control-font-size;
+                    font-weight: Theme.sftp-control-font-weight;
+                    enabled: !root.loading;
+                    accepted(path) => { root.list-directory(path); }
+                }
+                SftpActionButton {
+                    width: Theme.sftp-path-action-width;
+                    height: root.control-height;
+                    text: "Open";
+                    enabled: !root.loading && !root.path-draft.is-empty;
+                    clicked => { root.list-directory(root.path-draft); }
+                }
+                if root.allow-refresh : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: root.control-height;
+                    text: "Refresh";
+                    enabled: !root.loading && !root.current-path.is-empty;
+                    clicked => { root.refresh(); }
+                }
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+
+        SftpDirectoryHeader { }
+
+        if root.entries.length > 0 : ListView {
+            vertical-stretch: 1;
+            min-height: 0px;
+
+            // The direct ListView delegate owns its height. Keeping this
+            // geometry outside SftpEntry makes virtualized rows advance even
+            // when the entry is nested in another reusable component.
+            for entry in root.entries : Rectangle {
+                width: parent.width;
+                height: root.show-hidden || !entry.hidden
+                    ? Theme.sftp-row-height : 0px;
+                clip: true;
+
+                SftpEntry {
+                    width: parent.width;
+                    height: parent.height;
+                    entry: entry;
+                    shown: root.show-hidden || !entry.hidden;
+                    open-directory(path) => { root.list-directory(path); }
+                }
+            }
+        }
+
+        if root.entries.length == 0 : Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: root.loading ? "Loading..." : "No files";
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            height: root.status-height;
+            background: Theme.panel-alt;
+
+            Text {
+                x: Theme.sftp-column-padding;
+                width: parent.width - 2 * Theme.sftp-column-padding
+                    - (root.has-more ? Theme.sftp-more-button-width + Theme.space-sm : 0px);
+                height: parent.height;
+                text: root.status;
+                color: root.truncated ? Theme.danger : Theme.muted;
+                font-size: Theme.font-caption;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if root.has-more : SftpActionButton {
+                x: parent.width - Theme.sftp-column-padding - self.width;
+                y: (parent.height - self.height) / 2;
+                width: Theme.sftp-more-button-width;
+                height: root.control-height;
+                text: root.loading ? "Loading" : "More";
+                enabled: !root.loading;
+                clicked => { root.load-more(); }
+            }
+            Rectangle {
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+    }
+}
+
+component SftpTransferQueue inherits Rectangle {
+    background: Theme.panel;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: Theme.sftp-transfer-toolbar-height;
+            background: Theme.panel-alt;
+            Text {
+                x: Theme.sftp-column-padding;
+                width: parent.width - 2 * Theme.sftp-column-padding;
+                height: parent.height;
+                text: "Transfers   Active (0)   Failed (0)   Completed (0)";
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+        Rectangle {
+            height: Theme.sftp-transfer-header-height;
+            background: Theme.panel;
+            Text {
+                x: Theme.sftp-column-padding;
+                width: parent.width * 0.54 - self.x;
+                height: parent.height;
+                text: "Name";
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Text {
+                x: parent.width * 0.54;
+                width: parent.width * 0.18;
+                height: parent.height;
+                text: "Status";
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            Text {
+                x: parent.width * 0.74;
+                width: parent.width * 0.12;
+                height: parent.height;
+                text: "Size";
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            Text {
+                x: parent.width * 0.87;
+                width: parent.width * 0.12 - Theme.sftp-column-padding;
+                height: parent.height;
+                text: "Speed";
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: "No transfers yet";
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component SftpPane inherits Rectangle {
+    in property <SftpViewState> view;
+    in property <bool> standalone: false;
+    callback list-directory(string);
+    callback load-more();
+    callback list-local-directory(string);
+    callback close();
+
+    min-width: root.standalone ? 0px : Theme.sftp-panel-min-width;
+    preferred-width: root.standalone ? 0px : Theme.sftp-panel-width;
+    max-width: root.standalone ? 100000px : Theme.sftp-panel-max-width;
+    min-height: 0px;
+    background: Theme.background;
+    accessible-role: list;
+    accessible-label: "SFTP files";
+
+    init => {
+        if !root.view.local_path.is-empty {
+            root.list-local-directory(root.view.local_path);
+        }
+    }
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            vertical-stretch: 3;
+            min-height: 0px;
+            background: Theme.panel;
+            clip: true;
+
+            HorizontalLayout {
+                spacing: 0px;
+
+                SftpDirectoryPane {
+                    horizontal-stretch: 1;
+                    title: "Remote files";
+                    entries: root.view.entries;
+                    loading: root.view.loading;
+                    path: root.view.path;
+                    truncated: root.view.truncated;
+                    status: root.view.status;
+                    has-more: root.view.has_more;
+                    allow-refresh: true;
+                    list-directory(path) => { root.list-directory(path); }
+                    load-more => { root.load-more(); }
+                    refresh => { root.list-directory(root.view.path); }
+                }
+                Rectangle {
+                    width: Theme.hairline;
+                    background: Theme.divider;
+                }
+                SftpDirectoryPane {
+                    horizontal-stretch: 1;
+                    title: "Local files";
+                    allow-hidden: false;
+                    entries: root.view.local_entries;
+                    loading: root.view.local_loading;
+                    path: root.view.local_path;
+                    truncated: root.view.local_truncated;
+                    status: root.view.local_status;
+                    list-directory(path) => { root.list-local-directory(path); }
+                }
+            }
+        }
+
+        Rectangle {
+            height: Theme.hairline;
+            background: Theme.divider;
+        }
+
+        SftpTransferQueue {
+            vertical-stretch: 2;
+        }
+    }
+}

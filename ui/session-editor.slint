@@ -1,4 +1,4 @@
-import { Button, ScrollView } from "std-widgets.slint";
+import { Button, CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
@@ -12,11 +12,20 @@ export struct SessionEditorViewState {
     profile_id: string,
     name: string,
     group_name: string,
+    protocol: string,
     host: string,
     port: string,
     username: string,
     auth_method: string,
     private_key_path: string,
+    x11_forwarding: bool,
+    serial_port: string,
+    serial_baud_rate: string,
+    serial_data_bits: string,
+    serial_stop_bits: string,
+    serial_parity: string,
+    serial_flow_control: string,
+    serial_port_options: [string],
     group_options: [string],
     private_key_options: [string],
     status: string,
@@ -24,7 +33,11 @@ export struct SessionEditorViewState {
 
 export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
-    callback save(string, string, string, string, string, string, string);
+    callback save(
+        string, string, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string,
+    );
+    callback refresh-serial-ports();
     callback cancel();
 
     private property <string> incoming-draft-id: root.source.draft_id;
@@ -34,24 +47,49 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> status: root.source.status;
     private property <string> name-draft;
     private property <string> group-draft;
+    private property <string> protocol: "SSH";
     private property <string> host-draft;
     private property <string> port-draft: "22";
     private property <string> username-draft;
     private property <string> auth-method: "Password";
     private property <string> private-key-draft;
+    private property <bool> x11-forwarding-draft: false;
+    private property <string> serial-port-draft;
+    private property <string> serial-baud-rate: "115200";
+    private property <string> serial-data-bits: "8";
+    private property <string> serial-stop-bits: "1";
+    private property <string> serial-parity: "none";
+    private property <string> serial-flow-control: "none";
 
     function reset-draft() {
         root.name-draft = root.source.name;
         root.group-draft = root.source.group_name;
+        root.protocol = root.source.protocol;
         root.host-draft = root.source.host;
         root.port-draft = root.source.port;
         root.username-draft = root.source.username;
         root.auth-method = root.source.auth_method;
         root.private-key-draft = root.source.private_key_path;
+        root.x11-forwarding-draft = root.source.x11_forwarding;
+        root.serial-port-draft = root.source.serial_port;
+        root.serial-baud-rate = root.source.serial_baud_rate;
+        root.serial-data-bits = root.source.serial_data_bits;
+        root.serial-stop-bits = root.source.serial_stop_bits;
+        root.serial-parity = root.source.serial_parity;
+        root.serial-flow-control = root.source.serial_flow_control;
     }
 
     init => { root.reset-draft(); }
     changed incoming-draft-id => { root.reset-draft(); }
+    changed protocol => {
+        if root.protocol == "Telnet" && root.port-draft == "22" {
+            root.port-draft = "23";
+        } else if root.protocol == "SSH" && root.port-draft == "23" {
+            root.port-draft = "22";
+        } else if root.protocol == "Serial" {
+            root.refresh-serial-ports();
+        }
+    }
 
     background: Theme.background;
 
@@ -82,7 +120,7 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-xs;
                     Text {
                         height: Theme.editor-title-height;
-                        text: root.editing ? "Edit SSH session" : "New SSH session";
+                        text: root.editing ? "Edit session" : "New session";
                         color: Theme.text;
                         font-size: Theme.font-page-title;
                         font-weight: 700;
@@ -103,13 +141,35 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
+                        label: "Protocol";
+                        description: "Select the transport used by this saved connection.";
+                    }
+                    AuthenticationMethodSelector {
+                        options: [
+                            { label: "SSH", value: "SSH" },
+                            { label: "Telnet", value: "Telnet" },
+                            { label: "Serial", value: "Serial" },
+                        ];
+                        selected-method <=> root.protocol;
+                        accessible-name: "Connection protocol";
+                    }
+                    if root.protocol == "Telnet" : Text {
+                        text: "Telnet sends terminal traffic without encryption or host identity verification.";
+                        color: Theme.danger;
+                        font-size: Theme.font-small;
+                        wrap: word-wrap;
+                    }
+                }
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
                         label: "Identity";
                         description: "Choose how this connection appears in the workspace.";
                     }
                     HorizontalLayout {
-                        height: Theme.editor-label-height
-                            + Theme.space-xs
-                            + Theme.editor-input-row-height;
+                        height: self.preferred-height;
                         vertical-stretch: 0;
                         spacing: Theme.space-xl;
                         SessionEditorField {
@@ -150,17 +210,17 @@ export component SessionEditorPane inherits Rectangle {
                     }
                 }
 
-                VerticalLayout {
+                if root.protocol != "Serial" : VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: "Endpoint";
-                        description: "Enter the host address and SSH account.";
+                        description: root.protocol == "SSH"
+                            ? "Enter the host address and SSH account."
+                            : "Enter the Telnet server address.";
                     }
                     HorizontalLayout {
-                        height: Theme.editor-label-height
-                            + Theme.space-xs
-                            + Theme.editor-input-row-height;
+                        height: self.preferred-height;
                         vertical-stretch: 0;
                         spacing: Theme.space-xl;
                         SessionEditorField {
@@ -171,7 +231,7 @@ export component SessionEditorPane inherits Rectangle {
                                 height: Theme.editor-input-row-height;
                                 placeholder-text: "server.example.com";
                                 text <=> root.host-draft;
-                                accessible-label: "SSH host";
+                                accessible-label: root.protocol + " host";
                             }
                         }
                         SessionEditorField {
@@ -183,11 +243,11 @@ export component SessionEditorPane inherits Rectangle {
                                 height: Theme.editor-input-row-height;
                                 text <=> root.port-draft;
                                 placeholder-text: "22";
-                                accessible-label: "SSH port";
+                                accessible-label: root.protocol + " port";
                             }
                         }
                     }
-                    SessionEditorField {
+                    if root.protocol == "SSH" : SessionEditorField {
                         label: "Username";
                         user-edit := FlatTextInput {
                             width: parent.width;
@@ -199,7 +259,116 @@ export component SessionEditorPane inherits Rectangle {
                     }
                 }
 
-                VerticalLayout {
+                if root.protocol == "Serial" : VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
+                        label: "Serial port";
+                        description: "Select a detected device or enter its port name manually.";
+                    }
+                    SessionEditorField {
+                        label: "Port";
+                        HorizontalLayout {
+                            height: Theme.editor-input-row-height;
+                            spacing: Theme.space-md;
+                            serial-port-edit := FlatTextInput {
+                                horizontal-stretch: 1;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.serial-port-draft;
+                                placeholder-text: "/dev/cu.usbserial or COM3";
+                                accessible-label: "Serial port name";
+                            }
+                            if root.source.serial_port_options.length > 0 : ThemedComboBox {
+                                width: Theme.editor-detected-key-width;
+                                height: Theme.editor-input-row-height;
+                                model: root.source.serial_port_options;
+                                accessible-label: "Detected serial ports";
+                                selected(value) => { root.serial-port-draft = value; }
+                            }
+                            Button {
+                                height: Theme.editor-input-row-height;
+                                text: "Refresh";
+                                accessible-label: "Refresh serial ports";
+                                clicked => { root.refresh-serial-ports(); }
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        height: self.preferred-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Baud rate";
+                            FlatTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.serial-baud-rate;
+                                placeholder-text: "115200";
+                                accessible-label: "Serial baud rate";
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Data bits";
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: ["8", "7", "6", "5"];
+                                current-index: root.serial-data-bits == "8" ? 0
+                                    : (root.serial-data-bits == "7" ? 1
+                                    : (root.serial-data-bits == "6" ? 2 : 3));
+                                accessible-label: "Serial data bits";
+                                selected(value) => { root.serial-data-bits = value; }
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Stop bits";
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: ["1", "2"];
+                                current-index: root.serial-stop-bits == "2" ? 1 : 0;
+                                accessible-label: "Serial stop bits";
+                                selected(value) => { root.serial-stop-bits = value; }
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        height: self.preferred-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Parity";
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: ["none", "odd", "even"];
+                                current-index: root.serial-parity == "odd" ? 1
+                                    : (root.serial-parity == "even" ? 2 : 0);
+                                accessible-label: "Serial parity";
+                                selected(value) => { root.serial-parity = value; }
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Flow control";
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: ["none", "software", "hardware"];
+                                current-index: root.serial-flow-control == "software" ? 1
+                                    : (root.serial-flow-control == "hardware" ? 2 : 0);
+                                accessible-label: "Serial flow control";
+                                selected(value) => { root.serial-flow-control = value; }
+                            }
+                        }
+                    }
+                }
+
+                if root.protocol == "SSH" : VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
@@ -213,6 +382,12 @@ export component SessionEditorPane inherits Rectangle {
                         ];
                         selected-method <=> root.auth-method;
                         accessible-name: "SSH authentication method";
+                    }
+
+                    CheckBox {
+                        text: "Forward X11 applications";
+                        checked <=> root.x11-forwarding-draft;
+                        accessible-label: "Enable SSH X11 forwarding";
                     }
 
                     if root.auth-method == "Password" : VerticalLayout {
@@ -277,13 +452,21 @@ export component SessionEditorPane inherits Rectangle {
                         text: root.editing ? "Update session" : "Save session";
                         clicked => {
                             root.save(
-                                name-edit.text,
-                                group-edit.text,
-                                host-edit.text,
-                                port-edit.text,
-                                user-edit.text,
+                                root.name-draft,
+                                root.group-draft,
+                                root.protocol,
+                                root.host-draft,
+                                root.port-draft,
+                                root.username-draft,
                                 root.auth-method,
                                 root.private-key-draft,
+                                root.x11-forwarding-draft,
+                                root.serial-port-draft,
+                                root.serial-baud-rate,
+                                root.serial-data-bits,
+                                root.serial-stop-bits,
+                                root.serial-parity,
+                                root.serial-flow-control,
                             );
                         }
                     }

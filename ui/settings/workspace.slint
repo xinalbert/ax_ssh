@@ -2,11 +2,13 @@ import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component WorkspaceSettingsPage inherits SettingsPage {
     in-out property <int> draft-sidebar-width;
     in-out property <int> draft-tab-width;
     in-out property <string> draft-session-mask-character;
+    in-out property <int> draft-collapsed-group-label-chars;
     SettingsSectionHeading { label: "LAYOUT"; }
     SettingsRow {
         label: "Session sidebar width";
@@ -51,13 +53,34 @@ export component WorkspaceSettingsPage inherits SettingsPage {
     SettingsRow {
         label: "Session mask character";
         description: "Masks usernames and the middle IPv4 octets in the session sidebar";
-        show-divider: false;
         SettingsField {
             FlatTextInput {
                 width: Theme.settings-number-width;
                 height: Theme.settings-control-height;
                 text <=> root.draft-session-mask-character;
                 accessible-label: "Session mask character";
+            }
+        }
+    }
+    SettingsRow {
+        label: "Collapsed group label";
+        description: "Choose 1-4 characters or show the full group name";
+        show-divider: false;
+        SettingsField {
+            ThemedComboBox {
+                width: parent.width;
+                height: Theme.settings-control-height;
+                model: ["1 character", "2 characters", "3 characters", "4 characters", "Full name"];
+                current-index: root.draft-collapsed-group-label-chars == 0
+                    ? 4 : root.draft-collapsed-group-label-chars - 1;
+                accessible-label: "Collapsed group label length";
+                selected(value) => {
+                    root.draft-collapsed-group-label-chars = value == "Full name"
+                        ? 0
+                        : (value == "1 character" ? 1
+                        : (value == "2 characters" ? 2
+                        : (value == "3 characters" ? 3 : 4)));
+                }
             }
         }
     }

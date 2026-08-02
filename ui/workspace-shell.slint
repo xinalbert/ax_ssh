@@ -2,6 +2,7 @@ import { Theme } from "theme.slint";
 import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
 import { SettingsPane, SettingsViewState } from "settings.slint";
 import { TerminalPane, TerminalViewState } from "terminal-pane.slint";
+import { SftpPane, SftpViewState } from "sftp-pane.slint";
 import { SessionGroupRow, SessionNavigation } from "components/session-navigation.slint";
 import {
     ConnectableSessionRow,
@@ -17,12 +18,15 @@ export struct WorkspaceViewState {
     workspace_tabs: [WorkspaceTabRow],
     connection_options: [ConnectableSessionRow],
     active_tab_id: string,
+    settings_tab_id: string,
     active_tab_kind: string,
     status: string,
     sidebar_width: int,
     tab_width: int,
+    collapsed_group_label_chars: int,
     terminal_background: color,
     terminal: TerminalViewState,
+    sftp: SftpViewState,
     settings: SettingsViewState,
     session_editor: SessionEditorViewState,
 }
@@ -39,21 +43,34 @@ export component WorkspaceShell inherits Rectangle {
     callback new-session();
     callback new-session-in-group(string);
     callback edit-session(string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
     callback request-session-management(string, string, string);
     callback open-local-shell();
     callback activate-tab(string);
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, int, int, int, bool, string, string,
+        string, string, int, int, int, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, string, int, int, int, int, int, string, string, string, string, string, string,
+        bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        string, string, bool,
     );
-    callback cancel-settings();
     callback connect-session(string);
-    callback save-session(string, string, string, string, string, string, string);
+    callback open-sftp-session(string);
+    callback save-session(
+        string, string, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string,
+    );
+    callback refresh-serial-ports();
     callback cancel-session-dialog();
+    callback open-sftp();
+    callback list-sftp-directory(string);
+    callback load-more-sftp();
+    callback list-local-sftp-directory(string);
+    callback close-sftp();
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(int, int);
@@ -67,6 +84,14 @@ export component WorkspaceShell inherits Rectangle {
         root.sidebar-collapsed = !root.sidebar-collapsed;
     }
 
+    public function import-session-config() {
+        session-navigation.import-session-config();
+    }
+
+    public function export-selected-session-config() {
+        session-navigation.export-selected-session-config();
+    }
+
     public function dismiss-transient-controls() -> bool {
         if root.connection-picker-open {
             root.connection-picker-open = false;
@@ -75,16 +100,27 @@ export component WorkspaceShell inherits Rectangle {
         return false;
     }
 
+    public function request-close-tab(id: string) {
+        root.connection-picker-open = false;
+        if !root.view.settings_tab_id.is-empty && id == root.view.settings_tab_id {
+            settings-pane.request-close();
+        } else {
+            root.close-tab(id);
+        }
+    }
+
     HorizontalLayout {
         spacing: 0px;
 
-        SessionNavigation {
+        session-navigation := SessionNavigation {
             sessions: root.view.sessions;
             sidebar-width: root.view.sidebar_width;
+            collapsed-group-label-chars: root.view.collapsed_group_label_chars;
             collapsed <=> root.sidebar-collapsed;
             open-local-shell => { root.open-local-shell(); }
             new-session => { root.new-session(); }
             connect-session(id) => { root.connect-session(id); }
+            open-sftp(id) => { root.open-sftp-session(id); }
             new-group => { root.request-session-management("new-group", "", ""); }
             new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
             rename-group(group-name) => {
@@ -94,6 +130,11 @@ export component WorkspaceShell inherits Rectangle {
                 root.request-session-management("delete-group", group-name, group-name);
             }
             edit-session(id) => { root.edit-session(id); }
+            copy-session(id) => { root.copy-session(id); }
+            duplicate-session(id) => { root.duplicate-session(id); }
+            session-transfer-action(action, target) => {
+                root.session-transfer-action(action, target);
+            }
             delete-session(id, name) => {
                 root.request-session-management("delete-session", id, name);
             }
@@ -106,7 +147,7 @@ export component WorkspaceShell inherits Rectangle {
             VerticalLayout {
                 spacing: 0px;
 
-                WorkspaceTitlebar {
+                workspace-titlebar := WorkspaceTitlebar {
                     tabs: root.view.workspace_tabs;
                     active-tab-id: root.view.active_tab_id;
                     tab-width: root.view.tab_width;
@@ -117,8 +158,7 @@ export component WorkspaceShell inherits Rectangle {
                         root.activate-tab(id);
                     }
                     close-tab(id) => {
-                        root.connection-picker-open = false;
-                        root.close-tab(id);
+                        root.request-close-tab(id);
                     }
                     move-tab(id, target-index) => {
                         root.connection-picker-open = false;
@@ -159,11 +199,26 @@ export component WorkspaceShell inherits Rectangle {
                         read-clipboard() => { return root.read-clipboard(); }
                     }
 
-                    if root.view.active_tab_kind == "settings" : SettingsPane {
+                    if root.view.active_tab_kind == "sftp" : SftpPane {
+                        width: parent.width;
+                        height: parent.height;
+                        standalone: true;
+                        view: root.view.sftp;
+                        list-directory(path) => { root.list-sftp-directory(path); }
+                        load-more => { root.load-more-sftp(); }
+                        list-local-directory(path) => { root.list-local-sftp-directory(path); }
+                        close => { root.close-tab(root.view.active_tab_id); }
+                    }
+
+                    settings-pane := SettingsPane {
+                        visible: root.view.active_tab_kind == "settings";
+                        width: parent.width;
+                        height: parent.height;
                         source: root.view.settings;
+                        tab-id: root.view.settings_tab_id;
                         requested-section: root.requested-settings-section;
                         requested-section-revision: root.settings-section-request-revision;
-                        save(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                        save(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
                              theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                              theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                              theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -171,11 +226,13 @@ export component WorkspaceShell inherits Rectangle {
                              theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                              theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                              theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                             theme-dark-terminal-selection, right-click-copy, option-as-meta, shell,
-                             scrollback, columns, rows, sidebar, tab-size, mask-character, open-settings-key,
-                             toggle-sidebar-key, copy-key, paste-key, credential-storage) => {
+                             theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                             x11-provider, x11-app-path, x11-launch, x11-no-auth, shell,
+                             scrollback, columns, rows, sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key,
+                             new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
+                             settings-tab-id, close-after-save) => {
                             root.save-settings(
-                                font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                                application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
                                 theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                                 theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                                 theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -183,9 +240,11 @@ export component WorkspaceShell inherits Rectangle {
                                 theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                                 theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                                 theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                                theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows,
-                                sidebar, tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key,
-                                paste-key, credential-storage,
+                                theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                                x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
+                                sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
+                                toggle-sidebar-key, copy-key,
+                                paste-key, open-sftp-key, credential-storage, settings-tab-id, close-after-save,
                             );
                         }
                         format-shortcut(text, alt, control, meta, shift) => {
@@ -194,14 +253,18 @@ export component WorkspaceShell inherits Rectangle {
                         shortcut-recording-changed(recording) => {
                             root.shortcut-recording = recording;
                         }
-                        cancel => { root.cancel-settings(); }
                     }
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
-                        save(name, group, host, port, username, auth, key-path) => {
-                            root.save-session(name, group, host, port, username, auth, key-path);
+                        save(name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                             serial-port, baud-rate, data-bits, stop-bits, parity, flow-control) => {
+                            root.save-session(
+                                name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                                serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                            );
                         }
+                        refresh-serial-ports => { root.refresh-serial-ports(); }
                         cancel => { root.cancel-session-dialog(); }
                     }
 
@@ -231,7 +294,7 @@ export component WorkspaceShell inherits Rectangle {
             }
 
             if root.connection-picker-open : TouchArea {
-                y: Theme.titlebar-fallback-height;
+                y: workspace-titlebar.height;
                 width: parent.width;
                 height: parent.height - self.y;
                 clicked => { root.connection-picker-open = false; }
@@ -239,7 +302,7 @@ export component WorkspaceShell inherits Rectangle {
 
             if root.connection-picker-open : ConnectionPicker {
                 x: max(Theme.space-xs, parent.width - self.width);
-                y: Theme.titlebar-fallback-height;
+                y: workspace-titlebar.height;
                 sessions: root.view.connection_options;
                 connect-session(id) => {
                     root.connection-picker-open = false;

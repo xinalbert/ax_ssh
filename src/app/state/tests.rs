@@ -27,9 +27,15 @@ fn same_profile_opens_independent_terminal_tabs() {
 fn each_ssh_tab_keeps_its_own_authentication_prompt() {
     let mut state = test_state();
     let mut first_profile = SessionProfile::new("first", "first.example", "alice");
-    first_profile.host_key_fingerprint = Some("SHA256:first".into());
+    first_profile
+        .ssh_mut()
+        .expect("profile should be SSH")
+        .host_key_fingerprint = Some("SHA256:first".into());
     let mut second_profile = SessionProfile::new("second", "second.example", "bob");
-    second_profile.host_key_fingerprint = Some("SHA256:second".into());
+    second_profile
+        .ssh_mut()
+        .expect("profile should be SSH")
+        .host_key_fingerprint = Some("SHA256:second".into());
     state.sessions.upsert(first_profile.clone());
     state.sessions.upsert(second_profile.clone());
 
@@ -86,7 +92,10 @@ fn closing_one_pending_tab_keeps_another_tabs_authentication_prompt() {
     let mut state = test_state();
     let first_profile = SessionProfile::new("first", "first.example", "alice");
     let mut second_profile = SessionProfile::new("second", "second.example", "bob");
-    second_profile.host_key_fingerprint = Some("SHA256:second".into());
+    second_profile
+        .ssh_mut()
+        .expect("profile should be SSH")
+        .host_key_fingerprint = Some("SHA256:second".into());
     state.sessions.upsert(first_profile.clone());
     state.sessions.upsert(second_profile.clone());
 
@@ -212,7 +221,10 @@ fn stale_stored_credential_cleanup_cannot_reopen_a_closed_tab() {
 fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
     let mut state = test_state();
     let mut profile = SessionProfile::new("duplicate", "duplicate.example", "alice");
-    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    profile
+        .ssh_mut()
+        .expect("profile should be SSH")
+        .credential_storage = Some(CredentialStorage::SystemKeyring);
     state.sessions.upsert(profile.clone());
     let tab_id = state.open_terminal_tab(&profile);
     state
@@ -233,7 +245,10 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
     );
     let state = state.lock().expect("state should remain readable");
     assert_eq!(
-        state.sessions.sessions[0].credential_storage,
+        state.sessions.sessions[0]
+            .ssh()
+            .expect("profile should remain SSH")
+            .credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
 }
@@ -255,7 +270,10 @@ fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
     let mut state = test_state();
     let mut profile = SessionProfile::new("Production", "prod.example", "alice");
     profile.group_name = "Critical".into();
-    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    profile
+        .ssh_mut()
+        .expect("profile should be SSH")
+        .credential_storage = Some(CredentialStorage::SystemKeyring);
     state.sessions.upsert(profile.clone());
 
     let editor_id = state.open_session_editor_for_group(" Staging ");
@@ -272,7 +290,10 @@ fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
     assert_eq!(profile_editor.name, "Production");
     assert_eq!(profile_editor.group_name, "Critical");
     assert_eq!(
-        state.sessions.sessions[0].credential_storage,
+        state.sessions.sessions[0]
+            .ssh()
+            .expect("profile should remain SSH")
+            .credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
 }
@@ -334,6 +355,16 @@ fn retiring_one_duplicate_profile_attempt_does_not_touch_the_other() {
         .terminal_mut(second)
         .expect("second terminal should exist")
         .set_ssh_attempt(Some(second_attempt));
+    state
+        .terminal_mut(first)
+        .expect("first terminal should exist")
+        .sftp
+        .open = true;
+    state
+        .terminal_mut(second)
+        .expect("second terminal should exist")
+        .sftp
+        .open = true;
     let state = Arc::new(Mutex::new(state));
 
     assert!(retire_session_attempt(
@@ -350,6 +381,20 @@ fn retiring_one_duplicate_profile_attempt_does_not_touch_the_other() {
     assert_eq!(
         state.terminal(second).and_then(TerminalTabState::ssh_route),
         Some((profile.id, Some(second_attempt)))
+    );
+    assert!(
+        !state
+            .terminal(first)
+            .expect("first terminal should remain")
+            .sftp
+            .open
+    );
+    assert!(
+        state
+            .terminal(second)
+            .expect("second terminal should remain")
+            .sftp
+            .open
     );
 }
 
@@ -381,7 +426,7 @@ fn resizing_the_active_terminal_updates_its_snapshot_immediately() {
     state.open_local_shell_tab();
 
     state
-        .resize_active_terminal_model(12, 4)
+        .resize_active_terminal(12, 4)
         .expect("active terminal should be resized");
     let snapshot = state.active_snapshot();
     let terminal = snapshot
@@ -397,12 +442,12 @@ fn switching_terminal_tabs_exposes_each_tab_grid_size() {
     let mut state = test_state();
     let first = state.open_local_shell_tab();
     state
-        .resize_active_terminal_model(12, 4)
+        .resize_active_terminal(12, 4)
         .expect("first terminal should be resized");
 
     let second = state.open_local_shell_tab();
     state
-        .resize_active_terminal_model(20, 6)
+        .resize_active_terminal(20, 6)
         .expect("second terminal should be resized");
 
     assert!(state.activate_tab(first));
@@ -424,4 +469,82 @@ fn switching_terminal_tabs_exposes_each_tab_grid_size() {
         (second_snapshot.max_columns, second_snapshot.lines.len()),
         (20, 6)
     );
+}
+
+#[test]
+fn sftp_snapshots_are_isolated_per_ssh_tab_and_unavailable_for_local_tabs() {
+    let mut state = test_state();
+    let first_profile = SessionProfile::new("first", "first.example", "alice");
+    let second_profile = SessionProfile::new("second", "second.example", "bob");
+    let first = state.open_terminal_tab(&first_profile);
+    let second = state.open_terminal_tab(&second_profile);
+    let local = state.open_local_shell_tab();
+
+    let first_sftp = &mut state
+        .terminal_mut(first)
+        .expect("first SSH terminal should exist")
+        .sftp;
+    first_sftp.open = true;
+    first_sftp.path = "/home/alice".to_owned();
+    first_sftp.entries.push(SftpEntry {
+        name: "notes.txt".to_owned(),
+        path: "/home/alice/notes.txt".to_owned(),
+        is_dir: false,
+        is_symlink: false,
+        size: 42,
+        modified: None,
+    });
+
+    assert!(state.activate_tab(first));
+    let first_snapshot = state.active_snapshot().sftp;
+    assert!(first_snapshot.available);
+    assert!(first_snapshot.open);
+    assert_eq!(first_snapshot.path, "/home/alice");
+    assert_eq!(first_snapshot.entries.len(), 1);
+
+    assert!(state.activate_tab(second));
+    let second_snapshot = state.active_snapshot().sftp;
+    assert!(second_snapshot.available);
+    assert!(!second_snapshot.open);
+    assert!(second_snapshot.entries.is_empty());
+
+    assert!(state.activate_tab(local));
+    assert!(!state.active_snapshot().sftp.available);
+}
+
+#[test]
+fn sftp_tab_is_a_separate_ssh_target() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+
+    let terminal = state.open_terminal_tab(&profile);
+    let sftp = state.open_sftp_tab(&profile);
+
+    assert_eq!(state.tab_summaries()[0].kind, "terminal");
+    assert_eq!(state.tab_summaries()[1].kind, "sftp");
+    assert_eq!(
+        state
+            .terminal(sftp)
+            .and_then(TerminalTabState::ssh_route)
+            .map(|(profile_id, _)| profile_id),
+        Some(profile.id)
+    );
+    assert_eq!(
+        state
+            .terminal(sftp)
+            .map(TerminalTabState::connection_target),
+        Some(ConnectionTarget::Sftp)
+    );
+    assert!(state.terminal(sftp).is_some_and(TerminalTabState::is_sftp));
+    assert_eq!(
+        state
+            .terminal(terminal)
+            .map(TerminalTabState::connection_target),
+        Some(ConnectionTarget::Terminal)
+    );
+
+    let snapshot = state.active_snapshot().sftp;
+    assert!(!snapshot.local.path.is_empty());
+    assert!(!snapshot.local.loading);
+    assert!(snapshot.local.entries.is_empty());
 }

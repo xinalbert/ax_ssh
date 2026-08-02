@@ -10,11 +10,12 @@ export component FlatTextInput inherits FocusScope {
     in property <string> font-family;
     in property <int> font-weight: 400;
     in property <TextHorizontalAlignment> horizontal-alignment: left;
+    in property <length> control-min-height: Theme.settings-control-height;
     out property <bool> has-input-focus: input.has-focus;
     callback accepted(string);
     callback edited(string);
 
-    min-height: root.visible ? Theme.settings-control-height : 0px;
+    min-height: root.visible ? root.control-min-height : 0px;
     horizontal-stretch: 1;
     vertical-stretch: 0;
     focus-on-click: true;

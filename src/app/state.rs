@@ -10,8 +10,13 @@ use uuid::Uuid;
 
 use ax_ssh::config::{ConfigStore, SessionProfile, SessionStore, normalize_group_name};
 use ax_ssh::local_shell::LocalShellHandle;
+use ax_ssh::serial::{SerialPortDescriptor, SerialSessionHandle};
+use ax_ssh::sftp::SftpEntry;
 use ax_ssh::ssh::SshSessionHandle;
+use ax_ssh::telnet::TelnetSessionHandle;
 use ax_ssh::terminal::{TerminalModel, TerminalSnapshot};
+
+use super::local_files::{LocalDirectoryEntry, default_local_directory};
 
 pub(super) struct AppState {
     pub(super) config: ConfigStore,
@@ -20,6 +25,7 @@ pub(super) struct AppState {
     active_tab_id: Option<Uuid>,
     terminal_numbers: HashMap<Uuid, u32>,
     local_terminal_number: u32,
+    serial_ports: Vec<SerialPortDescriptor>,
 }
 
 impl AppState {
@@ -31,6 +37,7 @@ impl AppState {
             active_tab_id: None,
             terminal_numbers: HashMap::new(),
             local_terminal_number: 0,
+            serial_ports: Vec::new(),
         }
     }
 
@@ -122,19 +129,59 @@ impl AppState {
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
+        let backend = match profile.connection {
+            ax_ssh::config::ConnectionProfile::Ssh(_) => TerminalBackend::Ssh {
+                profile_id: profile.id,
+                attempt_id: None,
+            },
+            ax_ssh::config::ConnectionProfile::Telnet(_) => TerminalBackend::Telnet {
+                profile_id: profile.id,
+                attempt_id: None,
+            },
+            ax_ssh::config::ConnectionProfile::Serial(_) => TerminalBackend::Serial {
+                profile_id: profile.id,
+                attempt_id: None,
+            },
+        };
         self.tabs.push(WorkspaceTab {
             id,
             title: format!("{} #{}", profile.name, number),
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
-                backend: TerminalBackend::Ssh {
-                    profile_id: profile.id,
-                    attempt_id: None,
-                },
+                backend,
                 worker: None,
                 terminal,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
+                sftp: SftpBrowserState::default(),
+                ssh_phase: SshConnectionPhase::Idle,
+            }),
+        });
+        self.active_tab_id = Some(id);
+        id
+    }
+
+    pub(super) fn open_sftp_tab(&mut self, profile: &SessionProfile) -> Uuid {
+        let id = Uuid::new_v4();
+        let terminal = TerminalModel::new(
+            usize::from(self.sessions.settings.terminal.default_columns),
+            usize::from(self.sessions.settings.terminal.default_rows),
+            self.sessions.settings.terminal.scrollback_lines as usize,
+        );
+        self.tabs.push(WorkspaceTab {
+            id,
+            title: format!("{} SFTP", profile.name),
+            kind: WorkspaceTabKind::Terminal(TerminalTabState {
+                backend: TerminalBackend::Sftp {
+                    profile_id: profile.id,
+                    attempt_id: None,
+                },
+                worker: None,
+                terminal,
+                status: "Preparing SFTP connection...".to_owned(),
+                connected: false,
+                worker_running: false,
+                sftp: SftpBrowserState::for_standalone_tab(),
                 ssh_phase: SshConnectionPhase::Idle,
             }),
         });
@@ -160,6 +207,7 @@ impl AppState {
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
+                sftp: SftpBrowserState::default(),
                 ssh_phase: SshConnectionPhase::Idle,
             }),
         });
@@ -251,17 +299,24 @@ impl AppState {
             return ActiveTabSnapshot::default();
         };
         match &tab.kind {
-            WorkspaceTabKind::Terminal(terminal) => ActiveTabSnapshot {
-                id: Some(tab.id),
-                kind: "terminal",
-                title: tab.title.clone(),
-                status: terminal.status.clone(),
-                editor: None,
-                terminal: Some(terminal.terminal.snapshot()),
-                connected: terminal.connected,
-                worker_running: terminal.worker_running,
-                security_prompt: self.active_security_prompt(),
-            },
+            WorkspaceTabKind::Terminal(terminal) => {
+                let mut sftp = terminal.sftp.snapshot(terminal.ssh_route().is_some());
+                if terminal.is_sftp() && sftp.status.is_empty() {
+                    sftp.status = terminal.status.clone();
+                }
+                ActiveTabSnapshot {
+                    id: Some(tab.id),
+                    kind: terminal.backend.kind(),
+                    title: tab.title.clone(),
+                    status: terminal.status.clone(),
+                    editor: None,
+                    terminal: Some(terminal.terminal.snapshot()),
+                    connected: terminal.connected,
+                    worker_running: terminal.worker_running,
+                    sftp,
+                    security_prompt: self.active_security_prompt(),
+                }
+            }
             WorkspaceTabKind::Settings => ActiveTabSnapshot {
                 id: Some(tab.id),
                 kind: "settings",
@@ -294,6 +349,14 @@ impl AppState {
         Some(editor.profile_id)
     }
 
+    pub(super) fn replace_serial_ports(&mut self, ports: Vec<SerialPortDescriptor>) {
+        self.serial_ports = ports;
+    }
+
+    pub(super) fn serial_ports(&self) -> &[SerialPortDescriptor] {
+        &self.serial_ports
+    }
+
     pub(super) fn active_terminal(&self) -> Option<&TerminalTabState> {
         self.active_tab_id.and_then(|id| self.terminal(id))
     }
@@ -302,13 +365,13 @@ impl AppState {
         self.active_tab_id.and_then(|id| self.terminal_mut(id))
     }
 
-    pub(super) fn resize_active_terminal_model(
-        &mut self,
-        columns: usize,
-        rows: usize,
-    ) -> Option<()> {
-        self.active_terminal_mut()?.terminal.resize(columns, rows);
-        Some(())
+    pub(super) fn resize_active_terminal(&mut self, columns: u32, rows: u32) -> Result<()> {
+        let terminal = self.active_terminal_mut().context("no active terminal")?;
+        if let Some(worker) = terminal.worker.as_ref() {
+            worker.request_resize(columns, rows)?;
+        }
+        terminal.terminal.resize(columns as usize, rows as usize);
+        Ok(())
     }
 
     pub(super) fn terminal(&self, tab_id: Uuid) -> Option<&TerminalTabState> {
@@ -403,7 +466,7 @@ impl WorkspaceTabKind {
 
     fn name(&self) -> &'static str {
         match self {
-            Self::Terminal(_) => "terminal",
+            Self::Terminal(terminal) => terminal.backend.kind(),
             Self::Settings => "settings",
             Self::SessionEditor(_) => "session-editor",
         }
@@ -440,22 +503,93 @@ impl SessionEditorState {
                 ..SessionEditorSnapshot::default()
             };
         };
-        let (auth_method, private_key_path) = match &profile.auth {
-            ax_ssh::config::AuthMethod::Password => ("Password", String::new()),
-            ax_ssh::config::AuthMethod::PrivateKey { path } => {
-                ("Private key", path.to_string_lossy().into_owned())
+        let (
+            protocol,
+            host,
+            port,
+            username,
+            auth_method,
+            private_key_path,
+            x11_forwarding,
+            serial_port,
+            serial_baud_rate,
+            serial_data_bits,
+            serial_stop_bits,
+            serial_parity,
+            serial_flow_control,
+        ) = match &profile.connection {
+            ax_ssh::config::ConnectionProfile::Ssh(config) => {
+                let (auth_method, private_key_path) = match &config.auth {
+                    ax_ssh::config::AuthMethod::Password => ("Password", String::new()),
+                    ax_ssh::config::AuthMethod::PrivateKey { path } => {
+                        ("Private key", path.to_string_lossy().into_owned())
+                    }
+                };
+                (
+                    "SSH",
+                    config.host.clone(),
+                    config.port.to_string(),
+                    config.username.clone(),
+                    auth_method,
+                    private_key_path,
+                    config.x11_forwarding,
+                    String::new(),
+                    "115200".to_owned(),
+                    "8",
+                    "1",
+                    "none",
+                    "none",
+                )
             }
+            ax_ssh::config::ConnectionProfile::Telnet(config) => (
+                "Telnet",
+                config.host.clone(),
+                config.port.to_string(),
+                String::new(),
+                "Password",
+                String::new(),
+                false,
+                String::new(),
+                "115200".to_owned(),
+                "8",
+                "1",
+                "none",
+                "none",
+            ),
+            ax_ssh::config::ConnectionProfile::Serial(config) => (
+                "Serial",
+                String::new(),
+                "23".to_owned(),
+                String::new(),
+                "Password",
+                String::new(),
+                false,
+                config.port_name.clone(),
+                config.baud_rate.to_string(),
+                config.data_bits.as_setting(),
+                config.stop_bits.as_setting(),
+                config.parity.as_setting(),
+                config.flow_control.as_setting(),
+            ),
         };
         SessionEditorSnapshot {
             draft_id: self.draft_id,
             profile_id: Some(profile.id),
             name: profile.name.clone(),
             group_name: profile.group_name.clone(),
-            host: profile.host.clone(),
-            port: profile.port.to_string(),
-            username: profile.username.clone(),
+            protocol,
+            host,
+            port,
+            username,
             auth_method,
             private_key_path,
+            x11_forwarding,
+            serial_port,
+            serial_baud_rate,
+            serial_data_bits,
+            serial_stop_bits,
+            serial_parity,
+            serial_flow_control,
         }
     }
 }
@@ -473,7 +607,128 @@ pub(super) struct TerminalTabState {
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+    pub(super) sftp: SftpBrowserState,
     pub(super) ssh_phase: SshConnectionPhase,
+}
+
+#[derive(Default)]
+pub(super) struct SftpBrowserState {
+    pub(super) open: bool,
+    pub(super) loading: bool,
+    pub(super) home: String,
+    pub(super) path: String,
+    pub(super) entries: Vec<SftpEntry>,
+    pub(super) has_more: bool,
+    pub(super) truncated: bool,
+    pub(super) status: String,
+    pub(super) local: LocalDirectoryState,
+}
+
+impl SftpBrowserState {
+    fn for_standalone_tab() -> Self {
+        Self {
+            local: LocalDirectoryState {
+                path: default_local_directory(),
+                status: "Local directory ready".to_owned(),
+                ..LocalDirectoryState::default()
+            },
+            ..Self::default()
+        }
+    }
+
+    fn snapshot(&self, available: bool) -> SftpBrowserSnapshot {
+        SftpBrowserSnapshot {
+            available,
+            open: self.open,
+            loading: self.loading,
+            home: self.home.clone(),
+            path: self.path.clone(),
+            entries: self.entries.clone(),
+            has_more: self.has_more,
+            truncated: self.truncated,
+            status: self.status.clone(),
+            local: self.local.snapshot(),
+        }
+    }
+
+    pub(super) fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+#[derive(Default)]
+pub(super) struct LocalDirectoryState {
+    pub(super) loading: bool,
+    pub(super) path: String,
+    pub(super) entries: Vec<LocalDirectoryEntry>,
+    pub(super) truncated: bool,
+    pub(super) status: String,
+    pub(super) request_id: u64,
+}
+
+impl LocalDirectoryState {
+    pub(super) fn begin_load(&mut self, path: String) -> u64 {
+        self.request_id = self.request_id.wrapping_add(1);
+        self.path = path;
+        self.loading = true;
+        self.status = "Loading local directory...".to_owned();
+        self.request_id
+    }
+
+    pub(super) fn complete(
+        &mut self,
+        path: String,
+        entries: Vec<LocalDirectoryEntry>,
+        truncated: bool,
+    ) {
+        self.loading = false;
+        self.path = path;
+        self.entries = entries;
+        self.truncated = truncated;
+        self.status = if truncated {
+            "Local directory limit reached".to_owned()
+        } else {
+            format!("{} items", self.entries.len())
+        };
+    }
+
+    pub(super) fn fail(&mut self, message: String) {
+        self.loading = false;
+        self.status = message;
+    }
+
+    fn snapshot(&self) -> LocalDirectorySnapshot {
+        LocalDirectorySnapshot {
+            loading: self.loading,
+            path: self.path.clone(),
+            entries: self.entries.clone(),
+            truncated: self.truncated,
+            status: self.status.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct SftpBrowserSnapshot {
+    pub(super) available: bool,
+    pub(super) open: bool,
+    pub(super) loading: bool,
+    pub(super) home: String,
+    pub(super) path: String,
+    pub(super) entries: Vec<SftpEntry>,
+    pub(super) has_more: bool,
+    pub(super) truncated: bool,
+    pub(super) status: String,
+    pub(super) local: LocalDirectorySnapshot,
+}
+
+#[derive(Clone, Default)]
+pub(super) struct LocalDirectorySnapshot {
+    pub(super) loading: bool,
+    pub(super) path: String,
+    pub(super) entries: Vec<LocalDirectoryEntry>,
+    pub(super) truncated: bool,
+    pub(super) status: String,
 }
 
 impl TerminalTabState {
@@ -482,8 +737,40 @@ impl TerminalTabState {
             TerminalBackend::Ssh {
                 profile_id,
                 attempt_id,
+            }
+            | TerminalBackend::Sftp {
+                profile_id,
+                attempt_id,
             } => Some((profile_id, attempt_id)),
-            TerminalBackend::Local => None,
+            TerminalBackend::Telnet { .. }
+            | TerminalBackend::Serial { .. }
+            | TerminalBackend::Local => None,
+        }
+    }
+
+    pub(super) fn telnet_route(&self) -> Option<(Uuid, Option<Uuid>)> {
+        match self.backend {
+            TerminalBackend::Telnet {
+                profile_id,
+                attempt_id,
+            } => Some((profile_id, attempt_id)),
+            TerminalBackend::Ssh { .. }
+            | TerminalBackend::Sftp { .. }
+            | TerminalBackend::Serial { .. }
+            | TerminalBackend::Local => None,
+        }
+    }
+
+    pub(super) fn serial_route(&self) -> Option<(Uuid, Option<Uuid>)> {
+        match self.backend {
+            TerminalBackend::Serial {
+                profile_id,
+                attempt_id,
+            } => Some((profile_id, attempt_id)),
+            TerminalBackend::Ssh { .. }
+            | TerminalBackend::Sftp { .. }
+            | TerminalBackend::Telnet { .. }
+            | TerminalBackend::Local => None,
         }
     }
 
@@ -492,11 +779,49 @@ impl TerminalTabState {
             TerminalBackend::Ssh {
                 attempt_id: current,
                 ..
+            }
+            | TerminalBackend::Sftp {
+                attempt_id: current,
+                ..
             } => {
                 *current = attempt_id;
                 true
             }
-            TerminalBackend::Local => false,
+            TerminalBackend::Telnet { .. }
+            | TerminalBackend::Serial { .. }
+            | TerminalBackend::Local => false,
+        }
+    }
+
+    pub(super) fn set_telnet_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
+        match &mut self.backend {
+            TerminalBackend::Telnet {
+                attempt_id: current,
+                ..
+            } => {
+                *current = attempt_id;
+                true
+            }
+            TerminalBackend::Ssh { .. }
+            | TerminalBackend::Sftp { .. }
+            | TerminalBackend::Serial { .. }
+            | TerminalBackend::Local => false,
+        }
+    }
+
+    pub(super) fn set_serial_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
+        match &mut self.backend {
+            TerminalBackend::Serial {
+                attempt_id: current,
+                ..
+            } => {
+                *current = attempt_id;
+                true
+            }
+            TerminalBackend::Ssh { .. }
+            | TerminalBackend::Sftp { .. }
+            | TerminalBackend::Telnet { .. }
+            | TerminalBackend::Local => false,
         }
     }
 
@@ -505,11 +830,18 @@ impl TerminalTabState {
     }
 
     pub(super) fn ssh_phase(&self) -> Option<&SshConnectionPhase> {
-        matches!(self.backend, TerminalBackend::Ssh { .. }).then_some(&self.ssh_phase)
+        matches!(
+            self.backend,
+            TerminalBackend::Ssh { .. } | TerminalBackend::Sftp { .. }
+        )
+        .then_some(&self.ssh_phase)
     }
 
     pub(super) fn set_ssh_phase(&mut self, phase: SshConnectionPhase) -> bool {
-        if !matches!(self.backend, TerminalBackend::Ssh { .. }) {
+        if !matches!(
+            self.backend,
+            TerminalBackend::Ssh { .. } | TerminalBackend::Sftp { .. }
+        ) {
             return false;
         }
         self.ssh_phase = phase;
@@ -517,7 +849,10 @@ impl TerminalTabState {
     }
 
     pub(super) fn take_pending_probe(&mut self) -> Option<PendingProbe> {
-        if !matches!(self.backend, TerminalBackend::Ssh { .. }) {
+        if !matches!(
+            self.backend,
+            TerminalBackend::Ssh { .. } | TerminalBackend::Sftp { .. }
+        ) {
             return None;
         }
         let phase = std::mem::replace(&mut self.ssh_phase, SshConnectionPhase::Idle);
@@ -529,6 +864,18 @@ impl TerminalTabState {
             }
         }
     }
+
+    pub(super) fn connection_target(&self) -> ConnectionTarget {
+        if matches!(self.backend, TerminalBackend::Sftp { .. }) {
+            ConnectionTarget::Sftp
+        } else {
+            ConnectionTarget::Terminal
+        }
+    }
+
+    pub(super) fn is_sftp(&self) -> bool {
+        matches!(self.backend, TerminalBackend::Sftp { .. })
+    }
 }
 
 pub(super) enum TerminalBackend {
@@ -536,11 +883,36 @@ pub(super) enum TerminalBackend {
         profile_id: Uuid,
         attempt_id: Option<Uuid>,
     },
+    Sftp {
+        profile_id: Uuid,
+        attempt_id: Option<Uuid>,
+    },
+    Telnet {
+        profile_id: Uuid,
+        attempt_id: Option<Uuid>,
+    },
+    Serial {
+        profile_id: Uuid,
+        attempt_id: Option<Uuid>,
+    },
     Local,
+}
+
+impl TerminalBackend {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Sftp { .. } => "sftp",
+            Self::Ssh { .. } | Self::Telnet { .. } | Self::Serial { .. } | Self::Local => {
+                "terminal"
+            }
+        }
+    }
 }
 
 pub(super) enum TerminalWorker {
     Ssh(SshSessionHandle),
+    Telnet(TelnetSessionHandle),
+    Serial(SerialSessionHandle),
     Local(LocalShellHandle),
 }
 
@@ -548,6 +920,8 @@ impl TerminalWorker {
     pub(super) fn request_disconnect(&self) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_disconnect(),
+            Self::Telnet(worker) => worker.request_disconnect(),
+            Self::Serial(worker) => worker.request_disconnect(),
             Self::Local(worker) => worker.request_disconnect(),
         }
     }
@@ -555,6 +929,8 @@ impl TerminalWorker {
     pub(super) fn request_send(&self, data: Vec<u8>) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_send(data),
+            Self::Telnet(worker) => worker.request_send(data),
+            Self::Serial(worker) => worker.request_send(data),
             Self::Local(worker) => worker.request_send(data),
         }
     }
@@ -562,13 +938,44 @@ impl TerminalWorker {
     pub(super) fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_resize(columns, rows),
+            Self::Telnet(worker) => worker.request_resize(columns, rows),
+            Self::Serial(_) => Ok(()),
             Self::Local(worker) => worker.request_resize(columns, rows),
+        }
+    }
+
+    pub(super) fn request_list_sftp(&self, path: String) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_list_sftp(path),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(super) fn request_load_more_sftp(&self) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_load_more_sftp(),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(super) fn request_close_sftp(&self) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_close_sftp(),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
         }
     }
 
     pub(super) async fn shutdown(self) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.shutdown().await,
+            Self::Telnet(worker) => worker.shutdown().await,
+            Self::Serial(worker) => worker.shutdown().await,
             Self::Local(worker) => worker.shutdown().await,
         }
     }
@@ -590,6 +997,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+    pub(super) sftp: SftpBrowserSnapshot,
     pub(super) security_prompt: ActiveSecurityPrompt,
 }
 
@@ -604,6 +1012,7 @@ impl Default for ActiveTabSnapshot {
             terminal: None,
             connected: false,
             worker_running: false,
+            sftp: SftpBrowserSnapshot::default(),
             security_prompt: ActiveSecurityPrompt::None,
         }
     }
@@ -614,11 +1023,19 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) profile_id: Option<Uuid>,
     pub(super) name: String,
     pub(super) group_name: String,
+    pub(super) protocol: &'static str,
     pub(super) host: String,
     pub(super) port: String,
     pub(super) username: String,
     pub(super) auth_method: &'static str,
     pub(super) private_key_path: String,
+    pub(super) x11_forwarding: bool,
+    pub(super) serial_port: String,
+    pub(super) serial_baud_rate: String,
+    pub(super) serial_data_bits: &'static str,
+    pub(super) serial_stop_bits: &'static str,
+    pub(super) serial_parity: &'static str,
+    pub(super) serial_flow_control: &'static str,
 }
 
 impl Default for SessionEditorSnapshot {
@@ -628,11 +1045,19 @@ impl Default for SessionEditorSnapshot {
             profile_id: None,
             name: String::new(),
             group_name: String::new(),
+            protocol: "SSH",
             host: String::new(),
             port: "22".to_owned(),
             username: String::new(),
             auth_method: "Password",
             private_key_path: String::new(),
+            x11_forwarding: true,
+            serial_port: String::new(),
+            serial_baud_rate: "115200".to_owned(),
+            serial_data_bits: "8",
+            serial_stop_bits: "1",
+            serial_parity: "none",
+            serial_flow_control: "none",
         }
     }
 }
@@ -676,15 +1101,23 @@ pub(super) enum ActiveSecurityPrompt {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ConnectionTarget {
+    Terminal,
+    Sftp,
+}
+
 pub(super) enum ConnectionStart {
     Authenticate {
         tab_id: Uuid,
         profile: SessionProfile,
+        target: ConnectionTarget,
     },
     Probe {
         tab_id: Uuid,
         profile: SessionProfile,
         cancelled: oneshot::Receiver<()>,
+        target: ConnectionTarget,
     },
 }
 

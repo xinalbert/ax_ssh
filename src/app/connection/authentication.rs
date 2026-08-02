@@ -6,8 +6,20 @@ pub(super) fn begin_authentication(
     ui: slint::Weak<AppWindow>,
     tab_id: Uuid,
     profile: SessionProfile,
+    target: ConnectionTarget,
 ) {
-    if matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+    let Some(ssh) = profile.ssh() else {
+        set_tab_status(
+            &state,
+            &ui,
+            tab_id,
+            "SSH authentication requires an SSH profile",
+        );
+        return;
+    };
+    let private_key = matches!(ssh.auth, AuthMethod::PrivateKey { .. });
+    let credential_storage = ssh.credential_storage;
+    if private_key {
         set_tab_status(&state, &ui, tab_id, "Loading private key...");
         if let Err(error) = start_session_worker(
             runtime,
@@ -19,6 +31,7 @@ pub(super) fn begin_authentication(
             None,
             false,
             AuthenticationStart::Prompt,
+            target,
         ) {
             set_awaiting_authentication(&state, tab_id, profile.id, false);
             set_tab_status(
@@ -31,7 +44,7 @@ pub(super) fn begin_authentication(
         }
         return;
     }
-    let Some(storage) = profile.credential_storage else {
+    let Some(storage) = credential_storage else {
         set_awaiting_authentication(&state, tab_id, profile.id, false);
         set_tab_status(&state, &ui, tab_id, "Password required");
         refresh_workspace(&ui, &state);
@@ -92,6 +105,7 @@ pub(super) fn begin_authentication(
                     None,
                     true,
                     AuthenticationStart::StoredCredential,
+                    target,
                 ) {
                     set_status(&ui, &format!("Cannot start connection: {error}"));
                 }
@@ -144,6 +158,7 @@ pub(in crate::app) fn wire_authentication(
     let state_for_auth = state.clone();
     let runtime_for_auth = runtime.clone();
     ui.on_authenticate_session(move |password, vault_password, remember_password| {
+        log_ui_action("authentication.submit");
         let password = zeroize::Zeroizing::new(password.as_str().to_owned());
         let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
         let (target, default_storage) = match state_for_auth.lock() {
@@ -166,7 +181,7 @@ pub(in crate::app) fn wire_authentication(
                         .iter()
                         .find(|profile| profile.id == profile_id)
                         .cloned()?;
-                    Some((tab_id, profile, vault_unlock_only))
+                    Some((tab_id, profile, vault_unlock_only, terminal.connection_target()))
                 });
                 (target, app.sessions.settings.credential_storage)
             }
@@ -175,11 +190,16 @@ pub(in crate::app) fn wire_authentication(
                 return false;
             }
         };
-        let Some((tab_id, profile, vault_unlock_only)) = target else {
-            set_status(&ui_for_auth, "No terminal tab is awaiting authentication");
+        let Some((tab_id, profile, vault_unlock_only, connection_target)) = target else {
+            set_status(&ui_for_auth, "No SSH tab is awaiting authentication");
             return false;
         };
-        let password_auth = matches!(profile.auth, AuthMethod::Password);
+        let Some(ssh) = profile.ssh() else {
+            set_status(&ui_for_auth, "Authentication request is not an SSH profile");
+            return false;
+        };
+        let password_auth = matches!(ssh.auth, AuthMethod::Password);
+        let previous_storage = ssh.credential_storage;
         if vault_unlock_only {
             if vault_password.is_empty() {
                 set_status(&ui_for_auth, "Enter the vault password to unlock the saved SSH password");
@@ -206,6 +226,7 @@ pub(in crate::app) fn wire_authentication(
                             None,
                             true,
                             AuthenticationStart::StoredCredential,
+                            connection_target,
                         ) {
                             set_status(&ui, &format!("Cannot start connection: {error}"));
                         }
@@ -256,7 +277,7 @@ pub(in crate::app) fn wire_authentication(
         }
         let credential_to_store = (password_auth && remember_password).then(|| PendingCredentialStore {
             storage: default_storage,
-            previous_storage: profile.credential_storage,
+            previous_storage,
             vault_password: (default_storage == CredentialStorage::EncryptedVault)
                 .then(|| vault_password.clone()),
             secret: password.clone(),
@@ -278,6 +299,7 @@ pub(in crate::app) fn wire_authentication(
             credential_to_store,
             false,
             AuthenticationStart::Prompt,
+            connection_target,
         ) {
             Ok(()) => true,
             Err(error) => {
@@ -290,6 +312,7 @@ pub(in crate::app) fn wire_authentication(
     let ui_for_cancel = ui.as_weak();
     let state_for_cancel = state.clone();
     ui.on_cancel_password_dialog(move || {
+        log_ui_action("authentication.cancel");
         let pending = match state_for_cancel.lock() {
             Ok(mut app) => {
                 let tab_id = app.active_tab_id();
@@ -327,6 +350,7 @@ pub(in crate::app) fn wire_authentication(
 
     let ui_for_disconnect = ui.as_weak();
     ui.on_disconnect_session(move || {
+        log_ui_action("connection.disconnect");
         let result = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))

@@ -49,6 +49,7 @@ export component TerminalGrid inherits Rectangle {
     in property <length> cell-width;
     in property <length> cell-height;
     in property <length> font-cell-height;
+    in property <length> top-offset;
     in property <bool> cursor-blink;
     in property <string> preedit-text;
     in property <bool> right-click-copy-or-paste;
@@ -66,7 +67,7 @@ export component TerminalGrid inherits Rectangle {
 
     for line[line-index] in root.view.render_lines : Rectangle {
         x: 0px;
-        y: line-index * root.cell-height;
+        y: root.top-offset + line-index * root.cell-height;
         width: parent.width;
         height: root.cell-height;
         background: root.view.background;
@@ -155,7 +156,7 @@ export component TerminalGrid inherits Rectangle {
         x: max(0px, min(parent.width - root.cell-width,
             root.view.cursor_column * root.cell-width));
         y: max(0px, min(parent.height - root.cell-height,
-            root.view.cursor_row * root.cell-height));
+            root.top-offset + root.view.cursor_row * root.cell-height));
         width: min(parent.width - self.x,
             max(root.cell-width, preedit-value.preferred-width));
         height: root.cell-height;
@@ -188,7 +189,7 @@ export component TerminalGrid inherits Rectangle {
             if event.kind == PointerEventKind.down {
                 root.pointer-down(
                     max(0, min(root.view.render_lines.length - 1,
-                        floor(self.mouse-y / root.cell-height))),
+                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,
                         floor(self.mouse-x / root.cell-width))),
                     event.button == PointerEventButton.left,
@@ -202,7 +203,7 @@ export component TerminalGrid inherits Rectangle {
         moved => {
             root.pointer-moved(
                 max(0, min(root.view.render_lines.length - 1,
-                    floor(self.mouse-y / root.cell-height))),
+                    floor((self.mouse-y - root.top-offset) / root.cell-height))),
                 max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width))),
             );

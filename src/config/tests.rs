@@ -5,6 +5,14 @@ use uuid::Uuid;
 
 use super::*;
 
+fn ssh(profile: &SessionProfile) -> &SshConfig {
+    profile.ssh().expect("test profile should use SSH")
+}
+
+fn ssh_mut(profile: &mut SessionProfile) -> &mut SshConfig {
+    profile.ssh_mut().expect("test profile should use SSH")
+}
+
 #[test]
 fn profile_validation_rejects_missing_host() {
     let profile = SessionProfile::new("demo", "", "alice");
@@ -22,7 +30,7 @@ fn store_round_trips_and_upserts() {
     );
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
     profile.group_name = "Production".into();
-    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::SystemKeyring);
     data.upsert(profile.clone());
     data.upsert(SessionProfile {
         name: "renamed".into(),
@@ -49,7 +57,7 @@ fn legacy_profile_defaults_group_and_migrates_credential_marker() {
         serde_json::from_str(&json).expect("legacy profile should deserialize");
     assert_eq!(store.sessions[0].group_name, "");
     assert!(store.groups.is_empty());
-    assert_eq!(store.sessions[0].credential_storage, None);
+    assert_eq!(ssh(&store.sessions[0]).credential_storage, None);
     assert_eq!(store.settings, AppSettings::default());
 }
 
@@ -64,7 +72,7 @@ fn legacy_credential_marker_migrates_to_the_system_keyring() {
         serde_json::from_str(&json).expect("legacy profile should deserialize");
 
     assert_eq!(
-        store.sessions[0].credential_storage,
+        ssh(&store.sessions[0]).credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
     let encoded = serde_json::to_string(&store).expect("migrated store should serialize");
@@ -76,13 +84,13 @@ fn legacy_credential_marker_migrates_to_the_system_keyring() {
 fn global_default_does_not_change_an_existing_credential_reference() {
     let mut store = SessionStore::default();
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
-    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::SystemKeyring);
     store.upsert(profile);
 
     store.settings.credential_storage = CredentialStorage::EncryptedVault;
 
     assert_eq!(
-        store.sessions[0].credential_storage,
+        ssh(&store.sessions[0]).credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
     assert_eq!(
@@ -92,10 +100,20 @@ fn global_default_does_not_change_an_existing_credential_reference() {
 }
 
 #[test]
-fn appearance_settings_normalize_font_family_and_size() {
+fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
-        AppearanceSettings::normalized("  Menlo  ", 18, 135, "light", 115, false, true),
+        AppearanceSettings::normalized(
+            "  JetBrains Mono  ",
+            "  Menlo  ",
+            18,
+            135,
+            "light",
+            115,
+            false,
+            true,
+        ),
         AppearanceSettings {
+            application_font_family: "JetBrains Mono".into(),
             terminal_font_family: "Menlo".into(),
             terminal_font_size: 18,
             terminal_line_height_percent: 135,
@@ -112,8 +130,9 @@ fn appearance_settings_normalize_font_family_and_size() {
         }
     );
     assert_eq!(
-        AppearanceSettings::normalized("", 100, 1_000, "unknown", 1_000, true, false),
+        AppearanceSettings::normalized("", "", 100, 1_000, "unknown", 1_000, true, false,),
         AppearanceSettings {
+            application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
             terminal_font_size: MAX_TERMINAL_FONT_SIZE,
             terminal_line_height_percent: MAX_TERMINAL_LINE_HEIGHT,
@@ -139,6 +158,10 @@ fn legacy_appearance_migrates_into_versioned_settings() {
     let store: SessionStore = serde_json::from_str(json).expect("legacy settings should load");
 
     assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(
+        store.settings.appearance.application_font_family,
+        DEFAULT_APPLICATION_FONT_FAMILY
+    );
     assert_eq!(store.settings.appearance.terminal_font_family, "Menlo");
     assert_eq!(store.settings.appearance.terminal_font_size, 17);
     assert_eq!(
@@ -161,6 +184,10 @@ fn legacy_appearance_migrates_into_versioned_settings() {
     assert!(serialized.get("settings").is_some());
     assert!(serialized.get("appearance").is_none());
     assert_eq!(
+        serialized["settings"]["appearance"]["application_font_family"],
+        DEFAULT_APPLICATION_FONT_FAMILY
+    );
+    assert_eq!(
         serialized["settings"]["appearance"]["terminal_line_height_percent"],
         DEFAULT_TERMINAL_LINE_HEIGHT
     );
@@ -176,6 +203,48 @@ fn theme_mode_normalizes_aliases_and_unknown_values() {
         ThemePaletteKind::from_setting("Solarized Dark"),
         ThemePaletteKind::Solarized
     );
+    for (value, expected) in [
+        ("arctic-dark", ThemePaletteKind::Arctic),
+        ("Tokyo Dark", ThemePaletteKind::Tokyo),
+        ("ember", ThemePaletteKind::Ember),
+        ("FOREST", ThemePaletteKind::Forest),
+    ] {
+        assert_eq!(ThemePaletteKind::from_setting(value), expected);
+    }
+}
+
+#[test]
+fn fixed_palette_terminal_schemes_follow_dark_mode() {
+    for (palette, expected) in [
+        ("solarized", TerminalColorScheme::SolarizedDark),
+        ("arctic", TerminalColorScheme::ArcticDark),
+        ("tokyo", TerminalColorScheme::TokyoDark),
+        ("ember", TerminalColorScheme::EmberDark),
+        ("forest", TerminalColorScheme::ForestDark),
+    ] {
+        let dark = ThemeSettings::normalized(
+            "dark",
+            palette,
+            ThemePalette::axssh_light(),
+            ThemePalette::axssh_dark(),
+        );
+        let light = ThemeSettings::normalized(
+            "light",
+            palette,
+            ThemePalette::axssh_light(),
+            ThemePalette::axssh_dark(),
+        );
+        let system = ThemeSettings::normalized(
+            "system",
+            palette,
+            ThemePalette::axssh_light(),
+            ThemePalette::axssh_dark(),
+        );
+
+        assert_eq!(dark.terminal_color_scheme(), expected);
+        assert_eq!(light.terminal_color_scheme(), TerminalColorScheme::Light);
+        assert_eq!(system.terminal_color_scheme(), expected);
+    }
 }
 
 #[test]
@@ -359,6 +428,14 @@ fn fixed_palettes_keep_text_states_borders_and_terminal_selection_visible() {
         ThemePalette::axssh_dark(),
         ThemePalette::solarized_light(),
         ThemePalette::solarized_dark(),
+        ThemePalette::arctic_light(),
+        ThemePalette::arctic_dark(),
+        ThemePalette::tokyo_light(),
+        ThemePalette::tokyo_dark(),
+        ThemePalette::ember_light(),
+        ThemePalette::ember_dark(),
+        ThemePalette::forest_light(),
+        ThemePalette::forest_dark(),
     ] {
         let surfaces = [&palette.background, &palette.panel, &palette.panel_alt];
         for role in [
@@ -409,6 +486,7 @@ fn legacy_right_click_setting_uses_the_copy_or_paste_parameter() {
 #[test]
 fn app_settings_clamp_all_persisted_dimensions() {
     let settings = AppSettings::normalized(
+        "Maple Mono NF CN",
         "",
         100,
         -1,
@@ -425,13 +503,22 @@ fn app_settings_clamp_all_persisted_dimensions() {
         20,
         9_000,
         "  #  ",
+        9,
         "Ctrl+,",
+        "Ctrl+N",
+        "Ctrl+Shift+I",
+        "Ctrl+Shift+E",
         "Ctrl+Shift+B",
         "Ctrl+Shift+C",
         "Ctrl+Shift+V",
+        "Ctrl+Shift+F",
         "encrypted-vault",
     );
 
+    assert_eq!(
+        settings.appearance.application_font_family,
+        "Maple Mono NF CN"
+    );
     assert_eq!(
         settings.appearance.terminal_font_family,
         DEFAULT_TERMINAL_FONT_FAMILY
@@ -466,6 +553,10 @@ fn app_settings_clamp_all_persisted_dimensions() {
     assert_eq!(settings.workspace.sidebar_width, MIN_SIDEBAR_WIDTH);
     assert_eq!(settings.workspace.tab_width, MAX_TAB_WIDTH);
     assert_eq!(settings.workspace.session_mask_character, "#");
+    assert_eq!(
+        settings.workspace.collapsed_group_label_chars,
+        MAX_COLLAPSED_GROUP_LABEL_CHARS
+    );
     assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
 }
 
@@ -484,27 +575,51 @@ fn legacy_terminal_option_meta_defaults_disabled_and_round_trips() {
 
     assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
     assert!(!store.settings.terminal.option_as_meta);
+    assert_eq!(
+        store.settings.workspace.collapsed_group_label_chars,
+        DEFAULT_COLLAPSED_GROUP_LABEL_CHARS
+    );
     let serialized = serde_json::to_value(store).expect("settings should serialize");
     assert_eq!(serialized["settings"]["terminal"]["option_as_meta"], false);
+    assert_eq!(
+        serialized["settings"]["workspace"]["collapsed_group_label_chars"],
+        DEFAULT_COLLAPSED_GROUP_LABEL_CHARS
+    );
 }
 
 #[test]
 fn workspace_mask_character_is_one_visible_character() {
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "#").session_mask_character,
+        WorkspaceSettings::normalized(220, 172, "#", 2).session_mask_character,
         "#"
     );
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "  $  ").session_mask_character,
+        WorkspaceSettings::normalized(220, 172, "  $  ", 2).session_mask_character,
         "$"
     );
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "").session_mask_character,
+        WorkspaceSettings::normalized(220, 172, "", 2).session_mask_character,
         DEFAULT_SESSION_MASK_CHARACTER
     );
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "**").session_mask_character,
+        WorkspaceSettings::normalized(220, 172, "**", 2).session_mask_character,
         DEFAULT_SESSION_MASK_CHARACTER
+    );
+}
+
+#[test]
+fn collapsed_group_label_chars_support_full_or_clamped_compact_labels() {
+    assert_eq!(
+        WorkspaceSettings::normalized(220, 172, "*", 0).collapsed_group_label_chars,
+        0
+    );
+    assert_eq!(
+        WorkspaceSettings::normalized(220, 172, "*", 2).collapsed_group_label_chars,
+        2
+    );
+    assert_eq!(
+        WorkspaceSettings::normalized(220, 172, "*", 9).collapsed_group_label_chars,
+        MAX_COLLAPSED_GROUP_LABEL_CHARS
     );
 }
 
@@ -512,6 +627,31 @@ fn workspace_mask_character_is_one_visible_character() {
 fn shortcut_settings_validate_modifiers_and_conflicts() {
     let defaults = ShortcutSettings::default();
     assert!(defaults.validate().is_ok());
+    assert_eq!(
+        defaults.new_session,
+        if cfg!(target_os = "macos") {
+            "Cmd+N"
+        } else {
+            "Ctrl+N"
+        }
+    );
+    assert_eq!(defaults.open_sftp, "Ctrl+M");
+    assert_eq!(
+        defaults.import_sessions,
+        if cfg!(target_os = "macos") {
+            "Cmd+Shift+I"
+        } else {
+            "Ctrl+Shift+I"
+        }
+    );
+    assert_eq!(
+        defaults.export_selected,
+        if cfg!(target_os = "macos") {
+            "Cmd+Shift+E"
+        } else {
+            "Ctrl+Shift+E"
+        }
+    );
     assert_eq!(
         defaults.toggle_sidebar,
         if cfg!(target_os = "macos") {
@@ -538,14 +678,27 @@ fn shortcut_settings_validate_modifiers_and_conflicts() {
     );
     let conflicting = ShortcutSettings {
         open_settings: "Ctrl+,".into(),
+        new_session: "Ctrl+N".into(),
+        import_sessions: "Ctrl+Shift+I".into(),
+        export_selected: "Ctrl+Shift+E".into(),
         toggle_sidebar: "Ctrl+,".into(),
         copy_selection: "Ctrl+Shift+C".into(),
         paste: "Ctrl+Shift+V".into(),
+        open_sftp: "Ctrl+Shift+F".into(),
     };
     assert!(conflicting.validate().is_err());
 
     assert_eq!(
-        ShortcutSettings::normalized("B", "Ctrl+Shift+B", "Ctrl+Shift+C", "Ctrl+Shift+V"),
+        ShortcutSettings::normalized(
+            "B",
+            "Ctrl+N",
+            "Ctrl+Shift+I",
+            "Ctrl+Shift+E",
+            "Ctrl+Shift+B",
+            "Ctrl+Shift+C",
+            "Ctrl+Shift+V",
+            "Ctrl+Shift+F",
+        ),
         ShortcutSettings::default()
     );
 }
@@ -629,16 +782,17 @@ fn terminal_shell_cache_is_normalized_and_only_adds_discoveries() {
 #[test]
 fn profile_json_contains_no_secret_fields() {
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
-    profile.credential_storage = Some(CredentialStorage::EncryptedVault);
+    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::EncryptedVault);
     let value = serde_json::to_value(profile).expect("profile should serialize");
     let object = value.as_object().expect("profile should be an object");
 
     assert!(!object.contains_key("password"));
     assert!(!object.contains_key("passphrase"));
     assert!(!object.contains_key("secret"));
+    assert_eq!(object["connection"]["protocol"], "ssh");
     assert_eq!(
-        object.get("credential_storage"),
-        Some(&serde_json::json!("encrypted-vault"))
+        object["connection"]["config"]["credential_storage"],
+        "encrypted-vault"
     );
     assert!(!object.contains_key("credential_stored"));
 }
@@ -702,18 +856,18 @@ fn group_operations_preserve_profiles_without_implicit_deletion() {
 #[test]
 fn private_key_profiles_require_a_path_and_never_store_password_references() {
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
-    profile.auth = AuthMethod::PrivateKey {
+    ssh_mut(&mut profile).auth = AuthMethod::PrivateKey {
         path: PathBuf::new(),
     };
     assert!(profile.validate().is_err());
 
-    profile.auth = AuthMethod::PrivateKey {
+    ssh_mut(&mut profile).auth = AuthMethod::PrivateKey {
         path: PathBuf::from("/tmp/id_ed25519"),
     };
-    profile.credential_storage = Some(CredentialStorage::SystemKeyring);
+    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::SystemKeyring);
     assert!(profile.validate().is_err());
 
-    profile.credential_storage = None;
+    ssh_mut(&mut profile).credential_storage = None;
     assert!(profile.validate().is_ok());
 }
 
@@ -725,4 +879,81 @@ fn persisted_private_key_profile_rejects_a_password_reference() {
     );
 
     assert!(serde_json::from_str::<SessionProfile>(&json).is_err());
+}
+
+#[test]
+fn legacy_ssh_profile_migrates_to_explicit_protocol_config() {
+    let id = Uuid::new_v4();
+    let json = format!(
+        r#"{{"id":"{id}","name":"legacy","host":"host.example","port":22,"username":"alice","auth":"Password"}}"#
+    );
+    let profile: SessionProfile =
+        serde_json::from_str(&json).expect("legacy SSH profile should migrate");
+
+    assert_eq!(profile.protocol(), SessionProtocol::Ssh);
+    assert!(ssh(&profile).x11_forwarding);
+    let serialized = serde_json::to_value(profile).expect("profile should serialize");
+    assert_eq!(serialized["connection"]["protocol"], "ssh");
+    assert!(serialized.get("host").is_none());
+}
+
+#[test]
+fn x11_forwarding_defaults_on_and_round_trips_without_becoming_a_secret() {
+    let mut profile = SessionProfile::new("x11", "host.example", "alice");
+    assert!(ssh(&profile).x11_forwarding);
+    let mut legacy_value = serde_json::to_value(&profile).expect("profile should serialize");
+    legacy_value["connection"]["config"]
+        .as_object_mut()
+        .expect("SSH config should serialize as an object")
+        .remove("x11_forwarding");
+    let legacy_profile: SessionProfile =
+        serde_json::from_value(legacy_value).expect("old SSH config should default X11 on");
+    assert!(ssh(&legacy_profile).x11_forwarding);
+    ssh_mut(&mut profile).x11_forwarding = false;
+    let encoded = serde_json::to_string(&profile).expect("SSH profile should serialize");
+    assert!(encoded.contains("x11_forwarding"));
+    let decoded: SessionProfile =
+        serde_json::from_str(&encoded).expect("SSH profile should deserialize");
+    assert!(!ssh(&decoded).x11_forwarding);
+    assert!(!encoded.contains("MAGIC-COOKIE"));
+}
+
+#[test]
+fn x11_settings_normalize_and_round_trip_without_secret_material() {
+    let settings =
+        X11Settings::normalized("MacXServer", "  /Applications/MacXServer.app  ", true, true);
+    assert_eq!(settings.provider, X11ServerProvider::MacXServer);
+    assert_eq!(settings.app_path, "/Applications/MacXServer.app");
+    assert!(settings.launch_on_connect);
+    assert!(settings.allow_no_auth);
+
+    let encoded = serde_json::to_string(&settings).expect("X11 settings should serialize");
+    assert!(!encoded.contains("MAGIC-COOKIE"));
+    let decoded: X11Settings =
+        serde_json::from_str(&encoded).expect("X11 settings should deserialize");
+    assert_eq!(decoded, settings);
+
+    let defaults: X11Settings = serde_json::from_str("{}").expect("defaults should load");
+    assert_eq!(defaults, X11Settings::default());
+}
+
+#[test]
+fn telnet_and_serial_profiles_round_trip_without_ssh_security_fields() {
+    let telnet = SessionProfile::new_telnet("console", "router.example");
+    let mut serial = SessionProfile::new_serial("switch", "/dev/cu.usbserial-01");
+    if let ConnectionProfile::Serial(config) = &mut serial.connection {
+        config.usb_vendor_id = Some(0x0403);
+        config.usb_product_id = Some(0x6001);
+        config.usb_serial_number = Some("FT123".into());
+    }
+
+    for profile in [telnet, serial] {
+        profile.validate().expect("profile should be valid");
+        let encoded = serde_json::to_string(&profile).expect("profile should serialize");
+        assert!(!encoded.contains("credential_storage"));
+        assert!(!encoded.contains("host_key_fingerprint"));
+        let decoded: SessionProfile =
+            serde_json::from_str(&encoded).expect("profile should deserialize");
+        assert_eq!(decoded, profile);
+    }
 }

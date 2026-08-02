@@ -7,6 +7,10 @@ pub enum TerminalColorScheme {
     Dark,
     Light,
     SolarizedDark,
+    ArcticDark,
+    TokyoDark,
+    EmberDark,
+    ForestDark,
 }
 
 impl TerminalColorScheme {
@@ -14,6 +18,10 @@ impl TerminalColorScheme {
         match value.trim().to_ascii_lowercase().as_str() {
             "light" => Self::Light,
             "solarized-dark" | "solarized dark" => Self::SolarizedDark,
+            "arctic-dark" | "arctic dark" => Self::ArcticDark,
+            "tokyo-dark" | "tokyo dark" => Self::TokyoDark,
+            "ember-dark" | "ember dark" => Self::EmberDark,
+            "forest-dark" | "forest dark" => Self::ForestDark,
             _ => Self::Dark,
         }
     }
@@ -23,6 +31,10 @@ impl TerminalColorScheme {
             Self::Dark => "dark",
             Self::Light => "light",
             Self::SolarizedDark => "solarized-dark",
+            Self::ArcticDark => "arctic-dark",
+            Self::TokyoDark => "tokyo-dark",
+            Self::EmberDark => "ember-dark",
+            Self::ForestDark => "forest-dark",
         }
     }
 }
@@ -75,6 +87,10 @@ pub enum ThemePaletteKind {
     #[default]
     AxSsh,
     Solarized,
+    Arctic,
+    Tokyo,
+    Ember,
+    Forest,
     Custom,
 }
 
@@ -82,6 +98,10 @@ impl ThemePaletteKind {
     pub fn from_setting(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "solarized" | "solarized-dark" | "solarized dark" => Self::Solarized,
+            "arctic" | "arctic-dark" | "arctic dark" => Self::Arctic,
+            "tokyo" | "tokyo-dark" | "tokyo dark" => Self::Tokyo,
+            "ember" | "ember-dark" | "ember dark" => Self::Ember,
+            "forest" | "forest-dark" | "forest dark" => Self::Forest,
             "custom" => Self::Custom,
             _ => Self::AxSsh,
         }
@@ -91,6 +111,10 @@ impl ThemePaletteKind {
         match self {
             Self::AxSsh => "axssh",
             Self::Solarized => "solarized",
+            Self::Arctic => "arctic",
+            Self::Tokyo => "tokyo",
+            Self::Ember => "ember",
+            Self::Forest => "forest",
             Self::Custom => "custom",
         }
     }
@@ -256,6 +280,150 @@ impl ThemePalette {
         ])
     }
 
+    pub fn arctic_light() -> Self {
+        Self::from_hex([
+            "#F3F7FA",
+            "#FFFFFF",
+            "#E4EDF3",
+            "#61717D",
+            "#17232C",
+            "#435866",
+            "#005F85",
+            "#176A51",
+            "#B3374B",
+            "#14202A99",
+            "#233440",
+            "#F7FBFD",
+            "#A7CFE5",
+        ])
+    }
+
+    pub fn arctic_dark() -> Self {
+        Self::from_hex([
+            "#18232D",
+            "#202E3A",
+            "#2A3946",
+            "#8CA1AE",
+            "#E7F0F5",
+            "#B7C7D1",
+            "#63C5E8",
+            "#69D7AF",
+            "#FF9CAB",
+            "#071018A6",
+            "#D5E2E8",
+            "#111C25",
+            "#27566B",
+        ])
+    }
+
+    pub fn tokyo_light() -> Self {
+        Self::from_hex([
+            "#F5F6FC",
+            "#FFFFFF",
+            "#E8EBF6",
+            "#66708C",
+            "#202535",
+            "#4D5873",
+            "#3F5EAD",
+            "#26745F",
+            "#B43B59",
+            "#15192B99",
+            "#29314A",
+            "#FBFBFE",
+            "#B3C4FF",
+        ])
+    }
+
+    pub fn tokyo_dark() -> Self {
+        Self::from_hex([
+            "#171A2A",
+            "#20243A",
+            "#292E49",
+            "#8996B8",
+            "#E8ECF8",
+            "#B5BED8",
+            "#7AA2F7",
+            "#72D5A5",
+            "#FF9EAE",
+            "#070914AA",
+            "#C8D3F5",
+            "#101323",
+            "#33467C",
+        ])
+    }
+
+    pub fn ember_light() -> Self {
+        Self::from_hex([
+            "#FFF7F3",
+            "#FFFFFF",
+            "#FCE9E1",
+            "#846A60",
+            "#30211E",
+            "#624B44",
+            "#A53D23",
+            "#356E46",
+            "#B12F3C",
+            "#30150F99",
+            "#382824",
+            "#FFFCFA",
+            "#EAB795",
+        ])
+    }
+
+    pub fn ember_dark() -> Self {
+        Self::from_hex([
+            "#241B19",
+            "#30231F",
+            "#3B2C26",
+            "#A58A7C",
+            "#F5EAE4",
+            "#D4BEB4",
+            "#FF9A62",
+            "#7ED9A2",
+            "#FF9AA5",
+            "#100806AA",
+            "#E7D6CF",
+            "#1A1210",
+            "#70412D",
+        ])
+    }
+
+    pub fn forest_light() -> Self {
+        Self::from_hex([
+            "#F4F9F5",
+            "#FFFFFF",
+            "#E5F0E7",
+            "#64776A",
+            "#1B2B20",
+            "#45604C",
+            "#197044",
+            "#197044",
+            "#AF3346",
+            "#0E291999",
+            "#203C2A",
+            "#F9FCFA",
+            "#A2D2B1",
+        ])
+    }
+
+    pub fn forest_dark() -> Self {
+        Self::from_hex([
+            "#16231B",
+            "#1E3024",
+            "#27402E",
+            "#8CA694",
+            "#E8F3EB",
+            "#BDD1C1",
+            "#79D39A",
+            "#79D39A",
+            "#FFA1AA",
+            "#06120BAA",
+            "#D1E6D6",
+            "#0E1912",
+            "#285E3B",
+        ])
+    }
+
     pub(super) fn from_hex(values: [&str; 13]) -> Self {
         Self {
             background: values[0].to_owned(),
@@ -410,6 +578,10 @@ impl ThemeSettings {
             TerminalColorScheme::Dark => (ThemeMode::Dark, ThemePaletteKind::AxSsh),
             TerminalColorScheme::Light => (ThemeMode::Light, ThemePaletteKind::AxSsh),
             TerminalColorScheme::SolarizedDark => (ThemeMode::Dark, ThemePaletteKind::Solarized),
+            TerminalColorScheme::ArcticDark => (ThemeMode::Dark, ThemePaletteKind::Arctic),
+            TerminalColorScheme::TokyoDark => (ThemeMode::Dark, ThemePaletteKind::Tokyo),
+            TerminalColorScheme::EmberDark => (ThemeMode::Dark, ThemePaletteKind::Ember),
+            TerminalColorScheme::ForestDark => (ThemeMode::Dark, ThemePaletteKind::Forest),
         };
         Self {
             mode,
@@ -422,6 +594,10 @@ impl ThemeSettings {
         match self.palette {
             ThemePaletteKind::AxSsh => ThemePalette::axssh_light(),
             ThemePaletteKind::Solarized => ThemePalette::solarized_light(),
+            ThemePaletteKind::Arctic => ThemePalette::arctic_light(),
+            ThemePaletteKind::Tokyo => ThemePalette::tokyo_light(),
+            ThemePaletteKind::Ember => ThemePalette::ember_light(),
+            ThemePaletteKind::Forest => ThemePalette::forest_light(),
             ThemePaletteKind::Custom => self.custom_light.clone(),
         }
     }
@@ -430,6 +606,10 @@ impl ThemeSettings {
         match self.palette {
             ThemePaletteKind::AxSsh => ThemePalette::axssh_dark(),
             ThemePaletteKind::Solarized => ThemePalette::solarized_dark(),
+            ThemePaletteKind::Arctic => ThemePalette::arctic_dark(),
+            ThemePaletteKind::Tokyo => ThemePalette::tokyo_dark(),
+            ThemePaletteKind::Ember => ThemePalette::ember_dark(),
+            ThemePaletteKind::Forest => ThemePalette::forest_dark(),
             ThemePaletteKind::Custom => self.custom_dark.clone(),
         }
     }
@@ -437,8 +617,12 @@ impl ThemeSettings {
     pub(super) const fn terminal_color_scheme(&self) -> TerminalColorScheme {
         match (self.mode, self.palette) {
             (ThemeMode::Light, _) => TerminalColorScheme::Light,
-            (ThemeMode::Dark, ThemePaletteKind::Solarized) => TerminalColorScheme::SolarizedDark,
-            (ThemeMode::System | ThemeMode::Dark, _) => TerminalColorScheme::Dark,
+            (_, ThemePaletteKind::Solarized) => TerminalColorScheme::SolarizedDark,
+            (_, ThemePaletteKind::Arctic) => TerminalColorScheme::ArcticDark,
+            (_, ThemePaletteKind::Tokyo) => TerminalColorScheme::TokyoDark,
+            (_, ThemePaletteKind::Ember) => TerminalColorScheme::EmberDark,
+            (_, ThemePaletteKind::Forest) => TerminalColorScheme::ForestDark,
+            _ => TerminalColorScheme::Dark,
         }
     }
 }

@@ -1,62 +1,99 @@
+import { AboutSlint, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { SettingsInfoRow, SettingsPage, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { SettingsInfoRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 
-export component AboutSettingsPage inherits SettingsPage {
+export component AboutSettingsPage inherits Rectangle {
     in property <string> app-version;
-    HorizontalLayout {
-        height: Theme.settings-about-header-height;
-        spacing: Theme.space-xxl;
-        Rectangle {
-            width: Theme.settings-about-mark-size;
-            height: Theme.settings-about-mark-size;
-            border-radius: Theme.radius;
-            background: Theme.panel-alt;
-            border-width: Theme.hairline;
-            border-color: Theme.frame-border;
-            Text {
-                width: parent.width;
-                height: parent.height;
-                text: ">_";
-                color: Theme.accent;
-                font-family: "JetBrains Mono";
-                font-size: Theme.font-section;
-                font-weight: 700;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-        }
-        VerticalLayout {
-            spacing: Theme.space-xxs;
-            Text {
-                text: "AxSSH";
-                color: Theme.text;
-                font-size: Theme.font-title;
-                font-weight: 700;
-                vertical-alignment: bottom;
-            }
-            Text {
-                text: "Version \{root.app-version}";
-                color: Theme.muted;
-                font-size: Theme.font-small;
-                vertical-alignment: center;
-            }
-            Text {
-                height: Theme.settings-about-description-height;
-                text: "A focused desktop SSH workspace for saved servers, local shells, and terminal sessions.";
-                color: Theme.muted;
-                font-size: Theme.font-small;
-                wrap: word-wrap;
-                vertical-alignment: top;
+    background: Theme.background;
+
+    about-scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        viewport-width: self.visible-width;
+
+        about-page := Rectangle {
+            width: about-scroll.visible-width;
+            height: max(
+                about-scroll.visible-height,
+                about-content.preferred-height + 2 * Theme.space-xl,
+            );
+            background: Theme.background;
+
+            about-content := VerticalLayout {
+                x: Theme.page-padding;
+                y: Theme.space-xl;
+                width: min(
+                    Theme.settings-content-width,
+                    parent.width - 2 * Theme.page-padding,
+                );
+                height: self.preferred-height;
+                spacing: 0px;
+
+                HorizontalLayout {
+                    height: Theme.settings-about-header-height;
+                    spacing: Theme.space-xxl;
+                    Rectangle {
+                        width: Theme.settings-about-mark-size;
+                        height: Theme.settings-about-mark-size;
+                        border-radius: Theme.radius;
+                        background: Theme.panel-alt;
+                        border-width: Theme.hairline;
+                        border-color: Theme.frame-border;
+                        Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: ">_";
+                            color: Theme.accent;
+                            font-family: Theme.application-font-family;
+                            font-size: Theme.font-section;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xxs;
+                        Text {
+                            text: "AxSSH";
+                            color: Theme.text;
+                            font-size: Theme.font-title;
+                            font-weight: 700;
+                            vertical-alignment: bottom;
+                        }
+                        Text {
+                            text: "Version \{root.app-version}";
+                            color: Theme.muted;
+                            font-size: Theme.font-small;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            height: Theme.settings-about-description-height;
+                            text: "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions.";
+                            color: Theme.muted;
+                            font-size: Theme.font-small;
+                            wrap: word-wrap;
+                            vertical-alignment: top;
+                        }
+                    }
+                }
+                SettingsSectionHeading { label: "APPLICATION"; }
+                SettingsInfoRow { label: "Interface"; value: "Slint"; }
+                SettingsInfoRow { label: "SSH transport"; value: "russh"; }
+                SettingsInfoRow { label: "Telnet protocol"; value: "libmudtelnet-rs"; }
+                SettingsInfoRow { label: "Serial transport"; value: "tokio-serial"; }
+                SettingsInfoRow { label: "Async runtime"; value: "Tokio"; }
+                SettingsInfoRow {
+                    label: "License";
+                    value: "GPL-3.0-only";
+                    show-divider: false;
+                }
+                SettingsSectionHeading { label: "SLINT"; }
+                AboutSlint {
+                    width: parent.width;
+                    height: Theme.settings-about-slint-height;
+                }
             }
         }
     }
-    SettingsSectionHeading { label: "APPLICATION"; }
-    SettingsInfoRow { label: "Interface"; value: "Slint"; }
-    SettingsInfoRow { label: "SSH transport"; value: "russh"; }
-    SettingsInfoRow {
-        label: "Async runtime";
-        value: "Tokio";
-        show-divider: false;
-    }
-    Rectangle { vertical-stretch: 1; }
 }

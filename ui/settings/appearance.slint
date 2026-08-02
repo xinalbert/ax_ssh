@@ -1,7 +1,7 @@
-import { ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
-import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
+import { SettingsField, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 component ThemePaletteEditor inherits VerticalLayout {
@@ -96,11 +96,9 @@ component ThemePaletteEditor inherits VerticalLayout {
 }
 
 export component AppearanceSettingsPage inherits Rectangle {
-    in-out property <string> draft-font-family;
-    in-out property <int> draft-font-size;
-    in-out property <int> draft-line-height-percent;
-    in-out property <int> draft-brightness-percent;
-    in-out property <bool> draft-bright-bold-text;
+    in property <[string]> application-font-options;
+    in-out property <string> draft-application-font-family;
+    in-out property <int> draft-application-font-index;
     in-out property <string> draft-theme-mode;
     in-out property <string> draft-theme-palette;
     in-out property <string> draft-theme-light-background;
@@ -156,6 +154,22 @@ export component AppearanceSettingsPage inherits Rectangle {
                 height: self.preferred-height;
                 spacing: 0px;
 
+                SettingsSectionHeading { label: "APPLICATION TYPOGRAPHY"; }
+                SettingsRow {
+                    label: "Font family";
+                    description: "Application interface font";
+                    SettingsField {
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: root.application-font-options;
+                            current-index <=> root.draft-application-font-index;
+                            accessible-label: "Application font family";
+                            selected(value) => { root.draft-application-font-family = value; }
+                        }
+                    }
+                }
+
                 SettingsSectionHeading { label: "APPLICATION THEME"; }
                 SettingsRow {
                     label: "Display mode";
@@ -182,20 +196,32 @@ export component AppearanceSettingsPage inherits Rectangle {
                         ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
-                            model: ["AxSSH", "Solarized", "Custom"];
+                            model: ["AxSSH", "Solarized", "Arctic", "Tokyo", "Ember", "Forest", "Custom"];
                             current-index: root.draft-theme-palette == "solarized" ? 1
-                                : (root.draft-theme-palette == "custom" ? 2 : 0);
+                                : (root.draft-theme-palette == "arctic" ? 2
+                                : (root.draft-theme-palette == "tokyo" ? 3
+                                : (root.draft-theme-palette == "ember" ? 4
+                                : (root.draft-theme-palette == "forest" ? 5
+                                : (root.draft-theme-palette == "custom" ? 6 : 0)))));
                             accessible-label: "Application color palette";
                             selected(value) => {
                                 root.draft-theme-palette = value == "Solarized" ? "solarized"
-                                    : (value == "Custom" ? "custom" : "axssh");
+                                    : (value == "Arctic" ? "arctic"
+                                    : (value == "Tokyo" ? "tokyo"
+                                    : (value == "Ember" ? "ember"
+                                    : (value == "Forest" ? "forest"
+                                    : (value == "Custom" ? "custom" : "axssh")))));
                             }
                         }
                     }
                 }
 
                 if root.draft-theme-palette == "custom" : Text {
-                    height: Theme.settings-section-height;
+                    height: max(
+                        Theme.settings-section-min-height,
+                        self.font-metrics.ascent - self.font-metrics.descent
+                            + 2 * Theme.settings-section-padding-y,
+                    );
                     text: "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved.";
                     color: Theme.muted;
                     font-size: Theme.font-caption;
@@ -234,90 +260,6 @@ export component AppearanceSettingsPage inherits Rectangle {
                     terminal-selection-color <=> root.draft-theme-dark-terminal-selection;
                 }
 
-                SettingsSectionHeading { label: "TYPOGRAPHY"; }
-                SettingsRow {
-                    label: "Font family";
-                    description: "Terminal font family";
-                    SettingsField {
-                        FlatTextInput {
-                            height: Theme.settings-control-height;
-                            text <=> root.draft-font-family;
-                            accessible-label: "Terminal font family";
-                        }
-                    }
-                }
-                SettingsRow {
-                    label: "Font size";
-                    description: "9-32 px";
-                    SettingsField {
-                        SpinBox {
-                            width: Theme.settings-number-width;
-                            height: Theme.settings-control-height;
-                            minimum: 9;
-                            maximum: 32;
-                            value <=> root.draft-font-size;
-                            accessible-label: "Terminal font size";
-                        }
-                        Text {
-                            width: Theme.settings-unit-width;
-                            text: "px";
-                            color: Theme.muted;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-                SettingsRow {
-                    label: "Line height";
-                    description: "100-200 percent";
-                    SettingsField {
-                        SpinBox {
-                            width: Theme.settings-number-width;
-                            height: Theme.settings-control-height;
-                            minimum: 100;
-                            maximum: 200;
-                            value <=> root.draft-line-height-percent;
-                            accessible-label: "Terminal line height percentage";
-                        }
-                        Text {
-                            width: Theme.settings-unit-width;
-                            text: "%";
-                            color: Theme.muted;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-
-                SettingsSectionHeading { label: "TERMINAL DISPLAY"; }
-                SettingsRow {
-                    label: "Brightness";
-                    description: "60-140 percent";
-                    SettingsField {
-                        Slider {
-                            width: Theme.settings-slider-width;
-                            height: Theme.settings-control-height;
-                            minimum: 60;
-                            maximum: 140;
-                            step: 5;
-                            value: root.draft-brightness-percent;
-                            accessible-label: "Terminal brightness";
-                            changed(value) => { root.draft-brightness-percent = round(value); }
-                        }
-                        Text {
-                            width: Theme.settings-value-width;
-                            text: "\{root.draft-brightness-percent}%";
-                            color: Theme.muted;
-                            font-size: Theme.font-small;
-                            horizontal-alignment: right;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-                SettingsToggleRow {
-                    label: "Bright colors for bold text";
-                    description: "Use the bright ANSI palette for bold text";
-                    checked <=> root.draft-bright-bold-text;
-                    show-divider: false;
-                }
             }
         }
     }

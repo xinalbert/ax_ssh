@@ -29,6 +29,7 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_theme = ui.as_weak();
     let state_for_theme = state.clone();
     ui.on_refresh_terminal_appearance(move || {
+        log_ui_action("terminal.refresh-appearance");
         // A theme change only changes the visual snapshot; it must not resize or
         // otherwise disturb the PTY worker that owns the active terminal.
         dispatch_active_snapshot(&ui_for_theme, &state_for_theme);
@@ -37,10 +38,12 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
     ui.on_terminal_key(move |text, alt, control, meta, shift, physical_key_event| {
+        let input_started_at = std::time::Instant::now();
         // Committed TextInput and pasted text are not physical key events, so
         // they must not inherit a still-held shortcut modifier such as Cmd+V.
         let mut modifiers = terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
         let key = terminal_key_from_slint(text.as_str(), modifiers);
+        log_terminal_input(&key, modifiers, physical_key_event);
         let result = state_for_key
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
@@ -70,11 +73,26 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
             });
         match result {
             Ok((handled, true)) => {
+                log_terminal_input_latency("handled-and-scrolled", input_started_at.elapsed());
+                log_ui_action_outcome("terminal.send-input", "handled-and-scrolled");
                 dispatch_active_snapshot(&ui_for_key, &state_for_key);
                 handled
             }
-            Ok((handled, false)) => handled,
+            Ok((handled, false)) => {
+                log_terminal_input_latency(
+                    if handled { "handled" } else { "ignored" },
+                    input_started_at.elapsed(),
+                );
+                log_ui_action_outcome(
+                    "terminal.send-input",
+                    if handled { "handled" } else { "ignored" },
+                );
+                handled
+            }
             Err(error) => {
+                log_terminal_input_latency("error", input_started_at.elapsed());
+                log_ui_action_outcome("terminal.send-input", "error");
+                debug!(%error, "terminal input failed");
                 set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
                 true
             }
@@ -84,25 +102,22 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_resize = ui.as_weak();
     let state_for_resize = state.clone();
     ui.on_resize_terminal(move |columns, rows| {
+        log_ui_action("terminal.resize");
         let result = state_for_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
             .and_then(|mut app| {
                 let columns = columns.max(1) as u32;
                 let rows = rows.max(1) as u32;
-                app.active_terminal()
-                    .context("no active terminal")?
-                    .worker
-                    .as_ref()
-                    .context("active terminal has no worker")?
-                    .request_resize(columns, rows)?;
-                app.resize_active_terminal_model(columns as usize, rows as usize)
-                    .context("active terminal disappeared while resizing")?;
-                Ok(())
+                app.resize_active_terminal(columns, rows)
             });
         match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_resize, &state_for_resize),
+            Ok(()) => {
+                log_ui_action_outcome("terminal.resize", "accepted");
+                dispatch_active_snapshot(&ui_for_resize, &state_for_resize);
+            }
             Err(error) => {
+                log_ui_action_outcome("terminal.resize", "ignored");
                 debug!(%error, "terminal resize ignored");
                 set_status(&ui_for_resize, &format!("Cannot resize terminal: {error}"));
             }
@@ -112,6 +127,7 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
     let ui_for_scroll = ui.as_weak();
     let state_for_scroll = state.clone();
     ui.on_scroll_terminal(move |lines| {
+        log_ui_action("terminal.scroll");
         let changed = state_for_scroll
             .lock()
             .ok()
@@ -121,11 +137,15 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
             })
             .unwrap_or(false);
         if changed {
+            log_ui_action_outcome("terminal.scroll", "changed");
             dispatch_active_snapshot(&ui_for_scroll, &state_for_scroll);
+        } else {
+            log_ui_action_outcome("terminal.scroll", "unchanged");
         }
     });
 
     ui.on_terminal_selection_text(move |anchor_row, anchor_column, focus_row, focus_column| {
+        log_ui_action("terminal.selection-read");
         state
             .lock()
             .ok()

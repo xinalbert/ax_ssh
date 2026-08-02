@@ -72,6 +72,8 @@ export component TerminalPane inherits Rectangle {
     private property <int> terminal-rows:
         max(Theme.terminal-grid-min-rows,
             min(Theme.terminal-grid-max-rows, floor(grid-clip.height / root.cell-height)));
+    private property <length> grid-top-offset:
+        max(0px, grid-clip.height - root.terminal-rows * root.cell-height);
     private property <bool> terminal-resize-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
@@ -214,7 +216,7 @@ export component TerminalPane inherits Rectangle {
         x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
             root.cursor-column * root.cell-width));
         y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
-            root.cursor-row * root.cell-height));
+            root.grid-top-offset + root.cursor-row * root.cell-height));
         width: Theme.hairline;
         height: root.cell-height;
         opacity: 0;
@@ -286,7 +288,7 @@ export component TerminalPane inherits Rectangle {
         padding-left: Theme.space-md;
         padding-right: Theme.space-md;
         padding-top: Theme.space-md;
-        padding-bottom: Theme.space-xxs;
+        padding-bottom: 0px;
 
         grid-clip := Rectangle {
             vertical-stretch: 1;
@@ -300,6 +302,7 @@ export component TerminalPane inherits Rectangle {
                 cell-width: root.cell-width;
                 cell-height: root.cell-height;
                 font-cell-height: root.font-cell-height;
+                top-offset: root.grid-top-offset;
                 cursor-blink: root.cursor-blink;
                 preedit-text: ime-input.preedit-text;
                 right-click-copy-or-paste: root.right-click-copy-or-paste;

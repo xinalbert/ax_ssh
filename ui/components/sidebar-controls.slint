@@ -22,7 +22,7 @@ export component SidebarTerminalGlyph inherits Rectangle {
             height: parent.height;
             text: ">_";
             color: root.glyph-color;
-            font-family: "JetBrains Mono";
+            font-family: Theme.application-font-family;
             font-size: Theme.font-micro;
             font-weight: 700;
             horizontal-alignment: center;
@@ -120,19 +120,36 @@ export component SidebarRailItem inherits FocusScope {
     in property <bool> local: false;
     in property <bool> expandable: false;
     in property <bool> expanded: false;
+    in property <bool> expanded-label: false;
+    in property <bool> selected: false;
     callback activated();
 
-    private property <length> card-size: root.local
+    private property <length> label-line-height:
+        label-probe.font-metrics.ascent - label-probe.font-metrics.descent;
+    // Group names are capped at 64 characters in the config layer. Four
+    // measured lines cover that bound in the widened full-label rail without
+    // making card width and height depend on each other.
+    private property <length> label-content-height: root.expanded-label
+        ? root.label-line-height * 4
+        : root.label-line-height;
+    private property <length> card-height: root.local
         ? Theme.sidebar-rail-local-card-size
+        : root.label-content-height + 2 * (root.group
+            ? Theme.sidebar-rail-group-card-padding-y
+            : Theme.sidebar-rail-session-card-padding-y);
+    private property <length> card-width: root.expanded-label
+        ? root.width - 2 * Theme.space-xs
+        : root.card-height;
+    private property <length> row-padding-y: root.local
+        ? Theme.sidebar-rail-group-row-padding-y
         : (root.group
-            ? Theme.sidebar-rail-group-card-size
-            : Theme.sidebar-rail-session-card-size);
+            ? Theme.sidebar-rail-group-row-padding-y
+            : Theme.sidebar-rail-session-row-padding-y);
 
-    height: root.local
-        ? Theme.sidebar-rail-local-row-height
-        : (root.group
-            ? Theme.sidebar-rail-group-row-height
-            : Theme.sidebar-rail-session-row-height);
+    height: max(
+        Theme.sidebar-rail-item-min-height,
+        root.card-height + 2 * root.row-padding-y,
+    );
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
@@ -148,18 +165,29 @@ export component SidebarRailItem inherits FocusScope {
         return EventResult.reject;
     }
 
+    label-probe := Text {
+        visible: false;
+        text: root.label;
+        color: transparent;
+        font-family: Theme.application-font-family;
+        font-size: Theme.font-body;
+        font-weight: 700;
+    }
+
     item-card := Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: root.card-size;
-        height: root.card-size;
-        background: root.group || item-touch.has-hover || root.has-focus ? Theme.panel : transparent;
-        border-width: root.group || item-touch.has-hover || root.has-focus
+        width: root.card-width;
+        height: root.card-height;
+        background: root.selected
+            ? Theme.selected
+            : (root.group || item-touch.has-hover || root.has-focus ? Theme.panel : transparent);
+        border-width: root.selected || root.group || item-touch.has-hover || root.has-focus
             ? Theme.hairline
             : 0px;
         border-color: root.has-focus
             ? Theme.focus
-            : (root.group ? Theme.accent : Theme.control-border);
+            : (root.selected || root.group ? Theme.accent : Theme.control-border);
         border-radius: Theme.radius;
 
         if root.local : SidebarTerminalGlyph {
@@ -168,17 +196,21 @@ export component SidebarRailItem inherits FocusScope {
             glyph-color: Theme.text;
         }
 
-        if !root.local : Text {
-            width: parent.width;
-            height: parent.height;
+        label-text := Text {
+            visible: !root.local;
+            x: root.expanded-label ? Theme.space-sm : 0px;
+            width: parent.width - (root.expanded-label ? 2 * Theme.space-sm : 0px);
+            height: root.expanded-label ? self.preferred-height : parent.height;
+            y: root.expanded-label ? (parent.height - self.height) / 2 : 0px;
             text: root.label;
-            color: root.group ? Theme.accent : Theme.text;
-            font-family: "JetBrains Mono";
+            color: root.selected || root.group ? Theme.accent : Theme.text;
+            font-family: Theme.application-font-family;
             font-size: Theme.font-body;
             font-weight: 700;
             horizontal-alignment: center;
             vertical-alignment: center;
-            overflow: elide;
+            wrap: root.expanded-label ? char-wrap : no-wrap;
+            overflow: root.expanded-label ? clip : elide;
         }
 
         item-touch := TouchArea {

@@ -12,6 +12,10 @@ pub(super) fn spawn_session_monitor(
     mut credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
 ) {
+    let Some(ssh) = profile.ssh().cloned() else {
+        error!(session_id = %profile.id, "SSH monitor received a non-SSH profile");
+        return;
+    };
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
@@ -48,7 +52,7 @@ pub(super) fn spawn_session_monitor(
                         );
                     }
                 }
-                SshSessionEvent::Output(data) => {
+                SshSessionEvent::Output { data, received_at } => {
                     if let Some(true) = mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -56,7 +60,69 @@ pub(super) fn spawn_session_monitor(
                         attempt_id,
                         |terminal| terminal.terminal.process(&data),
                     ) {
+                        dispatch_terminal_output_snapshot(&ui, &state, received_at);
+                    }
+                }
+                SshSessionEvent::Sftp(event) => {
+                    let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            if let SftpBrowserEvent::Failed(message) = &event {
+                                terminal.status = format!("SFTP: {message}");
+                            } else if matches!(&event, SftpBrowserEvent::DirectoryPage { .. })
+                                && terminal.status.starts_with("SFTP: ")
+                            {
+                                terminal.status =
+                                    format!("Connected to {}", profile_endpoint(&profile));
+                            }
+                            apply_sftp_event(&mut terminal.sftp, event);
+                        },
+                    ) else {
+                        continue;
+                    };
+                    if active {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                }
+                SshSessionEvent::X11ForwardingEnabled => {
+                    if let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            terminal.status = format!(
+                                "Connected to {} - X11 forwarding enabled",
+                                profile_endpoint(&profile)
+                            );
+                        },
+                    ) {
+                        if active {
+                            dispatch_active_snapshot(&ui, &state);
+                        }
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+                SshSessionEvent::X11ForwardingUnavailable(message) => {
+                    if let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            terminal.status = format!(
+                                "Connected to {}; X11 unavailable: {message}",
+                                profile_endpoint(&profile)
+                            );
+                        },
+                    ) {
+                        if active {
+                            dispatch_active_snapshot(&ui, &state);
+                        }
+                        refresh_workspace(&ui, &state);
                     }
                 }
                 // The resize callback updates the active model immediately after its request is
@@ -64,6 +130,13 @@ pub(super) fn spawn_session_monitor(
                 SshSessionEvent::Resized { .. } => {}
                 SshSessionEvent::Disconnected => {
                     terminal_event = true;
+                    let _ = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| terminal.sftp.reset(),
+                    );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
                         set_tab_status(&state, &ui, tab_id, "Disconnected");
                         refresh_workspace(&ui, &state);
@@ -81,8 +154,8 @@ pub(super) fn spawn_session_monitor(
                     let prompt = PendingHostKey {
                         tab_id,
                         profile_id: profile.id,
-                        host: profile.host.clone(),
-                        port: profile.port,
+                        host: ssh.host.clone(),
+                        port: ssh.port,
                         fingerprint: actual,
                         changed: expected.is_some(),
                     };
@@ -129,7 +202,7 @@ pub(super) fn spawn_session_monitor(
                         continue;
                     }
                     if used_stored_credential {
-                        if let Some(storage) = profile.credential_storage {
+                        if let Some(storage) = ssh.credential_storage {
                             match delete_password(profile.id, storage).await {
                                 Ok(rollback) => {
                                     if !session_is_loading_stored_credential(
@@ -177,7 +250,7 @@ pub(super) fn spawn_session_monitor(
                         &state,
                         &ui,
                         tab_id,
-                        if matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+                        if matches!(ssh.auth, AuthMethod::PrivateKey { .. }) {
                             "The server rejected this private key"
                         } else if used_stored_credential {
                             "Saved password was rejected; enter a new password"
@@ -208,6 +281,13 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::Failed(message) => {
                     terminal_event = true;
+                    let _ = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| terminal.sftp.reset(),
+                    );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
                         set_tab_status(
                             &state,
@@ -228,6 +308,49 @@ pub(super) fn spawn_session_monitor(
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "SSH event monitor stopped");
     });
+}
+
+fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrowserEvent) {
+    match event {
+        SftpBrowserEvent::Opened { home } => {
+            state.open = true;
+            state.loading = true;
+            state.home = home;
+            state.status = "Loading directory...".to_owned();
+        }
+        SftpBrowserEvent::DirectoryPage {
+            path,
+            entries,
+            append,
+            has_more,
+            truncated,
+        } => {
+            state.open = true;
+            state.loading = false;
+            state.path = path;
+            if append {
+                state.entries.extend(entries);
+            } else {
+                state.entries = entries;
+            }
+            state.has_more = has_more;
+            state.truncated = truncated;
+            state.status = if truncated {
+                "Directory limit reached".to_owned()
+            } else {
+                format!("{} items", state.entries.len())
+            };
+        }
+        SftpBrowserEvent::Failed(message) => {
+            state.loading = false;
+            state.status = message;
+        }
+        SftpBrowserEvent::Closed => {
+            state.open = false;
+            state.loading = false;
+            state.has_more = false;
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -339,4 +462,69 @@ fn session_is_loading_stored_credential(
                 )
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::state::SftpBrowserState;
+
+    fn entry(name: &str) -> SftpEntry {
+        SftpEntry {
+            name: name.to_owned(),
+            path: format!("/home/alice/{name}"),
+            is_dir: false,
+            is_symlink: false,
+            size: 1,
+            modified: None,
+        }
+    }
+
+    #[test]
+    fn sftp_events_replace_append_fail_and_close_recoverably() {
+        let mut state = SftpBrowserState::default();
+
+        apply_sftp_event(
+            &mut state,
+            SftpBrowserEvent::Opened {
+                home: "/home/alice".to_owned(),
+            },
+        );
+        assert!(state.open);
+        assert!(state.loading);
+
+        apply_sftp_event(
+            &mut state,
+            SftpBrowserEvent::DirectoryPage {
+                path: "/home/alice".to_owned(),
+                entries: vec![entry("first")],
+                append: false,
+                has_more: true,
+                truncated: false,
+            },
+        );
+        apply_sftp_event(
+            &mut state,
+            SftpBrowserEvent::DirectoryPage {
+                path: "/home/alice".to_owned(),
+                entries: vec![entry("second")],
+                append: true,
+                has_more: false,
+                truncated: false,
+            },
+        );
+        assert_eq!(state.entries.len(), 2);
+        assert_eq!(state.status, "2 items");
+
+        apply_sftp_event(
+            &mut state,
+            SftpBrowserEvent::Failed("permission denied".to_owned()),
+        );
+        assert!(!state.loading);
+        assert_eq!(state.status, "permission denied");
+
+        apply_sftp_event(&mut state, SftpBrowserEvent::Closed);
+        assert!(!state.open);
+        assert!(!state.has_more);
+    }
 }

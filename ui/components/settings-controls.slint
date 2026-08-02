@@ -5,6 +5,7 @@ export enum SettingsNavIcon {
     General,
     Appearance,
     Terminal,
+    X11,
     Workspace,
     Shortcuts,
     About,
@@ -137,6 +138,37 @@ export component SettingsNavGlyph inherits Rectangle {
         }
     }
 
+    if root.icon == SettingsNavIcon.X11 : Rectangle {
+        x: 1px;
+        y: 2px;
+        width: parent.width - 2px;
+        height: parent.height - 5px;
+        background: transparent;
+        border-width: Theme.settings-icon-stroke;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+
+        Path {
+            x: 3px;
+            y: 2px;
+            width: parent.width - 6px;
+            height: parent.height - 4px;
+            commands: "M 1 1 L 9 7 M 9 1 L 1 7";
+            fill: transparent;
+            stroke: root.glyph-color;
+            stroke-width: Theme.settings-icon-stroke;
+            stroke-line-cap: round;
+        }
+        Rectangle {
+            x: (parent.width - 8px) / 2;
+            y: parent.height;
+            width: 8px;
+            height: Theme.settings-icon-stroke;
+            background: root.glyph-color;
+            border-radius: self.height / 2;
+        }
+    }
+
     if root.icon == SettingsNavIcon.Shortcuts : Rectangle {
         x: 1px;
         y: 4px;
@@ -216,7 +248,14 @@ export component SettingsNavItem inherits FocusScope {
     in property <bool> selected;
     callback activated();
 
-    height: Theme.settings-nav-item-height;
+    private property <length> label-line-height:
+        nav-label.font-metrics.ascent - nav-label.font-metrics.descent;
+
+    height: max(
+        Theme.settings-nav-item-min-height,
+        root.label-line-height + 2 * Theme.settings-nav-item-padding-y,
+        Theme.settings-icon-size + 2 * Theme.settings-nav-item-padding-y,
+    );
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
@@ -263,7 +302,7 @@ export component SettingsNavItem inherits FocusScope {
                     glyph-color: root.selected ? Theme.accent : Theme.muted;
                 }
             }
-            Text {
+            nav-label := Text {
                 horizontal-stretch: 1;
                 text: root.label;
                 color: Theme.text;
@@ -293,12 +332,7 @@ export component SettingsPage inherits Rectangle {
 
 export component SettingsHeader inherits Rectangle {
     in property <string> title;
-    in property <string> status;
-    in property <string> close-label: "Close";
-    in property <string> save-label: "Save";
     in property <length> content-width: Theme.settings-content-width;
-    callback close();
-    callback save();
 
     height: Theme.settings-header-height;
     background: Theme.background;
@@ -310,34 +344,13 @@ export component SettingsHeader inherits Rectangle {
         spacing: Theme.space-md;
 
         Text {
-            width: Theme.settings-label-width;
+            horizontal-stretch: 1;
             text: root.title;
             color: Theme.text;
             font-size: Theme.font-header;
             font-weight: 700;
             overflow: elide;
             vertical-alignment: center;
-        }
-        Text {
-            horizontal-stretch: 1;
-            text: root.status;
-            color: Theme.accent;
-            font-size: Theme.font-small;
-            overflow: elide;
-            horizontal-alignment: right;
-            vertical-alignment: center;
-        }
-        Button {
-            width: Theme.settings-action-button-width;
-            height: Theme.settings-control-height;
-            text: root.close-label;
-            clicked => { root.close(); }
-        }
-        Button {
-            width: Theme.settings-action-button-width;
-            height: Theme.settings-control-height;
-            text: root.save-label;
-            clicked => { root.save(); }
         }
     }
     Rectangle {
@@ -350,8 +363,13 @@ export component SettingsHeader inherits Rectangle {
 
 export component SettingsSectionHeading inherits Text {
     in property <string> label;
+    private property <length> label-line-height:
+        root.font-metrics.ascent - root.font-metrics.descent;
 
-    height: Theme.settings-section-height;
+    height: max(
+        Theme.settings-section-min-height,
+        root.label-line-height + 2 * Theme.settings-section-padding-y,
+    );
     text: root.label;
     color: Theme.muted;
     font-size: Theme.font-caption;
@@ -363,10 +381,10 @@ export component SettingsField inherits Rectangle {
     in property <length> field-width: Theme.settings-field-width;
 
     width: root.field-width;
-    height: Theme.settings-row-height;
+    height: max(Theme.settings-row-min-height, field-layout.preferred-height);
     background: transparent;
 
-    HorizontalLayout {
+    field-layout := HorizontalLayout {
         padding-top: Theme.settings-control-vertical-padding;
         padding-bottom: Theme.settings-control-vertical-padding;
         spacing: Theme.space-md;
@@ -382,38 +400,35 @@ export component SettingsRow inherits Rectangle {
     in property <length> label-width: Theme.settings-label-width;
     in property <bool> show-divider: true;
 
-    height: Theme.settings-row-height;
+    height: max(Theme.settings-row-min-height, row-layout.preferred-height);
     background: transparent;
 
-    HorizontalLayout {
+    row-layout := HorizontalLayout {
         spacing: Theme.space-lg;
-        Rectangle {
+        label-container := Rectangle {
             width: root.label-width;
-            height: root.height;
+            min-height: label-column.preferred-height;
 
-            Text {
-                y: root.description.is-empty
-                    ? (parent.height - self.height) / 2
-                    : Theme.settings-row-text-top;
+            label-column := VerticalLayout {
+                y: (parent.height - self.height) / 2;
                 width: parent.width;
-                height: Theme.settings-row-title-height;
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.font-body;
-                overflow: elide;
-                vertical-alignment: center;
-            }
-            if !root.description.is-empty : Text {
-                y: Theme.settings-row-text-top
-                    + Theme.settings-row-title-height
-                    + Theme.space-xxs;
-                width: parent.width;
-                height: Theme.settings-row-description-height;
-                text: root.description;
-                color: Theme.muted;
-                font-size: Theme.font-caption;
-                overflow: elide;
-                vertical-alignment: center;
+                height: self.preferred-height;
+                spacing: root.description.is-empty ? 0px : Theme.space-xxs;
+
+                Text {
+                    text: root.label;
+                    color: Theme.text;
+                    font-size: Theme.font-body;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if !root.description.is-empty : Text {
+                    text: root.description;
+                    color: Theme.muted;
+                    font-size: Theme.font-caption;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
             }
         }
         Rectangle { horizontal-stretch: 1; }
@@ -433,10 +448,11 @@ export component SettingsToggleRow inherits Rectangle {
     in property <string> description;
     in-out property <bool> checked;
     in property <bool> show-divider: true;
+    in property <bool> control-enabled: true;
 
-    height: Theme.settings-row-height;
+    height: toggle-row.height;
 
-    SettingsRow {
+    toggle-row := SettingsRow {
         label: root.label;
         description: root.description;
         show-divider: root.show-divider;
@@ -444,6 +460,7 @@ export component SettingsToggleRow inherits Rectangle {
             CheckBox {
                 height: Theme.settings-control-height;
                 checked <=> root.checked;
+                enabled: root.control-enabled;
                 accessible-label: root.label;
             }
         }
@@ -455,14 +472,12 @@ export component SettingsInfoRow inherits Rectangle {
     in property <string> value;
     in property <bool> show-divider: true;
 
-    height: Theme.settings-info-row-height;
+    height: info-row.height;
 
-    SettingsRow {
-        height: parent.height;
+    info-row := SettingsRow {
         label: root.label;
         show-divider: root.show-divider;
         SettingsField {
-            height: parent.height;
             Text {
                 width: Theme.settings-field-width;
                 text: root.value;
@@ -521,7 +536,7 @@ export component ShortcutRecorder inherits FocusScope {
             height: parent.height;
             text: root.shortcut;
             color: Theme.text;
-            font-family: "JetBrains Mono";
+            font-family: Theme.application-font-family;
             font-size: Theme.font-caption;
             horizontal-alignment: center;
             vertical-alignment: center;

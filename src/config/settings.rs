@@ -2,20 +2,24 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    CredentialStorage, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
-    DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_BRIGHTNESS,
-    DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE,
-    DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS, MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS,
-    MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH,
-    MAX_TAB_WIDTH, MAX_TERMINAL_BRIGHTNESS, MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE,
-    MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_ROWS, MIN_SCROLLBACK_LINES, MIN_SIDEBAR_WIDTH,
-    MIN_TAB_WIDTH, MIN_TERMINAL_BRIGHTNESS, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
+    CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
+    DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER, DEFAULT_SIDEBAR_WIDTH,
+    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_BRIGHTNESS, DEFAULT_TERMINAL_COLUMNS,
+    DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
+    DEFAULT_TERMINAL_ROWS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
+    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS,
+    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_BRIGHTNESS, MAX_TERMINAL_COLUMNS,
+    MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_ROWS,
+    MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH,
+    MIN_TERMINAL_BRIGHTNESS, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
     MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_ROWS, SYSTEM_DEFAULT_SHELL, TerminalColorScheme,
     ThemeSettings,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppearanceSettings {
+    #[serde(default = "default_application_font_family")]
+    pub application_font_family: String,
     #[serde(default = "default_terminal_font_family")]
     pub terminal_font_family: String,
     #[serde(default = "default_terminal_font_size")]
@@ -36,7 +40,8 @@ pub struct AppearanceSettings {
 
 impl AppearanceSettings {
     pub fn normalized(
-        font_family: &str,
+        application_font_family: &str,
+        terminal_font_family: &str,
         terminal_font_size: i32,
         terminal_line_height_percent: i32,
         color_scheme: &str,
@@ -46,7 +51,8 @@ impl AppearanceSettings {
     ) -> Self {
         let terminal_color_scheme = TerminalColorScheme::from_setting(color_scheme);
         Self::normalized_with_theme(
-            font_family,
+            application_font_family,
+            terminal_font_family,
             terminal_font_size,
             terminal_line_height_percent,
             terminal_color_scheme,
@@ -58,7 +64,8 @@ impl AppearanceSettings {
     }
 
     fn normalized_with_theme(
-        font_family: &str,
+        application_font_family: &str,
+        terminal_font_family: &str,
         terminal_font_size: i32,
         terminal_line_height_percent: i32,
         terminal_color_scheme: TerminalColorScheme,
@@ -67,17 +74,15 @@ impl AppearanceSettings {
         right_click_copy_or_paste: bool,
         theme: ThemeSettings,
     ) -> Self {
-        let font_family = font_family.trim();
-        let terminal_font_family = if font_family.is_empty()
-            || font_family.chars().count() > MAX_FONT_FAMILY_CHARS
-            || font_family.chars().any(char::is_control)
-        {
-            default_terminal_font_family()
-        } else {
-            font_family.to_owned()
-        };
         Self {
-            terminal_font_family,
+            application_font_family: normalize_font_family(
+                application_font_family,
+                default_application_font_family,
+            ),
+            terminal_font_family: normalize_font_family(
+                terminal_font_family,
+                default_terminal_font_family,
+            ),
             terminal_font_size: terminal_font_size.clamp(
                 i32::from(MIN_TERMINAL_FONT_SIZE),
                 i32::from(MAX_TERMINAL_FONT_SIZE),
@@ -105,6 +110,7 @@ impl AppearanceSettings {
             self.theme.custom_dark.clone(),
         );
         *self = Self::normalized_with_theme(
+            &self.application_font_family,
             &self.terminal_font_family,
             i32::from(self.terminal_font_size),
             i32::from(self.terminal_line_height_percent),
@@ -120,6 +126,7 @@ impl AppearanceSettings {
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
+            application_font_family: default_application_font_family(),
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),
             terminal_line_height_percent: default_terminal_line_height(),
@@ -128,6 +135,93 @@ impl Default for AppearanceSettings {
             terminal_brightness_percent: default_terminal_brightness(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum X11ServerProvider {
+    #[default]
+    Auto,
+    System,
+    XQuartz,
+    MacXServer,
+    VcXsrv,
+    Xming,
+    Custom,
+}
+
+impl X11ServerProvider {
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::System => "system",
+            Self::XQuartz => "xquartz",
+            Self::MacXServer => "macxserver",
+            Self::VcXsrv => "vcxsrv",
+            Self::Xming => "xming",
+            Self::Custom => "custom",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "system" => Self::System,
+            "xquartz" => Self::XQuartz,
+            "macxserver" | "mac-x-server" => Self::MacXServer,
+            "vcxsrv" => Self::VcXsrv,
+            "xming" => Self::Xming,
+            "custom" => Self::Custom,
+            _ => Self::Auto,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct X11Settings {
+    #[serde(default)]
+    pub provider: X11ServerProvider,
+    #[serde(default)]
+    pub app_path: String,
+    #[serde(default = "default_true")]
+    pub launch_on_connect: bool,
+    #[serde(default)]
+    pub allow_no_auth: bool,
+}
+
+impl X11Settings {
+    pub fn normalized(
+        provider: &str,
+        app_path: &str,
+        launch_on_connect: bool,
+        allow_no_auth: bool,
+    ) -> Self {
+        Self {
+            provider: X11ServerProvider::from_setting(provider),
+            app_path: normalize_x11_app_path(app_path),
+            launch_on_connect,
+            allow_no_auth,
+        }
+    }
+
+    fn normalize_in_place(&mut self) {
+        *self = Self::normalized(
+            self.provider.as_setting(),
+            &self.app_path,
+            self.launch_on_connect,
+            self.allow_no_auth,
+        );
+    }
+}
+
+impl Default for X11Settings {
+    fn default() -> Self {
+        Self {
+            provider: X11ServerProvider::Auto,
+            app_path: String::new(),
+            launch_on_connect: true,
+            allow_no_auth: false,
         }
     }
 }
@@ -255,15 +349,27 @@ pub struct WorkspaceSettings {
     pub tab_width: u16,
     #[serde(default = "default_session_mask_character")]
     pub session_mask_character: String,
+    /// `0` keeps the entire group name in the widened collapsed sidebar.
+    #[serde(default = "default_collapsed_group_label_chars")]
+    pub collapsed_group_label_chars: u8,
 }
 
 impl WorkspaceSettings {
-    pub fn normalized(sidebar_width: i32, tab_width: i32, session_mask_character: &str) -> Self {
+    pub fn normalized(
+        sidebar_width: i32,
+        tab_width: i32,
+        session_mask_character: &str,
+        collapsed_group_label_chars: i32,
+    ) -> Self {
         Self {
             sidebar_width: sidebar_width.clamp(MIN_SIDEBAR_WIDTH.into(), MAX_SIDEBAR_WIDTH.into())
                 as u16,
             tab_width: tab_width.clamp(MIN_TAB_WIDTH.into(), MAX_TAB_WIDTH.into()) as u16,
             session_mask_character: normalize_session_mask_character(session_mask_character),
+            collapsed_group_label_chars: collapsed_group_label_chars.clamp(
+                i32::from(MIN_COLLAPSED_GROUP_LABEL_CHARS),
+                i32::from(MAX_COLLAPSED_GROUP_LABEL_CHARS),
+            ) as u8,
         }
     }
 
@@ -272,6 +378,7 @@ impl WorkspaceSettings {
             i32::from(self.sidebar_width),
             i32::from(self.tab_width),
             &self.session_mask_character,
+            i32::from(self.collapsed_group_label_chars),
         );
     }
 }
@@ -282,6 +389,7 @@ impl Default for WorkspaceSettings {
             sidebar_width: default_sidebar_width(),
             tab_width: default_tab_width(),
             session_mask_character: default_session_mask_character(),
+            collapsed_group_label_chars: default_collapsed_group_label_chars(),
         }
     }
 }
@@ -290,26 +398,42 @@ impl Default for WorkspaceSettings {
 pub struct ShortcutSettings {
     #[serde(default = "default_open_settings_shortcut")]
     pub open_settings: String,
+    #[serde(default = "default_new_session_shortcut")]
+    pub new_session: String,
+    #[serde(default = "default_import_sessions_shortcut")]
+    pub import_sessions: String,
+    #[serde(default = "default_export_selected_shortcut")]
+    pub export_selected: String,
     #[serde(default = "default_toggle_sidebar_shortcut")]
     pub toggle_sidebar: String,
     #[serde(default = "default_copy_selection_shortcut")]
     pub copy_selection: String,
     #[serde(default = "default_paste_shortcut")]
     pub paste: String,
+    #[serde(default = "default_open_sftp_shortcut")]
+    pub open_sftp: String,
 }
 
 impl ShortcutSettings {
     pub fn normalized(
         open_settings: &str,
+        new_session: &str,
+        import_sessions: &str,
+        export_selected: &str,
         toggle_sidebar: &str,
         copy_selection: &str,
         paste: &str,
+        open_sftp: &str,
     ) -> Self {
         let candidate = Self {
             open_settings: open_settings.trim().to_owned(),
+            new_session: new_session.trim().to_owned(),
+            import_sessions: import_sessions.trim().to_owned(),
+            export_selected: export_selected.trim().to_owned(),
             toggle_sidebar: toggle_sidebar.trim().to_owned(),
             copy_selection: copy_selection.trim().to_owned(),
             paste: paste.trim().to_owned(),
+            open_sftp: open_sftp.trim().to_owned(),
         };
         if candidate.validate().is_ok() {
             candidate
@@ -321,9 +445,13 @@ impl ShortcutSettings {
     pub fn validate(&self) -> Result<()> {
         let shortcuts = [
             ("open settings", self.open_settings.as_str()),
+            ("new server", self.new_session.as_str()),
+            ("import sessions", self.import_sessions.as_str()),
+            ("export selected", self.export_selected.as_str()),
             ("toggle sidebar", self.toggle_sidebar.as_str()),
             ("copy selection", self.copy_selection.as_str()),
             ("paste", self.paste.as_str()),
+            ("open SFTP", self.open_sftp.as_str()),
         ];
         for (label, shortcut) in shortcuts {
             validate_shortcut(label, shortcut)?;
@@ -344,9 +472,13 @@ impl Default for ShortcutSettings {
     fn default() -> Self {
         Self {
             open_settings: default_open_settings_shortcut(),
+            new_session: default_new_session_shortcut(),
+            import_sessions: default_import_sessions_shortcut(),
+            export_selected: default_export_selected_shortcut(),
             toggle_sidebar: default_toggle_sidebar_shortcut(),
             copy_selection: default_copy_selection_shortcut(),
             paste: default_paste_shortcut(),
+            open_sftp: default_open_sftp_shortcut(),
         }
     }
 }
@@ -388,6 +520,8 @@ pub struct AppSettings {
     pub workspace: WorkspaceSettings,
     #[serde(default)]
     pub shortcuts: ShortcutSettings,
+    #[serde(default)]
+    pub x11: X11Settings,
     /// Backend used when the user chooses to remember a password after login.
     #[serde(default)]
     pub credential_storage: CredentialStorage,
@@ -395,7 +529,8 @@ pub struct AppSettings {
 
 impl AppSettings {
     pub fn normalized(
-        font_family: &str,
+        application_font_family: &str,
+        terminal_font_family: &str,
         font_size: i32,
         line_height_percent: i32,
         color_scheme: &str,
@@ -411,15 +546,21 @@ impl AppSettings {
         sidebar_width: i32,
         tab_width: i32,
         session_mask_character: &str,
+        collapsed_group_label_chars: i32,
         open_settings_shortcut: &str,
+        new_session_shortcut: &str,
+        import_sessions_shortcut: &str,
+        export_selected_shortcut: &str,
         toggle_sidebar_shortcut: &str,
         copy_selection_shortcut: &str,
         paste_shortcut: &str,
+        open_sftp_shortcut: &str,
         credential_storage: &str,
     ) -> Self {
         Self {
             appearance: AppearanceSettings::normalized(
-                font_family,
+                application_font_family,
+                terminal_font_family,
                 font_size,
                 line_height_percent,
                 color_scheme,
@@ -439,13 +580,19 @@ impl AppSettings {
                 sidebar_width,
                 tab_width,
                 session_mask_character,
+                collapsed_group_label_chars,
             ),
             shortcuts: ShortcutSettings::normalized(
                 open_settings_shortcut,
+                new_session_shortcut,
+                import_sessions_shortcut,
+                export_selected_shortcut,
                 toggle_sidebar_shortcut,
                 copy_selection_shortcut,
                 paste_shortcut,
+                open_sftp_shortcut,
             ),
+            x11: X11Settings::default(),
             credential_storage: CredentialStorage::from_setting(credential_storage),
         }
     }
@@ -467,13 +614,45 @@ impl AppSettings {
         self.workspace.normalize_in_place();
         self.shortcuts = ShortcutSettings::normalized(
             &self.shortcuts.open_settings,
+            &self.shortcuts.new_session,
+            &self.shortcuts.import_sessions,
+            &self.shortcuts.export_selected,
             &self.shortcuts.toggle_sidebar,
             &self.shortcuts.copy_selection,
             &self.shortcuts.paste,
+            &self.shortcuts.open_sftp,
         );
+        self.x11.normalize_in_place();
         self.credential_storage =
             CredentialStorage::from_setting(self.credential_storage.as_setting());
     }
+}
+
+fn normalize_font_family(value: &str, default: fn() -> String) -> String {
+    let value = value.trim();
+    if value.is_empty()
+        || value.chars().count() > MAX_FONT_FAMILY_CHARS
+        || value.chars().any(char::is_control)
+    {
+        default()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn normalize_x11_app_path(value: &str) -> String {
+    let value = value.trim();
+    if value.chars().count() <= super::MAX_X11_APP_PATH_CHARS
+        && !value.chars().any(char::is_control)
+    {
+        value.to_owned()
+    } else {
+        String::new()
+    }
+}
+
+fn default_application_font_family() -> String {
+    DEFAULT_APPLICATION_FONT_FAMILY.to_owned()
 }
 
 fn default_terminal_font_family() -> String {
@@ -528,6 +707,10 @@ fn default_session_mask_character() -> String {
     DEFAULT_SESSION_MASK_CHARACTER.to_owned()
 }
 
+const fn default_collapsed_group_label_chars() -> u8 {
+    DEFAULT_COLLAPSED_GROUP_LABEL_CHARS
+}
+
 fn normalize_session_mask_character(value: &str) -> String {
     let value = value.trim();
     if value.chars().count() == 1
@@ -546,6 +729,30 @@ fn default_open_settings_shortcut() -> String {
         "Cmd+,".to_owned()
     } else {
         "Ctrl+,".to_owned()
+    }
+}
+
+fn default_new_session_shortcut() -> String {
+    if cfg!(target_os = "macos") {
+        "Cmd+N".to_owned()
+    } else {
+        "Ctrl+N".to_owned()
+    }
+}
+
+fn default_import_sessions_shortcut() -> String {
+    if cfg!(target_os = "macos") {
+        "Cmd+Shift+I".to_owned()
+    } else {
+        "Ctrl+Shift+I".to_owned()
+    }
+}
+
+fn default_export_selected_shortcut() -> String {
+    if cfg!(target_os = "macos") {
+        "Cmd+Shift+E".to_owned()
+    } else {
+        "Ctrl+Shift+E".to_owned()
     }
 }
 
@@ -579,4 +786,8 @@ pub(super) fn default_paste_shortcut() -> String {
     } else {
         "Ctrl+Shift+V".to_owned()
     }
+}
+
+fn default_open_sftp_shortcut() -> String {
+    "Ctrl+M".to_owned()
 }

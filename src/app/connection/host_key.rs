@@ -8,7 +8,8 @@ pub(in crate::app) fn wire_host_key_confirmation(
     let ui_for_confirm = ui.as_weak();
     let state_for_confirm = state.clone();
     ui.on_confirm_host_key(move || {
-        let (tab_id, profile) = {
+        log_ui_action("host-key.confirm");
+        let (tab_id, profile, target) = {
             let mut app = match state_for_confirm.lock() {
                 Ok(app) => app,
                 Err(_) => {
@@ -53,13 +54,20 @@ pub(in crate::app) fn wire_host_key_confirmation(
                 set_status(&ui_for_confirm, "Session not found");
                 return;
             };
+            let Some(ssh) = profile.ssh_mut() else {
+                set_status(
+                    &ui_for_confirm,
+                    "Host-key confirmation requires an SSH profile",
+                );
+                return;
+            };
             if pending.tab_id != active_tab_id
                 || app
                     .terminal(pending.tab_id)
                     .and_then(TerminalTabState::ssh_route)
                     .is_none_or(|route| route.0 != pending.profile_id)
-                || profile.host != pending.host
-                || profile.port != pending.port
+                || ssh.host != pending.host
+                || ssh.port != pending.port
             {
                 if let Some(terminal) = app.terminal_mut(pending.tab_id) {
                     terminal.set_ssh_phase(SshConnectionPhase::Idle);
@@ -70,7 +78,7 @@ pub(in crate::app) fn wire_host_key_confirmation(
                 );
                 return;
             }
-            profile.host_key_fingerprint = Some(pending.fingerprint.clone());
+            ssh.host_key_fingerprint = Some(pending.fingerprint.clone());
             let profile = profile.clone();
             if let Err(error) = app.config.save(&candidate) {
                 set_status(&ui_for_confirm, &format!("Cannot trust host key: {error}"));
@@ -99,13 +107,14 @@ pub(in crate::app) fn wire_host_key_confirmation(
             terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
                 vault_unlock_only: false,
             });
-            (pending.tab_id, profile)
+            let target = terminal.connection_target();
+            (pending.tab_id, profile, target)
         };
 
         info!(
             tab_id = %tab_id,
             session_id = %profile.id,
-            fingerprint = ?profile.host_key_fingerprint,
+            fingerprint = ?profile.ssh().and_then(|ssh| ssh.host_key_fingerprint.as_deref()),
             "SSH host key trusted by user"
         );
         refresh_workspace(&ui_for_confirm, &state_for_confirm);
@@ -115,12 +124,14 @@ pub(in crate::app) fn wire_host_key_confirmation(
             ui_for_confirm.clone(),
             tab_id,
             profile,
+            target,
         );
     });
 
     let ui_for_reject = ui.as_weak();
     let state_for_reject = state.clone();
     ui.on_reject_host_key(move || {
+        log_ui_action("host-key.reject");
         let pending = match state_for_reject.lock() {
             Ok(mut app) => {
                 let active_tab_id = app.active_tab_id();

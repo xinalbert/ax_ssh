@@ -1,6 +1,119 @@
 use ax_ssh::terminal::{TerminalKey, TerminalModifiers};
 use slint::platform::Key;
 
+pub(super) struct MenuShortcut {
+    pub(super) keys: slint::Keys,
+    #[cfg(target_os = "macos")]
+    pub(super) native: NativeMenuShortcut,
+}
+
+#[cfg(target_os = "macos")]
+pub(super) struct NativeMenuShortcut {
+    pub(super) key: String,
+    pub(super) modifiers: TerminalModifiers,
+}
+
+pub(super) fn menu_shortcut_from_setting(shortcut: &str) -> anyhow::Result<MenuShortcut> {
+    menu_shortcut_from_setting_for_platform(shortcut, cfg!(target_os = "macos"))
+}
+
+fn menu_shortcut_from_setting_for_platform(
+    shortcut: &str,
+    apple_platform: bool,
+) -> anyhow::Result<MenuShortcut> {
+    let shortcut = shortcut.trim();
+    let Some((modifiers, key)) = shortcut.rsplit_once('+') else {
+        anyhow::bail!("shortcut must include a modifier");
+    };
+    if key.is_empty() {
+        anyhow::bail!("shortcut key is empty");
+    }
+
+    let mut parts = Vec::with_capacity(5);
+    #[cfg(target_os = "macos")]
+    let mut native_modifiers = TerminalModifiers::default();
+    for modifier in modifiers.split('+') {
+        match modifier {
+            "Cmd" | "Meta" if apple_platform => {
+                parts.push("Control".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.meta = true;
+                }
+            }
+            "Ctrl" if apple_platform => {
+                parts.push("Meta".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.control = true;
+                }
+            }
+            "Cmd" | "Meta" => {
+                parts.push("Meta".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.meta = true;
+                }
+            }
+            "Ctrl" => {
+                parts.push("Control".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.control = true;
+                }
+            }
+            "Alt" => {
+                parts.push("Alt".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.alt = true;
+                }
+            }
+            "Shift" => {
+                parts.push("Shift".to_owned());
+                #[cfg(target_os = "macos")]
+                {
+                    native_modifiers.shift = true;
+                }
+            }
+            _ => anyhow::bail!("shortcut contains an unknown modifier"),
+        }
+    }
+    parts.push(slint_menu_key_name(key));
+    let keys = slint::Keys::from_parts(parts.iter().map(String::as_str))
+        .map_err(|error| anyhow::anyhow!("shortcut cannot be used by the native menu: {error}"))?;
+
+    Ok(MenuShortcut {
+        keys,
+        #[cfg(target_os = "macos")]
+        native: NativeMenuShortcut {
+            key: key.to_owned(),
+            modifiers: native_modifiers,
+        },
+    })
+}
+
+fn slint_menu_key_name(key: &str) -> String {
+    match key {
+        "Enter" => "Return".to_owned(),
+        "ArrowUp" => "UpArrow".to_owned(),
+        "ArrowDown" => "DownArrow".to_owned(),
+        "ArrowLeft" => "LeftArrow".to_owned(),
+        "ArrowRight" => "RightArrow".to_owned(),
+        "," => "Comma".to_owned(),
+        character
+            if character.chars().count() == 1
+                && !character
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.is_ascii_alphabetic()) =>
+        {
+            character.to_lowercase()
+        }
+        named => named.to_owned(),
+    }
+}
+
 pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) -> TerminalKey {
     let special = [
         (Key::Return, TerminalKey::Return),
@@ -172,6 +285,14 @@ fn terminal_key_is_direct_for_platform(
     preedit_active: bool,
     apple_platform: bool,
 ) -> bool {
+    // Slint represents modifier keys as C0 code points (for example, Control
+    // is U+0011). A modifier press carries its own modifier state, which would
+    // otherwise make it look like a terminal control chord such as Ctrl+Q.
+    // Only a following non-modifier key may produce terminal input.
+    if is_slint_modifier_key(text) {
+        return false;
+    }
+
     let direct_modifier = if apple_platform {
         modifiers.control || modifiers.meta || (option_as_meta && modifiers.alt && !modifiers.meta)
     } else {
@@ -196,18 +317,20 @@ fn terminal_key_is_direct_for_platform(
         || modifiers.meta
 }
 
-pub(super) fn terminal_key_is_control_chord(
-    alt: bool,
-    control: bool,
-    meta: bool,
-    shift: bool,
-) -> bool {
-    let modifiers = normalize_event_modifiers(alt, control, meta, shift);
-    terminal_key_is_control_chord_with_modifiers(modifiers)
-}
-
-fn terminal_key_is_control_chord_with_modifiers(modifiers: TerminalModifiers) -> bool {
-    modifiers.control && !modifiers.meta
+fn is_slint_modifier_key(text: &str) -> bool {
+    [
+        Key::Shift,
+        Key::ShiftR,
+        Key::Control,
+        Key::ControlR,
+        Key::Alt,
+        Key::AltGr,
+        Key::CapsLock,
+        Key::Meta,
+        Key::MetaR,
+    ]
+    .into_iter()
+    .any(|key| matches_slint_key(text, key))
 }
 
 fn normalize_slint_modifiers_for_platform(
@@ -380,6 +503,39 @@ mod tests {
     }
 
     #[test]
+    fn maps_persisted_shortcuts_to_slint_menu_keys_on_each_platform() {
+        let apple = menu_shortcut_from_setting_for_platform("Cmd+Shift+I", true)
+            .expect("Apple shortcut should parse");
+        let expected_apple = slint::Keys::from_parts(["Control", "Shift", "I"])
+            .expect("expected Apple shortcut should parse");
+        assert!(apple.keys == expected_apple);
+
+        let apple_control = menu_shortcut_from_setting_for_platform("Ctrl+ArrowUp", true)
+            .expect("Apple Control shortcut should parse");
+        let expected_apple_control = slint::Keys::from_parts(["Meta", "UpArrow"])
+            .expect("expected Apple Control shortcut should parse");
+        assert!(apple_control.keys == expected_apple_control);
+
+        let other = menu_shortcut_from_setting_for_platform("Ctrl+,", false)
+            .expect("non-Apple shortcut should parse");
+        let expected_other = slint::Keys::from_parts(["Control", "Comma"])
+            .expect("expected non-Apple shortcut should parse");
+        assert!(other.keys == expected_other);
+    }
+
+    #[test]
+    fn maps_menu_special_key_labels_and_rejects_invalid_values() {
+        let enter = menu_shortcut_from_setting_for_platform("Alt+Enter", false)
+            .expect("Enter shortcut should parse");
+        let expected_enter = slint::Keys::from_parts(["Alt", "Return"])
+            .expect("expected Enter shortcut should parse");
+        assert!(enter.keys == expected_enter);
+
+        assert!(menu_shortcut_from_setting_for_platform("F1", false).is_err());
+        assert!(menu_shortcut_from_setting_for_platform("Ctrl+NotAKey", false).is_err());
+    }
+
+    #[test]
     fn restores_physical_control_and_command_from_slint_apple_modifiers() {
         assert_eq!(
             normalize_slint_modifiers_for_platform(false, false, true, false, true),
@@ -495,7 +651,45 @@ mod tests {
             true,
             true,
         ));
-        assert!(terminal_key_is_control_chord_with_modifiers(control));
-        assert!(!terminal_key_is_control_chord_with_modifiers(command));
+    }
+
+    #[test]
+    fn never_routes_standalone_modifier_keys_to_the_terminal() {
+        let modifiers = TerminalModifiers {
+            alt: true,
+            control: true,
+            meta: true,
+            shift: true,
+        };
+        let modifier_keys = [
+            Key::Shift,
+            Key::ShiftR,
+            Key::Control,
+            Key::ControlR,
+            Key::Alt,
+            Key::AltGr,
+            Key::CapsLock,
+            Key::Meta,
+            Key::MetaR,
+        ];
+
+        for modifier_key in modifier_keys {
+            let text = SharedString::from(modifier_key);
+            assert!(is_slint_modifier_key(text.as_str()));
+            assert!(!terminal_key_is_direct_for_platform(
+                text.as_str(),
+                modifiers,
+                true,
+                false,
+                true,
+            ));
+            assert!(!terminal_key_is_direct_for_platform(
+                text.as_str(),
+                modifiers,
+                true,
+                false,
+                false,
+            ));
+        }
     }
 }

@@ -24,6 +24,15 @@ component WorkspaceTabContent inherits HorizontalLayout {
     callback close();
     callback scroll-tabs(length, length);
 
+    private property <length> close-glyph-height:
+        close-label.font-metrics.ascent - close-label.font-metrics.descent;
+    private property <length> close-button-size: max(
+        Theme.tab-close-min-size,
+        root.close-glyph-height + Theme.tab-close-padding * 2,
+    );
+
+    padding-top: Theme.tab-content-padding-y;
+    padding-bottom: Theme.tab-content-padding-y;
     padding-left: Theme.tab-content-leading-padding;
     padding-right: Theme.space-xs;
     spacing: Theme.tab-content-spacing;
@@ -45,8 +54,8 @@ component WorkspaceTabContent inherits HorizontalLayout {
         width: Theme.tab-order-width;
         text: "\{root.order}";
         color: Theme.muted;
-        font-size: Theme.font-caption;
-        font-weight: 700;
+        font-size: Theme.tab-order-font-size;
+        font-weight: Theme.tab-order-font-weight;
         horizontal-alignment: right;
         vertical-alignment: center;
     }
@@ -54,22 +63,24 @@ component WorkspaceTabContent inherits HorizontalLayout {
         horizontal-stretch: 1;
         text: root.title;
         color: Theme.text;
-        font-size: Theme.font-small;
-        font-weight: root.active ? 700 : 400;
+        font-size: Theme.tab-title-font-size;
+        font-weight: root.active
+            ? Theme.tab-title-active-font-weight
+            : Theme.tab-title-inactive-font-weight;
         overflow: elide;
         vertical-alignment: center;
     }
     Rectangle {
-        width: Theme.tab-close-size;
-        height: Theme.tab-close-size;
+        width: root.close-button-size;
+        height: root.close-button-size;
         border-radius: Theme.radius;
         background: close-touch.has-hover && root.close-enabled ? Theme.hover : transparent;
-        Text {
+        close-label := Text {
             width: parent.width;
             height: parent.height;
             text: "x";
             color: Theme.muted;
-            font-size: Theme.font-small;
+            font-size: Theme.tab-close-font-size;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
@@ -93,7 +104,19 @@ component ConnectionPickerRow inherits FocusScope {
     in property <string> endpoint;
     callback connect-session(string);
 
-    height: Theme.titlebar-connection-picker-row-height;
+    private property <length> name-line-height:
+        name-label.font-metrics.ascent - name-label.font-metrics.descent;
+    private property <length> endpoint-line-height:
+        endpoint-label.font-metrics.ascent - endpoint-label.font-metrics.descent;
+    private property <length> row-height: max(
+        Theme.titlebar-connection-picker-row-min-height,
+        root.name-line-height
+            + Theme.titlebar-connection-picker-row-spacing
+            + root.endpoint-line-height
+            + 2 * Theme.titlebar-connection-picker-row-padding-y,
+    );
+
+    height: root.row-height;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
@@ -114,11 +137,12 @@ component ConnectionPickerRow inherits FocusScope {
         VerticalLayout {
             padding-left: Theme.space-md;
             padding-right: Theme.space-md;
-            padding-top: Theme.space-xs;
-            padding-bottom: Theme.space-xs;
-            spacing: 0px;
+            padding-top: Theme.titlebar-connection-picker-row-padding-y;
+            padding-bottom: Theme.titlebar-connection-picker-row-padding-y;
+            spacing: Theme.titlebar-connection-picker-row-spacing;
 
-            Text {
+            name-label := Text {
+                height: root.name-line-height;
                 text: root.name;
                 color: Theme.text;
                 font-size: Theme.font-body;
@@ -126,10 +150,11 @@ component ConnectionPickerRow inherits FocusScope {
                 overflow: elide;
                 vertical-alignment: center;
             }
-            Text {
+            endpoint-label := Text {
+                height: root.endpoint-line-height;
                 text: root.endpoint;
                 color: Theme.muted;
-                font-family: "JetBrains Mono";
+                font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
                 overflow: elide;
                 vertical-alignment: center;
@@ -148,18 +173,30 @@ export component ConnectionPicker inherits FocusScope {
     callback connect-session(string);
     callback dismiss();
 
+    private property <length> name-line-height:
+        name-probe.font-metrics.ascent - name-probe.font-metrics.descent;
+    private property <length> endpoint-line-height:
+        endpoint-probe.font-metrics.ascent - endpoint-probe.font-metrics.descent;
+    private property <length> row-height: max(
+        Theme.titlebar-connection-picker-row-min-height,
+        root.name-line-height
+            + Theme.titlebar-connection-picker-row-spacing
+            + root.endpoint-line-height
+            + 2 * Theme.titlebar-connection-picker-row-padding-y,
+    );
+
     width: Theme.titlebar-connection-picker-width;
     height: root.sessions.length == 0
         ? Theme.titlebar-connection-picker-empty-height
         : min(
             Theme.titlebar-connection-picker-max-height,
-            root.sessions.length * Theme.titlebar-connection-picker-row-height
+            root.sessions.length * root.row-height
                 + 2 * Theme.titlebar-connection-picker-padding,
         );
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: list;
-    accessible-label: "Saved SSH sessions";
+    accessible-label: "Saved connections";
 
     key-pressed(event) => {
         if event.text == Key.Escape {
@@ -167,6 +204,19 @@ export component ConnectionPicker inherits FocusScope {
             return EventResult.accept;
         }
         return EventResult.reject;
+    }
+
+    name-probe := Text {
+        visible: false;
+        text: "Name";
+        font-size: Theme.font-body;
+        font-weight: 700;
+    }
+    endpoint-probe := Text {
+        visible: false;
+        text: "Endpoint";
+        font-family: Theme.application-font-family;
+        font-size: Theme.font-caption;
     }
 
     Rectangle {
@@ -181,7 +231,7 @@ export component ConnectionPicker inherits FocusScope {
             spacing: 0px;
 
             if root.sessions.length == 0 : Text {
-                text: "No saved SSH sessions";
+                text: "No saved connections";
                 color: Theme.muted;
                 font-size: Theme.font-small;
                 horizontal-alignment: center;
@@ -221,6 +271,8 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <string> drag-kind;
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
+    private property <length> add-glyph-height:
+        add-label.font-metrics.ascent - add-label.font-metrics.descent;
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -275,9 +327,22 @@ export component WorkspaceTitlebar inherits Rectangle {
         }
     }
 
-    height: Theme.titlebar-fallback-height;
+    height: max(
+        tab-height-probe.preferred-height,
+        root.add-glyph-height + Theme.tab-content-padding-y * 2,
+    );
     background: Theme.panel;
     border-width: 0px;
+
+    tab-height-probe := WorkspaceTabContent {
+        visible: false;
+        width: 0px;
+        title: "Tab";
+        kind: "terminal";
+        connected: true;
+        active: true;
+        order: 1;
+    }
 
     HorizontalLayout {
         spacing: 0px;
@@ -446,19 +511,19 @@ export component WorkspaceTitlebar inherits Rectangle {
                 height: Theme.hairline;
                 background: Theme.divider;
             }
-            Text {
+            add-label := Text {
                 width: parent.width;
                 height: parent.height;
                 text: "+";
                 color: Theme.text;
-                font-size: Theme.font-page-title;
+                font-size: Theme.tab-add-font-size;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
             add-touch := TouchArea {
                 mouse-cursor: pointer;
                 accessible-role: button;
-                accessible-label: "Open saved SSH session";
+                accessible-label: "Open saved connection";
                 clicked => { root.toggle-connection-picker(); }
             }
         }

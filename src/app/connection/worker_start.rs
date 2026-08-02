@@ -17,6 +17,7 @@ pub(super) fn start_session_worker(
     credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
     source: AuthenticationStart,
+    target: ConnectionTarget,
 ) -> Result<()> {
     let attempt_id = Uuid::new_v4();
     let (profile, events, credential_to_store) = {
@@ -40,19 +41,36 @@ pub(super) fn start_session_worker(
             .find(|profile| profile.id == profile_id)
             .cloned()
             .context("session not found")?;
-        if profile.host_key_fingerprint.is_none() {
+        if profile
+            .ssh()
+            .context("SSH worker requires an SSH profile")?
+            .host_key_fingerprint
+            .is_none()
+        {
             anyhow::bail!("verify the SSH host key first");
         }
-        if app
-            .terminal(tab_id)
-            .is_none_or(|terminal| terminal.worker.is_some())
-        {
+        if app.terminal(tab_id).is_none_or(|terminal| {
+            terminal.worker.is_some() || terminal.connection_target() != target
+        }) {
             anyhow::bail!("terminal tab is missing or already has a worker");
         }
         let columns = u32::from(app.sessions.settings.terminal.default_columns);
         let rows = u32::from(app.sessions.settings.terminal.default_rows);
-        let (worker, events) =
-            SshSessionHandle::spawn(runtime, tab_id, profile.clone(), secret, columns, rows);
+        let x11_settings = app.sessions.settings.x11.clone();
+        let (worker, events) = match target {
+            ConnectionTarget::Terminal => SshSessionHandle::spawn_with_x11_settings(
+                runtime,
+                tab_id,
+                profile.clone(),
+                secret,
+                columns,
+                rows,
+                x11_settings,
+            ),
+            ConnectionTarget::Sftp => {
+                SshSessionHandle::spawn_sftp(runtime, tab_id, profile.clone(), secret)
+            }
+        };
         let terminal = app
             .terminal_mut(tab_id)
             .context("terminal tab disappeared while starting worker")?;

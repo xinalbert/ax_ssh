@@ -6,6 +6,7 @@ export global Theme {
     // requires blocking configuration or filesystem work.
     in-out property <string> mode: "dark";
     in-out property <string> palette: "axssh";
+    in-out property <string> application-font-family: "JetBrains Mono";
     in-out property <color> light-background: #f7f8f7;
     in-out property <color> light-panel: #ffffff;
     in-out property <color> light-panel-alt: #edf1ee;
@@ -64,7 +65,11 @@ export global Theme {
         ? light-terminal-selection : dark-terminal-selection;
     out property <string> terminal-color-scheme:
         palette == "solarized" && resolved-dark ? "solarized-dark"
-        : (resolved-dark ? "dark" : "light");
+        : (palette == "arctic" && resolved-dark ? "arctic-dark"
+        : (palette == "tokyo" && resolved-dark ? "tokyo-dark"
+        : (palette == "ember" && resolved-dark ? "ember-dark"
+        : (palette == "forest" && resolved-dark ? "forest-dark"
+        : (resolved-dark ? "dark" : "light")))));
 
     // Shared state tokens keep borders, dividers, focus rings and selected rows
     // on the same contrast-safe semantic surface across all components.
@@ -87,6 +92,20 @@ export global Theme {
     out property <length> font-title: 18px;
     out property <length> font-page-title: 20px;
 
+    // Semantic workspace typography. Components measure these fonts locally;
+    // changing hierarchy or density stays centralized here.
+    out property <length> sidebar-group-font-size: font-body-strong;
+    out property <int> sidebar-group-font-weight: 700;
+    out property <length> sidebar-session-font-size: font-body;
+    out property <int> sidebar-session-font-weight: 600;
+    out property <length> tab-order-font-size: font-caption;
+    out property <int> tab-order-font-weight: 700;
+    out property <length> tab-title-font-size: font-small;
+    out property <int> tab-title-active-font-weight: 700;
+    out property <int> tab-title-inactive-font-weight: 400;
+    out property <length> tab-close-font-size: font-small;
+    out property <length> tab-add-font-size: font-title;
+
     // Shared geometry.
     out property <length> hairline: 1px;
     out property <length> radius-small: 4px;
@@ -106,11 +125,12 @@ export global Theme {
     out property <length> window-min-height: 360px;
     out property <length> window-preferred-width: 1180px;
     out property <length> window-preferred-height: 740px;
-    out property <length> titlebar-fallback-height: 38px;
     out property <length> activity-bar-width: 52px;
     out property <length> tab-status-size: 7px;
     out property <length> tab-order-width: 20px;
-    out property <length> tab-close-size: 24px;
+    out property <length> tab-close-min-size: 20px;
+    out property <length> tab-close-padding: 2px;
+    out property <length> tab-content-padding-y: 4px;
     out property <length> tab-content-leading-padding: 8px;
     out property <length> tab-content-spacing: 4px;
     out property <length> tab-surface-inset: 3px;
@@ -119,33 +139,49 @@ export global Theme {
     out property <float> tab-drag-ghost-opacity: 0.96;
     out property <length> titlebar-connection-picker-width: 300px;
     out property <length> titlebar-connection-picker-padding: 6px;
-    out property <length> titlebar-connection-picker-row-height: 42px;
+    out property <length> titlebar-connection-picker-row-min-height: 38px;
+    out property <length> titlebar-connection-picker-row-padding-y: 4px;
+    out property <length> titlebar-connection-picker-row-spacing: 2px;
     out property <length> titlebar-connection-picker-empty-height: 56px;
     out property <length> titlebar-connection-picker-max-height: 264px;
     out property <length> sidebar-rail-toggle-row-height: 36px;
     out property <length> sidebar-rail-toggle-size: 26px;
+    out property <length> sidebar-rail-full-width: 180px;
     out property <length> sidebar-rail-local-row-height: 46px;
     out property <length> sidebar-rail-local-card-size: 36px;
-    out property <length> sidebar-rail-group-row-height: 40px;
-    out property <length> sidebar-rail-group-card-size: 32px;
-    out property <length> sidebar-rail-session-row-height: 34px;
-    out property <length> sidebar-rail-session-card-size: 26px;
+    out property <length> sidebar-rail-group-card-padding-y: 4px;
+    out property <length> sidebar-rail-session-card-padding-y: 3px;
+    out property <length> sidebar-rail-group-row-padding-y: 3px;
+    out property <length> sidebar-rail-session-row-padding-y: 2px;
+    out property <length> sidebar-rail-item-min-height: 28px;
+    out property <length> sidebar-rail-group-to-session-spacing: 1px;
+    out property <length> sidebar-rail-session-spacing: 1px;
+    out property <length> sidebar-rail-group-spacing: 8px;
     out property <length> sidebar-glyph-size: 20px;
     out property <length> sidebar-glyph-inset: 1px;
     out property <length> sidebar-local-card-height: 46px;
-    out property <length> sidebar-group-card-height: 34px;
-    out property <length> sidebar-session-card-height: 36px;
+    // Expanded sidebar rows derive their total height from live text metrics in
+    // SessionNavigationRow. These values only add the visual breathing room.
+    out property <length> sidebar-group-row-padding-y: 4px;
+    out property <length> sidebar-session-row-padding-y: 3px;
+    out property <length> sidebar-group-to-session-spacing: 1px;
+    out property <length> sidebar-session-row-spacing: 1px;
+    out property <length> sidebar-group-spacing: 8px;
     out property <length> sidebar-card-padding: 10px;
     out property <length> sidebar-leading-icon-slot-width: 20px;
     out property <length> sidebar-group-chevron-width: 20px;
+    out property <length> sidebar-group-count-width: 20px;
     out property <length> sidebar-group-chevron-size: 14px;
     out property <length> sidebar-group-chevron-stroke: 1.5px;
     out property <length> sidebar-session-indent: 42px;
     out property <length> sidebar-session-endpoint-width: 70px;
+    out property <length> sidebar-session-tooltip-min-width: 168px;
+    out property <length> sidebar-session-tooltip-max-width: 320px;
     // Settings workbench geometry.
     out property <length> settings-nav-width: 212px;
     out property <length> settings-content-width: 900px;
-    out property <length> settings-nav-item-height: 34px;
+    out property <length> settings-nav-item-min-height: 32px;
+    out property <length> settings-nav-item-padding-y: 6px;
     out property <length> settings-nav-indicator-height: 20px;
     out property <length> settings-nav-icon-width: 22px;
     out property <length> settings-nav-title-height: 38px;
@@ -153,13 +189,10 @@ export global Theme {
     out property <length> settings-icon-size: 18px;
     out property <length> settings-icon-stroke: 2px;
     out property <length> settings-icon-knob-size: 5px;
-    out property <length> settings-section-height: 32px;
-    out property <length> settings-row-height: 56px;
-    out property <length> settings-info-row-height: 48px;
+    out property <length> settings-section-min-height: 28px;
+    out property <length> settings-section-padding-y: 5px;
+    out property <length> settings-row-min-height: 48px;
     out property <length> settings-label-width: 250px;
-    out property <length> settings-row-text-top: 10px;
-    out property <length> settings-row-title-height: 18px;
-    out property <length> settings-row-description-height: 15px;
     out property <length> settings-control-height: 32px;
     out property <length> settings-control-vertical-padding: 12px;
     out property <length> settings-field-width: 280px;
@@ -187,15 +220,15 @@ export global Theme {
     out property <length> settings-about-header-height: 104px;
     out property <length> settings-about-mark-size: 52px;
     out property <length> settings-about-description-height: 34px;
+    out property <length> settings-about-slint-height: 104px;
     // Editor and overlay geometry.
     out property <length> editor-content-width: 680px;
     out property <length> editor-section-gap: 16px;
     out property <length> editor-title-height: 28px;
     out property <length> editor-subtitle-height: 20px;
-    out property <length> editor-section-heading-height: 40px;
-    out property <length> editor-section-title-height: 20px;
-    out property <length> editor-section-description-height: 18px;
-    out property <length> editor-label-height: 16px;
+    out property <length> editor-section-min-height: 32px;
+    out property <length> editor-section-padding-y: 3px;
+    out property <length> editor-field-min-height: 48px;
     out property <length> editor-port-width: 104px;
     out property <length> editor-secondary-picker-width: 124px;
     out property <length> editor-detected-key-width: 360px;
@@ -213,6 +246,32 @@ export global Theme {
     out property <length> session-management-dialog-width: 420px;
     out property <length> session-management-dialog-height: 220px;
     out property <length> terminal-underline-offset: 2px;
+    out property <length> sftp-toolbar-height: 34px;
+    out property <length> sftp-panel-width: 390px;
+    out property <length> sftp-panel-min-width: 300px;
+    out property <length> sftp-panel-max-width: 480px;
+    out property <length> sftp-control-font-size: font-body;
+    out property <int> sftp-control-font-weight: 500;
+    out property <length> sftp-control-min-height: 30px;
+    out property <length> sftp-control-padding-y: 5px;
+    out property <length> sftp-path-row-padding-y: 6px;
+    out property <length> sftp-status-row-padding-y: 3px;
+    out property <length> sftp-header-height: 30px;
+    out property <length> sftp-row-height: 30px;
+    out property <length> sftp-column-padding: 8px;
+    out property <length> sftp-column-gap: 6px;
+    out property <length> sftp-selection-width: 16px;
+    out property <length> sftp-icon-width: 18px;
+    out property <length> sftp-size-width: 76px;
+    out property <length> sftp-time-width: 128px;
+    out property <length> sftp-size-visible-width: 330px;
+    out property <length> sftp-time-visible-width: 470px;
+    out property <length> sftp-hidden-control-width: 84px;
+    out property <length> sftp-path-action-width: 58px;
+    out property <length> sftp-refresh-button-width: 72px;
+    out property <length> sftp-more-button-width: 58px;
+    out property <length> sftp-transfer-toolbar-height: 34px;
+    out property <length> sftp-transfer-header-height: 28px;
     // Keep these non-zero floors aligned with config.rs and terminal.rs.
     out property <int> terminal-grid-min-columns: 10;
     out property <int> terminal-grid-max-columns: 300;

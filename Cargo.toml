@@ -3,28 +3,35 @@ name = "ax_ssh"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.92.0"
-description = "A Slint desktop SSH workspace built on russh"
+description = "A Slint desktop terminal workspace for SSH, Telnet, and serial sessions"
+license = "GPL-3.0-only"
 publish = false
 readme = "README.md"
 
 [dependencies]
 argon2 = "0.5.3"
 anyhow = "1"
+alacritty_terminal = "0.26.0"
 base64 = "0.22"
 chacha20poly1305 = "0.10.1"
+chrono = "0.4"
 directories = "6"
+fontdb = "0.23.0"
 keyring = "4.1.5"
+libmudtelnet-rs = "2.0.10"
 portable-pty = "0.9.0"
+rand = "0.10"
 russh = "0.62.2"
+russh-sftp = "2.3.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-slint = { version = "1.17.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-software", "std"] }
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+slint = { version = "1.17.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-software", "std", "unstable-fontique-010"] }
+tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio-serial = "5.5.0"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde", "v4"] }
-vt100 = "0.16.2"
 zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]
@@ -32,20 +39,33 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSEvent", "NSMenu", "NSMenuItem", "NSResponder", "NSView", "NSWindow", "std"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSObject", "NSString", "std"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSEvent", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSView", "NSWindow", "NSWorkspace", "std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSObject", "NSString", "std"] }
 raw-window-handle = "0.6.2"
 
 [build-dependencies]
+embed-resource = "3.0.9"
 slint-build = "1.17.1"
 
 [dev-dependencies]
-rand = "0.10"
 tokio = { version = "1", features = ["test-util"] }
 
-[patch.crates-io]
-# Keep the locked vt100 API while applying a minimal wide-cell resize fix.
-vt100 = { path = "vendor/vt100" }
+[package.metadata.deb]
+assets = [
+    ["target/release/ax_ssh", "usr/bin/ax_ssh", "755"],
+    ["packaging/linux/axssh.desktop", "usr/share/applications/axssh.desktop", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_16.png", "usr/share/icons/hicolor/16x16/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_24.png", "usr/share/icons/hicolor/24x24/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_32.png", "usr/share/icons/hicolor/32x32/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_48.png", "usr/share/icons/hicolor/48x48/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_64.png", "usr/share/icons/hicolor/64x64/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_128.png", "usr/share/icons/hicolor/128x128/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_256.png", "usr/share/icons/hicolor/256x256/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_512.png", "usr/share/icons/hicolor/512x512/apps/axssh.png", "644"],
+    ["assets/ion/terminal_icon_all_formats/terminal_icon_1024.png", "usr/share/icons/hicolor/1024x1024/apps/axssh.png", "644"],
+    ["LICENSE", "usr/share/doc/axssh/LICENSE", "644"],
+    ["THIRD_PARTY_NOTICES.md", "usr/share/doc/axssh/THIRD_PARTY_NOTICES.md", "644"],
+]
 
 [profile.dev]
 opt-level = 1

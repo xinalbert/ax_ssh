@@ -4,13 +4,21 @@ import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, Short
 
 export component ShortcutsSettingsPage inherits SettingsPage {
     in-out property <string> draft-open-settings-shortcut;
+    in-out property <string> draft-new-session-shortcut;
+    in-out property <string> draft-import-sessions-shortcut;
+    in-out property <string> draft-export-selected-shortcut;
     in-out property <string> draft-toggle-sidebar-shortcut;
     in-out property <string> draft-copy-selection-shortcut;
     in-out property <string> draft-paste-shortcut;
+    in-out property <string> draft-open-sftp-shortcut;
     in property <string> default-open-settings-shortcut;
+    in property <string> default-new-session-shortcut;
+    in property <string> default-import-sessions-shortcut;
+    in property <string> default-export-selected-shortcut;
     in property <string> default-toggle-sidebar-shortcut;
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
+    in property <string> default-open-sftp-shortcut;
 
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
@@ -26,9 +34,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
             text: "Reset defaults";
             clicked => {
                 root.draft-open-settings-shortcut = root.default-open-settings-shortcut;
+                root.draft-new-session-shortcut = root.default-new-session-shortcut;
+                root.draft-import-sessions-shortcut = root.default-import-sessions-shortcut;
+                root.draft-export-selected-shortcut = root.default-export-selected-shortcut;
                 root.draft-toggle-sidebar-shortcut = root.default-toggle-sidebar-shortcut;
                 root.draft-copy-selection-shortcut = root.default-copy-selection-shortcut;
                 root.draft-paste-shortcut = root.default-paste-shortcut;
+                root.draft-open-sftp-shortcut = root.default-open-sftp-shortcut;
             }
         }
     }
@@ -50,9 +62,59 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
+        label: "New Server";
+        description: "Workspace command";
+        SettingsField {
+            ShortcutRecorder {
+                width: Theme.settings-field-width;
+                shortcut <=> root.draft-new-session-shortcut;
+                accessible-name: "New Server shortcut";
+                format-shortcut(text, alt, control, meta, shift) => {
+                    return root.format-shortcut(text, alt, control, meta, shift);
+                }
+                recording-changed(recording) => {
+                    root.shortcut-recording-changed(recording);
+                }
+            }
+        }
+    }
+    SettingsRow {
+        label: "Import from Clipboard";
+        description: "Session transfer command";
+        SettingsField {
+            ShortcutRecorder {
+                width: Theme.settings-field-width;
+                shortcut <=> root.draft-import-sessions-shortcut;
+                accessible-name: "Import from Clipboard shortcut";
+                format-shortcut(text, alt, control, meta, shift) => {
+                    return root.format-shortcut(text, alt, control, meta, shift);
+                }
+                recording-changed(recording) => {
+                    root.shortcut-recording-changed(recording);
+                }
+            }
+        }
+    }
+    SettingsRow {
+        label: "Export Selected";
+        description: "Session transfer command";
+        SettingsField {
+            ShortcutRecorder {
+                width: Theme.settings-field-width;
+                shortcut <=> root.draft-export-selected-shortcut;
+                accessible-name: "Export Selected shortcut";
+                format-shortcut(text, alt, control, meta, shift) => {
+                    return root.format-shortcut(text, alt, control, meta, shift);
+                }
+                recording-changed(recording) => {
+                    root.shortcut-recording-changed(recording);
+                }
+            }
+        }
+    }
+    SettingsRow {
         label: "Toggle Session Sidebar";
         description: "Workspace command";
-        show-divider: false;
         SettingsField {
             toggle-sidebar-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
@@ -68,6 +130,24 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
 
+    SettingsRow {
+        label: "Open SFTP";
+        description: "Workspace command";
+        show-divider: false;
+        SettingsField {
+            ShortcutRecorder {
+                width: Theme.settings-field-width;
+                shortcut <=> root.draft-open-sftp-shortcut;
+                accessible-name: "Open SFTP shortcut";
+                format-shortcut(text, alt, control, meta, shift) => {
+                    return root.format-shortcut(text, alt, control, meta, shift);
+                }
+                recording-changed(recording) => {
+                    root.shortcut-recording-changed(recording);
+                }
+            }
+        }
+    }
     SettingsSectionHeading { label: "TERMINAL"; }
     SettingsRow {
         label: "Copy Terminal Selection";

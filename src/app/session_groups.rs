@@ -52,16 +52,50 @@ pub(super) fn group_options(sessions: &SessionStore) -> Vec<String> {
 }
 
 pub(super) fn profile_endpoint(profile: &SessionProfile) -> String {
-    format!("{}@{}:{}", profile.username, profile.host, profile.port)
+    match &profile.connection {
+        ax_ssh::config::ConnectionProfile::Ssh(config) => {
+            format!("{}@{}:{}", config.username, config.host, config.port)
+        }
+        ax_ssh::config::ConnectionProfile::Telnet(config) => {
+            format!("telnet://{}:{}", config.host, config.port)
+        }
+        ax_ssh::config::ConnectionProfile::Serial(config) => {
+            format!("Serial {} @ {}", config.port_name, config.baud_rate)
+        }
+    }
 }
 
 pub(super) fn profile_sidebar_endpoint(profile: &SessionProfile, mask_character: &str) -> String {
-    format!(
-        "{}@{}:{}",
-        mask_username(&profile.username, mask_character),
-        mask_ipv4_host(&profile.host, mask_character),
-        profile.port,
-    )
+    match &profile.connection {
+        ax_ssh::config::ConnectionProfile::Ssh(config) => format!(
+            "{}@{}:{}",
+            mask_username(&config.username, mask_character),
+            mask_ipv4_host(&config.host, mask_character),
+            config.port,
+        ),
+        ax_ssh::config::ConnectionProfile::Telnet(config) => format!(
+            "telnet://{}:{}",
+            mask_ipv4_host(&config.host, mask_character),
+            config.port,
+        ),
+        ax_ssh::config::ConnectionProfile::Serial(config) => {
+            format!("Serial {} @ {}", config.port_name, config.baud_rate)
+        }
+    }
+}
+
+pub(super) fn profile_sidebar_details(profile: &SessionProfile) -> String {
+    match &profile.connection {
+        ax_ssh::config::ConnectionProfile::Ssh(_) => {
+            format!("SSH · {}", profile_endpoint(profile))
+        }
+        ax_ssh::config::ConnectionProfile::Telnet(_) => {
+            format!("Telnet · {}", profile_endpoint(profile))
+        }
+        ax_ssh::config::ConnectionProfile::Serial(config) => {
+            format!("Serial · {} · {} baud", config.port_name, config.baud_rate)
+        }
+    }
 }
 
 fn mask_username(username: &str, mask_character: &str) -> String {
@@ -89,14 +123,18 @@ fn mask_ipv4_host(host: &str, mask_character: &str) -> String {
     let Ok(address) = host.parse::<Ipv4Addr>() else {
         return host.to_owned();
     };
-    let [first, _, _, last] = address.octets();
-    format!("{first}.{mask_character}.{last}")
+    let [first, _, third, fourth] = address.octets();
+    format!("{first}.{mask_character}.{third}.{fourth}")
 }
 
-pub(super) fn compact_label(value: &str, fallback: &str) -> String {
+pub(super) fn compact_label(value: &str, fallback: &str, max_chars: usize) -> String {
     let value = value.trim();
     let value = if value.is_empty() { fallback } else { value };
-    value.chars().take(2).collect()
+    if max_chars == 0 {
+        value.to_owned()
+    } else {
+        value.chars().take(max_chars).collect()
+    }
 }
 
 #[cfg(test)]
@@ -125,26 +163,48 @@ mod tests {
 
     #[test]
     fn compact_labels_keep_the_first_two_unicode_characters() {
-        assert_eq!(compact_label("Production", "Un"), "Pr");
-        assert_eq!(compact_label("生产环境", "Un"), "生产");
-        assert_eq!(compact_label("", "Un"), "Un");
+        assert_eq!(compact_label("Production", "Un", 2), "Pr");
+        assert_eq!(compact_label("生产环境", "Un", 2), "生产");
+        assert_eq!(compact_label("Production", "Un", 0), "Production");
+        assert_eq!(compact_label("", "Un", 2), "Un");
     }
 
     #[test]
     fn sidebar_endpoints_mask_username_and_ipv4_middle_octets() {
         let mut profile = SessionProfile::new("private", "192.168.1.202", "zhushixin");
-        profile.port = 22;
 
         assert_eq!(
             profile_sidebar_endpoint(&profile, "*"),
-            "zh*in@192.*.202:22"
+            "zh*in@192.*.1.202:22"
         );
 
-        profile.host = "server.example.com".into();
-        profile.username = "root".into();
+        let ssh = profile.ssh_mut().expect("profile should be SSH");
+        ssh.host = "server.example.com".into();
+        ssh.username = "root".into();
         assert_eq!(
             profile_sidebar_endpoint(&profile, "#"),
             "r#t@server.example.com:22"
+        );
+    }
+
+    #[test]
+    fn sidebar_details_identify_protocol_with_full_non_secret_connection_information() {
+        let ssh = SessionProfile::new("private", "192.168.1.202", "zhushixin");
+        assert_eq!(
+            profile_sidebar_details(&ssh),
+            "SSH · zhushixin@192.168.1.202:22"
+        );
+
+        let telnet = SessionProfile::new_telnet("legacy", "10.20.30.40");
+        assert_eq!(
+            profile_sidebar_details(&telnet),
+            "Telnet · telnet://10.20.30.40:23"
+        );
+
+        let serial = SessionProfile::new_serial("console", "/dev/cu.usbserial");
+        assert_eq!(
+            profile_sidebar_details(&serial),
+            "Serial · /dev/cu.usbserial · 115200 baud"
         );
     }
 }

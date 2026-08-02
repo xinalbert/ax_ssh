@@ -1,3 +1,6 @@
+use slint::Model;
+
+use super::local_files::LocalDirectoryEntry;
 use super::*;
 
 pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow> {
@@ -17,19 +20,26 @@ pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow
                     .map(|profile| SessionProfileRow {
                         id: profile.id.to_string().into(),
                         name: profile.name.clone().into(),
+                        details: profile_sidebar_details(profile).into(),
                         endpoint: profile_sidebar_endpoint(
                             profile,
                             &sessions.settings.workspace.session_mask_character,
                         )
                         .into(),
-                        icon: compact_label(&profile.name, "--").into(),
+                        icon: compact_label(&profile.name, "--", 2).into(),
+                        sftp_enabled: profile.ssh().is_some(),
                     })
                     .collect::<Vec<_>>(),
             ));
             SessionGroupRow {
                 group_name: group_name.into(),
                 name: display_name.clone().into(),
-                icon: compact_label(&display_name, "Un").into(),
+                icon: compact_label(
+                    &display_name,
+                    "Un",
+                    usize::from(sessions.settings.workspace.collapsed_group_label_chars),
+                )
+                .into(),
                 profiles,
             }
         })
@@ -69,6 +79,13 @@ pub(super) fn shell_option_rows(settings: &AppSettings) -> Vec<SharedString> {
         .collect()
 }
 
+pub(super) fn font_option_rows(selected: &str, system_families: &[String]) -> Vec<SharedString> {
+    font_options(selected, system_families)
+        .into_iter()
+        .map(SharedString::from)
+        .collect()
+}
+
 pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
     let state = Arc::clone(state);
     dispatch_ui(ui, move |ui| {
@@ -102,7 +119,13 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
                 return;
             }
         };
+        let settings_tab_id = tabs
+            .iter()
+            .find(|tab| tab.kind.as_str() == "settings")
+            .map(|tab| tab.id.clone())
+            .unwrap_or_default();
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
+        ui.set_settings_tab_id(settings_tab_id);
         apply_active_snapshot(ui, snapshot);
     });
 }
@@ -116,6 +139,89 @@ pub(super) fn visible_workspace_tab_rows(tabs: Vec<WorkspaceTabSummary>) -> Vec<
             connected: tab.connected,
         })
         .collect()
+}
+
+fn sftp_entry_rows(entries: Vec<SftpEntry>) -> Vec<SftpEntryRow> {
+    entries
+        .into_iter()
+        .map(|entry| {
+            let hidden = entry.name.starts_with('.');
+            SftpEntryRow {
+                name: entry.name.into(),
+                path: entry.path.into(),
+                kind: if entry.is_dir {
+                    "folder"
+                } else if entry.is_symlink {
+                    "link"
+                } else {
+                    "file"
+                }
+                .into(),
+                size: format_file_size(entry.size, entry.is_dir).into(),
+                modified: entry
+                    .modified
+                    .map(format_timestamp)
+                    .unwrap_or_default()
+                    .into(),
+                hidden,
+            }
+        })
+        .collect()
+}
+
+fn local_entry_rows(entries: Vec<LocalDirectoryEntry>) -> Vec<SftpEntryRow> {
+    entries
+        .into_iter()
+        .map(|entry| {
+            let hidden = entry.name.starts_with('.');
+            SftpEntryRow {
+                name: entry.name.into(),
+                path: entry.path.into(),
+                kind: if entry.is_dir {
+                    "folder"
+                } else if entry.is_symlink {
+                    "link"
+                } else {
+                    "file"
+                }
+                .into(),
+                size: format_file_size(entry.size, entry.is_dir).into(),
+                modified: entry
+                    .modified
+                    .map(format_local_timestamp)
+                    .unwrap_or_default()
+                    .into(),
+                hidden,
+            }
+        })
+        .collect()
+}
+
+fn format_file_size(bytes: u64, is_dir: bool) -> String {
+    if is_dir {
+        return "-".to_owned();
+    }
+    if bytes < 1_024 {
+        format!("{bytes} B")
+    } else if bytes < 1_048_576 {
+        format!("{:.1} KB", bytes as f64 / 1_024.0)
+    } else if bytes < 1_073_741_824 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else {
+        format!("{:.1} GB", bytes as f64 / 1_073_741_824.0)
+    }
+}
+
+fn format_timestamp(timestamp: u32) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(i64::from(timestamp), 0)
+        .map(|time| time.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_default()
+}
+
+fn format_local_timestamp(timestamp: std::time::SystemTime) -> String {
+    chrono::DateTime::<chrono::Utc>::from(timestamp)
+        .format("%Y-%m-%d %H:%M")
+        .to_string()
 }
 
 pub(super) fn set_tab_status(
@@ -158,6 +264,44 @@ pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, state: &Arc<
     });
 }
 
+pub(super) fn dispatch_terminal_output_snapshot(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    output_received_at: std::time::Instant,
+) {
+    let state = Arc::clone(state);
+    let dispatch_requested_at = std::time::Instant::now();
+    dispatch_ui(ui, move |ui| {
+        let ui_started_at = std::time::Instant::now();
+        let snapshot = match state.lock() {
+            Ok(app) => app.active_snapshot(),
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
+        apply_active_snapshot(ui, snapshot);
+        tracing::debug!(
+            target: "ax_ssh::latency",
+            event = "ssh-output",
+            stage = "ui-applied",
+            output_to_dispatch_us = duration_micros(
+                dispatch_requested_at.saturating_duration_since(output_received_at),
+            ),
+            ui_queue_us = duration_micros(
+                ui_started_at.saturating_duration_since(dispatch_requested_at),
+            ),
+            ui_apply_us = duration_micros(ui_started_at.elapsed()),
+            output_to_ui_us = duration_micros(output_received_at.elapsed()),
+            "SSH terminal output applied to UI"
+        );
+    });
+}
+
+fn duration_micros(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
+}
+
 pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot) {
     let active_tab_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
     ui.set_active_tab_id(active_tab_id.into());
@@ -176,11 +320,19 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
             );
             ui.set_editor_name(editor.name.into());
             ui.set_editor_group_name(editor.group_name.into());
+            ui.set_editor_protocol(editor.protocol.into());
             ui.set_editor_host(editor.host.into());
             ui.set_editor_port(editor.port.into());
             ui.set_editor_username(editor.username.into());
             ui.set_editor_auth_method(editor.auth_method.into());
             ui.set_editor_private_key_path(editor.private_key_path.into());
+            ui.set_editor_x11_forwarding(editor.x11_forwarding);
+            ui.set_editor_serial_port(editor.serial_port.into());
+            ui.set_editor_serial_baud_rate(editor.serial_baud_rate.into());
+            ui.set_editor_serial_data_bits(editor.serial_data_bits.into());
+            ui.set_editor_serial_stop_bits(editor.serial_stop_bits.into());
+            ui.set_editor_serial_parity(editor.serial_parity.into());
+            ui.set_editor_serial_flow_control(editor.serial_flow_control.into());
             // The Slint editor resets its local fields when this identity changes.
             // Publish it last so all source values form one coherent draft.
             ui.set_editor_draft_id(draft_id.into());
@@ -203,7 +355,29 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
+    apply_sftp_snapshot(ui, snapshot.sftp);
     apply_security_prompt(ui, snapshot.security_prompt);
+}
+
+fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {
+    ui.set_sftp_available(snapshot.available);
+    ui.set_sftp_open(snapshot.open);
+    ui.set_sftp_loading(snapshot.loading);
+    ui.set_sftp_home(snapshot.home.into());
+    ui.set_sftp_path(snapshot.path.into());
+    ui.set_sftp_entries(ModelRc::new(VecModel::from(sftp_entry_rows(
+        snapshot.entries,
+    ))));
+    ui.set_sftp_has_more(snapshot.has_more);
+    ui.set_sftp_truncated(snapshot.truncated);
+    ui.set_sftp_status(snapshot.status.into());
+    ui.set_local_sftp_loading(snapshot.local.loading);
+    ui.set_local_sftp_path(snapshot.local.path.into());
+    ui.set_local_sftp_entries(ModelRc::new(VecModel::from(local_entry_rows(
+        snapshot.local.entries,
+    ))));
+    ui.set_local_sftp_truncated(snapshot.local.truncated);
+    ui.set_local_sftp_status(snapshot.local.status.into());
 }
 
 fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
@@ -226,13 +400,19 @@ fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
             profile,
             vault_unlock_only,
         } => {
-            let (private_key, key_path) = match &profile.auth {
+            let Some(ssh) = profile.ssh() else {
+                ui.set_host_key_dialog_open(false);
+                ui.set_password_dialog_open(false);
+                ui.set_password_dialog_tab_id("".into());
+                return;
+            };
+            let (private_key, key_path) = match &ssh.auth {
                 AuthMethod::Password => (false, String::new()),
                 AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
             };
             let vault_storage = vault_unlock_only
                 && !private_key
-                && profile.credential_storage == Some(CredentialStorage::EncryptedVault);
+                && ssh.credential_storage == Some(CredentialStorage::EncryptedVault);
             ui.set_host_key_dialog_open(false);
             ui.set_password_endpoint(profile_endpoint(&profile).into());
             ui.set_password_private_key(private_key);
@@ -245,13 +425,18 @@ fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
     }
 }
 
-pub(super) fn apply_settings(ui: &slint::Weak<AppWindow>, settings: AppSettings) {
-    dispatch_ui(ui, move |ui| apply_settings_to_component(ui, &settings));
-}
-
 pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
     apply_theme_to_component(ui, settings);
+    ui.set_application_font_family(settings.appearance.application_font_family.clone().into());
+    ui.set_application_font_index(font_option_index(
+        &ui.get_application_font_options(),
+        &settings.appearance.application_font_family,
+    ));
     ui.set_terminal_font_family(settings.appearance.terminal_font_family.clone().into());
+    ui.set_terminal_font_index(font_option_index(
+        &ui.get_terminal_font_options(),
+        &settings.appearance.terminal_font_family,
+    ));
     ui.set_terminal_font_size(i32::from(settings.appearance.terminal_font_size));
     ui.set_terminal_line_height_percent(i32::from(
         settings.appearance.terminal_line_height_percent,
@@ -260,6 +445,15 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
     ui.set_option_as_meta(settings.terminal.option_as_meta);
+    ui.set_x11_server_provider(
+        ax_ssh::x_server::provider_for_current_platform(settings.x11.provider)
+            .as_setting()
+            .into(),
+    );
+    ui.set_x11_server_provider_index(ax_ssh::x_server::provider_index(settings.x11.provider));
+    ui.set_x11_server_app_path(settings.x11.app_path.clone().into());
+    ui.set_x11_launch_on_connect(settings.x11.launch_on_connect);
+    ui.set_x11_allow_no_auth(settings.x11.allow_no_auth);
     ui.set_scrollback_lines(settings.terminal.scrollback_lines as i32);
     ui.set_default_terminal_columns(i32::from(settings.terminal.default_columns));
     ui.set_default_terminal_rows(i32::from(settings.terminal.default_rows));
@@ -275,16 +469,67 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
     ui.set_session_mask_character(settings.workspace.session_mask_character.clone().into());
+    ui.set_collapsed_group_label_chars(i32::from(settings.workspace.collapsed_group_label_chars));
     ui.set_open_settings_shortcut(settings.shortcuts.open_settings.clone().into());
+    ui.set_new_session_shortcut(settings.shortcuts.new_session.clone().into());
+    ui.set_import_sessions_shortcut(settings.shortcuts.import_sessions.clone().into());
+    ui.set_export_selected_shortcut(settings.shortcuts.export_selected.clone().into());
     ui.set_toggle_sidebar_shortcut(settings.shortcuts.toggle_sidebar.clone().into());
     ui.set_copy_selection_shortcut(settings.shortcuts.copy_selection.clone().into());
     ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
+    ui.set_open_sftp_shortcut(settings.shortcuts.open_sftp.clone().into());
+    ui.set_open_settings_menu_shortcut(menu_shortcut_keys(
+        "open-settings",
+        &settings.shortcuts.open_settings,
+    ));
+    ui.set_new_session_menu_shortcut(menu_shortcut_keys(
+        "new-session",
+        &settings.shortcuts.new_session,
+    ));
+    ui.set_import_sessions_menu_shortcut(menu_shortcut_keys(
+        "import-sessions",
+        &settings.shortcuts.import_sessions,
+    ));
+    ui.set_export_selected_menu_shortcut(menu_shortcut_keys(
+        "export-selected",
+        &settings.shortcuts.export_selected,
+    ));
+    ui.set_toggle_sidebar_menu_shortcut(menu_shortcut_keys(
+        "toggle-sidebar",
+        &settings.shortcuts.toggle_sidebar,
+    ));
+    ui.set_open_sftp_menu_shortcut(menu_shortcut_keys(
+        "open-sftp",
+        &settings.shortcuts.open_sftp,
+    ));
+    let defaults = ShortcutSettings::default();
+    ui.set_default_open_settings_shortcut(defaults.open_settings.into());
+    ui.set_default_new_session_shortcut(defaults.new_session.into());
+    ui.set_default_import_sessions_shortcut(defaults.import_sessions.into());
+    ui.set_default_export_selected_shortcut(defaults.export_selected.into());
+    ui.set_default_toggle_sidebar_shortcut(defaults.toggle_sidebar.into());
+    ui.set_default_copy_selection_shortcut(defaults.copy_selection.into());
+    ui.set_default_paste_shortcut(defaults.paste.into());
+    ui.set_default_open_sftp_shortcut(defaults.open_sftp.into());
+    #[cfg(target_os = "macos")]
+    schedule_macos_application_menu_configuration(ui);
+}
+
+fn menu_shortcut_keys(action: &'static str, setting: &str) -> slint::Keys {
+    match menu_shortcut_from_setting(setting) {
+        Ok(shortcut) => shortcut.keys,
+        Err(error) => {
+            warn!(action, %error, "cannot bind configured native menu shortcut");
+            slint::Keys::default()
+        }
+    }
 }
 
 fn apply_theme_to_component(ui: &AppWindow, settings: &AppSettings) {
     let light = settings.appearance.theme.light_palette();
     let dark = settings.appearance.theme.dark_palette();
     let theme = ui.global::<Theme>();
+    theme.set_application_font_family(settings.appearance.application_font_family.clone().into());
     theme.set_mode(settings.appearance.theme.mode.as_setting().into());
     theme.set_palette(settings.appearance.theme.palette.as_setting().into());
     set_theme_palette(&theme, &light, true);
@@ -493,6 +738,41 @@ pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWind
     });
 }
 
+pub(super) fn load_font_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+    runtime.spawn(async move {
+        let discovery = tokio::task::spawn_blocking(discover_system_monospace_families).await;
+        match discovery {
+            Ok(system_families) => dispatch_ui(&ui, move |ui| {
+                let application_font = ui.get_application_font_family().to_string();
+                let application_options = font_option_rows(&application_font, &system_families);
+                let application_index =
+                    font_option_index_in_slice(&application_options, &application_font);
+                ui.set_application_font_options(ModelRc::new(VecModel::from(application_options)));
+                ui.set_application_font_index(application_index);
+
+                let terminal_font = ui.get_terminal_font_family().to_string();
+                let terminal_options = font_option_rows(&terminal_font, &system_families);
+                let terminal_index = font_option_index_in_slice(&terminal_options, &terminal_font);
+                ui.set_terminal_font_options(ModelRc::new(VecModel::from(terminal_options)));
+                ui.set_terminal_font_index(terminal_index);
+            }),
+            Err(error) => warn!(%error, "system monospace font discovery task failed"),
+        }
+    });
+}
+
+fn font_option_index(options: &ModelRc<SharedString>, selected: &str) -> i32 {
+    font_option_index_in_slice(&options.iter().collect::<Vec<_>>(), selected)
+}
+
+fn font_option_index_in_slice(options: &[SharedString], selected: &str) -> i32 {
+    options
+        .iter()
+        .position(|font| font.as_str().eq_ignore_ascii_case(selected))
+        .unwrap_or(0)
+        .min(i32::MAX as usize) as i32
+}
+
 pub(super) fn parse_uuid(value: &str, label: &str, ui: &slint::Weak<AppWindow>) -> Option<Uuid> {
     match value.parse::<Uuid>() {
         Ok(id) => Some(id),
@@ -573,12 +853,32 @@ mod tests {
         assert_eq!(production_a.endpoint.as_str(), "al*ce@a.example:22");
         let production_b = rows[0].profiles.row_data(1).unwrap();
         assert_eq!(production_b.name.as_str(), "prod-b");
-        assert_eq!(production_b.endpoint.as_str(), "zh*in@192.*.202:22");
+        assert_eq!(production_b.endpoint.as_str(), "zh*in@192.*.1.202:22");
+        assert_eq!(
+            production_b.details.as_str(),
+            "SSH · zhushixin@192.168.1.202:22"
+        );
 
         assert_eq!(rows[1].name.as_str(), "Ungrouped");
         assert_eq!(rows[1].icon.as_str(), "Un");
         assert_eq!(rows[1].profiles.row_count(), 1);
         assert_eq!(rows[1].profiles.row_data(0).unwrap().name.as_str(), "local");
+    }
+
+    #[test]
+    fn full_group_labels_leave_server_badges_compact() {
+        let mut server = SessionProfile::new("production-server", "prod.example", "alice");
+        server.group_name = "Production systems".into();
+        let mut sessions = SessionStore {
+            sessions: vec![server],
+            ..SessionStore::default()
+        };
+        sessions.settings.workspace.collapsed_group_label_chars = 0;
+
+        let rows = session_group_rows(&sessions);
+
+        assert_eq!(rows[0].icon.as_str(), "Production systems");
+        assert_eq!(rows[0].profiles.row_data(0).unwrap().icon.as_str(), "pr");
     }
 
     #[test]
@@ -612,6 +912,6 @@ mod tests {
         assert_eq!(options[0].endpoint.as_str(), "al*ce@server.example:22");
         assert_eq!(options[1].id.as_str(), hidden.id.to_string());
         assert_eq!(options[1].name.as_str(), "hidden");
-        assert_eq!(options[1].endpoint.as_str(), "zh*in@192.*.202:22");
+        assert_eq!(options[1].endpoint.as_str(), "zh*in@192.*.1.202:22");
     }
 }

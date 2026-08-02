@@ -13,6 +13,20 @@ use super::worker::{MAX_ERROR_CHARS, bounded_error_message};
 const TEST_USER: &str = "ax-test-user";
 const TEST_PASSWORD: &str = "ax-test-password";
 
+fn test_profile(name: &str, host: String) -> SessionProfile {
+    let mut profile = SessionProfile::new(name, host, TEST_USER);
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .x11_forwarding = false;
+    profile
+}
+
+#[test]
+fn interactive_client_config_disables_nagle() {
+    assert!(client_config().nodelay);
+}
+
 #[derive(Clone)]
 struct TestServer {
     expected_public_key: Option<PublicKey>,
@@ -159,9 +173,12 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
         sessions
     });
 
-    let mut profile = SessionProfile::new("idle-test", address.ip().to_string(), TEST_USER);
-    profile.port = address.port();
-    profile.host_key_fingerprint = Some(
+    let mut profile = test_profile("idle-test", address.ip().to_string());
+    profile.ssh_mut().expect("test profile should use SSH").port = address.port();
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(
         probe_host_key(&profile)
             .await
             .expect("unknown host-key probe should return the rejected fingerprint"),
@@ -307,14 +324,17 @@ async fn probe_then_password_login_preserves_host_key_verification() {
         sessions
     });
 
-    let mut profile = SessionProfile::new("test", address.ip().to_string(), TEST_USER);
-    profile.port = address.port();
+    let mut profile = test_profile("test", address.ip().to_string());
+    profile.ssh_mut().expect("test profile should use SSH").port = address.port();
     let fingerprint = probe_host_key(&profile)
         .await
         .expect("unknown host-key probe should return the rejected fingerprint");
     assert_eq!(fingerprint, expected_fingerprint);
 
-    profile.host_key_fingerprint = Some(fingerprint);
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(fingerprint);
     let connection = SshConnection::connect(&profile, Zeroizing::new(TEST_PASSWORD.to_owned()))
         .await
         .expect("trusted host with valid password should authenticate");
@@ -375,7 +395,7 @@ async fn probe_then_password_login_preserves_host_key_verification() {
     let output = timeout(Duration::from_secs(2), async {
         loop {
             match events.recv().await {
-                Some(SshSessionEvent::Output(data))
+                Some(SshSessionEvent::Output { data, .. })
                     if String::from_utf8_lossy(&data).contains("echo: whoami") =>
                 {
                     break data;
@@ -484,16 +504,22 @@ async fn private_key_login_opens_interactive_shell() {
         sessions
     });
 
-    let mut profile = SessionProfile::new("key-test", address.ip().to_string(), TEST_USER);
-    profile.port = address.port();
-    profile.auth = AuthMethod::PrivateKey {
-        path: key_path.clone(),
-    };
+    let mut profile = test_profile("key-test", address.ip().to_string());
+    {
+        let ssh = profile.ssh_mut().expect("test profile should use SSH");
+        ssh.port = address.port();
+        ssh.auth = AuthMethod::PrivateKey {
+            path: key_path.clone(),
+        };
+    }
     let fingerprint = probe_host_key(&profile)
         .await
         .expect("unknown host-key probe should return the rejected fingerprint");
     assert_eq!(fingerprint, expected_fingerprint);
-    profile.host_key_fingerprint = Some(fingerprint);
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(fingerprint);
 
     let (worker, mut events) = SshSessionHandle::spawn(
         &Handle::current(),
@@ -512,7 +538,7 @@ async fn private_key_login_opens_interactive_shell() {
         .expect("private-key shell should accept input");
     timeout(Duration::from_secs(2), async {
         loop {
-            if let Some(SshSessionEvent::Output(data)) = events.recv().await
+            if let Some(SshSessionEvent::Output { data, .. }) = events.recv().await
                 && String::from_utf8_lossy(&data).contains("echo: id")
             {
                 break;

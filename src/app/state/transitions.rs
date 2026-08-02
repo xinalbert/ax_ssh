@@ -120,6 +120,7 @@ pub(in crate::app) fn retire_session_attempt(
                 terminal.set_ssh_attempt(None);
                 terminal.connected = false;
                 terminal.worker_running = false;
+                terminal.sftp.reset();
             }
             true
         }
@@ -150,13 +151,16 @@ pub(in crate::app) fn set_credential_storage(
         .iter_mut()
         .find(|profile| profile.id == session_id)
         .context("session not found while updating credential storage")?;
-    if profile.credential_storage == credential_storage {
+    let ssh = profile
+        .ssh_mut()
+        .context("only SSH profiles can update credential storage")?;
+    if ssh.credential_storage == credential_storage {
         return Ok(());
     }
-    if credential_storage.is_some() && matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+    if credential_storage.is_some() && matches!(ssh.auth, AuthMethod::PrivateKey { .. }) {
         anyhow::bail!("private-key profiles cannot store password credentials");
     }
-    profile.credential_storage = credential_storage;
+    ssh.credential_storage = credential_storage;
     app.config.save(&candidate)?;
     app.sessions = candidate;
     Ok(())
@@ -190,13 +194,16 @@ pub(in crate::app) fn set_credential_storage_while_loading(
         .iter_mut()
         .find(|profile| profile.id == session_id)
         .context("session not found while updating credential storage")?;
-    if profile.credential_storage == credential_storage {
+    let ssh = profile
+        .ssh_mut()
+        .context("only SSH profiles can update credential storage")?;
+    if ssh.credential_storage == credential_storage {
         return Ok(true);
     }
-    if credential_storage.is_some() && matches!(profile.auth, AuthMethod::PrivateKey { .. }) {
+    if credential_storage.is_some() && matches!(ssh.auth, AuthMethod::PrivateKey { .. }) {
         anyhow::bail!("private-key profiles cannot store password credentials");
     }
-    profile.credential_storage = credential_storage;
+    ssh.credential_storage = credential_storage;
     app.config.save(&candidate)?;
     app.sessions = candidate;
     Ok(true)

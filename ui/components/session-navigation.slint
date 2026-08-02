@@ -1,4 +1,3 @@
-import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ActionMenuItem, FlatActionMenu } from "flat-action-menu.slint";
 import {
@@ -10,8 +9,10 @@ import {
 export struct SessionProfileRow {
     id: string,
     name: string,
+    details: string,
     endpoint: string,
     icon: string,
+    sftp-enabled: bool,
 }
 
 export struct SessionGroupRow {
@@ -44,13 +45,53 @@ component GroupDisclosureChevron inherits Path {
     stroke-line-join: round;
 }
 
+component SessionProfileTooltipContent inherits Rectangle {
+    in property <string> name;
+    in property <string> details;
+
+    private property <length> natural-width: max(
+        tooltip-name.preferred-width,
+        tooltip-details.preferred-width,
+    );
+
+    width: min(
+        max(Theme.sidebar-session-tooltip-min-width, root.natural-width),
+        Theme.sidebar-session-tooltip-max-width,
+    );
+    height: tooltip-layout.preferred-height;
+    background: transparent;
+
+    tooltip-layout := VerticalLayout {
+        width: parent.width;
+        spacing: Theme.space-xs;
+
+        tooltip-name := Text {
+            text: root.name;
+            color: Theme.text;
+            font-family: Theme.application-font-family;
+            font-size: Theme.font-body;
+            font-weight: 700;
+            wrap: char-wrap;
+        }
+        tooltip-details := Text {
+            text: root.details;
+            color: Theme.muted;
+            font-family: Theme.application-font-family;
+            font-size: Theme.font-caption;
+            wrap: char-wrap;
+        }
+    }
+}
+
 component SessionActionMenu inherits Rectangle {
     in property <SessionActionMenuKind> kind: SessionActionMenuKind.list;
     in property <string> target-id;
     in property <string> group-name;
     in property <string> name;
+    in property <bool> sftp-enabled: false;
 
     callback connect-session(string);
+    callback open-sftp(string);
     callback new-group();
     callback new-session();
     callback new-session-in-group(string);
@@ -58,35 +99,45 @@ component SessionActionMenu inherits Rectangle {
     callback delete-group(string);
     callback edit-session(string);
     callback delete-session(string, string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
+    callback select-target(string, string, string);
 
-    function action(action-id: string, title: string) -> ActionMenuItem {
+    function action(action-id: string, title: string, enabled: bool) -> ActionMenuItem {
         {
             action-id: action-id,
             title: title,
-            enabled: true,
+            enabled: enabled,
         }
     }
 
     private property <[ActionMenuItem]> actions:
         root.kind == SessionActionMenuKind.list
             ? [
-                root.action("new-group", "New Group"),
-                root.action("new-server", "New Server"),
+                root.action("new-group", "New Group", true),
+                root.action("new-server", "New Server", true),
             ]
             : (root.kind == SessionActionMenuKind.group
                 ? [
-                    root.action("add-server", "Add Server"),
-                    root.action("rename-group", "Rename Group"),
-                    root.action("delete-group", "Delete Group"),
+                    root.action("add-server", "Add Server", true),
+                    root.action("copy-group", "Copy Group", true),
+                    root.action("duplicate-group", "Duplicate Group", true),
+                    root.action("rename-group", "Rename Group", true),
+                    root.action("delete-group", "Delete Group", true),
                 ]
                 : (root.kind == SessionActionMenuKind.ungrouped
                     ? [
-                        root.action("add-server", "Add Server"),
+                        root.action("add-server", "Add Server", true),
                     ]
                     : [
-                        root.action("connect", "Connect"),
-                        root.action("edit-server", "Edit Server"),
-                        root.action("delete-server", "Delete Server"),
+                        root.action("connect", "Connect", true),
+                        root.action("open-sftp", "Open SFTP", root.sftp-enabled),
+                        root.action("copy-address", "Copy Address", true),
+                        root.action("copy-server", "Copy Server", true),
+                        root.action("duplicate-session", "Duplicate", true),
+                        root.action("edit-server", "Edit Server", true),
+                        root.action("delete-server", "Delete Server", true),
                     ]));
 
     public function show-at(position: Point) {
@@ -96,18 +147,36 @@ component SessionActionMenu inherits Rectangle {
     action-menu := FlatActionMenu {
         actions: root.actions;
         triggered(action-id) => {
+            if root.kind == SessionActionMenuKind.group
+                    || root.kind == SessionActionMenuKind.ungrouped {
+                root.select-target("group", "", root.group-name);
+            } else if root.kind == SessionActionMenuKind.server {
+                root.select-target("server", root.target-id, root.group-name);
+            }
             if action-id == "new-group" {
                 root.new-group();
             } else if action-id == "new-server" {
                 root.new-session();
             } else if action-id == "add-server" {
                 root.new-session-in-group(root.group-name);
+            } else if action-id == "copy-group" {
+                root.session-transfer-action("copy-group", root.group-name);
+            } else if action-id == "duplicate-group" {
+                root.session-transfer-action("duplicate-group", root.group-name);
             } else if action-id == "rename-group" {
                 root.rename-group(root.group-name);
             } else if action-id == "delete-group" {
                 root.delete-group(root.group-name);
             } else if action-id == "connect" {
                 root.connect-session(root.target-id);
+            } else if action-id == "open-sftp" {
+                root.open-sftp(root.target-id);
+            } else if action-id == "copy-address" {
+                root.copy-session(root.target-id);
+            } else if action-id == "copy-server" {
+                root.session-transfer-action("copy-server", root.target-id);
+            } else if action-id == "duplicate-session" {
+                root.duplicate-session(root.target-id);
             } else if action-id == "edit-server" {
                 root.edit-session(root.target-id);
             } else if action-id == "delete-server" {
@@ -121,22 +190,40 @@ component SessionNavigationRow inherits FocusScope {
     in property <string> id;
     in property <string> group-name;
     in property <string> name;
+    in property <string> details;
     in property <string> endpoint;
     in property <string> icon;
     in property <bool> group;
     in property <bool> expanded;
+    in property <bool> sftp-enabled: false;
+    in property <bool> selected: false;
 
     callback connect-session(string);
+    callback open-sftp(string);
     callback toggle-expanded();
     callback new-session-in-group(string);
     callback rename-group(string);
     callback delete-group(string);
     callback edit-session(string);
     callback delete-session(string, string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
+    callback select-target(string, string, string);
 
-    height: root.group
-        ? Theme.sidebar-group-card-height
-        : Theme.sidebar-session-card-height;
+    private property <length> vertical-padding: root.group
+        ? Theme.sidebar-group-row-padding-y
+        : Theme.sidebar-session-row-padding-y;
+    private property <length> label-line-height:
+        row-label.font-metrics.ascent - row-label.font-metrics.descent;
+    private property <length> endpoint-line-height:
+        row-endpoint.font-metrics.ascent - row-endpoint.font-metrics.descent;
+
+    height: max(
+        root.label-line-height,
+        root.endpoint-line-height,
+        root.group ? Theme.sidebar-group-chevron-size : 0px,
+    ) + root.vertical-padding * 2;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
@@ -150,6 +237,11 @@ component SessionNavigationRow inherits FocusScope {
 
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {
+            root.select-target(
+                root.group ? "group" : "server",
+                root.id,
+                root.group-name,
+            );
             if root.group {
                 root.toggle-expanded();
             } else {
@@ -161,14 +253,21 @@ component SessionNavigationRow inherits FocusScope {
     }
 
     Rectangle {
-        background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
-        border-width: root.has-focus ? Theme.hairline : 0px;
-        border-color: Theme.focus;
+        background: root.selected
+            ? Theme.selected
+            : (row-touch.has-hover || root.has-focus ? Theme.hover : transparent);
+        border-width: root.selected || root.has-focus ? Theme.hairline : 0px;
+        border-color: root.has-focus ? Theme.focus : Theme.accent;
         border-radius: Theme.radius-small;
 
         row-touch := TouchArea {
             mouse-cursor: pointer;
             clicked => {
+                root.select-target(
+                    root.group ? "group" : "server",
+                    root.id,
+                    root.group-name,
+                );
                 if root.group {
                     root.toggle-expanded();
                 } else {
@@ -177,12 +276,23 @@ component SessionNavigationRow inherits FocusScope {
             }
         }
 
-        if root.group : HorizontalLayout {
-            padding-left: Theme.sidebar-card-padding;
+        if !root.group && !root.details.is-empty : Tooltip {
+            SessionProfileTooltipContent {
+                name: root.name;
+                details: root.details;
+            }
+        }
+
+        HorizontalLayout {
+            padding-top: root.vertical-padding;
+            padding-bottom: root.vertical-padding;
+            padding-left: root.group
+                ? Theme.sidebar-card-padding
+                : Theme.sidebar-session-indent;
             padding-right: Theme.sidebar-card-padding;
             spacing: Theme.space-sm;
 
-            Rectangle {
+            if root.group : Rectangle {
                 width: Theme.sidebar-group-chevron-width;
                 GroupDisclosureChevron {
                     x: (parent.width - self.width) / 2;
@@ -191,47 +301,29 @@ component SessionNavigationRow inherits FocusScope {
                 }
             }
 
-            Text {
+            row-label := Text {
                 horizontal-stretch: 1;
                 text: root.name;
-                color: Theme.text;
-                font-size: Theme.font-body;
-                font-weight: 700;
+                color: root.selected ? Theme.accent : Theme.text;
+                font-size: root.group
+                    ? Theme.sidebar-group-font-size
+                    : Theme.sidebar-session-font-size;
+                font-weight: root.group
+                    ? Theme.sidebar-group-font-weight
+                    : Theme.sidebar-session-font-weight;
                 overflow: elide;
                 vertical-alignment: center;
             }
-            Text {
+            row-endpoint := Text {
+                width: root.group
+                    ? Theme.sidebar-group-count-width
+                    : min(
+                        Theme.sidebar-session-endpoint-width,
+                        parent.width * 0.58,
+                    );
                 text: root.endpoint;
                 color: Theme.muted;
-                font-family: "JetBrains Mono";
-                font-size: Theme.font-caption;
-                horizontal-alignment: right;
-                vertical-alignment: center;
-            }
-        }
-
-        if !root.group : HorizontalLayout {
-            padding-left: Theme.sidebar-session-indent;
-            padding-right: Theme.sidebar-card-padding;
-            spacing: Theme.space-sm;
-
-            Text {
-                horizontal-stretch: 1;
-                text: root.name;
-                color: Theme.text;
-                font-size: Theme.font-body;
-                font-weight: 700;
-                overflow: elide;
-                vertical-alignment: center;
-            }
-            Text {
-                width: min(
-                    Theme.sidebar-session-endpoint-width,
-                    parent.width * 0.58,
-                );
-                text: root.endpoint;
-                color: Theme.muted;
-                font-family: "JetBrains Mono";
+                font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
                 horizontal-alignment: right;
                 overflow: elide;
@@ -248,12 +340,22 @@ component SessionNavigationRow inherits FocusScope {
             target-id: root.id;
             group-name: root.group-name;
             name: root.name;
+            sftp-enabled: root.sftp-enabled;
             connect-session(id) => { root.connect-session(id); }
+            open-sftp(id) => { root.open-sftp(id); }
             new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
             rename-group(group-name) => { root.rename-group(group-name); }
             delete-group(group-name) => { root.delete-group(group-name); }
             edit-session(id) => { root.edit-session(id); }
             delete-session(id, name) => { root.delete-session(id, name); }
+            copy-session(id) => { root.copy-session(id); }
+            duplicate-session(id) => { root.duplicate-session(id); }
+            select-target(kind, id, group-name) => {
+                root.select-target(kind, id, group-name);
+            }
+            session-transfer-action(action, target) => {
+                root.session-transfer-action(action, target);
+            }
         }
     }
 }
@@ -263,136 +365,223 @@ component SessionNavigationRow inherits FocusScope {
 // boundary or mutates application state.
 component SessionNavigationGroup inherits Rectangle {
     in property <SessionGroupRow> source;
+    in property <string> selected-kind;
+    in property <string> selected-id;
+    in property <string> selected-group-name;
 
     callback connect-session(string);
+    callback open-sftp(string);
     callback new-session-in-group(string);
     callback rename-group(string);
     callback delete-group(string);
     callback edit-session(string);
     callback delete-session(string, string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
+    callback select-target(string, string, string);
 
     private property <bool> group-expanded: true;
 
-    height: Theme.sidebar-group-card-height
-        + (root.group-expanded
-            ? root.source.profiles.length * Theme.sidebar-session-card-height
-            : 0px);
+    height: group-layout.preferred-height;
 
-    SessionNavigationRow {
-        width: parent.width;
-        id: "";
-        group-name: root.source.group-name;
-        name: root.source.name;
-        endpoint: "\{root.source.profiles.length}";
-        icon: root.source.icon;
-        group: true;
-        expanded: root.group-expanded;
-        toggle-expanded => { root.group-expanded = !root.group-expanded; }
-        connect-session(id) => { root.connect-session(id); }
-        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-        rename-group(group-name) => { root.rename-group(group-name); }
-        delete-group(group-name) => { root.delete-group(group-name); }
-        edit-session(id) => { root.edit-session(id); }
-        delete-session(id, name) => { root.delete-session(id, name); }
-    }
+    group-layout := VerticalLayout {
+        spacing: 0px;
 
-    if root.group-expanded : Rectangle {
-        y: Theme.sidebar-group-card-height;
-        width: parent.width;
-        height: root.source.profiles.length * Theme.sidebar-session-card-height;
-        background: transparent;
-
-        for profile[index] in root.source.profiles : SessionNavigationRow {
-            y: index * Theme.sidebar-session-card-height;
+        SessionNavigationRow {
             width: parent.width;
-            id: profile.id;
+            id: "";
             group-name: root.source.group-name;
-            name: profile.name;
-            endpoint: profile.endpoint;
-            icon: profile.icon;
-            group: false;
-            expanded: false;
+            name: root.source.name;
+            endpoint: "\{root.source.profiles.length}";
+            icon: root.source.icon;
+            group: true;
+            expanded: root.group-expanded;
+            selected: root.selected-kind == "group"
+                && root.selected-group-name == root.source.group-name;
+            toggle-expanded => { root.group-expanded = !root.group-expanded; }
+            select-target(kind, id, group-name) => {
+                root.select-target(kind, id, group-name);
+            }
             connect-session(id) => { root.connect-session(id); }
             new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
             rename-group(group-name) => { root.rename-group(group-name); }
             delete-group(group-name) => { root.delete-group(group-name); }
             edit-session(id) => { root.edit-session(id); }
             delete-session(id, name) => { root.delete-session(id, name); }
+            session-transfer-action(action, target) => {
+                root.session-transfer-action(action, target);
+            }
+        }
+
+        if root.group-expanded : Rectangle {
+            height: profile-layout.preferred-height;
+            vertical-stretch: 0;
+
+            profile-layout := VerticalLayout {
+                padding-top: Theme.sidebar-group-to-session-spacing;
+                spacing: Theme.sidebar-session-row-spacing;
+
+                for profile in root.source.profiles : SessionNavigationRow {
+                    width: parent.width;
+                    id: profile.id;
+                    group-name: root.source.group-name;
+                    name: profile.name;
+                    details: profile.details;
+                    endpoint: profile.endpoint;
+                    icon: profile.icon;
+                    sftp-enabled: profile.sftp-enabled;
+                    group: false;
+                    expanded: false;
+                    selected: root.selected-kind == "server"
+                        && root.selected-id == profile.id;
+                    select-target(kind, id, group-name) => {
+                        root.select-target(kind, id, group-name);
+                    }
+                    connect-session(id) => { root.connect-session(id); }
+                    open-sftp(id) => { root.open-sftp(id); }
+                    new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                    rename-group(group-name) => { root.rename-group(group-name); }
+                    delete-group(group-name) => { root.delete-group(group-name); }
+                    edit-session(id) => { root.edit-session(id); }
+                    delete-session(id, name) => { root.delete-session(id, name); }
+                    copy-session(id) => { root.copy-session(id); }
+                    duplicate-session(id) => { root.duplicate-session(id); }
+                    session-transfer-action(action, target) => {
+                        root.session-transfer-action(action, target);
+                    }
+                }
+            }
+        }
+
+        // The gap belongs to the preceding group, keeping its heading and
+        // servers visually together while separating the next group.
+        Rectangle {
+            height: Theme.sidebar-group-spacing;
+            vertical-stretch: 0;
         }
     }
 }
 
 component CompactSessionNavigationGroup inherits Rectangle {
     in property <SessionGroupRow> source;
+    in property <bool> full-group-label: false;
+    in property <string> selected-kind;
+    in property <string> selected-id;
+    in property <string> selected-group-name;
 
     callback connect-session(string);
+    callback open-sftp(string);
     callback new-session-in-group(string);
     callback rename-group(string);
     callback delete-group(string);
     callback edit-session(string);
     callback delete-session(string, string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
+    callback select-target(string, string, string);
 
     private property <bool> group-expanded: true;
 
-    height: Theme.sidebar-rail-group-row-height
-        + (root.group-expanded
-            ? root.source.profiles.length * Theme.sidebar-rail-session-row-height
-            : 0px);
+    height: compact-layout.preferred-height;
 
-    SidebarRailItem {
+    compact-layout := VerticalLayout {
         width: parent.width;
-        height: Theme.sidebar-rail-group-row-height;
-        label: root.source.icon;
-        group: true;
-        expandable: true;
-        expanded: root.group-expanded;
-        accessible-name: root.group-expanded
-            ? "Collapse " + root.source.name + " group"
-            : "Expand " + root.source.name + " group";
-        activated => { root.group-expanded = !root.group-expanded; }
-    }
-    SessionActionMenu {
-        group-name: root.source.group-name;
-        name: root.source.name;
-        kind: root.source.group-name.is-empty
-            ? SessionActionMenuKind.ungrouped
-            : SessionActionMenuKind.group;
-        connect-session(id) => { root.connect-session(id); }
-        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-        rename-group(group-name) => { root.rename-group(group-name); }
-        delete-group(group-name) => { root.delete-group(group-name); }
-        edit-session(id) => { root.edit-session(id); }
-        delete-session(id, name) => { root.delete-session(id, name); }
-    }
+        spacing: root.group-expanded && root.source.profiles.length > 0
+            ? Theme.sidebar-rail-group-to-session-spacing : 0px;
 
-    if root.group-expanded : Rectangle {
-        y: Theme.sidebar-rail-group-row-height;
-        width: parent.width;
-        height: root.source.profiles.length * Theme.sidebar-rail-session-row-height;
-
-        for profile[index] in root.source.profiles : Rectangle {
-            y: index * Theme.sidebar-rail-session-row-height;
+        Rectangle {
             width: parent.width;
-            height: Theme.sidebar-rail-session-row-height;
+            height: group-item.height;
 
-            SidebarRailItem {
+            group-item := SidebarRailItem {
                 width: parent.width;
-                label: profile.icon;
-                group: false;
-                accessible-name: "Connect to " + profile.name;
-                activated => { root.connect-session(profile.id); }
+                label: root.full-group-label ? root.source.name : root.source.icon;
+                group: true;
+                expandable: true;
+                expanded: root.group-expanded;
+                expanded-label: root.full-group-label;
+                selected: root.selected-kind == "group"
+                    && root.selected-group-name == root.source.group-name;
+                accessible-name: root.group-expanded
+                    ? "Collapse " + root.source.name + " group"
+                    : "Expand " + root.source.name + " group";
+                activated => {
+                    root.select-target("group", "", root.source.group-name);
+                    root.group-expanded = !root.group-expanded;
+                }
             }
             SessionActionMenu {
-                target-id: profile.id;
                 group-name: root.source.group-name;
-                name: profile.name;
-                kind: SessionActionMenuKind.server;
+                name: root.source.name;
+                kind: root.source.group-name.is-empty
+                    ? SessionActionMenuKind.ungrouped
+                    : SessionActionMenuKind.group;
                 connect-session(id) => { root.connect-session(id); }
                 new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
                 rename-group(group-name) => { root.rename-group(group-name); }
                 delete-group(group-name) => { root.delete-group(group-name); }
                 edit-session(id) => { root.edit-session(id); }
                 delete-session(id, name) => { root.delete-session(id, name); }
+                copy-session(id) => { root.copy-session(id); }
+                duplicate-session(id) => { root.duplicate-session(id); }
+                select-target(kind, id, group-name) => {
+                    root.select-target(kind, id, group-name);
+                }
+                session-transfer-action(action, target) => {
+                    root.session-transfer-action(action, target);
+                }
+            }
+        }
+
+        if root.group-expanded : VerticalLayout {
+            spacing: Theme.sidebar-rail-session-spacing;
+
+            for profile in root.source.profiles : Rectangle {
+                width: parent.width;
+                height: profile-item.height;
+
+                profile-item := SidebarRailItem {
+                    width: parent.width;
+                    label: profile.icon;
+                    group: false;
+                    selected: root.selected-kind == "server"
+                        && root.selected-id == profile.id;
+                    accessible-name: "Connect to " + profile.name;
+                    activated => {
+                        root.select-target("server", profile.id, root.source.group-name);
+                        root.connect-session(profile.id);
+                    }
+                }
+                if !profile.details.is-empty : Tooltip {
+                    SessionProfileTooltipContent {
+                        name: profile.name;
+                        details: profile.details;
+                    }
+                }
+                SessionActionMenu {
+                    target-id: profile.id;
+                    group-name: root.source.group-name;
+                    name: profile.name;
+                    kind: SessionActionMenuKind.server;
+                    sftp-enabled: profile.sftp-enabled;
+                    connect-session(id) => { root.connect-session(id); }
+                    open-sftp(id) => { root.open-sftp(id); }
+                    new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                    rename-group(group-name) => { root.rename-group(group-name); }
+                    delete-group(group-name) => { root.delete-group(group-name); }
+                    edit-session(id) => { root.edit-session(id); }
+                    delete-session(id, name) => { root.delete-session(id, name); }
+                    copy-session(id) => { root.copy-session(id); }
+                    duplicate-session(id) => { root.duplicate-session(id); }
+                    select-target(kind, id, group-name) => {
+                        root.select-target(kind, id, group-name);
+                    }
+                    session-transfer-action(action, target) => {
+                        root.session-transfer-action(action, target);
+                    }
+                }
             }
         }
     }
@@ -401,6 +590,7 @@ component CompactSessionNavigationGroup inherits Rectangle {
 export component SessionNavigation inherits Rectangle {
     in property <[SessionGroupRow]> sessions;
     in property <int> sidebar-width;
+    in property <int> collapsed-group-label-chars: 2;
     in-out property <bool> collapsed;
     in property <string> local-shell-title: "Local Shell";
     in property <string> local-shell-description: "Open a new local shell tab";
@@ -409,16 +599,47 @@ export component SessionNavigation inherits Rectangle {
     callback open-local-shell();
     callback new-session();
     callback connect-session(string);
+    callback open-sftp(string);
     callback new-group();
     callback new-session-in-group(string);
     callback rename-group(string);
     callback delete-group(string);
     callback edit-session(string);
     callback delete-session(string, string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
 
     private property <bool> expanded: !root.collapsed;
+    private property <string> selected-kind;
+    private property <string> selected-id;
+    private property <string> selected-group-name;
 
-    width: root.expanded ? root.sidebar-width * 1px : Theme.activity-bar-width;
+    public function import-session-config() {
+        root.session-transfer-action("import-any", "");
+    }
+
+    public function export-selected-session-config() {
+        if root.selected-kind == "server" && !root.selected-id.is-empty {
+            root.session-transfer-action("copy-server", root.selected-id);
+        } else if root.selected-kind == "group" && !root.selected-group-name.is-empty {
+            root.session-transfer-action("copy-group", root.selected-group-name);
+        } else {
+            root.session-transfer-action("export-none", "");
+        }
+    }
+
+    function select-target(kind: string, id: string, group-name: string) {
+        root.selected-kind = kind;
+        root.selected-id = id;
+        root.selected-group-name = group-name;
+    }
+
+    width: root.expanded
+        ? root.sidebar-width * 1px
+        : (root.collapsed-group-label-chars == 0
+            ? Theme.sidebar-rail-full-width
+            : Theme.activity-bar-width);
 
     if !root.expanded : Rectangle {
         background: Theme.panel-alt;
@@ -450,18 +671,44 @@ export component SessionNavigation inherits Rectangle {
                     kind: SessionActionMenuKind.list;
                     new-group => { root.new-group(); }
                     new-session => { root.new-session(); }
+                    session-transfer-action(action, target) => {
+                        root.session-transfer-action(action, target);
+                    }
                 }
 
-                if root.sessions.length > 0 : ListView {
-                    for group in root.sessions : CompactSessionNavigationGroup {
+                if root.sessions.length > 0 : groups-flick := Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+                    viewport-height: max(self.height, groups-layout.preferred-height);
+
+                    groups-layout := VerticalLayout {
                         width: parent.width;
-                        source: group;
-                        connect-session(id) => { root.connect-session(id); }
-                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                        rename-group(group-name) => { root.rename-group(group-name); }
-                        delete-group(group-name) => { root.delete-group(group-name); }
-                        edit-session(id) => { root.edit-session(id); }
-                        delete-session(id, name) => { root.delete-session(id, name); }
+                        spacing: Theme.sidebar-rail-group-spacing;
+
+                        for group in root.sessions : CompactSessionNavigationGroup {
+                            width: parent.width;
+                            source: group;
+                            full-group-label: root.collapsed-group-label-chars == 0;
+                            selected-kind: root.selected-kind;
+                            selected-id: root.selected-id;
+                            selected-group-name: root.selected-group-name;
+                            select-target(kind, id, group-name) => {
+                                root.select-target(kind, id, group-name);
+                            }
+                            connect-session(id) => { root.connect-session(id); }
+                            open-sftp(id) => { root.open-sftp(id); }
+                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                            rename-group(group-name) => { root.rename-group(group-name); }
+                            delete-group(group-name) => { root.delete-group(group-name); }
+                            edit-session(id) => { root.edit-session(id); }
+                            delete-session(id, name) => { root.delete-session(id, name); }
+                            copy-session(id) => { root.copy-session(id); }
+                            duplicate-session(id) => { root.duplicate-session(id); }
+                            session-transfer-action(action, target) => {
+                                root.session-transfer-action(action, target);
+                            }
+                        }
                     }
                 }
                 if root.sessions.length == 0 : Text {
@@ -566,18 +813,43 @@ export component SessionNavigation inherits Rectangle {
                     kind: SessionActionMenuKind.list;
                     new-group => { root.new-group(); }
                     new-session => { root.new-session(); }
+                    session-transfer-action(action, target) => {
+                        root.session-transfer-action(action, target);
+                    }
                 }
 
-                if root.sessions.length > 0 : ListView {
-                    for group in root.sessions : SessionNavigationGroup {
+                if root.sessions.length > 0 : expanded-groups-flick := Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+                    viewport-height: max(self.height, expanded-groups-layout.preferred-height);
+
+                    expanded-groups-layout := VerticalLayout {
                         width: parent.width;
-                        source: group;
-                        connect-session(id) => { root.connect-session(id); }
-                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                        rename-group(group-name) => { root.rename-group(group-name); }
-                        delete-group(group-name) => { root.delete-group(group-name); }
-                        edit-session(id) => { root.edit-session(id); }
-                        delete-session(id, name) => { root.delete-session(id, name); }
+                        spacing: 0px;
+
+                        for group in root.sessions : SessionNavigationGroup {
+                            width: parent.width;
+                            source: group;
+                            selected-kind: root.selected-kind;
+                            selected-id: root.selected-id;
+                            selected-group-name: root.selected-group-name;
+                            select-target(kind, id, group-name) => {
+                                root.select-target(kind, id, group-name);
+                            }
+                            connect-session(id) => { root.connect-session(id); }
+                            open-sftp(id) => { root.open-sftp(id); }
+                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                            rename-group(group-name) => { root.rename-group(group-name); }
+                            delete-group(group-name) => { root.delete-group(group-name); }
+                            edit-session(id) => { root.edit-session(id); }
+                            delete-session(id, name) => { root.delete-session(id, name); }
+                            copy-session(id) => { root.copy-session(id); }
+                            duplicate-session(id) => { root.duplicate-session(id); }
+                            session-transfer-action(action, target) => {
+                                root.session-transfer-action(action, target);
+                            }
+                        }
                     }
                 }
                 if root.sessions.length == 0 : Text {

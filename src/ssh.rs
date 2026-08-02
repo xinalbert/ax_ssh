@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use russh::client;
 use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
-use russh::{Channel, ChannelMsg};
+use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream};
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
 use zeroize::Zeroizing;
@@ -17,6 +17,7 @@ pub use self::worker::{SshSessionEvent, SshSessionHandle};
 
 mod private_keys;
 mod worker;
+mod x11;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const AUTH_TIMEOUT: Duration = Duration::from_secs(30);
@@ -86,13 +87,19 @@ impl FingerprintObservation {
 struct ClientHandler {
     expected_fingerprint: Option<String>,
     observation: FingerprintObservation,
+    x11_dispatcher: Option<x11::X11Dispatcher>,
 }
 
 impl ClientHandler {
-    fn new(expected_fingerprint: Option<String>, observation: FingerprintObservation) -> Self {
+    fn new(
+        expected_fingerprint: Option<String>,
+        observation: FingerprintObservation,
+        x11_dispatcher: Option<x11::X11Dispatcher>,
+    ) -> Self {
         Self {
             expected_fingerprint,
             observation,
+            x11_dispatcher,
         }
     }
 }
@@ -120,6 +127,28 @@ impl client::Handler for ClientHandler {
         }
         Ok(trusted)
     }
+
+    fn server_channel_open_x11(
+        &mut self,
+        channel: Channel<client::Msg>,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        let dispatcher = self.x11_dispatcher.clone();
+        async move {
+            match dispatcher {
+                Some(dispatcher) => dispatcher.dispatch(channel, reply).await,
+                None => {
+                    reply
+                        .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                        .await;
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 fn fingerprint_is_trusted(expected: Option<&str>, actual: &str) -> bool {
@@ -131,6 +160,9 @@ fn client_config() -> Arc<client::Config> {
         inactivity_timeout: Some(INACTIVITY_TIMEOUT),
         keepalive_interval: Some(KEEPALIVE_INTERVAL),
         keepalive_max: KEEPALIVE_MAX,
+        // Interactive terminal input is usually only a few bytes. Send it
+        // immediately instead of waiting for Nagle aggregation.
+        nodelay: true,
         ..client::Config::default()
     })
 }
@@ -139,21 +171,25 @@ async fn connect_transport(
     profile: &SessionProfile,
     expected_fingerprint: Option<String>,
     observation: FingerprintObservation,
+    x11_dispatcher: Option<x11::X11Dispatcher>,
 ) -> Result<client::Handle<ClientHandler>> {
-    let handler = ClientHandler::new(expected_fingerprint.clone(), observation.clone());
+    let ssh = profile
+        .ssh()
+        .context("SSH transport requires an SSH session profile")?;
+    let handler = ClientHandler::new(
+        expected_fingerprint.clone(),
+        observation.clone(),
+        x11_dispatcher,
+    );
     let result = timeout(
         CONNECT_TIMEOUT,
-        client::connect(
-            client_config(),
-            (profile.host.as_str(), profile.port),
-            handler,
-        ),
+        client::connect(client_config(), (ssh.host.as_str(), ssh.port), handler),
     )
     .await
     .with_context(|| {
         format!(
             "timed out connecting to {}:{} during SSH key exchange",
-            profile.host, profile.port
+            ssh.host, ssh.port
         )
     })?;
 
@@ -169,8 +205,7 @@ async fn connect_transport(
                 }
                 .into());
             }
-            Err(error)
-                .with_context(|| format!("failed to connect to {}:{}", profile.host, profile.port))
+            Err(error).with_context(|| format!("failed to connect to {}:{}", ssh.host, ssh.port))
         }
     }
 }
@@ -179,7 +214,7 @@ async fn connect_transport(
 pub async fn probe_host_key(profile: &SessionProfile) -> Result<String> {
     profile.validate()?;
     let observation = FingerprintObservation::default();
-    let result = connect_transport(profile, None, observation.clone()).await;
+    let result = connect_transport(profile, None, observation.clone(), None).await;
     let observed = observation.get()?;
 
     match (result, observed) {
@@ -206,26 +241,43 @@ pub struct SshConnection {
 }
 
 impl SshConnection {
+    #[cfg(test)]
     pub(crate) async fn connect(
         profile: &SessionProfile,
         secret: Zeroizing<String>,
     ) -> Result<Self> {
+        Self::connect_with_x11(profile, secret, None).await
+    }
+
+    async fn connect_with_x11(
+        profile: &SessionProfile,
+        secret: Zeroizing<String>,
+        x11_dispatcher: Option<x11::X11Dispatcher>,
+    ) -> Result<Self> {
         profile.validate()?;
+        let ssh = profile
+            .ssh()
+            .context("SSH connection requires an SSH session profile")?;
         info!(
             session_id = %profile.id,
-            host = %profile.host,
-            port = profile.port,
+            host = %ssh.host,
+            port = ssh.port,
             "starting SSH connection"
         );
 
         let observation = FingerprintObservation::default();
-        let mut handle =
-            connect_transport(profile, profile.host_key_fingerprint.clone(), observation).await?;
+        let mut handle = connect_transport(
+            profile,
+            ssh.host_key_fingerprint.clone(),
+            observation,
+            x11_dispatcher,
+        )
+        .await?;
 
-        let authenticated = match &profile.auth {
+        let authenticated = match &ssh.auth {
             AuthMethod::Password => timeout(
                 AUTH_TIMEOUT,
-                handle.authenticate_password(profile.username.clone(), secret.as_str()),
+                handle.authenticate_password(ssh.username.clone(), secret.as_str()),
             )
             .await
             .context("SSH password authentication timed out")?
@@ -242,7 +294,7 @@ impl SshConnection {
                 timeout(
                     AUTH_TIMEOUT,
                     handle.authenticate_publickey(
-                        profile.username.clone(),
+                        ssh.username.clone(),
                         PrivateKeyWithHashAlg::new(Arc::new(private_key), hash_alg),
                     ),
                 )
@@ -280,21 +332,69 @@ impl SshConnection {
             .context("failed to send SSH disconnect")
     }
 
-    pub async fn open_shell(self, columns: u32, rows: u32) -> Result<SshShell> {
+    async fn open_shell(
+        &self,
+        columns: u32,
+        rows: u32,
+        x11: Option<&x11::X11Session>,
+    ) -> Result<(SshShell, X11RequestStatus)> {
         let channel = self.handle.channel_open_session().await?;
         channel
             .request_pty(true, "xterm-256color", columns, rows, 0, 0, &[])
             .await?;
+        let x11_status = match x11 {
+            Some(x11) => {
+                let fake_cookie = x11.fake_cookie_hex();
+                match timeout(
+                    CONNECT_TIMEOUT,
+                    channel.request_x11(
+                        true,
+                        false,
+                        x11::X11_AUTH_PROTOCOL,
+                        fake_cookie.as_str(),
+                        x11.screen(),
+                    ),
+                )
+                .await
+                {
+                    Ok(Ok(())) => X11RequestStatus::Enabled,
+                    Ok(Err(error)) => {
+                        debug!(%error, "SSH server rejected the X11 forwarding request");
+                        X11RequestStatus::Rejected
+                    }
+                    Err(_) => {
+                        debug!("SSH X11 forwarding request timed out");
+                        X11RequestStatus::Rejected
+                    }
+                }
+            }
+            None => X11RequestStatus::NotRequested,
+        };
         channel.request_shell(true).await?;
-        Ok(SshShell {
-            handle: self.handle,
-            channel,
-        })
+        Ok((SshShell { channel }, x11_status))
+    }
+
+    pub(crate) async fn open_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
+        let channel = timeout(CONNECT_TIMEOUT, self.handle.channel_open_session())
+            .await
+            .context("timed out opening the SFTP SSH channel")?
+            .context("failed to open SFTP SSH channel")?;
+        timeout(CONNECT_TIMEOUT, channel.request_subsystem(true, "sftp"))
+            .await
+            .context("timed out requesting the SFTP subsystem")?
+            .context("server rejected the SFTP subsystem")?;
+        Ok(channel.into_stream())
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum X11RequestStatus {
+    NotRequested,
+    Enabled,
+    Rejected,
+}
+
 pub struct SshShell {
-    handle: client::Handle<ClientHandler>,
     channel: Channel<russh::client::Msg>,
 }
 
@@ -311,9 +411,6 @@ impl SshShell {
 
     pub async fn disconnect(&self) -> Result<()> {
         self.channel.close().await?;
-        self.handle
-            .disconnect(russh::Disconnect::ByApplication, "AxSSH session closed", "")
-            .await?;
         Ok(())
     }
 

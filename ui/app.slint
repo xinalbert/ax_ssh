@@ -1,4 +1,3 @@
-import "../assets/fonts/JetBrainsMono-Regular.ttf";
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
@@ -6,16 +5,19 @@ import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
 import { TerminalRenderLine } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
+import { SftpEntryRow, SftpViewState } from "sftp-pane.slint";
 import { WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
     title: "AxSSH";
+    icon: @image-url("../assets/ion/terminal_icon_all_formats/terminal_icon_256.png");
     min-width: Theme.window-min-width;
     min-height: Theme.window-min-height;
     preferred-width: Theme.window-preferred-width;
     preferred-height: Theme.window-preferred-height;
+    default-font-family: Theme.application-font-family;
     background: Theme.background;
     private property <ColorScheme> standard-widget-color-scheme: Theme.widget-color-scheme;
 
@@ -28,14 +30,24 @@ export component AppWindow inherits Window {
     in property <string> editor-profile-id;
     in property <string> editor-name;
     in property <string> editor-group-name;
+    in property <string> editor-protocol: "SSH";
     in property <string> editor-host;
     in property <string> editor-port: "22";
     in property <string> editor-username;
     in property <string> editor-auth-method: "Password";
     in property <string> editor-private-key-path;
+    in property <bool> editor-x11-forwarding: false;
+    in property <string> editor-serial-port;
+    in property <string> editor-serial-baud-rate: "115200";
+    in property <string> editor-serial-data-bits: "8";
+    in property <string> editor-serial-stop-bits: "1";
+    in property <string> editor-serial-parity: "none";
+    in property <string> editor-serial-flow-control: "none";
+    in property <[string]> serial-port-options;
     in property <[string]> local-shell-options;
     in property <string> status: "";
     in property <string> active-tab-id: "";
+    in property <string> settings-tab-id: "";
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
     in property <string> active-tab-status: "";
@@ -52,13 +64,32 @@ export component AppWindow inherits Window {
     in property <string> password-dialog-tab-id: "";
     in property <bool> worker-running: false;
     in property <bool> connected: false;
+    in property <bool> sftp-available: false;
+    in property <bool> sftp-open: false;
+    in property <bool> sftp-loading: false;
+    in property <string> sftp-home: "";
+    in property <string> sftp-path: "";
+    in property <[SftpEntryRow]> sftp-entries;
+    in property <bool> sftp-has-more: false;
+    in property <bool> sftp-truncated: false;
+    in property <string> sftp-status: "";
+    in property <bool> local-sftp-loading: false;
+    in property <string> local-sftp-path: "";
+    in property <[SftpEntryRow]> local-sftp-entries;
+    in property <bool> local-sftp-truncated: false;
+    in property <string> local-sftp-status: "";
     in property <[TerminalRenderLine]> terminal-render-lines;
     in property <int> terminal-content-columns: 0;
     in property <int> terminal-cursor-row: 0;
     in property <int> terminal-cursor-column: 0;
     in property <bool> terminal-cursor-visible: false;
     in property <string> terminal-cursor-text: " ";
+    in property <string> application-font-family: "JetBrains Mono";
+    in property <[string]> application-font-options;
+    in property <int> application-font-index: 0;
     in property <string> terminal-font-family: "JetBrains Mono";
+    in property <[string]> terminal-font-options;
+    in property <int> terminal-font-index: 0;
     in property <int> terminal-font-size: 14;
     in property <int> terminal-line-height-percent: 120;
     out property <string> terminal-color-scheme: Theme.terminal-color-scheme;
@@ -66,6 +97,12 @@ export component AppWindow inherits Window {
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
     in property <bool> option-as-meta: false;
+    in property <[string]> x11-server-provider-options;
+    in property <string> x11-server-provider: "auto";
+    in property <int> x11-server-provider-index: 0;
+    in property <string> x11-server-app-path: "";
+    in property <bool> x11-launch-on-connect: true;
+    in property <bool> x11-allow-no-auth: false;
     in property <color> terminal-render-foreground: Theme.terminal-foreground;
     in property <color> terminal-render-background: Theme.terminal-background;
     in property <color> terminal-render-selection-background: Theme.terminal-selection;
@@ -113,27 +150,48 @@ export component AppWindow inherits Window {
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
     in property <string> session-mask-character: "*";
+    in property <int> collapsed-group-label-chars: 2;
     in property <string> open-settings-shortcut;
+    in property <string> new-session-shortcut;
+    in property <string> import-sessions-shortcut;
+    in property <string> export-selected-shortcut;
     in property <string> toggle-sidebar-shortcut;
     in property <string> copy-selection-shortcut;
     in property <string> paste-shortcut;
+    in property <string> open-sftp-shortcut;
+    in property <keys> open-settings-menu-shortcut;
+    in property <keys> new-session-menu-shortcut;
+    in property <keys> import-sessions-menu-shortcut;
+    in property <keys> export-selected-menu-shortcut;
+    in property <keys> toggle-sidebar-menu-shortcut;
+    in property <keys> open-sftp-menu-shortcut;
     in property <string> default-open-settings-shortcut;
+    in property <string> default-new-session-shortcut;
+    in property <string> default-import-sessions-shortcut;
+    in property <string> default-export-selected-shortcut;
     in property <string> default-toggle-sidebar-shortcut;
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
+    in property <string> default-open-sftp-shortcut;
     in property <bool> apple-platform: false;
     in property <string> app-version;
     private property <string> settings-section: "General";
     private property <int> settings-section-request-revision: 0;
+    out property <bool> menu-shortcuts-enabled:
+        !workspace-shell.shortcut-recording
+        && !root.host-key-dialog-open
+        && !root.password-dialog-open;
     private property <WorkspaceViewState> workspace-view: {
         sessions: root.sessions,
         workspace_tabs: root.workspace-tabs,
         connection_options: root.connection-options,
         active_tab_id: root.active-tab-id,
+        settings_tab_id: root.settings-tab-id,
         active_tab_kind: root.active-tab-kind,
         status: root.status,
         sidebar_width: root.sidebar-width,
         tab_width: root.tab-width,
+        collapsed_group_label_chars: root.collapsed-group-label-chars,
         terminal_background: root.terminal-background,
         terminal: {
             terminal_id: root.active-tab-id, connected: root.connected,
@@ -147,8 +205,21 @@ export component AppWindow inherits Window {
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
         },
+        sftp: {
+            available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
+            home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
+            has_more: root.sftp-has-more, truncated: root.sftp-truncated, status: root.sftp-status,
+            local_loading: root.local-sftp-loading, local_path: root.local-sftp-path,
+            local_entries: root.local-sftp-entries, local_truncated: root.local-sftp-truncated,
+            local_status: root.local-sftp-status,
+        },
         settings: {
-            local_shell_options: root.local-shell-options, terminal_font_family: root.terminal-font-family,
+            local_shell_options: root.local-shell-options,
+            application_font_family: root.application-font-family,
+            application_font_options: root.application-font-options,
+            application_font_index: root.application-font-index,
+            terminal_font_family: root.terminal-font-family,
+            terminal_font_options: root.terminal-font-options, terminal_font_index: root.terminal-font-index,
             terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
             terminal_brightness_percent: root.terminal-brightness-percent, bright_bold_text: root.bright-bold-text,
             theme_mode: root.theme-mode, theme_palette: root.theme-palette,
@@ -169,24 +240,46 @@ export component AppWindow inherits Window {
             theme_dark_terminal_background: root.theme-dark-terminal-background,
             theme_dark_terminal_selection: root.theme-dark-terminal-selection,
             right_click_copy_or_paste: root.right-click-copy-or-paste, option_as_meta: root.option-as-meta,
+            x11_server_provider_options: root.x11-server-provider-options,
+            x11_server_provider: root.x11-server-provider,
+            x11_server_provider_index: root.x11-server-provider-index,
+            x11_server_app_path: root.x11-server-app-path,
+            x11_launch_on_connect: root.x11-launch-on-connect,
+            x11_allow_no_auth: root.x11-allow-no-auth,
             apple_platform: root.apple-platform, scrollback_lines: root.scrollback-lines,
             default_terminal_columns: root.default-terminal-columns, default_terminal_rows: root.default-terminal-rows,
             local_shell: root.local-shell, local_shell_index: root.local-shell-index,
             credential_storage: root.credential-storage, sidebar_width: root.sidebar-width,
             tab_width: root.tab-width, session_mask_character: root.session-mask-character,
+            collapsed_group_label_chars: root.collapsed-group-label-chars,
             open_settings_shortcut: root.open-settings-shortcut,
+            new_session_shortcut: root.new-session-shortcut,
+            import_sessions_shortcut: root.import-sessions-shortcut,
+            export_selected_shortcut: root.export-selected-shortcut,
             toggle_sidebar_shortcut: root.toggle-sidebar-shortcut,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
+            open_sftp_shortcut: root.open-sftp-shortcut,
             default_open_settings_shortcut: root.default-open-settings-shortcut,
+            default_new_session_shortcut: root.default-new-session-shortcut,
+            default_import_sessions_shortcut: root.default-import-sessions-shortcut,
+            default_export_selected_shortcut: root.default-export-selected-shortcut,
             default_toggle_sidebar_shortcut: root.default-toggle-sidebar-shortcut,
             default_copy_selection_shortcut: root.default-copy-selection-shortcut,
-            default_paste_shortcut: root.default-paste-shortcut, app_version: root.app-version, status: root.status,
+            default_paste_shortcut: root.default-paste-shortcut,
+            default_open_sftp_shortcut: root.default-open-sftp-shortcut,
+            app_version: root.app-version, status: root.status,
         },
         session_editor: {
             draft_id: root.editor-draft-id, profile_id: root.editor-profile-id, name: root.editor-name,
-            group_name: root.editor-group-name, host: root.editor-host, port: root.editor-port,
+            group_name: root.editor-group-name, protocol: root.editor-protocol,
+            host: root.editor-host, port: root.editor-port,
             username: root.editor-username, auth_method: root.editor-auth-method,
-            private_key_path: root.editor-private-key-path, group_options: root.group-options,
+            private_key_path: root.editor-private-key-path, x11_forwarding: root.editor-x11-forwarding,
+            serial_port: root.editor-serial-port,
+            serial_baud_rate: root.editor-serial-baud-rate, serial_data_bits: root.editor-serial-data-bits,
+            serial_stop_bits: root.editor-serial-stop-bits, serial_parity: root.editor-serial-parity,
+            serial_flow_control: root.editor-serial-flow-control, serial_port_options: root.serial-port-options,
+            group_options: root.group-options,
             private_key_options: root.private-key-options, status: root.status,
         },
     };
@@ -202,6 +295,9 @@ export component AppWindow inherits Window {
     callback new-session();
     callback new-session-in-group(string);
     callback edit-session(string);
+    callback copy-session(string);
+    callback duplicate-session(string);
+    callback session-transfer-action(string, string);
     callback manage-session-action(string, string, string);
     callback open-local-shell();
     callback open-settings();
@@ -209,27 +305,39 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, int, int, int, bool, string, string,
+        string, string, int, int, int, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, string, int, int, int, int, int, string, string, string, string, string, string,
+        bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        string, string, bool,
     );
-    callback cancel-settings();
     callback connect-session(string);
-    callback save-session(string, string, string, string, string, string, string);
+    callback open-sftp-session(string);
+    callback save-session(
+        string, string, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string,
+    );
+    callback refresh-serial-ports();
     callback cancel-session-dialog();
     callback confirm-host-key();
     callback reject-host-key();
     callback authenticate-session(string, string, bool) -> bool;
     callback cancel-password-dialog();
     callback disconnect-session();
+    callback open-sftp();
+    callback list-sftp-directory(string);
+    callback load-more-sftp();
+    callback list-local-sftp-directory(string);
+    callback close-sftp();
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
-    callback terminal-key-is-control(bool, bool, bool, bool) -> bool;
     callback resize-terminal(int, int);
     callback scroll-terminal(int);
     callback terminal-selection-text(int, int, int, int) -> string;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback log-keyboard-event(string, bool, bool, bool, bool, string, string);
+    callback menu-action(string);
+    callback menu-state-changed();
     callback write-clipboard(string);
     callback read-clipboard() -> string;
     callback refresh-terminal-appearance();
@@ -245,83 +353,143 @@ export component AppWindow inherits Window {
     }
     changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
     changed theme-revision => { root.refresh-terminal-appearance(); }
+    changed menu-shortcuts-enabled => { root.menu-state-changed(); }
     MenuBar {
         Menu {
             title: "File";
-            MenuItem { title: "New Session"; activated => { root.new-session(); } }
+            MenuItem {
+                title: "New Server";
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.new-session-menu-shortcut;
+                activated => { root.menu-action("new-session"); root.new-session(); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Import from Clipboard";
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.import-sessions-menu-shortcut;
+                activated => {
+                    root.menu-action("import-sessions");
+                    workspace-shell.import-session-config();
+                }
+            }
+            MenuItem {
+                title: "Export Selected to Clipboard";
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.export-selected-menu-shortcut;
+                activated => {
+                    root.menu-action("export-selected");
+                    workspace-shell.export-selected-session-config();
+                }
+            }
         }
         Menu {
             title: "Edit";
             MenuItem { title: "Undo"; enabled: false; }
             if !root.apple-platform : MenuItem {
                 title: "Settings...";
-                activated => { root.request-settings-section("General"); root.open-settings(); }
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.open-settings-menu-shortcut;
+                activated => {
+                    root.menu-action("open-settings");
+                    root.request-settings-section("General");
+                    root.open-settings();
+                }
             }
         }
         Menu {
             title: "View";
             MenuItem {
                 title: "Toggle Session Sidebar";
-                activated => { workspace-shell.toggle-sidebar(); }
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.toggle-sidebar-menu-shortcut;
+                activated => {
+                    root.menu-action("toggle-sidebar");
+                    workspace-shell.toggle-sidebar();
+                }
             }
         }
         Menu {
             title: "Pane";
-            MenuItem { title: "New Local Shell"; activated => { root.open-local-shell(); } }
+            MenuItem {
+                title: "New Local Shell";
+                activated => { root.menu-action("new-local-shell"); root.open-local-shell(); }
+            }
+            if root.apple-platform : MenuItem {
+                title: "Open SFTP Tab";
+                enabled: root.menu-shortcuts-enabled;
+                shortcut: root.open-sftp-menu-shortcut;
+                activated => { root.menu-action("open-sftp"); root.open-sftp(); }
+            }
+            if !root.apple-platform : MenuItem {
+                title: root.sftp-open ? "Refresh SFTP" : "Open SFTP";
+                enabled: root.menu-shortcuts-enabled
+                    && root.sftp-available && root.connected && !root.sftp-loading;
+                shortcut: root.open-sftp-menu-shortcut;
+                activated => {
+                    if root.sftp-open {
+                        root.menu-action("refresh-sftp");
+                        root.list-sftp-directory(root.sftp-path);
+                    } else {
+                        root.menu-action("open-sftp");
+                        root.open-sftp();
+                    }
+                }
+            }
         }
         Menu {
             title: "Window";
             if root.apple-platform : MenuItem {
                 title: "Close Current Tab";
-                activated => { root.close-tab(root.active-tab-id); }
+                activated => {
+                    root.menu-action("close-tab");
+                    workspace-shell.request-close-tab(root.active-tab-id);
+                }
             }
             if !root.apple-platform : MenuItem {
                 title: "Close Current Tab";
                 enabled: !root.active-tab-id.is-empty;
-                activated => { root.close-tab(root.active-tab-id); }
+                activated => {
+                    root.menu-action("close-tab");
+                    workspace-shell.request-close-tab(root.active-tab-id);
+                }
             }
         }
         Menu {
             title: "Help";
             MenuItem {
                 title: "Keyboard Shortcuts";
-                activated => { root.request-settings-section("Shortcuts"); root.open-settings(); }
+                activated => {
+                    root.menu-action("open-shortcuts");
+                    root.request-settings-section("Shortcuts");
+                    root.open-settings();
+                }
             }
             if !root.apple-platform : MenuItem {
                 title: "About AxSSH";
-                activated => { root.request-settings-section("About"); root.open-settings(); }
+                activated => {
+                    root.menu-action("open-about");
+                    root.request-settings-section("About");
+                    root.open-settings();
+                }
             }
         }
     }
 
     shortcut-scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+
         capture-key-pressed(event) => {
             if workspace-shell.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
                 return EventResult.reject;
             }
             if event.text == Key.Escape && workspace-shell.dismiss-transient-controls() {
-                return EventResult.accept;
-            }
-            if root.active-tab-kind == "terminal"
-                    && root.terminal-key-is-control(
-                        event.modifiers.alt,
-                        event.modifiers.control,
-                        event.modifiers.meta,
-                        event.modifiers.shift,
-                    ) {
-                return EventResult.reject;
-            }
-            if root.format-shortcut(event.text, event.modifiers.alt, event.modifiers.control,
-                                    event.modifiers.meta, event.modifiers.shift)
-                    == root.open-settings-shortcut {
-                root.request-settings-section("General");
-                root.open-settings();
-                return EventResult.accept;
-            }
-            if root.format-shortcut(event.text, event.modifiers.alt, event.modifiers.control,
-                                    event.modifiers.meta, event.modifiers.shift)
-                    == root.toggle-sidebar-shortcut {
-                workspace-shell.toggle-sidebar();
+                root.log-keyboard-event(
+                    event.text, event.modifiers.alt, event.modifiers.control,
+                    event.modifiers.meta, event.modifiers.shift,
+                    "transient-control", "dismiss-transient",
+                );
                 return EventResult.accept;
             }
             return EventResult.reject;
@@ -336,6 +504,11 @@ export component AppWindow inherits Window {
             new-session => { root.new-session(); }
             new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
             edit-session(id) => { root.edit-session(id); }
+            copy-session(id) => { root.copy-session(id); }
+            duplicate-session(id) => { root.duplicate-session(id); }
+            session-transfer-action(action, target) => {
+                root.session-transfer-action(action, target);
+            }
             request-session-management(action, target, subject) => {
                 overlay-host.show-session-management(action, target, subject);
             }
@@ -343,7 +516,7 @@ export component AppWindow inherits Window {
             activate-tab(id) => { root.activate-tab(id); }
             close-tab(id) => { root.close-tab(id); }
             move-tab(id, target-index) => { root.move-tab(id, target-index); }
-            save-settings(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+            save-settings(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                           theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                           theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -351,10 +524,12 @@ export component AppWindow inherits Window {
                           theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                           theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                           theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                          theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows,
-                          sidebar, tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key,
-                          paste-key, credential-storage) => {
-                root.save-settings(font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                          theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                          x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
+                          sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
+                          import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
+                          settings-tab-id, close-after-save) => {
+                root.save-settings(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                     theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                     theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -362,16 +537,28 @@ export component AppWindow inherits Window {
                     theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                     theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                     theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                    theme-dark-terminal-selection, right-click-copy, option-as-meta, shell, scrollback, columns, rows, sidebar,
-                    tab-size, mask-character, open-settings-key, toggle-sidebar-key, copy-key, paste-key,
-                    credential-storage);
+                    theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                    x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
+                    tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
+                    toggle-sidebar-key, copy-key, paste-key,
+                    open-sftp-key, credential-storage, settings-tab-id, close-after-save);
             }
-            cancel-settings => { root.cancel-settings(); }
             connect-session(id) => { root.connect-session(id); }
-            save-session(name, group, host, port, username, auth, key-path) => {
-                root.save-session(name, group, host, port, username, auth, key-path);
+            open-sftp-session(id) => { root.open-sftp-session(id); }
+            save-session(name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                         serial-port, baud-rate, data-bits, stop-bits, parity, flow-control) => {
+                root.save-session(
+                    name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                    serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                );
             }
+            refresh-serial-ports => { root.refresh-serial-ports(); }
             cancel-session-dialog => { root.cancel-session-dialog(); }
+            open-sftp => { root.open-sftp(); }
+            list-sftp-directory(path) => { root.list-sftp-directory(path); }
+            load-more-sftp => { root.load-more-sftp(); }
+            list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
+            close-sftp => { root.close-sftp(); }
             terminal-key(text, alt, control, meta, shift, physical-key-event) => {
                 return root.terminal-key(text, alt, control, meta, shift, physical-key-event);
             }
@@ -397,7 +584,7 @@ export component AppWindow inherits Window {
         width: parent.width;
         height: parent.height;
         security: root.security-overlay;
-        monospace-font-family: root.terminal-font-family;
+        monospace-font-family: root.application-font-family;
         manage-session-action(action, target, value) => {
             root.manage-session-action(action, target, value);
         }

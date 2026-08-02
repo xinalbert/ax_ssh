@@ -3,18 +3,27 @@ import { Theme } from "../theme.slint";
 export component SessionEditorSectionHeading inherits Rectangle {
     in property <string> label;
     in property <string> description;
-    private property <length> heading-height: root.description.is-empty
-        ? Theme.editor-section-title-height
-        : Theme.editor-section-heading-height;
+    private property <length> title-line-height:
+        title-label.font-metrics.ascent - title-label.font-metrics.descent;
+    private property <length> description-line-height:
+        description-label.font-metrics.ascent - description-label.font-metrics.descent;
+    private property <length> heading-height: max(
+        Theme.editor-section-min-height,
+        root.title-line-height
+            + (root.description.is-empty
+                ? 0px
+                : Theme.space-xxs + root.description-line-height)
+            + 2 * Theme.editor-section-padding-y,
+    );
 
-    min-height: root.heading-height;
-    max-height: root.heading-height;
+    height: root.heading-height;
     vertical-stretch: 0;
     background: transparent;
 
-    Text {
+    title-label := Text {
+        y: Theme.editor-section-padding-y;
         width: parent.width;
-        height: Theme.editor-section-title-height;
+        height: root.title-line-height;
         text: root.label;
         color: Theme.text;
         font-size: Theme.font-body-strong;
@@ -23,10 +32,13 @@ export component SessionEditorSectionHeading inherits Rectangle {
         overflow: elide;
     }
 
-    if !root.description.is-empty : Text {
-        y: Theme.editor-section-title-height + Theme.space-xxs;
+    description-label := Text {
+        visible: !root.description.is-empty;
+        y: Theme.editor-section-padding-y
+            + root.title-line-height
+            + Theme.space-xxs;
         width: parent.width;
-        height: Theme.editor-section-description-height;
+        height: root.description.is-empty ? 0px : root.description-line-height;
         text: root.description;
         color: Theme.muted;
         font-size: Theme.font-caption;
@@ -38,19 +50,22 @@ export component SessionEditorSectionHeading inherits Rectangle {
 export component SessionEditorField inherits Rectangle {
     in property <string> label;
     in property <length> control-height: Theme.editor-input-row-height;
-    private property <length> field-height:
-        Theme.editor-label-height + Theme.space-xs + root.control-height;
+    private property <length> label-line-height:
+        field-label.font-metrics.ascent - field-label.font-metrics.descent;
+    private property <length> field-height: max(
+        Theme.editor-field-min-height,
+        root.label-line-height + Theme.space-xs + root.control-height,
+    );
 
-    min-height: root.field-height;
-    max-height: root.field-height;
+    height: root.field-height;
     vertical-stretch: 0;
     background: transparent;
 
     VerticalLayout {
         spacing: Theme.space-xs;
 
-        Text {
-            height: Theme.editor-label-height;
+        field-label := Text {
+            height: root.label-line-height;
             text: root.label;
             color: Theme.muted;
             font-size: Theme.font-caption;
