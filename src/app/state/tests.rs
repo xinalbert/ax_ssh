@@ -257,12 +257,16 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
 fn settings_and_session_editor_tabs_are_singletons() {
     let mut state = test_state();
 
-    assert_eq!(state.open_settings_tab(), state.open_settings_tab());
+    let settings = state.open_settings_tab();
+    state.open_local_shell_tab();
+    assert_ne!(state.active_tab_id(), Some(settings));
+    assert_eq!(settings, state.open_settings_tab());
+    assert_eq!(state.active_tab_id(), Some(settings));
     assert_eq!(
         state.open_session_editor_tab(),
         state.open_session_editor_tab()
     );
-    assert_eq!(state.tab_summaries().len(), 2);
+    assert_eq!(state.tab_summaries().len(), 3);
 }
 
 #[test]
@@ -547,4 +551,109 @@ fn sftp_tab_is_a_separate_ssh_target() {
     assert!(!snapshot.local.path.is_empty());
     assert!(!snapshot.local.loading);
     assert!(snapshot.local.entries.is_empty());
+}
+
+#[test]
+fn ssh_sftp_shortcut_pairs_duplicate_profiles_by_runtime_tab() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    let first_terminal = state.open_terminal_tab(&profile);
+    let second_terminal = state.open_terminal_tab(&profile);
+
+    assert!(state.activate_tab(first_terminal));
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Connect {
+            profile_id: profile.id,
+            target: ConnectionTarget::Sftp,
+            companion_tab_id: first_terminal,
+        })
+    );
+    let first_sftp = state.open_sftp_tab_with_companion(&profile, Some(first_terminal));
+    assert_eq!(
+        state
+            .tab_summaries()
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        vec![first_terminal, first_sftp, second_terminal]
+    );
+
+    assert!(state.activate_tab(second_terminal));
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Connect {
+            profile_id: profile.id,
+            target: ConnectionTarget::Sftp,
+            companion_tab_id: second_terminal,
+        })
+    );
+}
+
+#[test]
+fn ssh_sftp_shortcut_activates_existing_companion_in_both_directions() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    let terminal = state.open_terminal_tab(&profile);
+    let sftp = state.open_sftp_tab_with_companion(&profile, Some(terminal));
+
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Activated(terminal))
+    );
+    assert_eq!(state.active_tab_id(), Some(terminal));
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Activated(sftp))
+    );
+    assert_eq!(state.active_tab_id(), Some(sftp));
+    assert_eq!(state.tab_summaries().len(), 2);
+}
+
+#[test]
+fn standalone_sftp_shortcut_plans_an_adjacent_terminal_companion() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    let sftp = state.open_sftp_tab(&profile);
+
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Connect {
+            profile_id: profile.id,
+            target: ConnectionTarget::Terminal,
+            companion_tab_id: sftp,
+        })
+    );
+    let terminal = state.open_terminal_tab_with_companion(&profile, Some(sftp));
+    assert_eq!(
+        state
+            .tab_summaries()
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        vec![terminal, sftp]
+    );
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Activated(sftp))
+    );
+}
+
+#[test]
+fn closing_a_companion_unlinks_the_surviving_tab() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    let terminal = state.open_terminal_tab(&profile);
+    let sftp = state.open_sftp_tab_with_companion(&profile, Some(terminal));
+
+    state.close_tab(terminal).expect("terminal should close");
+    assert_eq!(state.active_tab_id(), Some(sftp));
+    assert_eq!(
+        state.switch_ssh_sftp_tab(),
+        Some(SshSftpNavigation::Connect {
+            profile_id: profile.id,
+            target: ConnectionTarget::Terminal,
+            companion_tab_id: sftp,
+        })
+    );
 }

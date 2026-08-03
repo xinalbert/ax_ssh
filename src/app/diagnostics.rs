@@ -142,9 +142,9 @@ fn safe_menu_action(action: &str) -> &'static str {
         "new-session" => "new-session",
         "open-about" => "open-about",
         "open-settings" => "open-settings",
-        "open-sftp" => "open-sftp",
         "open-shortcuts" => "open-shortcuts",
         "refresh-sftp" => "refresh-sftp",
+        "switch-ssh-sftp" => "switch-ssh-sftp",
         "toggle-sidebar" => "toggle-sidebar",
         _ => "unknown",
     }

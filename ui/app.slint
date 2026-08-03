@@ -417,25 +417,13 @@ export component AppWindow inherits Window {
                 title: "New Local Shell";
                 activated => { root.menu-action("new-local-shell"); root.open-local-shell(); }
             }
-            if root.apple-platform : MenuItem {
-                title: "Open SFTP Tab";
+            MenuItem {
+                title: "Switch SSH/SFTP Tab";
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-sftp-menu-shortcut;
-                activated => { root.menu-action("open-sftp"); root.open-sftp(); }
-            }
-            if !root.apple-platform : MenuItem {
-                title: root.sftp-open ? "Refresh SFTP" : "Open SFTP";
-                enabled: root.menu-shortcuts-enabled
-                    && root.sftp-available && root.connected && !root.sftp-loading;
-                shortcut: root.open-sftp-menu-shortcut;
                 activated => {
-                    if root.sftp-open {
-                        root.menu-action("refresh-sftp");
-                        root.list-sftp-directory(root.sftp-path);
-                    } else {
-                        root.menu-action("open-sftp");
-                        root.open-sftp();
-                    }
+                    root.menu-action("switch-ssh-sftp");
+                    root.open-sftp();
                 }
             }
         }

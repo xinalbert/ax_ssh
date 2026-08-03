@@ -100,6 +100,7 @@ impl AppState {
             id,
             title,
             kind: WorkspaceTabKind::SessionEditor(editor),
+            companion_tab_id: None,
         });
         self.active_tab_id = Some(id);
         id
@@ -115,12 +116,22 @@ impl AppState {
             id,
             title: title.to_owned(),
             kind,
+            companion_tab_id: None,
         });
         self.active_tab_id = Some(id);
         id
     }
 
+    #[cfg(test)]
     pub(super) fn open_terminal_tab(&mut self, profile: &SessionProfile) -> Uuid {
+        self.open_terminal_tab_with_companion(profile, None)
+    }
+
+    pub(super) fn open_terminal_tab_with_companion(
+        &mut self,
+        profile: &SessionProfile,
+        companion_tab_id: Option<Uuid>,
+    ) -> Uuid {
         let number = self.terminal_numbers.entry(profile.id).or_default();
         *number = number.saturating_add(1);
         let id = Uuid::new_v4();
@@ -143,7 +154,7 @@ impl AppState {
                 attempt_id: None,
             },
         };
-        self.tabs.push(WorkspaceTab {
+        let tab = WorkspaceTab {
             id,
             title: format!("{} #{}", profile.name, number),
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
@@ -156,19 +167,33 @@ impl AppState {
                 sftp: SftpBrowserState::default(),
                 ssh_phase: SshConnectionPhase::Idle,
             }),
-        });
-        self.active_tab_id = Some(id);
-        id
+            companion_tab_id: None,
+        };
+        self.insert_connection_tab(
+            tab,
+            profile.id,
+            ConnectionTarget::Terminal,
+            companion_tab_id,
+        )
     }
 
+    #[cfg(test)]
     pub(super) fn open_sftp_tab(&mut self, profile: &SessionProfile) -> Uuid {
+        self.open_sftp_tab_with_companion(profile, None)
+    }
+
+    pub(super) fn open_sftp_tab_with_companion(
+        &mut self,
+        profile: &SessionProfile,
+        companion_tab_id: Option<Uuid>,
+    ) -> Uuid {
         let id = Uuid::new_v4();
         let terminal = TerminalModel::new(
             usize::from(self.sessions.settings.terminal.default_columns),
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
-        self.tabs.push(WorkspaceTab {
+        let tab = WorkspaceTab {
             id,
             title: format!("{} SFTP", profile.name),
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
@@ -184,9 +209,9 @@ impl AppState {
                 sftp: SftpBrowserState::for_standalone_tab(),
                 ssh_phase: SshConnectionPhase::Idle,
             }),
-        });
-        self.active_tab_id = Some(id);
-        id
+            companion_tab_id: None,
+        };
+        self.insert_connection_tab(tab, profile.id, ConnectionTarget::Sftp, companion_tab_id)
     }
 
     pub(super) fn open_local_shell_tab(&mut self) -> Uuid {
@@ -210,6 +235,7 @@ impl AppState {
                 sftp: SftpBrowserState::default(),
                 ssh_phase: SshConnectionPhase::Idle,
             }),
+            companion_tab_id: None,
         });
         self.active_tab_id = Some(id);
         id
@@ -222,6 +248,36 @@ impl AppState {
         } else {
             false
         }
+    }
+
+    pub(super) fn switch_ssh_sftp_tab(&mut self) -> Option<SshSftpNavigation> {
+        let active_tab_id = self.active_tab_id?;
+        let (profile_id, current_target, companion_tab_id) = self
+            .tabs
+            .iter()
+            .find(|tab| tab.id == active_tab_id)
+            .and_then(WorkspaceTab::ssh_connection_target)?;
+        let target = current_target.opposite();
+        if let Some(companion_tab_id) = companion_tab_id {
+            let companion_matches = self.tabs.iter().any(|tab| {
+                tab.id == companion_tab_id
+                    && tab.ssh_connection_target().is_some_and(
+                        |(candidate_profile_id, candidate_target, _)| {
+                            candidate_profile_id == profile_id && candidate_target == target
+                        },
+                    )
+            });
+            if companion_matches {
+                self.active_tab_id = Some(companion_tab_id);
+                return Some(SshSftpNavigation::Activated(companion_tab_id));
+            }
+            self.unlink_companion(active_tab_id);
+        }
+        Some(SshSftpNavigation::Connect {
+            profile_id,
+            target,
+            companion_tab_id: active_tab_id,
+        })
     }
 
     pub(super) fn move_tab(&mut self, tab_id: Uuid, target_index: usize) -> bool {
@@ -240,6 +296,12 @@ impl AppState {
     pub(super) fn close_tab(&mut self, tab_id: Uuid) -> Option<ClosedTab> {
         let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
         let mut tab = self.tabs.remove(index);
+        if let Some(companion_tab_id) = tab.companion_tab_id.take()
+            && let Some(companion) = self.tabs.iter_mut().find(|tab| tab.id == companion_tab_id)
+            && companion.companion_tab_id == Some(tab_id)
+        {
+            companion.companion_tab_id = None;
+        }
         let (worker, pending_probe) = match &mut tab.kind {
             WorkspaceTabKind::Terminal(terminal) => {
                 (terminal.worker.take(), terminal.take_pending_probe())
@@ -257,6 +319,67 @@ impl AppState {
             worker,
             pending_probe,
         })
+    }
+
+    fn insert_connection_tab(
+        &mut self,
+        tab: WorkspaceTab,
+        profile_id: Uuid,
+        target: ConnectionTarget,
+        companion_tab_id: Option<Uuid>,
+    ) -> Uuid {
+        let id = tab.id;
+        let companion_tab_id = companion_tab_id.filter(|companion_tab_id| {
+            self.tabs.iter().any(|candidate| {
+                candidate.id == *companion_tab_id
+                    && candidate.ssh_connection_target().is_some_and(
+                        |(candidate_profile_id, candidate_target, _)| {
+                            candidate_profile_id == profile_id
+                                && candidate_target == target.opposite()
+                        },
+                    )
+            })
+        });
+        let insert_index = companion_tab_id
+            .and_then(|companion_tab_id| {
+                self.tabs.iter().position(|tab| tab.id == companion_tab_id)
+            })
+            .map(|index| match target {
+                ConnectionTarget::Terminal => index,
+                ConnectionTarget::Sftp => index.saturating_add(1),
+            })
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(insert_index, tab);
+        if let Some(companion_tab_id) = companion_tab_id {
+            self.link_companions(id, companion_tab_id);
+        }
+        self.active_tab_id = Some(id);
+        id
+    }
+
+    fn link_companions(&mut self, first_tab_id: Uuid, second_tab_id: Uuid) {
+        self.unlink_companion(first_tab_id);
+        self.unlink_companion(second_tab_id);
+        if let Some(first) = self.tabs.iter_mut().find(|tab| tab.id == first_tab_id) {
+            first.companion_tab_id = Some(second_tab_id);
+        }
+        if let Some(second) = self.tabs.iter_mut().find(|tab| tab.id == second_tab_id) {
+            second.companion_tab_id = Some(first_tab_id);
+        }
+    }
+
+    fn unlink_companion(&mut self, tab_id: Uuid) {
+        let companion_tab_id = self
+            .tabs
+            .iter_mut()
+            .find(|tab| tab.id == tab_id)
+            .and_then(|tab| tab.companion_tab_id.take());
+        if let Some(companion_tab_id) = companion_tab_id
+            && let Some(companion) = self.tabs.iter_mut().find(|tab| tab.id == companion_tab_id)
+            && companion.companion_tab_id == Some(tab_id)
+        {
+            companion.companion_tab_id = None;
+        }
     }
 
     pub(super) fn drain_runtime_resources(&mut self) -> (Vec<TerminalWorker>, Vec<PendingProbe>) {
@@ -598,6 +721,22 @@ struct WorkspaceTab {
     id: Uuid,
     title: String,
     kind: WorkspaceTabKind,
+    companion_tab_id: Option<Uuid>,
+}
+
+impl WorkspaceTab {
+    fn ssh_connection_target(&self) -> Option<(Uuid, ConnectionTarget, Option<Uuid>)> {
+        let WorkspaceTabKind::Terminal(terminal) = &self.kind else {
+            return None;
+        };
+        terminal.ssh_route().map(|(profile_id, _)| {
+            (
+                profile_id,
+                terminal.connection_target(),
+                self.companion_tab_id,
+            )
+        })
+    }
 }
 
 pub(super) struct TerminalTabState {
@@ -1105,6 +1244,25 @@ pub(super) enum ActiveSecurityPrompt {
 pub(super) enum ConnectionTarget {
     Terminal,
     Sftp,
+}
+
+impl ConnectionTarget {
+    const fn opposite(self) -> Self {
+        match self {
+            Self::Terminal => Self::Sftp,
+            Self::Sftp => Self::Terminal,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SshSftpNavigation {
+    Activated(Uuid),
+    Connect {
+        profile_id: Uuid,
+        target: ConnectionTarget,
+        companion_tab_id: Uuid,
+    },
 }
 
 pub(super) enum ConnectionStart {

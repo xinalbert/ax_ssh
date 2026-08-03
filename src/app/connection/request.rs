@@ -28,6 +28,7 @@ pub(in crate::app) fn wire_connection_request(
             &runtime_for_connect,
             id.as_str(),
             ConnectionTarget::Terminal,
+            None,
         );
     });
 
@@ -42,37 +43,42 @@ pub(in crate::app) fn wire_connection_request(
             &runtime_for_sftp,
             id.as_str(),
             ConnectionTarget::Sftp,
+            None,
         );
     });
 
     let ui_for_active_sftp = ui.as_weak();
     let state_for_active_sftp = state;
     ui.on_open_sftp(move || {
-        log_ui_action("connection.open-sftp-active");
-        let profile_id = match state_for_active_sftp.lock() {
-            Ok(app) => app
-                .active_terminal()
-                .and_then(TerminalTabState::ssh_route)
-                .map(|(profile_id, _)| profile_id),
+        log_ui_action("connection.switch-ssh-sftp");
+        let navigation = match state_for_active_sftp.lock() {
+            Ok(mut app) => app.switch_ssh_sftp_tab(),
             Err(_) => {
                 set_status(&ui_for_active_sftp, "Cannot read active SSH session");
                 return;
             }
         };
-        let Some(profile_id) = profile_id else {
-            set_status(
-                &ui_for_active_sftp,
-                "Select an SSH server or terminal first",
-            );
+        let Some(navigation) = navigation else {
+            set_status(&ui_for_active_sftp, "Select an SSH or SFTP tab first");
             return;
         };
-        request_connection(
-            &ui_for_active_sftp,
-            &state_for_active_sftp,
-            &runtime,
-            &profile_id.to_string(),
-            ConnectionTarget::Sftp,
-        );
+        match navigation {
+            SshSftpNavigation::Activated(_) => {
+                refresh_workspace(&ui_for_active_sftp, &state_for_active_sftp);
+            }
+            SshSftpNavigation::Connect {
+                profile_id,
+                target,
+                companion_tab_id,
+            } => request_profile_connection(
+                &ui_for_active_sftp,
+                &state_for_active_sftp,
+                &runtime,
+                profile_id,
+                target,
+                Some(companion_tab_id),
+            ),
+        }
     });
 }
 
@@ -82,11 +88,23 @@ fn request_connection(
     runtime: &Handle,
     id: &str,
     target: ConnectionTarget,
+    companion_tab_id: Option<Uuid>,
 ) {
     let profile_id = match parse_uuid(id, "session", ui) {
         Some(id) => id,
         None => return,
     };
+    request_profile_connection(ui, state, runtime, profile_id, target, companion_tab_id);
+}
+
+pub(in crate::app) fn request_profile_connection(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    runtime: &Handle,
+    profile_id: Uuid,
+    target: ConnectionTarget,
+    companion_tab_id: Option<Uuid>,
+) {
     let start = {
         let mut app = match state.lock() {
             Ok(app) => app,
@@ -110,8 +128,10 @@ fn request_connection(
             return;
         }
         let tab_id = match target {
-            ConnectionTarget::Terminal => app.open_terminal_tab(&profile),
-            ConnectionTarget::Sftp => app.open_sftp_tab(&profile),
+            ConnectionTarget::Terminal => {
+                app.open_terminal_tab_with_companion(&profile, companion_tab_id)
+            }
+            ConnectionTarget::Sftp => app.open_sftp_tab_with_companion(&profile, companion_tab_id),
         };
         match &profile.connection {
             ConnectionProfile::Ssh(ssh) if ssh.host_key_fingerprint.is_some() => {

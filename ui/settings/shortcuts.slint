@@ -131,14 +131,14 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     }
 
     SettingsRow {
-        label: "Open SFTP";
+        label: "Switch SSH/SFTP Tab";
         description: "Workspace command";
         show-divider: false;
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-open-sftp-shortcut;
-                accessible-name: "Open SFTP shortcut";
+                accessible-name: "Switch SSH/SFTP Tab shortcut";
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }

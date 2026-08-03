@@ -45,8 +45,8 @@ use self::session_groups::{
 };
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ConnectionStart, ConnectionTarget,
-    PendingHostKey, PendingProbe, SftpBrowserSnapshot, SshConnectionPhase, TerminalTabState,
-    TerminalWorker, WorkspaceTabSummary, finish_stored_credential_retry,
+    PendingHostKey, PendingProbe, SftpBrowserSnapshot, SshConnectionPhase, SshSftpNavigation,
+    TerminalTabState, TerminalWorker, WorkspaceTabSummary, finish_stored_credential_retry,
     prepare_authentication_retry, prepare_host_key_retry, prepare_stored_credential_retry,
     retire_session_attempt, session_attempt_is_active, set_credential_storage,
     set_credential_storage_while_loading,
