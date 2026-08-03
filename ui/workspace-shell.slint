@@ -65,7 +65,7 @@ export component WorkspaceShell inherits Rectangle {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        bool, string, string, string, string, string, string, bool,
+        string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel-session-dialog();
@@ -73,6 +73,12 @@ export component WorkspaceShell inherits Rectangle {
     callback list-sftp-directory(string);
     callback load-more-sftp();
     callback list-local-sftp-directory(string);
+    callback navigate-sftp-back();
+    callback navigate-sftp-forward();
+    callback toggle-remote-sftp-selection(string, bool);
+    callback select-all-remote-sftp(bool);
+    callback toggle-local-sftp-selection(string, bool);
+    callback select-all-local-sftp(bool);
     callback close-sftp();
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -216,6 +222,16 @@ export component WorkspaceShell inherits Rectangle {
                         list-directory(path) => { root.list-sftp-directory(path); }
                         load-more => { root.load-more-sftp(); }
                         list-local-directory(path) => { root.list-local-sftp-directory(path); }
+                        navigate-back => { root.navigate-sftp-back(); }
+                        navigate-forward => { root.navigate-sftp-forward(); }
+                        toggle-remote-selection(path, selected) => {
+                            root.toggle-remote-sftp-selection(path, selected);
+                        }
+                        select-all-remote(selected) => { root.select-all-remote-sftp(selected); }
+                        toggle-local-selection(path, selected) => {
+                            root.toggle-local-sftp-selection(path, selected);
+                        }
+                        select-all-local(selected) => { root.select-all-local-sftp(selected); }
                         close => { root.close-tab(root.view.active_tab_id); }
                     }
 
@@ -269,11 +285,11 @@ export component WorkspaceShell inherits Rectangle {
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
-                        save(name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                        save(name, group, protocol, host, port, username, auth, key-path, password, vault-password, x11-forwarding,
                              serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                              connect-after-save) => {
                             root.save-session(
-                                name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
+                                name, group, protocol, host, port, username, auth, key-path, password, vault-password, x11-forwarding,
                                 serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                                 connect-after-save,
                             );

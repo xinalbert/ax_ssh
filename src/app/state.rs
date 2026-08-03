@@ -1,6 +1,6 @@
 //! Application state, workspace tabs, and connection-attempt transitions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -623,9 +623,21 @@ impl SessionEditorState {
             return SessionEditorSnapshot {
                 draft_id: self.draft_id,
                 group_name: self.group_name.clone(),
+                default_credential_storage: sessions
+                    .settings
+                    .credential_storage
+                    .as_setting()
+                    .to_owned(),
                 ..SessionEditorSnapshot::default()
             };
         };
+        let credential_storage = profile
+            .ssh()
+            .and_then(|ssh| ssh.credential_storage)
+            .map(|storage| storage.as_setting().to_owned())
+            .unwrap_or_default();
+        let default_credential_storage =
+            sessions.settings.credential_storage.as_setting().to_owned();
         let (
             protocol,
             host,
@@ -706,6 +718,8 @@ impl SessionEditorState {
             username,
             auth_method,
             private_key_path,
+            credential_storage,
+            default_credential_storage,
             x11_forwarding,
             serial_port,
             serial_baud_rate,
@@ -750,6 +764,21 @@ pub(super) struct TerminalTabState {
     pub(super) ssh_phase: SshConnectionPhase,
 }
 
+const SFTP_HISTORY_LIMIT: usize = 128;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SftpNavigation {
+    Direct,
+    Back,
+    Forward,
+}
+
+struct PendingSftpNavigation {
+    kind: SftpNavigation,
+    from: String,
+    requested: String,
+}
+
 #[derive(Default)]
 pub(super) struct SftpBrowserState {
     pub(super) open: bool,
@@ -760,6 +789,10 @@ pub(super) struct SftpBrowserState {
     pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
+    pub(super) selected: HashSet<String>,
+    back_history: VecDeque<String>,
+    forward_history: VecDeque<String>,
+    pending_navigation: Option<PendingSftpNavigation>,
     pub(super) local: LocalDirectoryState,
 }
 
@@ -786,13 +819,147 @@ impl SftpBrowserState {
             has_more: self.has_more,
             truncated: self.truncated,
             status: self.status.clone(),
+            can_go_back: !self.loading && !self.back_history.is_empty(),
+            can_go_forward: !self.loading && !self.forward_history.is_empty(),
+            selected_count: self.selected_count(),
+            all_selected: self.all_selected(),
+            selected: self.selected.clone(),
             local: self.local.snapshot(),
         }
+    }
+
+    pub(super) fn begin_navigation(
+        &mut self,
+        kind: SftpNavigation,
+        path: Option<String>,
+    ) -> Result<String> {
+        if self.loading {
+            anyhow::bail!("SFTP directory request already in progress");
+        }
+        let requested = match kind {
+            SftpNavigation::Direct => path
+                .context("SFTP directory path is missing")?
+                .trim()
+                .to_owned(),
+            SftpNavigation::Back => self
+                .back_history
+                .back()
+                .cloned()
+                .context("no previous SFTP directory")?,
+            SftpNavigation::Forward => self
+                .forward_history
+                .back()
+                .cloned()
+                .context("no next SFTP directory")?,
+        };
+        if requested.is_empty() {
+            anyhow::bail!("SFTP directory path is empty");
+        }
+        self.pending_navigation = Some(PendingSftpNavigation {
+            kind,
+            from: self.path.clone(),
+            requested: requested.clone(),
+        });
+        self.loading = true;
+        self.status = "Loading directory...".to_owned();
+        Ok(requested)
+    }
+
+    pub(super) fn cancel_navigation(&mut self) {
+        self.pending_navigation = None;
+        self.loading = false;
+    }
+
+    pub(super) fn reset_navigation(&mut self) {
+        self.path.clear();
+        self.entries.clear();
+        self.has_more = false;
+        self.truncated = false;
+        self.selected.clear();
+        self.back_history.clear();
+        self.forward_history.clear();
+        self.pending_navigation = None;
+    }
+
+    pub(super) fn complete_navigation(&mut self, path: String) {
+        if let Some(pending) = self.pending_navigation.take() {
+            match pending.kind {
+                SftpNavigation::Direct if pending.from != path => {
+                    push_sftp_history(&mut self.back_history, pending.from);
+                    self.forward_history.clear();
+                }
+                SftpNavigation::Back => {
+                    if self
+                        .back_history
+                        .back()
+                        .is_some_and(|candidate| candidate == &pending.requested)
+                    {
+                        self.back_history.pop_back();
+                        push_sftp_history(&mut self.forward_history, pending.from);
+                    }
+                }
+                SftpNavigation::Forward => {
+                    if self
+                        .forward_history
+                        .back()
+                        .is_some_and(|candidate| candidate == &pending.requested)
+                    {
+                        self.forward_history.pop_back();
+                        push_sftp_history(&mut self.back_history, pending.from);
+                    }
+                }
+                SftpNavigation::Direct => {}
+            }
+        }
+        self.loading = false;
+        self.path = path;
+    }
+
+    pub(super) fn toggle_selection(&mut self, path: &str, selected: bool) -> bool {
+        if !self.entries.iter().any(|entry| entry.path == path) {
+            return false;
+        }
+        if selected {
+            self.selected.insert(path.to_owned());
+        } else {
+            self.selected.remove(path);
+        }
+        true
+    }
+
+    pub(super) fn select_all(&mut self, selected: bool) {
+        if selected {
+            self.selected
+                .extend(self.entries.iter().map(|entry| entry.path.clone()));
+        } else {
+            self.selected.clear();
+        }
+    }
+
+    pub(super) fn selected_count(&self) -> usize {
+        self.selected
+            .iter()
+            .filter(|path| self.entries.iter().any(|entry| &entry.path == *path))
+            .count()
+    }
+
+    pub(super) fn all_selected(&self) -> bool {
+        !self.entries.is_empty() && self.selected_count() == self.entries.len()
     }
 
     pub(super) fn reset(&mut self) {
         *self = Self::default();
     }
+}
+
+fn push_sftp_history(history: &mut VecDeque<String>, path: String) {
+    if path.is_empty() || history.back().is_some_and(|current| current == &path) {
+        return;
+    }
+    if history.len() >= SFTP_HISTORY_LIMIT {
+        history.pop_front();
+    }
+    history.push_back(path);
 }
 
 #[derive(Default)]
@@ -803,10 +970,14 @@ pub(super) struct LocalDirectoryState {
     pub(super) truncated: bool,
     pub(super) status: String,
     pub(super) request_id: u64,
+    pub(super) selected: HashSet<String>,
 }
 
 impl LocalDirectoryState {
     pub(super) fn begin_load(&mut self, path: String) -> u64 {
+        if self.path != path {
+            self.selected.clear();
+        }
         self.request_id = self.request_id.wrapping_add(1);
         self.path = path;
         self.loading = true;
@@ -820,9 +991,14 @@ impl LocalDirectoryState {
         entries: Vec<LocalDirectoryEntry>,
         truncated: bool,
     ) {
+        if self.path != path {
+            self.selected.clear();
+        }
         self.loading = false;
         self.path = path;
         self.entries = entries;
+        self.selected
+            .retain(|selected| self.entries.iter().any(|entry| &entry.path == selected));
         self.truncated = truncated;
         self.status = if truncated {
             "Local directory limit reached".to_owned()
@@ -836,6 +1012,38 @@ impl LocalDirectoryState {
         self.status = message;
     }
 
+    pub(super) fn toggle_selection(&mut self, path: &str, selected: bool) -> bool {
+        if !self.entries.iter().any(|entry| entry.path == path) {
+            return false;
+        }
+        if selected {
+            self.selected.insert(path.to_owned());
+        } else {
+            self.selected.remove(path);
+        }
+        true
+    }
+
+    pub(super) fn select_all(&mut self, selected: bool) {
+        if selected {
+            self.selected
+                .extend(self.entries.iter().map(|entry| entry.path.clone()));
+        } else {
+            self.selected.clear();
+        }
+    }
+
+    fn selected_count(&self) -> usize {
+        self.selected
+            .iter()
+            .filter(|path| self.entries.iter().any(|entry| &entry.path == *path))
+            .count()
+    }
+
+    fn all_selected(&self) -> bool {
+        !self.entries.is_empty() && self.selected_count() == self.entries.len()
+    }
+
     fn snapshot(&self) -> LocalDirectorySnapshot {
         LocalDirectorySnapshot {
             loading: self.loading,
@@ -843,6 +1051,9 @@ impl LocalDirectoryState {
             entries: self.entries.clone(),
             truncated: self.truncated,
             status: self.status.clone(),
+            selected_count: self.selected_count(),
+            all_selected: self.all_selected(),
+            selected: self.selected.clone(),
         }
     }
 }
@@ -858,6 +1069,11 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
+    pub(super) can_go_back: bool,
+    pub(super) can_go_forward: bool,
+    pub(super) selected_count: usize,
+    pub(super) all_selected: bool,
+    pub(super) selected: HashSet<String>,
     pub(super) local: LocalDirectorySnapshot,
 }
 
@@ -868,6 +1084,9 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) entries: Vec<LocalDirectoryEntry>,
     pub(super) truncated: bool,
     pub(super) status: String,
+    pub(super) selected_count: usize,
+    pub(super) all_selected: bool,
+    pub(super) selected: HashSet<String>,
 }
 
 impl TerminalTabState {
@@ -1168,6 +1387,8 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) username: String,
     pub(super) auth_method: &'static str,
     pub(super) private_key_path: String,
+    pub(super) credential_storage: String,
+    pub(super) default_credential_storage: String,
     pub(super) x11_forwarding: bool,
     pub(super) serial_port: String,
     pub(super) serial_baud_rate: String,
@@ -1190,6 +1411,8 @@ impl Default for SessionEditorSnapshot {
             username: String::new(),
             auth_method: "Password",
             private_key_path: String::new(),
+            credential_storage: String::new(),
+            default_credential_storage: "system-keyring".to_owned(),
             x11_forwarding: true,
             serial_port: String::new(),
             serial_baud_rate: "115200".to_owned(),

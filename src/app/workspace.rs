@@ -233,6 +233,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               username,
               auth_method,
               private_key_path,
+              password,
+              vault_password,
               x11_forwarding,
               serial_port,
               serial_baud_rate,
@@ -242,7 +244,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               serial_flow_control,
               connect_after_save| {
             log_ui_action("session-editor.save");
-            let (editor_tab_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
+            let (editor_tab_id, existing_profile, serial_descriptor, default_credential_storage) =
+                match state_for_save.lock() {
                 Ok(app) => {
                     let Some(profile_id) = app.active_editor_profile_id() else {
                         set_status(&ui_for_save, "Session editor is not active");
@@ -264,14 +267,19 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                         .iter()
                         .find(|port| port.port_name == serial_port.as_str().trim())
                         .cloned();
-                    (app.active_tab_id(), existing_profile, serial_descriptor)
+                    (
+                        app.active_tab_id(),
+                        existing_profile,
+                        serial_descriptor,
+                        app.sessions.settings.credential_storage,
+                    )
                 }
                 Err(_) => {
                     set_status(&ui_for_save, "Cannot read session state");
                     return;
                 }
-            };
-            let (profile, credential_change) = match profile_from_editor(
+                };
+            let (profile, credential_change) = match profile_from_editor_with_password(
                 existing_profile.as_ref(),
                 name.as_str(),
                 group_name.as_str(),
@@ -281,6 +289,9 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 username.as_str(),
                 auth_method.as_str(),
                 private_key_path.as_str(),
+                password.as_str(),
+                vault_password.as_str(),
+                default_credential_storage,
                 x11_forwarding,
                 serial_port.as_str(),
                 serial_baud_rate.as_str(),
@@ -1020,6 +1031,12 @@ async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) 
 enum CredentialChange {
     None,
     Delete(CredentialStorage),
+    Store {
+        storage: CredentialStorage,
+        previous_storage: Option<CredentialStorage>,
+        password: zeroize::Zeroizing<String>,
+        vault_password: Option<zeroize::Zeroizing<String>>,
+    },
 }
 
 async fn apply_credential_change(
@@ -1029,10 +1046,25 @@ async fn apply_credential_change(
     match change {
         CredentialChange::None => Ok(None),
         CredentialChange::Delete(storage) => delete_password(session_id, storage).await.map(Some),
+        CredentialChange::Store {
+            storage,
+            previous_storage,
+            password,
+            vault_password,
+        } => save_password(
+            storage,
+            session_id,
+            password,
+            vault_password,
+            previous_storage,
+        )
+        .await
+        .map(Some),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn profile_from_editor(
     existing: Option<&SessionProfile>,
     name: &str,
@@ -1052,15 +1084,79 @@ fn profile_from_editor(
     serial_flow_control: &str,
     serial_descriptor: Option<&SerialPortDescriptor>,
 ) -> Result<(SessionProfile, CredentialChange)> {
+    profile_from_editor_with_password(
+        existing,
+        name,
+        group_name,
+        protocol,
+        host,
+        port,
+        username,
+        auth_method,
+        private_key_path,
+        "",
+        "",
+        CredentialStorage::SystemKeyring,
+        x11_forwarding,
+        serial_port,
+        serial_baud_rate,
+        serial_data_bits,
+        serial_stop_bits,
+        serial_parity,
+        serial_flow_control,
+        serial_descriptor,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn profile_from_editor_with_password(
+    existing: Option<&SessionProfile>,
+    name: &str,
+    group_name: &str,
+    protocol: &str,
+    host: &str,
+    port: &str,
+    username: &str,
+    auth_method: &str,
+    private_key_path: &str,
+    password: &str,
+    vault_password: &str,
+    default_credential_storage: CredentialStorage,
+    x11_forwarding: bool,
+    serial_port: &str,
+    serial_baud_rate: &str,
+    serial_data_bits: &str,
+    serial_stop_bits: &str,
+    serial_parity: &str,
+    serial_flow_control: &str,
+    serial_descriptor: Option<&SerialPortDescriptor>,
+) -> Result<(SessionProfile, CredentialChange)> {
     let private_key = auth_method == "Private key";
     let ssh_protocol = protocol.eq_ignore_ascii_case("SSH");
-    let credential_change = existing
+    let existing_storage = existing
         .and_then(SessionProfile::ssh)
-        .and_then(|ssh| ssh.credential_storage)
-        .filter(|_| !ssh_protocol || private_key)
-        .map_or(CredentialChange::None, |storage| {
-            CredentialChange::Delete(storage)
-        });
+        .and_then(|ssh| ssh.credential_storage);
+    let password_storage = (!private_key && ssh_protocol && !password.is_empty())
+        .then(|| existing_storage.unwrap_or(default_credential_storage));
+    if let Some(storage) = password_storage
+        && storage == CredentialStorage::EncryptedVault
+        && vault_password.is_empty()
+    {
+        anyhow::bail!("vault password is required when saving an SSH password");
+    }
+    let credential_change = if let Some(storage) = password_storage {
+        CredentialChange::Store {
+            storage,
+            previous_storage: existing_storage,
+            password: zeroize::Zeroizing::new(password.to_owned()),
+            vault_password: (storage == CredentialStorage::EncryptedVault)
+                .then(|| zeroize::Zeroizing::new(vault_password.to_owned())),
+        }
+    } else if !ssh_protocol || private_key {
+        existing_storage.map_or(CredentialChange::None, CredentialChange::Delete)
+    } else {
+        CredentialChange::None
+    };
 
     let mut profile = if ssh_protocol {
         let port = parse_network_port(port)?;
@@ -1071,9 +1167,6 @@ fn profile_from_editor(
                 .then(|| ssh.host_key_fingerprint.clone())
                 .flatten()
         });
-        let existing_storage = existing
-            .and_then(SessionProfile::ssh)
-            .and_then(|ssh| ssh.credential_storage);
         let ssh = profile
             .ssh_mut()
             .context("new SSH profile is missing SSH configuration")?;
@@ -1085,7 +1178,11 @@ fn profile_from_editor(
         } else {
             AuthMethod::Password
         };
-        ssh.credential_storage = if private_key { None } else { existing_storage };
+        ssh.credential_storage = if private_key {
+            None
+        } else {
+            password_storage.or(existing_storage)
+        };
         ssh.host_key_fingerprint = preserved_fingerprint;
         ssh.x11_forwarding = x11_forwarding;
         profile
@@ -1213,6 +1310,117 @@ mod tests {
                 .x11_forwarding
         );
         assert!(matches!(change, CredentialChange::None));
+    }
+
+    #[test]
+    fn entering_a_password_updates_the_existing_credential_backend() {
+        let mut existing = SessionProfile::new("old", "old.example", "alice");
+        let ssh = existing.ssh_mut().expect("profile should be SSH");
+        ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
+
+        let (profile, change) = profile_from_editor_with_password(
+            Some(&existing),
+            "updated",
+            "",
+            "SSH",
+            "old.example",
+            "22",
+            "alice",
+            "Password",
+            "",
+            "new-password",
+            "",
+            CredentialStorage::EncryptedVault,
+            true,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        )
+        .expect("profile should update");
+
+        assert_eq!(
+            profile.ssh().and_then(|ssh| ssh.credential_storage),
+            Some(CredentialStorage::SystemKeyring)
+        );
+        match change {
+            CredentialChange::Store {
+                storage,
+                previous_storage,
+                password,
+                vault_password,
+            } => {
+                assert_eq!(storage, CredentialStorage::SystemKeyring);
+                assert_eq!(previous_storage, Some(CredentialStorage::SystemKeyring));
+                assert_eq!(password.as_str(), "new-password");
+                assert!(vault_password.is_none());
+            }
+            CredentialChange::None | CredentialChange::Delete(_) => {
+                panic!("entered password should be stored")
+            }
+        }
+    }
+
+    #[test]
+    fn new_password_uses_default_storage_and_requires_vault_password() {
+        let error = match profile_from_editor_with_password(
+            None,
+            "new",
+            "",
+            "SSH",
+            "new.example",
+            "22",
+            "alice",
+            "Password",
+            "",
+            "new-password",
+            "",
+            CredentialStorage::EncryptedVault,
+            true,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        ) {
+            Ok(_) => panic!("encrypted-vault password updates require a vault password"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("vault password"));
+
+        let (profile, change) = profile_from_editor_with_password(
+            None,
+            "new",
+            "",
+            "SSH",
+            "new.example",
+            "22",
+            "alice",
+            "Password",
+            "",
+            "new-password",
+            "vault-password",
+            CredentialStorage::EncryptedVault,
+            true,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        )
+        .expect("profile should save with a vault password");
+        assert_eq!(
+            profile.ssh().and_then(|ssh| ssh.credential_storage),
+            Some(CredentialStorage::EncryptedVault)
+        );
+        assert!(matches!(change, CredentialChange::Store { .. }));
     }
 
     #[test]

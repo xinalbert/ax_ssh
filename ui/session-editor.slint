@@ -2,6 +2,7 @@ import { Button, CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
+import { SecretTextInput } from "components/secret-text-input.slint";
 import { SessionEditorField, SessionEditorSectionHeading } from "components/session-editor-controls.slint";
 import { ThemedComboBox } from "components/themed-combo-box.slint";
 
@@ -18,6 +19,8 @@ export struct SessionEditorViewState {
     username: string,
     auth_method: string,
     private_key_path: string,
+    credential_storage: string,
+    default_credential_storage: string,
     x11_forwarding: bool,
     serial_port: string,
     serial_baud_rate: string,
@@ -35,7 +38,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        bool, string, string, string, string, string, string, bool,
+        string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel();
@@ -53,6 +56,8 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> username-draft;
     private property <string> auth-method: "Password";
     private property <string> private-key-draft;
+    private property <string> password-draft;
+    private property <string> vault-password-draft;
     private property <bool> x11-forwarding-draft: false;
     private property <string> serial-port-draft;
     private property <string> serial-baud-rate: "115200";
@@ -71,6 +76,8 @@ export component SessionEditorPane inherits Rectangle {
             root.username-draft,
             root.auth-method,
             root.private-key-draft,
+            root.password-draft,
+            root.vault-password-draft,
             root.x11-forwarding-draft,
             root.serial-port-draft,
             root.serial-baud-rate,
@@ -80,6 +87,8 @@ export component SessionEditorPane inherits Rectangle {
             root.serial-flow-control,
             connect-after-save,
         );
+        root.password-draft = "";
+        root.vault-password-draft = "";
     }
 
     function reset-draft() {
@@ -91,6 +100,9 @@ export component SessionEditorPane inherits Rectangle {
         root.username-draft = root.source.username;
         root.auth-method = root.source.auth_method;
         root.private-key-draft = root.source.private_key_path;
+        // Passwords are intentionally never part of the source snapshot.
+        root.password-draft = "";
+        root.vault-password-draft = "";
         root.x11-forwarding-draft = root.source.x11_forwarding;
         root.serial-port-draft = root.source.serial_port;
         root.serial-baud-rate = root.source.serial_baud_rate;
@@ -103,6 +115,10 @@ export component SessionEditorPane inherits Rectangle {
     init => { root.reset-draft(); }
     changed incoming-draft-id => { root.reset-draft(); }
     changed protocol => {
+        if root.protocol != "SSH" {
+            root.password-draft = "";
+            root.vault-password-draft = "";
+        }
         if root.protocol == "Telnet" && root.port-draft == "22" {
             root.port-draft = "23";
         } else if root.protocol == "SSH" && root.port-draft == "23" {
@@ -111,10 +127,19 @@ export component SessionEditorPane inherits Rectangle {
             root.refresh-serial-ports();
         }
     }
+    changed auth-method => {
+        if root.auth-method != "Password" {
+            root.password-draft = "";
+            root.vault-password-draft = "";
+        }
+    }
 
     background: Theme.background;
 
     editor-scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-width: self.visible-width;
 
@@ -135,28 +160,6 @@ export component SessionEditorPane inherits Rectangle {
                 );
                 height: self.preferred-height;
                 spacing: Theme.editor-section-gap;
-
-                VerticalLayout {
-                    vertical-stretch: 0;
-                    spacing: Theme.space-xs;
-                    Text {
-                        height: Theme.editor-title-height;
-                        text: root.editing ? "Edit session" : "New session";
-                        color: Theme.text;
-                        font-size: Theme.font-page-title;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        height: Theme.editor-subtitle-height;
-                        text: root.editing
-                            ? "Update this reusable connection profile."
-                            : "Save a reusable connection profile.";
-                        color: Theme.muted;
-                        font-size: Theme.font-small;
-                        vertical-alignment: center;
-                    }
-                }
 
                 VerticalLayout {
                     vertical-stretch: 0;
@@ -394,7 +397,7 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: "Authentication";
-                        description: "Credentials are passed to the SSH worker only when connecting.";
+                        description: "Passwords are stored securely and loaded only when connecting.";
                     }
                     AuthenticationMethodSelector {
                         options: [
@@ -405,21 +408,40 @@ export component SessionEditorPane inherits Rectangle {
                         accessible-name: "SSH authentication method";
                     }
 
+                    if root.auth-method == "Password" : VerticalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.space-md;
+                        SessionEditorField {
+                            label: "Password";
+                            password-edit := SecretTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.password-draft;
+                                placeholder-text: root.editing
+                                    ? "Leave blank to keep saved password"
+                                    : "Enter password";
+                                accessible-label: "SSH password";
+                            }
+                        }
+                        if root.password-draft != ""
+                                && (root.source.credential_storage == "encrypted-vault"
+                                    || (root.source.credential_storage.is-empty
+                                        && root.source.default_credential_storage == "encrypted-vault")) : SessionEditorField {
+                            label: "Vault password";
+                            vault-password-edit := SecretTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.vault-password-draft;
+                                placeholder-text: "Required to save the SSH password";
+                                accessible-label: "Credential vault password";
+                            }
+                        }
+                    }
+
                     CheckBox {
                         text: "Forward X11 applications";
                         checked <=> root.x11-forwarding-draft;
                         accessible-label: "Enable SSH X11 forwarding";
-                    }
-
-                    if root.auth-method == "Password" : VerticalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.space-xs;
-                        Text {
-                            text: "The password is requested when connecting. Its optional storage location is set in Settings.";
-                            color: Theme.muted;
-                            font-size: Theme.font-small;
-                            wrap: word-wrap;
-                        }
                     }
 
                     if root.auth-method == "Private key" : VerticalLayout {

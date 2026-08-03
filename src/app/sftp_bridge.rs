@@ -8,19 +8,48 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
     let state_for_list = state.clone();
     ui.on_list_sftp_directory(move |path| {
         log_ui_action("sftp.list-remote");
-        let result = with_active_sftp_terminal(&state_for_list, |terminal| {
-            terminal
-                .worker
-                .as_ref()
-                .context("active SSH terminal has no worker")?
-                .request_list_sftp(path.as_str().to_owned())?;
-            terminal.sftp.loading = true;
-            terminal.sftp.status = "Loading directory...".to_owned();
-            Ok(())
-        });
+        let result = queue_remote_navigation(
+            &state_for_list,
+            SftpNavigation::Direct,
+            Some(path.as_str().to_owned()),
+        );
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_list, &state_for_list),
-            Err(error) => set_status(&ui_for_list, &format!("Cannot browse SFTP: {error}")),
+            Err(error) => {
+                set_status(&ui_for_list, &format!("Cannot browse SFTP: {error}"));
+                dispatch_active_snapshot(&ui_for_list, &state_for_list);
+            }
+        }
+    });
+
+    let ui_for_back = ui.as_weak();
+    let state_for_back = state.clone();
+    ui.on_navigate_sftp_back(move || {
+        log_ui_action("sftp.navigate-back");
+        let result = queue_remote_navigation(&state_for_back, SftpNavigation::Back, None);
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_back, &state_for_back),
+            Err(error) => {
+                set_status(&ui_for_back, &format!("Cannot go back in SFTP: {error}"));
+                dispatch_active_snapshot(&ui_for_back, &state_for_back);
+            }
+        }
+    });
+
+    let ui_for_forward = ui.as_weak();
+    let state_for_forward = state.clone();
+    ui.on_navigate_sftp_forward(move || {
+        log_ui_action("sftp.navigate-forward");
+        let result = queue_remote_navigation(&state_for_forward, SftpNavigation::Forward, None);
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_forward, &state_for_forward),
+            Err(error) => {
+                set_status(
+                    &ui_for_forward,
+                    &format!("Cannot go forward in SFTP: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_forward, &state_for_forward);
+            }
         }
     });
 
@@ -60,6 +89,88 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_close, &state_for_close),
             Err(error) => set_status(&ui_for_close, &format!("Cannot close SFTP: {error}")),
+        }
+    });
+
+    let ui_for_remote_selection = ui.as_weak();
+    let state_for_remote_selection = state.clone();
+    ui.on_toggle_remote_sftp_selection(move |path, selected| {
+        log_ui_action("sftp.toggle-remote-selection");
+        let result = with_active_sftp_terminal(&state_for_remote_selection, |terminal| {
+            if !terminal.sftp.toggle_selection(path.as_str(), selected) {
+                anyhow::bail!("remote entry is no longer visible");
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => {
+                dispatch_active_snapshot(&ui_for_remote_selection, &state_for_remote_selection)
+            }
+            Err(error) => set_status(
+                &ui_for_remote_selection,
+                &format!("Cannot update SFTP selection: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_remote_select_all = ui.as_weak();
+    let state_for_remote_select_all = state.clone();
+    ui.on_select_all_remote_sftp(move |selected| {
+        log_ui_action("sftp.select-all-remote");
+        let result = with_active_sftp_terminal(&state_for_remote_select_all, |terminal| {
+            terminal.sftp.select_all(selected);
+            Ok(())
+        });
+        match result {
+            Ok(()) => {
+                dispatch_active_snapshot(&ui_for_remote_select_all, &state_for_remote_select_all)
+            }
+            Err(error) => set_status(
+                &ui_for_remote_select_all,
+                &format!("Cannot update SFTP selection: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_local_selection = ui.as_weak();
+    let state_for_local_selection = state.clone();
+    ui.on_toggle_local_sftp_selection(move |path, selected| {
+        log_ui_action("sftp.toggle-local-selection");
+        let result = with_active_sftp_terminal(&state_for_local_selection, |terminal| {
+            if !terminal
+                .sftp
+                .local
+                .toggle_selection(path.as_str(), selected)
+            {
+                anyhow::bail!("local entry is no longer visible");
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_local_selection, &state_for_local_selection),
+            Err(error) => set_status(
+                &ui_for_local_selection,
+                &format!("Cannot update local selection: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_local_select_all = ui.as_weak();
+    let state_for_local_select_all = state.clone();
+    ui.on_select_all_local_sftp(move |selected| {
+        log_ui_action("sftp.select-all-local");
+        let result = with_active_sftp_terminal(&state_for_local_select_all, |terminal| {
+            terminal.sftp.local.select_all(selected);
+            Ok(())
+        });
+        match result {
+            Ok(()) => {
+                dispatch_active_snapshot(&ui_for_local_select_all, &state_for_local_select_all)
+            }
+            Err(error) => set_status(
+                &ui_for_local_select_all,
+                &format!("Cannot update local selection: {error}"),
+            ),
         }
     });
 
@@ -106,6 +217,27 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
             path,
         );
     });
+}
+
+fn queue_remote_navigation(
+    state: &Arc<Mutex<AppState>>,
+    kind: SftpNavigation,
+    path: Option<String>,
+) -> Result<()> {
+    with_active_sftp_terminal(state, |terminal| {
+        let worker = terminal
+            .worker
+            .as_ref()
+            .context("active SSH terminal has no worker")?;
+        let request_path = terminal.sftp.begin_navigation(kind, path)?;
+        let result = worker.request_list_sftp(request_path);
+        if let Err(error) = result {
+            terminal.sftp.cancel_navigation();
+            terminal.sftp.status = "SFTP directory request was rejected".to_owned();
+            return Err(error);
+        }
+        Ok(())
+    })
 }
 
 fn load_local_directory(

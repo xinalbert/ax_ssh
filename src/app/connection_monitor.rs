@@ -313,6 +313,7 @@ pub(super) fn spawn_session_monitor(
 fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrowserEvent) {
     match event {
         SftpBrowserEvent::Opened { home } => {
+            state.reset_navigation();
             state.open = true;
             state.loading = true;
             state.home = home;
@@ -327,12 +328,19 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
         } => {
             state.open = true;
             state.loading = false;
-            state.path = path;
+            if !append {
+                state.complete_navigation(path.clone());
+            } else {
+                state.path = path;
+            }
             if append {
                 state.entries.extend(entries);
             } else {
                 state.entries = entries;
             }
+            state
+                .selected
+                .retain(|selected| state.entries.iter().any(|entry| &entry.path == selected));
             state.has_more = has_more;
             state.truncated = truncated;
             state.status = if truncated {
@@ -342,7 +350,7 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
             };
         }
         SftpBrowserEvent::Failed(message) => {
-            state.loading = false;
+            state.cancel_navigation();
             state.status = message;
         }
         SftpBrowserEvent::Closed => {

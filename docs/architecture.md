@@ -127,6 +127,9 @@ when the incoming draft identity changes, and never mutates the Rust snapshot
 while the user types. `in-out` properties remain inside components only where
 two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
+Password and vault-password fields are local secret drafts: they are blank on
+every editor open, are cleared after submit, and never enter the read-only
+source snapshot.
 
 `OverlayHost` owns the local group/profile-management dialog open state and
 draft, deriving its title, message, and button presentation from one action
@@ -161,24 +164,27 @@ must not locally hide either dialog before the Rust state transition accepts it.
    slot.
 3. After explicit confirmation, the controller atomically persists the exact
    fingerprint. Password profiles load a remembered credential on a Tokio
-   blocking boundary or open a password prompt. Private-key profiles load the
-   selected path off the UI thread and request a transient passphrase only when
-   the encrypted key cannot be opened without one. The security overlay renders
-   only the active Tab's pending phase; inactive Tabs retain their own prompt
-   until activated, and changing an authentication prompt clears its secret
-   inputs before it becomes visible.
+   blocking boundary or open a password prompt. The session editor may instead
+   submit a new password inline; a blank value preserves the existing backend
+   reference, while a non-empty value updates that backend before the profile
+   save. Private-key profiles load the selected path off the UI thread and
+   request a transient passphrase only when the encrypted key cannot be opened
+   without one. The security overlay renders only the active Tab's pending
+   phase; inactive Tabs retain their own prompt until activated, and changing an
+   authentication prompt clears its secret inputs before it becomes visible.
 4. Settings > General owns the default backend for a newly remembered SSH
    password: the platform credential store or the encrypted application vault.
    Each ordinary password prompt initializes its backend selector from that
    setting and may override it for that prompt; the selector is ignored unless
-   **Remember password** is checked. The session editor never receives a password. A profile stores only an
-   optional backend reference after a successful remembered-password write, so
-   changing the default neither migrates nor breaks an existing credential.
-   The application writes the selected backend only after SSH authentication;
-   the backend record and profile reference are rolled back together if either
-   persistence step fails. Deleting a profile, switching it to private-key
-   authentication, or rejecting a stored password removes its referenced
-   credential transactionally without stopping an already-open terminal worker.
+   **Remember password** is checked. The session editor accepts a masked
+   password only as a local edit: a blank value keeps the existing credential,
+   while a non-empty value uses the existing backend or Settings default and
+   updates it transactionally with the profile. The secret is never returned in
+   the source snapshot or serialized profile, and changing the default neither
+   migrates nor breaks an existing credential. Deleting a profile, switching it
+   to private-key authentication, or rejecting a stored password removes its
+   referenced credential transactionally without stopping an already-open
+   terminal worker.
 5. The terminal surface maps Slint special keys, including F1-F12, to
    UI-independent terminal key values and applies a narrow shifted-hyphen
    fallback when the platform still reports `-` for `Shift+-`.
@@ -402,8 +408,12 @@ an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback
 inputs and are not part of `SessionStore`. A password profile contains only an
 optional `credential_storage` reference keyed by its stable UUID, never the
-password or a vault password. Settings > General selects the backend used by a
-future checked **Remember password** action: macOS Keychain, Windows Credential
+password or a vault password. The session editor keeps its masked password and
+vault-password fields blank on every open and clears them after submission; a
+non-empty editor password is written through the selected backend, with
+rollback if profile persistence fails. Settings > General selects the backend
+used by a future checked **Remember password** action and by a new editor
+password when the profile has no backend: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. The vault derives a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
@@ -525,7 +535,14 @@ The remote side remains the bounded SFTP browser, while
 boundary. Local results carry a Tab-local request identity so late reads cannot
 replace a newer path. They are bounded to 250 entries, 256 characters per name,
 a 64 KiB aggregate name budget, and 4 KiB paths before reaching Slint. The
-transfer queue is visual status only; it has no transfer commands. Commands and events use
+remote browser keeps a bounded per-Tab back/forward path history in application
+state. History entries are committed only after a directory page succeeds, so a
+failed request cannot consume a navigation step; navigation controls are disabled
+while a request is in flight. Remote and local rows expose real per-Tab selection
+state, with header controls for select-all and clear-all; selection is retained
+only for entries still present in the current directory snapshot and does not
+start a transfer. The transfer queue is visual status only; it has no transfer
+commands. Commands and events use
 bounded channels, requests are serialized and timed out, inbound SFTP frames
 are rejected above 256 KiB before `russh-sftp` parsing, and a raw directory
 cursor emits at most 250 entries per page. One directory stops at 2,000 accepted

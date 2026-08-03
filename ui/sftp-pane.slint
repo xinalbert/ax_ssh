@@ -9,6 +9,7 @@ export struct SftpEntryRow {
     size: string,
     modified: string,
     hidden: bool,
+    selected: bool,
 }
 
 export struct SftpViewState {
@@ -21,15 +22,22 @@ export struct SftpViewState {
     has_more: bool,
     truncated: bool,
     status: string,
+    can_go_back: bool,
+    can_go_forward: bool,
+    selected_count: int,
+    all_selected: bool,
     local_loading: bool,
     local_path: string,
     local_entries: [SftpEntryRow],
     local_truncated: bool,
     local_status: string,
+    local_selected_count: int,
+    local_all_selected: bool,
 }
 
 component SftpActionButton inherits FocusScope {
     in property <string> text;
+    in property <string> accessible-name: root.text;
     in property <length> font-size: Theme.sftp-control-font-size;
     in property <int> font-weight: Theme.sftp-control-font-weight;
     callback clicked();
@@ -45,7 +53,7 @@ component SftpActionButton inherits FocusScope {
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
-    accessible-label: root.text;
+    accessible-label: root.accessible-name;
     accessible-enabled: root.enabled;
     accessible-action-default => {
         if root.enabled {
@@ -105,7 +113,8 @@ component SftpSplitHandle inherits FocusScope {
 
     private property <bool> horizontal: root.orientation == Orientation.horizontal;
     private property <float> drag-start-value: root.value;
-    private property <bool> active: root.has-focus || touch.has-hover || touch.pressed;
+    private property <length> drag-start-position: 0px;
+    private property <bool> active: root.has-focus || touch.pressed;
 
     focus-on-click: true;
     focus-on-tab-navigation: true;
@@ -175,19 +184,24 @@ component SftpSplitHandle inherits FocusScope {
         pointer-event(event) => {
             if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
                 root.drag-start-value = root.value;
+                root.drag-start-position = root.horizontal
+                    ? root.x + self.mouse-x
+                    : root.y + self.mouse-y;
                 root.focus();
             }
         }
         moved => {
             if self.pressed && root.available-length > 0px {
+                let pointer-position = root.horizontal
+                    ? root.x + self.mouse-x
+                    : root.y + self.mouse-y;
                 root.set-value(max(
                     root.minimum,
                     min(
                         root.maximum,
                         root.drag-start-value
-                            + (root.horizontal
-                                ? (self.mouse-x - self.pressed-x) / root.available-length
-                                : (self.mouse-y - self.pressed-y) / root.available-length),
+                            + (pointer-position - root.drag-start-position)
+                                / root.available-length,
                     ),
                 ));
             }
@@ -197,6 +211,9 @@ component SftpSplitHandle inherits FocusScope {
 }
 
 component SftpDirectoryHeader inherits Rectangle {
+    in property <bool> selection-checked: false;
+    in property <bool> selection-enabled: false;
+    callback select-all(bool);
     private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
     private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
     private property <length> leading-x: Theme.sftp-column-padding;
@@ -223,6 +240,32 @@ component SftpDirectoryHeader inherits Rectangle {
         border-width: Theme.hairline;
         border-color: Theme.control-border;
         border-radius: Theme.radius-small;
+        background: root.selection-checked ? Theme.accent : transparent;
+
+        Text {
+            visible: root.selection-checked;
+            width: parent.width;
+            height: parent.height;
+            text: "x";
+            color: Theme.background;
+            font-size: Theme.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: parent.height;
+        enabled: root.selection-enabled;
+        mouse-cursor: pointer;
+        accessible-role: checkbox;
+        accessible-label: "Select all files";
+        accessible-checked: root.selection-checked;
+        accessible-enabled: root.selection-enabled;
+        accessible-action-default => { root.select-all(!root.selection-checked); }
+        clicked => { root.select-all(!root.selection-checked); }
     }
     Text {
         x: root.name-x;
@@ -271,6 +314,7 @@ component SftpEntry inherits Rectangle {
     in property <SftpEntryRow> entry;
     in property <bool> shown: true;
     callback open-directory(string);
+    callback toggle-selection(string, bool);
 
     private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
     private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
@@ -288,7 +332,9 @@ component SftpEntry inherits Rectangle {
 
     visible: root.shown;
     clip: true;
-    background: touch.has-hover ? Theme.hover : transparent;
+    background: root.entry.selected
+        ? Theme.selected
+        : (touch.has-hover ? Theme.hover : transparent);
     accessible-role: list-item;
     accessible-label: root.entry.name;
 
@@ -298,8 +344,21 @@ component SftpEntry inherits Rectangle {
         height: Theme.sftp-selection-width;
         y: (parent.height - self.height) / 2;
         border-width: Theme.hairline;
-        border-color: Theme.control-border;
+        border-color: root.entry.selected ? Theme.accent : Theme.control-border;
         border-radius: Theme.radius-small;
+        background: root.entry.selected ? Theme.accent : transparent;
+
+        Text {
+            visible: root.entry.selected;
+            width: parent.width;
+            height: parent.height;
+            text: "x";
+            color: Theme.background;
+            font-size: Theme.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
     Text {
         x: root.icon-x;
@@ -363,6 +422,21 @@ component SftpEntry inherits Rectangle {
             }
         }
     }
+    TouchArea {
+        x: 0px;
+        width: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        height: parent.height;
+        enabled: root.shown;
+        mouse-cursor: pointer;
+        accessible-role: checkbox;
+        accessible-label: "Select " + root.entry.name;
+        accessible-checked: root.entry.selected;
+        accessible-enabled: root.shown;
+        accessible-action-default => {
+            root.toggle-selection(root.entry.path, !root.entry.selected);
+        }
+        clicked => { root.toggle-selection(root.entry.path, !root.entry.selected); }
+    }
 }
 
 component SftpDirectoryPane inherits Rectangle {
@@ -373,11 +447,20 @@ component SftpDirectoryPane inherits Rectangle {
     in property <bool> truncated;
     in property <string> status;
     in property <bool> has-more: false;
+    in property <bool> selection-all: false;
+    in property <int> selection-count: 0;
     in property <bool> allow-hidden: true;
     in property <bool> allow-refresh: false;
+    in property <bool> allow-navigation: false;
+    in property <bool> can-go-back: false;
+    in property <bool> can-go-forward: false;
     callback list-directory(string);
     callback load-more();
     callback refresh();
+    callback navigate-back();
+    callback navigate-forward();
+    callback toggle-selection(string, bool);
+    callback select-all(bool);
 
     private property <string> current-path: root.path;
     private property <string> path-draft: root.current-path;
@@ -451,6 +534,23 @@ component SftpDirectoryPane inherits Rectangle {
                 padding-bottom: Theme.sftp-path-row-padding-y;
                 spacing: Theme.space-sm;
 
+                if root.allow-navigation : SftpActionButton {
+                    width: Theme.sftp-nav-icon-button-width;
+                    height: root.control-height;
+                    text: "<";
+                    accessible-name: "Back";
+                    enabled: !root.loading && root.can-go-back;
+                    clicked => { root.navigate-back(); }
+                }
+                if root.allow-navigation : SftpActionButton {
+                    width: Theme.sftp-nav-icon-button-width;
+                    height: root.control-height;
+                    text: ">";
+                    accessible-name: "Forward";
+                    enabled: !root.loading && root.can-go-forward;
+                    clicked => { root.navigate-forward(); }
+                }
+
                 FlatTextInput {
                     text <=> root.path-draft;
                     placeholder-text: "Path";
@@ -468,7 +568,7 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
                 }
-                if root.allow-refresh : SftpActionButton {
+                if root.allow-refresh && root.width >= 340px : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: root.control-height;
                     text: "Refresh";
@@ -484,7 +584,11 @@ component SftpDirectoryPane inherits Rectangle {
             }
         }
 
-        SftpDirectoryHeader { }
+        SftpDirectoryHeader {
+            selection-checked: root.selection-all;
+            selection-enabled: root.entries.length > 0 && !root.loading;
+            select-all(checked) => { root.select-all(checked); }
+        }
 
         if root.entries.length > 0 : ListView {
             vertical-stretch: 1;
@@ -505,6 +609,7 @@ component SftpDirectoryPane inherits Rectangle {
                     entry: entry;
                     shown: root.show-hidden || !entry.hidden;
                     open-directory(path) => { root.list-directory(path); }
+                    toggle-selection(path, selected) => { root.toggle-selection(path, selected); }
                 }
             }
         }
@@ -658,6 +763,12 @@ export component SftpPane inherits Rectangle {
     callback list-directory(string);
     callback load-more();
     callback list-local-directory(string);
+    callback navigate-back();
+    callback navigate-forward();
+    callback toggle-remote-selection(string, bool);
+    callback select-all-remote(bool);
+    callback toggle-local-selection(string, bool);
+    callback select-all-local(bool);
     callback close();
 
     min-width: root.standalone ? 0px : Theme.sftp-panel-min-width;
@@ -727,99 +838,119 @@ export component SftpPane inherits Rectangle {
         }
     }
 
-    files-area := Rectangle {
-        width: parent.width;
-        height: root.files-area-height;
-        background: Theme.panel;
-        clip: true;
+    VerticalLayout {
+        spacing: 0px;
 
-        remote-pane := SftpDirectoryPane {
-            width: root.remote-pane-width;
-            height: parent.height;
-            title: "Remote files";
-            entries: root.view.entries;
-            loading: root.view.loading;
-            path: root.view.path;
-            truncated: root.view.truncated;
-            status: root.view.status;
-            has-more: root.view.has_more;
-            allow-refresh: true;
-            list-directory(path) => { root.list-directory(path); }
-            load-more => { root.load-more(); }
-            refresh => { root.list-directory(root.view.path); }
+        files-area := Rectangle {
+            width: parent.width;
+            height: root.files-area-height;
+            background: Theme.panel;
+            clip: true;
+
+            remote-pane := SftpDirectoryPane {
+                x: 0px;
+                width: root.remote-pane-width;
+                height: parent.height;
+                title: "Remote files";
+                entries: root.view.entries;
+                loading: root.view.loading;
+                path: root.view.path;
+                truncated: root.view.truncated;
+                status: root.view.status;
+                has-more: root.view.has_more;
+                selection-all: root.view.all_selected;
+                selection-count: root.view.selected_count;
+                allow-refresh: true;
+                allow-navigation: true;
+                can-go-back: root.view.can_go_back;
+                can-go-forward: root.view.can_go_forward;
+                list-directory(path) => { root.list-directory(path); }
+                load-more => { root.load-more(); }
+                refresh => { root.list-directory(root.view.path); }
+                navigate-back => { root.navigate-back(); }
+                navigate-forward => { root.navigate-forward(); }
+                toggle-selection(path, selected) => {
+                    root.toggle-remote-selection(path, selected);
+                }
+                select-all(selected) => { root.select-all-remote(selected); }
+            }
+
+            directory-splitter := SftpSplitHandle {
+                x: remote-pane.width;
+                width: root.directory-splitter-size;
+                height: parent.height;
+                orientation: Orientation.horizontal;
+                accessible-name: "Remote and local file pane sizes";
+                value: root.clamped-directory-split-ratio;
+                minimum: root.directory-ratio-min;
+                maximum: root.directory-ratio-max;
+                available-length: root.horizontal-available-width;
+                adjust(delta) => {
+                    root.directory-split-ratio = max(
+                        root.directory-ratio-min,
+                        min(root.directory-ratio-max, root.directory-split-ratio + delta),
+                    );
+                }
+                set-value(candidate) => {
+                    root.directory-split-ratio = max(
+                        root.directory-ratio-min,
+                        min(root.directory-ratio-max, candidate),
+                    );
+                }
+                activated => { root.directory-split-ratio = 0.5; }
+            }
+
+            SftpDirectoryPane {
+                x: directory-splitter.x + directory-splitter.width;
+                width: max(0px, parent.width - self.x);
+                height: parent.height;
+                title: "Local files";
+                allow-hidden: false;
+                entries: root.view.local_entries;
+                loading: root.view.local_loading;
+                path: root.view.local_path;
+                truncated: root.view.local_truncated;
+                status: root.view.local_status;
+                selection-all: root.view.local_all_selected;
+                selection-count: root.view.local_selected_count;
+                list-directory(path) => { root.list-local-directory(path); }
+                toggle-selection(path, selected) => {
+                    root.toggle-local-selection(path, selected);
+                }
+                select-all(selected) => { root.select-all-local(selected); }
+            }
         }
 
-        directory-splitter := SftpSplitHandle {
-            x: remote-pane.width;
-            width: root.directory-splitter-size;
-            height: parent.height;
-            orientation: Orientation.horizontal;
-            accessible-name: "Remote and local file pane sizes";
-            value: root.clamped-directory-split-ratio;
-            minimum: root.directory-ratio-min;
-            maximum: root.directory-ratio-max;
-            available-length: root.horizontal-available-width;
+        transfer-splitter := SftpSplitHandle {
+            width: parent.width;
+            height: root.transfer-splitter-size;
+            orientation: Orientation.vertical;
+            accessible-name: "Files and transfers area sizes";
+            value: root.clamped-files-split-ratio;
+            minimum: root.files-ratio-min;
+            maximum: root.files-ratio-max;
+            available-length: root.expanded-vertical-available-height;
             adjust(delta) => {
-                root.directory-split-ratio = max(
-                    root.directory-ratio-min,
-                    min(root.directory-ratio-max, root.directory-split-ratio + delta),
+                root.transfers-collapsed = false;
+                root.files-split-ratio = max(
+                    root.files-ratio-min,
+                    min(root.files-ratio-max, root.files-split-ratio + delta),
                 );
             }
             set-value(candidate) => {
-                root.directory-split-ratio = max(
-                    root.directory-ratio-min,
-                    min(root.directory-ratio-max, candidate),
+                root.transfers-collapsed = false;
+                root.files-split-ratio = max(
+                    root.files-ratio-min,
+                    min(root.files-ratio-max, candidate),
                 );
             }
-            activated => { root.directory-split-ratio = 0.5; }
+            activated => { root.transfers-collapsed = !root.transfers-collapsed; }
         }
 
-        SftpDirectoryPane {
-            x: directory-splitter.x + directory-splitter.width;
-            width: max(0px, parent.width - self.x);
-            height: parent.height;
-            title: "Local files";
-            allow-hidden: false;
-            entries: root.view.local_entries;
-            loading: root.view.local_loading;
-            path: root.view.local_path;
-            truncated: root.view.local_truncated;
-            status: root.view.local_status;
-            list-directory(path) => { root.list-local-directory(path); }
+        SftpTransferQueue {
+            width: parent.width;
+            height: root.transfer-area-height;
+            collapsed: root.transfers-collapsed;
         }
-    }
-
-    transfer-splitter := SftpSplitHandle {
-        y: files-area.height;
-        width: parent.width;
-        height: root.transfer-splitter-size;
-        orientation: Orientation.vertical;
-        accessible-name: "Files and transfers area sizes";
-        value: root.clamped-files-split-ratio;
-        minimum: root.files-ratio-min;
-        maximum: root.files-ratio-max;
-        available-length: root.expanded-vertical-available-height;
-        adjust(delta) => {
-            root.transfers-collapsed = false;
-            root.files-split-ratio = max(
-                root.files-ratio-min,
-                min(root.files-ratio-max, root.files-split-ratio + delta),
-            );
-        }
-        set-value(candidate) => {
-            root.transfers-collapsed = false;
-            root.files-split-ratio = max(
-                root.files-ratio-min,
-                min(root.files-ratio-max, candidate),
-            );
-        }
-        activated => { root.transfers-collapsed = !root.transfers-collapsed; }
-    }
-
-    SftpTransferQueue {
-        y: transfer-splitter.y + transfer-splitter.height;
-        width: parent.width;
-        height: root.transfer-area-height;
-        collapsed: root.transfers-collapsed;
     }
 }

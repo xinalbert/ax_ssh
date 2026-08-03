@@ -56,7 +56,7 @@
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`compact_label`、`profile_endpoint`、`profile_sidebar_endpoint`、`profile_sidebar_details` | 持久化空 Group 与 profile 聚合、编辑器组选项、文字徽标、行内脱敏 sidebar endpoint 与完整非秘密悬停详情 |
 | `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking` + timeout、rollback | 在 UI 线程外调用系统凭据库和加密保险库；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时恢复记录 |
 | `src/app/serial_bridge.rs` | Serial 自动发现 bridge | `wire_serial_port_discovery`、`refresh_serial_ports` | 启动/手动刷新时在 blocking task 枚举 descriptor 并更新有界 Slint 端口 model；不得打开设备 |
-| `src/app/sftp_bridge.rs` | SFTP Tab 浏览与本地目录 intent bridge | `wire_sftp` | 校验活动 SSH/SFTP Tab，转发远端目录/分页和本地目录意图；不持有协议 session |
+| `src/app/sftp_bridge.rs` | SFTP Tab 浏览与本地目录 intent bridge | `wire_sftp` | 校验活动 SSH/SFTP Tab，转发远端目录/分页、前进后退和远端/本地选中意图；不持有协议 session |
 | `src/app/local_files.rs` | 本机目录只读 snapshot 边界 | `read_local_directory`、`LocalDirectoryListing` | 修改 SFTP 本地栏目录读取、路径或条目/名称预算时 |
 | `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SshConfig`、`TelnetConfig`、`SerialConfig`、`SessionStore`、`AppSettings`、`ShortcutSettings`、`ConfigStore` | schema v16 收起组名字符数；Import/Export 快捷键和 `SshConfig.x11_forwarding` 用字段级默认值兼容旧配置，不提升 schema；SSH-only 安全字段由 variant 隔离 |
 | `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | Keychain/Credential Manager/Secret Service，以及 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
@@ -85,13 +85,13 @@
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
 | `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalRenderLine` | 绘制底部对齐的 Rust 可见字符格、选区/光标/preedit 覆盖，并转换指针、滚动、复制/粘贴/全选意图；不持有终端数据、worker 状态、焦点或 IME 输入 |
 | `ui/terminal-pane.slint` | 当前终端 Tab 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、底部对齐的网格余量、复制粘贴和 PTY resize callback |
-| `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpDirectoryPane`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 受最小尺寸约束的远端/本地与文件区/Transfers splitter、固定文件表列、路径导航、隐藏文件过滤、远端分页和只读队列状态；不执行文件系统、网络或传输 |
+| `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpDirectoryPane`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 受最小尺寸约束的远端/本地与文件区/Transfers splitter、固定文件表列、远端前进后退、行选中/全选、隐藏文件过滤、远端分页和只读队列状态；不执行文件系统、网络或传输 |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 矢量图标、导航、标题、紧凑字段和行布局；标题不再承载 Save/Close 状态操作 |
 | `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsViewState`、统一草稿、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
 | `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | Appearance 拥有应用字体/主题；Terminal 拥有终端设置；X11 拥有本机 provider/path/启动/兼容选择；About 展示 GPL、标准 `AboutSlint` 和问题/日志/诊断操作 |
-| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`draft-id`、`submit`、`x11_forwarding` | 只读传入 draft identity、组件私有 profile 草稿、SSH-only X11 toggle、预选 Group 和私钥路径；新建 SSH 可 Save & connect，密码只在连接弹窗输入 |
+| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`draft-id`、`submit`、`x11_forwarding` | 只读传入 draft identity、组件私有 profile 草稿、SSH-only X11 toggle、内嵌遮蔽密码/保险库口令（空值保留、非空更新后端）、预选 Group 和私钥路径；新建 SSH 可 Save & connect |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
 ## 常用定位
@@ -127,4 +127,4 @@
 
 ## 最后更新时间
 
-- 2026-08-03 14:02 +0800
+- 2026-08-03 20:53 +0800

@@ -517,6 +517,71 @@ fn sftp_snapshots_are_isolated_per_ssh_tab_and_unavailable_for_local_tabs() {
 }
 
 #[test]
+fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
+    let mut sftp = SftpBrowserState::default();
+    sftp.path = "/home/alice".to_owned();
+
+    assert_eq!(
+        sftp.begin_navigation(SftpNavigation::Direct, Some("/var".to_owned()))
+            .expect("direct navigation should be queued"),
+        "/var"
+    );
+    sftp.complete_navigation("/var".to_owned());
+
+    let _ = sftp
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("back navigation should be available");
+    sftp.cancel_navigation();
+    assert!(sftp.begin_navigation(SftpNavigation::Back, None).is_ok());
+    sftp.complete_navigation("/home/alice".to_owned());
+
+    assert!(sftp.begin_navigation(SftpNavigation::Forward, None).is_ok());
+    sftp.cancel_navigation();
+    assert!(sftp.begin_navigation(SftpNavigation::Forward, None).is_ok());
+    sftp.complete_navigation("/var".to_owned());
+
+    sftp.begin_navigation(SftpNavigation::Direct, Some("/tmp".to_owned()))
+        .expect("new direct navigation should be queued");
+    sftp.complete_navigation("/tmp".to_owned());
+    assert!(
+        sftp.begin_navigation(SftpNavigation::Forward, None)
+            .is_err()
+    );
+}
+
+#[test]
+fn sftp_selection_tracks_rows_and_select_all() {
+    let mut sftp = SftpBrowserState::default();
+    sftp.entries = vec![
+        SftpEntry {
+            name: "one.txt".to_owned(),
+            path: "/home/alice/one.txt".to_owned(),
+            is_dir: false,
+            is_symlink: false,
+            size: 1,
+            modified: None,
+        },
+        SftpEntry {
+            name: "two.txt".to_owned(),
+            path: "/home/alice/two.txt".to_owned(),
+            is_dir: false,
+            is_symlink: false,
+            size: 2,
+            modified: None,
+        },
+    ];
+
+    assert!(sftp.toggle_selection("/home/alice/one.txt", true));
+    assert_eq!(sftp.selected_count(), 1);
+    assert!(!sftp.all_selected());
+    sftp.select_all(true);
+    assert!(sftp.all_selected());
+    sftp.select_all(false);
+    assert_eq!(sftp.selected_count(), 0);
+    assert!(!sftp.toggle_selection("/home/alice/missing.txt", true));
+}
+
+#[test]
 fn sftp_tab_is_a_separate_ssh_target() {
     let mut state = test_state();
     let profile = SessionProfile::new("server", "server.example", "alice");

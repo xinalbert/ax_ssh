@@ -141,11 +141,15 @@ pub(super) fn visible_workspace_tab_rows(tabs: Vec<WorkspaceTabSummary>) -> Vec<
         .collect()
 }
 
-fn sftp_entry_rows(entries: Vec<SftpEntry>) -> Vec<SftpEntryRow> {
+fn sftp_entry_rows(
+    entries: Vec<SftpEntry>,
+    selected: &std::collections::HashSet<String>,
+) -> Vec<SftpEntryRow> {
     entries
         .into_iter()
         .map(|entry| {
             let hidden = entry.name.starts_with('.');
+            let is_selected = selected.contains(&entry.path);
             SftpEntryRow {
                 name: entry.name.into(),
                 path: entry.path.into(),
@@ -164,16 +168,21 @@ fn sftp_entry_rows(entries: Vec<SftpEntry>) -> Vec<SftpEntryRow> {
                     .unwrap_or_default()
                     .into(),
                 hidden,
+                selected: is_selected,
             }
         })
         .collect()
 }
 
-fn local_entry_rows(entries: Vec<LocalDirectoryEntry>) -> Vec<SftpEntryRow> {
+fn local_entry_rows(
+    entries: Vec<LocalDirectoryEntry>,
+    selected: &std::collections::HashSet<String>,
+) -> Vec<SftpEntryRow> {
     entries
         .into_iter()
         .map(|entry| {
             let hidden = entry.name.starts_with('.');
+            let is_selected = selected.contains(&entry.path);
             SftpEntryRow {
                 name: entry.name.into(),
                 path: entry.path.into(),
@@ -192,6 +201,7 @@ fn local_entry_rows(entries: Vec<LocalDirectoryEntry>) -> Vec<SftpEntryRow> {
                     .unwrap_or_default()
                     .into(),
                 hidden,
+                selected: is_selected,
             }
         })
         .collect()
@@ -309,6 +319,8 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());
     if let Some(editor) = snapshot.editor {
+        ui.set_editor_credential_storage(editor.credential_storage.clone().into());
+        ui.set_editor_default_credential_storage(editor.default_credential_storage.clone().into());
         let draft_id = editor.draft_id.to_string();
         if ui.get_editor_draft_id().as_str() != draft_id {
             ui.set_editor_profile_id(
@@ -367,17 +379,25 @@ fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {
     ui.set_sftp_path(snapshot.path.into());
     ui.set_sftp_entries(ModelRc::new(VecModel::from(sftp_entry_rows(
         snapshot.entries,
+        &snapshot.selected,
     ))));
     ui.set_sftp_has_more(snapshot.has_more);
     ui.set_sftp_truncated(snapshot.truncated);
     ui.set_sftp_status(snapshot.status.into());
+    ui.set_sftp_can_go_back(snapshot.can_go_back);
+    ui.set_sftp_can_go_forward(snapshot.can_go_forward);
+    ui.set_sftp_selected_count(snapshot.selected_count as i32);
+    ui.set_sftp_all_selected(snapshot.all_selected);
     ui.set_local_sftp_loading(snapshot.local.loading);
     ui.set_local_sftp_path(snapshot.local.path.into());
     ui.set_local_sftp_entries(ModelRc::new(VecModel::from(local_entry_rows(
         snapshot.local.entries,
+        &snapshot.local.selected,
     ))));
     ui.set_local_sftp_truncated(snapshot.local.truncated);
     ui.set_local_sftp_status(snapshot.local.status.into());
+    ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);
+    ui.set_local_sftp_all_selected(snapshot.local.all_selected);
 }
 
 fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {

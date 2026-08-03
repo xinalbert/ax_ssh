@@ -109,6 +109,8 @@ diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签
 `SessionEditorPane` 对 `SessionEditorViewState` 使用同样模式：只有传入的
 draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
 同一局部草稿的嵌套编辑控件；显示文案、dialog 文本和视觉状态都用绑定计算，不重复保存。
+密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
+source snapshot。
 
 `OverlayHost` 拥有 Group/Profile 管理弹层的开关和草稿，并从单个 action 派生标题、消息和
 按钮表现；只有确认后才向上发送管理命令。它也组合 SSH 主机密钥与认证弹层，但二者是刻意
@@ -131,15 +133,16 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    连接阶段：idle、可取消的主机密钥探测、等待主机密钥确认、等待认证或读取已存凭据；不再
    存在全局的 probe、信任或认证等待槽位。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
-   边界读取已记住的凭据或打开密码弹窗；私钥 profile 在 UI 线程外加载所选路径，
-   只有加密密钥无法空口令打开时才请求一次性 passphrase。安全覆盖层只渲染活动 Tab 的
-   等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
+   边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
+   保留既有后端引用，非空值在 profile 保存前更新该后端。私钥 profile 在 UI 线程外加载
+   所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。安全覆盖层只渲染活动
+   Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Remember password**
-   时不会使用该选择。会话编辑器不接收密码。profile 只会在记住密码成功写入后保存可选的后端引用，因此修改
-   默认值不会迁移或破坏既有凭据。应用只在 SSH 认证成功后写入选中后端；后端记录和
-   profile 引用任一持久化失败都会一起回滚。删除 profile、切换为私钥认证或拒绝已保存
-   密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
+   时不会使用该选择。会话编辑器接受遮蔽密码，但只作为本地编辑：空值保留既有凭据，非空值
+   使用既有后端或 Settings 默认后端并与 profile 一起事务性更新；秘密不会返回 source snapshot
+   或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥认证或拒绝已
+   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
 5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
    `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
    生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
@@ -274,12 +277,14 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 认证前拒绝。首次拒绝握手可以把 SHA-256 指纹交给确认 UI，但只有用户明确决定后，
 该精确指纹才进入 profile；密钥变化需要再次明确确认。密码只作为 callback 的临时
 输入，不进入 `SessionStore`。密码 profile 只包含以稳定 UUID 为键的可选
-`credential_storage` 后端引用，绝不包含密码或保险库口令。Settings > General 选择以后
-勾选 **Remember password** 时使用的后端：系统后端使用 macOS Keychain、Windows Credential
-Manager 或 Unix Secret Service；保险库后端使用按 profile 分隔的应用记录。保险库对每条记录
-用 Argon2id 派生密钥、用 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，
-保险库口令始终是短期输入。私钥 profile 只持久化路径；私钥内容和可选 passphrase 只在一次
-blocking 加载/认证任务中短暂存在，不进入配置、tracing 字段或 UI model。
+`credential_storage` 后端引用，绝不包含密码或保险库口令。编辑器中的密码和保险库口令每次
+打开都为空，提交后立即清空；非空密码通过选中的后端写入，profile 持久化失败时回滚。Settings >
+General 选择以后勾选 **Remember password** 时使用的后端，以及没有既有后端时编辑器新密码使用的
+默认后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
+后端使用按 profile 分隔的应用记录。保险库对每条记录用 Argon2id 派生密钥、用
+XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，保险库口令始终是短期输入。私钥
+profile 只持久化路径；私钥内容和可选 passphrase 只在一次 blocking 加载/认证任务中短暂存在，
+不进入配置、tracing 字段或 UI model。
 
 X11 forwarding 是逐 SSH profile 的设置；新 profile 和旧配置缺失该字段时默认开启，已经明确
 保存为 `false` 的 profile 仍保持关闭。它只适用于 Terminal mode，SFTP-only、Telnet 和 Serial
@@ -364,6 +369,11 @@ frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw 目
 也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此 AxSSH 把暴露范围
 限制为一个浏览 session 和一个在途请求。上传、下载、删除、重命名和受管编辑同步需要独立的
 确认、进度、取消与冲突契约，不属于本阶段。
+
+远端浏览器在应用状态中为每个 Tab 保留有界的前进/后退路径历史；只有目录页成功返回后才提交
+历史，因此失败请求不会消耗导航步骤，加载期间导航按钮会禁用。远端和本地行都拥有真实的
+Tab 内选中状态，表头可以全选或清空；目录刷新后只保留仍存在于当前快照的条目，选中本身不会
+启动传输。传输队列仍只显示视觉状态，不提供传输命令。
 
 ## Telnet 与 Serial 传输契约
 
