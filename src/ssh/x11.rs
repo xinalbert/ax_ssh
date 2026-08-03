@@ -5,6 +5,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::{error::Error as StdError, fmt};
 
 use anyhow::{Context, Result};
 use russh::client;
@@ -22,6 +23,18 @@ use crate::config::X11Settings;
 use crate::x_server::XServerPlan;
 
 pub(super) const X11_AUTH_PROTOCOL: &str = "MIT-MAGIC-COOKIE-1";
+
+#[derive(Debug)]
+pub(super) struct X11PreparationError;
+
+impl fmt::Display for X11PreparationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("local X11 preparation failed")
+    }
+}
+
+impl StdError for X11PreparationError {}
+
 const X11_COOKIE_BYTES: usize = 16;
 const X11_CHANNEL_CAPACITY: usize = 8;
 const XAUTH_TIMEOUT: Duration = Duration::from_secs(3);
@@ -135,20 +148,58 @@ struct X11Credentials {
 }
 
 #[derive(Clone)]
-pub(super) struct X11Session {
+pub(super) struct X11Forwarding {
+    settings: X11Settings,
+    fake_cookie: Zeroizing<[u8; X11_COOKIE_BYTES]>,
+}
+
+impl X11Forwarding {
+    pub(super) fn new(settings: X11Settings) -> Self {
+        Self {
+            settings,
+            fake_cookie: Zeroizing::new(rand::random::<[u8; X11_COOKIE_BYTES]>()),
+        }
+    }
+
+    pub(super) const fn screen(&self) -> u32 {
+        0
+    }
+
+    pub(super) fn fake_cookie_hex(&self) -> Zeroizing<String> {
+        Zeroizing::new(encode_hex(self.fake_cookie.as_ref()))
+    }
+
+    pub(super) async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
+        let session =
+            match X11Session::prepare(self.settings.clone(), self.fake_cookie.clone()).await {
+                Ok(session) => session,
+                Err(error) => {
+                    request.reject(ChannelOpenFailure::ConnectFailed).await;
+                    return Err(error
+                        .context("cannot prepare the local X server")
+                        .context(X11PreparationError));
+                }
+            };
+        session.relay(request).await
+    }
+}
+
+struct X11Session {
     endpoint: X11Endpoint,
-    screen: u32,
     credentials: Arc<X11Credentials>,
 }
 
 impl X11Session {
-    pub(super) async fn prepare(settings: X11Settings) -> Result<Self> {
+    async fn prepare(
+        settings: X11Settings,
+        fake_cookie: Zeroizing<[u8; X11_COOKIE_BYTES]>,
+    ) -> Result<Self> {
         let plan = XServerPlan::resolve(settings).await?;
-        let initial_error = match prepare_existing_server(&plan, None).await {
+        let initial_error = match prepare_existing_server(&plan, &fake_cookie, None).await {
             Ok(session) => return Ok(session),
             Err(error) => error,
         };
-        if !plan.launch_on_connect() {
+        if !plan.launch_on_x11_request() {
             return Err(initial_error)
                 .context("local X server is not ready and automatic startup is disabled");
         }
@@ -157,14 +208,14 @@ impl X11Session {
             .get_or_init(|| tokio::sync::Mutex::new(()))
             .lock()
             .await;
-        if let Ok(session) = prepare_existing_server(&plan, None).await {
+        if let Ok(session) = prepare_existing_server(&plan, &fake_cookie, None).await {
             return Ok(session);
         }
         let launched_display = plan.launch().await?;
         let mut last_error = None;
         let result = timeout(SERVER_START_TIMEOUT, async {
             loop {
-                match prepare_existing_server(&plan, Some(&launched_display)).await {
+                match prepare_existing_server(&plan, &fake_cookie, Some(&launched_display)).await {
                     Ok(session) => return session,
                     Err(error) => last_error = Some(error),
                 }
@@ -179,15 +230,7 @@ impl X11Session {
         }
     }
 
-    pub(super) fn screen(&self) -> u32 {
-        self.screen
-    }
-
-    pub(super) fn fake_cookie_hex(&self) -> Zeroizing<String> {
-        Zeroizing::new(encode_hex(self.credentials.fake_cookie.as_ref()))
-    }
-
-    pub(super) async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
+    async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
         let X11ChannelRequest { channel, reply } = request;
         let mut local = match connect_endpoint(&self.endpoint).await {
             Ok(stream) => stream,
@@ -223,6 +266,7 @@ static X_SERVER_LAUNCH_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
 async fn prepare_existing_server(
     plan: &XServerPlan,
+    fake_cookie: &Zeroizing<[u8; X11_COOKIE_BYTES]>,
     preferred_display: Option<&str>,
 ) -> Result<X11Session> {
     let mut displays = Vec::new();
@@ -236,7 +280,7 @@ async fn prepare_existing_server(
     }
     let mut last_error = None;
     for display in displays {
-        match prepare_display(plan, &display).await {
+        match prepare_display(plan, fake_cookie, &display).await {
             Ok(session) => return Ok(session),
             Err(error) => last_error = Some(error),
         }
@@ -244,7 +288,11 @@ async fn prepare_existing_server(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no local X display candidate is available")))
 }
 
-async fn prepare_display(plan: &XServerPlan, display: &str) -> Result<X11Session> {
+async fn prepare_display(
+    plan: &XServerPlan,
+    fake_cookie: &Zeroizing<[u8; X11_COOKIE_BYTES]>,
+    display: &str,
+) -> Result<X11Session> {
     let display = DisplayTarget::parse(display)?;
     let endpoint = probe_endpoints(&display.endpoints).await?;
     let local_auth = match load_xauth_cookie(&display.query).await {
@@ -252,12 +300,10 @@ async fn prepare_display(plan: &XServerPlan, display: &str) -> Result<X11Session
         Err(_error) if plan.allow_no_auth() => LocalX11Auth::None,
         Err(error) => return Err(error),
     };
-    let fake_cookie = Zeroizing::new(rand::random::<[u8; X11_COOKIE_BYTES]>());
     Ok(X11Session {
         endpoint,
-        screen: display.screen,
         credentials: Arc::new(X11Credentials {
-            fake_cookie,
+            fake_cookie: fake_cookie.clone(),
             local_auth,
         }),
     })

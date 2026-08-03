@@ -15,6 +15,8 @@ use crate::config::{X11ServerProvider, X11Settings};
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 1_024;
 const MAX_DISPLAY_CANDIDATES: usize = 8;
+const MAX_DISCOVERED_PROVIDER_LOCATIONS: usize = 4;
+const MAX_DISCOVERED_LOCATION_CHARS: usize = 1_024;
 #[cfg(target_os = "windows")]
 const X11_TCP_PORT_BASE: u16 = 6_000;
 
@@ -42,7 +44,7 @@ impl XServerPlan {
             .context("local X server selection task failed")?
     }
 
-    pub(crate) const fn launch_on_connect(&self) -> bool {
+    pub(crate) const fn launch_on_x11_request(&self) -> bool {
         self.launch_on_connect
     }
 
@@ -132,6 +134,20 @@ pub fn provider_options() -> Vec<String> {
     }
 }
 
+/// Returns discovered, launchable known-provider locations for UI display.
+///
+/// This synchronous filesystem and platform-service lookup must run in a
+/// blocking worker; it never launches a provider or inspects a custom path.
+pub fn discovered_provider_locations() -> Vec<String> {
+    known_providers_for_current_platform()
+        .into_iter()
+        .filter_map(|provider| {
+            default_app_path(provider).and_then(|path| provider_location_text(provider, &path))
+        })
+        .take(MAX_DISCOVERED_PROVIDER_LOCATIONS)
+        .collect()
+}
+
 pub fn provider_index(provider: X11ServerProvider) -> i32 {
     let label = provider_label(provider_for_current_platform(provider));
     provider_options()
@@ -175,6 +191,27 @@ fn provider_label(provider: X11ServerProvider) -> &'static str {
         X11ServerProvider::Xming => "Xming",
         X11ServerProvider::Custom => "Custom",
     }
+}
+
+fn known_providers_for_current_platform() -> Vec<X11ServerProvider> {
+    if cfg!(target_os = "macos") {
+        vec![X11ServerProvider::XQuartz, X11ServerProvider::MacXServer]
+    } else if cfg!(target_os = "windows") {
+        vec![X11ServerProvider::VcXsrv, X11ServerProvider::Xming]
+    } else {
+        Vec::new()
+    }
+}
+
+fn provider_location_text(provider: X11ServerProvider, path: &Path) -> Option<String> {
+    let path = path.display().to_string();
+    if path.is_empty()
+        || path.chars().count() > MAX_DISCOVERED_LOCATION_CHARS
+        || path.chars().any(char::is_control)
+    {
+        return None;
+    }
+    Some(format!("{}: {path}", provider_label(provider)))
 }
 
 fn resolve_plan(settings: X11Settings) -> Result<XServerPlan> {
@@ -549,6 +586,36 @@ mod tests {
                 X11ServerProvider::System
             );
         }
+    }
+
+    #[test]
+    fn discovered_provider_locations_only_describe_supported_known_providers() {
+        let providers = known_providers_for_current_platform();
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                providers,
+                [X11ServerProvider::XQuartz, X11ServerProvider::MacXServer]
+            );
+        } else if cfg!(target_os = "windows") {
+            assert_eq!(
+                providers,
+                [X11ServerProvider::VcXsrv, X11ServerProvider::Xming]
+            );
+        } else {
+            assert!(providers.is_empty());
+        }
+        assert!(discovered_provider_locations().len() <= MAX_DISCOVERED_PROVIDER_LOCATIONS);
+    }
+
+    #[test]
+    fn provider_location_text_bounds_untrusted_path_display_text() {
+        assert_eq!(
+            provider_location_text(X11ServerProvider::Custom, Path::new("/opt/xserver")),
+            Some("Custom: /opt/xserver".to_owned())
+        );
+        assert!(
+            provider_location_text(X11ServerProvider::Custom, Path::new("bad\npath")).is_none()
+        );
     }
 
     #[test]

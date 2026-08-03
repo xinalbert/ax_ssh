@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 use crate::config::{SessionProfile, X11Settings};
 use crate::sftp::{SftpBrowserEvent, SftpBrowserHandle, validate_remote_path};
 
-use super::x11::{X11ChannelRequest, X11Dispatcher, X11Session};
+use super::x11::{X11ChannelRequest, X11Dispatcher, X11Forwarding, X11PreparationError};
 use super::{SshConnection, SshError, SshEvent, SshShell, X11RequestStatus};
 
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -324,33 +324,18 @@ async fn run_session(
 ) {
     let x11_requested = x11_requested_for(mode, &profile);
     let connect = async {
-        let mut x11_session = None;
+        let mut x11_forwarding = None;
         let mut x11_dispatcher = None;
         let mut x11_requests = None;
-        let mut x11_prepare_error = None;
         if x11_requested {
-            match X11Session::prepare(x11_settings).await {
-                Ok(session) => {
-                    let (dispatcher, requests) = X11Dispatcher::channel();
-                    x11_session = Some(session);
-                    x11_dispatcher = Some(dispatcher);
-                    x11_requests = Some(requests);
-                }
-                Err(error) => {
-                    warn!(session_id = %session_id, %error, "SSH X11 preparation failed");
-                    x11_prepare_error = Some(bounded_error_message(&error));
-                }
-            }
+            let (dispatcher, requests) = X11Dispatcher::channel();
+            x11_forwarding = Some(X11Forwarding::new(x11_settings));
+            x11_dispatcher = Some(dispatcher);
+            x11_requests = Some(requests);
         }
         let connection =
             SshConnection::connect_with_x11(&profile, secret, x11_dispatcher.clone()).await?;
-        Ok::<_, anyhow::Error>((
-            connection,
-            x11_session,
-            x11_dispatcher,
-            x11_requests,
-            x11_prepare_error,
-        ))
+        Ok::<_, anyhow::Error>((connection, x11_forwarding, x11_dispatcher, x11_requests))
     };
     tokio::pin!(connect);
     let connection_result = tokio::select! {
@@ -378,50 +363,49 @@ async fn run_session(
         send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
         return;
     };
-    let (connection, mut x11_session, x11_dispatcher, mut x11_requests, x11_prepare_error) =
-        match connection_result {
-            Ok(startup) => startup,
-            Err(error) => {
-                if let Some(SshError::HostKeyRejected { expected, actual }) =
-                    error.downcast_ref::<SshError>()
-                {
-                    send_event(
-                        &event_tx,
-                        SshSessionEvent::HostKeyRejected {
-                            expected: expected.clone(),
-                            actual: actual.clone(),
-                        },
-                        session_id,
-                    )
-                    .await;
-                } else if matches!(
-                    error.downcast_ref::<SshError>(),
-                    Some(SshError::AuthenticationFailed)
-                ) {
-                    warn!(session_id = %session_id, "SSH worker authentication failed");
-                    send_event(&event_tx, SshSessionEvent::AuthenticationFailed, session_id).await;
-                } else if let Some(SshError::PrivateKeyLoad(message)) =
-                    error.downcast_ref::<SshError>()
-                {
-                    warn!(session_id = %session_id, "SSH worker could not load private key");
-                    send_event(
-                        &event_tx,
-                        SshSessionEvent::PrivateKeyFailed(bounded_text(message)),
-                        session_id,
-                    )
-                    .await;
-                } else {
-                    warn!(session_id = %session_id, %error, "SSH worker failed to connect");
-                    send_event(
-                        &event_tx,
-                        SshSessionEvent::Failed(bounded_error_message(&error)),
-                        session_id,
-                    )
-                    .await;
-                }
-                return;
+    let (connection, mut x11_forwarding, x11_dispatcher, mut x11_requests) = match connection_result
+    {
+        Ok(startup) => startup,
+        Err(error) => {
+            if let Some(SshError::HostKeyRejected { expected, actual }) =
+                error.downcast_ref::<SshError>()
+            {
+                send_event(
+                    &event_tx,
+                    SshSessionEvent::HostKeyRejected {
+                        expected: expected.clone(),
+                        actual: actual.clone(),
+                    },
+                    session_id,
+                )
+                .await;
+            } else if matches!(
+                error.downcast_ref::<SshError>(),
+                Some(SshError::AuthenticationFailed)
+            ) {
+                warn!(session_id = %session_id, "SSH worker authentication failed");
+                send_event(&event_tx, SshSessionEvent::AuthenticationFailed, session_id).await;
+            } else if let Some(SshError::PrivateKeyLoad(message)) = error.downcast_ref::<SshError>()
+            {
+                warn!(session_id = %session_id, "SSH worker could not load private key");
+                send_event(
+                    &event_tx,
+                    SshSessionEvent::PrivateKeyFailed(bounded_text(message)),
+                    session_id,
+                )
+                .await;
+            } else {
+                warn!(session_id = %session_id, %error, "SSH worker failed to connect");
+                send_event(
+                    &event_tx,
+                    SshSessionEvent::Failed(bounded_error_message(&error)),
+                    session_id,
+                )
+                .await;
             }
-        };
+            return;
+        }
+    };
 
     if mode == SshSessionMode::Sftp {
         run_sftp_session(connection, session_id, command_rx, event_tx).await;
@@ -433,7 +417,7 @@ async fn run_session(
         .open_shell(
             initial_size.columns,
             initial_size.rows,
-            x11_session.as_ref(),
+            x11_forwarding.as_ref(),
         )
         .await
     {
@@ -461,7 +445,7 @@ async fn run_session(
                 dispatcher.disable();
             }
             x11_requests = None;
-            x11_session = None;
+            x11_forwarding = None;
         }
         X11RequestStatus::NotRequested => {}
     }
@@ -476,8 +460,7 @@ async fn run_session(
             return;
         }
     } else if x11_requested {
-        let message = x11_prepare_error
-            .unwrap_or_else(|| "The SSH server rejected X11 forwarding".to_owned());
+        let message = "The SSH server rejected X11 forwarding".to_owned();
         if !send_event(
             &event_tx,
             SshSessionEvent::X11ForwardingUnavailable(message),
@@ -499,6 +482,7 @@ async fn run_session(
     let mut sftp: Option<SftpBrowserHandle> = None;
     let mut sftp_events: Option<mpsc::Receiver<SftpBrowserEvent>> = None;
     let mut x11_relays = JoinSet::new();
+    let mut x11_unavailable_reported = false;
     let mut failed = false;
     loop {
         tokio::select! {
@@ -790,13 +774,13 @@ async fn run_session(
                         request.reject(russh::ChannelOpenFailure::ResourceShortage).await;
                     }
                     Some(request) => {
-                        let Some(session) = x11_session.clone() else {
+                        let Some(forwarding) = x11_forwarding.clone() else {
                             request
                                 .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
                                 .await;
                             continue;
                         };
-                        x11_relays.spawn(async move { session.relay(request).await });
+                        x11_relays.spawn(async move { forwarding.relay(request).await });
                     }
                     None => {
                         x11_requests = None;
@@ -808,6 +792,20 @@ async fn run_session(
                     Some(Ok(Ok(()))) | None => {}
                     Some(Ok(Err(error))) => {
                         warn!(session_id = %session_id, %error, "SSH X11 relay stopped with an error");
+                        if error.downcast_ref::<X11PreparationError>().is_some()
+                            && !x11_unavailable_reported
+                        {
+                            x11_unavailable_reported = true;
+                            if !send_event(
+                                &event_tx,
+                                SshSessionEvent::X11ForwardingUnavailable(bounded_error_message(&error)),
+                                session_id,
+                            )
+                            .await
+                            {
+                                break;
+                            }
+                        }
                     }
                     Some(Err(error)) if error.is_cancelled() => {}
                     Some(Err(error)) => {

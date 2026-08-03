@@ -4,9 +4,12 @@ use rand::rngs::StdRng;
 use russh::server::{self, Auth};
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
+use tokio::sync::mpsc;
 use tokio::time::{advance, pause, resume};
 use uuid::Uuid;
 use zeroize::Zeroizing;
+
+use crate::config::{X11ServerProvider, X11Settings};
 
 use super::worker::{MAX_ERROR_CHARS, bounded_error_message};
 
@@ -31,6 +34,7 @@ fn interactive_client_config_disables_nagle() {
 struct TestServer {
     expected_public_key: Option<PublicKey>,
     send_initial_prompt: bool,
+    x11_requests: Option<mpsc::UnboundedSender<()>>,
 }
 
 impl TestServer {
@@ -38,6 +42,7 @@ impl TestServer {
         Self {
             expected_public_key: None,
             send_initial_prompt: true,
+            x11_requests: None,
         }
     }
 
@@ -45,6 +50,7 @@ impl TestServer {
         Self {
             expected_public_key: None,
             send_initial_prompt: false,
+            x11_requests: None,
         }
     }
 }
@@ -93,6 +99,22 @@ impl server::Handler for TestServer {
         _modes: &[(russh::Pty, u32)],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        session.channel_success(channel)?;
+        Ok(())
+    }
+
+    async fn x11_request(
+        &mut self,
+        channel: russh::ChannelId,
+        _single_connection: bool,
+        _x11_auth_protocol: &str,
+        _x11_auth_cookie: &str,
+        _x11_screen_number: u32,
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        if let Some(requests) = &self.x11_requests {
+            let _ = requests.send(());
+        }
         session.channel_success(channel)?;
         Ok(())
     }
@@ -449,6 +471,110 @@ async fn probe_then_password_login_preserves_host_key_verification() {
 }
 
 #[tokio::test]
+async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_opens() {
+    let mut rng = StdRng::seed_from_u64(91);
+    let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test host key should be generated");
+    let expected_fingerprint = host_key
+        .public_key()
+        .fingerprint(russh::keys::HashAlg::Sha256)
+        .to_string();
+    let server_config = Arc::new(server::Config {
+        auth_rejection_time: Duration::from_millis(1),
+        auth_rejection_time_initial: Some(Duration::ZERO),
+        keys: vec![host_key],
+        ..server::Config::default()
+    });
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test SSH listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("test SSH listener should have an address");
+    let (x11_request_tx, mut x11_request_rx) = mpsc::unbounded_channel();
+    let server_task = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .expect("test SSH connection should be accepted");
+            let handler = TestServer {
+                expected_public_key: None,
+                send_initial_prompt: true,
+                x11_requests: Some(x11_request_tx.clone()),
+            };
+            tokio::spawn(
+                server::run_stream(server_config.clone(), stream, handler)
+                    .await
+                    .expect("test SSH session should start"),
+            );
+        }
+    });
+
+    let mut profile = test_profile("x11-lazy", address.ip().to_string());
+    {
+        let ssh = profile.ssh_mut().expect("test profile should use SSH");
+        ssh.port = address.port();
+        ssh.x11_forwarding = true;
+    }
+    let fingerprint = probe_host_key(&profile)
+        .await
+        .expect("unknown host-key probe should return the rejected fingerprint");
+    assert_eq!(fingerprint, expected_fingerprint);
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(fingerprint);
+
+    let x11_settings = X11Settings {
+        provider: X11ServerProvider::Custom,
+        app_path: "/definitely/not/an/axssh-x-server".to_owned(),
+        launch_on_connect: true,
+        allow_no_auth: false,
+    };
+    let (worker, mut events) = SshSessionHandle::spawn_with_x11_settings(
+        &Handle::current(),
+        Uuid::new_v4(),
+        profile,
+        Zeroizing::new(TEST_PASSWORD.to_owned()),
+        120,
+        36,
+        x11_settings,
+    );
+
+    let connected = timeout(Duration::from_secs(2), async {
+        loop {
+            match events.recv().await {
+                Some(SshSessionEvent::Connected) => break true,
+                Some(SshSessionEvent::X11ForwardingEnabled) => {}
+                Some(SshSessionEvent::Failed(message)) => {
+                    panic!("SSH worker failed before opening its shell: {message}")
+                }
+                Some(_) => {}
+                None => break false,
+            }
+        }
+    })
+    .await
+    .expect("SSH worker should connect without a local X server");
+    assert!(connected);
+    timeout(Duration::from_secs(2), x11_request_rx.recv())
+        .await
+        .expect("server should receive the X11 forwarding request")
+        .expect("X11 request sender should remain open");
+
+    worker
+        .request_disconnect()
+        .expect("worker should accept a disconnect request");
+    worker
+        .shutdown()
+        .await
+        .expect("worker should join after disconnect");
+    server_task.abort();
+    let _ = server_task.await;
+}
+
+#[tokio::test]
 async fn private_key_login_opens_interactive_shell() {
     let mut rng = StdRng::seed_from_u64(84);
     let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
@@ -495,6 +621,7 @@ async fn private_key_login_opens_interactive_shell() {
                 TestServer {
                     expected_public_key: Some(expected_public_key.clone()),
                     send_initial_prompt: true,
+                    x11_requests: None,
                 },
             )
             .await

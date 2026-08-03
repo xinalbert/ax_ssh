@@ -98,6 +98,7 @@ export component AppWindow inherits Window {
     in property <bool> right-click-copy-or-paste: false;
     in property <bool> option-as-meta: false;
     in property <[string]> x11-server-provider-options;
+    in property <[string]> x11-server-installations;
     in property <string> x11-server-provider: "auto";
     in property <int> x11-server-provider-index: 0;
     in property <string> x11-server-app-path: "";
@@ -241,6 +242,7 @@ export component AppWindow inherits Window {
             theme_dark_terminal_selection: root.theme-dark-terminal-selection,
             right_click_copy_or_paste: root.right-click-copy-or-paste, option_as_meta: root.option-as-meta,
             x11_server_provider_options: root.x11-server-provider-options,
+            x11_server_installations: root.x11-server-installations,
             x11_server_provider: root.x11-server-provider,
             x11_server_provider_index: root.x11-server-provider-index,
             x11_server_app_path: root.x11-server-app-path,

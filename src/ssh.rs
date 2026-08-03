@@ -336,7 +336,7 @@ impl SshConnection {
         &self,
         columns: u32,
         rows: u32,
-        x11: Option<&x11::X11Session>,
+        x11: Option<&x11::X11Forwarding>,
     ) -> Result<(SshShell, X11RequestStatus)> {
         let channel = self.handle.channel_open_session().await?;
         channel

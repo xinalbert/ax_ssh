@@ -2,6 +2,7 @@ import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import {
     SettingsField,
+    SettingsInfoRow,
     SettingsPage,
     SettingsRow,
     SettingsSectionHeading,
@@ -11,6 +12,7 @@ import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component X11SettingsPage inherits SettingsPage {
     in property <[string]> provider-options;
+    in property <[string]> discovered-installations;
     in-out property <string> draft-provider;
     in-out property <int> draft-provider-index;
     in-out property <string> draft-app-path;
@@ -24,6 +26,7 @@ export component X11SettingsPage inherits SettingsPage {
         SettingsField {
             ThemedComboBox {
                 height: Theme.settings-control-height;
+                width: parent.width;
                 model: root.provider-options;
                 current-index <=> root.draft-provider-index;
                 accessible-label: "Local X server provider";
@@ -38,10 +41,18 @@ export component X11SettingsPage inherits SettingsPage {
             }
         }
     }
+    if root.discovered-installations.length == 0 : SettingsInfoRow {
+        label: "Detected locations";
+        value: "No known local X server was found";
+    }
+    for location[index] in root.discovered-installations : SettingsInfoRow {
+        label: index == 0 ? "Detected locations" : "";
+        value: location;
+    }
     SettingsRow {
         visible: root.draft-provider == "custom";
-        label: "Application path";
-        description: "Executable launched without a command shell";
+        label: "Custom executable";
+        description: "Choose Custom to launch this path without a command shell";
         SettingsField {
             FlatTextInput {
                 height: Theme.settings-control-height;
@@ -52,8 +63,8 @@ export component X11SettingsPage inherits SettingsPage {
         }
     }
     SettingsToggleRow {
-        label: "Start on SSH connect";
-        description: "Launch the selected X server when it is not already ready";
+        label: "Start for first X11 application";
+        description: "Launch the selected X server only when a forwarded graphical app opens";
         checked <=> root.draft-launch-on-connect;
         show-divider: false;
         control-enabled: root.draft-provider != "system";

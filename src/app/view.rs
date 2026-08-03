@@ -761,6 +761,25 @@ pub(super) fn load_font_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
     });
 }
 
+pub(super) fn load_x11_server_installations(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+    runtime.spawn(async move {
+        let discovery =
+            tokio::task::spawn_blocking(ax_ssh::x_server::discovered_provider_locations);
+        match tokio::time::timeout(std::time::Duration::from_secs(3), discovery).await {
+            Ok(Ok(locations)) => dispatch_ui(&ui, move |ui| {
+                ui.set_x11_server_installations(ModelRc::new(VecModel::from(
+                    locations
+                        .into_iter()
+                        .map(SharedString::from)
+                        .collect::<Vec<_>>(),
+                )));
+            }),
+            Ok(Err(error)) => warn!(%error, "X server location discovery task failed"),
+            Err(_) => warn!("X server location discovery timed out"),
+        }
+    });
+}
+
 fn font_option_index(options: &ModelRc<SharedString>, selected: &str) -> i32 {
     font_option_index_in_slice(&options.iter().collect::<Vec<_>>(), selected)
 }

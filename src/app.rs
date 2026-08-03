@@ -137,6 +137,7 @@ pub fn run() -> Result<()> {
             .map(SharedString::from)
             .collect::<Vec<_>>(),
     )));
+    ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_application_font_options(ModelRc::new(VecModel::from(font_option_rows(
         &settings.appearance.application_font_family,
         &[],
@@ -170,6 +171,7 @@ pub fn run() -> Result<()> {
     wire_callbacks(&ui, state.clone(), runtime.handle().clone(), font_registry);
     load_private_key_options(runtime.handle(), ui.as_weak());
     load_font_options(runtime.handle(), ui.as_weak());
+    load_x11_server_installations(runtime.handle(), ui.as_weak());
     #[cfg(target_os = "macos")]
     {
         ui.show().context("failed to create macOS window")?;

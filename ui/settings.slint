@@ -58,6 +58,7 @@ export struct SettingsViewState {
     right_click_copy_or_paste: bool,
     option_as_meta: bool,
     x11_server_provider_options: [string],
+    x11_server_installations: [string],
     x11_server_provider: string,
     x11_server_provider_index: int,
     x11_server_app_path: string,
@@ -141,6 +142,7 @@ export component SettingsPane inherits Rectangle {
     private property <bool> right-click-copy-or-paste: root.source.right_click_copy_or_paste;
     private property <bool> option-as-meta: root.source.option_as_meta;
     private property <[string]> x11-server-provider-options: root.source.x11_server_provider_options;
+    private property <[string]> x11-server-installations: root.source.x11_server_installations;
     private property <string> x11-server-provider: root.source.x11_server_provider;
     private property <int> x11-server-provider-index: root.source.x11_server_provider_index;
     private property <string> x11-server-app-path: root.source.x11_server_app_path;
@@ -631,6 +633,7 @@ export component SettingsPane inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         provider-options: root.x11-server-provider-options;
+                        discovered-installations: root.x11-server-installations;
                         draft-provider <=> root.draft-x11-server-provider;
                         draft-provider-index <=> root.draft-x11-server-provider-index;
                         draft-app-path <=> root.draft-x11-server-app-path;
