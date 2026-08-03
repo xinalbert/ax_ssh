@@ -551,6 +551,19 @@ mod tests {
         }
     }
 
+    #[test]
+    fn macxserver_provider_is_normalized_for_the_current_platform() {
+        let normalized = provider_for_current_platform(X11ServerProvider::MacXServer);
+        if cfg!(target_os = "macos") {
+            assert_eq!(normalized, X11ServerProvider::MacXServer);
+        } else if cfg!(target_os = "windows") {
+            assert_eq!(normalized, X11ServerProvider::Auto);
+        } else {
+            assert_eq!(normalized, X11ServerProvider::System);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
     #[tokio::test]
     async fn explicit_macxserver_plan_is_loopback_and_requires_compatibility_to_launch() {
         let plan = XServerPlan::resolve(X11Settings {
