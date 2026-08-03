@@ -7,6 +7,7 @@ description = "A Slint desktop terminal workspace for SSH, Telnet, and serial se
 license = "GPL-3.0-only"
 publish = false
 readme = "README.md"
+repository = "https://github.com/xinalbert/ax_ssh"
 
 [dependencies]
 argon2 = "0.5.3"
@@ -23,6 +24,7 @@ portable-pty = "0.9.0"
 rand = "0.10"
 russh = "0.62.2"
 russh-sftp = "2.3.0"
+open = "5.3.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 slint = { version = "1.17.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-software", "std", "unstable-fontique-010"] }

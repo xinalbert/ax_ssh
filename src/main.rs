@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
         "AxSSH process started"
     );
 
-    let result = app::run();
+    let result = app::run(logging.directory().to_path_buf());
     match &result {
         Ok(()) => tracing::info!("AxSSH process exiting normally"),
         Err(error) => tracing::error!(%error, "AxSSH process exiting with an error"),

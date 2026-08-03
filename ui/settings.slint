@@ -186,6 +186,9 @@ export component SettingsPane inherits Rectangle {
     );
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
+    callback report-bug();
+    callback open-log-directory();
+    callback copy-diagnostic-info();
 
     private property <string> selected-section: root.requested-section;
     private property <string> section-title:
@@ -681,6 +684,9 @@ export component SettingsPane inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         app-version: root.app-version;
+                        report-bug => { root.report-bug(); }
+                        open-log-directory => { root.open-log-directory(); }
+                        copy-diagnostic-info => { root.copy-diagnostic-info(); }
                     }
                 }
 

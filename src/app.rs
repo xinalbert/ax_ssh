@@ -4,7 +4,7 @@
 //! maps user intent to domain operations and returns owned worker events to the
 //! Slint event loop.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -87,7 +87,9 @@ use self::workspace::*;
 
 slint::include_modules!();
 
-pub fn run() -> Result<()> {
+const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
+
+pub fn run(log_directory: PathBuf) -> Result<()> {
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let mut sessions = config.load().context("failed to load session profiles")?;
@@ -154,7 +156,7 @@ pub fn run() -> Result<()> {
     ui.set_default_paste_shortcut(default_shortcuts.paste.into());
     ui.set_default_open_sftp_shortcut(default_shortcuts.open_sftp.into());
     ui.set_apple_platform(cfg!(target_os = "macos"));
-    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
+    ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
     for initial_font in initial_fonts {
         if let Err(error) = font_registry
             .lock()
@@ -168,7 +170,13 @@ pub fn run() -> Result<()> {
     apply_active_snapshot(&ui, ActiveTabSnapshot::default());
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
     ui.set_status("".into());
-    wire_callbacks(&ui, state.clone(), runtime.handle().clone(), font_registry);
+    wire_callbacks(
+        &ui,
+        state.clone(),
+        runtime.handle().clone(),
+        font_registry,
+        log_directory,
+    );
     load_private_key_options(runtime.handle(), ui.as_weak());
     load_font_options(runtime.handle(), ui.as_weak());
     load_x11_server_installations(runtime.handle(), ui.as_weak());
@@ -252,6 +260,7 @@ fn wire_callbacks(
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
+    log_directory: PathBuf,
 ) {
     ui.on_log_keyboard_event(move |text, alt, control, meta, shift, route, action| {
         log_keyboard_event(
@@ -306,6 +315,35 @@ fn wire_callbacks(
             .map(|ui| platform_clipboard_text(&ui))
             .unwrap_or_default()
             .into()
+    });
+    let ui_for_report_bug = ui.as_weak();
+    ui.on_report_bug(move || {
+        log_ui_action("about.report-bug");
+        open_external_target(
+            &ui_for_report_bug,
+            ISSUES_URL,
+            "Cannot open bug report page",
+        );
+    });
+    let ui_for_open_logs = ui.as_weak();
+    let log_directory_for_callback = log_directory.clone();
+    ui.on_open_log_directory(move || {
+        log_ui_action("about.open-log-directory");
+        open_external_path(
+            &ui_for_open_logs,
+            &log_directory_for_callback,
+            "Cannot open log directory",
+        );
+    });
+    let ui_for_diagnostics = ui.as_weak();
+    ui.on_copy_diagnostic_info(move || {
+        log_ui_action("about.copy-diagnostic-info");
+        let Some(ui) = ui_for_diagnostics.upgrade() else {
+            return;
+        };
+        let diagnostics = diagnostic_info();
+        set_platform_clipboard_text(&ui, &diagnostics);
+        ui.set_status("Diagnostic information copied".into());
     });
     let ui_for_copy_session = ui.as_weak();
     let state_for_copy_session = state.clone();
@@ -365,6 +403,58 @@ fn platform_clipboard_text(ui: &AppWindow) -> String {
         .platform()
         .clipboard_text(Clipboard::DefaultClipboard)
         .unwrap_or_default()
+}
+
+fn build_revision() -> &'static str {
+    option_env!("AXSSH_BUILD_REVISION").unwrap_or("unknown")
+}
+
+fn diagnostic_info() -> String {
+    format!(
+        "AxSSH diagnostics\nversion: {}\nbuild-revision: {}\nos: {}\narch: {}\nprofile: {}\n",
+        env!("CARGO_PKG_VERSION"),
+        build_revision(),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
+    )
+}
+
+fn open_external_target(ui: &slint::Weak<AppWindow>, target: &str, failure_message: &str) {
+    if open::that_detached(target).is_err() {
+        tracing::warn!(target: "ax_ssh::diagnostics", operation = "open-external-target", "failed to open support target");
+        set_status(ui, failure_message);
+    }
+}
+
+fn open_external_path(ui: &slint::Weak<AppWindow>, path: &Path, failure_message: &str) {
+    if open::that_detached(path).is_err() {
+        tracing::warn!(target: "ax_ssh::diagnostics", operation = "open-log-directory", "failed to open log directory");
+        set_status(ui, failure_message);
+    }
+}
+
+#[cfg(test)]
+mod support_tests {
+    use super::*;
+
+    #[test]
+    fn copied_diagnostics_are_build_metadata_only() {
+        let diagnostics = diagnostic_info();
+
+        assert!(diagnostics.contains("version: "));
+        assert!(diagnostics.contains("build-revision: "));
+        assert!(diagnostics.contains("os: "));
+        assert!(diagnostics.contains("arch: "));
+        assert!(diagnostics.contains("profile: "));
+        for forbidden in ["host:", "password", "session-id", "sessions.json"] {
+            assert!(!diagnostics.contains(forbidden));
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]

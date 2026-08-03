@@ -19,6 +19,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: Set build revision
+        shell: bash
+        run: echo "AXSSH_BUILD_REVISION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev

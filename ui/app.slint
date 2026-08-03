@@ -342,6 +342,9 @@ export component AppWindow inherits Window {
     callback menu-state-changed();
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    callback report-bug();
+    callback open-log-directory();
+    callback copy-diagnostic-info();
     callback refresh-terminal-appearance();
 
     public function request-settings-section(section: string) {
@@ -567,6 +570,9 @@ export component AppWindow inherits Window {
             }
             write-clipboard(text) => { root.write-clipboard(text); }
             read-clipboard() => { return root.read-clipboard(); }
+            report-bug => { root.report-bug(); }
+            open-log-directory => { root.open-log-directory(); }
+            copy-diagnostic-info => { root.copy-diagnostic-info(); }
         }
     }
 

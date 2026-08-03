@@ -79,6 +79,9 @@ export component WorkspaceShell inherits Rectangle {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    callback report-bug();
+    callback open-log-directory();
+    callback copy-diagnostic-info();
 
     public function toggle-sidebar() {
         root.sidebar-collapsed = !root.sidebar-collapsed;
@@ -253,6 +256,9 @@ export component WorkspaceShell inherits Rectangle {
                         shortcut-recording-changed(recording) => {
                             root.shortcut-recording = recording;
                         }
+                        report-bug => { root.report-bug(); }
+                        open-log-directory => { root.open-log-directory(); }
+                        copy-diagnostic-info => { root.copy-diagnostic-info(); }
                     }
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {

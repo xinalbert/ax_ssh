@@ -1,9 +1,17 @@
-import { AboutSlint, ScrollView } from "std-widgets.slint";
+import { AboutSlint, Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { SettingsInfoRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import {
+    SettingsField,
+    SettingsInfoRow,
+    SettingsRow,
+    SettingsSectionHeading,
+} from "../components/settings-controls.slint";
 
 export component AboutSettingsPage inherits Rectangle {
     in property <string> app-version;
+    callback report-bug();
+    callback open-log-directory();
+    callback copy-diagnostic-info();
     background: Theme.background;
 
     about-scroll := ScrollView {
@@ -87,6 +95,41 @@ export component AboutSettingsPage inherits Rectangle {
                     label: "License";
                     value: "GPL-3.0-only";
                     show-divider: false;
+                }
+                SettingsSectionHeading { label: "SUPPORT"; }
+                SettingsRow {
+                    label: "Bug reports";
+                    description: "Open the AxSSH issue tracker";
+                    SettingsField {
+                        Button {
+                            text: "Report a bug";
+                            clicked => { root.report-bug(); }
+                            accessible-label: "Report a bug";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Runtime logs";
+                    description: "Review before sharing";
+                    SettingsField {
+                        Button {
+                            text: "Open log folder";
+                            clicked => { root.open-log-directory(); }
+                            accessible-label: "Open log folder";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Diagnostics";
+                    description: "Copy version and build information without connection data";
+                    show-divider: false;
+                    SettingsField {
+                        Button {
+                            text: "Copy diagnostics";
+                            clicked => { root.copy-diagnostic-info(); }
+                            accessible-label: "Copy diagnostics";
+                        }
+                    }
                 }
                 SettingsSectionHeading { label: "SLINT"; }
                 AboutSlint {
