@@ -317,13 +317,13 @@ export component AppWindow inherits Window {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        bool, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel-session-dialog();
     callback confirm-host-key();
     callback reject-host-key();
-    callback authenticate-session(string, string, bool) -> bool;
+    callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
     callback disconnect-session();
     callback open-sftp();
@@ -539,10 +539,12 @@ export component AppWindow inherits Window {
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
             save-session(name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
-                         serial-port, baud-rate, data-bits, stop-bits, parity, flow-control) => {
+                         serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                         connect-after-save) => {
                 root.save-session(
                     name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                    connect-after-save,
                 );
             }
             refresh-serial-ports => { root.refresh-serial-ports(); }
@@ -586,8 +588,8 @@ export component AppWindow inherits Window {
         }
         confirm-host-key => { root.confirm-host-key(); }
         reject-host-key => { root.reject-host-key(); }
-        authenticate-session(secret, vault-password, remember) => {
-            return root.authenticate-session(secret, vault-password, remember);
+        authenticate-session(secret, vault-password, remember, storage) => {
+            return root.authenticate-session(secret, vault-password, remember, storage);
         }
         cancel-password-dialog => { root.cancel-password-dialog(); }
     }

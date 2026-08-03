@@ -1,5 +1,6 @@
 import { Button, CheckBox } from "std-widgets.slint";
 import { SecretTextInput } from "secret-text-input.slint";
+import { ThemedComboBox } from "themed-combo-box.slint";
 import { Theme } from "../theme.slint";
 
 export component HostKeyDialog inherits Rectangle {
@@ -65,14 +66,21 @@ export component AuthenticationDialog inherits Rectangle {
     in property <string> key-path;
     in property <string> prompt-id;
 
-    callback authenticate(string, string, bool) -> bool;
+    callback authenticate(string, string, bool, string) -> bool;
     callback cancel();
+
+    private property <[string]> credential-storage-options: [
+        "System credential store",
+        "Encrypted application vault",
+    ];
+    private property <string> selected-credential-storage: root.default-credential-storage;
 
     function submit() {
         if root.authenticate(
             secret-edit.text,
             vault-password-edit.text,
             remember-password.checked,
+            root.selected-credential-storage,
         ) {
             secret-edit.clear();
             vault-password-edit.clear();
@@ -89,6 +97,7 @@ export component AuthenticationDialog inherits Rectangle {
         secret-edit.clear();
         vault-password-edit.clear();
         remember-password.checked = false;
+        root.selected-credential-storage = root.default-credential-storage;
     }
 
     background: Theme.overlay;
@@ -100,9 +109,7 @@ export component AuthenticationDialog inherits Rectangle {
         width: Theme.password-dialog-width;
         height: root.private-key
             ? Theme.password-private-key-dialog-height
-            : (root.vault-storage || root.default-credential-storage == "encrypted-vault"
-                ? Theme.password-private-key-dialog-height
-                : Theme.password-dialog-height);
+            : Theme.password-dialog-height;
         background: Theme.panel-alt;
         border-width: Theme.hairline;
         border-color: Theme.frame-border;
@@ -144,7 +151,9 @@ export component AuthenticationDialog inherits Rectangle {
             }
             vault-password-edit := SecretTextInput {
                 visible: !root.private-key
-                    && (root.vault-storage || root.default-credential-storage == "encrypted-vault");
+                    && (root.vault-storage
+                        || (remember-password.checked
+                            && root.selected-credential-storage == "encrypted-vault"));
                 height: self.visible ? Theme.editor-input-row-height : 0px;
                 placeholder-text: root.vault-unlock-only
                     ? "Vault password"
@@ -155,10 +164,30 @@ export component AuthenticationDialog inherits Rectangle {
             remember-password := CheckBox {
                 visible: !root.private-key && !root.vault-unlock-only;
                 height: self.visible ? Theme.editor-check-row-height : 0px;
-                text: root.default-credential-storage == "encrypted-vault"
-                    ? "Remember password in encrypted application vault"
-                    : "Remember password in system credential store";
+                text: "Remember password";
                 checked: false;
+            }
+            if !root.private-key && !root.vault-unlock-only : HorizontalLayout {
+                height: Theme.combo-box-control-height;
+                spacing: Theme.space-md;
+                Text {
+                    width: 132px;
+                    text: "Credential storage";
+                    color: Theme.muted;
+                    font-size: Theme.font-small;
+                    vertical-alignment: center;
+                }
+                ThemedComboBox {
+                    enabled: remember-password.checked;
+                    current-index: root.selected-credential-storage == "encrypted-vault" ? 1 : 0;
+                    model: root.credential-storage-options;
+                    accessible-label: "Credential storage";
+                    selected(value) => {
+                        root.selected-credential-storage = value == "Encrypted application vault"
+                            ? "encrypted-vault"
+                            : "system-keyring";
+                    }
+                }
             }
             HorizontalLayout {
                 alignment: end;

@@ -157,13 +157,13 @@ pub(in crate::app) fn wire_authentication(
     let ui_for_auth = ui.as_weak();
     let state_for_auth = state.clone();
     let runtime_for_auth = runtime.clone();
-    ui.on_authenticate_session(move |password, vault_password, remember_password| {
+    ui.on_authenticate_session(move |password, vault_password, remember_password, storage| {
         log_ui_action("authentication.submit");
         let password = zeroize::Zeroizing::new(password.as_str().to_owned());
         let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
-        let (target, default_storage) = match state_for_auth.lock() {
+        let target = match state_for_auth.lock() {
             Ok(app) => {
-                let target = app.active_tab_id().and_then(|tab_id| {
+                app.active_tab_id().and_then(|tab_id| {
                     let terminal = app.terminal(tab_id)?;
                     let (profile_id, _) = terminal.ssh_route()?;
                     let vault_unlock_only = match terminal.ssh_phase()? {
@@ -182,8 +182,7 @@ pub(in crate::app) fn wire_authentication(
                         .find(|profile| profile.id == profile_id)
                         .cloned()?;
                     Some((tab_id, profile, vault_unlock_only, terminal.connection_target()))
-                });
-                (target, app.sessions.settings.credential_storage)
+                })
             }
             Err(_) => {
                 set_status(&ui_for_auth, "Cannot read session state");
@@ -275,13 +274,19 @@ pub(in crate::app) fn wire_authentication(
             set_status(&ui_for_auth, "Password cannot be empty");
             return false;
         }
-        let credential_to_store = (password_auth && remember_password).then(|| PendingCredentialStore {
-            storage: default_storage,
-            previous_storage,
-            vault_password: (default_storage == CredentialStorage::EncryptedVault)
-                .then(|| vault_password.clone()),
-            secret: password.clone(),
-        });
+        let credential_to_store = if password_auth {
+            selected_storage_for_remember(remember_password, storage.as_str()).map(|storage| {
+                PendingCredentialStore {
+                    storage,
+                    previous_storage,
+                    vault_password: (storage == CredentialStorage::EncryptedVault)
+                        .then(|| vault_password.clone()),
+                    secret: password.clone(),
+                }
+            })
+        } else {
+            None
+        };
         if credential_to_store.as_ref().is_some_and(|store| {
             store.storage == CredentialStorage::EncryptedVault
                 && store.vault_password.as_deref().is_none_or(String::is_empty)
@@ -370,4 +375,32 @@ pub(in crate::app) fn wire_authentication(
             ),
         }
     });
+}
+
+fn selected_storage_for_remember(
+    remember_password: bool,
+    setting: &str,
+) -> Option<CredentialStorage> {
+    remember_password.then(|| CredentialStorage::from_setting(setting))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_storage_uses_explicit_selection_only_when_remembering() {
+        assert_eq!(
+            selected_storage_for_remember(false, "encrypted-vault"),
+            None
+        );
+        assert_eq!(
+            selected_storage_for_remember(true, "encrypted-vault"),
+            Some(CredentialStorage::EncryptedVault)
+        );
+        assert_eq!(
+            selected_storage_for_remember(true, "system-keyring"),
+            Some(CredentialStorage::SystemKeyring)
+        );
+    }
 }

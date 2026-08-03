@@ -65,7 +65,7 @@ export component WorkspaceShell inherits Rectangle {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        bool, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel-session-dialog();
@@ -270,10 +270,12 @@ export component WorkspaceShell inherits Rectangle {
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
                         save(name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
-                             serial-port, baud-rate, data-bits, stop-bits, parity, flow-control) => {
+                             serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                             connect-after-save) => {
                             root.save-session(
                                 name, group, protocol, host, port, username, auth, key-path, x11-forwarding,
                                 serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
+                                connect-after-save,
                             );
                         }
                         refresh-serial-ports => { root.refresh-serial-ports(); }

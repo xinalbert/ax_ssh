@@ -25,7 +25,7 @@ export component OverlayHost inherits Rectangle {
     callback manage-session-action(string, string, string);
     callback confirm-host-key();
     callback reject-host-key();
-    callback authenticate-session(string, string, bool) -> bool;
+    callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
 
     private property <bool> session-management-open: false;
@@ -88,8 +88,8 @@ export component OverlayHost inherits Rectangle {
         prompt-id: root.security.password_prompt_id;
         default-credential-storage: root.security.default_credential_storage;
         key-path: root.security.password_key_path;
-        authenticate(secret, vault-password, remember) => {
-            return root.authenticate-session(secret, vault-password, remember);
+        authenticate(secret, vault-password, remember, storage) => {
+            return root.authenticate-session(secret, vault-password, remember, storage);
         }
         cancel => { root.cancel-password-dialog(); }
     }

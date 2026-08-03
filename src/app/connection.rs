@@ -7,7 +7,7 @@ mod request;
 mod worker_start;
 
 pub(super) use self::host_key::wire_host_key_confirmation;
-pub(super) use self::request::wire_connection_request;
+pub(in crate::app) use self::request::{request_profile_connection, wire_connection_request};
 
 use self::authentication::begin_authentication;
 pub(super) use self::authentication::wire_authentication;

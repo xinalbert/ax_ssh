@@ -35,7 +35,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        bool, string, string, string, string, string, string,
+        bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel();
@@ -60,6 +60,27 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> serial-stop-bits: "1";
     private property <string> serial-parity: "none";
     private property <string> serial-flow-control: "none";
+
+    function submit(connect-after-save: bool) {
+        root.save(
+            root.name-draft,
+            root.group-draft,
+            root.protocol,
+            root.host-draft,
+            root.port-draft,
+            root.username-draft,
+            root.auth-method,
+            root.private-key-draft,
+            root.x11-forwarding-draft,
+            root.serial-port-draft,
+            root.serial-baud-rate,
+            root.serial-data-bits,
+            root.serial-stop-bits,
+            root.serial-parity,
+            root.serial-flow-control,
+            connect-after-save,
+        );
+    }
 
     function reset-draft() {
         root.name-draft = root.source.name;
@@ -447,28 +468,15 @@ export component SessionEditorPane inherits Rectangle {
                         text: "Cancel";
                         clicked => { root.cancel(); }
                     }
+                    if !root.editing && root.protocol == "SSH" : Button {
+                        height: Theme.editor-input-row-height;
+                        text: "Save & connect";
+                        clicked => { root.submit(true); }
+                    }
                     Button {
                         height: Theme.editor-input-row-height;
                         text: root.editing ? "Update session" : "Save session";
-                        clicked => {
-                            root.save(
-                                root.name-draft,
-                                root.group-draft,
-                                root.protocol,
-                                root.host-draft,
-                                root.port-draft,
-                                root.username-draft,
-                                root.auth-method,
-                                root.private-key-draft,
-                                root.x11-forwarding-draft,
-                                root.serial-port-draft,
-                                root.serial-baud-rate,
-                                root.serial-data-bits,
-                                root.serial-stop-bits,
-                                root.serial-parity,
-                                root.serial-flow-control,
-                            );
-                        }
+                        clicked => { root.submit(false); }
                     }
                 }
             }

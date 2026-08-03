@@ -239,7 +239,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               serial_data_bits,
               serial_stop_bits,
               serial_parity,
-              serial_flow_control| {
+              serial_flow_control,
+              connect_after_save| {
             log_ui_action("session-editor.save");
             let (editor_tab_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
                 Ok(app) => {
@@ -303,7 +304,9 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             let state = state_for_save.clone();
             let ui = ui_for_save.clone();
             set_status(&ui_for_save, "Saving session...");
-            runtime.spawn(async move {
+            let runtime_for_save = runtime.clone();
+            let runtime_for_connect = runtime.clone();
+            runtime_for_save.spawn(async move {
                 let credential_rollback = match apply_credential_change(
                     profile_id,
                     credential_change,
@@ -351,7 +354,18 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     let _ = state.lock().map(|mut app| app.close_tab(editor_tab_id));
                 }
                 refresh_workspace(&ui, &state);
-                set_status(&ui, "Session saved");
+                if should_connect_after_save(connect_after_save, &profile) {
+                    request_profile_connection(
+                        &ui,
+                        &state,
+                        &runtime_for_connect,
+                        profile_id,
+                        ConnectionTarget::Terminal,
+                        None,
+                    );
+                } else {
+                    set_status(&ui, "Session saved");
+                }
             });
         },
     );
@@ -1120,6 +1134,10 @@ fn profile_from_editor(
     Ok((profile, credential_change))
 }
 
+fn should_connect_after_save(connect_after_save: bool, profile: &SessionProfile) -> bool {
+    connect_after_save && profile.ssh().is_some()
+}
+
 fn parse_network_port(value: &str) -> Result<u16> {
     match value.trim().parse::<u16>() {
         Ok(port) if port > 0 => Ok(port),
@@ -1130,6 +1148,16 @@ fn parse_network_port(value: &str) -> Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_and_connect_is_limited_to_ssh_profiles() {
+        let ssh = SessionProfile::new("server", "server.example", "alice");
+        let telnet = SessionProfile::new_telnet("console", "console.example");
+
+        assert!(should_connect_after_save(true, &ssh));
+        assert!(!should_connect_after_save(false, &ssh));
+        assert!(!should_connect_after_save(true, &telnet));
+    }
 
     #[test]
     fn editing_without_a_password_preserves_an_existing_credential() {
