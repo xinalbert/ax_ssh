@@ -1,5 +1,21 @@
 # 项目环境变化记录
 
+## 2026-08-03 刷新最终提交门禁环境
+
+- 日期：2026-08-03
+- 变化摘要：本机 Cargo fmt/clippy 组件当前可用；五项跨模块结果完成按功能边界提交后，重新确认完整 Slint/Rust 构建、测试和 lint 状态。
+- 受影响文件：`docs/project-env-audit/{current,changes}.md`、`docs/project-implementation-tracker/`。
+- 更新后的命令或环境：关键命令仍为 locked/offline fmt、check、clippy、test 和差异检查；严格 Clippy 的既有基线需单独记录，不作为本轮功能回归。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo test --locked --offline`（库 109、应用 75、Doc tests 0）通过；严格全目标 Clippy 命中既有基线，允许已记录的八类 lint 后通过。
+
+## 2026-08-03 记录 X11 延迟准备与位置快照环境
+
+- 日期：2026-08-03
+- 变化摘要：普通 SSH shell 创建不再准备或启动本机 X server；只有远端实际打开 X11 channel 时才解析 `DISPLAY`、查询 `xauth`、探测端点和按需启动 provider。Settings 以 Tokio blocking task 显示 macOS/Windows 已知 provider 的只读检测位置，Custom 保持用户显式路径。
+- 受影响文件：`src/{x_server,ssh/{x11,worker,tests}}.rs`、`src/app/view.rs`、`ui/settings/`、`docs/project-env-audit/{current,changes}.md`。
+- 更新后的命令或环境：Rust 2024、MSRV 1.92.0、现有 locked/offline 门禁及外部 X server 前置条件不变；首次图形 channel 的启动/认证/relay 继续受既有超时和队列上限约束。
+- 验证结果：`cargo check --locked --offline`、X11/位置 focused tests、完整 `cargo test --locked --offline`（库 109、应用 68、Doc tests 0）、直接 Rustfmt、tracker validator、Markdown 相对链接和 `git diff --check` 通过；本机未安装 Cargo fmt/clippy 组件。真实三平台 provider 检测、GUI 布局与远端图形应用行为仍需目标平台手工验收。
+
 ## 2026-07-31 初始化施工前环境记忆
 
 - 日期：2026-07-31

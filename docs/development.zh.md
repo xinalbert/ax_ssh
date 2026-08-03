@@ -84,7 +84,9 @@ git diff --check
   `packaging/macos/Info.plist` 打包 ICNS；Linux 随 desktop entry 安装 hicolor PNG 图标集。
   不得替换或加载参考工程中的图标。
 - 顶层菜单可访问的 About 页面必须保留 `AboutSlint`。AxSSH 选择 Slint 的
-  `GPL-3.0-only` 许可选项，标准组件直接提供工具包署名，不新增 Rust callback。
+  `GPL-3.0-only` 许可选项，标准组件直接提供工具包署名。About 的支持操作复用现有
+  AppWindow bridge：打开 issue tracker 或日志目录，或复制非敏感构建元数据；不得上传日志，
+  不得暴露 profile、主机、路径或秘密字段。
 - 修改面向用户的文档时同步维护中英文页面。
 
 ## 平台打包
@@ -106,6 +108,7 @@ Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Li
 writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 guard 释放时刷新。
 日志位于平台本地 AxSSH 应用数据目录的 `logs` 子目录。默认过滤规则为
 `ax_ssh=info,russh=warn`，可由 `RUST_LOG` 覆盖。
+About 从进程边界接收已经创建的目录，并通过 bridge 打开；Slint 线程不执行文件系统操作。
 
 单次运行中可用以下命令开启脱敏键盘/UI diagnostics 和 SSH latency 阶段：
 
@@ -126,7 +129,7 @@ event-loop queue、应用和客户端输出总耗时，不包含终端内容或�
 
 ## 验证边界
 
-自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、日志退出刷新，以及
+自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、保存并连接路由、认证存储选择映射、日志退出刷新，以及
 loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、PTY shell
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥

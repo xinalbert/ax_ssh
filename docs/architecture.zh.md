@@ -118,7 +118,7 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 ## 事件流
 
 1. Slint callback 只产生已保存 profile ID、唯一 Tab ID、终端按键/修饰键、
-   草稿字段、信任决策或一次性临时秘密等小值。认证秘密经专用
+   草稿字段、保存并连接意图、信任决策或一次性临时秘密等小值。认证秘密经专用
    `SecretTextInput` 传递，应用接收后或用户取消提示时都会清空 UI 中的值。
 2. 每次打开 profile 或本地 shell 都会创建新的终端 Tab UUID，即使另一个 Tab 使用
    相同目标。已保存连接的输入、resize、输出、重试和关闭按 `tab_id + profile_id +
@@ -135,7 +135,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    只有加密密钥无法空口令打开时才请求一次性 passphrase。安全覆盖层只渲染活动 Tab 的
    等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
-    会话编辑器不接收密码。profile 只会在记住密码成功写入后保存可选的后端引用，因此修改
+   普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Remember password**
+   时不会使用该选择。会话编辑器不接收密码。profile 只会在记住密码成功写入后保存可选的后端引用，因此修改
    默认值不会迁移或破坏既有凭据。应用只在 SSH 认证成功后写入选中后端；后端记录和
    profile 引用任一持久化失败都会一起回滚。删除 profile、切换为私钥认证或拒绝已保存
    密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
@@ -205,11 +206,14 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    不会再与 Tab 重排手势竞争。
 10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
     General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
-    中，因此激活 Settings 不会移除返回活动终端的路径。Close 会在草稿持久化成功后移除该单例
+    中，因此激活 Settings 不会移除返回活动终端的路径。Settings Tab 已存在时再次按其快捷键，
+    只激活既有 Tab，不会创建第二个 Settings 实例。Close 会在草稿持久化成功后移除该单例
     Tab，绝不影响任何终端 worker。页面切换时未保存草稿仍由 Slint 持有；只有 Settings Tab
-    关闭会跨入应用边界。About 展示静态产品用途说明，只接收编译期 package 版本作为只读 UI
-   元数据，标明应用使用 `GPL-3.0-only`，并嵌入 Slint 标准 `AboutSlint` 署名组件。该组件保持为
-   声明式 UI，自行打开 Slint 网站，不新增应用 callback。会话侧边栏不再重复 Settings/About，
+    关闭会跨入应用边界。About 展示产品用途、package 版本和构建 revision 只读元数据，标明
+    应用使用 `GPL-3.0-only`，并嵌入 Slint 标准 `AboutSlint` 署名组件。其支持操作只通过现有
+    AppWindow callback：Report a bug 打开 AxSSH issue tracker，Open log folder 打开进程持有的
+    滚动日志目录，Copy diagnostics 只把版本、revision、系统、架构和构建类型写入剪贴板。
+    不上传数据，也不把配置、主机、路径或凭据字段暴露给 Slint。会话侧边栏不再重复 Settings/About，
    并从原生标题栏下方贯穿整个客户端高度；
    工作区 Tab 条只占其右侧的工作区列。`+` 固定在最右边缘，打开由 Slint 本地持有的
     选择器，显示全部已保存连接 profile 的遮蔽只读快照，选择后只将 profile UUID 传入
@@ -225,10 +229,11 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     represented object 保持其生命周期。应用边界用单一解析器把配置字符串转换为
     `slint::Keys`；Apple 上持久化的 `Cmd` 映射为 Slint `Control`，物理 `Ctrl` 映射为
     Slint `Meta`，因此 Muda 负责绘制和激活原生 accelerator，不在标题后拼接文字。macOS
-    的关闭 Tab 与固定 **Open SFTP Tab** 菜单项刻意不绑定动态活动 Tab 菜单属性，因此
-    Tab 身份、类型、连接和 SFTP loading 变化不会重建原生菜单。快捷键或安全状态变化仍可能
-    触发重建，AppKit bridge 随后会幂等重绑当前 Settings/About。Windows/Linux 仍保留
-    动态关闭 Tab 和 SFTP 状态，并在 Edit/Help 提供 Settings/About；其他菜单复用已有的
+    的关闭 Tab 菜单项与跨平台固定的 **Switch SSH/SFTP Tab** 菜单项刻意不绑定动态活动 Tab
+    属性。应用 callback 只在命令触发时解析当前运行时 Tab，因此 Tab 身份、类型、连接和
+    SFTP loading 变化不会重建原生菜单。快捷键或安全状态变化仍可能触发原生菜单重建，AppKit bridge
+    随后会幂等重绑当前 Settings/About。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
+    提供 Settings/About；其他菜单复用已有的
     新建会话、侧栏、本地 shell、关闭 Tab、剪贴板传输和快捷键意图。Import 固定进入自动
     识别的有界传输路径；Export 从 `SessionNavigation` 读取当前选中的持久化 Group/服务器
     对象，没有有效选择时只显示固定状态提示。菜单激活只记录固定 action ID；Slint 的
@@ -279,20 +284,20 @@ blocking 加载/认证任务中短暂存在，不进入配置、tracing 字段�
 X11 forwarding 是逐 SSH profile 的设置；新 profile 和旧配置缺失该字段时默认开启，已经明确
 保存为 `false` 的 profile 仍保持关闭。它只适用于 Terminal mode，SFTP-only、Telnet 和 Serial
 worker 永远不会申请 X11。全局 `X11Settings` 只保存非秘密的 provider、仅供 Custom 使用的
-应用路径、连接时启动偏好和显式 no-auth 兼容选择。`src/x_server.rs` 负责按平台解析 Auto：
-macOS 通过 `NSWorkspace` 和 bundle identifier 发现应用，Windows 先搜索进程 `PATH` 再检查
-Program Files；标准安装路径仍作为存在性检查后的兜底。该模块生成有上限的本机 display 候选，
-并在 UI 线程外有界启动选定程序。macOS Auto 依次选择 XQuartz、MacXServer；Windows Auto
-依次选择 VcXsrv、Xming；Linux 提供系统 `DISPLAY` 和 Custom。所有已知 provider 都忽略保存的
-Custom 路径，AxSSH 不下载或安装任何 provider。Custom 不经命令 shell 启动，且必须是普通文件；
-Unix 上还必须具有 executable 权限。
+应用路径、启动偏好和显式 no-auth 兼容选择。`src/x_server.rs` 负责按平台解析 Auto：macOS 通过
+`NSWorkspace` 和 bundle identifier 发现应用，Windows 先搜索进程 `PATH` 再检查 Program Files；
+同时向 Settings 返回有上限、只读的已知安装位置快照。标准安装路径仍作为存在性检查后的兜底。
+macOS Auto 依次选择 XQuartz、MacXServer；Windows Auto 依次选择 VcXsrv、Xming；Linux 提供系统
+`DISPLAY` 和 Custom。所有已知 provider 都忽略保存的 Custom 路径，AxSSH 不下载或安装任何
+provider。Custom 不经命令 shell 启动，且必须是普通文件；Unix 上还必须具有 executable 权限。
 
-申请 forwarding 前，worker 会探测本机 Unix socket 或 loopback TCP 端点，默认以超时和输出
-上限执行 `xauth list <DISPLAY>`，要求唯一、明确的 `MIT-MAGIC-COOKIE-1`。若本机 server 未
-就绪且允许连接时启动，启动与就绪轮询会串行并受超时限制。MacXServer 只有在显式开启 no-auth
-兼容时才会以 `127.0.0.1:6000` 启动；VcXsrv/Xming 也只有在该选择下才接收
-`-multiwindow -clipboard -ac`。relay 仍只连接本机端点，并先验证 SSH fake cookie，之后才为
-兼容 server 去除 X authority。本机准备失败或服务端拒绝请求时，SSH shell 仍保持连接并显示
+创建 shell 时只会带着随机 128-bit fake cookie 发送 X11 forwarding request，不读取本机
+`DISPLAY`、不运行 `xauth`、不探测本机端点，也不启动 X server。只有远端 server 打开 X11
+channel 时，relay 才解析本机 display 候选、在超时和输出上限内执行 `xauth list <DISPLAY>`，并在
+需要且启用时启动选定 provider、轮询其就绪状态。MacXServer 只有在显式开启 no-auth 兼容时才会以
+`127.0.0.1:6000` 启动；VcXsrv/Xming 也只有在该选择下才接收 `-multiwindow -clipboard -ac`。
+relay 仍只连接本机端点，并先验证 SSH fake cookie，之后才为兼容 server 去除 X authority。
+本机准备、channel 或服务端请求失败时，只会拒绝对应 X11 channel，SSH shell 仍保持连接并显示
 X11 不可用。AxSSH 不修改远端 `sshd`；远端必须独立允许 X11 forwarding 并接受请求，才会设置
 远端 `DISPLAY`。
 
@@ -333,15 +338,27 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 ## SFTP 浏览契约
 
 每个 SFTP Tab 拥有一条 SSH transport，认证完成后 worker 只打开独立的 `sftp` subsystem
-channel，绝不申请 PTY 或终端 shell。SSH worker 仍是 russh connection 的唯一所有者；应用状态
-和 Slint 只接收自有的目录 DTO 与短小浏览意图。服务器右键操作和可配置的打开 SFTP 快捷键都
-创建这种独立 Tab，并复用默认拒绝的主机密钥与凭据流程。关闭 SFTP Tab 会关闭浏览器、subsystem
-和 transport。
+channel，绝不申请 PTY 或终端 shell。SSH worker 仍是该 russh connection 的唯一所有者；应用
+状态和 Slint 只接收自有的目录 DTO 与短小浏览意图。配对的 Terminal 与 SFTP Tab 也绝不共享
+russh handle 或 worker。
 
-第一阶段提供双栏目录浏览。远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio
-blocking 边界读取本机目录元数据。本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入
-Slint 前限制为 250 条、每个名称 256 字符、名称总预算 64 KiB 和路径 4 KiB。传输队列只显示视觉状态，
-不提供传输命令。命令/事件 channel 有界，请求串行执行并带超时；入站 SFTP
+服务器右键 **Open SFTP** 会创建无配对来源的独立 SFTP Tab。可配置的
+**Switch SSH/SFTP Tab** 命令则使用仅由 `AppState` 持有、不会持久化的运行时 Tab UUID 配对。
+从未配对的 SSH Terminal 触发时，会在其后创建并独立认证 SFTP Tab；从未配对的独立 SFTP Tab
+触发时，会在其前创建并独立认证 Terminal。两条路径都复用默认拒绝的主机密钥与凭据流程。
+配对建立后，命令只激活对应 Tab，不会再次连接或认证。关闭任一端只解除配对，并只关闭该 Tab
+自己的浏览器、subsystem、worker 和 transport；另一端继续保留，之后可重新创建配对 Tab。
+
+第一阶段提供双栏目录浏览。Slint 拥有两个受约束的 splitter：一个调整远端/本地宽度，另一个调整
+文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，
+`SftpPane` 则按响应式最小尺寸限制两侧。splitter 提供 resize 光标、键盘焦点与方向键调整，以及 slider
+可访问操作；双击目录 splitter 恢复等宽，双击 Transfers splitter 折叠或展开队列。分栏状态不进入
+Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列在本阶段仍是固定的响应式列。
+
+远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
+本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为 250 条、每个名称
+256 字符、名称总预算 64 KiB 和路径 4 KiB。传输队列只显示视觉状态，不提供传输命令。命令/事件
+channel 有界，请求串行执行并带超时；入站 SFTP
 frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw 目录游标每页最多输出
 250 条。单目录在接受 2,000 条或名称/路径累计 2 MiB 时停止，单条路径和名称进入应用快照前
 也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此 AxSSH 把暴露范围
@@ -370,7 +387,8 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 结束之后。`src/logging.rs` 通过有界无损队列写入按 UTC 日期滚动的文件，最多保留
 15 个，同时把 `INFO` 及以上事件镜像到 stderr。guard 释放时先写退出事件，再排空
 队列、刷新当前文件并 join writer 线程。运行字段可以包含 session ID、host、port 和
-主机指纹；禁止记录凭据和终端内容。
+主机指纹；禁止记录凭据和终端内容。About 只接收 guard 已创建的日志目录 owned path，
+通过应用 bridge 打开它，不改变日志模块的所有权。
 
 ## 持久化设置与字体资源
 

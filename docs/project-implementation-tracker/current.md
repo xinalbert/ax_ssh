@@ -2,14 +2,15 @@
 
 ## 当前目标
 
-- 目标：用平台系统发现替代已知 X server provider 对固定安装路径的依赖，并把 Terminal 的传输 resize 与本地模型 resize 收敛到单一应用状态入口。
-- 交付物：macOS bundle/Windows executable 系统发现与标准路径兜底、仅 Custom 可编辑的 Settings 路径、集中式活动 Terminal resize 方法、回归测试和双语文档。
+- 目标 ID：20260803-AUTHCONNECT01
+- 目标：为新建 SSH 会话增加“保存并连接”，并让认证弹窗按全局默认或用户当次选择安全记住密码存储后端。
+- 交付物：保存并连接动作、认证弹窗凭据后端选择、成功认证后按会话持久化后端引用、无凭据导出回归、双语文档和验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`Cargo.lock`、`src/x_server.rs`、`src/app/state.rs`、`src/app/state/tests.rs`、`src/app/terminal_bridge.rs`、`ui/settings/x11.slint`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、环境与实施记录。
-- 不在本轮范围内：安装或下载第三方 X server、修改远端 `sshd_config`、改变 X11 cookie/no-auth 安全默认值、改变终端 reflow 算法、引入新 UI/SSH 框架或引用项目耦合。
+- 当前范围：`ui/{app,session-editor,theme}.slint`、`ui/components/{overlay-host,security-dialogs}.slint`、`src/app/{connection,workspace,connection/request,connection/authentication}.rs`、相关状态/导出测试、双语架构/使用说明、项目地图与实施记录。
+- 不在本轮范围内：在会话编辑器或配置中保存明文密码/私钥口令、把任何凭据或其后端引用加入普通导出、改变主机密钥默认拒绝与确认顺序、修改加密保险库算法、导入参考项目源码或依赖。
 
 ## 当前状态
 
@@ -22,38 +23,35 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| PATHDISC1 | completed | 平台系统发现优先的 X server launch target | provider/path 单元测试、macOS bundle 实测、Cargo check | macOS 用 bundle identifier；Windows 用 PATH/ProgramFiles 兜底。 |
-| PATHUI2 | completed | 仅 Custom 可编辑路径的 Settings 与双语契约 | Slint/Cargo 联合编译、静态 UI contract | 已知 provider 不再持久依赖用户路径。 |
-| RESIZE3 | completed | `AppState` 单一活动 Terminal resize 入口 | state tests、Terminal focused tests | 仍同时执行 worker resize 和本地 model resize。 |
-| GATE4 | completed | 完整 Cargo、格式、tracker、Markdown 和差异门禁 | locked/offline check/test、Rustfmt、validator、`git diff --check` | GUI/真实 Windows 发现留给目标平台确认。 |
+| FLOW1 | completed | 新建 SSH profile 的保存并连接动作 | Slint/Rust 联合编译、保存路由定向测试 | 保存成功后复用既有连接入口，先执行 host-key probe。 |
+| PROMPT2 | completed | 认证弹窗按设置默认并允许当次选择凭据后端 | 认证选择映射测试、完整测试、静态安全审阅 | 仅认证成功且勾选记住后持久化后端引用。 |
+| DOC3 | completed | 双语使用/架构契约和项目地图 | tracker validator、Markdown 结构审阅 | 普通导出继续无凭据。 |
+| VERIFY4 | completed | 全仓自动化门禁与差异安全审阅 | fmt/check/test/clippy/tracker/diff | 严格 Clippy 仍受既有基线 lint 阻挡；允许已记录基线后通过。GUI 视觉由用户在目标平台验收。 |
 
 ## 已完成
 
-- 已完成施工前环境预检：Rust 2024、MSRV 1.92.0、Cargo locked/offline 和三平台 CI 契约未变化；本机缺 Cargo fmt/clippy 子命令。
-- 已确认 macOS 当前固定路径可用，但 XQuartz 与 MacXServer 都有稳定 bundle identifier，可由系统应用数据库发现。
-- 已确认 Windows 当前只检查 `ProgramFiles`/`ProgramFiles(x86)`，可增加进程 `PATH` 发现而不引入新依赖或注册表 unsafe API。
-- 已确认 Terminal bridge 当前分别查找 worker 与本地模型；两个 resize 均必需，但编排可由 `AppState` 单一方法拥有。
-- macOS 已通过 `NSWorkspace` bundle identifier 发现 XQuartz/MacXServer，并保留存在性检查后的标准路径兜底；Windows 已增加进程 `PATH` 优先、Program Files 后备的 executable 发现。
-- 已知 provider 已忽略持久化 `app_path`；Custom 保留显式路径，并在启动前要求普通文件和 Unix executable 权限。
-- Terminal bridge 已只调用 `AppState::resize_active_terminal`；状态层先请求现有 worker resize，再立即更新本地 `TerminalModel`，Serial 仍由 worker no-op 后只更新模型。
+- 已确认现有认证弹窗在主机密钥确认之后出现，配置只保存 `credential_storage` 引用，密码由系统凭据库或 Argon2id + XChaCha20-Poly1305 加密保险库保存。
+- 已确认现有成功认证 monitor 才提交待保存密码；失败、迟到 attempt 或未勾选记住不会写入密码。
+- 已确认普通导出主动移除 `credential_storage` 和 `host_key_fingerprint`，导入还会重新分配 profile UUID 并再次清理安全字段。
+- 已确认设置中的全局 `credential_storage` 可以作为每次新认证弹窗的初始选择，不需要修改配置 schema。
+- 已实现新建 SSH 的 Save & connect、普通认证弹窗后端选择和成功认证后的 profile 后端引用持久化；私钥/vault 解锁流程不显示无关选择。
+- 已保持普通导出/导入清理、host-key 默认拒绝、密码不进入 profile JSON 和日志的既有安全边界。
 
 ## 验证
 
-- 已完成：X11 provider/path 测试 8 项；`cargo check --locked --offline`；完整测试（库 105、应用 68、Doc tests）；全部 `src/` 直接 Rustfmt；Cargo metadata；tracker validator；27 个 Markdown 文件中的 46 个相对链接；参考项目源码/构建/打包零耦合；`git diff --check`。本机应用数据库分别返回 XQuartz 与 MacXServer bundle。
-- 未完成：Cargo `fmt`/`clippy` 子命令本机未安装；GUI 路径行显隐、真实 Windows 发现和实际 X server 启动按仓库规则留给目标平台确认。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 109、应用 75、Doc tests 0）、tracker/Markdown/差异检查；严格全目标 Clippy 确认仅命中既有基线，允许清单后通过。
+- 未完成：目标平台 GUI 视觉、键盘焦点、真实 SSH 互操作和凭据后端手工验收。
 
 ## 风险与阻塞
 
-- macOS bundle 发现必须保持在 blocking worker 内，不得阻塞 Slint UI 线程；已知 bundle 未发现时仍保留标准路径兜底。
-- Windows GUI 进程的 `PATH` 可能不含第三方 server，因此仍需保留 `ProgramFiles` 搜索；真实 Windows 行为只能在目标平台验收。
-- Custom 路径仍会启动本机程序，必须继续使用无 shell 的 `Command`、有界状态和存在/类型校验。
-- 工作区已有大量用户改动；本轮只增量修改相关位置，不回退无关差异。
-- Windows GUI 进程的实际 `PATH` 和第三方安装布局只能由 Windows CI/目标机确认；Program Files 后备仍保留。
+- 严格 `cargo clippy --all-targets --locked --offline -- -D warnings` 仍被既有配置、本地 shell、Telnet 和 worker lint 基线阻挡；本轮未扩大范围重构这些无关代码。
+- 认证弹窗新增选择控件后必须维持稳定高度、键盘焦点、秘密清理和 vault 解锁专用流程。
+- 保存并连接只能在 profile 成功落盘后启动；失败时保留编辑状态，不创建连接或泄露草稿秘密。
 
 ## 下一步
 
-- 等待用户在目标平台确认 Settings > X11 的 Custom 路径显隐，以及真实 XQuartz/MacXServer/VcXsrv/Xming 启动；后续路径策略修改继续留在 `src/x_server.rs`，Terminal resize 继续只从 `AppState::resize_active_terminal` 进入。
+- 用户在目标平台确认 Save & connect、弹窗焦点/高度、后端下拉选择、vault 口令条件和首次 host-key/认证顺序。
 
 ## 最后更新时间
 
-- 2026-08-02 20:22 CST
+- 2026-08-03 18:55 +0800

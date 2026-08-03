@@ -17,7 +17,7 @@
 
 - 单元与集成测试：Cargo 原生测试，包括 config、terminal、应用状态、本地 PTY、loopback SSH/Telnet、SFTP packet/path/state 边界和 Serial descriptor 匹配。
 - CI：GitHub Actions 在 Ubuntu、macOS、Windows 上运行 format、check 和 test。
-- 本机 `cargo fmt` 与 `cargo clippy` 组件未安装；可直接调用可用的 `rustfmt`，Clippy 需在 CI 或安装组件后验证。
+- 本机 `cargo fmt` 与 `cargo clippy` 可用；严格 Clippy 会命中仓库既有 lint 基线，允许已记录的八类基线 lint 后全目标检查通过。
 
 ## 关键命令
 
@@ -40,9 +40,9 @@ git diff --check
 - `libmudtelnet-rs 2.0.10` 的跨调用不完整 IAC/协商帧和转义 IAC 存在已确认边界；本项目 64 KiB 有界分帧适配由逐字节与 Telnet loopback 回归覆盖。
 - `russh-sftp 2.3.0` 未声明 MSRV，且 raw client 内部使用 unbounded packet sender；项目以 MSRV/CI、单浏览 session、串行请求、256 KiB 入站 frame、250 条分页和 2,000 条/2 MiB 目录预算约束其使用。
 - 真实 SFTP 服务兼容性与 GUI 文件面板需要目标环境手工验证。
-- X11 forwarding 依赖目标平台可用的本机 X server。AxSSH 可从 Settings 选择并有界启动 XQuartz、MacXServer、VcXsrv、Xming 或自定义程序；macOS 通过 bundle identifier、Windows 通过 `PATH` 后接 Program Files 自动发现已知 provider，路径输入只供 Custom 使用。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
+- X11 forwarding 依赖目标平台可用的本机 X server。普通 SSH shell 创建只发送 forwarding request，不读取本机 `DISPLAY`、不运行 `xauth`、不探测端点且不启动 provider；远端实际打开 X11 channel 后才进行本机准备。AxSSH 从 Settings 显示 macOS bundle identifier 或 Windows `PATH`/Program Files 检测到的只读已知位置，且仅在 Custom 时接受用户提供的 executable 路径。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
 - 自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包，不经 Slint import 嵌入可执行文件。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
-- 当前完整 locked/offline 测试门禁通过：库测试 105 项、应用测试 68 项和 Doc tests 均无失败。
+- 当前完整 locked/offline 测试门禁通过：库测试 109 项、应用测试 75 项和 Doc tests 均无失败。
 
 ## 证据文件
 
@@ -54,4 +54,4 @@ git diff --check
 
 ## 最后确认时间
 
-- 2026-08-02 20:22 CST
+- 2026-08-03 18:55 CST

@@ -139,7 +139,7 @@ must not locally hide either dialog before the Rust state transition accepts it.
 ## Event flow
 
 1. A Slint callback produces a small value such as a saved profile ID, unique
-   tab ID, terminal key/modifier tuple, draft fields, a trust
+   tab ID, terminal key/modifier tuple, draft fields, a save-and-connect intent, a trust
    decision, or one transient secret. Authentication secrets travel through the
    dedicated SecretTextInput, whose UI value is cleared after the application
    accepts it or when the prompt is cancelled.
@@ -169,7 +169,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
    inputs before it becomes visible.
 4. Settings > General owns the default backend for a newly remembered SSH
    password: the platform credential store or the encrypted application vault.
-   The session editor never receives a password. A profile stores only an
+   Each ordinary password prompt initializes its backend selector from that
+   setting and may override it for that prompt; the selector is ignored unless
+   **Remember password** is checked. The session editor never receives a password. A profile stores only an
    optional backend reference after a successful remembered-password write, so
    changing the default neither migrates nor breaks an existing credential.
    The application writes the selected backend only after SSH authentication;
@@ -283,17 +285,23 @@ must not locally hide either dialog before the Rust state transition accepts it.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so
-    activating Settings never removes the route back to a live terminal. Its
+    activating Settings never removes the route back to a live terminal. If
+    the Settings shortcut is used while that tab already exists, the existing
+    tab is activated instead of creating another Settings instance. Its
     draft previews in the current application immediately, while the Close
     action persists that candidate before removing only the singleton tab; it
     never affects a terminal worker. The coalesced preview crosses the
     application boundary only to update in-memory settings and visual state;
     the close transaction performs the resource loading and persistence.
-    About presents a static product-purpose description, receives the
-    compile-time package version as read-only UI metadata, identifies the
-    application license as `GPL-3.0-only`, and embeds Slint's standard
-    `AboutSlint` attribution component. The component remains declarative UI
-    and opens the Slint website without introducing an application callback.
+    About presents the product-purpose description, the package version and
+    build revision as read-only UI metadata, identifies the application license
+    as `GPL-3.0-only`, and embeds Slint's standard `AboutSlint` attribution
+    component. Its support actions cross the existing AppWindow callback only:
+    Report a bug opens the AxSSH issue tracker, Open log folder opens the
+    process-owned rolling-log directory, and Copy diagnostics places only
+    version, revision, OS, architecture, and build profile on the clipboard.
+    None of these actions uploads data or exposes configuration, host, path, or
+    credential fields to Slint.
    The session sidebar does not duplicate Settings
    or About. It spans the full client height directly below the native title
    bar, while the workspace Tab strip occupies only the column to its right.
@@ -319,13 +327,15 @@ must not locally hide either dialog before the Rust state transition accepts it.
     converted in one application-boundary parser to `slint::Keys`; on Apple,
     persisted `Cmd` maps to Slint `Control`, while physical `Ctrl` maps to Slint
     `Meta`. Muda therefore renders and activates native accelerators instead of
-    appending shortcut text to titles. The macOS close-tab and fixed **Open SFTP
-    Tab** items intentionally have no dynamic active-tab menu properties, so Tab
-    identity, kind, connection, and SFTP loading changes do not rebuild the
-    native menu. Shortcut or security-state changes may still rebuild it; the
+    appending shortcut text to titles. The macOS close-tab item and the
+    cross-platform fixed **Switch SSH/SFTP Tab** item intentionally have no
+    dynamic active-tab menu properties. The application callback resolves the
+    active runtime Tab only when the command is invoked, so Tab identity, kind,
+    connection, and SFTP loading changes do not rebuild the native menu.
+    Shortcut or security-state changes may still rebuild it; the
     AppKit bridge then idempotently rebinds the current Settings/About items.
-    Windows/Linux retain dynamic close-tab and SFTP state, keep Settings in Edit,
-    and keep About in Help. File, View, Pane, Window, and Help reuse existing
+    Windows/Linux retain dynamic close-tab state, keep Settings in Edit, and
+    keep About in Help. File, View, Pane, Window, and Help reuse existing
     new-session, sidebar, local-shell, close-tab, clipboard-transfer, and
     shortcut intents. Import always invokes the automatic bounded transfer path.
     Export asks `SessionNavigation` for the currently selected persisted
@@ -409,27 +419,29 @@ request X11. Global `X11Settings` stores only the non-secret provider,
 Custom-only application path, launch preference, and explicit no-auth
 compatibility choice. `src/x_server.rs` resolves Auto to platform providers,
 discovers macOS applications by bundle identifier through `NSWorkspace`,
-searches the Windows process `PATH` before Program Files, builds a bounded
-local-display candidate list, and starts a selected application outside the UI
-thread when permitted. Standard installation paths remain existence-checked
-fallbacks. macOS Auto prefers XQuartz, then MacXServer; Windows Auto prefers
-VcXsrv, then Xming; Linux exposes the system `DISPLAY` and Custom choices. Every
-known provider ignores a saved Custom path, and no provider is downloaded or
-installed. A Custom target is launched without a command shell and must be a
-regular file with executable permission on Unix.
+searches the Windows process `PATH` before Program Files, and returns a bounded
+read-only snapshot of known installed locations for Settings. Standard
+installation paths remain existence-checked fallbacks. macOS Auto prefers
+XQuartz, then MacXServer; Windows Auto prefers VcXsrv, then Xming; Linux exposes
+the system `DISPLAY` and Custom choices. Every known provider ignores a saved
+Custom path, and no provider is downloaded or installed. A Custom target is
+launched without a command shell and must be a regular file with executable
+permission on Unix.
 
-Before requesting forwarding, the worker probes a local Unix socket or loopback
-TCP endpoint and normally runs a timed, output-limited
-`xauth list <DISPLAY>` that requires one unambiguous `MIT-MAGIC-COOKIE-1` value.
-If the server is not ready and launch-on-connect is enabled, X-server launch and
-readiness polling are serialized and time-bounded. MacXServer is started only
-with explicit no-auth compatibility and forced to `127.0.0.1:6000`; VcXsrv and
-Xming receive `-multiwindow -clipboard -ac` only under the same explicit choice.
-The relay still accepts only local endpoints and validates the SSH fake cookie
-before stripping X authority for a compatible local server. Preparation or
-server-request failure leaves the SSH shell connected and publishes a persistent
-unavailable status. Remote `sshd` policy is not modified: it must independently
-allow X11 forwarding and accept the request before it assigns remote `DISPLAY`.
+The shell creation phase sends an X11 forwarding request with one random 128-bit
+fake cookie, but it does not read local `DISPLAY`, run `xauth`, probe a local
+endpoint, or start an X server. Only when the remote server opens an X11 channel
+does the relay resolve local display candidates, run a timed, output-limited
+`xauth list <DISPLAY>`, and, if needed and enabled, launch and poll the selected
+provider behind the existing timeout. MacXServer is started only with explicit
+no-auth compatibility and forced to `127.0.0.1:6000`; VcXsrv and Xming receive
+`-multiwindow -clipboard -ac` only under the same explicit choice. The relay
+still accepts only local endpoints and validates the SSH fake cookie before
+stripping X authority for a compatible local server. Local preparation, channel,
+or server-request failure rejects only that X11 channel, leaves the SSH shell
+connected, and publishes a persistent unavailable status. Remote `sshd` policy
+is not modified: it must independently allow X11 forwarding and accept the
+request before it assigns remote `DISPLAY`.
 
 Each enabled terminal creates a random 128-bit fake cookie for the SSH request.
 `ClientHandler` rejects server-opened X11 channels by default and dispatches
@@ -481,19 +493,39 @@ Authenticated connections follow this lifecycle:
 
 An SFTP Tab owns one SSH transport whose worker opens only a separate `sftp`
 subsystem channel after authentication. It does not allocate a PTY or terminal
-shell. The SSH worker remains the sole owner of the russh connection; application
-state and Slint see only owned directory DTOs and small browse intents. A server
-context-menu action and the configurable open-SFTP shortcut create this distinct
-Tab; the normal deny-by-default host-key and credential flow is shared. Closing
-the SFTP Tab shuts down its browser, subsystem, and transport.
+shell. The SSH worker remains the sole owner of that russh connection;
+application state and Slint see only owned directory DTOs and small browse
+intents. A paired Terminal Tab and SFTP Tab never share a russh handle or worker.
 
-The first phase provides a dual-pane directory browser. The remote side remains
-the bounded SFTP browser, while `src/app/local_files.rs` reads local directory
-metadata only on a Tokio blocking boundary. Local results carry a Tab-local
-request identity so late reads cannot replace a newer path. They are bounded to
-250 entries, 256 characters per name, a 64 KiB aggregate name budget, and 4 KiB
-paths before reaching Slint. The transfer queue is visual status only; it has no
-transfer commands. Commands and events use
+The server context-menu **Open SFTP** action creates a standalone SFTP Tab. The
+configurable **Switch SSH/SFTP Tab** command instead uses an `AppState`-owned,
+non-persistent pair of runtime Tab UUIDs. From an unpaired SSH Terminal it creates
+an independently authenticated SFTP Tab immediately after the Terminal; from an
+unpaired standalone SFTP Tab it creates an independently authenticated Terminal
+immediately before the SFTP Tab. Both paths reuse the normal deny-by-default
+host-key and credential flow. Once the pair exists, the command only activates
+the companion Tab and does not reconnect or authenticate again. Closing either
+Tab unlinks the pair and shuts down only that Tab's browser, subsystem, worker,
+and transport; the surviving Tab remains open and may create a new companion
+later.
+
+The first phase provides a dual-pane directory browser. Slint owns two bounded
+splitters: one changes the remote/local widths and one changes the files/transfer
+heights. `WorkspaceShell` retains their ratios and the collapsed transfer state
+only for the current process lifetime, while `SftpPane` clamps both sides to
+responsive minimum sizes. The splitters expose pointer resize cursors, keyboard
+focus and arrow adjustment, and slider accessibility actions. Double-clicking
+the directory splitter restores equal widths; double-clicking the transfer
+splitter collapses or expands the queue. No splitter state enters Rust, the
+configuration schema, or the SFTP transport, and the Name/Size/Modified columns
+remain fixed responsive columns in this phase.
+
+The remote side remains the bounded SFTP browser, while
+`src/app/local_files.rs` reads local directory metadata only on a Tokio blocking
+boundary. Local results carry a Tab-local request identity so late reads cannot
+replace a newer path. They are bounded to 250 entries, 256 characters per name,
+a 64 KiB aggregate name budget, and 4 KiB paths before reaching Slint. The
+transfer queue is visual status only; it has no transfer commands. Commands and events use
 bounded channels, requests are serialized and timed out, inbound SFTP frames
 are rejected above 256 KiB before `russh-sftp` parsing, and a raw directory
 cursor emits at most 250 entries per page. One directory stops at 2,000 accepted
@@ -536,7 +568,9 @@ writes through a bounded non-lossy queue to daily UTC files, retains at most 15
 files, and mirrors `INFO` and higher events to stderr. Dropping the guard writes
 the shutdown event, drains the queue, flushes the active file, and joins the
 writer thread. Operational fields may include session ID, host, port, and host
-fingerprint; credentials and terminal contents are forbidden.
+fingerprint; credentials and terminal contents are forbidden. About receives
+the guard's already-created log directory as an owned path and can open it
+through the application bridge without changing the logging owner.
 
 ## Persistent settings and font resources
 

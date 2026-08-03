@@ -110,7 +110,10 @@ registry.
   desktop entry. Do not substitute or load an icon from the reference project.
 - Keep `AboutSlint` in the top-level-menu-accessible About page. AxSSH selects
   Slint's `GPL-3.0-only` option, while the standard component keeps toolkit
-  attribution visible without adding a Rust callback.
+  attribution visible. About support actions use the existing AppWindow bridge:
+  they open the issue tracker or log directory, or copy only non-sensitive build
+  metadata. They must not upload logs or expose profile, host, path, or secret
+  values.
 - Update both language pages when changing user-facing documentation.
 
 ## Platform packages
@@ -136,6 +139,8 @@ to be refreshed before a replaced icon appears.
 and flushes when the process-owned guard is dropped. Logs live in the `logs`
 subdirectory of the platform-local AxSSH application data directory. The
 default filter is `ax_ssh=info,russh=warn`; `RUST_LOG` overrides it.
+The About page receives this already-created directory from the process boundary
+and can open it without performing filesystem work on the Slint thread.
 
 Enable redacted keyboard/UI diagnostics and SSH latency stages for one run with:
 
@@ -163,6 +168,7 @@ benchmark result.
 ## Verification boundaries
 
 Automated checks cover profile validation, JSON round-trip, Slint compilation,
+save-and-connect routing and authentication storage-selection mapping,
 log flush behavior, and a loopback russh server that verifies rejected host-key
 probing, trusted password/private-key authentication, PTY shell input/output,
 resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,

@@ -20,15 +20,17 @@ cargo run --locked
    默认开启；Telnet 使用 host、port，并显示未加密警告；Serial 使用
    端口名、baud rate、data bits、stop bits、parity 和 flow control。AxSSH 启动时会自动
    列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。
-3. 保存会话并在会话导航中选择它。重复打开同一个已保存会话会创建彼此独立的终端
+3. 保存会话并在会话导航中选择它。新建 SSH profile 时，也可以点击 **Save & connect**，
+   保存成功后立即进入正常的主机密钥流程。重复打开同一个已保存会话会创建彼此独立的终端
    Tab，每个 Tab 都有自己的连接与输出。每个 SSH Tab 都可以独立等待主机密钥确认或认证；
    安全提示始终对应活动 Tab，切换 Tab 后其它等待提示仍会保留。
 4. 使用 SSH 首次连接时，先通过可信来源核对界面显示的 SHA-256 主机密钥指纹，再确认信任。
    主机密钥发生变化时必须再次明确确认，并应在接受前调查原因。
 5. 使用 SSH 时根据提示输入临时密码或私钥 passphrase；私钥 passphrase 永远不会持久化。若要记住
    SSH 密码，先在 **Settings > General** 选择 **System credential store** 或
-   **Encrypted application vault**，再在密码弹窗勾选 **Remember password**。选择加密
-   保险库时还要输入保险库口令；之后连接只需输入该口令来解锁已保存的 SSH 密码。
+   **Encrypted application vault**。密码弹窗会以该设置为初始值，也可以在 **Credential
+   storage** 菜单中只为本次提示改选后端，再勾选 **Remember password**。只有认证成功后才会
+   保存密码；选择加密保险库时还要输入保险库口令，之后连接只需输入该口令来解锁已保存的 SSH 密码。
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
    关闭正在探测或等待认证的 Tab，只会取消或丢弃该 Tab 自己的连接流程。
@@ -36,16 +38,17 @@ cargo run --locked
 在 **Settings > X11** 选择本机 server。macOS 提供 Auto、XQuartz、MacXServer、Custom；
 Windows 提供 Auto、VcXsrv、Xming、Custom；Linux 提供 System DISPLAY、Custom。已知 provider
 由 macOS 应用数据库或 Windows executable 搜索路径与 Program Files 自动定位，只有 Custom
-显示可编辑的 executable 路径。连接时自动启动默认开启。安全默认仍要求 `xauth` 中存在精确的
-`MIT-MAGIC-COOKIE-1`，XQuartz 和系统 X.Org/Xwayland 应使用该模式。
+会显示检测到的安装位置；选择 Custom 后可自行提供 executable 路径。首个 X11 application 时启动
+默认开启：打开 SSH shell 只向服务端申请 forwarding，不会启动本机 X server。安全默认仍要求
+`xauth` 中存在精确的 `MIT-MAGIC-COOKIE-1`，XQuartz 和系统 X.Org/Xwayland 应使用该模式。
 **Allow local connections without X authority** 默认关闭，仅在 MacXServer 或由 AxSSH 启动的
 VcXsrv/Xming 确实需要时开启；这些兼容启动只连接 loopback，Windows server 也只有在用户明确
 选择后才接收 `-ac`。
 
 远端 SSH server 还必须允许 X11 forwarding，通常需要 `X11Forwarding yes` 和可用的服务端
 `xauth`；AxSSH 不修改 `sshd_config`。远端 `DISPLAY` 为空表示 forwarding request 没有建立，
-常见原因是本机准备失败或 `sshd` 拒绝。无论哪种情况，Terminal shell 都保持连接并提示 X11
-不可用；关闭 Tab 会取消全部活动 X11 relay。
+常见原因是 `sshd` 拒绝。如果远端图形应用打开时本机准备失败，AxSSH 只拒绝该图形 channel；
+Terminal shell 仍保持连接并提示 X11 不可用；关闭 Tab 会取消全部活动 X11 relay。
 
 Telnet 流量不加密，在终端中输入的登录信息也会明文传输；AxSSH 不会自动填写 Telnet
 凭据。Serial 扫描只读取操作系统提供的可用端口元数据，不会打开端口、发送探测字节、
@@ -78,10 +81,19 @@ SSH 连接弹窗操作。修改 **Settings > General** 的默认后端只影响�
 选择 **Pane > New Local Shell** 或 Local Shell 控件可打开独立的本地终端。通过 Tab
 关闭控件或 **Window > Close Current Tab** 关闭终端。
 
-活动 Tab 是 SSH 或 SFTP 时，选择 **Pane > Open SFTP** 可为该服务器新建独立 SFTP Tab。
-默认快捷键为 `Ctrl+M`，可在 **Settings > Shortcuts** 修改。SFTP Tab 会重复正常的主机密钥和认证流程，随后只打开
-`sftp` subsystem，绝不申请 PTY 或终端 shell。上方区域将远端和本地文件浏览器并排显示，并使用
-一致的名称、大小和修改时间列。远端输入绝对路径、相对当前目录的路径或 `~` 后选择 **Open**；双击
+活动 Tab 是 SSH 或 SFTP 时，选择 **Pane > Switch SSH/SFTP Tab**。默认快捷键为 `Ctrl+M`，
+可在 **Settings > Shortcuts** 修改。从尚未配对的 SSH Terminal 触发时，会紧接其后新建独立
+SFTP Tab；从独立 SFTP Tab 触发时，会紧接其前新建 SSH Terminal。新 Tab 使用自己的 SSH
+transport，并重新走正常的主机密钥和认证流程。配对建立后，在任一端再次触发只会激活另一端。
+关闭任一 Tab 会保留另一端并清除配对，之后再次触发可重新创建对应 Tab。
+
+SFTP Tab 随后只打开 `sftp` subsystem，绝不申请 PTY 或终端 shell。上方区域将远端和本地
+文件浏览器并排显示，并使用一致的名称、大小和修改时间列。拖动纵向分隔条可调整两栏宽度，双击可恢复
+等宽；拖动横向分隔条可调整文件区与 Transfers 高度，双击可折叠或展开 Transfers。两个分隔条都可通过
+Tab 获得焦点，并接受对应方向键、Home 和 End；Enter 或 Space 执行其双击动作。当前应用运行期间切换
+Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独拖动文件表格列宽。
+
+远端输入绝对路径、相对当前目录的路径或 `~` 后选择 **Open**；双击
 文件夹可进入该目录。本地栏默认打开平台 home 目录，可输入其它本地目录，且只读取有界文件元数据。
 **Hidden** 显示点文件，**More** 请求下一页远端目录。底部传输队列在传输尚未实现时只显示状态，不能发起操作。
 关闭 SFTP Tab 会关闭它的 subsystem 和 SSH transport。第一阶段仅支持只读浏览，尚不提供上传、下载、删除、
@@ -127,7 +139,11 @@ macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会�
 Windows 和 Linux 分别在 Edit
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、
 Workspace、Shortcuts 和 About 页面；修改会立即作用于当前应用，关闭 Settings Tab 的 `x` 后才会持久化。
+Settings Tab 已经打开时再次按其快捷键，只会激活这个单例 Tab。
 About 标明 AxSSH 使用 `GPL-3.0-only`，并包含 Slint 标准的可点击署名组件。
+About 还提供 **Report a bug**、**Open log folder** 和 **Copy diagnostics**：前者打开 AxSSH
+issue tracker，中者打开本机滚动日志目录，后者只复制版本、构建 revision、系统、架构和构建类型。
+这些操作不会上传数据。
 **Settings > General** 还负责选择以后连接时主动记住密码的默认后端。
 
 在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；
@@ -143,14 +159,16 @@ Light 模式保留可读的浅色 ANSI 色表。Custom 会展开 Light/Dark 两�
 scrollback、鼠标行为以及平台相关的 Option-as-Meta。两个字体列表都先显示软件自带字体，
 再显示自动发现的系统等宽字体。
 
-**Settings > X11** 控制当前平台的本机 X server provider、连接时启动和显式的 loopback-only
-no-auth 兼容模式。已知 provider 会自动定位；应用路径只在 Custom 时显示，且必须指向可执行文件。
-这些设置都不是秘密；X11 cookie 仍只短暂存在且永不保存。
+**Settings > X11** 控制当前平台的本机 X server provider、首个 X11 application 时启动和显式的
+loopback-only no-auth 兼容模式。已知 provider 的检测位置会以只读方式显示；应用路径只在 Custom
+时可提供，且必须指向可执行文件。这些设置都不是秘密；X11 cookie 仍只短暂存在且永不保存。
 
 ## 本地数据与凭据
 
-AxSSH 把 profile、非敏感 Group 名称和设置写入平台本地应用数据目录中的版本化
-`sessions.json`。每个 profile 明确包含一份 SSH、Telnet 或 Serial 配置；只有 SSH 可以
+AxSSH 把 profile、非敏感 Group 名称和设置写入平台应用配置目录中的版本化
+`sessions.json`。Linux 默认会解析到 `~/.config/ax_ssh/sessions.json`，同时遵守
+`XDG_CONFIG_HOME`；macOS 和 Windows 使用各自的标准应用目录。每个 profile 明确包含一份
+SSH、Telnet 或 Serial 配置；只有 SSH 可以
 包含已确认的主机密钥指纹、私钥路径、指向已记住密码后端的非敏感引用，以及非敏感的 X11
 forwarding 开关；X11 cookie 永远不会保存。Serial 可以保存
 用于稳定匹配的非敏感 USB 身份元数据。profile 不包含密码、保险库口令、私钥 passphrase、
@@ -158,9 +176,10 @@ forwarding 开关；X11 cookie 永远不会保存。Serial 可以保存
 
 选择 **System credential store** 后，记住的密码通过 macOS Keychain、Windows Credential
 Manager 或 Unix Secret Service 保存。选择 **Encrypted application vault** 后，应用会在
-配置目录中为每个 profile 保存一个私有加密记录，保险库口令不会保存。每日日志写入同一
-应用数据目录的 `logs` 子目录，最多保留 15 个文件。`RUST_LOG` 可以覆盖默认的
-`ax_ssh=info,russh=warn` 过滤规则。凭据和终端内容不得写入日志。
+配置目录中为每个 profile 保存一个私有加密记录，保险库口令不会保存。每日日志单独写入
+平台本地应用数据目录的 `logs` 子目录，最多保留 15 个文件。`RUST_LOG` 可以覆盖默认的
+`ax_ssh=info,russh=warn` 过滤规则。凭据和终端内容不得写入日志；运行日志仍可能包含 host、
+port、session ID 或主机指纹等连接元数据，附加到 issue 前应先检查。
 
 已连接的终端可以合法地长时间没有 shell 输出。AxSSH 使用 SSH 传输层的 keepalive 和
 inactivity 策略，而不是 shell 输出计时器，来判断连接何时不再存活。

@@ -24,11 +24,13 @@ cargo run --locked
    bits, parity, and flow control. AxSSH lists detected ports automatically at
    startup; use **Refresh** after a device is attached, or enter a path/name
    manually.
-3. Save the session, then select it in the session navigator. Opening the same
-   saved session more than once creates independent terminal tabs with separate
-   connections and output. Each SSH Tab can independently wait for host-key
-   confirmation or authentication; the security prompt always belongs to the
-   active Tab, and switching Tabs preserves the other pending prompt.
+3. Save the session, then select it in the session navigator. For a new SSH
+   profile, **Save & connect** saves the profile and immediately starts the
+   normal host-key flow. Opening the same saved session more than once creates
+   independent terminal tabs with separate connections and output. Each SSH Tab
+   can independently wait for host-key confirmation or authentication; the
+   security prompt always belongs to the active Tab, and switching Tabs
+   preserves the other pending prompt.
 4. For SSH, compare the displayed SHA-256 host-key fingerprint on the first
    connection
    with a trusted source before confirming it. A changed key requires another
@@ -36,9 +38,11 @@ cargo run --locked
 5. For SSH, enter a transient password or private-key passphrase when prompted. A
    private-key passphrase is never persisted. To remember an SSH password,
    first choose **System credential store** or **Encrypted application vault**
-   in **Settings > General**, then select **Remember password** in the password
-   prompt. The encrypted vault also asks for a vault password; later uses ask
-   only for that vault password to unlock the saved SSH password.
+   in **Settings > General**. The password prompt starts with that choice, and
+   its **Credential storage** menu can override the backend for this prompt.
+   Select **Remember password** to save after successful authentication. The
+   encrypted vault also asks for a vault password; later uses ask only for that
+   vault password to unlock the saved SSH password.
    Password, vault-password, and passphrase fields cannot be copied, cut, or
    selected, and are cleared after a submitted secret is accepted or the prompt
    is cancelled.
@@ -49,9 +53,12 @@ Choose the local server under **Settings > X11**. macOS offers Auto, XQuartz,
 MacXServer, and Custom; Windows offers Auto, VcXsrv, Xming, and Custom; Linux
 offers System DISPLAY and Custom. AxSSH locates known providers through the
 macOS application database or the Windows executable search path and Program
-Files; only Custom shows an editable executable path. Auto-start is enabled by
-default. The secure default still requires an exact `MIT-MAGIC-COOKIE-1` from
-`xauth`; XQuartz and system X.Org/Xwayland should use this mode. **Allow local
+Files and displays the detected locations in Settings; choose Custom to provide
+an executable path yourself. Start for first X11 application is enabled by
+default: opening an SSH shell only asks the server for forwarding and never
+starts a local X server. The secure default still requires an exact
+`MIT-MAGIC-COOKIE-1` from `xauth`; XQuartz and system X.Org/Xwayland should use
+this mode. **Allow local
 connections without X authority** is off by default and should be enabled only
 when needed for MacXServer or an AxSSH-started VcXsrv/Xming instance. Those
 compatibility launches are loopback-only; the Windows servers receive `-ac`
@@ -60,8 +67,9 @@ only after this explicit choice.
 The remote SSH server must also allow X11 forwarding, normally through
 `X11Forwarding yes` and a usable server-side `xauth`. AxSSH does not change
 `sshd_config`. A remote empty `DISPLAY` means that the forwarding request was not
-established, commonly because local preparation failed or `sshd` rejected it.
-In either case the shell remains connected and reports X11 as unavailable.
+established, commonly because `sshd` rejected it. If local preparation fails when
+the remote graphical application opens, AxSSH rejects that graphical channel;
+the shell remains connected and reports X11 as unavailable.
 Closing the Tab cancels every active X11 relay.
 
 Telnet traffic, including any login text entered in the terminal, is sent
@@ -108,13 +116,27 @@ Choose **Pane > New Local Shell** or the Local Shell control to open an
 independent local terminal. Close a terminal with its tab control or **Window >
 Close Current Tab**.
 
-With an SSH or SFTP Tab active, choose **Pane > Open SFTP** to open a dedicated
-SFTP Tab for that server. The default shortcut is `Ctrl+M`; change it in
-**Settings > Shortcuts**. The
-SFTP Tab repeats the normal host-key and authentication flow, then opens only
-the `sftp` subsystem: it never allocates a PTY or terminal shell. Its upper
-area keeps remote and local file browsers side by side with matching Name,
-Size, and Modified columns. Enter an absolute path, a path relative to the
+With an SSH or SFTP Tab active, choose **Pane > Switch SSH/SFTP Tab**. The
+default shortcut is `Ctrl+M`; change it in **Settings > Shortcuts**. From an
+SSH Terminal without a companion, the command creates a dedicated SFTP Tab
+immediately after it. From a standalone SFTP Tab, it creates an SSH Terminal
+immediately before it. Each new Tab repeats the normal host-key and
+authentication flow with its own SSH transport. Once paired, using the command
+in either Tab only activates its companion. Closing either Tab leaves the other
+open and clears the pairing, so a later command can create a new companion.
+
+The SFTP Tab opens only the `sftp` subsystem: it never allocates a PTY or
+terminal shell. The upper area keeps remote and local file browsers side by
+side with matching Name, Size, and Modified columns. Drag the vertical divider
+to change the two browser widths, or double-click it to restore equal widths.
+Drag the horizontal divider to resize the files and Transfers areas;
+double-click it to collapse or expand Transfers. Both dividers participate in
+Tab focus and accept the matching arrow keys, Home, and End. Enter or Space
+performs the divider's double-click action. The layout remains while switching
+Tabs in the current application run and returns to its defaults after restart.
+The individual file-table columns are not resizable in this phase.
+
+Enter an absolute path, a path relative to the
 current directory, or `~` in the remote browser, then use **Open**; double-click
 a folder to enter it. The local browser starts at the platform home directory,
 accepts an explicit local directory path, and reads only bounded file metadata.
@@ -180,8 +202,15 @@ the Settings item follows its configured shortcut. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
 contains General, Appearance, Terminal, X11, Workspace, Shortcuts, and About pages.
 Changes take effect immediately in the current application; they are persisted
-when the Settings tab is closed with its tab `x` control. About identifies
+when the Settings tab is closed with its tab `x` control. Using the Settings
+shortcut while that tab is already open activates the existing singleton Tab.
+About identifies
 AxSSH as `GPL-3.0-only` and includes Slint's standard, clickable attribution.
+The About page also provides **Report a bug**, **Open log folder**, and **Copy
+diagnostics** actions. The first opens the AxSSH issue tracker, the second opens
+the local rolling-log directory, and the third copies only version, build
+revision, operating system, architecture, and build profile. No diagnostic
+action uploads data.
 **Settings > General**
 also selects the default backend for a password you choose to remember on a
 future connection.
@@ -204,16 +233,19 @@ line height, brightness, bright ANSI colors for bold text, scrollback, mouse
 behavior, and the platform-specific Option-as-Meta preference. Bundled fonts
 appear before discovered system monospace fonts in both font lists.
 
-**Settings > X11** controls the platform-local X server provider,
-launch-on-connect behavior, and the explicit loopback-only no-auth compatibility
-mode. Known providers are located automatically; an application path is shown
-only for Custom and must name an executable file. These settings are non-secret;
-X11 cookies remain transient and are never saved.
+**Settings > X11** controls the platform-local X server provider, first-X11-
+application startup behavior, and the explicit loopback-only no-auth
+compatibility mode. Known provider locations are detected and shown read-only;
+an application path is available only for Custom and must name an executable
+file. These settings are non-secret; X11 cookies remain transient and are never
+saved.
 
 ## Local data and credentials
 
 AxSSH stores profiles, non-secret group names, and settings in a versioned
-`sessions.json` inside the platform-local application data directory. Each
+`sessions.json` inside the platform application configuration directory. On
+Linux this normally resolves to `~/.config/ax_ssh/sessions.json` while respecting
+`XDG_CONFIG_HOME`; macOS and Windows use their standard application directories. Each
 profile contains one explicit SSH, Telnet, or Serial configuration. Only SSH
 may contain a confirmed host-key fingerprint, private-key path, or non-secret
 reference to the backend holding a remembered password, plus the non-secret
@@ -226,10 +258,12 @@ Remembered passwords are stored through macOS Keychain, Windows Credential
 Manager, or Unix Secret Service when **System credential store** is selected.
 The **Encrypted application vault** stores one private encrypted record per
 profile in the application configuration directory; its vault password is not
-saved. Daily logs are written to the `logs` subdirectory of the same
-application data directory, with at most 15 files retained. `RUST_LOG`
+saved. Daily logs are written separately to the `logs` subdirectory of the
+platform-local application data directory, with at most 15 files retained. `RUST_LOG`
 overrides the default `ax_ssh=info,russh=warn` filter. Credentials and terminal
-contents must not be logged.
+contents must not be logged. Operational logs may still contain connection
+metadata such as a host, port, session ID, or host-key fingerprint, so review
+them before attaching them to an issue.
 
 A connected terminal may legitimately have no shell output. AxSSH uses SSH
 transport keepalive and inactivity policy, not a shell-output timer, to decide
