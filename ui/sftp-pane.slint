@@ -91,6 +91,111 @@ component SftpActionButton inherits FocusScope {
     }
 }
 
+component SftpSplitHandle inherits FocusScope {
+    in property <Orientation> orientation: Orientation.horizontal;
+    in property <string> accessible-name;
+    in property <float> value;
+    in property <float> minimum: 0.0;
+    in property <float> maximum: 1.0;
+    in property <float> step: Theme.sftp-splitter-step;
+    in property <length> available-length;
+    callback adjust(float);
+    callback set-value(float);
+    callback activated();
+
+    private property <bool> horizontal: root.orientation == Orientation.horizontal;
+    private property <float> drag-start-value: root.value;
+    private property <bool> active: root.has-focus || touch.has-hover || touch.pressed;
+
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: slider;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-orientation: root.orientation;
+    accessible-value: root.value;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: root.step;
+    accessible-action-set-value(candidate) => {
+        if candidate.is-float() {
+            root.set-value(max(root.minimum, min(root.maximum, candidate.to-float())));
+        }
+    }
+    accessible-action-increment => { root.adjust(root.step); }
+    accessible-action-decrement => { root.adjust(-root.step); }
+    accessible-action-default => { root.activated(); }
+
+    key-pressed(event) => {
+        if root.horizontal && event.text == Key.RightArrow {
+            root.adjust(root.step);
+            return EventResult.accept;
+        }
+        if root.horizontal && event.text == Key.LeftArrow {
+            root.adjust(-root.step);
+            return EventResult.accept;
+        }
+        if !root.horizontal && event.text == Key.DownArrow {
+            root.adjust(root.step);
+            return EventResult.accept;
+        }
+        if !root.horizontal && event.text == Key.UpArrow {
+            root.adjust(-root.step);
+            return EventResult.accept;
+        }
+        if event.text == Key.Home {
+            root.set-value(root.minimum);
+            return EventResult.accept;
+        }
+        if event.text == Key.End {
+            root.set-value(root.maximum);
+            return EventResult.accept;
+        }
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        x: root.horizontal ? (parent.width - self.width) / 2 : 0px;
+        y: root.horizontal ? 0px : (parent.height - self.height) / 2;
+        width: root.horizontal
+            ? (root.active ? Theme.sftp-splitter-active-thickness : Theme.hairline)
+            : parent.width;
+        height: root.horizontal
+            ? parent.height
+            : (root.active ? Theme.sftp-splitter-active-thickness : Theme.hairline);
+        background: root.active ? Theme.accent : Theme.divider;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.horizontal ? ew-resize : ns-resize;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.drag-start-value = root.value;
+                root.focus();
+            }
+        }
+        moved => {
+            if self.pressed && root.available-length > 0px {
+                root.set-value(max(
+                    root.minimum,
+                    min(
+                        root.maximum,
+                        root.drag-start-value
+                            + (root.horizontal
+                                ? (self.mouse-x - self.pressed-x) / root.available-length
+                                : (self.mouse-y - self.pressed-y) / root.available-length),
+                    ),
+                ));
+            }
+        }
+        double-clicked => { root.activated(); }
+    }
+}
+
 component SftpDirectoryHeader inherits Rectangle {
     private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
     private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
@@ -449,6 +554,8 @@ component SftpDirectoryPane inherits Rectangle {
 }
 
 component SftpTransferQueue inherits Rectangle {
+    in property <bool> collapsed: false;
+
     background: Theme.panel;
     clip: true;
 
@@ -476,7 +583,7 @@ component SftpTransferQueue inherits Rectangle {
                 background: Theme.divider;
             }
         }
-        Rectangle {
+        if !root.collapsed : Rectangle {
             height: Theme.sftp-transfer-header-height;
             background: Theme.panel;
             Text {
@@ -529,7 +636,7 @@ component SftpTransferQueue inherits Rectangle {
                 background: Theme.divider;
             }
         }
-        Rectangle {
+        if !root.collapsed : Rectangle {
             vertical-stretch: 1;
             Text {
                 text: "No transfers yet";
@@ -545,6 +652,9 @@ component SftpTransferQueue inherits Rectangle {
 export component SftpPane inherits Rectangle {
     in property <SftpViewState> view;
     in property <bool> standalone: false;
+    in-out property <float> directory-split-ratio: 0.5;
+    in-out property <float> files-split-ratio: 0.7;
+    in-out property <bool> transfers-collapsed: false;
     callback list-directory(string);
     callback load-more();
     callback list-local-directory(string);
@@ -558,63 +668,158 @@ export component SftpPane inherits Rectangle {
     accessible-role: list;
     accessible-label: "SFTP files";
 
+    private property <length> directory-splitter-size: min(
+        Theme.sftp-splitter-size,
+        root.width,
+    );
+    private property <length> horizontal-available-width:
+        max(0px, root.width - root.directory-splitter-size);
+    private property <length> directory-pane-floor: min(
+        Theme.sftp-directory-pane-min-width,
+        root.horizontal-available-width / 2,
+    );
+    private property <float> directory-ratio-min: root.horizontal-available-width > 0px
+        ? root.directory-pane-floor / root.horizontal-available-width : 0.5;
+    private property <float> directory-ratio-max: 1.0 - root.directory-ratio-min;
+    private property <float> clamped-directory-split-ratio: max(
+        root.directory-ratio-min,
+        min(root.directory-ratio-max, root.directory-split-ratio),
+    );
+    private property <length> remote-pane-width:
+        root.horizontal-available-width * root.clamped-directory-split-ratio;
+
+    private property <length> transfer-splitter-size: min(
+        Theme.sftp-splitter-size,
+        root.height,
+    );
+    private property <length> expanded-vertical-available-height:
+        max(0px, root.height - root.transfer-splitter-size);
+    private property <length> files-area-floor: min(
+        Theme.sftp-files-area-min-height,
+        root.expanded-vertical-available-height / 2,
+    );
+    private property <length> transfer-area-floor: min(
+        Theme.sftp-transfer-area-min-height,
+        root.expanded-vertical-available-height / 2,
+    );
+    private property <float> files-ratio-min: root.expanded-vertical-available-height > 0px
+        ? root.files-area-floor / root.expanded-vertical-available-height : 0.5;
+    private property <float> files-ratio-max: root.expanded-vertical-available-height > 0px
+        ? 1.0 - root.transfer-area-floor / root.expanded-vertical-available-height : 0.5;
+    private property <float> clamped-files-split-ratio: max(
+        root.files-ratio-min,
+        min(root.files-ratio-max, root.files-split-ratio),
+    );
+    private property <length> collapsed-transfer-height: min(
+        Theme.sftp-transfer-toolbar-height,
+        root.expanded-vertical-available-height,
+    );
+    private property <length> files-area-height: root.transfers-collapsed
+        ? max(0px, root.expanded-vertical-available-height - root.collapsed-transfer-height)
+        : root.expanded-vertical-available-height * root.clamped-files-split-ratio;
+    private property <length> transfer-area-height: root.transfers-collapsed
+        ? root.collapsed-transfer-height
+        : max(0px, root.expanded-vertical-available-height - root.files-area-height);
+
     init => {
         if !root.view.local_path.is-empty {
             root.list-local-directory(root.view.local_path);
         }
     }
 
-    VerticalLayout {
-        spacing: 0px;
+    files-area := Rectangle {
+        width: parent.width;
+        height: root.files-area-height;
+        background: Theme.panel;
+        clip: true;
 
-        Rectangle {
-            vertical-stretch: 3;
-            min-height: 0px;
-            background: Theme.panel;
-            clip: true;
+        remote-pane := SftpDirectoryPane {
+            width: root.remote-pane-width;
+            height: parent.height;
+            title: "Remote files";
+            entries: root.view.entries;
+            loading: root.view.loading;
+            path: root.view.path;
+            truncated: root.view.truncated;
+            status: root.view.status;
+            has-more: root.view.has_more;
+            allow-refresh: true;
+            list-directory(path) => { root.list-directory(path); }
+            load-more => { root.load-more(); }
+            refresh => { root.list-directory(root.view.path); }
+        }
 
-            HorizontalLayout {
-                spacing: 0px;
-
-                SftpDirectoryPane {
-                    horizontal-stretch: 1;
-                    title: "Remote files";
-                    entries: root.view.entries;
-                    loading: root.view.loading;
-                    path: root.view.path;
-                    truncated: root.view.truncated;
-                    status: root.view.status;
-                    has-more: root.view.has_more;
-                    allow-refresh: true;
-                    list-directory(path) => { root.list-directory(path); }
-                    load-more => { root.load-more(); }
-                    refresh => { root.list-directory(root.view.path); }
-                }
-                Rectangle {
-                    width: Theme.hairline;
-                    background: Theme.divider;
-                }
-                SftpDirectoryPane {
-                    horizontal-stretch: 1;
-                    title: "Local files";
-                    allow-hidden: false;
-                    entries: root.view.local_entries;
-                    loading: root.view.local_loading;
-                    path: root.view.local_path;
-                    truncated: root.view.local_truncated;
-                    status: root.view.local_status;
-                    list-directory(path) => { root.list-local-directory(path); }
-                }
+        directory-splitter := SftpSplitHandle {
+            x: remote-pane.width;
+            width: root.directory-splitter-size;
+            height: parent.height;
+            orientation: Orientation.horizontal;
+            accessible-name: "Remote and local file pane sizes";
+            value: root.clamped-directory-split-ratio;
+            minimum: root.directory-ratio-min;
+            maximum: root.directory-ratio-max;
+            available-length: root.horizontal-available-width;
+            adjust(delta) => {
+                root.directory-split-ratio = max(
+                    root.directory-ratio-min,
+                    min(root.directory-ratio-max, root.directory-split-ratio + delta),
+                );
             }
+            set-value(candidate) => {
+                root.directory-split-ratio = max(
+                    root.directory-ratio-min,
+                    min(root.directory-ratio-max, candidate),
+                );
+            }
+            activated => { root.directory-split-ratio = 0.5; }
         }
 
-        Rectangle {
-            height: Theme.hairline;
-            background: Theme.divider;
+        SftpDirectoryPane {
+            x: directory-splitter.x + directory-splitter.width;
+            width: max(0px, parent.width - self.x);
+            height: parent.height;
+            title: "Local files";
+            allow-hidden: false;
+            entries: root.view.local_entries;
+            loading: root.view.local_loading;
+            path: root.view.local_path;
+            truncated: root.view.local_truncated;
+            status: root.view.local_status;
+            list-directory(path) => { root.list-local-directory(path); }
         }
+    }
 
-        SftpTransferQueue {
-            vertical-stretch: 2;
+    transfer-splitter := SftpSplitHandle {
+        y: files-area.height;
+        width: parent.width;
+        height: root.transfer-splitter-size;
+        orientation: Orientation.vertical;
+        accessible-name: "Files and transfers area sizes";
+        value: root.clamped-files-split-ratio;
+        minimum: root.files-ratio-min;
+        maximum: root.files-ratio-max;
+        available-length: root.expanded-vertical-available-height;
+        adjust(delta) => {
+            root.transfers-collapsed = false;
+            root.files-split-ratio = max(
+                root.files-ratio-min,
+                min(root.files-ratio-max, root.files-split-ratio + delta),
+            );
         }
+        set-value(candidate) => {
+            root.transfers-collapsed = false;
+            root.files-split-ratio = max(
+                root.files-ratio-min,
+                min(root.files-ratio-max, candidate),
+            );
+        }
+        activated => { root.transfers-collapsed = !root.transfers-collapsed; }
+    }
+
+    SftpTransferQueue {
+        y: transfer-splitter.y + transfer-splitter.height;
+        width: parent.width;
+        height: root.transfer-area-height;
+        collapsed: root.transfers-collapsed;
     }
 }

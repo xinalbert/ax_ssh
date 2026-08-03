@@ -39,6 +39,9 @@ export component WorkspaceShell inherits Rectangle {
     out property <bool> shortcut-recording: false;
     private property <bool> sidebar-collapsed: false;
     private property <bool> connection-picker-open: false;
+    private property <float> sftp-directory-split-ratio: 0.5;
+    private property <float> sftp-files-split-ratio: 0.7;
+    private property <bool> sftp-transfers-collapsed: false;
 
     callback new-session();
     callback new-session-in-group(string);
@@ -207,6 +210,9 @@ export component WorkspaceShell inherits Rectangle {
                         height: parent.height;
                         standalone: true;
                         view: root.view.sftp;
+                        directory-split-ratio <=> root.sftp-directory-split-ratio;
+                        files-split-ratio <=> root.sftp-files-split-ratio;
+                        transfers-collapsed <=> root.sftp-transfers-collapsed;
                         list-directory(path) => { root.list-sftp-directory(path); }
                         load-more => { root.load-more-sftp(); }
                         list-local-directory(path) => { root.list-local-sftp-directory(path); }
