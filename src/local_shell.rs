@@ -4,14 +4,14 @@ use std::collections::BTreeSet;
 use std::env;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{ChildKiller, CommandBuilder, PtySize, native_pty_system};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -25,6 +25,7 @@ const MAX_COLUMNS: u32 = 300;
 const MAX_ROWS: u32 = 100;
 const MAX_ERROR_CHARS: usize = 512;
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const EVENT_BACKPRESSURE_INTERVAL: Duration = Duration::from_millis(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +53,8 @@ pub struct LocalShellHandle {
     command_tx: SyncSender<LocalShellCommand>,
     pending_resize: Arc<Mutex<Option<TerminalSize>>>,
     shutdown_requested: Arc<AtomicBool>,
+    child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
+    process_group: Arc<AtomicI32>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -69,8 +72,13 @@ impl LocalShellHandle {
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let pending_resize = Arc::new(Mutex::new(None));
         let shutdown_requested = Arc::new(AtomicBool::new(false));
+        let child_killer = Arc::new(Mutex::new(None));
+        let process_group = Arc::new(AtomicI32::new(0));
         let worker_resize = pending_resize.clone();
         let worker_shutdown = shutdown_requested.clone();
+        let failure_shutdown = shutdown_requested.clone();
+        let worker_child_killer = child_killer.clone();
+        let worker_process_group = process_group.clone();
         let worker_event_tx = event_tx.clone();
         let thread = thread::Builder::new()
             .name("axssh-local-pty".to_owned())
@@ -81,10 +89,15 @@ impl LocalShellHandle {
                     command_rx,
                     worker_resize,
                     worker_shutdown,
+                    worker_child_killer,
+                    worker_process_group,
                     &worker_event_tx,
                 ) {
-                    let _ = worker_event_tx
-                        .blocking_send(LocalShellEvent::Failed(bounded_error(&error)));
+                    let _ = send_event_with_cancellation(
+                        &worker_event_tx,
+                        LocalShellEvent::Failed(bounded_error(&error)),
+                        &failure_shutdown,
+                    );
                 }
             });
 
@@ -102,6 +115,8 @@ impl LocalShellHandle {
                 command_tx,
                 pending_resize,
                 shutdown_requested,
+                child_killer,
+                process_group,
                 thread,
             },
             event_rx,
@@ -145,16 +160,112 @@ impl LocalShellHandle {
         let Some(thread) = self.thread.take() else {
             return Ok(());
         };
-        let join = tokio::task::spawn_blocking(move || thread.join());
-        match timeout(WORKER_SHUTDOWN_TIMEOUT, join).await {
-            Ok(joined) => joined
-                .context("local PTY join task failed")?
-                .map_err(|panic| {
-                    anyhow::anyhow!("local PTY worker panicked: {}", panic_message(panic))
-                }),
-            Err(_) => anyhow::bail!("local PTY worker exceeded shutdown timeout"),
+        let mut termination_error =
+            force_kill_child(self.child_killer.clone(), self.process_group.clone())
+                .await
+                .err();
+        let exceeded_timeout = timeout(WORKER_SHUTDOWN_TIMEOUT, wait_for_thread(&thread))
+            .await
+            .is_err();
+        if exceeded_timeout {
+            if let Err(error) =
+                force_kill_child(self.child_killer.clone(), self.process_group.clone()).await
+            {
+                termination_error.get_or_insert(error);
+            }
+            while !thread.is_finished() {
+                tokio::time::sleep(COMMAND_POLL_INTERVAL).await;
+            }
+        }
+        thread.join().map_err(|panic| {
+            anyhow::anyhow!("local PTY worker panicked: {}", panic_message(panic))
+        })?;
+        if exceeded_timeout {
+            anyhow::bail!("local PTY worker exceeded shutdown timeout");
+        }
+        if let Some(error) = termination_error {
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
+async fn wait_for_thread(thread: &JoinHandle<()>) {
+    while !thread.is_finished() {
+        tokio::time::sleep(COMMAND_POLL_INTERVAL).await;
+    }
+}
+
+async fn force_kill_child(
+    child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
+    process_group: Arc<AtomicI32>,
+) -> Result<()> {
+    let killer = child_killer
+        .lock()
+        .map_err(|_| anyhow::anyhow!("local PTY child killer lock poisoned"))?
+        .take();
+    let process_group = process_group.load(Ordering::Acquire);
+    if killer.is_none() && process_group <= 0 {
+        return Ok(());
+    }
+    tokio::task::spawn_blocking(move || {
+        let group_result = kill_local_process_group(process_group);
+        let child_result = killer.map_or_else(
+            || {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "local PTY child killer is unavailable",
+                ))
+            },
+            |mut killer| killer.kill(),
+        );
+        match (group_result, child_result) {
+            (Ok(()), _) | (_, Ok(())) => Ok(()),
+            (Err(group_error), Err(_)) => Err(group_error),
+        }
+    })
+    .await
+    .context("local PTY child termination task failed")?
+    .context("failed to terminate local PTY child")
+}
+
+#[cfg(unix)]
+fn kill_local_process_group(process_group: i32) -> std::io::Result<()> {
+    const SIGKILL: i32 = 9;
+
+    unsafe extern "C" {
+        fn getpgrp() -> i32;
+        fn kill(pid: i32, signal: i32) -> i32;
+    }
+
+    // SAFETY: getpgrp takes no arguments and has no memory-safety preconditions.
+    let own_process_group = unsafe { getpgrp() };
+    if process_group <= 0 || process_group == own_process_group {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "local PTY process group is unavailable",
+        ));
+    }
+    // SAFETY: a negative, validated process-group ID targets only that PTY
+    // group, and SIGKILL carries no pointer or lifetime requirements.
+    if unsafe { kill(-process_group, SIGKILL) } == 0 {
+        Ok(())
+    } else {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(3) {
+            Ok(())
+        } else {
+            Err(error)
         }
     }
+}
+
+#[cfg(not(unix))]
+fn kill_local_process_group(_: i32) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "process-group termination is unavailable",
+    ))
 }
 
 /// Returns platform-appropriate shell names that currently resolve on `PATH`.
@@ -203,6 +314,8 @@ fn run_local_shell(
     command_rx: Receiver<LocalShellCommand>,
     pending_resize: Arc<Mutex<Option<TerminalSize>>>,
     shutdown_requested: Arc<AtomicBool>,
+    child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
+    process_group: Arc<AtomicI32>,
     event_tx: &mpsc::Sender<LocalShellEvent>,
 ) -> Result<()> {
     let shell_path = resolve_shell(shell)?;
@@ -216,20 +329,44 @@ fn run_local_shell(
         .slave
         .spawn_command(command)
         .with_context(|| format!("failed to start local shell {}", shell_path.display()))?;
+    *child_killer
+        .lock()
+        .map_err(|_| anyhow::anyhow!("local PTY child killer lock poisoned"))? =
+        Some(child.clone_killer());
+    #[cfg(unix)]
+    if let Some(group) = pair.master.process_group_leader() {
+        process_group.store(group, Ordering::Release);
+    }
     drop(pair.slave);
-    let mut writer = pair
-        .master
-        .take_writer()
-        .context("failed to open local PTY input")?;
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .context("failed to open local PTY output")?;
+    let mut writer = match pair.master.take_writer() {
+        Ok(writer) => writer,
+        Err(error) => {
+            let _ = terminate_child(child.as_mut(), process_group.load(Ordering::Acquire));
+            clear_child_killer(&child_killer);
+            return Err(error).context("failed to open local PTY input");
+        }
+    };
+    let reader = match pair.master.try_clone_reader() {
+        Ok(reader) => reader,
+        Err(error) => {
+            let _ = terminate_child(child.as_mut(), process_group.load(Ordering::Acquire));
+            clear_child_killer(&child_killer);
+            return Err(error).context("failed to open local PTY output");
+        }
+    };
     let reader_tx = event_tx.clone();
+    let reader_shutdown = shutdown_requested.clone();
     let reader_thread = thread::Builder::new()
         .name("axssh-local-pty-reader".to_owned())
-        .spawn(move || read_output(reader, &reader_tx))
-        .context("failed to start local PTY reader")?;
+        .spawn(move || read_output(reader, &reader_tx, &reader_shutdown));
+    let reader_thread = match reader_thread {
+        Ok(reader_thread) => reader_thread,
+        Err(error) => {
+            let _ = terminate_child(child.as_mut(), process_group.load(Ordering::Acquire));
+            clear_child_killer(&child_killer);
+            return Err(error).context("failed to start local PTY reader");
+        }
+    };
 
     let outcome = drive_local_shell(
         shell_path.display().to_string(),
@@ -242,16 +379,55 @@ fn run_local_shell(
         event_tx,
     );
     if !matches!(outcome, Ok(Some(_))) {
-        let _ = child.kill();
-        let _ = child.wait();
+        let _ = terminate_child(child.as_mut(), process_group.load(Ordering::Acquire));
     }
     drop(writer);
     drop(pair.master);
-    let _ = reader_thread.join();
+    reader_thread
+        .join()
+        .map_err(|panic| anyhow::anyhow!("local PTY reader panicked: {}", panic_message(panic)))?;
+    clear_child_killer(&child_killer);
+    process_group.store(0, Ordering::Release);
     if let Some(status) = outcome? {
-        let _ = event_tx.blocking_send(LocalShellEvent::Exited { status });
+        let _ = send_event_with_cancellation(
+            event_tx,
+            LocalShellEvent::Exited { status },
+            &shutdown_requested,
+        );
     }
     Ok(())
+}
+
+fn terminate_child(child: &mut dyn portable_pty::Child, process_group: i32) -> Result<()> {
+    if child
+        .try_wait()
+        .context("failed to poll local PTY child")?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let group_result = kill_local_process_group(process_group);
+    let child_result = child.kill();
+    if group_result.is_err() && child_result.is_err() {
+        return group_result.context("failed to terminate local PTY process group");
+    }
+    for _ in 0..40 {
+        if child
+            .try_wait()
+            .context("failed to reap local PTY child")?
+            .is_some()
+        {
+            return Ok(());
+        }
+        thread::sleep(COMMAND_POLL_INTERVAL);
+    }
+    anyhow::bail!("local PTY child did not exit after forced termination")
+}
+
+fn clear_child_killer(child_killer: &Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>) {
+    if let Ok(mut killer) = child_killer.lock() {
+        *killer = None;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -265,11 +441,14 @@ fn drive_local_shell(
     shutdown_requested: &Arc<AtomicBool>,
     event_tx: &mpsc::Sender<LocalShellEvent>,
 ) -> Result<Option<String>> {
-    event_tx
-        .blocking_send(LocalShellEvent::Started { shell })
-        .context("local shell event receiver closed during startup")?;
+    send_event_with_cancellation(
+        event_tx,
+        LocalShellEvent::Started { shell },
+        shutdown_requested,
+    )
+    .context("local shell event receiver closed during startup")?;
     while !shutdown_requested.load(Ordering::Acquire) {
-        apply_pending_resize(master, pending_resize, event_tx)?;
+        apply_pending_resize(master, pending_resize, shutdown_requested, event_tx)?;
         match child.try_wait().context("failed to poll local shell")? {
             Some(status) => return Ok(Some(status.to_string())),
             None => {}
@@ -293,6 +472,7 @@ fn drive_local_shell(
 fn apply_pending_resize(
     master: &(dyn portable_pty::MasterPty + Send),
     pending_resize: &Arc<Mutex<Option<TerminalSize>>>,
+    shutdown_requested: &Arc<AtomicBool>,
     event_tx: &mpsc::Sender<LocalShellEvent>,
 ) -> Result<()> {
     let size = pending_resize
@@ -305,28 +485,61 @@ fn apply_pending_resize(
     master
         .resize(pty_size(size))
         .context("failed to resize local pseudo-terminal")?;
-    let _ = event_tx.blocking_send(LocalShellEvent::Resized {
-        columns: size.columns,
-        rows: size.rows,
-    });
+    let _ = send_event_with_cancellation(
+        event_tx,
+        LocalShellEvent::Resized {
+            columns: size.columns,
+            rows: size.rows,
+        },
+        shutdown_requested,
+    );
     Ok(())
 }
 
-fn read_output(mut reader: Box<dyn Read + Send>, event_tx: &mpsc::Sender<LocalShellEvent>) {
+fn read_output(
+    mut reader: Box<dyn Read + Send>,
+    event_tx: &mpsc::Sender<LocalShellEvent>,
+    shutdown_requested: &Arc<AtomicBool>,
+) {
     let mut buffer = vec![0; MAX_OUTPUT_BATCH_BYTES];
     loop {
         match reader.read(&mut buffer) {
             Ok(0) => return,
             Ok(read) => {
-                if event_tx
-                    .blocking_send(LocalShellEvent::Output(buffer[..read].to_vec()))
-                    .is_err()
+                if send_event_with_cancellation(
+                    event_tx,
+                    LocalShellEvent::Output(buffer[..read].to_vec()),
+                    shutdown_requested,
+                )
+                .is_err()
                 {
                     return;
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
             Err(_) => return,
+        }
+    }
+}
+
+fn send_event_with_cancellation(
+    event_tx: &mpsc::Sender<LocalShellEvent>,
+    mut event: LocalShellEvent,
+    shutdown_requested: &Arc<AtomicBool>,
+) -> Result<()> {
+    loop {
+        match event_tx.try_send(event) {
+            Ok(()) => return Ok(()),
+            Err(mpsc::error::TrySendError::Full(returned)) => {
+                if shutdown_requested.load(Ordering::Acquire) {
+                    anyhow::bail!("local PTY shutdown cancelled pending event delivery");
+                }
+                event = returned;
+                thread::sleep(EVENT_BACKPRESSURE_INTERVAL);
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                anyhow::bail!("local shell event receiver closed");
+            }
         }
     }
 }
@@ -501,5 +714,24 @@ mod tests {
             output.contains("AXSSH_LOCAL_PTY_OK"),
             "output was {output:?}"
         );
+    }
+
+    #[cfg(not(windows))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn shutdown_terminates_a_running_shell_with_a_full_event_queue() {
+        let (worker, mut events) = LocalShellHandle::spawn("sh".into(), 80, 24);
+        let started = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("local shell should start promptly");
+        assert!(matches!(started, Some(LocalShellEvent::Started { .. })));
+        worker
+            .request_send(b"while :; do echo AXSSH_LOCAL_PTY_BUSY; done\n".to_vec())
+            .expect("local PTY should accept the output loop");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        timeout(Duration::from_secs(5), worker.shutdown())
+            .await
+            .expect("shutdown must not leave a detached blocking join")
+            .expect("running local PTY should shut down cleanly");
     }
 }
