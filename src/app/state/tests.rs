@@ -362,6 +362,26 @@ fn closing_active_tab_selects_a_neighbor() {
 }
 
 #[test]
+fn cycling_workspace_tabs_wraps_in_both_directions() {
+    let mut state = test_state();
+    assert_eq!(state.cycle_tab(true), None);
+
+    let first = state.open_local_shell_tab();
+    assert_eq!(state.cycle_tab(true), None);
+    assert_eq!(state.active_tab_id(), Some(first));
+
+    let second = state.open_local_shell_tab();
+    let third = state.open_local_shell_tab();
+    assert_eq!(state.cycle_tab(true), Some(first));
+    assert_eq!(state.cycle_tab(false), Some(third));
+
+    assert!(state.activate_tab(first));
+    assert_eq!(state.cycle_tab(false), Some(third));
+    assert_eq!(state.cycle_tab(true), Some(first));
+    assert_eq!(state.cycle_tab(true), Some(second));
+}
+
+#[test]
 fn moving_workspace_tabs_changes_position_without_renumbering_instances() {
     let mut state = test_state();
     let first = state.open_local_shell_tab();

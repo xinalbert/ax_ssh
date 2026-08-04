@@ -136,6 +136,26 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
         refresh_workspace(&ui_for_activate, &state_for_activate);
     });
 
+    let ui_for_cycle = ui.as_weak();
+    let state_for_cycle = state.clone();
+    ui.on_cycle_tab(move |next| {
+        log_ui_action(if next {
+            "workspace.next-tab"
+        } else {
+            "workspace.previous-tab"
+        });
+        let cycled = match state_for_cycle.lock() {
+            Ok(mut app) => app.cycle_tab(next).is_some(),
+            Err(_) => {
+                set_status(&ui_for_cycle, "Cannot update workspace tabs");
+                return;
+            }
+        };
+        if cycled {
+            refresh_workspace(&ui_for_cycle, &state_for_cycle);
+        }
+    });
+
     let ui_for_move = ui.as_weak();
     let state_for_move = state.clone();
     ui.on_move_tab(move |id, target_index| {

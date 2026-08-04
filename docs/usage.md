@@ -185,6 +185,11 @@ bar lists every saved connection and connects the selected profile; **File >
 New Server** and the sidebar blank-area context menu open the session editor.
 Drag a workspace Tab to reorder it. Its leading number changes with its current
 position, while an instance suffix such as `#1` remains unchanged.
+Use **Window > Previous Tab** / **Next Tab** to cycle through that current order;
+the selection wraps at either end. The fixed shortcuts are `Cmd+Shift+[` /
+`Cmd+Shift+]` on macOS and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows and Linux.
+They are available when at least two Tabs are open and are temporarily disabled
+while recording a shortcut or answering a security prompt.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.

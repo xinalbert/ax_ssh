@@ -255,6 +255,23 @@ impl AppState {
         }
     }
 
+    pub(super) fn cycle_tab(&mut self, next: bool) -> Option<Uuid> {
+        if self.tabs.len() < 2 {
+            return None;
+        }
+        let active_index = self
+            .active_tab_id
+            .and_then(|active_id| self.tabs.iter().position(|tab| tab.id == active_id))?;
+        let target_index = if next {
+            (active_index + 1) % self.tabs.len()
+        } else {
+            active_index.checked_sub(1).unwrap_or(self.tabs.len() - 1)
+        };
+        let target_id = self.tabs[target_index].id;
+        self.active_tab_id = Some(target_id);
+        Some(target_id)
+    }
+
     pub(super) fn switch_ssh_sftp_tab(&mut self) -> Option<SshSftpNavigation> {
         let active_tab_id = self.active_tab_id?;
         let (profile_id, current_target, companion_tab_id) = self

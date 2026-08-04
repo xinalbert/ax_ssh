@@ -174,6 +174,8 @@ export component AppWindow inherits Window {
     in property <keys> export-selected-menu-shortcut;
     in property <keys> toggle-sidebar-menu-shortcut;
     in property <keys> open-sftp-menu-shortcut;
+    in property <keys> previous-tab-menu-shortcut;
+    in property <keys> next-tab-menu-shortcut;
     in property <string> default-open-settings-shortcut;
     in property <string> default-new-session-shortcut;
     in property <string> default-import-sessions-shortcut;
@@ -317,6 +319,7 @@ export component AppWindow inherits Window {
     callback open-local-shell();
     callback open-settings();
     callback activate-tab(string);
+    callback cycle-tab(bool);
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
@@ -451,6 +454,19 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: "Window";
+            MenuItem {
+                title: "Previous Tab";
+                enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
+                shortcut: root.previous-tab-menu-shortcut;
+                activated => { root.menu-action("previous-tab"); root.cycle-tab(false); }
+            }
+            MenuItem {
+                title: "Next Tab";
+                enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
+                shortcut: root.next-tab-menu-shortcut;
+                activated => { root.menu-action("next-tab"); root.cycle-tab(true); }
+            }
+            MenuSeparator { }
             if root.apple-platform : MenuItem {
                 title: "Close Current Tab";
                 activated => {

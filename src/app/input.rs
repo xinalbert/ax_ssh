@@ -521,6 +521,30 @@ mod tests {
         let expected_other = slint::Keys::from_parts(["Control", "Comma"])
             .expect("expected non-Apple shortcut should parse");
         assert!(other.keys == expected_other);
+
+        let apple_previous = menu_shortcut_from_setting_for_platform("Cmd+Shift+[", true)
+            .expect("Apple previous-tab shortcut should parse");
+        let expected_apple_previous = slint::Keys::from_parts(["Control", "Shift", "["])
+            .expect("expected Apple previous-tab shortcut should parse");
+        assert!(apple_previous.keys == expected_apple_previous);
+
+        let apple_next = menu_shortcut_from_setting_for_platform("Cmd+Shift+]", true)
+            .expect("Apple next-tab shortcut should parse");
+        let expected_apple_next = slint::Keys::from_parts(["Control", "Shift", "]"])
+            .expect("expected Apple next-tab shortcut should parse");
+        assert!(apple_next.keys == expected_apple_next);
+
+        let other_previous = menu_shortcut_from_setting_for_platform("Ctrl+Shift+[", false)
+            .expect("non-Apple previous-tab shortcut should parse");
+        let expected_other_previous = slint::Keys::from_parts(["Control", "Shift", "["])
+            .expect("expected non-Apple previous-tab shortcut should parse");
+        assert!(other_previous.keys == expected_other_previous);
+
+        let other_next = menu_shortcut_from_setting_for_platform("Ctrl+Shift+]", false)
+            .expect("non-Apple next-tab shortcut should parse");
+        let expected_other_next = slint::Keys::from_parts(["Control", "Shift", "]"])
+            .expect("expected non-Apple next-tab shortcut should parse");
+        assert!(other_next.keys == expected_other_next);
     }
 
     #[test]

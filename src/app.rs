@@ -157,6 +157,21 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui.set_default_paste_shortcut(default_shortcuts.paste.into());
     ui.set_default_open_sftp_shortcut(default_shortcuts.open_sftp.into());
     ui.set_apple_platform(cfg!(target_os = "macos"));
+    let (previous_tab_shortcut, next_tab_shortcut) = if cfg!(target_os = "macos") {
+        ("Cmd+Shift+[", "Cmd+Shift+]")
+    } else {
+        ("Ctrl+Shift+[", "Ctrl+Shift+]")
+    };
+    ui.set_previous_tab_menu_shortcut(
+        menu_shortcut_from_setting(previous_tab_shortcut)
+            .context("failed to configure the previous-tab menu shortcut")?
+            .keys,
+    );
+    ui.set_next_tab_menu_shortcut(
+        menu_shortcut_from_setting(next_tab_shortcut)
+            .context("failed to configure the next-tab menu shortcut")?
+            .keys,
+    );
     ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
     for initial_font in initial_fonts {
         if let Err(error) = font_registry

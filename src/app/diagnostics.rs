@@ -143,6 +143,8 @@ fn safe_menu_action(action: &str) -> &'static str {
         "open-about" => "open-about",
         "open-settings" => "open-settings",
         "open-shortcuts" => "open-shortcuts",
+        "next-tab" => "next-tab",
+        "previous-tab" => "previous-tab",
         "refresh-sftp" => "refresh-sftp",
         "switch-ssh-sftp" => "switch-ssh-sftp",
         "toggle-sidebar" => "toggle-sidebar",
@@ -186,6 +188,8 @@ mod tests {
         );
         assert_eq!(safe_keyboard_action("secret"), "unknown");
         assert_eq!(safe_menu_action("open-settings"), "open-settings");
+        assert_eq!(safe_menu_action("previous-tab"), "previous-tab");
+        assert_eq!(safe_menu_action("next-tab"), "next-tab");
         assert_eq!(safe_menu_action("user supplied"), "unknown");
     }
 }

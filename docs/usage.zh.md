@@ -124,6 +124,10 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 选择后连接对应 profile；**File > New Server** 和侧栏列表空白区域的右键菜单
 仍只打开会话编辑器。
 可拖拽工作区 Tab 调整顺序。前置数字会随当前位置变化，而 `#1` 这类实例后缀保持不变。
+可通过 **Window > Previous Tab** / **Next Tab** 按当前顺序循环切换，首尾相接。固定快捷键
+在 macOS 上为 `Cmd+Shift+[` / `Cmd+Shift+]`，在 Windows 和 Linux 上为
+`Ctrl+Shift+[` / `Ctrl+Shift+]`。至少打开两个 Tab 时才可用；录制快捷键或处理安全提示时
+会暂时禁用。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
