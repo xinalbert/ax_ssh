@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-08-04 VS Code Terminal 最小对比度语义
+
+- 时间：2026-08-04 11:52 +0800
+- 检索问题：VS Code Terminal 所谓的亮度/对比度调节是否会重写所有 ANSI 颜色，AxSSH 应采用何种兼容语义？
+- 检索原因：当前 AxSSH 的 Brightness 以 RGB 混合无条件改变前景和背景，用户观察到颜色整体漂移且效果不佳，需要以官方行为作为替换依据。
+- 来源列表：VS Code 官方 Terminal Appearance 文档 <https://code.visualstudio.com/docs/terminal/appearance#_minimum-contrast-ratio>；VS Code `terminalConfiguration.ts` 的 `minimumContrastRatio` 设置定义；xterm.js `Color.ts` 的 `ensureContrastRatio`、WCAG 相对亮度和前景修正实现。
+- 关键结论：VS Code 没有同语义的亮度滑块，而是 `terminal.integrated.minimumContrastRatio`，默认 4.5、1 表示不修正、21 表示最高目标。它只在每个单元格的前景低于实际背景对比度时调整前景；dim 单元使用半目标，并保留背景与已经达标的颜色。修正朝黑/白方向搜索，可能轻微降低饱和度但不会把全部 ANSI 色无条件重映射。
+- 对实施计划的影响：AxSSH 将 Brightness 替换为 1.0–21.0、0.5 步长的最小对比度设置，持久化使用 tenths 固定精度；渲染实现标准 WCAG 相对亮度、实际 cell background 和仅前景修正，schema v17 放弃旧亮度数值而迁移到 4.5 默认。
+- 未解决问题：xterm.js 的 powerline glyph 特殊豁免尚未映射到 AxSSH 的 run DTO；目标平台仍需用户确认字体、dim、反色和彩色背景的实际观感。
+
 ## 2026-07-30 主题明暗与控件 palette 统一
 
 - 时间：2026-07-30 21:12 +0800

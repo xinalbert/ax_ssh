@@ -110,7 +110,8 @@ diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签
 draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
 同一局部草稿的嵌套编辑控件；显示文案、dialog 文本和视觉状态都用绑定计算，不重复保存。
 密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
-source snapshot。
+source snapshot。Remember password 与凭据后端只是明确的保存意图；未勾选记住密码时后端选择
+不参与处理。
 
 `OverlayHost` 拥有 Group/Profile 管理弹层的开关和草稿，并从单个 action 派生标题、消息和
 按钮表现；只有确认后才向上发送管理命令。它也组合 SSH 主机密钥与认证弹层，但二者是刻意
@@ -134,14 +135,16 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    存在全局的 probe、信任或认证等待槽位。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
-   保留既有后端引用，非空值在 profile 保存前更新该后端。私钥 profile 在 UI 线程外加载
+   保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
+   **Remember password** 时才会在 profile 保存前更新所选后端。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。安全覆盖层只渲染活动
    Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Remember password**
-   时不会使用该选择。会话编辑器接受遮蔽密码，但只作为本地编辑：空值保留既有凭据，非空值
-   使用既有后端或 Settings 默认后端并与 profile 一起事务性更新；秘密不会返回 source snapshot
-   或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥认证或拒绝已
+   时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
+   **Remember password** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
+   勾选后才把密码与 profile 事务性写入所选后端，且只有选择应用加密保险库时才要求保险库口令；
+   秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥认证或拒绝已
    保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
 5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
    `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
@@ -280,9 +283,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 该精确指纹才进入 profile；密钥变化需要再次明确确认。密码只作为 callback 的临时
 输入，不进入 `SessionStore`。密码 profile 只包含以稳定 UUID 为键的可选
 `credential_storage` 后端引用，绝不包含密码或保险库口令。编辑器中的密码和保险库口令每次
-打开都为空，提交后立即清空；非空密码通过选中的后端写入，profile 持久化失败时回滚。Settings >
-General 选择以后勾选 **Remember password** 时使用的后端，以及没有既有后端时编辑器新密码使用的
-默认后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
+打开都为空，提交后立即清空；非空密码默认只由对应 Tab 短期持有，主机密钥确认完成并由 SSH worker
+接管后即清除。只有勾选 **Remember password** 才会额外通过所选后端写入，profile 持久化失败时回滚，
+且只有加密保险库要求保险库口令。Settings > General 初始化以后勾选 **Remember password** 时使用的
+后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
 后端使用按 profile 分隔的应用记录。保险库对每条记录用 Argon2id 派生密钥、用
 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，保险库口令始终是短期输入。私钥
 profile 只持久化路径；私钥内容和可选 passphrase 只在一次 blocking 加载/认证任务中短暂存在，
@@ -411,7 +415,7 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 即时预览中首次选到的自带字体也会按需读取。候选设置先立即应用，注册完成后再读取当前内存设置
 重新应用，避免迟到字体读取恢复旧选择。Appearance 只拥有应用字体、显示模式与配色；Terminal
 拥有自己的字体、字号、行高、
-亮度、粗体亮色和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
+最小对比度、粗体亮色和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
 Tokio blocking task 中发现、按大小写无关去重并按字母排序且有数量上限的系统等宽字体。
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
 `TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一字体来源。构建和运行时都不会从
@@ -422,10 +426,14 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 后合并发送 resize。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
-`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、亮度、粗体亮色和右键行为、
+`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、最小对比度、粗体亮色和右键行为、
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
-    非秘密的 X11 provider/path/启动/兼容设置，以及记住密码的默认后端。schema 版本 16 新增
+    非秘密的 X11 provider/path/启动/兼容设置，以及记住密码的默认后端。schema 版本 17 将原有
+    `terminal_brightness_percent` 重映射替换为定点保存的
+    `terminal_minimum_contrast_ratio_tenths`，范围为 1.0:1 至 21.0:1，默认 4.5:1。
+    schema 版本 16 及更早文件会丢弃旧亮度值并迁移到该默认值，因为两种设置不存在安全的一一数值映射。
+    schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
     旧文件缺失时保持默认的两个字符。schema 版本 15 新增独立的应用字体；旧文件默认使用 JetBrains Mono，
 不会改变已有 Terminal 字体。schema 版本 14 把原有 SSH-only 平铺 profile 字段替换为显式带 tag 的
@@ -438,7 +446,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
 Solarized、Arctic、Tokyo、Ember、Forest 或 Custom。固定方案各自提供 Light/Dark 语义色；
 固定方案解析为 Dark 时，会使用匹配的 ANSI-16 Terminal 色表。Custom 分别保存 Light/Dark
 两套 13 个语义 UI/终端默认色，并规范化为 `#RRGGBB` 或 `#RRGGBBAA`。schema 版本 11 会
-拆分旧的组合模式：Solarized Dark 迁移为 Dark + Solarized；旧 Custom 按背景亮度进入对应的
+拆分旧的组合模式：Solarized Dark 迁移为 Dark + Solarized；旧 Custom 按背景明暗进入对应的
 一侧，另一侧使用安全 AxSSH 默认。主题规范化会保证 Light 表面保持浅色、Dark 表面保持深色；
 正文、焦点/强调和状态色至少 4.5:1，必要边框至少 3:1，不安全的终端前景/选区组合回退到
 相同明暗侧的安全默认。
@@ -479,7 +487,9 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 `ui/settings/appearance.slint` 将 Display mode 与 Color palette 分开，并用一个共享
 `ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将当前内存设置的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端
-快照。终端渲染使用解析后的默认前景、背景和选区色，仍保留既有 ANSI 16/256 色语义。
+快照。终端渲染使用解析后的默认前景、背景和选区色，同时保留 ANSI 16/256/真彩色语义。
+最小对比度按每个单元格的实际背景计算；只有低于目标的前景会向黑或白修正，背景和已经可读的颜色保持不变。
+设置为 1.0:1 可关闭修正，dim 文本使用一半目标对比度以保留层级。
 主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。运行时终端
 几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 

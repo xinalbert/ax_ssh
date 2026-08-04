@@ -129,7 +129,9 @@ two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
 Password and vault-password fields are local secret drafts: they are blank on
 every editor open, are cleared after submit, and never enter the read-only
-source snapshot.
+source snapshot. The remember-password and credential-storage drafts are
+explicit intent only; the storage choice is ignored until remembering is
+enabled.
 
 `OverlayHost` owns the local group/profile-management dialog open state and
 draft, deriving its title, message, and button presentation from one action
@@ -166,8 +168,10 @@ must not locally hide either dialog before the Rust state transition accepts it.
    fingerprint. Password profiles load a remembered credential on a Tokio
    blocking boundary or open a password prompt. The session editor may instead
    submit a new password inline; a blank value preserves the existing backend
-   reference, while a non-empty value updates that backend before the profile
-   save. Private-key profiles load the selected path off the UI thread and
+   reference. A non-empty value is available to **Save & connect** as a
+   Tab-scoped one-time secret, and it updates the selected backend before the
+   profile save only when **Remember password** is checked. Private-key profiles
+   load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
    without one. The security overlay renders only the active Tab's pending
    phase; inactive Tabs retain their own prompt until activated, and changing an
@@ -176,12 +180,14 @@ must not locally hide either dialog before the Rust state transition accepts it.
    password: the platform credential store or the encrypted application vault.
    Each ordinary password prompt initializes its backend selector from that
    setting and may override it for that prompt; the selector is ignored unless
-   **Remember password** is checked. The session editor accepts a masked
-   password only as a local edit: a blank value keeps the existing credential,
-   while a non-empty value uses the existing backend or Settings default and
-   updates it transactionally with the profile. The secret is never returned in
-   the source snapshot or serialized profile, and changing the default neither
-   migrates nor breaks an existing credential. Deleting a profile, switching it
+   **Remember password** is checked. The session editor uses the profile's
+   existing backend or the Settings default only to initialize its selector.
+   Without **Remember password**, an inline password is used once by **Save &
+   connect** and a save-only action discards it. With remembering enabled, the
+   selected backend is updated transactionally with the profile, and the vault
+   password is required only for the encrypted application vault. The secret is
+   never returned in the source snapshot or serialized profile, and changing
+   the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
    terminal worker.
@@ -412,11 +418,13 @@ key requires a second explicit decision. Passwords are transient callback
 inputs and are not part of `SessionStore`. A password profile contains only an
 optional `credential_storage` reference keyed by its stable UUID, never the
 password or a vault password. The session editor keeps its masked password and
-vault-password fields blank on every open and clears them after submission; a
-non-empty editor password is written through the selected backend, with
-rollback if profile persistence fails. Settings > General selects the backend
-used by a future checked **Remember password** action and by a new editor
-password when the profile has no backend: macOS Keychain, Windows Credential
+vault-password fields blank on every open and clears them after submission. A
+non-empty editor password stays transient by default and is carried only by the
+corresponding Tab until host-key confirmation completes and the SSH worker takes
+ownership. Checking **Remember password** additionally writes it through the
+selected backend, with rollback if profile persistence fails; the vault password
+is requested only for the encrypted backend. Settings > General initializes the
+backend for a future checked **Remember password** action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. The vault derives a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
@@ -605,7 +613,7 @@ selects them, still on a Tokio blocking task. The UI applies the candidate
 immediately, then reapplies the current in-memory settings after registration
 so a delayed font read cannot restore stale choices. Appearance owns the application
 font, display mode, and palette; Terminal owns its font, size, line height,
-brightness, bold-color behavior, and terminal interactions. Both font lists
+minimum contrast ratio, bold-color behavior, and terminal interactions. Both font lists
 place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
@@ -623,12 +631,17 @@ metrics and its layout have settled.
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
-brightness, bold-color and right-click behavior, scrollback, default PTY
+minimum contrast ratio, bold-color and right-click behavior, scrollback, default PTY
     dimensions, local-shell choice and bounded discovered-shell cache, the macOS
     Option-as-Meta preference, sidebar/tab widths, session mask character,
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
     non-secret X11 provider/path/launch/compatibility settings, and the default
-    remembered-password backend. Schema version 16 adds the collapsed
+    remembered-password backend. Schema version 17 replaces the former
+    `terminal_brightness_percent` remapping with a fixed-point
+    `terminal_minimum_contrast_ratio_tenths` setting. The value is stored in
+    tenths from 1.0:1 to 21.0:1 and defaults to 4.5:1; schema versions through
+    16 discard the old brightness value and migrate to that default because the
+    two settings have no safe numeric mapping. Schema version 16 adds the collapsed
     group-label character count; `0` means Full name and missing values retain
     the default of two characters. Schema version 15 adds the independent application font; older files default it to
 JetBrains Mono without changing their Terminal font. Schema version 14 replaces
@@ -650,7 +663,7 @@ resolves Dark, its matching ANSI-16 terminal palette is used. Custom stores
 separate Light and Dark sets of 13 canonical `#RRGGBB` or `#RRGGBBAA` semantic
 UI/terminal-default colors. Schema version 11 splits the former combined modes:
 Solarized Dark becomes Dark plus Solarized, while a legacy Custom palette is
-assigned to its matching brightness side and the other side receives a safe
+assigned to its matching Light/Dark side and the other side receives a safe
 AxSSH default. Theme normalization keeps Light surfaces light and Dark surfaces
 dark, requires 4.5:1 contrast for text, focus/accent and status roles, requires
 3:1 for essential borders, and repairs unsafe terminal foreground/selection
@@ -715,7 +728,11 @@ fields, preventing the two editors from drifting structurally.
 `src/app/view.rs` maps the current settings theme into the Slint global and
 re-renders only the active terminal snapshot when its resolved colors change. Terminal rendering
 uses the resolved default foreground, background, and selection colors while
-retaining the existing ANSI 16/256 palette semantics. A theme refresh never
+retaining ANSI 16/256/true-color semantics. The configured minimum contrast ratio
+is evaluated per cell against the resolved cell background; only a foreground below
+the target is moved toward black or white, while backgrounds and already-readable
+colors remain unchanged. A ratio of 1.0 disables correction, and dim text uses half
+the target ratio to preserve its intentional hierarchy. A theme refresh never
 resizes a PTY, sends worker commands, or changes SSH/local-shell lifetimes.
 Runtime terminal geometry and user choices remain in versioned `AppSettings`;
 the Theme global remains a visual resolver rather than a persistence owner.

@@ -41,8 +41,8 @@
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh`、`sftp`、`telnet`、`serial` | 领域、系统服务、进程服务和传输公共边界 |
 | `src/app.rs` | Slint/Rust bridge 入口 | `slint::include_modules!`、`run`、`wire_callbacks`、About support actions | 生成类型声明、UI 启停、功能 callback 和脱敏诊断复制/外部路径打开 |
 | `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts` | UI 线程注册按需读取的应用/Terminal 自带 TTF；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
-| `src/app/workspace.rs` | 工作区与 profile/group bridge | `wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`SessionTransferEnvelope`、`import_session_transfer_into_store`、`close_workspace_tab` | Tab 激活/内存排序、会话 CRUD、Group/Server Duplicate、256 KiB/128 profile 脱敏 JSON 复制导入、凭据回滚与关闭时资源回收 |
-| `src/app/connection.rs` 与 `src/app/connection/` | 多协议连接控制器组装入口与单一流程模块 | `wire_connection_request`、`request_profile_connection`、`start_telnet_connection`、`start_serial_connection`、`start_session_worker` | `request` 解析 SSH/SFTP companion 导航并分发协议；`direct` 负责 Telnet/Serial attempt 与 monitor；其余模块保持 SSH probe、信任、认证和 worker phase；未知或变化密钥仍须明确确认 |
+| `src/app/workspace.rs` | 工作区与 profile/group bridge | `wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`SessionTransferEnvelope`、`import_session_transfer_into_store`、`close_workspace_tab` | Tab 激活/内存排序、会话 CRUD、编辑器一次性密码/显式保存分流、Group/Server Duplicate、256 KiB/128 profile 脱敏 JSON 复制导入、凭据回滚与关闭时资源回收 |
+| `src/app/connection.rs` 与 `src/app/connection/` | 多协议连接控制器组装入口与单一流程模块 | `wire_connection_request`、`request_profile_connection`、`begin_authentication`、`start_telnet_connection`、`start_serial_connection`、`start_session_worker` | `request` 解析 SSH/SFTP companion 导航、分发协议并把编辑器一次性密码绑定到对应 Tab；`direct` 负责 Telnet/Serial attempt 与 monitor；其余模块保持 SSH probe、信任、认证和 worker phase；未知或变化密钥仍须明确确认 |
 | `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential` | attempt 路由、带接收时间的输出/失败事件、认证成功后的凭据保存，以及迟到 worker/凭据结果隔离 |
 | `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 终端输入/selection、本地 worker 事件和仅视觉主题刷新；resize 意图只进入 `AppState` 单一入口 |
 | `src/app/settings_bridge.rs` | Settings 预览/保存 bridge | `wire_settings`、`apply_preview_settings` | 合并草稿即时更新内存/Theme/终端/布局；新自带字体异步注册；关闭请求才原子保存并关闭指定 Settings Tab |
@@ -50,7 +50,7 @@
 | `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event`、`menu_shortcut_from_setting` | 特殊键（含 F1-F12）、快捷键、原生菜单 `slint::Keys` 和 Apple 物理修饰键还原 |
 | `src/app/diagnostics.rs` | 脱敏键盘、UI action 和输入耗时日志边界 | `log_keyboard_event`、`log_terminal_input`、`log_terminal_input_latency`、`log_ui_action` | 调试快捷键/功能调用/输入请求耗时；文字只记 `Text`，不得增加内容长度、路径、主机、名称、Clipboard 或秘密字段 |
 | `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `configure`、`current_modifier_state`、`configure_application_menu`、`NativeMenuTarget` | 标准标题栏、当前物理修饰键，以及带实时 key equivalent 的 Settings/About 幂等绑定与主线程生命周期 |
-| `src/app/state.rs` | 工作区 Tab、终端、编辑器 draft、transport route 与 SSH phase 所有权 | `AppState`、`switch_ssh_sftp_tab`、`SshSftpNavigation`、`resize_active_terminal`、`TerminalBackend`、`TerminalWorker`、`TerminalTabState`、`SshConnectionPhase` | Tab 创建/切换/关闭、运行时 companion UUID 配对与邻接插入、同 profile 多实例、逐 Tab attempt、活动 worker 与本地模型 resize 编排、SSH 安全 phase 和编辑草稿身份；配对不持久化且不共享 live transport |
+| `src/app/state.rs` | 工作区 Tab、终端、编辑器 draft、transport route 与 SSH phase 所有权 | `AppState`、`switch_ssh_sftp_tab`、`SshSftpNavigation`、`resize_active_terminal`、`TerminalBackend`、`TerminalWorker`、`TerminalTabState`、`SshConnectionPhase` | Tab 创建/切换/关闭、运行时 companion UUID 配对与邻接插入、同 profile 多实例、逐 Tab attempt、活动 worker 与本地模型 resize 编排、SSH 安全 phase、对应 Tab 的短期一次性认证秘密和编辑草稿身份；配对与秘密都不持久化，也不共享 live transport |
 | `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、duplicate tab、SSH/SFTP companion、active prompt、attempt/credential isolation tests | 修改 Tab、配对导航、认证 phase 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`compact_label`、`profile_endpoint`、`profile_sidebar_endpoint`、`profile_sidebar_details` | 持久化空 Group 与 profile 聚合、编辑器组选项、文字徽标、行内脱敏 sidebar endpoint 与完整非秘密悬停详情 |
@@ -58,7 +58,7 @@
 | `src/app/serial_bridge.rs` | Serial 自动发现 bridge | `wire_serial_port_discovery`、`refresh_serial_ports` | 启动/手动刷新时在 blocking task 枚举 descriptor 并更新有界 Slint 端口 model；不得打开设备 |
 | `src/app/sftp_bridge.rs` | SFTP Tab 浏览与本地目录 intent bridge | `wire_sftp` | 校验活动 SSH/SFTP Tab，转发远端目录/分页、前进后退和远端/本地选中意图；不持有协议 session |
 | `src/app/local_files.rs` | 本机目录只读 snapshot 边界 | `read_local_directory`、`LocalDirectoryListing` | 修改 SFTP 本地栏目录读取、路径或条目/名称预算时 |
-| `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SshConfig`、`TelnetConfig`、`SerialConfig`、`SessionStore`、`AppSettings`、`ShortcutSettings`、`ConfigStore` | schema v16 收起组名字符数；Import/Export 快捷键和 `SshConfig.x11_forwarding` 用字段级默认值兼容旧配置，不提升 schema；SSH-only 安全字段由 variant 隔离 |
+| `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SshConfig`、`TelnetConfig`、`SerialConfig`、`SessionStore`、`AppSettings`、`ShortcutSettings`、`ConfigStore` | schema v17 终端最小对比度替换旧亮度字段；schema v16 收起组名字符数；Import/Export 快捷键和 `SshConfig.x11_forwarding` 用字段级默认值兼容旧配置；SSH-only 安全字段由 variant 隔离 |
 | `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | Keychain/Credential Manager/Secret Service，以及 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs` | 有界终端文本模型 | `TerminalModel`、Alacritty `Term`/`Processor` 映射 | shell 输出解析、主屏 reflow、光标和 scrollback |
 | `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalModifiers`、`encode_key` | 控制字节、application-cursor Home/End、导航/Function 键和 xterm 修饰序列 |
@@ -123,8 +123,8 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-08-03 的运行时 SSH/SFTP companion UUID、双向 Tab 切换、独立 transport 和 Settings 单例快捷键激活，以及 X11 首个远端 channel 按需本机准备、X server 已知安装位置快照和 Custom executable 设置入口；2026-08-02 的跨平台 X server provider/启动设置、默认开启的 SSH X11 forwarding、显式 loopback no-auth 兼容；同日的原生可配置菜单 accelerator、活动 Tab 无关的 macOS 菜单与 Settings/About 重建后幂等绑定、GPL-3.0-only 主许可证和 Slint 标准 About 署名；2026-08-01 的独立双栏 SFTP Tab、默认 `Ctrl+M`、脱敏 diagnostics、终端主屏 reflow、运行时字体资源和双字体设置分离。
+- 最近依据：2026-08-04 的会话编辑器可选密码保存、逐 Tab 一次性认证秘密，以及 Terminal 最小对比度设置、schema v17 迁移和按实际单元格背景的 WCAG 前景修正；2026-08-03 的运行时 SSH/SFTP companion UUID、双向 Tab 切换、独立 transport 和 Settings 单例快捷键激活，以及 X11 首个远端 channel 按需本机准备、X server 已知安装位置快照和 Custom executable 设置入口；2026-08-02 的跨平台 X server provider/启动设置、默认开启的 SSH X11 forwarding、显式 loopback no-auth 兼容；同日的原生可配置菜单 accelerator、活动 Tab 无关的 macOS 菜单与 Settings/About 重建后幂等绑定、GPL-3.0-only 主许可证和 Slint 标准 About 署名；2026-08-01 的独立双栏 SFTP Tab、默认 `Ctrl+M`、脱敏 diagnostics、终端主屏 reflow、运行时字体资源和双字体设置分离。
 
 ## 最后更新时间
 
-- 2026-08-03 20:53 +0800
+- 2026-08-04 13:52 +0800

@@ -26,7 +26,11 @@ cargo run --locked
    manually.
 3. Save the session, then select it in the session navigator. For a new SSH
    profile, **Save & connect** saves the profile and immediately starts the
-   normal host-key flow. Opening the same saved session more than once creates
+   normal host-key flow. A password entered in the session editor is one-time by
+   default and is used for that connection without requiring a vault password.
+   Select **Remember password** to persist it, then choose the credential
+   backend; the vault-password field appears only for **Encrypted application
+   vault**. Opening the same saved session more than once creates
    independent terminal tabs with separate connections and output. Each SSH Tab
    can independently wait for host-key confirmation or authentication; the
    security prompt always belongs to the active Tab, and switching Tabs
@@ -107,10 +111,11 @@ Changing an SSH host or port
 clears the confirmed host-key fingerprint, so the new endpoint must be trusted
 explicitly on its next connection. Switching an SSH profile to Telnet or Serial
 removes its remembered SSH credential reference. The session editor never shows
-or changes a saved password; use the SSH connection prompt to remember a new
-password. Changing the default in **Settings > General** affects only future
-remembered passwords, not the storage backend referenced by an existing SSH
-profile.
+a saved password; leaving the field blank preserves it. A newly entered password
+can be used once by **Save & connect**, or persisted by selecting **Remember
+password** and a backend. Changing the default in **Settings > General** only
+initializes future storage selections and does not migrate the backend referenced
+by an existing SSH profile.
 
 Choose **Pane > New Local Shell** or the Local Shell control to open an
 independent local terminal. Close a terminal with its tab control or **Window >
@@ -231,9 +236,13 @@ essential borders, focus/status states, or terminal text are replaced with
 readable defaults for that side.
 
 **Settings > Terminal** independently controls the Terminal font, font size,
-line height, brightness, bright ANSI colors for bold text, scrollback, mouse
-behavior, and the platform-specific Option-as-Meta preference. Bundled fonts
-appear before discovered system monospace fonts in both font lists.
+line height, minimum contrast ratio, bright ANSI colors for bold text, scrollback,
+mouse behavior, and the platform-specific Option-as-Meta preference. The contrast
+ratio ranges from 1.0:1 to 21.0:1 and defaults to 4.5:1; 1.0:1 keeps the original
+ANSI/256/true-color foregrounds. Rendering checks each cell's actual background
+and changes only a foreground that is below the target, leaving backgrounds and
+already-readable colors intact. Bundled fonts appear before discovered system
+monospace fonts in both font lists.
 
 **Settings > X11** controls the platform-local X server provider, first-X11-
 application startup behavior, and the explicit loopback-only no-auth

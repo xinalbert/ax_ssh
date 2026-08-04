@@ -21,7 +21,9 @@ cargo run --locked
    端口名、baud rate、data bits、stop bits、parity 和 flow control。AxSSH 启动时会自动
    列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。
 3. 保存会话并在会话导航中选择它。新建 SSH profile 时，也可以点击 **Save & connect**，
-   保存成功后立即进入正常的主机密钥流程。重复打开同一个已保存会话会创建彼此独立的终端
+   保存成功后立即进入正常的主机密钥流程。会话编辑器中输入的密码默认只供本次连接使用，
+   不需要保险库口令；只有主动勾选 **Remember password** 后才会保存，并可选择凭据后端，
+   **Vault password** 只在选择 **Encrypted application vault** 时显示。重复打开同一个已保存会话会创建彼此独立的终端
    Tab，每个 Tab 都有自己的连接与输出。每个 SSH Tab 都可以独立等待主机密钥确认或认证；
    安全提示始终对应活动 Tab，切换 Tab 后其它等待提示仍会保留。
 4. 使用 SSH 首次连接时，先通过可信来源核对界面显示的 SHA-256 主机密钥指纹，再确认信任。
@@ -74,9 +76,10 @@ vendor/product/serial-number 元数据跟踪被操作系统改名的设备；找
 
 修改 SSH host 或 port 会清除
 已确认的主机密钥指纹，下次连接必须重新明确确认；把 SSH profile 切换为 Telnet 或 Serial
-会移除其已记住的 SSH 凭据引用。会话编辑器不会显示或修改已保存密码；要记住新密码，请在
-SSH 连接弹窗操作。修改 **Settings > General** 的默认后端只影响之后新记住的密码，不会
-迁移或破坏既有 SSH profile 所引用的后端。
+会移除其已记住的 SSH 凭据引用。会话编辑器不会显示已保存密码，密码留空会保留原凭据；
+新输入的密码可以由 **Save & connect** 使用一次，也可以勾选 **Remember password** 并选择后端后保存。
+修改 **Settings > General** 的默认后端只用于初始化之后的保存选择，不会迁移或破坏既有 SSH profile
+所引用的后端。
 
 选择 **Pane > New Local Shell** 或 Local Shell 控件可打开独立的本地终端。通过 Tab
 关闭控件或 **Window > Close Current Tab** 关闭终端。
@@ -157,8 +160,10 @@ Light 模式保留可读的浅色 ANSI 色表。Custom 会展开 Light/Dark 两�
 无效十六进制值或会让文字、必要边框、焦点/状态及终端文字看不清的颜色，会回退到对应明暗侧的
 可读默认。
 
-**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、亮度、粗体亮 ANSI 色、
-scrollback、鼠标行为以及平台相关的 Option-as-Meta。两个字体列表都先显示软件自带字体，
+**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、最小对比度、粗体亮 ANSI 色、
+scrollback、鼠标行为以及平台相关的 Option-as-Meta。最小对比度范围为 1.0:1 至 21.0:1，
+默认 4.5:1；设置为 1.0:1 会保留原始 ANSI/256/真彩色前景。渲染会按每个单元格的实际背景检查，
+只修正低于目标的前景，背景和已经可读的颜色保持不变。两个字体列表都先显示软件自带字体，
 再显示自动发现的系统等宽字体。
 
 **Settings > X11** 控制当前平台的本机 X server provider、首个 X11 application 时启动和显式的
