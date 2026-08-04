@@ -7,6 +7,11 @@ const SESSION_TRANSFER_VERSION: u32 = 1;
 const MAX_SESSION_TRANSFER_BYTES: usize = 256 * 1024;
 const MAX_SESSION_TRANSFER_PROFILES: usize = 128;
 
+#[derive(Default)]
+pub(super) struct ProfileMutationCoordinator {
+    gate: tokio::sync::Mutex<()>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 enum SessionTransferKind {
@@ -217,7 +222,12 @@ pub(super) fn close_workspace_tab(
     refresh_workspace(ui, state);
 }
 
-pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
+pub(super) fn wire_session_editor(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    profile_mutations: Arc<ProfileMutationCoordinator>,
+) {
     let ui_for_save = ui.as_weak();
     let state_for_save = state.clone();
     ui.on_save_session(
@@ -242,9 +252,9 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               serial_flow_control,
               connect_after_save| {
             log_ui_action("session-editor.save");
-            let (editor_tab_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
+            let (editor_tab_id, editor_draft_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
                 Ok(app) => {
-                    let Some(profile_id) = app.active_editor_profile_id() else {
+                    let Some((editor_tab_id, editor_draft_id, profile_id)) = app.active_editor_identity() else {
                         set_status(&ui_for_save, "Session editor is not active");
                         return;
                     };
@@ -265,7 +275,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                         .find(|port| port.port_name == serial_port.as_str().trim())
                         .cloned();
                     (
-                        app.active_tab_id(),
+                        editor_tab_id,
+                        editor_draft_id,
                         existing_profile,
                         serial_descriptor,
                     )
@@ -311,6 +322,17 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 set_status(&ui_for_save, &format!("Cannot save session: {error}"));
                 return;
             }
+            let mutation_token = match begin_profile_mutation(
+                &state_for_save,
+                profile_id,
+                existing_profile.as_ref(),
+            ) {
+                Ok(token) => token,
+                Err(error) => {
+                    set_status(&ui_for_save, &format!("Cannot save session: {error}"));
+                    return;
+                }
+            };
             let should_connect = should_connect_after_save(connect_after_save, &profile);
             let connection_password = if should_connect {
                 connection_password
@@ -322,7 +344,20 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             set_status(&ui_for_save, "Saving session...");
             let runtime_for_save = runtime.clone();
             let runtime_for_connect = runtime.clone();
+            let profile_mutations = profile_mutations.clone();
             runtime_for_save.spawn(async move {
+                let _mutation_guard = profile_mutations.gate.lock().await;
+                if let Err(error) = ensure_profile_mutation_current(
+                    &state,
+                    profile_id,
+                    mutation_token,
+                    existing_profile.as_ref(),
+                ) {
+                    debug!(session_id = %profile_id, %error, "stale profile save ignored");
+                    finish_profile_mutation(&state, profile_id, mutation_token);
+                    set_status(&ui, "Session changed while saving; retry your changes");
+                    return;
+                }
                 let credential_rollback = match apply_credential_change(
                     profile_id,
                     credential_change,
@@ -331,22 +366,19 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 {
                     Ok(rollback) => rollback,
                     Err(error) => {
+                        finish_profile_mutation(&state, profile_id, mutation_token);
                         warn!(session_id = %profile_id, %error, "failed to update session credential");
                         set_status(&ui, &format!("Cannot update password: {error}"));
                         return;
                     }
                 };
 
-                let save_result = (|| -> Result<()> {
-                    let mut app = state
-                        .lock()
-                        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-                    let mut candidate = app.sessions.clone();
-                    candidate.upsert(profile.clone());
-                    app.config.save(&candidate)?;
-                    app.sessions = candidate;
-                    Ok(())
-                })();
+                let save_result = commit_profile_save(
+                    &state,
+                    &profile,
+                    existing_profile.as_ref(),
+                    mutation_token,
+                );
 
                 if let Err(error) = save_result {
                     if let Some(rollback) = credential_rollback
@@ -366,9 +398,11 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     "session profile saved"
                 );
                 refresh_session_models(&ui, &state);
-                if let Some(editor_tab_id) = editor_tab_id {
-                    let _ = state.lock().map(|mut app| app.close_tab(editor_tab_id));
-                }
+                let _ = state.lock().map(|mut app| {
+                    if app.editor_matches(editor_tab_id, editor_draft_id) {
+                        let _ = app.close_tab(editor_tab_id);
+                    }
+                });
                 refresh_workspace(&ui, &state);
                 if should_connect {
                     request_profile_connection(
@@ -394,6 +428,7 @@ pub(super) fn wire_session_management(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
+    profile_mutations: Arc<ProfileMutationCoordinator>,
 ) {
     let ui_for_duplicate = ui.as_weak();
     let state_for_duplicate = state.clone();
@@ -519,6 +554,7 @@ pub(super) fn wire_session_management(
     });
 
     let ui_for_action = ui.as_weak();
+    let profile_mutations_for_action = profile_mutations;
     ui.on_manage_session_action(move |action, target, value| {
         log_ui_action("session-management.execute");
         let action = action.as_str().to_owned();
@@ -526,9 +562,10 @@ pub(super) fn wire_session_management(
         let value = value.as_str().to_owned();
         let ui = ui_for_action.clone();
         let state = state.clone();
+        let profile_mutations = profile_mutations_for_action.clone();
         runtime.spawn(async move {
             let result = if action == "delete-session" {
-                delete_session_profile(&state, &target).await
+                delete_session_profile(&state, &profile_mutations, &target).await
             } else {
                 update_session_group(&state, &action, &target, &value)
             };
@@ -983,18 +1020,34 @@ fn update_session_group(
     Ok(message)
 }
 
-async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) -> Result<String> {
+async fn delete_session_profile(
+    state: &Arc<Mutex<AppState>>,
+    profile_mutations: &ProfileMutationCoordinator,
+    session_id: &str,
+) -> Result<String> {
     let session_id = Uuid::parse_str(session_id).context("invalid session id")?;
-    let profile = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?
-        .sessions
-        .sessions
-        .iter()
-        .find(|profile| profile.id == session_id)
-        .cloned()
-        .context("session not found")?;
-    let credential_rollback = apply_credential_change(
+    let (profile, mutation_token) = {
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        let profile = app
+            .sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == session_id)
+            .cloned()
+            .context("session not found")?;
+        let mutation_token = app.begin_profile_mutation(session_id);
+        (profile, mutation_token)
+    };
+    let _mutation_guard = profile_mutations.gate.lock().await;
+    if let Err(error) =
+        ensure_profile_mutation_current(state, session_id, mutation_token, Some(&profile))
+    {
+        finish_profile_mutation(state, session_id, mutation_token);
+        return Err(error);
+    }
+    let credential_rollback = match apply_credential_change(
         session_id,
         if let Some(storage) = profile.ssh().and_then(|ssh| ssh.credential_storage) {
             CredentialChange::Delete(storage)
@@ -1002,24 +1055,15 @@ async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) 
             CredentialChange::None
         },
     )
-    .await?;
-    let save_result = (|| -> Result<()> {
-        let mut app = state
-            .lock()
-            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-        let mut candidate = app.sessions.clone();
-        if !candidate.remove(session_id) {
-            anyhow::bail!("session not found");
+    .await
+    {
+        Ok(rollback) => rollback,
+        Err(error) => {
+            finish_profile_mutation(state, session_id, mutation_token);
+            return Err(error);
         }
-        app.config.save(&candidate)?;
-        app.sessions = candidate;
-        if app.active_editor_profile_id() == Some(Some(session_id))
-            && let Some(tab_id) = app.active_tab_id()
-        {
-            let _ = app.close_tab(tab_id);
-        }
-        Ok(())
-    })();
+    };
+    let save_result = commit_profile_delete(state, &profile, mutation_token);
     if let Err(error) = save_result {
         if let Some(rollback) = credential_rollback
             && let Err(rollback_error) = rollback.restore().await
@@ -1030,6 +1074,119 @@ async fn delete_session_profile(state: &Arc<Mutex<AppState>>, session_id: &str) 
     }
     info!(session_id = %session_id, "session profile deleted");
     Ok(format!("Session {} deleted", profile.name))
+}
+
+fn begin_profile_mutation(
+    state: &Arc<Mutex<AppState>>,
+    profile_id: Uuid,
+    expected: Option<&SessionProfile>,
+) -> Result<Uuid> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let current = app
+        .sessions
+        .sessions
+        .iter()
+        .find(|profile| profile.id == profile_id);
+    if current != expected {
+        anyhow::bail!("session changed before the save started");
+    }
+    Ok(app.begin_profile_mutation(profile_id))
+}
+
+fn ensure_profile_mutation_current(
+    state: &Arc<Mutex<AppState>>,
+    profile_id: Uuid,
+    token: Uuid,
+    expected: Option<&SessionProfile>,
+) -> Result<()> {
+    let app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let current = app
+        .sessions
+        .sessions
+        .iter()
+        .find(|profile| profile.id == profile_id);
+    if !app.profile_mutation_is_current(profile_id, token) || current != expected {
+        anyhow::bail!("session mutation was superseded");
+    }
+    Ok(())
+}
+
+fn finish_profile_mutation(state: &Arc<Mutex<AppState>>, profile_id: Uuid, token: Uuid) {
+    if let Ok(mut app) = state.lock() {
+        app.finish_profile_mutation(profile_id, token);
+    }
+}
+
+fn commit_profile_save(
+    state: &Arc<Mutex<AppState>>,
+    profile: &SessionProfile,
+    expected: Option<&SessionProfile>,
+    token: Uuid,
+) -> Result<()> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if !app.profile_mutation_is_current(profile.id, token) {
+        anyhow::bail!("session save was superseded");
+    }
+    let result = (|| {
+        let current = app
+            .sessions
+            .sessions
+            .iter()
+            .find(|candidate| candidate.id == profile.id);
+        if current != expected {
+            anyhow::bail!("session changed while the save was running");
+        }
+        let mut candidate = app.sessions.clone();
+        candidate.upsert(profile.clone());
+        app.config.save(&candidate)?;
+        app.sessions = candidate;
+        Ok(())
+    })();
+    app.finish_profile_mutation(profile.id, token);
+    result
+}
+
+fn commit_profile_delete(
+    state: &Arc<Mutex<AppState>>,
+    expected: &SessionProfile,
+    token: Uuid,
+) -> Result<()> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if !app.profile_mutation_is_current(expected.id, token) {
+        anyhow::bail!("session delete was superseded");
+    }
+    let result = (|| {
+        let current = app
+            .sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == expected.id);
+        if current != Some(expected) {
+            anyhow::bail!("session changed while the delete was running");
+        }
+        let mut candidate = app.sessions.clone();
+        if !candidate.remove(expected.id) {
+            anyhow::bail!("session not found");
+        }
+        app.config.save(&candidate)?;
+        app.sessions = candidate;
+        if app.active_editor_profile_id() == Some(Some(expected.id))
+            && let Some(tab_id) = app.active_tab_id()
+        {
+            let _ = app.close_tab(tab_id);
+        }
+        Ok(())
+    })();
+    app.finish_profile_mutation(expected.id, token);
+    result
 }
 
 enum CredentialChange {
@@ -1939,7 +2096,8 @@ mod tests {
         let terminal_id = app.open_terminal_tab(&profile);
         let state = Arc::new(Mutex::new(app));
 
-        delete_session_profile(&state, &profile.id.to_string())
+        let profile_mutations = ProfileMutationCoordinator::default();
+        delete_session_profile(&state, &profile_mutations, &profile.id.to_string())
             .await
             .expect("profile should be deleted");
 
@@ -1947,6 +2105,72 @@ mod tests {
         assert!(app.sessions.sessions.is_empty());
         assert!(app.terminal(terminal_id).is_some());
         drop(app);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn out_of_order_profile_saves_keep_the_newest_started_mutation() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-save-order-{}.json", Uuid::new_v4()));
+        let original = SessionProfile::new("server", "server.example", "alice");
+        let mut sessions = SessionStore::default();
+        sessions.upsert(original.clone());
+        let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
+
+        let first = begin_profile_mutation(&state, original.id, Some(&original))
+            .expect("first save should start");
+        let second = begin_profile_mutation(&state, original.id, Some(&original))
+            .expect("second save should supersede the first");
+        let newest = SessionProfile {
+            name: "newest".to_owned(),
+            ..original.clone()
+        };
+        commit_profile_save(&state, &newest, Some(&original), second)
+            .expect("newest save should commit");
+        let stale = SessionProfile {
+            name: "stale".to_owned(),
+            ..original.clone()
+        };
+
+        assert!(commit_profile_save(&state, &stale, Some(&original), first).is_err());
+        assert_eq!(
+            state
+                .lock()
+                .expect("state should remain readable")
+                .sessions
+                .sessions[0]
+                .name,
+            "newest"
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn stale_profile_save_cannot_resurrect_a_deleted_profile() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-save-delete-{}.json", Uuid::new_v4()));
+        let original = SessionProfile::new("server", "server.example", "alice");
+        let mut sessions = SessionStore::default();
+        sessions.upsert(original.clone());
+        let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
+
+        let save = begin_profile_mutation(&state, original.id, Some(&original))
+            .expect("save should start");
+        let delete = begin_profile_mutation(&state, original.id, Some(&original))
+            .expect("delete should supersede the save");
+        commit_profile_delete(&state, &original, delete).expect("delete should commit");
+        let stale = SessionProfile {
+            name: "stale".to_owned(),
+            ..original.clone()
+        };
+
+        assert!(commit_profile_save(&state, &stale, Some(&original), save).is_err());
+        assert!(
+            state
+                .lock()
+                .expect("state should remain readable")
+                .sessions
+                .sessions
+                .is_empty()
+        );
         let _ = std::fs::remove_file(path);
     }
 }

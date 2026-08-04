@@ -379,9 +379,15 @@ fn wire_callbacks(
         }
     });
     wire_workspace_tabs(ui, state.clone(), runtime.clone());
-    wire_session_editor(ui, state.clone(), runtime.clone());
+    let profile_mutations = Arc::new(ProfileMutationCoordinator::default());
+    wire_session_editor(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        profile_mutations.clone(),
+    );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
-    wire_session_management(ui, state.clone(), runtime.clone());
+    wire_session_management(ui, state.clone(), runtime.clone(), profile_mutations);
     wire_connection_request(ui, state.clone(), runtime.clone());
     wire_host_key_confirmation(ui, state.clone(), runtime.clone());
     wire_authentication(ui, state.clone(), runtime.clone());
