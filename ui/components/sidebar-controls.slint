@@ -73,6 +73,8 @@ export component SidebarToggleGlyph inherits Rectangle {
 
 export component SidebarRailToggle inherits FocusScope {
     in property <bool> expanded;
+    in property <bool> full-width: false;
+    in property <string> title: "Sessions";
     callback activated();
 
     height: Theme.sidebar-rail-toggle-row-height;
@@ -91,8 +93,23 @@ export component SidebarRailToggle inherits FocusScope {
         return EventResult.reject;
     }
 
+    if root.full-width : Text {
+        x: Theme.sidebar-card-padding;
+        width: toggle-card.x - self.x - Theme.space-sm;
+        height: parent.height;
+        text: root.title;
+        color: Theme.muted;
+        font-family: Theme.application-font-family;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+
     toggle-card := Rectangle {
-        x: (parent.width - self.width) / 2;
+        x: root.full-width
+            ? parent.width - self.width - Theme.space-sm
+            : (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         width: Theme.sidebar-rail-toggle-size;
         height: Theme.sidebar-rail-toggle-size;
@@ -115,9 +132,11 @@ export component SidebarRailToggle inherits FocusScope {
 
 export component SidebarRailItem inherits FocusScope {
     in property <string> label;
+    in property <string> trailing-label;
     in property <string> accessible-name;
     in property <bool> group: false;
     in property <bool> local: false;
+    in property <bool> nested: false;
     in property <bool> expandable: false;
     in property <bool> expanded: false;
     in property <bool> expanded-label: false;
@@ -126,12 +145,7 @@ export component SidebarRailItem inherits FocusScope {
 
     private property <length> label-line-height:
         label-probe.font-metrics.ascent - label-probe.font-metrics.descent;
-    // Group names are capped at 64 characters in the config layer. Four
-    // measured lines cover that bound in the widened full-label rail without
-    // making card width and height depend on each other.
-    private property <length> label-content-height: root.expanded-label
-        ? root.label-line-height * 4
-        : root.label-line-height;
+    private property <length> label-content-height: root.label-line-height;
     private property <length> card-height: root.local
         ? Theme.sidebar-rail-local-card-size
         : root.label-content-height + 2 * (root.group
@@ -170,8 +184,12 @@ export component SidebarRailItem inherits FocusScope {
         text: root.label;
         color: transparent;
         font-family: Theme.application-font-family;
-        font-size: Theme.font-body;
-        font-weight: 700;
+        font-size: root.expanded-label && root.group
+            ? Theme.sidebar-group-font-size
+            : Theme.sidebar-session-font-size;
+        font-weight: root.expanded-label && !root.group && !root.local
+            ? Theme.sidebar-session-font-weight
+            : Theme.sidebar-group-font-weight;
     }
 
     item-card := Rectangle {
@@ -181,8 +199,13 @@ export component SidebarRailItem inherits FocusScope {
         height: root.card-height;
         background: root.selected
             ? Theme.selected
-            : (root.group || item-touch.has-hover || root.has-focus ? Theme.panel : transparent);
-        border-width: root.selected || root.group || item-touch.has-hover || root.has-focus
+            : ((root.group && !root.expanded-label) || item-touch.has-hover || root.has-focus
+                ? Theme.panel
+                : transparent);
+        border-width: root.selected
+                || (root.group && !root.expanded-label)
+                || item-touch.has-hover
+                || root.has-focus
             ? Theme.hairline
             : 0px;
         border-color: root.has-focus
@@ -190,18 +213,16 @@ export component SidebarRailItem inherits FocusScope {
             : (root.selected || root.group ? Theme.accent : Theme.control-border);
         border-radius: Theme.radius;
 
-        if root.local : SidebarTerminalGlyph {
+        if root.local && !root.expanded-label : SidebarTerminalGlyph {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             glyph-color: Theme.text;
         }
 
         label-text := Text {
-            visible: !root.local;
-            x: root.expanded-label ? Theme.space-sm : 0px;
-            width: parent.width - (root.expanded-label ? 2 * Theme.space-sm : 0px);
-            height: root.expanded-label ? self.preferred-height : parent.height;
-            y: root.expanded-label ? (parent.height - self.height) / 2 : 0px;
+            visible: !root.expanded-label && !root.local;
+            width: parent.width;
+            height: parent.height;
             text: root.label;
             color: root.selected || root.group ? Theme.accent : Theme.text;
             font-family: Theme.application-font-family;
@@ -209,8 +230,58 @@ export component SidebarRailItem inherits FocusScope {
             font-weight: 700;
             horizontal-alignment: center;
             vertical-alignment: center;
-            wrap: root.expanded-label ? char-wrap : no-wrap;
-            overflow: root.expanded-label ? clip : elide;
+            overflow: elide;
+        }
+
+        if root.expanded-label : HorizontalLayout {
+            padding-left: root.nested
+                ? Theme.sidebar-rail-full-session-indent
+                : Theme.sidebar-card-padding;
+            padding-right: Theme.sidebar-card-padding;
+            spacing: Theme.space-sm;
+
+            if root.local : SidebarTerminalGlyph {
+                glyph-color: item-touch.has-hover ? Theme.accent : Theme.text;
+            }
+
+            if root.expandable : Path {
+                width: Theme.sidebar-group-chevron-size;
+                height: Theme.sidebar-group-chevron-size;
+                commands: root.expanded
+                    ? "M 2 4 L 8 10 L 14 4"
+                    : "M 2 10 L 8 4 L 14 10";
+                fill: transparent;
+                stroke: Theme.muted;
+                stroke-width: Theme.sidebar-group-chevron-stroke;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.label;
+                color: root.selected ? Theme.accent : Theme.text;
+                font-family: Theme.application-font-family;
+                font-size: root.group
+                    ? Theme.sidebar-group-font-size
+                    : Theme.sidebar-session-font-size;
+                font-weight: root.group || root.local
+                    ? Theme.sidebar-group-font-weight
+                    : Theme.sidebar-session-font-weight;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+
+            if !root.trailing-label.is-empty : Text {
+                width: Theme.sidebar-group-count-width;
+                text: root.trailing-label;
+                color: Theme.muted;
+                font-family: Theme.application-font-family;
+                font-size: Theme.font-caption;
+                horizontal-alignment: right;
+                overflow: elide;
+                vertical-alignment: center;
+            }
         }
 
         item-touch := TouchArea {

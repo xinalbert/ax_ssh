@@ -74,6 +74,7 @@ component SessionProfileTooltipContent inherits Rectangle {
             wrap: char-wrap;
         }
         tooltip-details := Text {
+            visible: !root.details.is-empty;
             text: root.details;
             color: Theme.muted;
             font-family: Theme.application-font-family;
@@ -498,6 +499,9 @@ component CompactSessionNavigationGroup inherits Rectangle {
             group-item := SidebarRailItem {
                 width: parent.width;
                 label: root.full-group-label ? root.source.name : root.source.icon;
+                trailing-label: root.full-group-label
+                    ? "\{root.source.profiles.length}"
+                    : "";
                 group: true;
                 expandable: true;
                 expanded: root.group-expanded;
@@ -510,6 +514,12 @@ component CompactSessionNavigationGroup inherits Rectangle {
                 activated => {
                     root.select-target("group", "", root.source.group-name);
                     root.group-expanded = !root.group-expanded;
+                }
+            }
+            if root.full-group-label : Tooltip {
+                SessionProfileTooltipContent {
+                    name: root.source.name;
+                    details: "";
                 }
             }
             SessionActionMenu {
@@ -544,8 +554,10 @@ component CompactSessionNavigationGroup inherits Rectangle {
 
                 profile-item := SidebarRailItem {
                     width: parent.width;
-                    label: profile.icon;
+                    label: root.full-group-label ? profile.name : profile.icon;
                     group: false;
+                    nested: root.full-group-label;
+                    expanded-label: root.full-group-label;
                     selected: root.selected-kind == "server"
                         && root.selected-id == profile.id;
                     accessible-name: "Connect to " + profile.name;
@@ -653,12 +665,15 @@ export component SessionNavigation inherits Rectangle {
 
             SidebarRailToggle {
                 expanded: false;
+                full-width: root.collapsed-group-label-chars == 0;
                 activated => { root.collapsed = false; }
             }
             Rectangle { height: Theme.hairline; background: Theme.divider; }
 
             SidebarRailItem {
                 local: true;
+                label: root.local-shell-title;
+                expanded-label: root.collapsed-group-label-chars == 0;
                 accessible-name: root.local-shell-accessible-name;
                 activated => { root.open-local-shell(); }
             }
