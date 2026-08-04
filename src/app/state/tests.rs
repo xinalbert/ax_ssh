@@ -88,6 +88,53 @@ fn each_ssh_tab_keeps_its_own_authentication_prompt() {
 }
 
 #[test]
+fn one_time_password_is_tab_scoped_and_cleared_on_idle() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("temporary", "temporary.example", "alice");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+
+    assert!(
+        terminal.set_pending_auth_secret(zeroize::Zeroizing::new("temporary-password".to_owned()))
+    );
+    assert_eq!(
+        terminal
+            .take_pending_auth_secret()
+            .expect("password should be available once")
+            .as_str(),
+        "temporary-password"
+    );
+    assert!(terminal.take_pending_auth_secret().is_none());
+
+    assert!(
+        terminal.set_pending_auth_secret(zeroize::Zeroizing::new("host-key-password".to_owned()))
+    );
+    assert!(
+        terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(PendingHostKey {
+            tab_id,
+            profile_id: profile.id,
+            host: "temporary.example".to_owned(),
+            port: 22,
+            fingerprint: "SHA256:temporary".to_owned(),
+            changed: false,
+        }))
+    );
+    assert_eq!(
+        terminal
+            .take_pending_auth_secret()
+            .expect("host-key confirmation should preserve the one-time password")
+            .as_str(),
+        "host-key-password"
+    );
+
+    assert!(
+        terminal.set_pending_auth_secret(zeroize::Zeroizing::new("second-password".to_owned()))
+    );
+    assert!(terminal.set_ssh_phase(SshConnectionPhase::Idle));
+    assert!(terminal.take_pending_auth_secret().is_none());
+}
+
+#[test]
 fn closing_one_pending_tab_keeps_another_tabs_authentication_prompt() {
     let mut state = test_state();
     let first_profile = SessionProfile::new("first", "first.example", "alice");

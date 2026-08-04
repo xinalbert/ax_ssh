@@ -44,6 +44,56 @@ pub(super) fn begin_authentication(
         }
         return;
     }
+    let one_time_password = match state.lock() {
+        Ok(mut app) => match app.terminal_mut(tab_id) {
+            Some(terminal)
+                if terminal
+                    .ssh_route()
+                    .is_some_and(|route| route.0 == profile.id)
+                    && matches!(
+                        terminal.ssh_phase(),
+                        Some(SshConnectionPhase::AwaitingAuthentication { .. })
+                    ) =>
+            {
+                terminal.take_pending_auth_secret()
+            }
+            Some(_) | None => None,
+        },
+        Err(_) => {
+            set_tab_status(&state, &ui, tab_id, "Cannot read session state");
+            return;
+        }
+    };
+    if let Some(password) = one_time_password {
+        set_tab_status(
+            &state,
+            &ui,
+            tab_id,
+            "Connecting with the one-time password...",
+        );
+        if let Err(error) = start_session_worker(
+            runtime,
+            state.clone(),
+            ui.clone(),
+            tab_id,
+            profile.id,
+            password,
+            None,
+            false,
+            AuthenticationStart::Prompt,
+            target,
+        ) {
+            set_awaiting_authentication(&state, tab_id, profile.id, false);
+            set_tab_status(
+                &state,
+                &ui,
+                tab_id,
+                &format!("Cannot start password connection: {error}"),
+            );
+            refresh_workspace(&ui, &state);
+        }
+        return;
+    }
     let Some(storage) = credential_storage else {
         set_awaiting_authentication(&state, tab_id, profile.id, false);
         set_tab_status(&state, &ui, tab_id, "Password required");

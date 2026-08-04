@@ -77,6 +77,7 @@ pub(in crate::app) fn wire_connection_request(
                 profile_id,
                 target,
                 Some(companion_tab_id),
+                None,
             ),
         }
     });
@@ -94,7 +95,15 @@ fn request_connection(
         Some(id) => id,
         None => return,
     };
-    request_profile_connection(ui, state, runtime, profile_id, target, companion_tab_id);
+    request_profile_connection(
+        ui,
+        state,
+        runtime,
+        profile_id,
+        target,
+        companion_tab_id,
+        None,
+    );
 }
 
 pub(in crate::app) fn request_profile_connection(
@@ -104,6 +113,7 @@ pub(in crate::app) fn request_profile_connection(
     profile_id: Uuid,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
+    one_time_password: Option<zeroize::Zeroizing<String>>,
 ) {
     let start = {
         let mut app = match state.lock() {
@@ -133,6 +143,12 @@ pub(in crate::app) fn request_profile_connection(
             }
             ConnectionTarget::Sftp => app.open_sftp_tab_with_companion(&profile, companion_tab_id),
         };
+        if let Some(password) = one_time_password
+            && profile.ssh().is_some()
+            && let Some(terminal) = app.terminal_mut(tab_id)
+        {
+            terminal.set_pending_auth_secret(password);
+        }
         match &profile.connection {
             ConnectionProfile::Ssh(ssh) if ssh.host_key_fingerprint.is_some() => {
                 let Some(terminal) = app.terminal_mut(tab_id) else {

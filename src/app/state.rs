@@ -166,6 +166,7 @@ impl AppState {
                 worker_running: false,
                 sftp: SftpBrowserState::default(),
                 ssh_phase: SshConnectionPhase::Idle,
+                pending_auth_secret: None,
             }),
             companion_tab_id: None,
         };
@@ -208,6 +209,7 @@ impl AppState {
                 worker_running: false,
                 sftp: SftpBrowserState::for_standalone_tab(),
                 ssh_phase: SshConnectionPhase::Idle,
+                pending_auth_secret: None,
             }),
             companion_tab_id: None,
         };
@@ -234,6 +236,7 @@ impl AppState {
                 worker_running: true,
                 sftp: SftpBrowserState::default(),
                 ssh_phase: SshConnectionPhase::Idle,
+                pending_auth_secret: None,
             }),
             companion_tab_id: None,
         });
@@ -762,6 +765,7 @@ pub(super) struct TerminalTabState {
     pub(super) worker_running: bool,
     pub(super) sftp: SftpBrowserState,
     pub(super) ssh_phase: SshConnectionPhase,
+    pending_auth_secret: Option<zeroize::Zeroizing<String>>,
 }
 
 const SFTP_HISTORY_LIMIT: usize = 128;
@@ -1202,8 +1206,32 @@ impl TerminalTabState {
         ) {
             return false;
         }
+        if matches!(phase, SshConnectionPhase::Idle) {
+            self.pending_auth_secret = None;
+        }
         self.ssh_phase = phase;
         true
+    }
+
+    pub(super) fn set_pending_auth_secret(&mut self, secret: zeroize::Zeroizing<String>) -> bool {
+        if !matches!(
+            self.backend,
+            TerminalBackend::Ssh { .. } | TerminalBackend::Sftp { .. }
+        ) {
+            return false;
+        }
+        self.pending_auth_secret = Some(secret);
+        true
+    }
+
+    pub(super) fn take_pending_auth_secret(&mut self) -> Option<zeroize::Zeroizing<String>> {
+        if !matches!(
+            self.backend,
+            TerminalBackend::Ssh { .. } | TerminalBackend::Sftp { .. }
+        ) {
+            return None;
+        }
+        self.pending_auth_secret.take()
     }
 
     pub(super) fn take_pending_probe(&mut self) -> Option<PendingProbe> {

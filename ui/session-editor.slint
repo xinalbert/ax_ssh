@@ -38,7 +38,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, bool, string, string, string, string, string, string, bool,
+        string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel();
@@ -57,7 +57,13 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> auth-method: "Password";
     private property <string> private-key-draft;
     private property <string> password-draft;
+    private property <bool> remember-password-draft: false;
+    private property <string> credential-storage-draft: "system-keyring";
     private property <string> vault-password-draft;
+    private property <[string]> credential-storage-options: [
+        "System credential store",
+        "Encrypted application vault",
+    ];
     private property <bool> x11-forwarding-draft: false;
     private property <string> serial-port-draft;
     private property <string> serial-baud-rate: "115200";
@@ -77,6 +83,8 @@ export component SessionEditorPane inherits Rectangle {
             root.auth-method,
             root.private-key-draft,
             root.password-draft,
+            root.remember-password-draft,
+            root.credential-storage-draft,
             root.vault-password-draft,
             root.x11-forwarding-draft,
             root.serial-port-draft,
@@ -102,6 +110,10 @@ export component SessionEditorPane inherits Rectangle {
         root.private-key-draft = root.source.private_key_path;
         // Passwords are intentionally never part of the source snapshot.
         root.password-draft = "";
+        root.remember-password-draft = false;
+        root.credential-storage-draft = root.source.credential_storage.is-empty
+            ? root.source.default_credential_storage
+            : root.source.credential_storage;
         root.vault-password-draft = "";
         root.x11-forwarding-draft = root.source.x11_forwarding;
         root.serial-port-draft = root.source.serial_port;
@@ -117,6 +129,7 @@ export component SessionEditorPane inherits Rectangle {
     changed protocol => {
         if root.protocol != "SSH" {
             root.password-draft = "";
+            root.remember-password-draft = false;
             root.vault-password-draft = "";
         }
         if root.protocol == "Telnet" && root.port-draft == "22" {
@@ -130,6 +143,23 @@ export component SessionEditorPane inherits Rectangle {
     changed auth-method => {
         if root.auth-method != "Password" {
             root.password-draft = "";
+            root.remember-password-draft = false;
+            root.vault-password-draft = "";
+        }
+    }
+    changed password-draft => {
+        if root.password-draft.is-empty {
+            root.remember-password-draft = false;
+            root.vault-password-draft = "";
+        }
+    }
+    changed remember-password-draft => {
+        if !root.remember-password-draft {
+            root.vault-password-draft = "";
+        }
+    }
+    changed credential-storage-draft => {
+        if root.credential-storage-draft != "encrypted-vault" {
             root.vault-password-draft = "";
         }
     }
@@ -397,7 +427,7 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: "Authentication";
-                        description: "Passwords are stored securely and loaded only when connecting.";
+                        description: "Use the password once for Save & connect, or choose to remember it securely.";
                     }
                     AuthenticationMethodSelector {
                         options: [
@@ -417,16 +447,35 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.password-draft;
-                                placeholder-text: root.editing
+                                placeholder-text: root.editing && !root.source.credential_storage.is-empty
                                     ? "Leave blank to keep saved password"
-                                    : "Enter password";
+                                    : "Enter password for Save & connect";
                                 accessible-label: "SSH password";
                             }
                         }
-                        if root.password-draft != ""
-                                && (root.source.credential_storage == "encrypted-vault"
-                                    || (root.source.credential_storage.is-empty
-                                        && root.source.default_credential_storage == "encrypted-vault")) : SessionEditorField {
+                        CheckBox {
+                            text: "Remember password";
+                            enabled: !root.password-draft.is-empty;
+                            checked <=> root.remember-password-draft;
+                            accessible-label: "Remember SSH password";
+                        }
+                        if root.remember-password-draft : SessionEditorField {
+                            label: "Credential storage";
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: root.credential-storage-options;
+                                current-index: root.credential-storage-draft == "encrypted-vault" ? 1 : 0;
+                                accessible-label: "Credential storage";
+                                selected(value) => {
+                                    root.credential-storage-draft = value == "Encrypted application vault"
+                                        ? "encrypted-vault"
+                                        : "system-keyring";
+                                }
+                            }
+                        }
+                        if root.remember-password-draft
+                                && root.credential-storage-draft == "encrypted-vault" : SessionEditorField {
                             label: "Vault password";
                             vault-password-edit := SecretTextInput {
                                 width: parent.width;

@@ -330,7 +330,7 @@ export component AppWindow inherits Window {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, bool, string, string, string, string, string, string, bool,
+        string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback cancel-session-dialog();
@@ -557,11 +557,11 @@ export component AppWindow inherits Window {
             }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
-            save-session(name, group, protocol, host, port, username, auth, key-path, password, vault-password, x11-forwarding,
+            save-session(name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                          serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                          connect-after-save) => {
                 root.save-session(
-                    name, group, protocol, host, port, username, auth, key-path, password, vault-password, x11-forwarding,
+                    name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                     connect-after-save,
                 );

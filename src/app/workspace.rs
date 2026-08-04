@@ -234,6 +234,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               auth_method,
               private_key_path,
               password,
+              remember_password,
+              credential_storage,
               vault_password,
               x11_forwarding,
               serial_port,
@@ -244,8 +246,7 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
               serial_flow_control,
               connect_after_save| {
             log_ui_action("session-editor.save");
-            let (editor_tab_id, existing_profile, serial_descriptor, default_credential_storage) =
-                match state_for_save.lock() {
+            let (editor_tab_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
                 Ok(app) => {
                     let Some(profile_id) = app.active_editor_profile_id() else {
                         set_status(&ui_for_save, "Session editor is not active");
@@ -271,7 +272,6 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                         app.active_tab_id(),
                         existing_profile,
                         serial_descriptor,
-                        app.sessions.settings.credential_storage,
                     )
                 }
                 Err(_) => {
@@ -279,7 +279,8 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     return;
                 }
                 };
-            let (profile, credential_change) = match profile_from_editor_with_password(
+            let (profile, credential_change, connection_password) =
+                match profile_from_editor_with_password(
                 existing_profile.as_ref(),
                 name.as_str(),
                 group_name.as_str(),
@@ -290,8 +291,9 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 auth_method.as_str(),
                 private_key_path.as_str(),
                 password.as_str(),
+                remember_password,
+                credential_storage.as_str(),
                 vault_password.as_str(),
-                default_credential_storage,
                 x11_forwarding,
                 serial_port.as_str(),
                 serial_baud_rate.as_str(),
@@ -308,10 +310,17 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                 }
             };
             let profile_id = profile.id;
+            let has_connection_password = connection_password.is_some();
             if let Err(error) = profile.validate() {
                 set_status(&ui_for_save, &format!("Cannot save session: {error}"));
                 return;
             }
+            let should_connect = should_connect_after_save(connect_after_save, &profile);
+            let connection_password = if should_connect {
+                connection_password
+            } else {
+                None
+            };
             let state = state_for_save.clone();
             let ui = ui_for_save.clone();
             set_status(&ui_for_save, "Saving session...");
@@ -365,7 +374,7 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                     let _ = state.lock().map(|mut app| app.close_tab(editor_tab_id));
                 }
                 refresh_workspace(&ui, &state);
-                if should_connect_after_save(connect_after_save, &profile) {
+                if should_connect {
                     request_profile_connection(
                         &ui,
                         &state,
@@ -373,7 +382,10 @@ pub(super) fn wire_session_editor(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
                         profile_id,
                         ConnectionTarget::Terminal,
                         None,
+                        connection_password,
                     );
+                } else if has_connection_password && !remember_password {
+                    set_status(&ui, "Session saved; password was not remembered");
                 } else {
                     set_status(&ui, "Session saved");
                 }
@@ -1084,7 +1096,7 @@ fn profile_from_editor(
     serial_flow_control: &str,
     serial_descriptor: Option<&SerialPortDescriptor>,
 ) -> Result<(SessionProfile, CredentialChange)> {
-    profile_from_editor_with_password(
+    let (profile, credential_change, connection_password) = profile_from_editor_with_password(
         existing,
         name,
         group_name,
@@ -1095,8 +1107,9 @@ fn profile_from_editor(
         auth_method,
         private_key_path,
         "",
+        false,
+        CredentialStorage::SystemKeyring.as_setting(),
         "",
-        CredentialStorage::SystemKeyring,
         x11_forwarding,
         serial_port,
         serial_baud_rate,
@@ -1105,7 +1118,9 @@ fn profile_from_editor(
         serial_parity,
         serial_flow_control,
         serial_descriptor,
-    )
+    )?;
+    debug_assert!(connection_password.is_none());
+    Ok((profile, credential_change))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1120,8 +1135,9 @@ fn profile_from_editor_with_password(
     auth_method: &str,
     private_key_path: &str,
     password: &str,
+    remember_password: bool,
+    credential_storage: &str,
     vault_password: &str,
-    default_credential_storage: CredentialStorage,
     x11_forwarding: bool,
     serial_port: &str,
     serial_baud_rate: &str,
@@ -1130,14 +1146,19 @@ fn profile_from_editor_with_password(
     serial_parity: &str,
     serial_flow_control: &str,
     serial_descriptor: Option<&SerialPortDescriptor>,
-) -> Result<(SessionProfile, CredentialChange)> {
+) -> Result<(
+    SessionProfile,
+    CredentialChange,
+    Option<zeroize::Zeroizing<String>>,
+)> {
     let private_key = auth_method == "Private key";
     let ssh_protocol = protocol.eq_ignore_ascii_case("SSH");
     let existing_storage = existing
         .and_then(SessionProfile::ssh)
         .and_then(|ssh| ssh.credential_storage);
-    let password_storage = (!private_key && ssh_protocol && !password.is_empty())
-        .then(|| existing_storage.unwrap_or(default_credential_storage));
+    let password_auth = !private_key && ssh_protocol;
+    let password_storage = (password_auth && !password.is_empty() && remember_password)
+        .then(|| CredentialStorage::from_setting(credential_storage));
     if let Some(storage) = password_storage
         && storage == CredentialStorage::EncryptedVault
         && vault_password.is_empty()
@@ -1157,6 +1178,8 @@ fn profile_from_editor_with_password(
     } else {
         CredentialChange::None
     };
+    let connection_password = (password_auth && !password.is_empty())
+        .then(|| zeroize::Zeroizing::new(password.to_owned()));
 
     let mut profile = if ssh_protocol {
         let port = parse_network_port(port)?;
@@ -1228,7 +1251,7 @@ fn profile_from_editor_with_password(
         profile.id = existing.id;
     }
     profile.group_name = normalize_group_name(group_name);
-    Ok((profile, credential_change))
+    Ok((profile, credential_change, connection_password))
 }
 
 fn should_connect_after_save(connect_after_save: bool, profile: &SessionProfile) -> bool {
@@ -1313,12 +1336,12 @@ mod tests {
     }
 
     #[test]
-    fn entering_a_password_updates_the_existing_credential_backend() {
+    fn remembering_a_password_updates_the_existing_credential_backend() {
         let mut existing = SessionProfile::new("old", "old.example", "alice");
         let ssh = existing.ssh_mut().expect("profile should be SSH");
         ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
 
-        let (profile, change) = profile_from_editor_with_password(
+        let (profile, change, connection_password) = profile_from_editor_with_password(
             Some(&existing),
             "updated",
             "",
@@ -1329,8 +1352,9 @@ mod tests {
             "Password",
             "",
             "new-password",
+            true,
+            "system-keyring",
             "",
-            CredentialStorage::EncryptedVault,
             true,
             "",
             "115200",
@@ -1345,6 +1369,13 @@ mod tests {
         assert_eq!(
             profile.ssh().and_then(|ssh| ssh.credential_storage),
             Some(CredentialStorage::SystemKeyring)
+        );
+        assert_eq!(
+            connection_password
+                .as_ref()
+                .expect("entered password should be available for immediate connection")
+                .as_str(),
+            "new-password"
         );
         match change {
             CredentialChange::Store {
@@ -1365,7 +1396,44 @@ mod tests {
     }
 
     #[test]
-    fn new_password_uses_default_storage_and_requires_vault_password() {
+    fn new_password_is_one_time_by_default() {
+        let (profile, change, connection_password) = profile_from_editor_with_password(
+            None,
+            "new",
+            "",
+            "SSH",
+            "new.example",
+            "22",
+            "alice",
+            "Password",
+            "",
+            "new-password",
+            false,
+            "encrypted-vault",
+            "",
+            true,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        )
+        .expect("one-time password should not require a vault password");
+
+        assert_eq!(profile.ssh().and_then(|ssh| ssh.credential_storage), None);
+        assert!(matches!(change, CredentialChange::None));
+        assert_eq!(
+            connection_password
+                .expect("one-time password should be returned for immediate connection")
+                .as_str(),
+            "new-password"
+        );
+    }
+
+    #[test]
+    fn remembering_new_password_in_vault_requires_vault_password() {
         let error = match profile_from_editor_with_password(
             None,
             "new",
@@ -1377,8 +1445,9 @@ mod tests {
             "Password",
             "",
             "new-password",
+            true,
+            "encrypted-vault",
             "",
-            CredentialStorage::EncryptedVault,
             true,
             "",
             "115200",
@@ -1393,7 +1462,7 @@ mod tests {
         };
         assert!(error.to_string().contains("vault password"));
 
-        let (profile, change) = profile_from_editor_with_password(
+        let (profile, change, connection_password) = profile_from_editor_with_password(
             None,
             "new",
             "",
@@ -1404,8 +1473,9 @@ mod tests {
             "Password",
             "",
             "new-password",
+            true,
+            "encrypted-vault",
             "vault-password",
-            CredentialStorage::EncryptedVault,
             true,
             "",
             "115200",
@@ -1421,6 +1491,58 @@ mod tests {
             Some(CredentialStorage::EncryptedVault)
         );
         assert!(matches!(change, CredentialChange::Store { .. }));
+        assert_eq!(
+            connection_password
+                .expect("remembered password should also be used for immediate connection")
+                .as_str(),
+            "new-password"
+        );
+    }
+
+    #[test]
+    fn one_time_password_preserves_an_existing_remembered_credential() {
+        let mut existing = SessionProfile::new("old", "old.example", "alice");
+        existing
+            .ssh_mut()
+            .expect("profile should be SSH")
+            .credential_storage = Some(CredentialStorage::SystemKeyring);
+
+        let (profile, change, connection_password) = profile_from_editor_with_password(
+            Some(&existing),
+            "updated",
+            "",
+            "SSH",
+            "old.example",
+            "22",
+            "alice",
+            "Password",
+            "",
+            "temporary-password",
+            false,
+            "encrypted-vault",
+            "",
+            true,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        )
+        .expect("one-time password should update the connection draft");
+
+        assert_eq!(
+            profile.ssh().and_then(|ssh| ssh.credential_storage),
+            Some(CredentialStorage::SystemKeyring)
+        );
+        assert!(matches!(change, CredentialChange::None));
+        assert_eq!(
+            connection_password
+                .expect("one-time password should be available for connection")
+                .as_str(),
+            "temporary-password"
+        );
     }
 
     #[test]

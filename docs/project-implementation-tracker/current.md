@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260803-AUTHCONNECT01
-- 目标：为新建 SSH 会话增加“保存并连接”，并让认证弹窗按全局默认或用户当次选择安全记住密码存储后端。
-- 交付物：保存并连接动作、认证弹窗凭据后端选择、成功认证后按会话持久化后端引用、无凭据导出回归、双语文档和验证记录。
+- 目标 ID：20260804-OPTIONALPASSWORDSAVE01
+- 目标：将会话编辑器中的 SSH 密码输入与密码持久化解耦，默认支持一次性快速连接，只有用户明确选择记住密码时才要求凭据存储信息。
+- 交付物：可选的 Remember password/存储后端 UI、一次性密码跨主机密钥确认的短期内存链路、保存与连接分流回归、双语架构说明和验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/{app,session-editor,theme}.slint`、`ui/components/{overlay-host,security-dialogs}.slint`、`src/app/{connection,workspace,connection/request,connection/authentication}.rs`、相关状态/导出测试、双语架构/使用说明、项目地图与实施记录。
-- 不在本轮范围内：在会话编辑器或配置中保存明文密码/私钥口令、把任何凭据或其后端引用加入普通导出、改变主机密钥默认拒绝与确认顺序、修改加密保险库算法、导入参考项目源码或依赖。
+- 当前范围：`ui/{session-editor,workspace-shell,app}.slint`、`src/app/{workspace,state}.rs`、`src/app/connection/{request,host_key,authentication}.rs`、相关应用测试、双语架构说明与实施记录。
+- 不在本轮范围内：配置 schema、默认凭据后端设置、认证弹层的既有 Remember password 行为、SSH 主机密钥信任策略、明文凭据持久化、`third_package/axshell` 耦合和 GUI 截图验收。
 
 ## 当前状态
 
@@ -23,35 +23,36 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| FLOW1 | completed | 新建 SSH profile 的保存并连接动作 | Slint/Rust 联合编译、保存路由定向测试 | 保存成功后复用既有连接入口，先执行 host-key probe。 |
-| PROMPT2 | completed | 认证弹窗按设置默认并允许当次选择凭据后端 | 认证选择映射测试、完整测试、静态安全审阅 | 仅认证成功且勾选记住后持久化后端引用。 |
-| DOC3 | completed | 双语使用/架构契约和项目地图 | tracker validator、Markdown 结构审阅 | 普通导出继续无凭据。 |
-| VERIFY4 | completed | 全仓自动化门禁与差异安全审阅 | fmt/check/test/clippy/tracker/diff | 严格 Clippy 仍受既有基线 lint 阻挡；允许已记录基线后通过。GUI 视觉由用户在目标平台验收。 |
+| CONTRACT1 | completed | 编辑器密码使用与保存意图的跨层合同 | callback/状态链路审阅、focused tests | 默认一次性；只有明确记住时持久化。 |
+| UI2 | completed | Remember password、凭据后端与条件式保险库口令控件 | Slint/Cargo 联合编译 | 保险库口令仅在记住到 encrypted-vault 时显示。 |
+| FLOW3 | completed | 一次性密码跨保存、主机密钥确认和认证的短期内存链路 | workspace/state/connection focused tests | 不进入配置、Slint snapshot 或日志。 |
+| DOC4 | completed | 双语架构契约和跟踪记录 | tracker/Markdown 检查 | 保持安全边界说明对齐。 |
+| VERIFY5 | completed | 全仓 Rust/Slint 门禁与差异安全审阅 | fmt/check/clippy/test/diff | GUI 视觉由用户在目标平台验收。 |
 
 ## 已完成
 
-- 已确认现有认证弹窗在主机密钥确认之后出现，配置只保存 `credential_storage` 引用，密码由系统凭据库或 Argon2id + XChaCha20-Poly1305 加密保险库保存。
-- 已确认现有成功认证 monitor 才提交待保存密码；失败、迟到 attempt 或未勾选记住不会写入密码。
-- 已确认普通导出主动移除 `credential_storage` 和 `host_key_fingerprint`，导入还会重新分配 profile UUID 并再次清理安全字段。
-- 已确认设置中的全局 `credential_storage` 可以作为每次新认证弹窗的初始选择，不需要修改配置 schema。
-- 已实现新建 SSH 的 Save & connect、普通认证弹窗后端选择和成功认证后的 profile 后端引用持久化；私钥/vault 解锁流程不显示无关选择。
-- 已保持普通导出/导入清理、host-key 默认拒绝、密码不进入 profile JSON 和日志的既有安全边界。
+- 已确认现有编辑器把任何非空 SSH 密码都解释为持久化更新，因此默认 encrypted-vault 时会立即强制显示保险库口令。
+- 已确认认证弹层本身已有可选 Remember password 语义，可作为编辑器交互与后端选择的现有模式。
+- 已将编辑器默认改为一次性密码；Remember password 未勾选时不设置或更新 `credential_storage`，单独保存会明确提示密码未保存。
+- 已增加条件式凭据后端选择和保险库口令字段；只有 Remember password + encrypted-vault 同时成立时才要求保险库口令。
+- 已将一次性密码绑定到对应 Terminal Tab，并在主机密钥拒绝/失败、Tab 关闭、phase 回到 Idle 或 worker 取走秘密时清除。
+- 已同步中英文架构、使用说明和项目地图，明确默认一次性与显式保存语义。
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 109、应用 75、Doc tests 0）、tracker/Markdown/差异检查；严格全目标 Clippy 确认仅命中既有基线，允许清单后通过。
-- 未完成：目标平台 GUI 视觉、键盘焦点、真实 SSH 互操作和凭据后端手工验收。
+- 已完成：根指令、项目 skill、Rust/Slint 边界、项目地图、双语架构和现有凭据/连接代码审阅；`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 110、应用 82、Doc tests 0）、workspace 18 项 focused tests、一次性密码 Tab/host-key phase 回归、tracker validator、Markdown 相对链接和 `git diff --check`。
+- 未完成：目标平台 GUI 字段显隐、焦点顺序和真实 SSH 快速连接验收；严格全目标 Clippy 仍命中既有仓库基线。
 
 ## 风险与阻塞
 
-- 严格 `cargo clippy --all-targets --locked --offline -- -D warnings` 仍被既有配置、本地 shell、Telnet 和 worker lint 基线阻挡；本轮未扩大范围重构这些无关代码。
-- 认证弹窗新增选择控件后必须维持稳定高度、键盘焦点、秘密清理和 vault 解锁专用流程。
-- 保存并连接只能在 profile 成功落盘后启动；失败时保留编辑状态，不创建连接或泄露草稿秘密。
+- 一次性密码可能需要等待未知主机密钥确认；必须只由对应 Terminal Tab 短期持有，并在拒绝、失败、关闭或 worker 启动时立即清除。
+- 编辑既有已保存密码的 profile 时，未勾选 Remember password 只覆盖本次连接，不应隐式删除原有凭据引用。
+- `cargo clippy --all-targets --locked --offline -- -D warnings` 仍被既有 config/local shell/Telnet/SSH worker 与应用 lint 阻挡；允许这些已知类别后的补充运行仍命中既有 `items_after_test_module`、输入布尔式、large enum 和旧测试初始化 lint，本轮新增文件未出现独立 lint。
 
 ## 下一步
 
-- 用户在目标平台确认 Save & connect、弹窗焦点/高度、后端下拉选择、vault 口令条件和首次 host-key/认证顺序。
+- 用户在目标平台确认默认不显示 Vault password，勾选 Remember password 后按后端条件显示，并验证 **Save & connect** 不会再次询问 SSH 密码。
 
 ## 最后更新时间
 
-- 2026-08-03 18:55 +0800
+- 2026-08-04 14:12 +0800
