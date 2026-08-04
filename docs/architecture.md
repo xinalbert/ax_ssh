@@ -366,8 +366,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
     parent shows the matching up chevron. The compact rail alone uses a
     configurable 1-4 character badge derived from the group name, or the full
     group name in Full-name mode, rather than a folder icon. Full-name mode
-    widens the collapsed rail to a bounded 180px and wraps the label within a
-    stable four-line budget instead of clipping it in a compact square card.
+    widens the collapsed rail to a bounded 180px and switches to a dense list:
+    the header keeps the sidebar control at the trailing edge, Local Shell uses
+    an icon-and-label row, groups use a single-line label with disclosure and
+    count, and indented servers use their single-line names. Long labels elide
+    within stable-height rows and remain available through tooltips.
     A separate compact panel control is the only action that expands or
     collapses the sidebar. In the expanded sidebar it sits at the trailing
     edge of the Local Shell row; in the collapsed rail it remains a top control.

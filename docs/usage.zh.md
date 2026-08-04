@@ -108,7 +108,9 @@ Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独�
 名称，右侧为遮蔽后的 endpoint。**View > Toggle Session Sidebar** 可在此视图和紧凑
 Activity Bar 之间切换；紧凑栏默认使用 Group 名称前 1-4 个字符作为文字徽标，也可在
 **Settings > Workspace** 选择 **Full name** 显示完整组名。Full name 模式会将收起栏加宽到
-180px，并对长名称换行而不是截断。打开 Group 时会同时展开侧边栏和该 Group，紧凑栏行也提供相同的右键菜单。删除 Group 会把其中
+180px，并使用高密度单行列表：侧栏按钮位于标题行末端，Local Shell 显示图标和文字，Group
+显示展开尖角与数量，服务器缩进显示全名；长名称会省略并通过 tooltip 提供全文。紧凑栏行也
+提供相同的右键菜单。删除 Group 会把其中
 服务器移入 Ungrouped。最近选中的 Group 或服务器会在展开与收起侧栏中持续高亮，hover 和
 键盘焦点仍使用独立反馈。删除 profile 也会删除记住的密码，但不会关闭已经打开的终端 Tab。
 

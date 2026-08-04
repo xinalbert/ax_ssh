@@ -160,9 +160,11 @@ right. **View > Toggle Session Sidebar** switches between this view and the
 compact activity bar. The compact bar uses the first 1-4 characters of each
 group name by default; choose **Full name** in **Settings > Workspace** to show
 the complete group name. Full-name mode widens the collapsed rail to 180px and
-wraps long names instead of clipping them. Opening a group there expands the
-sidebar and that group. The same row context menus are available in the compact
-rail. The most recently selected group or server remains highlighted across
+uses a dense single-line list with a trailing sidebar control, labeled Local
+Shell action, group disclosure and counts, and indented full server names.
+Long labels are elided and available in tooltips. The same row context menus
+are available in the compact rail. The most recently selected group or server
+remains highlighted across
 expanded and compact sidebar views; hover and keyboard focus use separate
 feedback. Deleting a group moves its servers to Ungrouped. Deleting a profile
 also removes its remembered password but does not close terminal tabs that are
