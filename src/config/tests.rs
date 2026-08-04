@@ -108,7 +108,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             18,
             135,
             "light",
-            115,
+            11.5,
             false,
             true,
         ),
@@ -124,13 +124,13 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
                 custom_light: ThemePalette::axssh_light(),
                 custom_dark: ThemePalette::axssh_dark(),
             },
-            terminal_brightness_percent: 115,
+            terminal_minimum_contrast_ratio_tenths: 115,
             bright_bold_text: false,
             right_click_copy_or_paste: true,
         }
     );
     assert_eq!(
-        AppearanceSettings::normalized("", "", 100, 1_000, "unknown", 1_000, true, false,),
+        AppearanceSettings::normalized("", "", 100, 1_000, "unknown", 1_000.0, true, false,),
         AppearanceSettings {
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
@@ -138,7 +138,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_line_height_percent: MAX_TERMINAL_LINE_HEIGHT,
             terminal_color_scheme: TerminalColorScheme::Dark,
             theme: ThemeSettings::default(),
-            terminal_brightness_percent: MAX_TERMINAL_BRIGHTNESS,
+            terminal_minimum_contrast_ratio_tenths: MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
             bright_bold_text: true,
             right_click_copy_or_paste: false,
         }
@@ -173,8 +173,11 @@ fn legacy_appearance_migrates_into_versioned_settings() {
         TerminalColorScheme::Dark
     );
     assert_eq!(
-        store.settings.appearance.terminal_brightness_percent,
-        DEFAULT_TERMINAL_BRIGHTNESS
+        store
+            .settings
+            .appearance
+            .terminal_minimum_contrast_ratio_tenths,
+        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
     );
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
@@ -191,6 +194,36 @@ fn legacy_appearance_migrates_into_versioned_settings() {
         serialized["settings"]["appearance"]["terminal_line_height_percent"],
         DEFAULT_TERMINAL_LINE_HEIGHT
     );
+}
+
+#[test]
+fn version_sixteen_brightness_migrates_to_default_contrast_ratio() {
+    let json = r#"{
+        "version": 16,
+        "settings": {
+            "appearance": {
+                "terminal_brightness_percent": 140
+            }
+        }
+    }"#;
+
+    let store: SessionStore = serde_json::from_str(json).expect("version sixteen should migrate");
+
+    assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(
+        store
+            .settings
+            .appearance
+            .terminal_minimum_contrast_ratio_tenths,
+        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+    );
+    let serialized = serde_json::to_value(store).expect("migrated settings should serialize");
+    let appearance = &serialized["settings"]["appearance"];
+    assert_eq!(
+        appearance["terminal_minimum_contrast_ratio_tenths"],
+        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+    );
+    assert!(appearance.get("terminal_brightness_percent").is_none());
 }
 
 #[test]
@@ -491,7 +524,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
         100,
         -1,
         "solarized-dark",
-        -1,
+        -1.0,
         false,
         true,
         -1,
@@ -536,8 +569,8 @@ fn app_settings_clamp_all_persisted_dimensions() {
         TerminalColorScheme::SolarizedDark
     );
     assert_eq!(
-        settings.appearance.terminal_brightness_percent,
-        MIN_TERMINAL_BRIGHTNESS
+        settings.appearance.terminal_minimum_contrast_ratio_tenths,
+        MIN_TERMINAL_CONTRAST_RATIO_TENTHS
     );
     assert!(!settings.appearance.bright_bold_text);
     assert!(settings.appearance.right_click_copy_or_paste);

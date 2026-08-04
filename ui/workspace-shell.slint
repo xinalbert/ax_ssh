@@ -55,7 +55,7 @@ export component WorkspaceShell inherits Rectangle {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, int, int, int, bool, string, string,
+        string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -243,7 +243,7 @@ export component WorkspaceShell inherits Rectangle {
                         tab-id: root.view.settings_tab_id;
                         requested-section: root.requested-settings-section;
                         requested-section-revision: root.settings-section-request-revision;
-                        save(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                        save(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold, theme-mode, theme-palette,
                              theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                              theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                              theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -257,7 +257,7 @@ export component WorkspaceShell inherits Rectangle {
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                              settings-tab-id, close-after-save) => {
                             root.save-settings(
-                                application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                                application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold, theme-mode, theme-palette,
                                 theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                                 theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                                 theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,

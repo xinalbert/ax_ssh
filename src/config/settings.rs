@@ -4,14 +4,14 @@ use serde::{Deserialize, Serialize};
 use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
     DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER, DEFAULT_SIDEBAR_WIDTH,
-    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_BRIGHTNESS, DEFAULT_TERMINAL_COLUMNS,
+    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS,
     DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
     DEFAULT_TERMINAL_ROWS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
     MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS,
-    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_BRIGHTNESS, MAX_TERMINAL_COLUMNS,
+    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS, MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
     MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_ROWS,
     MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH,
-    MIN_TERMINAL_BRIGHTNESS, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
+    MIN_TERMINAL_COLUMNS, MIN_TERMINAL_CONTRAST_RATIO_TENTHS, MIN_TERMINAL_FONT_SIZE,
     MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_ROWS, SYSTEM_DEFAULT_SHELL, TerminalColorScheme,
     ThemeSettings,
 };
@@ -30,8 +30,8 @@ pub struct AppearanceSettings {
     pub terminal_color_scheme: TerminalColorScheme,
     #[serde(default)]
     pub theme: ThemeSettings,
-    #[serde(default = "default_terminal_brightness")]
-    pub terminal_brightness_percent: u16,
+    #[serde(default = "default_terminal_minimum_contrast_ratio_tenths")]
+    pub terminal_minimum_contrast_ratio_tenths: u16,
     #[serde(default = "default_true")]
     pub bright_bold_text: bool,
     #[serde(default, alias = "right_click_copies_selection")]
@@ -45,7 +45,7 @@ impl AppearanceSettings {
         terminal_font_size: i32,
         terminal_line_height_percent: i32,
         color_scheme: &str,
-        brightness_percent: i32,
+        minimum_contrast_ratio: f32,
         bright_bold_text: bool,
         right_click_copy_or_paste: bool,
     ) -> Self {
@@ -56,7 +56,7 @@ impl AppearanceSettings {
             terminal_font_size,
             terminal_line_height_percent,
             terminal_color_scheme,
-            brightness_percent,
+            minimum_contrast_ratio,
             bright_bold_text,
             right_click_copy_or_paste,
             ThemeSettings::from_terminal_color_scheme(terminal_color_scheme),
@@ -69,7 +69,7 @@ impl AppearanceSettings {
         terminal_font_size: i32,
         terminal_line_height_percent: i32,
         terminal_color_scheme: TerminalColorScheme,
-        brightness_percent: i32,
+        minimum_contrast_ratio: f32,
         bright_bold_text: bool,
         right_click_copy_or_paste: bool,
         theme: ThemeSettings,
@@ -93,10 +93,9 @@ impl AppearanceSettings {
             ) as u16,
             terminal_color_scheme,
             theme,
-            terminal_brightness_percent: brightness_percent.clamp(
-                i32::from(MIN_TERMINAL_BRIGHTNESS),
-                i32::from(MAX_TERMINAL_BRIGHTNESS),
-            ) as u16,
+            terminal_minimum_contrast_ratio_tenths: normalize_terminal_minimum_contrast_ratio(
+                minimum_contrast_ratio,
+            ),
             bright_bold_text,
             right_click_copy_or_paste,
         }
@@ -115,7 +114,7 @@ impl AppearanceSettings {
             i32::from(self.terminal_font_size),
             i32::from(self.terminal_line_height_percent),
             theme.terminal_color_scheme(),
-            i32::from(self.terminal_brightness_percent),
+            f32::from(self.terminal_minimum_contrast_ratio_tenths) / 10.0,
             self.bright_bold_text,
             self.right_click_copy_or_paste,
             theme,
@@ -132,7 +131,8 @@ impl Default for AppearanceSettings {
             terminal_line_height_percent: default_terminal_line_height(),
             terminal_color_scheme: TerminalColorScheme::default(),
             theme: ThemeSettings::default(),
-            terminal_brightness_percent: default_terminal_brightness(),
+            terminal_minimum_contrast_ratio_tenths: default_terminal_minimum_contrast_ratio_tenths(
+            ),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
         }
@@ -534,7 +534,7 @@ impl AppSettings {
         font_size: i32,
         line_height_percent: i32,
         color_scheme: &str,
-        brightness_percent: i32,
+        minimum_contrast_ratio: f32,
         bright_bold_text: bool,
         right_click_copy_or_paste: bool,
         scrollback_lines: i32,
@@ -564,7 +564,7 @@ impl AppSettings {
                 font_size,
                 line_height_percent,
                 color_scheme,
-                brightness_percent,
+                minimum_contrast_ratio,
                 bright_bold_text,
                 right_click_copy_or_paste,
             ),
@@ -667,8 +667,20 @@ const fn default_terminal_line_height() -> u16 {
     DEFAULT_TERMINAL_LINE_HEIGHT
 }
 
-const fn default_terminal_brightness() -> u16 {
-    DEFAULT_TERMINAL_BRIGHTNESS
+const fn default_terminal_minimum_contrast_ratio_tenths() -> u16 {
+    DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+}
+
+fn normalize_terminal_minimum_contrast_ratio(value: f32) -> u16 {
+    let tenths = if value.is_finite() {
+        (value * 10.0).round() as i32
+    } else {
+        i32::from(DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS)
+    };
+    tenths.clamp(
+        i32::from(MIN_TERMINAL_CONTRAST_RATIO_TENTHS),
+        i32::from(MAX_TERMINAL_CONTRAST_RATIO_TENTHS),
+    ) as u16
 }
 
 const fn default_true() -> bool {

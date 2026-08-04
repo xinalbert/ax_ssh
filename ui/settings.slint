@@ -25,7 +25,7 @@ export struct SettingsViewState {
     terminal_font_index: int,
     terminal_font_size: int,
     terminal_line_height_percent: int,
-    terminal_brightness_percent: int,
+    terminal_minimum_contrast_ratio: float,
     bright_bold_text: bool,
     theme_mode: string,
     theme_palette: string,
@@ -109,7 +109,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> terminal-font-index: root.source.terminal_font_index;
     private property <int> terminal-font-size: root.source.terminal_font_size;
     private property <int> terminal-line-height-percent: root.source.terminal_line_height_percent;
-    private property <int> terminal-brightness-percent: root.source.terminal_brightness_percent;
+    private property <float> terminal-minimum-contrast-ratio: root.source.terminal_minimum_contrast_ratio;
     private property <bool> bright-bold-text: root.source.bright_bold_text;
     private property <string> theme-mode: root.source.theme_mode;
     private property <string> theme-palette: root.source.theme_palette;
@@ -178,7 +178,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> app-version: root.source.app_version;
 
     callback save(
-        string, string, int, int, int, bool, string, string,
+        string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -204,7 +204,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-font-index: root.terminal-font-index;
     private property <int> draft-font-size: root.terminal-font-size;
     private property <int> draft-line-height-percent: root.terminal-line-height-percent;
-    private property <int> draft-brightness-percent: root.terminal-brightness-percent;
+    private property <float> draft-minimum-contrast-ratio: root.terminal-minimum-contrast-ratio;
     private property <bool> draft-bright-bold-text: root.bright-bold-text;
     private property <string> draft-theme-mode: root.theme-mode;
     private property <string> draft-theme-palette: root.theme-palette;
@@ -284,7 +284,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
-            root.draft-brightness-percent,
+            root.draft-minimum-contrast-ratio,
             root.draft-bright-bold-text,
             root.draft-theme-mode,
             root.draft-theme-palette,
@@ -349,7 +349,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
-            root.draft-brightness-percent,
+            root.draft-minimum-contrast-ratio,
             root.draft-bright-bold-text,
             root.draft-theme-mode,
             root.draft-theme-palette,
@@ -411,7 +411,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-font-family => { root.schedule-preview(); }
     changed draft-font-size => { root.schedule-preview(); }
     changed draft-line-height-percent => { root.schedule-preview(); }
-    changed draft-brightness-percent => { root.schedule-preview(); }
+    changed draft-minimum-contrast-ratio => { root.schedule-preview(); }
     changed draft-bright-bold-text => { root.schedule-preview(); }
     changed draft-theme-mode => { root.schedule-preview(); }
     changed draft-theme-palette => { root.schedule-preview(); }
@@ -624,7 +624,7 @@ export component SettingsPane inherits Rectangle {
                         draft-font-index <=> root.draft-font-index;
                         draft-font-size <=> root.draft-font-size;
                         draft-line-height-percent <=> root.draft-line-height-percent;
-                        draft-brightness-percent <=> root.draft-brightness-percent;
+                        draft-minimum-contrast-ratio <=> root.draft-minimum-contrast-ratio;
                         draft-bright-bold-text <=> root.draft-bright-bold-text;
                         draft-scrollback-lines <=> root.draft-scrollback-lines;
                         draft-right-click-copy-or-paste <=> root.draft-right-click-copy-or-paste;

@@ -360,7 +360,9 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
             default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
             default_background: to_rgb_color(ui.get_theme_terminal_background()),
             selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
-            brightness_percent: ui.get_terminal_brightness_percent().clamp(60, 140) as u16,
+            minimum_contrast_ratio: f64::from(
+                ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
+            ),
             bright_bold_text: ui.get_bright_bold_text(),
         },
     );
@@ -461,7 +463,9 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_terminal_line_height_percent(i32::from(
         settings.appearance.terminal_line_height_percent,
     ));
-    ui.set_terminal_brightness_percent(i32::from(settings.appearance.terminal_brightness_percent));
+    ui.set_terminal_minimum_contrast_ratio(
+        f32::from(settings.appearance.terminal_minimum_contrast_ratio_tenths) / 10.0,
+    );
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
     ui.set_option_as_meta(settings.terminal.option_as_meta);

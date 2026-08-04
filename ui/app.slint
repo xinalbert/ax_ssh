@@ -101,7 +101,7 @@ export component AppWindow inherits Window {
     in property <int> terminal-font-size: 14;
     in property <int> terminal-line-height-percent: 120;
     out property <string> terminal-color-scheme: Theme.terminal-color-scheme;
-    in property <int> terminal-brightness-percent: 100;
+    in property <float> terminal-minimum-contrast-ratio: 4.5;
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
     in property <bool> option-as-meta: false;
@@ -233,7 +233,7 @@ export component AppWindow inherits Window {
             terminal_font_family: root.terminal-font-family,
             terminal_font_options: root.terminal-font-options, terminal_font_index: root.terminal-font-index,
             terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
-            terminal_brightness_percent: root.terminal-brightness-percent, bright_bold_text: root.bright-bold-text,
+            terminal_minimum_contrast_ratio: root.terminal-minimum-contrast-ratio, bright_bold_text: root.bright-bold-text,
             theme_mode: root.theme-mode, theme_palette: root.theme-palette,
             theme_light_background: root.theme-light-background, theme_light_panel: root.theme-light-panel,
             theme_light_panel_alt: root.theme-light-panel-alt, theme_light_border: root.theme-light-border,
@@ -320,7 +320,7 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, int, int, int, bool, string, string,
+        string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -528,7 +528,7 @@ export component AppWindow inherits Window {
             activate-tab(id) => { root.activate-tab(id); }
             close-tab(id) => { root.close-tab(id); }
             move-tab(id, target-index) => { root.move-tab(id, target-index); }
-            save-settings(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+            save-settings(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold, theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                           theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                           theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,
@@ -541,7 +541,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           settings-tab-id, close-after-save) => {
-                root.save-settings(application-font, terminal-font, size, line-height, brightness, bright-bold, theme-mode, theme-palette,
+                root.save-settings(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold, theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                     theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
                     theme-light-danger, theme-light-overlay, theme-light-terminal-foreground,

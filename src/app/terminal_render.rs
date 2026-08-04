@@ -24,7 +24,7 @@ pub(super) struct TerminalRenderSettings {
     pub(super) default_foreground: RgbColor,
     pub(super) default_background: RgbColor,
     pub(super) selection_background: RgbColor,
-    pub(super) brightness_percent: u16,
+    pub(super) minimum_contrast_ratio: f64,
     pub(super) bright_bold_text: bool,
 }
 
@@ -64,10 +64,10 @@ pub(super) fn render_terminal(
     palette.foreground = settings.default_foreground;
     palette.background = settings.default_background;
     palette.selection_background = settings.selection_background;
-    let foreground = adjust_contrast(
+    let foreground = ensure_contrast_ratio(
         palette.foreground,
         palette.background,
-        settings.brightness_percent,
+        settings.minimum_contrast_ratio,
     );
     let lines = snapshot
         .lines
@@ -143,12 +143,15 @@ fn resolve_style_colors(
     if style.inverse {
         std::mem::swap(&mut foreground, &mut background);
     }
-    foreground = adjust_contrast(foreground, palette.background, settings.brightness_percent);
-    if background != palette.background {
-        background = adjust_contrast(background, palette.background, settings.brightness_percent);
-    }
     if style.dim {
         foreground = blend(foreground, background, 55);
+        foreground = ensure_contrast_ratio(
+            foreground,
+            background,
+            settings.minimum_contrast_ratio / 2.0,
+        );
+    } else {
+        foreground = ensure_contrast_ratio(foreground, background, settings.minimum_contrast_ratio);
     }
     (foreground, background)
 }
@@ -180,17 +183,61 @@ fn indexed_color(index: u8, palette: &TerminalPalette) -> RgbColor {
     }
 }
 
-fn adjust_contrast(color: RgbColor, background: RgbColor, percent: u16) -> RgbColor {
-    let percent = percent.clamp(60, 140);
-    if percent <= 100 {
-        return blend(background, color, percent as u8);
+fn ensure_contrast_ratio(color: RgbColor, background: RgbColor, ratio: f64) -> RgbColor {
+    let ratio = ratio.clamp(1.0, 21.0);
+    if contrast_ratio(color, background) >= ratio {
+        return color;
     }
-    let target = if relative_luminance(background) > 127 {
-        RgbColor::new(0, 0, 0)
-    } else {
-        RgbColor::new(255, 255, 255)
+
+    let white = adjust_toward(color, background, RgbColor::new(255, 255, 255), ratio);
+    let black = adjust_toward(color, background, RgbColor::new(0, 0, 0), ratio);
+    match (white, black) {
+        (Some((white, white_steps)), Some((black, black_steps))) => {
+            if white_steps <= black_steps {
+                white
+            } else {
+                black
+            }
+        }
+        (Some((white, _)), None) => white,
+        (None, Some((black, _))) => black,
+        (None, None) => color,
+    }
+}
+
+fn adjust_toward(
+    color: RgbColor,
+    background: RgbColor,
+    target: RgbColor,
+    ratio: f64,
+) -> Option<(RgbColor, u16)> {
+    if contrast_ratio(target, background) < ratio {
+        return None;
+    }
+
+    let mut low = 1u16;
+    let mut high = 255u16;
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let candidate = blend_steps(color, target, middle);
+        if contrast_ratio(candidate, background) >= ratio {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    Some((blend_steps(color, target, low), low))
+}
+
+fn blend_steps(from: RgbColor, to: RgbColor, steps: u16) -> RgbColor {
+    let channel = |from: u8, to: u8| {
+        ((u16::from(from) * (255 - steps) + u16::from(to) * steps + 127) / 255) as u8
     };
-    blend(color, target, ((percent - 100) * 100 / 40) as u8)
+    RgbColor::new(
+        channel(from.red, to.red),
+        channel(from.green, to.green),
+        channel(from.blue, to.blue),
+    )
 }
 
 fn blend(from: RgbColor, to: RgbColor, to_percent: u8) -> RgbColor {
@@ -206,8 +253,24 @@ fn blend(from: RgbColor, to: RgbColor, to_percent: u8) -> RgbColor {
     )
 }
 
-fn relative_luminance(color: RgbColor) -> u16 {
-    (u16::from(color.red) * 54 + u16::from(color.green) * 183 + u16::from(color.blue) * 19) / 256
+fn contrast_ratio(first: RgbColor, second: RgbColor) -> f64 {
+    let first = relative_luminance(first);
+    let second = relative_luminance(second);
+    let lighter = first.max(second);
+    let darker = first.min(second);
+    (lighter + 0.05) / (darker + 0.05)
+}
+
+fn relative_luminance(color: RgbColor) -> f64 {
+    let linear = |channel: u8| {
+        let channel = f64::from(channel) / 255.0;
+        if channel <= 0.04045 {
+            channel / 12.92
+        } else {
+            ((channel + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    linear(color.red) * 0.2126 + linear(color.green) * 0.7152 + linear(color.blue) * 0.0722
 }
 
 struct TerminalPalette {
@@ -414,7 +477,7 @@ mod tests {
             default_foreground: RgbColor::new(204, 204, 204),
             default_background: RgbColor::new(30, 30, 30),
             selection_background: RgbColor::new(38, 79, 120),
-            brightness_percent: 100,
+            minimum_contrast_ratio: 4.5,
             bright_bold_text: true,
         }
     }
@@ -448,9 +511,11 @@ mod tests {
             settings(),
         );
 
-        assert_eq!(
-            rendered.lines[0].runs[0].foreground,
-            RgbColor::new(0, 0, 255)
+        assert!(
+            contrast_ratio(
+                rendered.lines[0].runs[0].foreground,
+                rendered.lines[0].runs[0].background,
+            ) >= 4.5
         );
         assert_eq!(
             rendered.lines[0].runs[0].background,
@@ -479,9 +544,11 @@ mod tests {
             default_rendered.selection_background,
             RgbColor::new(48, 64, 80)
         );
-        assert_eq!(
-            indexed_rendered.lines[0].runs[0].foreground,
-            RgbColor::new(205, 49, 49)
+        assert!(
+            contrast_ratio(
+                indexed_rendered.lines[0].runs[0].foreground,
+                themed.default_background,
+            ) >= 4.5
         );
     }
 
@@ -501,17 +568,54 @@ mod tests {
     }
 
     #[test]
-    fn brightness_moves_colors_toward_or_away_from_background() {
+    fn minimum_contrast_preserves_readable_colors_and_backgrounds() {
         let palette = TerminalPalette::for_scheme(TerminalColorScheme::Dark);
         let color = RgbColor::new(100, 120, 140);
+        let background = RgbColor::new(220, 230, 240);
+        let rendered = render_terminal(
+            snapshot(TerminalStyle {
+                foreground: TerminalColor::Rgb {
+                    red: color.red,
+                    green: color.green,
+                    blue: color.blue,
+                },
+                background: TerminalColor::Rgb {
+                    red: background.red,
+                    green: background.green,
+                    blue: background.blue,
+                },
+                ..TerminalStyle::default()
+            }),
+            TerminalRenderSettings {
+                minimum_contrast_ratio: 4.5,
+                ..settings()
+            },
+        );
+        let run = &rendered.lines[0].runs[0];
 
-        assert!(
-            relative_luminance(adjust_contrast(color, palette.background, 60))
-                < relative_luminance(color)
+        assert_eq!(run.background, background);
+        assert_ne!(run.foreground, color);
+        assert!(contrast_ratio(run.foreground, background) >= 4.5);
+        assert_eq!(
+            render_terminal(
+                snapshot(TerminalStyle {
+                    foreground: TerminalColor::Rgb {
+                        red: color.red,
+                        green: color.green,
+                        blue: color.blue,
+                    },
+                    ..TerminalStyle::default()
+                }),
+                TerminalRenderSettings {
+                    minimum_contrast_ratio: 1.0,
+                    ..settings()
+                },
+            )
+            .lines[0]
+                .runs[0]
+                .foreground,
+            color
         );
-        assert!(
-            relative_luminance(adjust_contrast(color, palette.background, 140))
-                > relative_luminance(color)
-        );
+        assert_eq!(palette.background, RgbColor::new(30, 30, 30));
     }
 }
