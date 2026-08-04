@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,6 +11,17 @@ use super::{
     PREVIOUS_DEFAULT_SIDEBAR_WIDTH, TERMINAL_CONTRAST_SCHEMA_VERSION,
     THEME_SETTINGS_SCHEMA_VERSION, ThemeSettings, WORKSPACE_DENSITY_SCHEMA_VERSION,
 };
+
+pub const MAX_SESSION_NAME_CHARS: usize = 128;
+pub const MAX_HOST_CHARS: usize = 512;
+pub const MAX_USERNAME_CHARS: usize = 256;
+pub const MAX_PRIVATE_KEY_PATH_CHARS: usize = 4_096;
+pub(crate) const MAX_SESSION_PROFILES: usize = 1_024;
+pub(crate) const MAX_GROUPS: usize = 256;
+const MAX_GROUP_NAME_CHARS: usize = 64;
+const MAX_HOST_KEY_FINGERPRINT_CHARS: usize = 256;
+const MAX_SERIAL_PORT_CHARS: usize = 512;
+const MAX_USB_SERIAL_CHARS: usize = 256;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -327,13 +338,14 @@ impl<'de> Deserialize<'de> for SessionProfile {
                 x11_forwarding: wire.x11_forwarding.unwrap_or(true),
             })
         };
-        validate_connection_consistency(&connection).map_err(serde::de::Error::custom)?;
-        Ok(Self {
+        let profile = Self {
             id: wire.id,
             name: wire.name,
             group_name: wire.group_name,
             connection,
-        })
+        };
+        profile.validate().map_err(serde::de::Error::custom)?;
+        Ok(profile)
     }
 }
 
@@ -420,9 +432,7 @@ impl SessionProfile {
     }
 
     pub fn validate(&self) -> Result<()> {
-        if self.name.trim().is_empty() {
-            anyhow::bail!("session name cannot be empty");
-        }
+        validate_required_text("session name", &self.name, MAX_SESSION_NAME_CHARS)?;
         validate_group_name(&self.group_name, true)?;
         validate_connection_consistency(&self.connection)?;
         Ok(())
@@ -437,13 +447,19 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
     match connection {
         ConnectionProfile::Ssh(config) => {
             validate_host_and_port(&config.host, config.port)?;
-            if config.username.trim().is_empty() {
-                anyhow::bail!("username cannot be empty");
+            validate_required_text("username", &config.username, MAX_USERNAME_CHARS)?;
+            if let Some(fingerprint) = &config.host_key_fingerprint {
+                validate_optional_text(
+                    "host-key fingerprint",
+                    fingerprint,
+                    MAX_HOST_KEY_FINGERPRINT_CHARS,
+                )?;
             }
             if let AuthMethod::PrivateKey { path } = &config.auth {
-                if path.as_os_str().is_empty() {
-                    anyhow::bail!("private key path cannot be empty");
-                }
+                let path = path
+                    .to_str()
+                    .context("private key path must be valid UTF-8")?;
+                validate_required_text("private key path", path, MAX_PRIVATE_KEY_PATH_CHARS)?;
                 if config.credential_storage.is_some() {
                     anyhow::bail!("private-key profiles cannot store password credentials");
                 }
@@ -455,14 +471,16 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
             if port_name.is_empty() {
                 anyhow::bail!("serial port cannot be empty");
             }
-            if port_name.chars().count() > 512 || port_name.chars().any(char::is_control) {
+            if port_name.chars().count() > MAX_SERIAL_PORT_CHARS
+                || port_name.chars().any(char::is_control)
+            {
                 anyhow::bail!("serial port name is invalid");
             }
             if config.baud_rate == 0 || config.baud_rate > 12_000_000 {
                 anyhow::bail!("serial baud rate must be between 1 and 12000000");
             }
             if let Some(serial_number) = &config.usb_serial_number
-                && (serial_number.chars().count() > 256
+                && (serial_number.chars().count() > MAX_USB_SERIAL_CHARS
                     || serial_number.chars().any(char::is_control))
             {
                 anyhow::bail!("USB serial number is invalid");
@@ -473,11 +491,26 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
 }
 
 fn validate_host_and_port(host: &str, port: u16) -> Result<()> {
-    if host.trim().is_empty() {
-        anyhow::bail!("host cannot be empty");
-    }
+    validate_required_text("host", host, MAX_HOST_CHARS)?;
     if port == 0 {
         anyhow::bail!("port must be between 1 and 65535");
+    }
+    Ok(())
+}
+
+fn validate_required_text(label: &str, value: &str, max_chars: usize) -> Result<()> {
+    if value.trim().is_empty() {
+        anyhow::bail!("{label} cannot be empty");
+    }
+    validate_optional_text(label, value, max_chars)
+}
+
+fn validate_optional_text(label: &str, value: &str, max_chars: usize) -> Result<()> {
+    if value.chars().count() > max_chars {
+        anyhow::bail!("{label} cannot exceed {max_chars} characters");
+    }
+    if value.chars().any(char::is_control) {
+        anyhow::bail!("{label} cannot contain control characters");
     }
     Ok(())
 }
@@ -496,8 +529,8 @@ fn validate_group_name(value: &str, allow_empty: bool) -> Result<()> {
     if !allow_empty && value.is_empty() {
         anyhow::bail!("group name cannot be empty");
     }
-    if value.chars().count() > 64 {
-        anyhow::bail!("group name cannot exceed 64 characters");
+    if value.chars().count() > MAX_GROUP_NAME_CHARS {
+        anyhow::bail!("group name cannot exceed {MAX_GROUP_NAME_CHARS} characters");
     }
     if value.chars().any(char::is_control) {
         anyhow::bail!("group name cannot contain control characters");
@@ -546,6 +579,16 @@ impl<'de> Deserialize<'de> for SessionStore {
         D: serde::Deserializer<'de>,
     {
         let wire = SessionStoreWire::deserialize(deserializer)?;
+        if wire.groups.len() > MAX_GROUPS {
+            return Err(serde::de::Error::custom(format!(
+                "session store cannot exceed {MAX_GROUPS} groups"
+            )));
+        }
+        if wire.sessions.len() > MAX_SESSION_PROFILES {
+            return Err(serde::de::Error::custom(format!(
+                "session store cannot exceed {MAX_SESSION_PROFILES} profiles"
+            )));
+        }
         let mut settings = wire.settings.unwrap_or_default();
         if let Some(appearance) = wire.appearance
             && settings.appearance == AppearanceSettings::default()
@@ -583,11 +626,28 @@ impl<'de> Deserialize<'de> for SessionStore {
             settings,
         };
         store.normalize_groups();
+        store.validate().map_err(serde::de::Error::custom)?;
         Ok(store)
     }
 }
 
 impl SessionStore {
+    pub(crate) fn validate(&self) -> Result<()> {
+        if self.groups.len() > MAX_GROUPS {
+            anyhow::bail!("session store cannot exceed {MAX_GROUPS} groups");
+        }
+        if self.sessions.len() > MAX_SESSION_PROFILES {
+            anyhow::bail!("session store cannot exceed {MAX_SESSION_PROFILES} profiles");
+        }
+        for group in &self.groups {
+            validate_group_name(group, false)?;
+        }
+        for profile in &self.sessions {
+            profile.validate()?;
+        }
+        Ok(())
+    }
+
     pub fn upsert(&mut self, mut profile: SessionProfile) {
         profile.group_name = normalize_group_name(&profile.group_name);
         if !profile.group_name.is_empty() && !self.groups.contains(&profile.group_name) {

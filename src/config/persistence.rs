@@ -1,11 +1,12 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
+use uuid::Uuid;
 
-use super::SessionStore;
+use super::{MAX_CONFIG_FILE_BYTES, SessionStore};
 
 /// Private persistence boundary for the versioned session store and vault files.
 #[derive(Clone, Debug)]
@@ -28,14 +29,41 @@ impl ConfigStore {
         if !self.path.exists() {
             return Ok(SessionStore::default());
         }
-        let bytes = fs::read(&self.path)
+        let file = File::open(&self.path)
+            .with_context(|| format!("failed to open {}", self.path.display()))?;
+        let metadata = file
+            .metadata()
+            .with_context(|| format!("failed to inspect {}", self.path.display()))?;
+        if metadata.len() > MAX_CONFIG_FILE_BYTES as u64 {
+            anyhow::bail!(
+                "session store {} exceeds the {} byte limit",
+                self.path.display(),
+                MAX_CONFIG_FILE_BYTES
+            );
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take((MAX_CONFIG_FILE_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
             .with_context(|| format!("failed to read {}", self.path.display()))?;
+        if bytes.len() > MAX_CONFIG_FILE_BYTES {
+            anyhow::bail!(
+                "session store {} exceeds the {} byte limit",
+                self.path.display(),
+                MAX_CONFIG_FILE_BYTES
+            );
+        }
         serde_json::from_slice(&bytes)
             .with_context(|| format!("invalid session store {}", self.path.display()))
     }
 
     pub fn save(&self, store: &SessionStore) -> Result<()> {
+        store
+            .validate()
+            .context("session store validation failed")?;
         let bytes = serde_json::to_vec_pretty(store).context("failed to encode session store")?;
+        if bytes.len() > MAX_CONFIG_FILE_BYTES {
+            anyhow::bail!("encoded session store exceeds the {MAX_CONFIG_FILE_BYTES} byte limit");
+        }
         write_private_file_atomically(&self.path, &bytes)
     }
 
@@ -50,35 +78,100 @@ pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result
             .with_context(|| format!("failed to create {}", parent.display()))?;
         set_private_directory_permissions(parent);
     }
-    let temporary = path.with_extension("tmp");
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
+    let (mut file, mut temporary) = create_private_temporary_file(path)?;
     // ReplaceFileW requires the replacement file handle to be closed first.
-    {
-        let mut file = options
-            .open(&temporary)
-            .with_context(|| format!("failed to open {}", temporary.display()))?;
-        file.write_all(bytes)
-            .and_then(|_| file.sync_all())
-            .with_context(|| format!("failed to write {}", temporary.display()))?;
-    }
-    replace_file_atomically(&temporary, path).with_context(|| {
+    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
+    drop(file);
+    write_result.with_context(|| format!("failed to write {}", temporary.path().display()))?;
+    replace_file_atomically(temporary.path(), path).with_context(|| {
         format!(
             "failed to atomically replace {} with {}",
             path.display(),
-            temporary.display()
+            temporary.path().display()
         )
     })?;
+    temporary.disarm();
     set_private_file_permissions(path);
     if let Some(parent) = path.parent() {
         sync_parent_directory(parent);
     }
     Ok(())
+}
+
+fn create_private_temporary_file(path: &Path) -> Result<(File, TemporaryPath)> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .context("private persistence path must include a file name")?;
+    for _ in 0..8 {
+        let mut temporary_name = std::ffi::OsString::from(".");
+        temporary_name.push(file_name);
+        temporary_name.push(format!(".{}.tmp", Uuid::new_v4()));
+        let temporary_path = parent.join(temporary_name);
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            options.mode(0o600);
+        }
+        match options.open(&temporary_path) {
+            Ok(file) => {
+                let metadata = match file.metadata() {
+                    Ok(metadata) => metadata,
+                    Err(error) => {
+                        drop(file);
+                        let _ = fs::remove_file(&temporary_path);
+                        return Err(error).with_context(|| {
+                            format!("failed to inspect {}", temporary_path.display())
+                        });
+                    }
+                };
+                if !metadata.is_file() {
+                    drop(file);
+                    let _ = fs::remove_file(&temporary_path);
+                    anyhow::bail!(
+                        "private persistence temporary path is not a regular file: {}",
+                        temporary_path.display()
+                    );
+                }
+                return Ok((file, TemporaryPath::new(temporary_path)));
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to create {}", temporary_path.display()));
+            }
+        }
+    }
+    anyhow::bail!("failed to allocate a unique private persistence temporary file")
+}
+
+struct TemporaryPath {
+    path: PathBuf,
+    armed: bool,
+}
+
+impl TemporaryPath {
+    fn new(path: PathBuf) -> Self {
+        Self { path, armed: true }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for TemporaryPath {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -162,5 +255,44 @@ fn replace_file_atomically(temporary: &Path, destination: &Path) -> io::Result<(
         Ok(())
     } else {
         Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_does_not_follow_the_legacy_tmp_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("ax-ssh-atomic-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("test directory should be created");
+        let destination = root.join("sessions.json");
+        let victim = root.join("victim.json");
+        let legacy_temporary = destination.with_extension("tmp");
+        fs::write(&victim, b"unchanged").expect("victim fixture should be written");
+        symlink(&victim, &legacy_temporary).expect("legacy temporary symlink should be created");
+
+        write_private_file_atomically(&destination, b"new session data")
+            .expect("atomic write should use a unique temporary file");
+
+        assert_eq!(
+            fs::read(&victim).expect("victim should remain readable"),
+            b"unchanged"
+        );
+        assert_eq!(
+            fs::read(&destination).expect("destination should be written"),
+            b"new session data"
+        );
+        assert!(
+            fs::symlink_metadata(&legacy_temporary)
+                .expect("legacy symlink should remain present")
+                .file_type()
+                .is_symlink()
+        );
+
+        fs::remove_dir_all(root).expect("test directory should be removed");
     }
 }

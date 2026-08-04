@@ -15,10 +15,13 @@ mod tests;
 pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{
-    AuthMethod, ConnectionProfile, CredentialStorage, SerialConfig, SerialDataBits,
-    SerialFlowControl, SerialParity, SerialStopBits, SessionProfile, SessionProtocol, SessionStore,
-    SshConfig, TelnetConfig, normalize_group_name,
+    AuthMethod, ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
+    MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialConfig, SerialDataBits, SerialFlowControl,
+    SerialParity, SerialStopBits, SessionProfile, SessionProtocol, SessionStore, SshConfig,
+    TelnetConfig, normalize_group_name,
 };
+#[cfg(test)]
+use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
     AppSettings, AppearanceSettings, ShortcutSettings, TerminalSettings, WorkspaceSettings,
     X11ServerProvider, X11Settings,
@@ -57,6 +60,7 @@ pub const MIN_COLLAPSED_GROUP_LABEL_CHARS: u8 = 0;
 pub const MAX_COLLAPSED_GROUP_LABEL_CHARS: u8 = 4;
 pub const SYSTEM_DEFAULT_SHELL: &str = "System default";
 pub const DEFAULT_SESSION_MASK_CHARACTER: &str = "*";
+pub(crate) const MAX_CONFIG_FILE_BYTES: usize = 8 * 1024 * 1024;
 const DEFAULT_TERMINAL_FONT_SIZE: u16 = 14;
 const DEFAULT_TERMINAL_LINE_HEIGHT: u16 = 120;
 const DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS: u16 = 45;

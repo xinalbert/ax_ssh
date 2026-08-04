@@ -6,10 +6,6 @@ const SESSION_TRANSFER_FORMAT: &str = "axssh-session-export";
 const SESSION_TRANSFER_VERSION: u32 = 1;
 const MAX_SESSION_TRANSFER_BYTES: usize = 256 * 1024;
 const MAX_SESSION_TRANSFER_PROFILES: usize = 128;
-const MAX_TRANSFER_SESSION_NAME_CHARS: usize = 128;
-const MAX_TRANSFER_HOST_CHARS: usize = 512;
-const MAX_TRANSFER_USERNAME_CHARS: usize = 256;
-const MAX_TRANSFER_KEY_PATH_CHARS: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -677,27 +673,23 @@ fn validate_session_transfer(envelope: &SessionTransferEnvelope) -> Result<()> {
 
 fn validate_transferred_profile(profile: &SessionProfile) -> Result<()> {
     profile.validate()?;
-    validate_transfer_text(
-        "session name",
-        &profile.name,
-        MAX_TRANSFER_SESSION_NAME_CHARS,
-    )?;
+    validate_transfer_text("session name", &profile.name, MAX_SESSION_NAME_CHARS)?;
     match &profile.connection {
         ConnectionProfile::Ssh(ssh) => {
-            validate_transfer_text("SSH host", &ssh.host, MAX_TRANSFER_HOST_CHARS)?;
-            validate_transfer_text("SSH username", &ssh.username, MAX_TRANSFER_USERNAME_CHARS)?;
+            validate_transfer_text("SSH host", &ssh.host, MAX_HOST_CHARS)?;
+            validate_transfer_text("SSH username", &ssh.username, MAX_USERNAME_CHARS)?;
             if let AuthMethod::PrivateKey { path } = &ssh.auth {
                 let path = path
                     .to_str()
                     .context("private key path must use valid Unicode")?;
-                validate_transfer_text("private key path", path, MAX_TRANSFER_KEY_PATH_CHARS)?;
+                validate_transfer_text("private key path", path, MAX_PRIVATE_KEY_PATH_CHARS)?;
             }
         }
         ConnectionProfile::Telnet(telnet) => {
-            validate_transfer_text("Telnet host", &telnet.host, MAX_TRANSFER_HOST_CHARS)?;
+            validate_transfer_text("Telnet host", &telnet.host, MAX_HOST_CHARS)?;
         }
         ConnectionProfile::Serial(serial) => {
-            validate_transfer_text("serial port", &serial.port_name, MAX_TRANSFER_HOST_CHARS)?;
+            validate_transfer_text("serial port", &serial.port_name, MAX_HOST_CHARS)?;
             if let Some(serial_number) = &serial.usb_serial_number {
                 validate_transfer_text("USB serial number", serial_number, 256)?;
             }
@@ -917,7 +909,7 @@ fn unique_imported_session_name(sessions: &SessionStore, name: &str) -> Result<S
         } else {
             format!(" Copy {copy_number}")
         };
-        let stem_limit = MAX_TRANSFER_SESSION_NAME_CHARS.saturating_sub(suffix.chars().count());
+        let stem_limit = MAX_SESSION_NAME_CHARS.saturating_sub(suffix.chars().count());
         let stem = name.chars().take(stem_limit).collect::<String>();
         let candidate = format!("{}{suffix}", stem.trim_end());
         if !sessions
@@ -1251,6 +1243,7 @@ fn profile_from_editor_with_password(
         profile.id = existing.id;
     }
     profile.group_name = normalize_group_name(group_name);
+    profile.validate()?;
     Ok((profile, credential_change, connection_password))
 }
 

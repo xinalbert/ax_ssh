@@ -20,6 +20,70 @@ fn profile_validation_rejects_missing_host() {
 }
 
 #[test]
+fn profile_validation_enforces_shared_text_limits() {
+    let mut profile = SessionProfile::new(
+        "x".repeat(MAX_SESSION_NAME_CHARS + 1),
+        "host.example",
+        "alice",
+    );
+    assert!(profile.validate().is_err());
+
+    profile.name = "demo".to_owned();
+    ssh_mut(&mut profile).host = "bad\nhost".to_owned();
+    assert!(profile.validate().is_err());
+
+    ssh_mut(&mut profile).host = "host.example".to_owned();
+    ssh_mut(&mut profile).username = "x".repeat(MAX_USERNAME_CHARS + 1);
+    assert!(profile.validate().is_err());
+
+    ssh_mut(&mut profile).username = "alice".to_owned();
+    ssh_mut(&mut profile).auth = AuthMethod::PrivateKey {
+        path: PathBuf::from("x".repeat(MAX_PRIVATE_KEY_PATH_CHARS + 1)),
+    };
+    assert!(profile.validate().is_err());
+}
+
+#[test]
+fn profile_deserialization_rejects_invalid_normal_fields() {
+    let profile = SessionProfile::new("bad\nname", "host.example", "alice");
+    let json = serde_json::to_string(&profile).expect("invalid fixture should still serialize");
+
+    assert!(serde_json::from_str::<SessionProfile>(&json).is_err());
+}
+
+#[test]
+fn store_validation_enforces_group_and_profile_count_limits() {
+    let mut groups = SessionStore::default();
+    groups.groups = (0..=MAX_GROUPS)
+        .map(|index| format!("group-{index}"))
+        .collect();
+    assert!(groups.validate().is_err());
+
+    let template = SessionProfile::new("demo", "host.example", "alice");
+    let mut profiles = SessionStore::default();
+    profiles.sessions = (0..=MAX_SESSION_PROFILES)
+        .map(|_| SessionProfile {
+            id: Uuid::new_v4(),
+            ..template.clone()
+        })
+        .collect();
+    assert!(profiles.validate().is_err());
+}
+
+#[test]
+fn config_load_rejects_oversized_files_before_deserialization() {
+    let path = std::env::temp_dir().join(format!("ax-ssh-oversized-{}.json", Uuid::new_v4()));
+    fs::write(&path, vec![b' '; MAX_CONFIG_FILE_BYTES + 1])
+        .expect("oversized config fixture should be written");
+
+    let error = ConfigStore::new(&path)
+        .load()
+        .expect_err("oversized config should be rejected");
+    assert!(error.to_string().contains("exceeds"));
+    let _ = fs::remove_file(path);
+}
+
+#[test]
 fn store_round_trips_and_upserts() {
     let temp = std::env::temp_dir().join(format!("ax-ssh-{}", Uuid::new_v4()));
     let store = ConfigStore::new(&temp);
