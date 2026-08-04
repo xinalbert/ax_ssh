@@ -1,7 +1,6 @@
-import { SpinBox } from "std-widgets.slint";
+import { ComboBox, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
-import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
     in property <[string]> local-shell-options;
@@ -15,7 +14,7 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: "Local shell";
         description: "Executable used for new local terminal tabs";
         SettingsField {
-            ThemedComboBox {
+            ComboBox {
                 height: Theme.settings-control-height;
                 model: root.local-shell-options;
                 current-index <=> root.draft-local-shell-index;
@@ -28,7 +27,7 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: "Remembered password storage";
         description: "Used for remembered passwords and new passwords entered in the session editor";
         SettingsField {
-            ThemedComboBox {
+            ComboBox {
                 height: Theme.settings-control-height;
                 model: ["System credential store", "Encrypted application vault"];
                 current-index: root.draft-credential-storage == "encrypted-vault" ? 1 : 0;
