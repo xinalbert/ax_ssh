@@ -130,7 +130,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    工作区 Tab 顺序是仅在内存中的展示状态：拖拽释放会把 Tab UUID 和受限目标位置交给
    `AppState`，它只重排现有 Tab 列表。按住期间 Slint 保留半透明的源槽、高亮目标槽，
    并在指针位置绘制不可交互的 Tab 副本；不会创建第二个运行时 Tab。前置 UI 序号从当前
-   列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。每个 SSH Tab 还独占当前
+   列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。Previous/Next Tab 意图会让
+   `AppState` 在同一列表中激活相邻 UUID 并首尾循环；零个或一个 Tab 时状态不变。每个
+   SSH Tab 还独占当前
    连接阶段：idle、可取消的主机密钥探测、等待主机密钥确认、等待认证或读取已存凭据；不再
    存在全局的 probe、信任或认证等待槽位。
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
@@ -145,7 +147,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    **Remember password** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
    勾选后才把密码与 profile 事务性写入所选后端，且只有选择应用加密保险库时才要求保险库口令；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥认证或拒绝已
-   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
+   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。profile 保存和删除
+   共享一个异步凭据闸门，并为每个 profile 分配最新 mutation token；在修改凭据前和替换
+   `SessionStore` 前都会重新核验原 profile。已被后续操作取代的事务会在释放闸门前恢复自己的
+   凭据备份；保存完成后也只关闭发起该操作且 Tab/draft identity 仍匹配的编辑器。
 5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
    `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
    生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
@@ -162,6 +167,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
    使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为
    有界 shell 输入发送；可选右键行为根据是否存在选区选择复制或粘贴。
+   活动终端报告 connected 前，原生文字/IME 和应用终端按键路由都不可交互；Rust bridge 会再次
+   检查连接状态，因此焦点变化或迟到 callback 也不能在建连期间排入终端输入。
    键盘路由和主要 application callback 使用专用 `ax_ssh::diagnostics` debug target。特殊键
    使用稳定名称，所有可打印、IME、密码和粘贴文字只记录为 `Text`。功能调用事件只包含固定
    action ID 与结果，不记录 callback 的路径、名称、主机或秘密值。默认 INFO 过滤规则关闭
@@ -175,11 +182,16 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    只有用户明确要求连接后才打开选定设备。同 profile 的重复 Tab 使用彼此独立的有界命令/
    事件队列。关闭 Tab 时先移除 attempt 路由，再异步 shutdown worker，迟到事件不会更新
    其他 Tab。
+   SSH 信任与认证仍在进行时，worker 会继续等待并丢弃已经排队的 shell/SFTP 操作；只有明确的
+   `Disconnect` 或 controller 被释放才会取消该连接尝试，普通操作必须等到 `Connected` 后生效。
    共享 russh client config 明确启用 `TCP_NODELAY`，避免少量交互 channel data 等待 Nagle
    聚合。有界输入队列不设置 batching timer；worker 取出输入后立即发送。这能消除客户端附加
    等待，但不能消除远端 PTY 回显必需的网络往返。
-7. 本地终端 Tab 改为持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占
-   child、reader、writer、resize 状态、有界命令/事件队列、取消标记和超时 join。
+7. 本地终端 Tab 持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占 child、reader、
+   writer、resize 状态、有界命令/事件队列、取消标记、child-killer handle 和所有线程 join。
+   shutdown 会设置取消、唤醒 worker、强制终止隔离的 Unix PTY 进程组或平台 child、关闭 PTY
+   资源，并异步等待 worker 可 join；满事件队列的反压可响应取消，不会卡住 reader，也不会把
+   超时的 blocking join 脱离所有者留在后台。
 8. 每个终端 Tab 还持有一个有界 `TerminalModel`。`vt100` 负责行、字符格样式、光标、
    scrollback、宽字符和 application-cursor 模式。仓库内的 `vendor/vt100` 补丁保持锁定
    的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
@@ -235,6 +247,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     represented object 保持其生命周期。应用边界用单一解析器把配置字符串转换为
     `slint::Keys`；Apple 上持久化的 `Cmd` 映射为 Slint `Control`，物理 `Ctrl` 映射为
     Slint `Meta`，因此 Muda 负责绘制和激活原生 accelerator，不在标题后拼接文字。macOS
+    的 **Previous Tab** / **Next Tab** 通过同一解析器使用固定 `Cmd+Shift+[` /
+    `Cmd+Shift+]`，Windows/Linux 使用 `Ctrl+Shift+[` / `Ctrl+Shift+]`。它们只在多于一个
+    Tab 时启用，并共用快捷键录制/安全提示禁用闸门。macOS
     的关闭 Tab 菜单项与跨平台固定的 **Switch SSH/SFTP Tab** 菜单项刻意不绑定动态活动 Tab
     属性。应用 callback 只在命令触发时解析当前运行时 Tab，因此 Tab 身份、类型、连接和
     SFTP loading 变化不会重建原生菜单。快捷键或安全状态变化仍可能触发原生菜单重建，AppKit bridge
@@ -340,6 +355,7 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
   凭据失败或截断后的错误；
 - 每个 SSH Tab 独立拥有 probe 取消和认证阶段；每个 UI callback 以及迟到的 probe、凭据
   或 worker 结果都必须重新核验 Tab、profile、attempt 和预期 phase 后才能转换状态；
+- 认证完成前，已排队的 shell/SFTP 操作会被忽略且不会结束连接尝试；`Disconnect` 仍立即生效；
 - 取消既能中断连接/认证，也能断开已建立会话；
 - 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
   存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
@@ -359,6 +375,9 @@ russh handle 或 worker。
 触发时，会在其前创建并独立认证 Terminal。两条路径都复用默认拒绝的主机密钥与凭据流程。
 配对建立后，命令只激活对应 Tab，不会再次连接或认证。关闭任一端只解除配对，并只关闭该 Tab
 自己的浏览器、subsystem、worker 和 transport；另一端继续保留，之后可重新创建配对 Tab。
+
+只有 SFTP Tab 报告 connected 后，远端导航和选择控件才可交互。此前 `AppState` 不发布
+available 的远端 snapshot，application bridge 也会独立拒绝来自未连接或非 SFTP Tab 的操作。
 
 第一阶段提供双栏目录浏览。Slint 拥有两个受约束的 splitter：一个调整远端/本地宽度，另一个调整
 文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，
@@ -456,6 +475,13 @@ schema 版本 10 会把旧 profile 中的 Group 值提升为规范化、去重�
 版本 7 的旧默认 260px 侧栏改为紧凑 220px，并增加 schema 版本 8 默认 `*` 的遮蔽设置，
 不覆盖用户自定义值。密码、passphrase、私钥内容、终端输出、Tab 运行时 ID、子进程和
 worker 永远不会序列化。
+
+config 领域会拒绝控制字符，并对 profile 名称、host、username、私钥路径、主机密钥指纹、
+串口标识和 Group 名称应用共享字符上限。单个 store 最多包含 1,024 个 profile 和 256 个 Group；
+`sessions.json` 在反序列化前与编码后都不得超过 8 MiB。每个反序列化 profile 和每次 store 保存
+都会经过同一套领域校验。私有配置与保险库写入使用同目录隐藏 UUID 临时文件、`create_new`、Unix
+`0600` mode 和普通文件校验；写入或替换失败时由 guard 删除临时文件。文件同步、平台原子替换、
+最终私有权限和父目录同步仍属于同一次提交，不再跟随固定 `.tmp` 路径。
 
 即使没有已保存 profile，展开会话侧栏也会保留列表空白区域的右键菜单，用于新建空 Group
 或添加第一台服务器。用户手动收起后切换为窄栏，窄栏仍保留 Local Shell 和相同的行/列表

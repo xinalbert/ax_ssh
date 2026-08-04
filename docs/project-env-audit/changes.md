@@ -103,3 +103,19 @@
 - 受影响文件：`Cargo.toml`、`src/x_server.rs`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、现有 `Cargo.lock` 和 locked/offline 门禁；已知 provider 不再使用持久化路径，Custom 仍以无 shell 进程启动并校验文件类型/Unix executable 权限。
 - 验证结果：X11 provider/path 定向测试 8 项、`cargo check --locked --offline` 和完整测试通过（库 105、应用 68、Doc tests）；本机应用数据库可按 bundle identifier 返回 XQuartz 与 MacXServer。真实 Windows 发现仍需 Windows CI 或目标机确认；Cargo fmt/clippy 子命令本机未安装。
+
+## 2026-08-04 校正本机 Cargo 组件记录
+
+- 日期：2026-08-04
+- 变化摘要：最小环境复核确认当前本机没有 `cargo fmt` 和 `cargo clippy` 子命令，修正此前把它们记录为可用的过期结论；仓库工具链、依赖和 CI 命令未改变。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`
+- 更新后的命令或环境：Rust 2024、MSRV 1.92.0、`rustc/cargo 1.96.1` 和 locked/offline check/test 不变；fmt/clippy 继续由具备相应组件的 CI 执行。
+- 验证结果：`cargo fmt --version` 与 `cargo clippy --version` 均返回 Cargo 子命令不存在；未安装新工具。
+
+## 2026-08-04 完成五项审查修复环境门禁
+
+- 日期：2026-08-04
+- 变化摘要：SSH 认证前命令隔离、私有原子临时文件、profile mutation 协调、owned PTY shutdown 和配置输入上限均已纳入自动化回归；未新增依赖或改变工具链。
+- 受影响文件：`src/{app,config,ssh,local_shell}.rs`、对应子模块/UI/测试，以及双语架构与项目追踪记录。
+- 更新后的命令或环境：Rust 2024、MSRV 1.92.0、Cargo locked/offline 和既有三平台 CI 不变；本机继续使用直接 `rustfmt`，Cargo fmt/clippy 组件仍未安装。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 117、应用 84、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过；真实三平台 GUI、SSH/SFTP、凭据后端与本地 PTY 关闭留给目标环境验收。

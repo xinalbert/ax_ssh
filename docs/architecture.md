@@ -160,6 +160,8 @@ must not locally hide either dialog before the Rust state transition accepts it.
    and renders a non-interactive Tab copy at the pointer; it never creates a
    second runtime Tab. The leading UI ordinal derives from that list index,
    while an instance suffix such as `#1` remains part of the Tab's stable title.
+   Previous/Next Tab intent asks `AppState` to activate the adjacent UUID in
+   this same list and wraps at either end; zero or one Tab leaves state unchanged.
    Each SSH Tab also owns its current connection phase: idle, cancellable host-key
    probe, pending host-key confirmation, pending authentication, or stored-
    credential loading. There is no global pending-probe, trust, or authentication
@@ -190,7 +192,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
-   terminal worker.
+   terminal worker. Profile save and delete operations share one asynchronous
+   credential gate and assign a latest-mutation token per profile. They validate
+   the original profile before changing a credential and again before replacing
+   `SessionStore`; a superseded operation restores its own credential backup
+   before releasing the gate. A completed save closes only the editor Tab whose
+   Tab and draft identities initiated that save.
 5. The terminal surface maps Slint special keys, including F1-F12, to
    UI-independent terminal key values and applies a narrow shifted-hyphen
    fallback when the platform still reports `-` for `Shift+-`.
@@ -217,6 +224,10 @@ must not locally hide either dialog before the Rust state transition accepts it.
    platform modifier. Selection copy remains local while paste becomes bounded
    shell input; the optional right-click action chooses between them based on
    selection state.
+   Native text/IME and application terminal-key routing are disabled until the
+   active terminal reports connected. This UI guard is repeated at the Rust
+   bridge, so focus or a stale callback cannot enqueue terminal input during
+   connection setup.
    Keyboard routing and major application callbacks use the dedicated
    `ax_ssh::diagnostics` debug target. Special keys have stable labels, while
    all printable, IME, password, and pasted text is recorded only as `Text`.
@@ -237,6 +248,10 @@ must not locally hide either dialog before the Rust state transition accepts it.
    duplicate profile tabs. Closing a tab removes its attempt route before
    asynchronously shutting down the worker, so late events cannot update
    another tab.
+   While SSH trust and authentication are still in progress, the worker keeps
+   waiting and discards any already-queued shell or SFTP operation. Only an
+   explicit `Disconnect` or a dropped controller cancels that connection
+   attempt; operational commands become valid only after `Connected`.
    The shared russh client config explicitly enables `TCP_NODELAY`, so small
    interactive channel-data writes are not held for Nagle aggregation. The
    bounded input queue adds no batching timer: the worker sends dequeued input
@@ -244,7 +259,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
    round trip required for a remote PTY to echo input.
 7. A local terminal tab instead owns one `portable-pty` worker thread. That
    worker owns its child, reader, writer, resize state, bounded command/event
-   queues, cancellation flag, and timeout-bounded join for the tab lifetime.
+   queues, cancellation flag, child-killer handle, and every thread join for
+   the tab lifetime. Shutdown sets cancellation, wakes the worker, force-stops
+   the isolated Unix PTY process group or platform child, closes PTY resources,
+   and waits asynchronously until the worker is joinable. A full event queue is
+   cancellation-aware and cannot strand the reader; no timed-out blocking join
+   is detached from its owner.
 8. Each terminal tab also owns one bounded `TerminalModel`. `vt100` owns the
    rows, cell styles, cursor, scrollback, wide characters, and application
    cursor mode. The checked-in `vendor/vt100` patch keeps its locked `0.16.2`
@@ -339,7 +359,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
     converted in one application-boundary parser to `slint::Keys`; on Apple,
     persisted `Cmd` maps to Slint `Control`, while physical `Ctrl` maps to Slint
     `Meta`. Muda therefore renders and activates native accelerators instead of
-    appending shortcut text to titles. The macOS close-tab item and the
+    appending shortcut text to titles. **Previous Tab** and **Next Tab** use the
+    same parser for fixed `Cmd+Shift+[` / `Cmd+Shift+]` accelerators on macOS
+    and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows/Linux. They are enabled only
+    with more than one Tab and share the shortcut-recording/security gate. The
+    macOS close-tab item and the
     cross-platform fixed **Switch SSH/SFTP Tab** item intentionally have no
     dynamic active-tab menu properties. The application callback resolves the
     active runtime Tab only when the command is invoked, so Tab identity, kind,
@@ -502,6 +526,9 @@ Authenticated connections follow this lifecycle:
 - each SSH Tab independently owns probe cancellation and its authentication
   phase; every UI callback and delayed probe, credential, or worker result
   revalidates the Tab, profile, attempt, and expected phase before changing it;
+- before authentication finishes, queued shell and SFTP operations are ignored
+  without ending the connection attempt; `Disconnect` remains immediately
+  effective;
 - cancel interrupts connection/authentication as well as an established session;
 - a 20-second keepalive with three missed-reply limit and the 90-second
   transport inactivity boundary decide connection liveness; a quiet shell data
@@ -529,6 +556,11 @@ the companion Tab and does not reconnect or authenticate again. Closing either
 Tab unlinks the pair and shuts down only that Tab's browser, subsystem, worker,
 and transport; the surviving Tab remains open and may create a new companion
 later.
+
+Remote navigation and selection controls are interactive only after that SFTP
+Tab reports connected. `AppState` publishes no available remote snapshot before
+then, and the application bridge independently rejects operations from a
+disconnected or non-SFTP Tab.
 
 The first phase provides a dual-pane directory browser. Slint owns two bounded
 splitters: one changes the remote/local widths and one changes the files/transfer
@@ -677,6 +709,18 @@ load. Earlier migrations retain the schema version 7 compact 220px sidebar
 default and the schema version 8 `*` mask default without overwriting custom
 values. Passwords, passphrases, private-key contents, terminal output, tab
 runtime IDs, child processes, and workers are never serialized.
+
+The config domain rejects control characters and applies shared character
+limits to profile names, hosts, usernames, private-key paths, host-key
+fingerprints, serial identifiers, and group names. A store contains at most
+1,024 profiles and 256 groups, and `sessions.json` is capped at 8 MiB before
+deserialization and after encoding. Every deserialized profile and every store
+save passes the same domain validation. Private configuration and vault writes
+create a hidden, same-directory UUID temporary file with `create_new`, Unix
+mode `0600`, and regular-file verification; the guard removes it on any write
+or replacement failure. File sync, atomic platform replacement, final private
+permissions, and parent-directory sync remain part of the commit, and no fixed
+`.tmp` path is followed.
 
 The expanded session sidebar remains available even with no saved profiles so
 its blank-area context menu can create an empty group or add a first server.
