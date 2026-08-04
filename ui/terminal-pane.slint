@@ -112,7 +112,9 @@ export component TerminalPane inherits Rectangle {
     };
 
     public function focus-terminal() {
-        ime-input.focus();
+        if root.connected {
+            ime-input.focus();
+        }
     }
 
     function update-terminal-size() {
@@ -228,6 +230,7 @@ export component TerminalPane inherits Rectangle {
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         accessible-role: none;
+        enabled: root.connected;
 
         changed has-focus => {
             if self.has-focus {
@@ -235,6 +238,9 @@ export component TerminalPane inherits Rectangle {
             }
         }
         key-pressed(event) => {
+            if !root.connected {
+                return EventResult.reject;
+            }
             let shortcut = root.format-shortcut(
                 event.text,
                 event.modifiers.alt,
@@ -276,7 +282,9 @@ export component TerminalPane inherits Rectangle {
             return EventResult.reject;
         }
         edited => {
-            if self.preedit-text == "" && self.text != "" {
+            if !root.connected {
+                self.text = "";
+            } else if self.preedit-text == "" && self.text != "" {
                 root.clear-selection();
                 root.terminal-key(self.text, false, false, false, false, false);
                 self.text = "";

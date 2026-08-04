@@ -51,11 +51,11 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
                 if cfg!(target_os = "macos") && !app.sessions.settings.terminal.option_as_meta {
                     modifiers.alt = false;
                 }
-                let application_cursor = app
-                    .active_terminal()
-                    .context("no active terminal")?
-                    .terminal
-                    .application_cursor();
+                let terminal = app.active_terminal().context("no active terminal")?;
+                if !terminal.connected {
+                    return Ok((false, false));
+                }
+                let application_cursor = terminal.terminal.application_cursor();
                 let Some(data) = encode_terminal_key(&key, modifiers, application_cursor) else {
                     return Ok((false, false));
                 };

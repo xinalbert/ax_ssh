@@ -523,18 +523,22 @@ fn switching_terminal_tabs_exposes_each_tab_grid_size() {
 }
 
 #[test]
-fn sftp_snapshots_are_isolated_per_ssh_tab_and_unavailable_for_local_tabs() {
+fn sftp_snapshots_require_connected_sftp_tabs_and_remain_isolated() {
     let mut state = test_state();
     let first_profile = SessionProfile::new("first", "first.example", "alice");
     let second_profile = SessionProfile::new("second", "second.example", "bob");
-    let first = state.open_terminal_tab(&first_profile);
-    let second = state.open_terminal_tab(&second_profile);
+    let first = state.open_sftp_tab(&first_profile);
+    let second = state.open_sftp_tab(&second_profile);
     let local = state.open_local_shell_tab();
 
-    let first_sftp = &mut state
+    assert!(state.activate_tab(first));
+    assert!(!state.active_snapshot().sftp.available);
+
+    let first_terminal = state
         .terminal_mut(first)
-        .expect("first SSH terminal should exist")
-        .sftp;
+        .expect("first SFTP terminal should exist");
+    first_terminal.connected = true;
+    let first_sftp = &mut first_terminal.sftp;
     first_sftp.open = true;
     first_sftp.path = "/home/alice".to_owned();
     first_sftp.entries.push(SftpEntry {
@@ -553,6 +557,10 @@ fn sftp_snapshots_are_isolated_per_ssh_tab_and_unavailable_for_local_tabs() {
     assert_eq!(first_snapshot.path, "/home/alice");
     assert_eq!(first_snapshot.entries.len(), 1);
 
+    state
+        .terminal_mut(second)
+        .expect("second SFTP terminal should exist")
+        .connected = true;
     assert!(state.activate_tab(second));
     let second_snapshot = state.active_snapshot().sftp;
     assert!(second_snapshot.available);

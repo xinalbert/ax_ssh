@@ -426,7 +426,9 @@ impl AppState {
         };
         match &tab.kind {
             WorkspaceTabKind::Terminal(terminal) => {
-                let mut sftp = terminal.sftp.snapshot(terminal.ssh_route().is_some());
+                let mut sftp = terminal
+                    .sftp
+                    .snapshot(terminal.is_sftp() && terminal.connected);
                 if terminal.is_sftp() && sftp.status.is_empty() {
                     sftp.status = terminal.status.clone();
                 }

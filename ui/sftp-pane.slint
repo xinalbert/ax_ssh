@@ -313,6 +313,7 @@ component SftpDirectoryHeader inherits Rectangle {
 component SftpEntry inherits Rectangle {
     in property <SftpEntryRow> entry;
     in property <bool> shown: true;
+    in property <bool> interactive: true;
     callback open-directory(string);
     callback toggle-selection(string, bool);
 
@@ -414,7 +415,7 @@ component SftpEntry inherits Rectangle {
     touch := TouchArea {
         width: parent.width;
         height: parent.height;
-        enabled: root.shown;
+        enabled: root.shown && root.interactive;
         mouse-cursor: root.entry.kind == "folder" ? pointer : default;
         double-clicked => {
             if root.entry.kind == "folder" {
@@ -426,12 +427,12 @@ component SftpEntry inherits Rectangle {
         x: 0px;
         width: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
         height: parent.height;
-        enabled: root.shown;
+        enabled: root.shown && root.interactive;
         mouse-cursor: pointer;
         accessible-role: checkbox;
         accessible-label: "Select " + root.entry.name;
         accessible-checked: root.entry.selected;
-        accessible-enabled: root.shown;
+        accessible-enabled: root.shown && root.interactive;
         accessible-action-default => {
             root.toggle-selection(root.entry.path, !root.entry.selected);
         }
@@ -440,6 +441,7 @@ component SftpEntry inherits Rectangle {
 }
 
 component SftpDirectoryPane inherits Rectangle {
+    in property <bool> interactive: true;
     in property <string> title;
     in property <[SftpEntryRow]> entries;
     in property <bool> loading;
@@ -514,6 +516,7 @@ component SftpDirectoryPane inherits Rectangle {
                 height: parent.height;
                 text: "Hidden";
                 checked <=> root.show-hidden;
+                enabled: root.interactive;
             }
             Rectangle {
                 y: parent.height - Theme.hairline;
@@ -539,7 +542,7 @@ component SftpDirectoryPane inherits Rectangle {
                     height: root.control-height;
                     text: "<";
                     accessible-name: "Back";
-                    enabled: !root.loading && root.can-go-back;
+                    enabled: root.interactive && !root.loading && root.can-go-back;
                     clicked => { root.navigate-back(); }
                 }
                 if root.allow-navigation : SftpActionButton {
@@ -547,7 +550,7 @@ component SftpDirectoryPane inherits Rectangle {
                     height: root.control-height;
                     text: ">";
                     accessible-name: "Forward";
-                    enabled: !root.loading && root.can-go-forward;
+                    enabled: root.interactive && !root.loading && root.can-go-forward;
                     clicked => { root.navigate-forward(); }
                 }
 
@@ -558,21 +561,21 @@ component SftpDirectoryPane inherits Rectangle {
                     control-min-height: root.control-height;
                     font-size: Theme.sftp-control-font-size;
                     font-weight: Theme.sftp-control-font-weight;
-                    enabled: !root.loading;
+                    enabled: root.interactive && !root.loading;
                     accepted(path) => { root.list-directory(path); }
                 }
                 SftpActionButton {
                     width: Theme.sftp-path-action-width;
                     height: root.control-height;
                     text: "Open";
-                    enabled: !root.loading && !root.path-draft.is-empty;
+                    enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
                 }
                 if root.allow-refresh && root.width >= 340px : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: root.control-height;
                     text: "Refresh";
-                    enabled: !root.loading && !root.current-path.is-empty;
+                    enabled: root.interactive && !root.loading && !root.current-path.is-empty;
                     clicked => { root.refresh(); }
                 }
             }
@@ -586,7 +589,7 @@ component SftpDirectoryPane inherits Rectangle {
 
         SftpDirectoryHeader {
             selection-checked: root.selection-all;
-            selection-enabled: root.entries.length > 0 && !root.loading;
+            selection-enabled: root.interactive && root.entries.length > 0 && !root.loading;
             select-all(checked) => { root.select-all(checked); }
         }
 
@@ -608,6 +611,7 @@ component SftpDirectoryPane inherits Rectangle {
                     height: parent.height;
                     entry: entry;
                     shown: root.show-hidden || !entry.hidden;
+                    interactive: root.interactive && !root.loading;
                     open-directory(path) => { root.list-directory(path); }
                     toggle-selection(path, selected) => { root.toggle-selection(path, selected); }
                 }
@@ -646,7 +650,7 @@ component SftpDirectoryPane inherits Rectangle {
                 width: Theme.sftp-more-button-width;
                 height: root.control-height;
                 text: root.loading ? "Loading" : "More";
-                enabled: !root.loading;
+                enabled: root.interactive && !root.loading;
                 clicked => { root.load-more(); }
             }
             Rectangle {
@@ -852,6 +856,7 @@ export component SftpPane inherits Rectangle {
                 width: root.remote-pane-width;
                 height: parent.height;
                 title: "Remote files";
+                interactive: root.view.available;
                 entries: root.view.entries;
                 loading: root.view.loading;
                 path: root.view.path;

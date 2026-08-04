@@ -267,6 +267,104 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
     }
 }
 
+#[tokio::test]
+async fn commands_queued_during_authentication_do_not_cancel_the_worker() {
+    let mut rng = StdRng::seed_from_u64(7);
+    let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test host key should be generated");
+    let server_config = Arc::new(server::Config {
+        auth_rejection_time: Duration::from_millis(1),
+        auth_rejection_time_initial: Some(Duration::ZERO),
+        keys: vec![host_key],
+        ..server::Config::default()
+    });
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test SSH listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("test SSH listener should have an address");
+    let server_task = tokio::spawn(async move {
+        let mut sessions = Vec::new();
+        for _ in 0..2 {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .expect("test SSH connection should be accepted");
+            let session =
+                server::run_stream(server_config.clone(), stream, TestServer::password_only())
+                    .await
+                    .expect("test SSH session should start");
+            sessions.push(tokio::spawn(session));
+        }
+        sessions
+    });
+
+    let mut profile = test_profile("pre-auth-command", address.ip().to_string());
+    profile.ssh_mut().expect("test profile should use SSH").port = address.port();
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(
+        probe_host_key(&profile)
+            .await
+            .expect("unknown host-key probe should return the rejected fingerprint"),
+    );
+
+    let (worker, mut events) = SshSessionHandle::spawn(
+        &Handle::current(),
+        Uuid::new_v4(),
+        profile,
+        Zeroizing::new(TEST_PASSWORD.to_owned()),
+        120,
+        36,
+    );
+    worker
+        .request_send(b"ignored-before-auth\r".to_vec())
+        .expect("connecting worker should accept bounded terminal input");
+    worker
+        .request_list_sftp("/ignored-before-auth".to_owned())
+        .expect("connecting worker should accept bounded SFTP input");
+
+    let connected = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("pre-auth commands must not prevent SSH connection");
+    assert_eq!(connected, Some(SshSessionEvent::Connected));
+
+    worker
+        .request_disconnect()
+        .expect("connected worker should accept disconnect command");
+    let disconnected = timeout(Duration::from_secs(2), async {
+        loop {
+            match events.recv().await {
+                Some(SshSessionEvent::Disconnected) => break,
+                Some(SshSessionEvent::Failed(message)) => {
+                    panic!("SSH worker failed during disconnect: {message}")
+                }
+                Some(_) => {}
+                None => panic!("SSH worker event stream closed before disconnect"),
+            }
+        }
+    })
+    .await;
+    assert!(
+        disconnected.is_ok(),
+        "SSH worker should disconnect promptly"
+    );
+    worker
+        .shutdown()
+        .await
+        .expect("SSH worker should join cleanly after disconnect");
+
+    let sessions = server_task
+        .await
+        .expect("test SSH accept task should finish");
+    for session in sessions {
+        session.abort();
+        let _ = session.await;
+    }
+}
+
 #[test]
 fn host_key_policy_rejects_unknown_and_mismatched_keys() {
     let actual = "SHA256:known-key";

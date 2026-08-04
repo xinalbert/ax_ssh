@@ -334,8 +334,11 @@ fn with_active_sftp_terminal(
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
     let terminal = app.active_terminal_mut().context("no active terminal")?;
-    if terminal.ssh_route().is_none() {
-        anyhow::bail!("SFTP is available only for SSH sessions");
+    if !terminal.is_sftp() {
+        anyhow::bail!("SFTP is available only in an SFTP tab");
+    }
+    if !terminal.connected {
+        anyhow::bail!("SFTP session is not connected");
     }
     action(terminal)
 }

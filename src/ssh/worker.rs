@@ -338,25 +338,28 @@ async fn run_session(
         Ok::<_, anyhow::Error>((connection, x11_forwarding, x11_dispatcher, x11_requests))
     };
     tokio::pin!(connect);
-    let connection_result = tokio::select! {
-        result = &mut connect => Some(result),
-        command = command_rx.recv() => {
-            match command {
-                Some(SshCommand::Disconnect) => {
-                    info!(session_id = %session_id, "SSH connection attempt cancelled");
-                }
-                Some(SshCommand::Send { .. })
-                | Some(SshCommand::OpenSftp { .. })
-                | Some(SshCommand::ListSftp { .. })
-                | Some(SshCommand::LoadMoreSftp)
-                | Some(SshCommand::CloseSftp) => {
-                    debug!(session_id = %session_id, "session command ignored before SSH authentication");
-                }
-                None => {
-                    info!(session_id = %session_id, "SSH controller dropped during connection attempt");
+    let connection_result = loop {
+        tokio::select! {
+            result = &mut connect => break Some(result),
+            command = command_rx.recv() => {
+                match command {
+                    Some(SshCommand::Disconnect) => {
+                        info!(session_id = %session_id, "SSH connection attempt cancelled");
+                        break None;
+                    }
+                    Some(SshCommand::Send { .. })
+                    | Some(SshCommand::OpenSftp { .. })
+                    | Some(SshCommand::ListSftp { .. })
+                    | Some(SshCommand::LoadMoreSftp)
+                    | Some(SshCommand::CloseSftp) => {
+                        debug!(session_id = %session_id, "session command ignored before SSH authentication");
+                    }
+                    None => {
+                        info!(session_id = %session_id, "SSH controller dropped during connection attempt");
+                        break None;
+                    }
                 }
             }
-            None
         }
     };
     let Some(connection_result) = connection_result else {
