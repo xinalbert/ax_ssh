@@ -653,11 +653,6 @@ component SftpDirectoryPane inherits Rectangle {
                 enabled: root.interactive && !root.loading;
                 clicked => { root.load-more(); }
             }
-            Rectangle {
-                width: parent.width;
-                height: Theme.hairline;
-                background: Theme.divider;
-            }
         }
     }
 }
