@@ -236,8 +236,9 @@ pub async fn probe_host_key(profile: &SessionProfile) -> Result<String> {
     }
 }
 
+#[derive(Clone)]
 pub struct SshConnection {
-    handle: client::Handle<ClientHandler>,
+    handle: Arc<client::Handle<ClientHandler>>,
 }
 
 impl SshConnection {
@@ -318,7 +319,9 @@ impl SshConnection {
         }
 
         info!(session_id = %profile.id, "SSH authentication succeeded");
-        Ok(Self { handle })
+        Ok(Self {
+            handle: Arc::new(handle),
+        })
     }
 
     pub fn is_closed(&self) -> bool {

@@ -1,7 +1,15 @@
+use std::collections::{HashSet, VecDeque};
+use std::sync::{Arc, Mutex, OnceLock};
+
 use slint::Model;
 
+use super::file_icons::{FileIconKey, global_provider, prewarm_async};
 use super::local_files::LocalDirectoryEntry;
+use super::state::{SftpTransferPhase, SftpTransferSnapshot};
 use super::*;
+
+const ICON_PREWARM_PENDING_KEY_LIMIT: usize = 256;
+const ICON_PREWARM_BATCH_KEY_LIMIT: usize = 64;
 
 pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow> {
     session_groups(sessions)
@@ -150,7 +158,10 @@ fn sftp_entry_rows(
         .map(|entry| {
             let hidden = entry.name.starts_with('.');
             let is_selected = selected.contains(&entry.path);
+            let icon_key = FileIconKey::for_entry(&entry.name, entry.is_dir, entry.is_symlink);
             SftpEntryRow {
+                icon: slint_icon(&icon_key),
+                has_icon: true,
                 name: entry.name.into(),
                 path: entry.path.into(),
                 kind: if entry.is_dir {
@@ -183,7 +194,10 @@ fn local_entry_rows(
         .map(|entry| {
             let hidden = entry.name.starts_with('.');
             let is_selected = selected.contains(&entry.path);
+            let icon_key = FileIconKey::for_entry(&entry.name, entry.is_dir, entry.is_symlink);
             SftpEntryRow {
+                icon: slint_icon(&icon_key),
+                has_icon: true,
                 name: entry.name.into(),
                 path: entry.path.into(),
                 kind: if entry.is_dir {
@@ -202,6 +216,185 @@ fn local_entry_rows(
                     .into(),
                 hidden,
                 selected: is_selected,
+            }
+        })
+        .collect()
+}
+
+fn slint_icon(key: &FileIconKey) -> slint::Image {
+    let icon = global_provider().cached_icon(key);
+    let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+        icon.rgba(),
+        icon.width(),
+        icon.height(),
+    );
+    slint::Image::from_rgba8(pixels)
+}
+
+pub(super) fn prewarm_file_icons(
+    runtime: &tokio::runtime::Handle,
+    keys: Vec<FileIconKey>,
+    ui: &slint::Weak<AppWindow>,
+    state: &std::sync::Arc<std::sync::Mutex<AppState>>,
+) {
+    if keys.is_empty() {
+        return;
+    }
+    let coordinator = icon_prewarm_coordinator();
+    let should_start = {
+        let Ok(mut pending) = coordinator.lock() else {
+            return;
+        };
+        for key in keys {
+            if pending.queued.contains(&key) {
+                continue;
+            }
+            if pending.keys.len() >= ICON_PREWARM_PENDING_KEY_LIMIT {
+                break;
+            }
+            if pending.queued.insert(key.clone()) {
+                pending.keys.push_back(key);
+            }
+        }
+        pending.target = Some(IconPrewarmTarget {
+            ui: ui.clone(),
+            state: Arc::clone(state),
+        });
+        if pending.running {
+            false
+        } else {
+            pending.running = true;
+            true
+        }
+    };
+    if should_start {
+        let runtime = runtime.clone();
+        let _ = runtime.clone().spawn(run_icon_prewarm_worker(
+            runtime,
+            coordinator,
+            ICON_PREWARM_BATCH_KEY_LIMIT,
+        ));
+    }
+}
+
+struct IconPrewarmTarget {
+    ui: slint::Weak<AppWindow>,
+    state: Arc<Mutex<AppState>>,
+}
+
+struct IconPrewarmCoordinator {
+    keys: VecDeque<FileIconKey>,
+    queued: HashSet<FileIconKey>,
+    target: Option<IconPrewarmTarget>,
+    running: bool,
+}
+
+static ICON_PREWARM_COORDINATOR: OnceLock<Arc<Mutex<IconPrewarmCoordinator>>> = OnceLock::new();
+
+fn icon_prewarm_coordinator() -> Arc<Mutex<IconPrewarmCoordinator>> {
+    ICON_PREWARM_COORDINATOR
+        .get_or_init(|| {
+            Arc::new(Mutex::new(IconPrewarmCoordinator {
+                keys: VecDeque::new(),
+                queued: HashSet::new(),
+                target: None,
+                running: false,
+            }))
+        })
+        .clone()
+}
+
+async fn run_icon_prewarm_worker(
+    runtime: tokio::runtime::Handle,
+    coordinator: Arc<Mutex<IconPrewarmCoordinator>>,
+    batch_limit: usize,
+) {
+    loop {
+        let (keys, target) = {
+            let Ok(mut pending) = coordinator.lock() else {
+                return;
+            };
+            if pending.keys.is_empty() {
+                pending.running = false;
+                pending.target = None;
+                return;
+            }
+            let mut keys = Vec::with_capacity(batch_limit);
+            while keys.len() < batch_limit {
+                let Some(key) = pending.keys.pop_front() else {
+                    break;
+                };
+                pending.queued.remove(&key);
+                keys.push(key);
+            }
+            (
+                keys,
+                pending.target.as_ref().map(|target| IconPrewarmTarget {
+                    ui: target.ui.clone(),
+                    state: Arc::clone(&target.state),
+                }),
+            )
+        };
+
+        let prewarm = prewarm_async(&runtime, keys);
+        if let Err(error) = prewarm.await {
+            tracing::debug!(%error, "file icon prewarm task stopped");
+        }
+        if let Some(target) = target {
+            dispatch_active_snapshot(&target.ui, &target.state);
+        }
+    }
+}
+
+pub(super) fn sftp_icon_keys(entries: &[SftpEntry]) -> Vec<FileIconKey> {
+    entries
+        .iter()
+        .map(|entry| FileIconKey::for_entry(&entry.name, entry.is_dir, entry.is_symlink))
+        .collect()
+}
+
+pub(super) fn local_icon_keys(entries: &[LocalDirectoryEntry]) -> Vec<FileIconKey> {
+    entries
+        .iter()
+        .map(|entry| FileIconKey::for_entry(&entry.name, entry.is_dir, entry.is_symlink))
+        .collect()
+}
+
+fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<SftpTransferRow> {
+    transfers
+        .into_iter()
+        .map(|transfer| {
+            let progress = if transfer.total_bytes == 0 {
+                0.0
+            } else {
+                (transfer.downloaded_bytes as f64 / transfer.total_bytes as f64).clamp(0.0, 1.0)
+                    as f32
+            };
+            let size = if transfer.total_bytes == 0 {
+                format_file_size(transfer.downloaded_bytes, false)
+            } else if transfer.downloaded_bytes >= transfer.total_bytes {
+                format_file_size(transfer.total_bytes, false)
+            } else {
+                format!(
+                    "{} / {}",
+                    format_file_size(transfer.downloaded_bytes, false),
+                    format_file_size(transfer.total_bytes, false)
+                )
+            };
+            let speed = if transfer.phase.cancellable() && transfer.bytes_per_second > 0 {
+                format!("{}/s", format_file_size(transfer.bytes_per_second, false))
+            } else {
+                String::new()
+            };
+            SftpTransferRow {
+                id: transfer.id.to_string().into(),
+                name: transfer.name.into(),
+                state: transfer.phase.as_str().into(),
+                status: transfer.status.into(),
+                progress,
+                size: size.into(),
+                speed: speed.into(),
+                cancellable: transfer.phase.cancellable(),
             }
         })
         .collect()
@@ -259,19 +452,37 @@ pub(super) fn set_tab_status(
 }
 
 pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    let should_schedule = match state.lock() {
+        Ok(app) => app.try_schedule_ui_refresh(),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if !should_schedule {
+        return;
+    }
     let state = Arc::clone(state);
-    dispatch_ui(ui, move |ui| {
+    let state_for_ui = Arc::clone(&state);
+    if !dispatch_ui_result(ui, move |ui| {
         // Worker output and resize events can queue faster than the UI event loop runs.
         // Resolve the snapshot here so an older queued event cannot restore stale dimensions.
-        let snapshot = match state.lock() {
-            Ok(app) => app.active_snapshot(),
+        let snapshot = match state_for_ui.lock() {
+            Ok(app) => {
+                app.clear_ui_refresh_pending();
+                app.active_snapshot()
+            }
             Err(_) => {
                 ui.set_status("State lock poisoned".into());
                 return;
             }
         };
         apply_active_snapshot(ui, snapshot);
-    });
+    }) {
+        if let Ok(app) = state.lock() {
+            app.clear_ui_refresh_pending();
+        }
+    }
 }
 
 pub(super) fn dispatch_terminal_output_snapshot(
@@ -279,12 +490,26 @@ pub(super) fn dispatch_terminal_output_snapshot(
     state: &Arc<Mutex<AppState>>,
     output_received_at: std::time::Instant,
 ) {
+    let should_schedule = match state.lock() {
+        Ok(app) => app.try_schedule_ui_refresh(),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if !should_schedule {
+        return;
+    }
     let state = Arc::clone(state);
+    let state_for_ui = Arc::clone(&state);
     let dispatch_requested_at = std::time::Instant::now();
-    dispatch_ui(ui, move |ui| {
+    if !dispatch_ui_result(ui, move |ui| {
         let ui_started_at = std::time::Instant::now();
-        let snapshot = match state.lock() {
-            Ok(app) => app.active_snapshot(),
+        let snapshot = match state_for_ui.lock() {
+            Ok(app) => {
+                app.clear_ui_refresh_pending();
+                app.active_snapshot()
+            }
             Err(_) => {
                 ui.set_status("State lock poisoned".into());
                 return;
@@ -305,7 +530,11 @@ pub(super) fn dispatch_terminal_output_snapshot(
             output_to_ui_us = duration_micros(output_received_at.elapsed()),
             "SSH terminal output applied to UI"
         );
-    });
+    }) {
+        if let Ok(app) = state.lock() {
+            app.clear_ui_refresh_pending();
+        }
+    }
 }
 
 fn duration_micros(duration: std::time::Duration) -> u64 {
@@ -374,6 +603,21 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
 }
 
 fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {
+    let transfer_active_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase.cancellable())
+        .count() as i32;
+    let transfer_failed_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase == SftpTransferPhase::Failed)
+        .count() as i32;
+    let transfer_completed_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase == SftpTransferPhase::Completed)
+        .count() as i32;
     ui.set_sftp_available(snapshot.available);
     ui.set_sftp_open(snapshot.open);
     ui.set_sftp_loading(snapshot.loading);
@@ -400,6 +644,12 @@ fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {
     ui.set_local_sftp_status(snapshot.local.status.into());
     ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);
     ui.set_local_sftp_all_selected(snapshot.local.all_selected);
+    ui.set_sftp_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(
+        snapshot.transfers,
+    ))));
+    ui.set_sftp_transfer_active_count(transfer_active_count);
+    ui.set_sftp_transfer_failed_count(transfer_failed_count);
+    ui.set_sftp_transfer_completed_count(transfer_completed_count);
 }
 
 fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
@@ -835,6 +1085,13 @@ pub(super) fn dispatch_ui(
     ui: &slint::Weak<AppWindow>,
     action: impl FnOnce(&AppWindow) + Send + 'static,
 ) {
+    let _ = dispatch_ui_result(ui, action);
+}
+
+pub(super) fn dispatch_ui_result(
+    ui: &slint::Weak<AppWindow>,
+    action: impl FnOnce(&AppWindow) + Send + 'static,
+) -> bool {
     let ui = ui.clone();
     if slint::invoke_from_event_loop(move || {
         if let Some(ui) = ui.upgrade() {
@@ -844,6 +1101,9 @@ pub(super) fn dispatch_ui(
     .is_err()
     {
         debug!("Slint event loop is no longer available for UI update");
+        false
+    } else {
+        true
     }
 }
 

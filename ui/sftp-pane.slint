@@ -6,10 +6,25 @@ export struct SftpEntryRow {
     name: string,
     path: string,
     kind: string,
+    icon: image,
+    has_icon: bool,
     size: string,
     modified: string,
     hidden: bool,
     selected: bool,
+}
+
+// Rust owns the bounded transfer snapshot and updates it in batches. Slint
+// only renders these presentation fields and returns the opaque id on cancel.
+export struct SftpTransferRow {
+    id: string,
+    name: string,
+    state: string,
+    status: string,
+    progress: float,
+    size: string,
+    speed: string,
+    cancellable: bool,
 }
 
 export struct SftpViewState {
@@ -33,6 +48,10 @@ export struct SftpViewState {
     local_status: string,
     local_selected_count: int,
     local_all_selected: bool,
+    transfers: [SftpTransferRow],
+    transfer_active_count: int,
+    transfer_failed_count: int,
+    transfer_completed_count: int,
 }
 
 component SftpActionButton inherits FocusScope {
@@ -315,6 +334,7 @@ component SftpEntry inherits Rectangle {
     in property <bool> shown: true;
     in property <bool> interactive: true;
     callback open-directory(string);
+    callback open-file(string);
     callback toggle-selection(string, bool);
 
     private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
@@ -362,6 +382,7 @@ component SftpEntry inherits Rectangle {
         }
     }
     Text {
+        visible: !root.entry.has_icon && root.entry.kind != "file";
         x: root.icon-x;
         width: Theme.sftp-icon-width;
         height: parent.height;
@@ -370,6 +391,26 @@ component SftpEntry inherits Rectangle {
         font-size: Theme.font-body;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+    Rectangle {
+        visible: !root.entry.has_icon && root.entry.kind == "file";
+        x: root.icon-x + Theme.space-xs;
+        y: (parent.height - self.height) / 2;
+        width: max(Theme.hairline, Theme.sftp-icon-width - 2 * Theme.space-xs);
+        height: Theme.sftp-icon-width - Theme.space-xs;
+        border-width: Theme.hairline;
+        border-color: Theme.muted;
+        border-radius: Theme.hairline;
+        background: transparent;
+    }
+    Image {
+        visible: root.entry.has_icon;
+        x: root.icon-x;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-icon-width;
+        height: Theme.sftp-icon-width;
+        source: root.entry.icon;
+        image-fit: contain;
     }
     Text {
         x: root.name-x;
@@ -416,10 +457,13 @@ component SftpEntry inherits Rectangle {
         width: parent.width;
         height: parent.height;
         enabled: root.shown && root.interactive;
-        mouse-cursor: root.entry.kind == "folder" ? pointer : default;
+        mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
+            ? pointer : default;
         double-clicked => {
             if root.entry.kind == "folder" {
                 root.open-directory(root.entry.path);
+            } else if root.entry.kind == "file" {
+                root.open-file(root.entry.path);
             }
         }
     }
@@ -461,6 +505,7 @@ component SftpDirectoryPane inherits Rectangle {
     callback refresh();
     callback navigate-back();
     callback navigate-forward();
+    callback open-file(string);
     callback toggle-selection(string, bool);
     callback select-all(bool);
 
@@ -613,6 +658,7 @@ component SftpDirectoryPane inherits Rectangle {
                     shown: root.show-hidden || !entry.hidden;
                     interactive: root.interactive && !root.loading;
                     open-directory(path) => { root.list-directory(path); }
+                    open-file(path) => { root.open-file(path); }
                     toggle-selection(path, selected) => { root.toggle-selection(path, selected); }
                 }
             }
@@ -657,8 +703,121 @@ component SftpDirectoryPane inherits Rectangle {
     }
 }
 
+component SftpTransferEntry inherits Rectangle {
+    in property <SftpTransferRow> transfer;
+    callback cancel(string);
+
+    private property <length> action-slot-width:
+        Theme.sftp-nav-icon-button-width + Theme.sftp-column-gap;
+    private property <length> content-width: max(
+        0px,
+        root.width - Theme.sftp-column-padding - root.action-slot-width,
+    );
+    private property <length> name-x: Theme.sftp-column-padding;
+    private property <length> status-x: root.content-width * 0.48;
+    private property <length> size-x: root.content-width * 0.72;
+    private property <length> speed-x: root.content-width * 0.86;
+    private property <float> bounded-progress:
+        max(0.0, min(1.0, root.transfer.progress));
+    private property <color> state-color: root.transfer.state == "failed"
+        ? Theme.danger
+        : (root.transfer.state == "completed" ? Theme.success
+        : (root.transfer.state == "cancelled" ? Theme.muted : Theme.accent));
+
+    height: Theme.sftp-row-height;
+    clip: true;
+    background: cancel-button.has-focus ? Theme.hover : transparent;
+    accessible-role: list-item;
+    accessible-label: root.transfer.name + ", " + root.transfer.status
+        + (root.transfer.size.is-empty ? "" : ", " + root.transfer.size);
+
+    Text {
+        x: root.name-x;
+        width: max(0px, root.status-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.name;
+        color: Theme.text;
+        font-size: Theme.font-body;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: root.status-x;
+        y: parent.height - Theme.space-sm;
+        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
+        height: Theme.space-xxs;
+        border-radius: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+
+        Rectangle {
+            width: parent.width * root.bounded-progress;
+            height: parent.height;
+            border-radius: parent.border-radius;
+            background: root.state-color;
+        }
+    }
+    Text {
+        x: root.status-x;
+        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
+        height: parent.height - Theme.space-sm;
+        text: root.transfer.status;
+        color: root.state-color;
+        font-size: Theme.font-caption;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.size-x;
+        width: max(0px, root.speed-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.size;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.speed-x;
+        width: max(
+            0px,
+            parent.width - root.action-slot-width - Theme.sftp-column-gap - self.x,
+        );
+        height: parent.height;
+        text: root.transfer.speed;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    cancel-button := SftpActionButton {
+        visible: root.transfer.cancellable;
+        x: parent.width - Theme.sftp-column-padding - self.width;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-nav-icon-button-width;
+        height: parent.height;
+        text: "x";
+        accessible-name: "Cancel transfer " + root.transfer.name;
+        font-size: Theme.font-small;
+        enabled: root.transfer.cancellable;
+        clicked => { root.cancel(root.transfer.id); }
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+    }
+}
+
 component SftpTransferQueue inherits Rectangle {
     in property <bool> collapsed: false;
+    in property <[SftpTransferRow]> transfers;
+    in property <int> active-count: 0;
+    in property <int> failed-count: 0;
+    in property <int> completed-count: 0;
+    callback cancel-transfer(string);
 
     background: Theme.panel;
     clip: true;
@@ -673,7 +832,8 @@ component SftpTransferQueue inherits Rectangle {
                 x: Theme.sftp-column-padding;
                 width: parent.width - 2 * Theme.sftp-column-padding;
                 height: parent.height;
-                text: "Transfers   Active (0)   Failed (0)   Completed (0)";
+                text: "Transfers   Active (" + root.active-count + ")   Failed ("
+                    + root.failed-count + ")   Completed (" + root.completed-count + ")";
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -688,49 +848,61 @@ component SftpTransferQueue inherits Rectangle {
             }
         }
         if !root.collapsed : Rectangle {
+            private property <length> action-slot-width:
+                Theme.sftp-nav-icon-button-width + Theme.sftp-column-gap;
+            private property <length> content-width: max(
+                0px,
+                self.width - Theme.sftp-column-padding - self.action-slot-width,
+            );
             height: Theme.sftp-transfer-header-height;
             background: Theme.panel;
             Text {
                 x: Theme.sftp-column-padding;
-                width: parent.width * 0.54 - self.x;
+                width: max(0px, parent.content-width * 0.48 - Theme.sftp-column-gap - self.x);
                 height: parent.height;
                 text: "Name";
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
+                overflow: elide;
                 vertical-alignment: center;
             }
             Text {
-                x: parent.width * 0.54;
-                width: parent.width * 0.18;
+                x: parent.content-width * 0.48;
+                width: max(0px, parent.content-width * 0.24 - Theme.sftp-column-gap);
                 height: parent.height;
                 text: "Status";
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
-                horizontal-alignment: right;
+                overflow: elide;
                 vertical-alignment: center;
             }
             Text {
-                x: parent.width * 0.74;
-                width: parent.width * 0.12;
+                x: parent.content-width * 0.72;
+                width: max(0px, parent.content-width * 0.14 - Theme.sftp-column-gap);
                 height: parent.height;
                 text: "Size";
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
                 horizontal-alignment: right;
+                overflow: elide;
                 vertical-alignment: center;
             }
             Text {
-                x: parent.width * 0.87;
-                width: parent.width * 0.12 - Theme.sftp-column-padding;
+                x: parent.content-width * 0.86;
+                width: max(
+                    0px,
+                    parent.width - parent.action-slot-width - Theme.sftp-column-gap - self.x,
+                );
                 height: parent.height;
                 text: "Speed";
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
                 horizontal-alignment: right;
+                overflow: elide;
                 vertical-alignment: center;
             }
             Rectangle {
@@ -740,7 +912,25 @@ component SftpTransferQueue inherits Rectangle {
                 background: Theme.divider;
             }
         }
-        if !root.collapsed : Rectangle {
+        if !root.collapsed && root.transfers.length > 0 : ListView {
+            vertical-stretch: 1;
+            min-height: 0px;
+            accessible-role: list;
+            accessible-label: "File transfers";
+
+            for transfer in root.transfers : Rectangle {
+                width: parent.width;
+                height: Theme.sftp-row-height;
+
+                SftpTransferEntry {
+                    width: parent.width;
+                    height: parent.height;
+                    transfer: transfer;
+                    cancel(id) => { root.cancel-transfer(id); }
+                }
+            }
+        }
+        if !root.collapsed && root.transfers.length == 0 : Rectangle {
             vertical-stretch: 1;
             Text {
                 text: "No transfers yet";
@@ -768,6 +958,9 @@ export component SftpPane inherits Rectangle {
     callback select-all-remote(bool);
     callback toggle-local-selection(string, bool);
     callback select-all-local(bool);
+    callback open-remote-file(string);
+    callback open-local-file(string);
+    callback cancel-transfer(string);
     callback close();
 
     min-width: root.standalone ? 0px : Theme.sftp-panel-min-width;
@@ -869,6 +1062,7 @@ export component SftpPane inherits Rectangle {
                 refresh => { root.list-directory(root.view.path); }
                 navigate-back => { root.navigate-back(); }
                 navigate-forward => { root.navigate-forward(); }
+                open-file(path) => { root.open-remote-file(path); }
                 toggle-selection(path, selected) => {
                     root.toggle-remote-selection(path, selected);
                 }
@@ -914,6 +1108,7 @@ export component SftpPane inherits Rectangle {
                 selection-all: root.view.local_all_selected;
                 selection-count: root.view.local_selected_count;
                 list-directory(path) => { root.list-local-directory(path); }
+                open-file(path) => { root.open-local-file(path); }
                 toggle-selection(path, selected) => {
                     root.toggle-local-selection(path, selected);
                 }
@@ -951,6 +1146,11 @@ export component SftpPane inherits Rectangle {
             width: parent.width;
             height: root.transfer-area-height;
             collapsed: root.transfers-collapsed;
+            transfers: root.view.transfers;
+            active-count: root.view.transfer_active_count;
+            failed-count: root.view.transfer_failed_count;
+            completed-count: root.view.transfer_completed_count;
+            cancel-transfer(id) => { root.cancel-transfer(id); }
         }
     }
 }

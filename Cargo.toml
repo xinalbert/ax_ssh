@@ -18,6 +18,7 @@ chacha20poly1305 = "0.10.1"
 chrono = "0.4"
 directories = "6"
 fontdb = "0.23.0"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff"] }
 keyring = "4.1.5"
 libmudtelnet-rs = "2.0.10"
 portable-pty = "0.9.0"
@@ -37,12 +38,17 @@ uuid = { version = "1", features = ["serde", "v4"] }
 zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+freedesktop-icons = "0.4.0"
+mime_guess = { version = "2.0.5", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSEvent", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSView", "NSWindow", "NSWorkspace", "std"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication", "NSBitmapImageRep", "NSEvent", "NSGraphics", "NSGraphicsContext", "NSImage", "NSImageRep", "NSMenu", "NSMenuItem", "NSResponder", "NSView", "NSWindow", "NSWorkspace", "objc2-core-graphics", "objc2-uniform-type-identifiers", "std"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSObject", "NSString", "std"] }
+objc2-uniform-type-identifiers = { version = "0.3.2", default-features = false, features = ["UTType", "std"] }
 raw-window-handle = "0.6.2"
 
 [build-dependencies]

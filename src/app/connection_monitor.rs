@@ -64,6 +64,10 @@ pub(super) fn spawn_session_monitor(
                     }
                 }
                 SshSessionEvent::Sftp(event) => {
+                    let icon_keys = match &event {
+                        SftpBrowserEvent::DirectoryPage { entries, .. } => sftp_icon_keys(entries),
+                        _ => Vec::new(),
+                    };
                     let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -85,6 +89,85 @@ pub(super) fn spawn_session_monitor(
                     };
                     if active {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    prewarm_file_icons(&runtime_for_monitor, icon_keys, &ui, &state);
+                }
+                SshSessionEvent::SftpTransfer(event) => {
+                    let mut completed_open = None;
+                    let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| match event {
+                            SftpTransferEvent::Started {
+                                transfer_id,
+                                remote_path: _,
+                                name,
+                                total_bytes,
+                            } => {
+                                terminal
+                                    .sftp
+                                    .start_transfer(transfer_id, name, total_bytes);
+                            }
+                            SftpTransferEvent::Progress {
+                                transfer_id,
+                                downloaded_bytes,
+                                total_bytes,
+                            } => {
+                                terminal.sftp.update_transfer_progress(
+                                    transfer_id,
+                                    downloaded_bytes,
+                                    total_bytes,
+                                );
+                            }
+                            SftpTransferEvent::Completed {
+                                transfer_id,
+                                local_path,
+                                total_bytes,
+                            } => {
+                                if terminal
+                                    .sftp
+                                    .mark_transfer_opening(transfer_id, total_bytes)
+                                {
+                                    completed_open = Some((transfer_id, local_path));
+                                }
+                            }
+                            SftpTransferEvent::Cancelled { transfer_id } => {
+                                terminal.sftp.finish_transfer(
+                                    transfer_id,
+                                    SftpTransferPhase::Cancelled,
+                                    "Cancelled".to_owned(),
+                                );
+                            }
+                            SftpTransferEvent::Failed {
+                                transfer_id,
+                                message,
+                            } => {
+                                terminal.sftp.finish_transfer(
+                                    transfer_id,
+                                    SftpTransferPhase::Failed,
+                                    message,
+                                );
+                            }
+                        },
+                    ) else {
+                        continue;
+                    };
+                    if active {
+                        dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some((transfer_id, local_path)) = completed_open {
+                        open_downloaded_sftp_file(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.id,
+                            attempt_id,
+                            transfer_id,
+                            local_path,
+                        );
                     }
                 }
                 SshSessionEvent::X11ForwardingEnabled => {
@@ -308,6 +391,64 @@ pub(super) fn spawn_session_monitor(
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "SSH event monitor stopped");
     });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn open_downloaded_sftp_file(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    attempt_id: Uuid,
+    transfer_id: Uuid,
+    local_path: PathBuf,
+) {
+    runtime.spawn(async move {
+        if !session_attempt_is_active(&state, tab_id, profile_id, attempt_id) {
+            return;
+        }
+        let opened = timeout(
+            Duration::from_secs(5),
+            tokio::task::spawn_blocking(move || open::that_detached(local_path)),
+        )
+        .await;
+        let open_result = match opened {
+            Ok(Ok(Ok(()))) => Ok(()),
+            Ok(Ok(Err(error))) => Err(format!("Cannot open downloaded file: {error}")),
+            Ok(Err(error)) => Err(format!("File opener task failed: {error}")),
+            Err(_) => Err("File opener timed out".to_owned()),
+        };
+        let (phase, status) = classify_downloaded_file_open(open_result);
+        if let Some(active) =
+            mutate_terminal_attempt(&state, tab_id, profile_id, attempt_id, |terminal| {
+                terminal.sftp.finish_transfer(transfer_id, phase, status)
+            })
+            && active
+        {
+            dispatch_active_snapshot(&ui, &state);
+        }
+    });
+}
+
+fn classify_downloaded_file_open(result: Result<(), String>) -> (SftpTransferPhase, String) {
+    match result {
+        Ok(()) => (SftpTransferPhase::Completed, "Opened".to_owned()),
+        Err(message) => (SftpTransferPhase::Failed, bounded_transfer_message(message)),
+    }
+}
+
+fn bounded_transfer_message(message: String) -> String {
+    const MAX_TRANSFER_STATUS_CHARS: usize = 512;
+    let mut chars = message.chars();
+    let mut bounded = chars
+        .by_ref()
+        .take(MAX_TRANSFER_STATUS_CHARS)
+        .collect::<String>();
+    if chars.next().is_some() {
+        bounded.push_str("...");
+    }
+    bounded
 }
 
 fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrowserEvent) {
@@ -534,5 +675,17 @@ mod tests {
         apply_sftp_event(&mut state, SftpBrowserEvent::Closed);
         assert!(!state.open);
         assert!(!state.has_more);
+    }
+
+    #[test]
+    fn failed_download_opener_never_transitions_to_completed() {
+        let (phase, status) =
+            classify_downloaded_file_open(Err("no default application".to_owned()));
+        assert_eq!(phase, SftpTransferPhase::Failed);
+        assert!(status.contains("no default application"));
+
+        let (phase, status) = classify_downloaded_file_open(Ok(()));
+        assert_eq!(phase, SftpTransferPhase::Completed);
+        assert_eq!(status, "Opened");
     }
 }

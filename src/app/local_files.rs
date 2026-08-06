@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
@@ -113,6 +113,47 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     })
 }
 
+pub(super) fn validate_local_file_for_open(
+    directory: &str,
+    entry: &LocalDirectoryEntry,
+) -> Result<PathBuf> {
+    if entry.is_dir {
+        bail!("local entry is a directory");
+    }
+    if entry.is_symlink {
+        bail!("symbolic links cannot be opened from SFTP in this version");
+    }
+
+    let directory_path = Path::new(directory);
+    let directory_metadata = fs::symlink_metadata(directory_path)
+        .with_context(|| format!("cannot inspect local directory {directory}"))?;
+    if directory_metadata.file_type().is_symlink() || !directory_metadata.is_dir() {
+        bail!("local directory changed after it was listed");
+    }
+    let canonical_directory = fs::canonicalize(directory_path)
+        .with_context(|| format!("cannot resolve local directory {directory}"))?;
+
+    let entry_path = Path::new(&entry.path);
+    if entry_path.parent() != Some(directory_path) {
+        bail!("local entry is outside the current directory snapshot");
+    }
+    let entry_metadata = fs::symlink_metadata(entry_path)
+        .with_context(|| format!("cannot inspect local file {}", entry.path))?;
+    if entry_metadata.file_type().is_symlink() {
+        bail!("local file became a symbolic link after it was listed");
+    }
+    if !entry_metadata.is_file() {
+        bail!("local entry is no longer a regular file");
+    }
+
+    let canonical_entry = fs::canonicalize(entry_path)
+        .with_context(|| format!("cannot resolve local file {}", entry.path))?;
+    if canonical_entry.parent() != Some(canonical_directory.as_path()) {
+        bail!("local file resolved outside the current directory snapshot");
+    }
+    Ok(canonical_entry)
+}
+
 fn is_safe_display_text(value: &str) -> bool {
     !value.chars().any(char::is_control)
 }
@@ -147,5 +188,79 @@ mod tests {
         assert!(!is_safe_display_text("bad\nname"));
         assert!(!is_safe_display_text("bad\u{1b}name"));
         assert!(is_safe_display_text("normal-name"));
+    }
+
+    #[test]
+    fn local_open_validation_accepts_only_snapshot_regular_files() {
+        let directory =
+            std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).expect("test directory should be created");
+        let file_path = directory.join("notes.txt");
+        fs::write(&file_path, b"notes").expect("test file should be written");
+        let entry = LocalDirectoryEntry {
+            name: "notes.txt".to_owned(),
+            path: file_path.display().to_string(),
+            is_dir: false,
+            is_symlink: false,
+            size: 5,
+            modified: None,
+        };
+
+        let validated = validate_local_file_for_open(&directory.display().to_string(), &entry)
+            .expect("snapshot regular file should be accepted");
+        assert_eq!(validated, fs::canonicalize(&file_path).expect("file path"));
+
+        fs::remove_dir_all(&directory).expect("test directory should be removed");
+    }
+
+    #[test]
+    fn local_open_validation_rejects_entries_outside_snapshot() {
+        let root = std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
+        let directory = root.join("listed");
+        let outside = root.join("outside.txt");
+        fs::create_dir_all(&directory).expect("test directory should be created");
+        fs::write(&outside, b"outside").expect("outside file should be written");
+        let entry = LocalDirectoryEntry {
+            name: "outside.txt".to_owned(),
+            path: outside.display().to_string(),
+            is_dir: false,
+            is_symlink: false,
+            size: 7,
+            modified: None,
+        };
+
+        let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
+            .expect_err("outside file should be rejected");
+        assert!(error.to_string().contains("outside the current directory"));
+
+        fs::remove_dir_all(&root).expect("test directory should be removed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_open_validation_rejects_replaced_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
+        let directory = root.join("listed");
+        let target = root.join("target.txt");
+        let link = directory.join("notes.txt");
+        fs::create_dir_all(&directory).expect("test directory should be created");
+        fs::write(&target, b"target").expect("target file should be written");
+        symlink(&target, &link).expect("test symlink should be created");
+        let entry = LocalDirectoryEntry {
+            name: "notes.txt".to_owned(),
+            path: link.display().to_string(),
+            is_dir: false,
+            is_symlink: false,
+            size: 6,
+            modified: None,
+        };
+
+        let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
+            .expect_err("replacement symlink should be rejected");
+        assert!(error.to_string().contains("became a symbolic link"));
+
+        fs::remove_dir_all(&root).expect("test directory should be removed");
     }
 }

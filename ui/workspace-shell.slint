@@ -79,6 +79,9 @@ export component WorkspaceShell inherits Rectangle {
     callback select-all-remote-sftp(bool);
     callback toggle-local-sftp-selection(string, bool);
     callback select-all-local-sftp(bool);
+    callback open-remote-sftp-file(string);
+    callback open-local-sftp-file(string);
+    callback cancel-sftp-transfer(string);
     callback close-sftp();
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -232,6 +235,9 @@ export component WorkspaceShell inherits Rectangle {
                             root.toggle-local-sftp-selection(path, selected);
                         }
                         select-all-local(selected) => { root.select-all-local-sftp(selected); }
+                        open-remote-file(path) => { root.open-remote-sftp-file(path); }
+                        open-local-file(path) => { root.open-local-sftp-file(path); }
+                        cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
                         close => { root.close-tab(root.view.active_tab_id); }
                     }
 

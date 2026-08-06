@@ -1,4 +1,9 @@
-//! Bounded SFTP v3 directory browsing for one authenticated SSH transport.
+//! Bounded SFTP v3 browsing and read-only transfers over authenticated SSH.
+
+mod transfer;
+
+pub(crate) use transfer::{SFTP_TRANSFER_EVENT_CAPACITY, SftpDownloadHandle, SftpDownloadRequest};
+pub use transfer::{SftpTransferEvent, cleanup_stale_sftp_open_cache};
 
 use std::collections::VecDeque;
 use std::io;
@@ -59,7 +64,7 @@ enum SftpBrowserCommand {
 
 pub(crate) struct SftpBrowserHandle {
     command_tx: mpsc::Sender<SftpBrowserCommand>,
-    task: JoinHandle<()>,
+    task: Option<JoinHandle<()>>,
 }
 
 impl SftpBrowserHandle {
@@ -75,11 +80,14 @@ impl SftpBrowserHandle {
         validate_remote_path(&initial_path)?;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let task = runtime.spawn(run_browser(stream, initial_path, command_rx, event_tx));
-        Ok(Self { command_tx, task })
+        Ok(Self {
+            command_tx,
+            task: Some(task),
+        })
     }
 
     pub(crate) fn is_finished(&self) -> bool {
-        self.task.is_finished()
+        self.task.as_ref().is_none_or(|task| task.is_finished())
     }
 
     pub(crate) fn request_list(&self, path: String) -> Result<()> {
@@ -96,7 +104,7 @@ impl SftpBrowserHandle {
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
-        if !self.task.is_finished() {
+        if !self.is_finished() {
             match self.command_tx.try_send(SftpBrowserCommand::Close) {
                 Ok(()) => {}
                 Err(mpsc::error::TrySendError::Full(_)) => {
@@ -107,11 +115,14 @@ impl SftpBrowserHandle {
                 }
             }
         }
-        match timeout(SHUTDOWN_TIMEOUT, &mut self.task).await {
+        let Some(mut task) = self.task.take() else {
+            return Ok(());
+        };
+        match timeout(SHUTDOWN_TIMEOUT, &mut task).await {
             Ok(joined) => joined.context("SFTP browser task failed during shutdown"),
             Err(_) => {
-                self.task.abort();
-                match self.task.await {
+                task.abort();
+                match task.await {
                     Err(error) if error.is_cancelled() => {
                         warn!("SFTP browser exceeded shutdown timeout and was aborted");
                         Ok(())
@@ -120,6 +131,19 @@ impl SftpBrowserHandle {
                     Ok(()) => Ok(()),
                 }
             }
+        }
+    }
+}
+
+impl Drop for SftpBrowserHandle {
+    fn drop(&mut self) {
+        // The worker normally joins this task through `shutdown`. If the
+        // owning SSH worker is aborted by its outer deadline, dropping the
+        // handle must still stop the browser rather than detach it.
+        if let Some(task) = self.task.as_ref()
+            && !task.is_finished()
+        {
+            task.abort();
         }
     }
 }

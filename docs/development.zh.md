@@ -44,11 +44,16 @@ git diff --check
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
   `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
   必须保留与终端 Tab 相同的主机密钥和凭据门禁。增加文件操作时必须保留入站 packet、路径/名称、
-  分页、目录预算、请求和 shutdown 上限；上传/下载/删除/编辑还必须有明确确认、进度、取消
-  和冲突测试。
+  分页、目录预算、请求和 shutdown 上限。只读 download-to-open 必须保持 512 MiB 文件上限、
+  64 KiB 请求 chunk、有界 writer/event queue、逐操作与总超时、逐 Tab 并发上限、取消、私有缓存
+  发布和 owned join。未来上传/删除/重命名/编辑必须另行建立确认、冲突与修改测试。
 - SFTP 本地文件栏是只读 application bridge 快照。目录读取必须放在有界 blocking task 中，且只返回
   名称、路径、类型、大小和修改时间元数据；Slint 不得访问文件系统。结果回到 UI 前按 Tab 和请求 identity
-  丢弃过期项，并保留条目、名称和路径上限。
+  丢弃过期项，并保留条目、名称和路径上限。本地打开意图必须命中当前活动 Tab 快照，并在 blocking
+  worker 上重验非 symlink 目录与 regular file 的归属，最后才调用 detached 平台 opener。
+- 文件图标平台 API、主题检测、文件读取和图片解码都必须留在 `src/app/file_icons.rs` 的 blocking
+  工作中；Slint 只能接收进程内缓存里的有界自有 RGBA 图片。远端名称只作为扩展名/类型提示，绝不
+  当成本机路径；每个平台 resolver 都必须保留内建 fallback 并确定性释放 native handle。
 - Telnet 必须明确标记为明文；IAC 协商必须在进入终端前解析和过滤，拒绝不支持的选项，
   只有对端接受后才发送 NAWS。Telnet profile 不得新增凭据持久化。
 - Serial 枚举必须只读取元数据并在 UI 线程外运行；自动发现期间绝不打开或探测设备，
@@ -136,12 +141,16 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
 方向键、Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键还原、Telnet
 协商/CRLF/NAWS、Serial USB 稳定身份匹配和直连 attempt 隔离。SFTP 测试覆盖远端
-路径/名称校验、分片与超大 packet frame、逐 Tab 快照隔离和浏览事件恢复。忽略测试
+路径/名称校验、分片与超大 packet frame、逐 Tab 快照隔离、浏览事件恢复、regular file
+元数据/路径检查、有界分块下载、截断、取消、私有缓存发布/权限/清理、transfer 状态、pending
+subsystem 取消和 Tab shutdown join。文件图标测试覆盖有界规范化 key、cache identity、LRU
+容量、预热上限和 fallback；本地打开测试覆盖快照归属与 symlink 替换拒绝。忽略测试
 `platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
 写入、读取和删除，并可能触发系统授权提示；应在每个受支持的凭据后端上主动运行。
 窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH/Telnet
 服务器仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实连接并发、目标平台
-Serial 发现/权限/热插拔与设备输入输出、真实 SFTP 服务兼容性、SFTP 面板焦点/布局、
-协议 resize、切换后的终端焦点保持和原生标题栏拖动命中区域。
+Serial 发现/权限/热插拔与设备输入输出、真实 SFTP 服务兼容性、SFTP 面板焦点/布局、macOS/
+Windows/Linux 默认程序调度与文件图标外观/主题变化、协议 resize、切换后的终端焦点保持和原生
+标题栏拖动命中区域。
 SSH 输入延迟应在同一主机和网络上对比 AxSSH 与系统 `ssh`，优先观察 P50/P95；两者相近通常
 说明网络/远端 PTY RTT，占比明显更大的 AxSSH 差值再用上述 latency 阶段定位。

@@ -5,7 +5,7 @@ import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
 import { TerminalRenderLine } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
-import { SftpEntryRow, SftpViewState } from "sftp-pane.slint";
+import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
 import { WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
@@ -86,6 +86,10 @@ export component AppWindow inherits Window {
     in property <string> local-sftp-status: "";
     in property <int> local-sftp-selected-count: 0;
     in property <bool> local-sftp-all-selected: false;
+    in property <[SftpTransferRow]> sftp-transfers;
+    in property <int> sftp-transfer-active-count: 0;
+    in property <int> sftp-transfer-failed-count: 0;
+    in property <int> sftp-transfer-completed-count: 0;
     in property <[TerminalRenderLine]> terminal-render-lines;
     in property <int> terminal-content-columns: 0;
     in property <int> terminal-cursor-row: 0;
@@ -226,6 +230,10 @@ export component AppWindow inherits Window {
             local_entries: root.local-sftp-entries, local_truncated: root.local-sftp-truncated,
             local_status: root.local-sftp-status, local_selected_count: root.local-sftp-selected-count,
             local_all_selected: root.local-sftp-all-selected,
+            transfers: root.sftp-transfers,
+            transfer_active_count: root.sftp-transfer-active-count,
+            transfer_failed_count: root.sftp-transfer-failed-count,
+            transfer_completed_count: root.sftp-transfer-completed-count,
         },
         settings: {
             local_shell_options: root.local-shell-options,
@@ -352,6 +360,9 @@ export component AppWindow inherits Window {
     callback select-all-remote-sftp(bool);
     callback toggle-local-sftp-selection(string, bool);
     callback select-all-local-sftp(bool);
+    callback open-remote-sftp-file(string);
+    callback open-local-sftp-file(string);
+    callback cancel-sftp-transfer(string);
     callback close-sftp();
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -598,6 +609,9 @@ export component AppWindow inherits Window {
                 root.toggle-local-sftp-selection(path, selected);
             }
             select-all-local-sftp(selected) => { root.select-all-local-sftp(selected); }
+            open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
+            open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
+            cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
             close-sftp => { root.close-sftp(); }
             terminal-key(text, alt, control, meta, shift, physical-key-event) => {
                 return root.terminal-key(text, alt, control, meta, shift, physical-key-event);

@@ -33,6 +33,18 @@ License 1.1. Their copyright, author, reserved-name, and license notices are in:
 The retained source under `vendor/vt100/` is licensed under the MIT License.
 Its copyright and license notice are in `vendor/vt100/LICENSE`.
 
+## Platform File Icons
+
+AxSSH obtains file-type icons from operating-system facilities: AppKit and
+Uniform Type Identifiers on macOS, Windows Shell and GDI APIs on Windows, and
+freedesktop icon themes plus MIME mappings on Linux. Operating-system artwork
+is resolved at runtime and is not copied into this repository.
+
+The Rust implementation uses the locked `image`, `freedesktop-icons`,
+`mime_guess`, `objc2` family, and `windows-sys` crates on their applicable
+targets. They remain under the license terms declared by their respective
+copyright holders and recorded in the Cargo dependency metadata.
+
 ## Cargo Dependencies
 
 Other Rust dependencies resolved by `Cargo.lock` remain under the license terms

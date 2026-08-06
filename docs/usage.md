@@ -146,10 +146,28 @@ current directory, or `~` in the remote browser, then use **Open**; double-click
 a folder to enter it. The local browser starts at the platform home directory,
 accepts an explicit local directory path, and reads only bounded file metadata.
 Use **Hidden** and **More** to include dot files or request the next bounded
-remote page. The lower transfer queue intentionally shows no actions while
-transfers are unavailable. Closing the SFTP Tab closes its subsystem and SSH
-transport. This first phase is read-only browsing: upload, download, delete,
-rename, and remote edit sync are not available.
+remote page. Rows use the target platform's file-type icon when one is available
+and a built-in folder, link, or generic-file icon otherwise.
+
+Double-click a regular file in the local pane to open the current snapshot entry
+with the platform's default application. Directories continue to navigate and
+symbolic links are not opened. AxSSH rechecks the directory, file type, and
+resolved parent outside the UI thread before asking the operating system to open
+the file.
+
+Double-click a regular file in the remote pane to download a read-only copy into
+AxSSH's private cache and open that completed copy with the default application.
+Directories and symbolic links are rejected. A file may be at most 512 MiB, and
+each SFTP Tab runs at most two downloads at once. The Transfers area shows
+progress, success, cancellation, or a bounded failure message; use its cancel
+button to stop a queued or active download. Closing the SFTP Tab cancels its
+pending and active downloads before closing the browser and SSH transport.
+Partial or failed files are never opened. Completed cache copies are best-effort
+temporary files and are removed by a later startup cleanup after they become
+stale.
+
+This first file-open phase does not provide upload, Save As, delete, rename,
+drag-and-drop, modification monitoring, automatic upload, or remote edit sync.
 
 ## Workspace and terminal controls
 
@@ -287,8 +305,8 @@ when such a connection is no longer live.
 
 ## Current limitations
 
-Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP file
-transfer/mutation/edit sync, SSH agent integration, reconnect, persisted
+Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP upload,
+explicit Save As, mutation/edit sync, SSH agent integration, reconnect, persisted
 workspace restoration, and complete full-screen terminal mouse reporting remain
 planned work. Serial availability, device permissions, and supported parameter
 combinations depend on the target operating system and hardware; Telnet has no

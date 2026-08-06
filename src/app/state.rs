@@ -1,7 +1,9 @@
 //! Application state, workspace tabs, and connection-attempt transitions.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use tokio::sync::oneshot;
@@ -27,6 +29,7 @@ pub(super) struct AppState {
     profile_mutations: HashMap<Uuid, Uuid>,
     local_terminal_number: u32,
     serial_ports: Vec<SerialPortDescriptor>,
+    ui_refresh_pending: AtomicBool,
 }
 
 impl AppState {
@@ -40,7 +43,16 @@ impl AppState {
             profile_mutations: HashMap::new(),
             local_terminal_number: 0,
             serial_ports: Vec::new(),
+            ui_refresh_pending: AtomicBool::new(false),
         }
+    }
+
+    pub(super) fn try_schedule_ui_refresh(&self) -> bool {
+        !self.ui_refresh_pending.swap(true, Ordering::AcqRel)
+    }
+
+    pub(super) fn clear_ui_refresh_pending(&self) {
+        self.ui_refresh_pending.store(false, Ordering::Release);
     }
 
     pub(super) fn open_settings_tab(&mut self) -> Uuid {
@@ -821,6 +833,7 @@ pub(super) struct TerminalTabState {
 }
 
 const SFTP_HISTORY_LIMIT: usize = 128;
+const SFTP_TRANSFER_HISTORY_LIMIT: usize = 32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SftpNavigation {
@@ -850,6 +863,7 @@ pub(super) struct SftpBrowserState {
     forward_history: VecDeque<String>,
     pending_navigation: Option<PendingSftpNavigation>,
     pub(super) local: LocalDirectoryState,
+    pub(super) transfers: VecDeque<SftpTransferState>,
 }
 
 impl SftpBrowserState {
@@ -881,7 +895,149 @@ impl SftpBrowserState {
             all_selected: self.all_selected(),
             selected: self.selected.clone(),
             local: self.local.snapshot(),
+            transfers: self
+                .transfers
+                .iter()
+                .map(SftpTransferState::snapshot)
+                .collect(),
         }
+    }
+
+    pub(super) fn queue_transfer(
+        &mut self,
+        id: Uuid,
+        name: String,
+        total_bytes: u64,
+    ) -> Result<()> {
+        if self.transfers.iter().any(|transfer| transfer.id == id) {
+            anyhow::bail!("SFTP transfer already exists");
+        }
+        if self.transfers.len() >= SFTP_TRANSFER_HISTORY_LIMIT {
+            let removable = self
+                .transfers
+                .iter()
+                .position(|transfer| !transfer.phase.cancellable());
+            if let Some(index) = removable {
+                self.transfers.remove(index);
+            } else {
+                anyhow::bail!("SFTP transfer history is full");
+            }
+        }
+        self.transfers.push_back(SftpTransferState {
+            id,
+            name,
+            phase: SftpTransferPhase::Queued,
+            downloaded_bytes: 0,
+            total_bytes,
+            bytes_per_second: 0,
+            started_at: None,
+            status: "Queued".to_owned(),
+        });
+        Ok(())
+    }
+
+    pub(super) fn start_transfer(&mut self, id: Uuid, name: String, total_bytes: u64) {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return;
+        };
+        if transfer.phase != SftpTransferPhase::Queued {
+            return;
+        }
+        transfer.name = name;
+        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.total_bytes = total_bytes;
+        transfer.started_at = Some(Instant::now());
+        transfer.status = "Downloading".to_owned();
+    }
+
+    pub(super) fn update_transfer_progress(
+        &mut self,
+        id: Uuid,
+        downloaded_bytes: u64,
+        total_bytes: u64,
+    ) {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return;
+        };
+        if transfer.phase != SftpTransferPhase::Downloading {
+            return;
+        }
+        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
+        transfer.total_bytes = total_bytes;
+        if let Some(started_at) = transfer.started_at {
+            let elapsed = started_at.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                transfer.bytes_per_second =
+                    (transfer.downloaded_bytes as f64 / elapsed).min(u64::MAX as f64) as u64;
+            }
+        }
+        transfer.status = if total_bytes == 0 {
+            "Downloading".to_owned()
+        } else {
+            format!(
+                "{:.0}%",
+                100.0 * transfer.downloaded_bytes as f64 / total_bytes as f64
+            )
+        };
+    }
+
+    pub(super) fn mark_transfer_opening(&mut self, id: Uuid, total_bytes: u64) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if transfer.phase != SftpTransferPhase::Downloading {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Opening;
+        transfer.downloaded_bytes = total_bytes;
+        transfer.total_bytes = total_bytes;
+        transfer.status = "Opening".to_owned();
+        true
+    }
+
+    pub(super) fn request_transfer_cancel(&mut self, id: Uuid) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if !transfer.phase.can_request_cancel() {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Cancelling;
+        transfer.status = "Cancelling".to_owned();
+        true
+    }
+
+    pub(super) fn transfer_is_cancellable(&self, id: Uuid) -> bool {
+        self.transfers
+            .iter()
+            .find(|transfer| transfer.id == id)
+            .is_some_and(|transfer| transfer.phase.can_request_cancel())
+    }
+
+    pub(super) fn finish_transfer(&mut self, id: Uuid, phase: SftpTransferPhase, status: String) {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return;
+        };
+        let allowed = match (transfer.phase, phase) {
+            (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
+            | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
+            | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
+            | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
+            | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
+            | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
+            | (SftpTransferPhase::Opening, SftpTransferPhase::Completed)
+            | (SftpTransferPhase::Opening, SftpTransferPhase::Failed) => true,
+            _ => false,
+        };
+        if !allowed {
+            return;
+        }
+        transfer.phase = phase;
+        if phase == SftpTransferPhase::Completed {
+            transfer.downloaded_bytes = transfer.total_bytes;
+        }
+        transfer.status = status;
     }
 
     pub(super) fn begin_navigation(
@@ -1131,6 +1287,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) all_selected: bool,
     pub(super) selected: HashSet<String>,
     pub(super) local: LocalDirectorySnapshot,
+    pub(super) transfers: Vec<SftpTransferSnapshot>,
 }
 
 #[derive(Clone, Default)]
@@ -1143,6 +1300,75 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) selected_count: usize,
     pub(super) all_selected: bool,
     pub(super) selected: HashSet<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SftpTransferPhase {
+    Queued,
+    Downloading,
+    Cancelling,
+    Opening,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+impl SftpTransferPhase {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Downloading => "downloading",
+            Self::Cancelling => "cancelling",
+            Self::Opening => "opening",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub(super) fn cancellable(self) -> bool {
+        matches!(self, Self::Queued | Self::Downloading | Self::Cancelling)
+    }
+
+    fn can_request_cancel(self) -> bool {
+        matches!(self, Self::Queued | Self::Downloading)
+    }
+}
+
+pub(super) struct SftpTransferState {
+    pub(super) id: Uuid,
+    pub(super) name: String,
+    pub(super) phase: SftpTransferPhase,
+    pub(super) downloaded_bytes: u64,
+    pub(super) total_bytes: u64,
+    pub(super) bytes_per_second: u64,
+    started_at: Option<Instant>,
+    pub(super) status: String,
+}
+
+impl SftpTransferState {
+    fn snapshot(&self) -> SftpTransferSnapshot {
+        SftpTransferSnapshot {
+            id: self.id,
+            name: self.name.clone(),
+            phase: self.phase,
+            downloaded_bytes: self.downloaded_bytes,
+            total_bytes: self.total_bytes,
+            bytes_per_second: self.bytes_per_second,
+            status: self.status.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct SftpTransferSnapshot {
+    pub(super) id: Uuid,
+    pub(super) name: String,
+    pub(super) phase: SftpTransferPhase,
+    pub(super) downloaded_bytes: u64,
+    pub(super) total_bytes: u64,
+    pub(super) bytes_per_second: u64,
+    pub(super) status: String,
 }
 
 impl TerminalTabState {
@@ -1403,6 +1629,24 @@ impl TerminalWorker {
     pub(super) fn request_close_sftp(&self) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_close_sftp(),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(super) fn request_open_sftp_file(&self, transfer_id: Uuid, path: String) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_open_sftp_file(transfer_id, path),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(super) fn request_cancel_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_cancel_sftp_transfer(transfer_id),
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }

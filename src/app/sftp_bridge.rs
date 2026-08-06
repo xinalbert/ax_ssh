@@ -1,7 +1,11 @@
-use super::local_files::{LOCAL_DIRECTORY_PATH_LIMIT, read_local_directory};
+use super::local_files::{
+    LOCAL_DIRECTORY_PATH_LIMIT, LocalDirectoryEntry, read_local_directory,
+    validate_local_file_for_open,
+};
 use super::*;
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
     let ui_for_list = ui.as_weak();
@@ -132,6 +136,88 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
         }
     });
 
+    let ui_for_remote_open = ui.as_weak();
+    let state_for_remote_open = state.clone();
+    ui.on_open_remote_sftp_file(move |path| {
+        log_ui_action("sftp.open-remote-file");
+        let result = with_active_sftp_terminal(&state_for_remote_open, |terminal| {
+            let entry = terminal
+                .sftp
+                .entries
+                .iter()
+                .find(|entry| entry.path == path.as_str())
+                .cloned()
+                .context("remote entry is no longer visible")?;
+            if entry.is_dir {
+                anyhow::bail!("directories must be opened by navigation");
+            }
+            if entry.is_symlink {
+                anyhow::bail!("symbolic links cannot be downloaded in this version");
+            }
+            let transfer_id = uuid::Uuid::new_v4();
+            terminal
+                .sftp
+                .queue_transfer(transfer_id, entry.name, entry.size)?;
+            let request = terminal
+                .worker
+                .as_ref()
+                .context("active SFTP tab has no worker")?
+                .request_open_sftp_file(transfer_id, entry.path);
+            if let Err(error) = request {
+                terminal.sftp.finish_transfer(
+                    transfer_id,
+                    SftpTransferPhase::Failed,
+                    "Download request was rejected".to_owned(),
+                );
+                return Err(error);
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_remote_open, &state_for_remote_open),
+            Err(error) => {
+                set_status(
+                    &ui_for_remote_open,
+                    &format!("Cannot open remote file: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_remote_open, &state_for_remote_open);
+            }
+        }
+    });
+
+    let ui_for_transfer_cancel = ui.as_weak();
+    let state_for_transfer_cancel = state.clone();
+    ui.on_cancel_sftp_transfer(move |id| {
+        log_ui_action("sftp.cancel-transfer");
+        let result = id
+            .as_str()
+            .parse::<uuid::Uuid>()
+            .context("invalid SFTP transfer id")
+            .and_then(|transfer_id| {
+                with_active_sftp_terminal(&state_for_transfer_cancel, |terminal| {
+                    if !terminal.sftp.transfer_is_cancellable(transfer_id) {
+                        anyhow::bail!("SFTP transfer is no longer cancellable");
+                    }
+                    terminal
+                        .worker
+                        .as_ref()
+                        .context("active SFTP tab has no worker")?
+                        .request_cancel_sftp_transfer(transfer_id)?;
+                    if !terminal.sftp.request_transfer_cancel(transfer_id) {
+                        anyhow::bail!("SFTP transfer changed before cancellation was recorded");
+                    }
+                    Ok(())
+                })
+            });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_transfer_cancel, &state_for_transfer_cancel),
+            Err(error) => set_status(
+                &ui_for_transfer_cancel,
+                &format!("Cannot cancel SFTP transfer: {error}"),
+            ),
+        }
+    });
+
     let ui_for_local_selection = ui.as_weak();
     let state_for_local_selection = state.clone();
     ui.on_toggle_local_sftp_selection(move |path, selected| {
@@ -171,6 +257,32 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
                 &ui_for_local_select_all,
                 &format!("Cannot update local selection: {error}"),
             ),
+        }
+    });
+
+    let ui_for_local_open = ui.as_weak();
+    let state_for_local_open = state.clone();
+    let runtime_for_local_open = runtime.clone();
+    ui.on_open_local_sftp_file(move |path| {
+        log_ui_action("sftp.open-local-file");
+        let request = prepare_local_file_open(&state_for_local_open, path.as_str());
+        match request {
+            Ok(request) => {
+                dispatch_active_snapshot(&ui_for_local_open, &state_for_local_open);
+                open_local_file(
+                    &runtime_for_local_open,
+                    state_for_local_open.clone(),
+                    ui_for_local_open.clone(),
+                    request,
+                );
+            }
+            Err(error) => {
+                set_status(
+                    &ui_for_local_open,
+                    &format!("Cannot open local file: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_local_open, &state_for_local_open);
+            }
         }
     });
 
@@ -219,6 +331,147 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
     });
 }
 
+struct LocalOpenRequest {
+    tab_id: uuid::Uuid,
+    request_id: u64,
+    directory: String,
+    entry: LocalDirectoryEntry,
+}
+
+fn prepare_local_file_open(
+    state: &Arc<Mutex<AppState>>,
+    requested_path: &str,
+) -> Result<LocalOpenRequest> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let tab_id = app.active_tab_id().context("no active SFTP tab")?;
+    let terminal = app.terminal_mut(tab_id).context("no active SFTP tab")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("local files are available only in an SFTP tab");
+    }
+    let entry = terminal
+        .sftp
+        .local
+        .entries
+        .iter()
+        .find(|entry| entry.path == requested_path)
+        .cloned()
+        .context("local entry is no longer visible")?;
+    if entry.is_dir {
+        anyhow::bail!("directories must be opened by navigation");
+    }
+    if entry.is_symlink {
+        anyhow::bail!("symbolic links cannot be opened from SFTP in this version");
+    }
+    terminal.sftp.local.status = format!("Opening {}...", entry.name);
+    Ok(LocalOpenRequest {
+        tab_id,
+        request_id: terminal.sftp.local.request_id,
+        directory: terminal.sftp.local.path.clone(),
+        entry,
+    })
+}
+
+fn open_local_file(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    request: LocalOpenRequest,
+) {
+    runtime.spawn(async move {
+        let directory = request.directory.clone();
+        let entry = request.entry.clone();
+        let validated = tokio::time::timeout(
+            LOCAL_OPEN_TIMEOUT,
+            tokio::task::spawn_blocking(move || validate_local_file_for_open(&directory, &entry)),
+        )
+        .await;
+        let target = match validated {
+            Ok(Ok(Ok(target))) => target,
+            Ok(Ok(Err(error))) => {
+                finish_local_file_open(
+                    &state,
+                    &request,
+                    format!("Cannot open {}: {error}", request.entry.name),
+                );
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+            Ok(Err(error)) => {
+                finish_local_file_open(
+                    &state,
+                    &request,
+                    format!("Local file check failed: {error}"),
+                );
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+            Err(_) => {
+                finish_local_file_open(&state, &request, "Local file check timed out".to_owned());
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+        };
+
+        if !local_open_snapshot_is_current(&state, &request) {
+            return;
+        }
+        let opened = tokio::time::timeout(
+            LOCAL_OPEN_TIMEOUT,
+            tokio::task::spawn_blocking(move || open::that_detached(target)),
+        )
+        .await;
+        let status = match opened {
+            Ok(Ok(Ok(()))) => format!("Opened {}", request.entry.name),
+            Ok(Ok(Err(error))) => format!("Cannot open {}: {error}", request.entry.name),
+            Ok(Err(error)) => format!("Local file opener failed: {error}"),
+            Err(_) => "Local file opener timed out".to_owned(),
+        };
+        finish_local_file_open(&state, &request, status);
+        dispatch_active_snapshot(&ui, &state);
+    });
+}
+
+fn local_open_snapshot_is_current(
+    state: &Arc<Mutex<AppState>>,
+    request: &LocalOpenRequest,
+) -> bool {
+    let Ok(app) = state.lock() else {
+        return false;
+    };
+    app.terminal(request.tab_id).is_some_and(|terminal| {
+        terminal.is_sftp()
+            && terminal.sftp.local.request_id == request.request_id
+            && terminal.sftp.local.path == request.directory
+            && terminal
+                .sftp
+                .local
+                .entries
+                .iter()
+                .any(|entry| entry.path == request.entry.path && !entry.is_dir && !entry.is_symlink)
+    })
+}
+
+fn finish_local_file_open(
+    state: &Arc<Mutex<AppState>>,
+    request: &LocalOpenRequest,
+    status: String,
+) {
+    let Ok(mut app) = state.lock() else {
+        return;
+    };
+    let Some(terminal) = app.terminal_mut(request.tab_id) else {
+        return;
+    };
+    if terminal.is_sftp()
+        && terminal.sftp.local.request_id == request.request_id
+        && terminal.sftp.local.path == request.directory
+    {
+        terminal.sftp.local.status = status;
+    }
+}
+
 fn queue_remote_navigation(
     state: &Arc<Mutex<AppState>>,
     kind: SftpNavigation,
@@ -248,14 +501,18 @@ fn load_local_directory(
     request_id: u64,
     path: String,
 ) {
+    let runtime = runtime.clone();
+    let runtime_for_icons = runtime.clone();
     runtime.spawn(async move {
         let listed = tokio::time::timeout(
             LOCAL_DIRECTORY_TIMEOUT,
             tokio::task::spawn_blocking(move || read_local_directory(&path)),
         )
         .await;
+        let mut icon_keys = Vec::new();
         let message = match listed {
             Ok(Ok(Ok(listing))) => {
+                icon_keys = local_icon_keys(&listing.entries);
                 apply_local_directory_listing(&state, tab_id, request_id, listing)
             }
             Ok(Ok(Err(error))) => apply_local_directory_failure(
@@ -279,6 +536,7 @@ fn load_local_directory(
         };
         if message {
             dispatch_active_snapshot(&ui, &state);
+            prewarm_file_icons(&runtime_for_icons, icon_keys, &ui, &state);
         }
     });
 }

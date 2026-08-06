@@ -26,8 +26,8 @@ Slint UI（.slint）
        │                 有界线程 + portable-pty 子进程
        ├──────────────► SSH 边界（src/ssh.rs）
        │                 Tokio task + russh handle/channel + X11 relay + 私钥加载
-       ├──────────────► SFTP 浏览（src/sftp.rs）
-       │                 有界 SFTP v3 目录游标 + 分页 DTO
+       ├──────────────► SFTP 领域（src/sftp.rs + src/sftp/）
+       │                 有界浏览 + 只读下载后打开缓存
        ├──────────────► Telnet 边界（src/telnet.rs）
        │                 有界 TCP worker + RFC 854 parser + NAWS
        └──────────────► Serial 边界（src/serial.rs）
@@ -45,8 +45,9 @@ Slint UI（.slint）
 | `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
 | `src/app.rs` | 生成 Slint 类型的声明、进程级 UI 启动和顶层 callback 编排 | 功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` 与 `src/app/connection/` | 私有 application bridge 功能接线，包括协议分发、SSH 信任/认证、直连 worker、串口发现和 SFTP 浏览意图 | 生成类型声明、传输实现或持久化 schema |
-| `src/app/local_files.rs` | SFTP 本地栏的有界、只读本机目录元数据发现 | Slint 类型、文件传输/修改、持久化或 SSH handle |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` 与 `src/app/connection/` | 私有 application bridge 功能接线，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图和 detached opener 调度 | 生成类型声明、传输实现或持久化 schema |
+| `src/app/file_icons.rs` | 有界的进程内文件图标 key/cache、平台 resolver 和自有 RGBA fallback | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
+| `src/app/local_files.rs` | SFTP 本地栏的有界目录元数据发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
 | `src/app/diagnostics.rs` | 脱敏键盘分类、固定 diagnostics route/action 字段和专用 tracing target | 原始终端/剪贴板文本、路径、profile 标签、主机、凭据或传输状态 |
@@ -58,8 +59,8 @@ Slint UI（.slint）
 | `src/ssh.rs` | russh handler、主机密钥决策、认证、shell 与服务端发起的 X11 channel 边界 | 窗口更新、持久化会话修改、UI 格式化 |
 | `src/ssh/private_keys.rs` | 本机 `.ssh` 私钥发现和阻塞式密钥加载 | passphrase 持久化、UI 状态、主机信任决策 |
 | `src/ssh/x11.rs` | 本机 DISPLAY 解析、精确 xauth cookie 查询、X11 setup 校验/替换、本机端点连接和 relay | UI 状态、profile 修改、cookie 持久化、启动 X server 或修改访问控制 |
-| `src/ssh/worker.rs` | 有界 shell/X11 命令、合并式 resize 状态、批量输出事件、relay 取消和关闭 | UI 状态或 profile 持久化 |
-| `src/sftp.rs` | 有界 SFTP v3 packet 适配、远端路径校验、目录游标、分页 DTO 和浏览 task 生命周期 | Slint 类型、凭据、profile 持久化或 russh 信任决策 |
+| `src/ssh/worker.rs` | 有界 shell/X11/SFTP 命令、合并式 resize 状态、批量事件、下载 task 所有权、取消和关闭 | UI 状态或 profile 持久化 |
+| `src/sftp.rs` 与 `src/sftp/transfer.rs` | 有界 SFTP v3 packet 适配、目录浏览、只读分块下载、私有缓存发布/清理和 transfer task 生命周期 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
 | `src/telnet.rs` | 明文 TCP 生命周期、RFC 854 选项过滤、NAWS、有界输入输出、取消和关闭 | 凭据、SSH 信任、UI 状态或终端渲染 |
 | `src/serial.rs` | 不打开设备的端口发现、稳定 USB 身份匹配、串口参数映射和单设备有界 worker | 自动打开/探测设备、UI 状态或持久化 profile 修改 |
 | `src/logging.rs` | 全局 tracing subscriber、日志目录、按日滚动、保留和 flush guard | 凭据、功能状态、UI 或 SSH handle |
@@ -252,8 +253,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     Tab 时启用，并共用快捷键录制/安全提示禁用闸门。macOS
     的关闭 Tab 菜单项与跨平台固定的 **Switch SSH/SFTP Tab** 菜单项刻意不绑定动态活动 Tab
     属性。应用 callback 只在命令触发时解析当前运行时 Tab，因此 Tab 身份、类型、连接和
-    SFTP loading 变化不会重建原生菜单。快捷键或安全状态变化仍可能触发原生菜单重建，AppKit bridge
-    随后会幂等重绑当前 Settings/About。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
+    SFTP loading 变化不会重建原生菜单。快捷键、安全状态变化以及替换工作区 Tab model 仍可能触发
+    原生菜单重建，AppKit bridge 随后会幂等重绑当前 Settings/About；重绑会扫描当前 native menu
+    tree 的应用 submenu 和 About 标题，兼容平台使用的省略号写法，并在 AppKit 尚未发布重建菜单时
+    短暂重试。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
     提供 Settings/About；其他菜单复用已有的
     新建会话、侧栏、本地 shell、关闭 Tab、剪贴板传输和快捷键意图。Import 固定进入自动
     识别的有界传输路径；Export 从 `SessionNavigation` 读取当前选中的持久化 Group/服务器
@@ -387,18 +390,38 @@ Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列在本阶段仍�
 
 远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
 本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为 250 条、每个名称
-256 字符、名称总预算 64 KiB 和路径 4 KiB。传输队列只显示视觉状态，不提供传输命令。命令/事件
-channel 有界，请求串行执行并带超时；入站 SFTP
-frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw 目录游标每页最多输出
-250 条。单目录在接受 2,000 条或名称/路径累计 2 MiB 时停止，单条路径和名称进入应用快照前
-也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此 AxSSH 把暴露范围
-限制为一个浏览 session 和一个在途请求。上传、下载、删除、重命名和受管编辑同步需要独立的
-确认、进度、取消与冲突契约，不属于本阶段。
+256 字符、名称总预算 64 KiB 和路径 4 KiB。远端浏览器在应用状态中为每个 Tab 保留有界的
+前进/后退路径历史；只有目录页成功返回后才提交历史，因此失败请求不会消耗导航步骤，加载期间
+导航按钮会禁用。远端和本地行都拥有真实的 Tab 内选中状态，表头可以全选或清空；目录刷新后
+只保留仍存在于当前快照的条目，选中本身不会启动传输。命令/事件 channel 有界，请求串行执行
+并带超时；入站 SFTP frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw
+目录游标每页最多输出 250 条。单目录在接受 2,000 条或名称/路径累计 2 MiB 时停止，单条路径和
+名称进入应用快照前也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此
+AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
-远端浏览器在应用状态中为每个 Tab 保留有界的前进/后退路径历史；只有目录页成功返回后才提交
-历史，因此失败请求不会消耗导航步骤，加载期间导航按钮会禁用。远端和本地行都拥有真实的
-Tab 内选中状态，表头可以全选或清空；目录刷新后只保留仍存在于当前快照的条目，选中本身不会
-启动传输。传输队列仍只显示视觉状态，不提供传输命令。
+每行从 `src/app/file_icons.rs` 接收 24x24 的自有 RGBA 图标。UI 只读取内存结果或内建的目录、
+链接、通用文件 fallback；平台查询与图片解码都在 blocking worker 中运行，每批最多预热 64 个
+唯一 key，进程内最多保留 128 项。macOS 通过 NSWorkspace 查询 UTType 图标，Windows 使用
+合成文件属性调用 Shell API，Linux 将扩展名映射为 MIME 与 freedesktop 图标主题。远端名称不会
+被当成本机路径解析图标，Slint 也不调用平台或文件系统图标 API。
+
+双击本地 regular file 行只产生只读打开意图。bridge 先要求该精确路径仍位于活动 SFTP Tab 的
+当前本地快照；blocking worker 再使用不跟随链接的元数据重验目录和条目，拒绝目录与符号链接，
+canonicalize 两者并要求文件父目录仍是已列出的目录，最后才通过 `open::that_detached` 调用平台
+默认程序。过期 Tab、目录 request、路径或已替换条目都会在调度前被拒绝。
+
+双击当前远端快照中的 regular file 会排入只读下载后打开。每个 SFTP Tab 最多允许两个活动
+transfer，仍在打开的 subsystem 也计入上限；每个 transfer 独占单独的 SFTP subsystem stream。
+transfer 会重验路径和 handle 元数据，拒绝目录与符号链接，将文件限制为 512 MiB，每次最多读取
+64 KiB，writer queue 只容纳两个 chunk，每个操作 15 秒超时、总时长 30 分钟，并报告有界进度与
+终态事件。文件以 UUID 前缀和安全 basename 写入 AxSSH 私有缓存；Unix 上 part 文件为 `0600`、
+namespace 为 `0700`，完成后 flush、fsync 并原子 rename，application bridge 才调用 detached
+opener。取消或失败绝不打开 part 文件；关闭 Tab 会取消并 join 尚在打开的 subsystem 与活动
+transfer。启动清理最多检查缓存目录直属的 4,096 项，并尽力删除超过 1 小时的受管 part 文件和
+超过 24 小时的已发布文件。
+
+这只是 download-to-open，不是通用保存或受管编辑流程。上传、显式下载/另存为、删除、重命名、
+拖放、修改监听、自动回传与冲突处理仍不属于本阶段。
 
 ## Telnet 与 Serial 传输契约
 
@@ -522,12 +545,12 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 ## 分阶段范围
 
 当前应用可校验并持久化 SSH、Telnet 与 Serial profile，确认逐 profile 的 SSH 主机指纹，
-使用临时密码或本机私钥完成 SSH 认证，为已认证 SSH Tab 提供有界远端 SFTP 和本地元数据目录浏览，并持有多个逐 Tab 隔离的 transport 或本地 shell
+使用临时密码或本机私钥完成 SSH 认证，为已认证 SSH Tab 提供有界远端 SFTP、本地元数据目录浏览和 regular file 下载后打开，并持有多个逐 Tab 隔离的 transport 或本地 shell
 终端，相同目标也可重复打开。新建会话编辑器和单例 Settings 工作台都属于可见工作区 Tab；只有短期信任和
 secret 提示保留为覆盖层。
 以下内容仍作为独立步骤：
 
 - 共享的 OpenSSH 兼容 known_hosts 存储和主机密钥撤销；
-- SFTP 上传、下载、修改和受管编辑同步；
+- SFTP 上传、显式另存为、修改和受管编辑同步；
 - SSH agent、重连和工作区恢复；
 - 更完整的全屏终端兼容和鼠标上报。

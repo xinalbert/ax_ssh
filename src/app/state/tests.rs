@@ -9,6 +9,16 @@ fn test_state() -> AppState {
 }
 
 #[test]
+fn ui_refresh_gate_coalesces_until_the_queued_snapshot_is_consumed() {
+    let state = test_state();
+
+    assert!(state.try_schedule_ui_refresh());
+    assert!(!state.try_schedule_ui_refresh());
+    state.clear_ui_refresh_pending();
+    assert!(state.try_schedule_ui_refresh());
+}
+
+#[test]
 fn same_profile_opens_independent_terminal_tabs() {
     let mut state = test_state();
     let profile = SessionProfile::new("Local", "localhost", "alice");
@@ -589,6 +599,75 @@ fn sftp_snapshots_require_connected_sftp_tabs_and_remain_isolated() {
 
     assert!(state.activate_tab(local));
     assert!(!state.active_snapshot().sftp.available);
+}
+
+#[test]
+fn sftp_transfer_state_covers_progress_cancellation_and_terminal_phases() {
+    let mut sftp = SftpBrowserState::default();
+    let transfer_id = Uuid::new_v4();
+
+    sftp.queue_transfer(transfer_id, "report.txt".to_owned(), 100)
+        .expect("transfer should be queued");
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+    assert!(sftp.transfers[0].phase.cancellable());
+
+    sftp.start_transfer(transfer_id, "report.txt".to_owned(), 100);
+    sftp.update_transfer_progress(transfer_id, 150, 100);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Downloading);
+    assert_eq!(sftp.transfers[0].downloaded_bytes, 100);
+    assert_eq!(sftp.transfers[0].status, "100%");
+
+    assert!(sftp.request_transfer_cancel(transfer_id));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
+    assert!(!sftp.transfer_is_cancellable(transfer_id));
+    assert!(!sftp.request_transfer_cancel(transfer_id));
+    sftp.finish_transfer(
+        transfer_id,
+        SftpTransferPhase::Cancelled,
+        "Cancelled".to_owned(),
+    );
+    assert!(!sftp.request_transfer_cancel(transfer_id));
+
+    let failed_id = Uuid::new_v4();
+    sftp.queue_transfer(failed_id, "broken.txt".to_owned(), 0)
+        .expect("second transfer should be queued");
+    sftp.start_transfer(failed_id, "broken.txt".to_owned(), 0);
+    assert!(sftp.mark_transfer_opening(failed_id, 0));
+    sftp.finish_transfer(
+        failed_id,
+        SftpTransferPhase::Failed,
+        "opener failed".to_owned(),
+    );
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Failed);
+    assert!(!sftp.transfers[1].phase.cancellable());
+}
+
+#[test]
+fn sftp_transfer_state_ignores_late_events_after_cancellation() {
+    let mut sftp = SftpBrowserState::default();
+    let transfer_id = Uuid::new_v4();
+
+    sftp.queue_transfer(transfer_id, "report.txt".to_owned(), 100)
+        .expect("transfer should be queued");
+    assert!(sftp.request_transfer_cancel(transfer_id));
+
+    sftp.start_transfer(transfer_id, "report.txt".to_owned(), 100);
+    sftp.update_transfer_progress(transfer_id, 50, 100);
+    assert!(!sftp.mark_transfer_opening(transfer_id, 100));
+    sftp.finish_transfer(
+        transfer_id,
+        SftpTransferPhase::Completed,
+        "Opened".to_owned(),
+    );
+
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
+    assert_eq!(sftp.transfers[0].downloaded_bytes, 0);
+    sftp.finish_transfer(
+        transfer_id,
+        SftpTransferPhase::Cancelled,
+        "Cancelled".to_owned(),
+    );
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelled);
 }
 
 #[test]

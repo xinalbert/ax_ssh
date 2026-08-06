@@ -28,8 +28,8 @@ Application controller (src/app.rs)
        │                 bounded thread + portable-pty process
        ├──────────────► SSH boundary (src/ssh.rs)
        │                 Tokio tasks + russh handles/channels + X11 relay + key loading
-       ├──────────────► SFTP browser (src/sftp.rs)
-       │                 bounded SFTP v3 directory cursor + page DTOs
+       ├──────────────► SFTP domain (src/sftp.rs + src/sftp/)
+       │                 bounded browser + read-only download-to-open cache
        ├──────────────► Telnet boundary (src/telnet.rs)
        │                 bounded TCP worker + RFC 854 parser + NAWS
        └──────────────► Serial boundary (src/serial.rs)
@@ -47,8 +47,9 @@ Process startup (src/main.rs)
 | `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
 | `src/app.rs` | Generated Slint type declaration, process-level UI startup, and top-level callback composition | Feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` and `src/app/connection/` | Private application-bridge feature wiring, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, and SFTP browser intents | Generated type declaration, transport implementation, or persistence schema |
-| `src/app/local_files.rs` | Bounded, read-only local directory metadata discovery for the SFTP local pane | Slint types, file transfer/mutation, persistence, or SSH handles |
+| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` and `src/app/connection/` | Private application-bridge feature wiring, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, and detached opener dispatch | Generated type declaration, transport implementation, or persistence schema |
+| `src/app/file_icons.rs` | Bounded process-local file-icon keys/cache, platform resolvers, and owned RGBA fallbacks | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
+| `src/app/local_files.rs` | Bounded local directory metadata discovery and regular-file revalidation for the SFTP local pane | Slint types, file mutation, persistence, or SSH handles |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
 | `src/app/diagnostics.rs` | Redacted keyboard classification, fixed diagnostic route/action fields, and the dedicated tracing target | Raw terminal/clipboard text, paths, profile labels, hosts, credentials, or transport state |
@@ -60,8 +61,8 @@ Process startup (src/main.rs)
 | `src/ssh.rs` | russh handler, host-key decision, authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting |
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
-| `src/ssh/worker.rs` | Bounded shell/X11 commands, coalesced resize state, batched output events, relay cancellation, and shutdown | UI state or profile persistence |
-| `src/sftp.rs` | Bounded SFTP v3 packet adapter, remote-path validation, directory cursor, paging DTOs, and browser task lifetime | Slint types, credentials, profile persistence, or russh trust decisions |
+| `src/ssh/worker.rs` | Bounded shell/X11/SFTP commands, coalesced resize state, batched events, download task ownership, cancellation, and shutdown | UI state or profile persistence |
+| `src/sftp.rs` and `src/sftp/transfer.rs` | Bounded SFTP v3 packet adapter, directory browser, read-only chunked download, private cache publication/cleanup, and transfer task lifetime | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
 | `src/telnet.rs` | Plaintext TCP lifetime, RFC 854 option filtering, NAWS, bounded input/output, cancellation and shutdown | Credentials, SSH trust, UI state or terminal rendering |
 | `src/serial.rs` | Non-opening port discovery, stable USB identity matching, serial parameter mapping, and one bounded device worker | Automatic device opening/probing, UI state or persisted profile mutation |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
@@ -368,8 +369,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
     dynamic active-tab menu properties. The application callback resolves the
     active runtime Tab only when the command is invoked, so Tab identity, kind,
     connection, and SFTP loading changes do not rebuild the native menu.
-    Shortcut or security-state changes may still rebuild it; the
-    AppKit bridge then idempotently rebinds the current Settings/About items.
+    Shortcut or security-state changes, and replacement of the workspace Tab
+    model, may still rebuild it; the AppKit bridge then idempotently rebinds
+    the current Settings/About items. Rebinding scans the current native menu
+    tree for the application submenu and About title, accepts the platform's
+    ellipsis spelling for Settings, and retries briefly when AppKit has not
+    published the rebuilt menu yet.
     Windows/Linux retain dynamic close-tab state, keep Settings in Edit, and
     keep About in Help. File, View, Pane, Window, and Help reuse existing
     new-session, sidebar, local-shell, close-tab, clipboard-transfer, and
@@ -584,17 +589,50 @@ failed request cannot consume a navigation step; navigation controls are disable
 while a request is in flight. Remote and local rows expose real per-Tab selection
 state, with header controls for select-all and clear-all; selection is retained
 only for entries still present in the current directory snapshot and does not
-start a transfer. The transfer queue is visual status only; it has no transfer
-commands. Commands and events use
-bounded channels, requests are serialized and timed out, inbound SFTP frames
-are rejected above 256 KiB before `russh-sftp` parsing, and a raw directory
-cursor emits at most 250 entries per page. One directory stops at 2,000 accepted
-entries or 2 MiB of names and paths; individual paths/names are also validated
-and bounded before they enter the application snapshot. `russh-sftp` still has
-an internal unbounded packet sender, so AxSSH limits this exposure to one
-browser session with one request in flight. Upload, download, deletion,
-renaming, and managed edit sync require separate confirmation, progress,
-cancellation, and conflict contracts and are outside this phase.
+start a transfer. Commands and events use bounded channels, requests are
+serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
+`russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
+page. One directory stops at 2,000 accepted entries or 2 MiB of names and paths;
+individual paths/names are also validated and bounded before they enter the
+application snapshot. `russh-sftp` still has an internal unbounded packet
+sender, so AxSSH limits the browser exposure to one session with one request in
+flight.
+
+Each row receives a 24x24 owned RGBA icon from `src/app/file_icons.rs`. The UI
+only reads an in-memory result or a built-in folder, symlink, or generic-file
+fallback. Platform lookups and image decoding run on a blocking worker, prewarm
+at most 64 unique keys per batch, and retain at most 128 process-local entries.
+macOS resolves UTType icons through NSWorkspace, Windows uses synthetic file
+attributes with the Shell API, and Linux maps extensions to MIME and freedesktop
+icon themes. No remote name is treated as a local path for icon resolution, and
+Slint never calls a platform or filesystem icon API.
+
+Double-clicking a local regular-file row is a read-only open intent. The bridge
+first requires that exact path in the active SFTP Tab's current local snapshot,
+then a blocking worker rechecks the directory and entry with non-following
+metadata, rejects directories and symbolic links, canonicalizes both, and
+requires the file's parent to remain the listed directory before calling the
+platform default application through `open::that_detached`. A stale Tab,
+directory request, path, or replaced entry is rejected before dispatch.
+
+Double-clicking a visible remote regular file queues a read-only download and
+open operation. Each SFTP Tab permits at most two active transfers, counting a
+subsystem that is still opening, and each transfer owns a separate SFTP
+subsystem stream. The transfer revalidates path and handle metadata, rejects
+directories and symbolic links, caps the file at 512 MiB, reads at most 64 KiB
+per request, uses a two-chunk writer queue, applies 15-second operation timeouts
+and a 30-minute overall timeout, and reports bounded progress/terminal events.
+It writes a UUID-prefixed, sanitized basename inside AxSSH's private cache,
+using a `0600` part file and `0700` namespace on Unix, then flushes, fsyncs, and
+atomically renames the part before the application invokes the detached opener.
+Cancelled or failed transfers never open a part file. Tab shutdown cancels and
+joins both pending subsystem openings and active transfers. Startup cleanup
+examines at most 4,096 direct cache entries and removes recognized stale part
+files after one hour and published files after 24 hours on a best-effort basis.
+
+This is download-to-open, not a general save or managed-edit workflow. Upload,
+explicit download/save-as, deletion, renaming, drag-and-drop, change watching,
+automatic upload, and conflict resolution remain outside this phase.
 
 ## Telnet and serial transport contract
 
@@ -786,13 +824,14 @@ the Theme global remains a visual resolver rather than a persistence owner.
 The current application validates and persists SSH, Telnet, and Serial profiles;
 confirms per-profile SSH host fingerprints; authenticates SSH with transient
 passwords or local private keys; provides bounded remote SFTP and local metadata
-directory browsing for an authenticated SSH Tab; and owns multiple independent transport or
+directory browsing plus regular-file download-to-open for an authenticated SSH
+Tab; and owns multiple independent transport or
 local-shell terminal tabs, including duplicate targets. New-session editing and the singleton Settings
 workbench remain visible workspace tabs; only short-lived trust and secret
 prompts remain overlays. The following remain
 separate steps:
 
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;
-- SFTP upload, download, mutation, and managed edit sync;
+- SFTP upload, explicit save-as, mutation, and managed edit sync;
 - SSH agent integration, reconnect, and persisted workspace restoration;
 - richer full-screen terminal compatibility and mouse reporting.

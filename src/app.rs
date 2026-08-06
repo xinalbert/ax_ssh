@@ -12,7 +12,7 @@ use slint::platform::Clipboard;
 use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::Duration;
+use tokio::time::{Duration, timeout};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ use ax_ssh::serial::{
     SerialPortDescriptor, SerialSessionEvent, SerialSessionHandle, discover_serial_ports,
     resolve_serial_port,
 };
-use ax_ssh::sftp::{SftpBrowserEvent, SftpEntry};
+use ax_ssh::sftp::{SftpBrowserEvent, SftpEntry, SftpTransferEvent, cleanup_stale_sftp_open_cache};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};
 use ax_ssh::telnet::{TelnetSessionEvent, TelnetSessionHandle};
 use ax_ssh::terminal::{TerminalSnapshot, encode_key as encode_terminal_key};
@@ -46,8 +46,8 @@ use self::session_groups::{
 };
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ConnectionStart, ConnectionTarget,
-    PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation, SshConnectionPhase,
-    SshSftpNavigation, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
+    PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation, SftpTransferPhase,
+    SshConnectionPhase, SshSftpNavigation, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
     finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
     prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
     set_credential_storage, set_credential_storage_while_loading,
@@ -60,6 +60,7 @@ mod connection;
 mod connection_monitor;
 mod credential_tasks;
 mod diagnostics;
+mod file_icons;
 mod font_bridge;
 mod input;
 mod local_files;
@@ -78,6 +79,7 @@ mod workspace;
 use self::connection::*;
 use self::connection_monitor::*;
 use self::diagnostics::*;
+use self::file_icons::global_provider;
 use self::font_bridge::*;
 use self::serial_bridge::*;
 use self::settings_bridge::*;
@@ -91,6 +93,7 @@ slint::include_modules!();
 const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
+    let _file_icon_provider = global_provider();
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let mut sessions = config.load().context("failed to load session profiles")?;
@@ -103,6 +106,15 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         warn!(%error, "failed to persist newly discovered local shells");
     }
     let runtime = Runtime::new().context("failed to start Tokio runtime")?;
+    let _cache_cleanup_task = runtime.spawn(async {
+        match cleanup_stale_sftp_open_cache().await {
+            Ok(removed) if removed > 0 => {
+                debug!(removed, "removed stale SFTP open-cache files");
+            }
+            Ok(_) => {}
+            Err(error) => warn!(%error, "failed to clean stale SFTP open-cache files"),
+        }
+    });
     let initial_font_families = vec![
         sessions.settings.appearance.application_font_family.clone(),
         sessions.settings.appearance.terminal_font_family.clone(),

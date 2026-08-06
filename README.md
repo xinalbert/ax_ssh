@@ -11,10 +11,11 @@ explicit host-key confirmation, plaintext Telnet, manually initiated serial
 connections with automatic port discovery, bounded terminal scrollback, ANSI
 rendering, selection, clipboard shortcuts, native input-method support, and
 bounded remote SFTP directory browsing in dedicated dual-pane SFTP tabs. The
-local pane reads only bounded directory metadata; the transfer queue is a
-status surface until upload/download support is implemented. SFTP
-upload/download/delete/edit, SSH agent integration, reconnect, workspace
-restoration, and full terminal mouse reporting are not implemented yet.
+local pane reads only bounded directory metadata and can open regular files with
+the platform default application. Remote regular files can be downloaded into a
+private cache and opened from the bounded transfer queue. SFTP upload, delete,
+edit, SSH agent integration, reconnect, workspace restoration, and full
+terminal mouse reporting are not implemented yet.
 
 ## Quick start
 

@@ -148,3 +148,13 @@
 - 关键结论：`vt100::Grid::set_size` 列缩窄时会截断每一物理行，右侧 cell 已被删除，之后扩宽无法恢复。AxShell 使用的 `alacritty_terminal` 在普通主屏调用 `Grid::resize(true, ...)`，将软换行的连续逻辑行重新分列；备用屏调用 `Grid::resize(false, ...)`，保持全屏程序期望的非重排语义。其高度 shrink 同时把顶部内容送入有界历史区，保持底部交互内容可见���
 - 对实施计划的影响：以 `alacritty_terminal 0.26.0` 替换 `vt100` 作为 `TerminalModel` 私有实现，保留既有 DTO、UI、worker 和输入编码边界；新增主屏软/硬换行、宽字符、宽窄往返、备用屏与纵向往返回归。
 - 未解决问题：目标平台需用户在真实本地 shell/SSH 全屏程序中确认布局与焦点；本轮不复制 AxShell 或 Alacritty 源码，也不把参考项目加入 Cargo 图。
+
+## 2026-08-06 SFTP 图标与双击打开实现路线
+
+- 时间：2026-08-06 10:33 +0800
+- 检索问题：WinSCP、Cyberduck、VS Code、Qt 及三平台系统 API 如何实现远端文件图标、临时副本、默认应用打开和编辑回传；AxSSH 的 SFTP 双击应先交付哪一层能力？
+- 检索原因：用户要求参考 AxShell，并检索其他软件的实现方式后制定 AxSSH 实施计划。当前 AxSSH 只有目录浏览，不能把远端路径直接交给本机程序，Transfers 也尚未有真实传输契约。
+- 来源列表：详见 `docs/benchmark-grounded-method-research/sftp-icons-local-open/source-tracking.md`；核心来源包括 WinSCP `task_edit`/`temp_folders`、Cyberduck `edit`、Apple `NSWorkspace`/`UTType`、Microsoft `SHGetFileInfoW`、freedesktop MIME/Icon Theme、Qt `QFileIconProvider`、VS Code File Icon Theme/Remote Extensions 和 Rust `open::that_detached`。
+- 关键结论：未检索到直接对应的统一公开 benchmark，所有产品和平台文档均为 proxy evidence。WinSCP/Cyberduck 都先下载临时副本再交给外部应用，编辑回传还需要 watch、进程复用处理、后台队列、冲突/版本和清理；VS Code 采用远端文件系统代理，不适合 AxSSH 当前的系统默认应用目标。系统图标应由平台 provider 统一转成缓存位图：macOS 优先核对现代 `iconForContentType`/UTType，Windows 可用 `SHGFI_USEFILEATTRIBUTES` 查询不存在的合成扩展名路径，Linux 采用 MIME + icon theme + hicolor 回退。
+- 对实施计划的影响：建立目标 `20260806-sftp-icons-local-open`，分 P1-P9 执行。首版只做 regular file 的本地重验证后 detached open，以及远端 regular file 的有界 chunked download -> 私有 ProjectDirs cache -> fsync/rename -> detached open；目录继续导航，symlink 首版拒绝，失败/取消不打开半文件。远端下载在同一已认证 SSH worker 中开独立 SFTP subsystem task，由 worker 统一拥有取消、并发、进度和 Tab 关闭回收；图标 provider/cache 与 Slint `SftpEntryRow` DTO 分离，列表渲染不调用平台 API。
+- 未解决问题：Apple 新 API feature/最低系统版本、Windows Shell/GDI 句柄到 PNG 的 DPI 与释放、Linux 主题依赖的 MSRV/系统环境、远端大文件上限、symlink 策略、缓存占用清理和真实三平台默认应用行为需要 P1/P5-P9 验证；受管编辑/上传/冲突另建目标，不在本轮。

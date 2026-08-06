@@ -52,14 +52,24 @@ registry.
   not expose the russh handle or `RawSftpSession` to application state or Slint.
   SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
   the same host-key and credential gates as terminal Tabs. Preserve the inbound
-  packet, path/name, page, directory-budget, request, and
-  shutdown limits when adding file operations; upload/download/delete/edit also
-  require explicit confirmation, progress, cancellation, and conflict tests.
+  packet, path/name, page, directory-budget, request, and shutdown limits. The
+  read-only download-to-open path must retain its 512 MiB file cap, 64 KiB
+  request chunks, bounded writer/event queues, per-operation and overall
+  timeouts, per-Tab concurrency cap, cancellation, private-cache publication,
+  and owned joins. Future upload/delete/rename/edit work requires separate
+  confirmation, conflict, and mutation tests.
 - The SFTP local-file pane is a read-only application-bridge snapshot. Directory
   reads run in a bounded blocking task and return only name, path, type, size,
   and modification metadata; Slint must not access the filesystem. Reject stale
-  results by Tab and request identity, and preserve entry, name, and path
-  limits before data reaches the UI.
+  results by Tab and request identity, and preserve entry, name, and path limits
+  before data reaches the UI. A local open intent must match the current active
+  Tab snapshot and revalidate non-symlink directory/regular-file ownership on a
+  blocking worker before invoking the detached platform opener.
+- Keep file-icon platform APIs, theme detection, file reads, and image decoding
+  in `src/app/file_icons.rs` blocking work. Slint may consume only bounded owned
+  RGBA images from the process-local cache. Remote names are extension/type
+  hints, never local paths, and every platform resolver must retain a built-in
+  fallback and release native handles deterministically.
 - Keep Telnet explicitly plaintext. Parse and filter IAC negotiation before
   terminal output, reject unsupported options, and send NAWS only after peer
   acceptance. Do not add credential persistence to Telnet profiles.
@@ -179,7 +189,13 @@ application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
 events, Apple modifier normalization, Telnet negotiation/CRLF/NAWS behavior,
 stable Serial USB identity matching, and duplicate direct-connection attempt
 isolation. SFTP tests cover remote-path/name validation, fragmented and
-oversized packet frames, per-Tab snapshot isolation, and browser event recovery.
+oversized packet frames, per-Tab snapshot isolation, browser event recovery,
+regular-file metadata/path checks, bounded chunked downloads, truncation,
+cancellation, private-cache publication/permissions/cleanup, transfer state,
+pending subsystem cancellation, and Tab-shutdown joins. File-icon tests cover
+bounded normalized keys, cache identity, LRU capacity, prewarm limits, and
+fallback behavior; local-open tests cover snapshot ownership and symlink
+replacement rejection.
 The ignored `platform_credential_store_round_trips_and_deletes` test performs a
 real platform credential write/read/delete and may trigger an OS authorization
 prompt. Run it deliberately on each supported credential backend. Manual
@@ -188,7 +204,9 @@ native title-bar drag hit testing, keyboard/focus input, the visible
 group/host-key/authentication flows, concurrent login against real SSH servers,
 real Telnet servers, target-platform Serial discovery/permissions/hot-plug and
 device input/output, real SFTP server compatibility, SFTP pane focus/layout,
-protocol-specific resize behavior, and full-screen terminal programs.
+default-application dispatch, and file-icon appearance/theme changes on macOS,
+Windows, and Linux, plus protocol-specific resize behavior and full-screen
+terminal programs.
 For SSH input latency, compare AxSSH and the system `ssh` client against the
 same host and network, preferably with P50/P95 observations. Similar delays in
 both clients indicate network/remote-PTY RTT; a larger AxSSH-only delta should
