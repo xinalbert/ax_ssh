@@ -135,6 +135,8 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
         ui.set_settings_tab_id(settings_tab_id);
         apply_active_snapshot(ui, snapshot);
+        #[cfg(target_os = "macos")]
+        schedule_macos_application_menu_configuration(ui);
     });
 }
 

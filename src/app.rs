@@ -222,7 +222,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             if let Err(error) = macos_window::configure(ui.window()) {
                 warn!(%error, "failed to configure the standard macOS title bar");
             }
-            configure_macos_application_menu(&ui);
+            schedule_macos_application_menu_configuration(&ui);
         });
     }
     info!("AxSSH UI initialized");
@@ -492,12 +492,12 @@ mod support_tests {
 }
 
 #[cfg(target_os = "macos")]
-fn configure_macos_application_menu(ui: &AppWindow) {
+fn configure_macos_application_menu(ui: &AppWindow) -> bool {
     let shortcut = match menu_shortcut_from_setting(ui.get_open_settings_shortcut().as_str()) {
         Ok(shortcut) => shortcut,
         Err(error) => {
             warn!(%error, "cannot configure the macOS Settings shortcut");
-            return;
+            return false;
         }
     };
     let ui_for_menu = ui.as_weak();
@@ -523,6 +523,9 @@ fn configure_macos_application_menu(ui: &AppWindow) {
         },
     ) {
         warn!(%error, "failed to connect the standard macOS application menu");
+        false
+    } else {
+        true
     }
 }
 
@@ -531,7 +534,25 @@ fn schedule_macos_application_menu_configuration(ui: &AppWindow) {
     let ui_for_menu = ui.as_weak();
     slint::Timer::single_shot(Duration::from_millis(1), move || {
         if let Some(ui) = ui_for_menu.upgrade() {
-            configure_macos_application_menu(&ui);
+            if !configure_macos_application_menu(&ui) {
+                retry_macos_application_menu_configuration(ui.as_weak(), 1);
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn retry_macos_application_menu_configuration(ui: slint::Weak<AppWindow>, attempt: u8) {
+    const MAX_ATTEMPTS: u8 = 8;
+    if attempt > MAX_ATTEMPTS {
+        return;
+    }
+    slint::Timer::single_shot(Duration::from_millis(25), move || {
+        let Some(ui) = ui.upgrade() else {
+            return;
+        };
+        if !configure_macos_application_menu(&ui) {
+            retry_macos_application_menu_configuration(ui.as_weak(), attempt + 1);
         }
     });
 }

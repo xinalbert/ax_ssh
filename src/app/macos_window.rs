@@ -8,7 +8,7 @@ use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel
 use objc2_app_kit::{
     NSApplication, NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent,
     NSEventModifierFlags, NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSInsertFunctionKey,
-    NSLeftArrowFunctionKey, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
+    NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
     NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow,
 };
 use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSString};
@@ -110,16 +110,10 @@ pub(super) fn configure_application_menu(
     let main_menu = application
         .mainMenu()
         .context("AppKit application has no main menu")?;
-    let application_item = main_menu
-        .itemAtIndex(0)
-        .context("AppKit main menu has no application item")?;
-    let application_menu = application_item
-        .submenu()
-        .context("AppKit application item has no submenu")?;
+    let application_menu = find_application_menu(&main_menu)?;
     let settings_title = NSString::from_str("Settings...");
-    let about_item = application_menu
-        .itemAtIndex(0)
-        .filter(|item| !item.title().isEqualToString(&settings_title));
+    let settings_ellipsis_title = NSString::from_str("Settings…");
+    let about_item = find_about_item(&application_menu);
     let target = NativeMenuTarget::new(mtm, activate);
 
     if let Some(about_item) = &about_item {
@@ -127,7 +121,10 @@ pub(super) fn configure_application_menu(
     }
 
     let key_equivalent = NSString::from_str(&native_key_equivalent(&shortcut.key)?);
-    let settings_item = match application_menu.itemWithTitle(&settings_title) {
+    let settings_item = match application_menu
+        .itemWithTitle(&settings_title)
+        .or_else(|| application_menu.itemWithTitle(&settings_ellipsis_title))
+    {
         Some(item) => item,
         None => {
             // SAFETY: `openSettings:` is implemented by NativeMenuTarget with
@@ -140,7 +137,11 @@ pub(super) fn configure_application_menu(
                     &key_equivalent,
                 )
             };
-            application_menu.insertItem_atIndex(&item, isize::from(about_item.is_some()));
+            let insert_index = about_item
+                .as_ref()
+                .map(|item| application_menu.indexOfItem(item).saturating_add(1))
+                .unwrap_or(0);
+            application_menu.insertItem_atIndex(&item, insert_index);
             item
         }
     };
@@ -149,6 +150,42 @@ pub(super) fn configure_application_menu(
     settings_item.setEnabled(shortcut_enabled);
     bind_menu_item(&settings_item, &target, sel!(openSettings:));
     Ok(())
+}
+
+fn find_application_menu(main_menu: &NSMenu) -> Result<Retained<NSMenu>> {
+    let app_title = NSString::from_str("App");
+    let mut named_submenu = None;
+    let item_count = main_menu.numberOfItems().max(0);
+
+    for index in 0..item_count {
+        let Some(item) = main_menu.itemAtIndex(index) else {
+            continue;
+        };
+        let Some(submenu) = item.submenu() else {
+            continue;
+        };
+        if submenu.title().isEqualToString(&app_title) {
+            named_submenu = Some(submenu.clone());
+        }
+        if find_about_item(&submenu).is_some() {
+            return Ok(submenu);
+        }
+    }
+
+    named_submenu.context("AppKit main menu has no application submenu")
+}
+
+fn find_about_item(menu: &NSMenu) -> Option<Retained<NSMenuItem>> {
+    let item_count = menu.numberOfItems().max(0);
+    for index in 0..item_count {
+        let Some(item) = menu.itemAtIndex(index) else {
+            continue;
+        };
+        if item.title().to_string().starts_with("About") {
+            return Some(item);
+        }
+    }
+    None
 }
 
 fn native_modifier_mask(modifiers: TerminalModifiers) -> NSEventModifierFlags {
