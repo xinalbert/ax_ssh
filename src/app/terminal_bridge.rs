@@ -25,11 +25,18 @@ pub(super) fn start_local_shell(
     Ok(())
 }
 
-pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
+pub(super) fn wire_terminal(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    window_router: WindowRouter,
+    window_id: Uuid,
+) {
     let ui_for_theme = ui.as_weak();
     let state_for_theme = state.clone();
+    let router_for_theme = window_router.clone();
     ui.on_refresh_terminal_appearance(move || {
         log_ui_action("terminal.refresh-appearance");
+        sync_window_active(&router_for_theme, window_id, &state_for_theme);
         // A theme change only changes the visual snapshot; it must not resize or
         // otherwise disturb the PTY worker that owns the active terminal.
         dispatch_active_snapshot(&ui_for_theme, &state_for_theme);
@@ -37,7 +44,9 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
 
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
+    let router_for_key = window_router.clone();
     ui.on_terminal_key(move |text, alt, control, meta, shift, physical_key_event| {
+        sync_window_active(&router_for_key, window_id, &state_for_key);
         let input_started_at = std::time::Instant::now();
         // Committed TextInput and pasted text are not physical key events, so
         // they must not inherit a still-held shortcut modifier such as Cmd+V.
@@ -55,13 +64,21 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
                 if !terminal.connected {
                     return Ok((false, false));
                 }
-                let application_cursor = terminal.terminal.application_cursor();
+                let application_cursor = terminal
+                    .terminal
+                    .as_ref()
+                    .context("active tab has no terminal model")?
+                    .application_cursor();
                 let Some(data) = encode_terminal_key(&key, modifiers, application_cursor) else {
                     return Ok((false, false));
                 };
                 let viewport_changed = {
                     let terminal = app.active_terminal_mut().context("no active terminal")?;
-                    let viewport_changed = terminal.terminal.scroll_to_bottom();
+                    let viewport_changed = terminal
+                        .terminal
+                        .as_mut()
+                        .context("active tab has no terminal model")?
+                        .scroll_to_bottom();
                     terminal
                         .worker
                         .as_ref()
@@ -101,8 +118,10 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
 
     let ui_for_resize = ui.as_weak();
     let state_for_resize = state.clone();
+    let router_for_resize = window_router.clone();
     ui.on_resize_terminal(move |columns, rows| {
         log_ui_action("terminal.resize");
+        sync_window_active(&router_for_resize, window_id, &state_for_resize);
         let result = state_for_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
@@ -126,14 +145,17 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
 
     let ui_for_scroll = ui.as_weak();
     let state_for_scroll = state.clone();
+    let router_for_scroll = window_router.clone();
     ui.on_scroll_terminal(move |lines| {
         log_ui_action("terminal.scroll");
+        sync_window_active(&router_for_scroll, window_id, &state_for_scroll);
         let changed = state_for_scroll
             .lock()
             .ok()
             .and_then(|mut app| {
                 app.active_terminal_mut()
-                    .map(|terminal| terminal.terminal.scroll(lines))
+                    .and_then(|terminal| terminal.terminal.as_mut())
+                    .map(|terminal| terminal.scroll(lines))
             })
             .unwrap_or(false);
         if changed {
@@ -144,20 +166,24 @@ pub(super) fn wire_terminal(ui: &AppWindow, state: Arc<Mutex<AppState>>) {
         }
     });
 
+    let router_for_selection = window_router;
     ui.on_terminal_selection_text(move |anchor_row, anchor_column, focus_row, focus_column| {
         log_ui_action("terminal.selection-read");
+        sync_window_active(&router_for_selection, window_id, &state);
         state
             .lock()
             .ok()
             .and_then(|app| {
-                app.active_terminal().map(|terminal| {
-                    terminal.terminal.selection_text(
-                        anchor_row.max(0) as usize,
-                        anchor_column.max(0) as usize,
-                        focus_row.max(0) as usize,
-                        focus_column.max(0) as usize,
-                    )
-                })
+                app.active_terminal()
+                    .and_then(|terminal| terminal.terminal.as_ref())
+                    .map(|terminal| {
+                        terminal.selection_text(
+                            anchor_row.max(0) as usize,
+                            anchor_column.max(0) as usize,
+                            focus_row.max(0) as usize,
+                            focus_column.max(0) as usize,
+                        )
+                    })
             })
             .unwrap_or_default()
             .into()
@@ -191,7 +217,9 @@ pub(super) fn spawn_local_shell_monitor(
                 }
                 LocalShellEvent::Output(data) => {
                     if let Some(true) = mutate_local_terminal(&state, tab_id, |terminal| {
-                        terminal.terminal.process(&data);
+                        if let Some(model) = terminal.terminal.as_mut() {
+                            model.process(&data);
+                        }
                     }) {
                         dispatch_active_snapshot(&ui, &state);
                     }

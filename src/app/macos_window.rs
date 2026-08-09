@@ -6,12 +6,13 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent,
-    NSEventModifierFlags, NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSInsertFunctionKey,
-    NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
-    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow,
+    NSApplication, NSAutoresizingMaskOptions, NSButton, NSDeleteFunctionKey,
+    NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags, NSF1FunctionKey,
+    NSHomeFunctionKey, NSImage, NSInsertFunctionKey, NSLeftArrowFunctionKey, NSMenu, NSMenuItem,
+    NSPageDownFunctionKey, NSPageUpFunctionKey, NSRightArrowFunctionKey, NSUpArrowFunctionKey,
+    NSView, NSWindow, NSWindowButton,
 };
-use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
 use super::input::NativeMenuShortcut;
@@ -65,9 +66,91 @@ impl NativeMenuTarget {
     }
 }
 
+const RETURN_BUTTON_WIDTH: f64 = 58.0;
+const RETURN_BUTTON_HEIGHT: f64 = 20.0;
+const RETURN_BUTTON_TRAILING_MARGIN: f64 = 12.0;
+
+struct NativeReturnButtonIvars {
+    return_workspace: Box<dyn Fn()>,
+}
+
+define_class!(
+    // SAFETY: NSButton has no subclassing requirements. The callback is
+    // main-thread-only and the title-bar view retains this button for its life.
+    #[unsafe(super(NSButton))]
+    #[name = "AxSSHNativeReturnButton"]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = NativeReturnButtonIvars]
+    struct NativeReturnButton;
+
+    // SAFETY: NSObjectProtocol has no additional implementation requirements.
+    unsafe impl NSObjectProtocol for NativeReturnButton {}
+
+    impl NativeReturnButton {
+        #[unsafe(method(returnWorkspace:))]
+        fn return_workspace(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().return_workspace)();
+        }
+    }
+);
+
+impl NativeReturnButton {
+    fn new(mtm: MainThreadMarker, return_workspace: impl Fn() + 'static) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(NativeReturnButtonIvars {
+            return_workspace: Box::new(return_workspace),
+        });
+        // SAFETY: `this` is an allocated NativeReturnButton and NSButton's
+        // initializer has the selector signature used here.
+        unsafe {
+            msg_send![super(this), initWithFrame: NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(RETURN_BUTTON_WIDTH, RETURN_BUTTON_HEIGHT),
+            )]
+        }
+    }
+}
+
 pub(super) fn configure(window: &slint::Window) -> Result<()> {
     with_native_window(window, |native_window| {
         native_window.setMovableByWindowBackground(false);
+        Ok(())
+    })
+}
+
+pub(super) fn configure_detached_return_button(
+    window: &slint::Window,
+    return_workspace: impl Fn() + 'static,
+) -> Result<()> {
+    let mtm =
+        MainThreadMarker::new().context("macOS title-bar setup must run on the main thread")?;
+    let button = NativeReturnButton::new(mtm, return_workspace);
+    let title = NSString::from_str("Return");
+    button.setTitle(&title);
+    button.setToolTip(Some(&NSString::from_str("Return workspace to main window")));
+    // SAFETY: `returnWorkspace:` is implemented by NativeReturnButton. NSControl
+    // keeps targets weakly, while the title-bar view retains the button itself.
+    unsafe {
+        button.setTarget(Some(&button));
+        button.setAction(Some(sel!(returnWorkspace:)));
+    }
+    with_native_window(window, |native_window| {
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: AppKit owns the standard button and its superview for the
+        // native window lifetime. The title-bar view retains added subviews.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit standard zoom button has no title-bar view")?;
+        let bounds = title_bar.bounds();
+        let origin_x =
+            (bounds.size.width - RETURN_BUTTON_WIDTH - RETURN_BUTTON_TRAILING_MARGIN).max(0.0);
+        let origin_y = ((bounds.size.height - RETURN_BUTTON_HEIGHT) / 2.0).max(0.0);
+        button.setFrame(NSRect::new(
+            NSPoint::new(origin_x, origin_y),
+            NSSize::new(RETURN_BUTTON_WIDTH, RETURN_BUTTON_HEIGHT),
+        ));
+        button.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+        title_bar.addSubview(&button);
         Ok(())
     })
 }

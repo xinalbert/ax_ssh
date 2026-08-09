@@ -2,6 +2,7 @@ use super::*;
 use rand::SeedableRng as _;
 use rand::rngs::StdRng;
 use russh::server::{self, Auth};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
@@ -28,6 +29,194 @@ fn test_profile(name: &str, host: String) -> SessionProfile {
 #[test]
 fn interactive_client_config_disables_nagle() {
     assert!(client_config().nodelay);
+}
+
+#[test]
+fn ssh_agent_identity_attempts_are_bounded() {
+    assert_eq!(ssh_agent_attempt_count(0), 0);
+    assert_eq!(ssh_agent_attempt_count(3), 3);
+    assert_eq!(
+        ssh_agent_attempt_count(MAX_SSH_AGENT_IDENTITIES + 20),
+        MAX_SSH_AGENT_IDENTITIES
+    );
+}
+
+#[test]
+fn ssh_agent_errors_do_not_expose_runtime_details() {
+    assert_eq!(
+        SshError::SshAgentUnavailable.to_string(),
+        "SSH agent is unavailable"
+    );
+    assert_eq!(
+        SshError::SshAgentOperationFailed.to_string(),
+        "SSH agent could not complete authentication"
+    );
+}
+
+fn append_agent_string(frame: &mut Vec<u8>, value: &[u8]) {
+    let length = u32::try_from(value.len()).expect("test agent string should fit in a u32");
+    frame.extend_from_slice(&length.to_be_bytes());
+    frame.extend_from_slice(value);
+}
+
+fn read_agent_string<'a>(frame: &'a [u8], offset: &mut usize) -> &'a [u8] {
+    let length_end = offset.checked_add(4).expect("test agent offset should fit");
+    let length_bytes: [u8; 4] = frame
+        .get(*offset..length_end)
+        .expect("test agent string length should be present")
+        .try_into()
+        .expect("test agent string length should contain four bytes");
+    let length = u32::from_be_bytes(length_bytes) as usize;
+    let value_end = length_end
+        .checked_add(length)
+        .expect("test agent string length should fit");
+    let value = frame
+        .get(length_end..value_end)
+        .expect("test agent string should be present");
+    *offset = value_end;
+    value
+}
+
+async fn read_agent_frame(stream: &mut tokio::io::DuplexStream) -> Vec<u8> {
+    let mut length = [0_u8; 4];
+    stream
+        .read_exact(&mut length)
+        .await
+        .expect("test agent frame length should be readable");
+    let length = u32::from_be_bytes(length) as usize;
+    assert!(length <= 256 * 1024);
+    let mut frame = vec![0_u8; length];
+    stream
+        .read_exact(&mut frame)
+        .await
+        .expect("test agent frame should be readable");
+    frame
+}
+
+async fn write_agent_frame(stream: &mut tokio::io::DuplexStream, frame: &[u8]) {
+    let length = u32::try_from(frame.len()).expect("test agent frame should fit in a u32");
+    stream
+        .write_all(&length.to_be_bytes())
+        .await
+        .expect("test agent frame length should be writable");
+    stream
+        .write_all(frame)
+        .await
+        .expect("test agent frame should be writable");
+    stream.flush().await.expect("test agent frame should flush");
+}
+
+#[tokio::test]
+async fn external_agent_signer_authenticates_against_a_trusted_server() {
+    let mut rng = StdRng::seed_from_u64(108);
+    let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test host key should be generated");
+    let user_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test user key should be generated");
+    let expected_fingerprint = host_key
+        .public_key()
+        .fingerprint(HashAlg::Sha256)
+        .to_string();
+    let user_public_key = user_key.public_key().clone();
+    let expected_public_key = user_public_key.clone();
+    let server_config = Arc::new(server::Config {
+        auth_rejection_time: Duration::from_millis(1),
+        auth_rejection_time_initial: Some(Duration::ZERO),
+        keys: vec![host_key],
+        ..server::Config::default()
+    });
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test SSH listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("test SSH listener should have an address");
+    let server_task = tokio::spawn(async move {
+        let (stream, _) = listener
+            .accept()
+            .await
+            .expect("test SSH connection should be accepted");
+        let session = server::run_stream(
+            server_config,
+            stream,
+            TestServer {
+                expected_public_key: Some(expected_public_key),
+                send_initial_prompt: false,
+                x11_requests: None,
+            },
+        )
+        .await
+        .expect("test SSH session should start");
+        let _ = session.await;
+    });
+
+    let mut profile = test_profile("agent-test", address.ip().to_string());
+    {
+        let ssh = profile.ssh_mut().expect("test profile should use SSH");
+        ssh.port = address.port();
+        ssh.auth = AuthMethod::SshAgent;
+        ssh.host_key_fingerprint = Some(expected_fingerprint.clone());
+    }
+    let observation = FingerprintObservation::default();
+    let mut handle = connect_transport(&profile, Some(expected_fingerprint), observation, None)
+        .await
+        .expect("trusted test transport should connect");
+    let (agent_client_stream, mut agent_server_stream) = tokio::io::duplex(16 * 1024);
+    let public_key_blob = user_public_key
+        .to_bytes()
+        .expect("test public key should encode");
+    let expected_key_blob = public_key_blob.clone();
+    let agent_task = tokio::spawn(async move {
+        let identity_request = read_agent_frame(&mut agent_server_stream).await;
+        assert_eq!(identity_request.as_slice(), [11]);
+        let mut identity_response = vec![12];
+        identity_response.extend_from_slice(&1_u32.to_be_bytes());
+        append_agent_string(&mut identity_response, &public_key_blob);
+        append_agent_string(&mut identity_response, b"test identity");
+        write_agent_frame(&mut agent_server_stream, &identity_response).await;
+
+        let sign_request = read_agent_frame(&mut agent_server_stream).await;
+        assert_eq!(sign_request.first(), Some(&13));
+        let mut offset = 1;
+        let requested_key = read_agent_string(&sign_request, &mut offset);
+        let signed_data = read_agent_string(&sign_request, &mut offset);
+        let flags_end = offset.checked_add(4).expect("test agent flags should fit");
+        let flags: [u8; 4] = sign_request
+            .get(offset..flags_end)
+            .expect("test agent flags should be present")
+            .try_into()
+            .expect("test agent flags should contain four bytes");
+        assert_eq!(requested_key, expected_key_blob);
+        assert_eq!(u32::from_be_bytes(flags), 0);
+
+        let signature = russh::keys::signature::Signer::try_sign(user_key.key_data(), signed_data)
+            .expect("test agent should sign the authentication request");
+        let encoded_signature =
+            Vec::<u8>::try_from(signature).expect("test agent signature should encode");
+        let mut sign_response = vec![14];
+        append_agent_string(&mut sign_response, &encoded_signature);
+        write_agent_frame(&mut agent_server_stream, &sign_response).await;
+    });
+    let mut agent = AgentClient::connect(agent_client_stream);
+    let identities = agent
+        .request_identities()
+        .await
+        .expect("test agent should list its identity");
+
+    assert!(
+        authenticate_agent_identities(&mut handle, TEST_USER, identities, None, &mut agent)
+            .await
+            .expect("external signer authentication should complete")
+    );
+    agent_task
+        .await
+        .expect("test agent protocol task should complete");
+    handle
+        .disconnect(russh::Disconnect::ByApplication, "test complete", "")
+        .await
+        .expect("test transport should disconnect");
+    server_task.abort();
+    let _ = server_task.await;
 }
 
 #[derive(Clone)]

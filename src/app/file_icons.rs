@@ -111,6 +111,12 @@ pub(super) fn global_provider() -> Arc<FileIconProvider> {
         .clone()
 }
 
+pub(super) fn clear_global_cache() {
+    if let Some(provider) = GLOBAL_FILE_ICON_PROVIDER.get() {
+        provider.clear_cache();
+    }
+}
+
 pub(super) fn prewarm_async(
     runtime: &Handle,
     keys: Vec<FileIconKey>,
@@ -200,6 +206,12 @@ impl FileIconProvider {
 
         report.cache_entries = self.cache.lock().map_or(0, |cache| cache.icons.len());
         report
+    }
+
+    pub(super) fn clear_cache(&self) {
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = IconCache::new(CacheIdentity::new("uninitialized"), &self.fallbacks);
+        }
     }
 
     fn with_boxed_resolver(resolver: Arc<dyn IconResolver>) -> Self {
@@ -1141,6 +1153,24 @@ mod tests {
         assert_eq!(
             provider.cached_icon(&FileIconKey::Folder),
             provider.fallbacks.folder
+        );
+    }
+
+    #[test]
+    fn clearing_cache_releases_resolved_extensions_but_keeps_fallbacks() {
+        let resolver = Arc::new(TestResolver::new(false));
+        let provider = FileIconProvider::with_resolver(resolver);
+        provider.prewarm([
+            FileIconKey::Extension("rs".to_owned()),
+            FileIconKey::Extension("json".to_owned()),
+        ]);
+
+        provider.clear_cache();
+
+        assert_eq!(provider.cache_len(), 3);
+        assert_eq!(
+            provider.cached_icon(&FileIconKey::Extension("rs".to_owned())),
+            provider.cached_icon(&FileIconKey::GenericFile)
         );
     }
 

@@ -5,11 +5,12 @@
 AxSSH 是一个由 Rust、Slint 和 Tokio 构建的跨平台桌面终端工作区，在同一个原生应用中
 提供已保存的 SSH、Telnet、Serial 会话、彼此独立的本地/远程终端 Tab 和持久化设置。
 
-当前功能包括 SSH 密码/私钥认证与明确的主机密钥确认、明文 Telnet、自动发现端口但由用户
+当前功能包括 SSH 密码/私钥/运行时 agent 认证与明确的主机密钥确认、明文 Telnet、自动发现端口但由用户
 主动连接的 Serial、有界终端回滚、ANSI 渲染、文本选择、剪贴板快捷键和原生输入法支持。
 还支持在独立的双栏 SFTP Tab 中有界浏览远端目录；本地栏只读取有界目录元数据，底部传输队列
 支持进度和取消；本地 regular file 可以用平台默认程序打开，远端 regular file 会下载到私有缓存后
-打开。SFTP 上传、删除、编辑、SSH agent、自动重连、工作区恢复和完整的终端鼠标上报尚未实现。
+打开。SFTP 上传、删除、编辑、自动重连、工作区恢复和完整的终端鼠标上报尚未实现。
+已连接的 SSH Terminal 及其 SFTP companion 可以一起移动到独立原生窗口，并在不重连的情况下合并回主窗口。
 
 ## 快速开始
 
@@ -34,7 +35,7 @@ cargo run --locked
 
 未知或发生变化的 SSH 主机密钥默认拒绝。记住的密码由 macOS Keychain、Windows
 Credential Manager 或 Unix Secret Service 保存；会话 JSON 永远不会写入密码、
-私钥 passphrase、私钥内容、终端输出或运行中的 worker 状态。
+私钥 passphrase、私钥内容、SSH agent socket 路径与 identity、终端输出或运行中的 worker 状态。
 Telnet 不加密；Serial 自动发现只读取设备元数据，只有用户明确发起连接后才打开设备。
 
 `third_package/axshell` 只作为参考资料，不是 Cargo workspace member、源码导入、

@@ -969,6 +969,24 @@ fn private_key_profiles_require_a_path_and_never_store_password_references() {
 }
 
 #[test]
+fn ssh_agent_profiles_round_trip_without_runtime_or_credential_state() {
+    let mut profile = SessionProfile::new("agent", "host.example", "alice");
+    ssh_mut(&mut profile).auth = AuthMethod::SshAgent;
+    assert!(profile.validate().is_ok());
+
+    let encoded = serde_json::to_string(&profile).expect("agent profile should serialize");
+    assert!(encoded.contains("SshAgent"));
+    assert!(!encoded.contains("SSH_AUTH_SOCK"));
+    assert!(!encoded.contains("credential_storage"));
+    let decoded: SessionProfile =
+        serde_json::from_str(&encoded).expect("agent profile should deserialize");
+    assert_eq!(decoded, profile);
+
+    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::SystemKeyring);
+    assert!(profile.validate().is_err());
+}
+
+#[test]
 fn persisted_private_key_profile_rejects_a_password_reference() {
     let id = Uuid::new_v4();
     let json = format!(

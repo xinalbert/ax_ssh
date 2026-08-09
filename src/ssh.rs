@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use russh::client;
-use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::agent::AgentIdentity;
+use russh::keys::agent::client::{AgentClient, AgentStream};
+use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
 use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream};
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
@@ -24,6 +26,9 @@ const AUTH_TIMEOUT: Duration = Duration::from_secs(30);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const KEEPALIVE_MAX: usize = 3;
+const MAX_SSH_AGENT_IDENTITIES: usize = 5;
+
+type RuntimeAgentClient = AgentClient<Box<dyn AgentStream + Send + Unpin>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshEvent {
@@ -35,6 +40,10 @@ pub enum SshEvent {
 pub enum SshError {
     AuthenticationFailed,
     PrivateKeyLoad(String),
+    SshAgentUnavailable,
+    SshAgentTimedOut,
+    SshAgentNoIdentities,
+    SshAgentOperationFailed,
     HostKeyRejected {
         expected: Option<String>,
         actual: String,
@@ -46,6 +55,12 @@ impl std::fmt::Display for SshError {
         match self {
             Self::AuthenticationFailed => write!(f, "SSH authentication failed"),
             Self::PrivateKeyLoad(message) => write!(f, "failed to load private key: {message}"),
+            Self::SshAgentUnavailable => write!(f, "SSH agent is unavailable"),
+            Self::SshAgentTimedOut => write!(f, "SSH agent authentication timed out"),
+            Self::SshAgentNoIdentities => write!(f, "SSH agent has no identities"),
+            Self::SshAgentOperationFailed => {
+                write!(f, "SSH agent could not complete authentication")
+            }
             Self::HostKeyRejected {
                 expected: Some(expected),
                 actual,
@@ -210,6 +225,100 @@ async fn connect_transport(
     }
 }
 
+#[cfg(unix)]
+async fn connect_runtime_agent() -> std::result::Result<RuntimeAgentClient, SshError> {
+    AgentClient::connect_env()
+        .await
+        .map(|agent| agent.dynamic())
+        .map_err(|_| SshError::SshAgentUnavailable)
+}
+
+#[cfg(windows)]
+async fn connect_runtime_agent() -> std::result::Result<RuntimeAgentClient, SshError> {
+    const OPENSSH_AGENT_PIPE: &str = r"\\.\pipe\openssh-ssh-agent";
+
+    let pipe = std::env::var_os("SSH_AUTH_SOCK")
+        .unwrap_or_else(|| std::ffi::OsString::from(OPENSSH_AGENT_PIPE));
+    AgentClient::connect_named_pipe(pipe)
+        .await
+        .map(|agent| agent.dynamic())
+        .map_err(|_| SshError::SshAgentUnavailable)
+}
+
+#[cfg(not(any(unix, windows)))]
+async fn connect_runtime_agent() -> std::result::Result<RuntimeAgentClient, SshError> {
+    Err(SshError::SshAgentUnavailable)
+}
+
+const fn ssh_agent_attempt_count(identity_count: usize) -> usize {
+    if identity_count < MAX_SSH_AGENT_IDENTITIES {
+        identity_count
+    } else {
+        MAX_SSH_AGENT_IDENTITIES
+    }
+}
+
+async fn authenticate_agent_identities<S>(
+    handle: &mut client::Handle<ClientHandler>,
+    username: &str,
+    identities: Vec<AgentIdentity>,
+    hash_alg: Option<HashAlg>,
+    signer: &mut AgentClient<S>,
+) -> std::result::Result<bool, SshError>
+where
+    S: AgentStream + Send + Unpin,
+{
+    let attempt_count = ssh_agent_attempt_count(identities.len());
+    debug!(
+        identity_count = identities.len(),
+        attempt_count, "attempting bounded SSH agent authentication"
+    );
+    for identity in identities.into_iter().take(attempt_count) {
+        let result = match identity {
+            AgentIdentity::PublicKey { key, .. } => {
+                handle
+                    .authenticate_publickey_with(username, key, hash_alg, signer)
+                    .await
+            }
+            AgentIdentity::Certificate { certificate, .. } => {
+                handle
+                    .authenticate_certificate_with(username, certificate, hash_alg, signer)
+                    .await
+            }
+        }
+        .map_err(|_| SshError::SshAgentOperationFailed)?;
+        if result.success() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn authenticate_with_runtime_agent(
+    handle: &mut client::Handle<ClientHandler>,
+    username: &str,
+) -> std::result::Result<bool, SshError> {
+    timeout(AUTH_TIMEOUT, async {
+        let mut agent = connect_runtime_agent().await?;
+        let identities = agent
+            .request_identities()
+            .await
+            .map_err(|_| SshError::SshAgentOperationFailed)?;
+        if identities.is_empty() {
+            return Err(SshError::SshAgentNoIdentities);
+        }
+
+        let hash_alg = handle
+            .best_supported_rsa_hash()
+            .await
+            .map_err(|_| SshError::SshAgentOperationFailed)?
+            .flatten();
+        authenticate_agent_identities(handle, username, identities, hash_alg, &mut agent).await
+    })
+    .await
+    .map_err(|_| SshError::SshAgentTimedOut)?
+}
+
 /// Reads a host fingerprint while still rejecting the untrusted transport.
 pub async fn probe_host_key(profile: &SessionProfile) -> Result<String> {
     profile.validate()?;
@@ -282,7 +391,8 @@ impl SshConnection {
             )
             .await
             .context("SSH password authentication timed out")?
-            .context("SSH password authentication failed")?,
+            .context("SSH password authentication failed")?
+            .success(),
             AuthMethod::PrivateKey { path } => {
                 let private_key = private_keys::load_private_key(path.clone(), secret)
                     .await
@@ -302,9 +412,13 @@ impl SshConnection {
                 .await
                 .context("SSH private-key authentication timed out")?
                 .context("SSH private-key authentication failed")?
+                .success()
+            }
+            AuthMethod::SshAgent => {
+                authenticate_with_runtime_agent(&mut handle, &ssh.username).await?
             }
         };
-        if !authenticated.success() {
+        if !authenticated {
             if let Err(error) = handle
                 .disconnect(
                     russh::Disconnect::NoMoreAuthMethodsAvailable,

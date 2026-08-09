@@ -1,15 +1,17 @@
 use std::collections::{HashSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use slint::Model;
 
-use super::file_icons::{FileIconKey, global_provider, prewarm_async};
+use super::file_icons::{FileIconKey, clear_global_cache, global_provider, prewarm_async};
 use super::local_files::LocalDirectoryEntry;
 use super::state::{SftpTransferPhase, SftpTransferSnapshot};
 use super::*;
 
 const ICON_PREWARM_PENDING_KEY_LIMIT: usize = 256;
 const ICON_PREWARM_BATCH_KEY_LIMIT: usize = 64;
+static PRIVATE_KEY_OPTION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow> {
     session_groups(sessions)
@@ -115,6 +117,36 @@ pub(super) fn refresh_session_models(ui: &slint::Weak<AppWindow>, state: &Arc<Mu
 }
 
 pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    if let Some(router) = global_window_router() {
+        let state = Arc::clone(state);
+        let views = match state.lock() {
+            Ok(app) => router.views(&app),
+            Err(_) => {
+                set_status(ui, "State lock poisoned");
+                return;
+            }
+        };
+        for view in views {
+            let state = Arc::clone(&state);
+            dispatch_ui(&view.ui, move |ui| {
+                let settings_tab_id = view
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.kind == "settings")
+                    .map(|tab| tab.id.to_string())
+                    .unwrap_or_default();
+                ui.set_workspace_tabs(ModelRc::new(VecModel::from(visible_workspace_tab_rows(
+                    view.tabs,
+                ))));
+                ui.set_settings_tab_id(settings_tab_id.into());
+                apply_active_snapshot(ui, view.snapshot);
+                drop(state);
+                #[cfg(target_os = "macos")]
+                schedule_macos_application_menu_configuration(ui);
+            });
+        }
+        return;
+    }
     let state = Arc::clone(state);
     dispatch_ui(ui, move |ui| {
         let (tabs, snapshot) = match state.lock() {
@@ -289,6 +321,7 @@ struct IconPrewarmCoordinator {
     queued: HashSet<FileIconKey>,
     target: Option<IconPrewarmTarget>,
     running: bool,
+    generation: u64,
 }
 
 static ICON_PREWARM_COORDINATOR: OnceLock<Arc<Mutex<IconPrewarmCoordinator>>> = OnceLock::new();
@@ -301,6 +334,7 @@ fn icon_prewarm_coordinator() -> Arc<Mutex<IconPrewarmCoordinator>> {
                 queued: HashSet::new(),
                 target: None,
                 running: false,
+                generation: 0,
             }))
         })
         .clone()
@@ -312,7 +346,7 @@ async fn run_icon_prewarm_worker(
     batch_limit: usize,
 ) {
     loop {
-        let (keys, target) = {
+        let (keys, target, generation) = {
             let Ok(mut pending) = coordinator.lock() else {
                 return;
             };
@@ -335,6 +369,7 @@ async fn run_icon_prewarm_worker(
                     ui: target.ui.clone(),
                     state: Arc::clone(&target.state),
                 }),
+                pending.generation,
             )
         };
 
@@ -342,10 +377,29 @@ async fn run_icon_prewarm_worker(
         if let Err(error) = prewarm.await {
             tracing::debug!(%error, "file icon prewarm task stopped");
         }
+        let still_current = coordinator
+            .lock()
+            .is_ok_and(|pending| pending.generation == generation);
+        if !still_current {
+            clear_global_cache();
+            continue;
+        }
         if let Some(target) = target {
             dispatch_active_snapshot(&target.ui, &target.state);
         }
     }
+}
+
+pub(super) fn clear_file_icon_cache() {
+    if let Some(coordinator) = ICON_PREWARM_COORDINATOR.get()
+        && let Ok(mut pending) = coordinator.lock()
+    {
+        pending.keys.clear();
+        pending.queued.clear();
+        pending.target = None;
+        pending.generation = pending.generation.wrapping_add(1);
+    }
+    clear_global_cache();
 }
 
 pub(super) fn sftp_icon_keys(entries: &[SftpEntry]) -> Vec<FileIconKey> {
@@ -454,6 +508,10 @@ pub(super) fn set_tab_status(
 }
 
 pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
+    if global_window_router().is_some() {
+        refresh_workspace(ui, state);
+        return;
+    }
     let should_schedule = match state.lock() {
         Ok(app) => app.try_schedule_ui_refresh(),
         Err(_) => {
@@ -492,6 +550,10 @@ pub(super) fn dispatch_terminal_output_snapshot(
     state: &Arc<Mutex<AppState>>,
     output_received_at: std::time::Instant,
 ) {
+    if global_window_router().is_some() {
+        refresh_workspace(ui, state);
+        return;
+    }
     let should_schedule = match state.lock() {
         Ok(app) => app.try_schedule_ui_refresh(),
         Err(_) => {
@@ -683,6 +745,12 @@ fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
             let (private_key, key_path) = match &ssh.auth {
                 AuthMethod::Password => (false, String::new()),
                 AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
+                AuthMethod::SshAgent => {
+                    ui.set_host_key_dialog_open(false);
+                    ui.set_password_dialog_open(false);
+                    ui.set_password_dialog_tab_id("".into());
+                    return;
+                }
             };
             let vault_storage = vault_unlock_only
                 && !private_key
@@ -995,7 +1063,14 @@ fn hex_digit(value: u8) -> Option<u8> {
     }
 }
 
-pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+pub(super) fn load_private_key_options(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
+    let generation = PRIVATE_KEY_OPTION_GENERATION
+        .fetch_add(1, Ordering::AcqRel)
+        .wrapping_add(1);
     runtime.spawn(async move {
         let result = tokio::task::spawn_blocking(discover_private_keys).await;
         match result {
@@ -1005,6 +1080,11 @@ pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWind
                     .map(|path| SharedString::from(path.display().to_string()))
                     .collect::<Vec<_>>();
                 dispatch_ui(&ui, move |ui| {
+                    if PRIVATE_KEY_OPTION_GENERATION.load(Ordering::Acquire) != generation
+                        || !state.lock().is_ok_and(|app| app.has_session_editor_tab())
+                    {
+                        return;
+                    }
                     ui.set_private_key_options(ModelRc::new(VecModel::from(options)));
                 });
             }
@@ -1014,11 +1094,18 @@ pub(super) fn load_private_key_options(runtime: &Handle, ui: slint::Weak<AppWind
     });
 }
 
-pub(super) fn load_font_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+pub(super) fn load_font_options(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
     runtime.spawn(async move {
         let discovery = tokio::task::spawn_blocking(discover_system_monospace_families).await;
         match discovery {
             Ok(system_families) => dispatch_ui(&ui, move |ui| {
+                if !state.lock().is_ok_and(|app| app.has_settings_tab()) {
+                    return;
+                }
                 let application_font = ui.get_application_font_family().to_string();
                 let application_options = font_option_rows(&application_font, &system_families);
                 let application_index =
@@ -1037,12 +1124,19 @@ pub(super) fn load_font_options(runtime: &Handle, ui: slint::Weak<AppWindow>) {
     });
 }
 
-pub(super) fn load_x11_server_installations(runtime: &Handle, ui: slint::Weak<AppWindow>) {
+pub(super) fn load_x11_server_installations(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
     runtime.spawn(async move {
         let discovery =
             tokio::task::spawn_blocking(ax_ssh::x_server::discovered_provider_locations);
         match tokio::time::timeout(std::time::Duration::from_secs(3), discovery).await {
             Ok(Ok(locations)) => dispatch_ui(&ui, move |ui| {
+                if !state.lock().is_ok_and(|app| app.has_settings_tab()) {
+                    return;
+                }
                 ui.set_x11_server_installations(ModelRc::new(VecModel::from(
                     locations
                         .into_iter()
@@ -1054,6 +1148,100 @@ pub(super) fn load_x11_server_installations(runtime: &Handle, ui: slint::Weak<Ap
             Err(_) => warn!("X server location discovery timed out"),
         }
     });
+}
+
+pub(super) fn load_local_shell_options(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
+    runtime.spawn(async move {
+        let shells = match tokio::task::spawn_blocking(discover_shells).await {
+            Ok(shells) => shells,
+            Err(error) => {
+                warn!(%error, "local-shell discovery task failed");
+                return;
+            }
+        };
+        let options = match state.lock() {
+            Ok(mut app) if app.has_settings_tab() => {
+                app.sessions.settings.terminal.merge_known_shells(shells);
+                shell_option_rows(&app.sessions.settings)
+            }
+            Ok(_) => return,
+            Err(_) => {
+                set_status(&ui, "Cannot update local shell options");
+                return;
+            }
+        };
+        dispatch_ui(&ui, move |ui| {
+            if !state.lock().is_ok_and(|app| app.has_settings_tab()) {
+                return;
+            }
+            ui.set_local_shell_options(ModelRc::new(VecModel::from(options)));
+            let selected = ui.get_local_shell().to_string();
+            let index = ui
+                .get_local_shell_options()
+                .iter()
+                .position(|shell| shell.as_str().eq_ignore_ascii_case(&selected))
+                .unwrap_or(0);
+            ui.set_local_shell_index(index.min(i32::MAX as usize) as i32);
+        });
+    });
+}
+
+pub(super) fn clear_settings_option_models(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+) {
+    let (application_font, terminal_font, shell_options) = match state.lock() {
+        Ok(app) => (
+            app.sessions
+                .settings
+                .appearance
+                .application_font_family
+                .clone(),
+            app.sessions
+                .settings
+                .appearance
+                .terminal_font_family
+                .clone(),
+            shell_option_rows(&app.sessions.settings),
+        ),
+        Err(_) => return,
+    };
+    dispatch_ui(ui, move |ui| {
+        let application_options = font_option_rows(&application_font, &[]);
+        let application_index = font_option_index_in_slice(&application_options, &application_font);
+        ui.set_application_font_options(ModelRc::new(VecModel::from(application_options)));
+        ui.set_application_font_index(application_index);
+
+        let terminal_options = font_option_rows(&terminal_font, &[]);
+        let terminal_index = font_option_index_in_slice(&terminal_options, &terminal_font);
+        ui.set_terminal_font_options(ModelRc::new(VecModel::from(terminal_options)));
+        ui.set_terminal_font_index(terminal_index);
+        ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_options)));
+        ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    });
+}
+
+pub(super) fn clear_session_editor_option_models(ui: &slint::Weak<AppWindow>) {
+    invalidate_private_key_option_load();
+    dispatch_ui(ui, move |ui| {
+        ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+        ui.set_serial_port_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    });
+}
+
+pub(super) fn clear_private_key_option_model(ui: &slint::Weak<AppWindow>) {
+    invalidate_private_key_option_load();
+    dispatch_ui(ui, move |ui| {
+        ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    });
+}
+
+fn invalidate_private_key_option_load() {
+    PRIVATE_KEY_OPTION_GENERATION.fetch_add(1, Ordering::AcqRel);
 }
 
 fn font_option_index(options: &ModelRc<SharedString>, selected: &str) -> i32 {

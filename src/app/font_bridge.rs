@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use slint::fontique_010::fontique;
@@ -54,6 +55,70 @@ pub(super) struct FontResources {
 pub(super) struct FontRegistry {
     resources: FontResources,
     registered_families: BTreeSet<&'static str>,
+}
+
+pub(super) fn load_terminal_font_on_demand(
+    runtime: &tokio::runtime::Handle,
+    ui: slint::Weak<super::AppWindow>,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    started: Arc<AtomicBool>,
+) {
+    if started.load(Ordering::Acquire) {
+        return;
+    }
+    let family = ui
+        .upgrade()
+        .map(|ui| ui.get_terminal_font_family().to_string());
+    let Some(family) = family else {
+        return;
+    };
+    if bundled_font(&family).is_none() || started.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let resources = match font_registry.lock() {
+        Ok(registry) if registry.is_registered(&family) => return,
+        Ok(registry) => registry.resources(),
+        Err(_) => {
+            started.store(false, Ordering::Release);
+            tracing::warn!("cannot access font resources for terminal startup");
+            return;
+        }
+    };
+    runtime.spawn(async move {
+        let family_for_load = family.clone();
+        let loaded =
+            tokio::task::spawn_blocking(move || resources.load_bundled_font(&family_for_load))
+                .await;
+        let font = match loaded {
+            Ok(Ok(Some(font))) => font,
+            Ok(Ok(None)) => {
+                tracing::warn!(family = %family, "configured terminal bundled font is unavailable");
+                started.store(false, Ordering::Release);
+                return;
+            }
+            Ok(Err(error)) => {
+                tracing::warn!(%error, "failed to read configured terminal font");
+                started.store(false, Ordering::Release);
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "configured terminal font task failed");
+                started.store(false, Ordering::Release);
+                return;
+            }
+        };
+        super::view::dispatch_ui(&ui, move |ui| {
+            let registration = font_registry
+                .lock()
+                .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
+                .and_then(|mut registry| registry.register_loaded_font(font));
+            if let Err(error) = registration {
+                started.store(false, Ordering::Release);
+                tracing::warn!(%error, "failed to register configured terminal font");
+                ui.set_status(format!("Cannot register terminal font: {error}").into());
+            }
+        });
+    });
 }
 
 pub(super) struct LoadedBundledFont {
@@ -124,6 +189,10 @@ impl FontRegistry {
 
     pub(super) fn resources(&self) -> FontResources {
         self.resources.clone()
+    }
+
+    pub(super) fn is_registered(&self, family: &str) -> bool {
+        bundled_font(family).is_some_and(|font| self.registered_families.contains(font.family))
     }
 
     pub(super) fn register_loaded_font(&mut self, font: LoadedBundledFont) -> Result<()> {
@@ -339,5 +408,16 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn registry_matches_registered_bundled_families_case_insensitively() {
+        let mut registry = FontRegistry::new();
+        assert!(!registry.is_registered("jetbrains mono"));
+
+        registry.registered_families.insert(BUNDLED_UI_FONT_FAMILY);
+
+        assert!(registry.is_registered("jetbrains mono"));
+        assert!(!registry.is_registered("System Monospace"));
     }
 }

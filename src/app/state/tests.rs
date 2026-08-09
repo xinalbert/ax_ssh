@@ -1,5 +1,5 @@
 use super::*;
-use ax_ssh::config::CredentialStorage;
+use ax_ssh::config::{AuthMethod, CredentialStorage};
 
 fn test_state() -> AppState {
     AppState::new(
@@ -31,6 +31,37 @@ fn same_profile_opens_independent_terminal_tabs() {
     assert_eq!(state.tab_summaries()[0].title, "Local #1");
     assert_eq!(state.tab_summaries()[1].title, "Local #2");
     assert_eq!(state.active_tab_id(), Some(second));
+}
+
+#[test]
+fn workspace_transfer_keeps_ssh_and_sftp_companion_together() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let terminal_id = state.open_terminal_tab(&profile);
+    let sftp_id = state.open_sftp_tab_with_companion(&profile, Some(terminal_id));
+
+    let source_window_id = Uuid::new_v4();
+    let transfer = state
+        .workspace_transfer_for(terminal_id, source_window_id)
+        .expect("terminal should be transferable");
+
+    assert_eq!(transfer.source_window_id, source_window_id);
+    assert_eq!(transfer.active_tab_id, Some(terminal_id));
+    assert_eq!(transfer.tab_ids, vec![terminal_id, sftp_id]);
+    assert_eq!(state.tab_summaries_for(&transfer.tab_ids).len(), 2);
+    assert_eq!(state.snapshot_for(Some(sftp_id)).id, Some(sftp_id));
+}
+
+#[test]
+fn non_terminal_tabs_cannot_be_detached() {
+    let mut state = test_state();
+    let settings_id = state.open_settings_tab();
+
+    assert!(
+        state
+            .workspace_transfer_for(settings_id, Uuid::new_v4())
+            .is_none()
+    );
 }
 
 #[test]
@@ -315,15 +346,49 @@ fn settings_and_session_editor_tabs_are_singletons() {
     let mut state = test_state();
 
     let settings = state.open_settings_tab();
+    assert!(state.has_settings_tab());
     state.open_local_shell_tab();
     assert_ne!(state.active_tab_id(), Some(settings));
     assert_eq!(settings, state.open_settings_tab());
     assert_eq!(state.active_tab_id(), Some(settings));
-    assert_eq!(
-        state.open_session_editor_tab(),
-        state.open_session_editor_tab()
-    );
+    let editor = state.open_session_editor_tab();
+    assert_eq!(editor, state.open_session_editor_tab());
+    assert!(state.has_session_editor_tab());
     assert_eq!(state.tab_summaries().len(), 3);
+
+    let closed_editor = state.close_tab(editor).expect("editor should close");
+    assert_eq!(closed_editor.kind, ClosedTabKind::SessionEditor);
+    assert!(!state.has_session_editor_tab());
+
+    let closed_settings = state.close_tab(settings).expect("settings should close");
+    assert_eq!(closed_settings.kind, ClosedTabKind::Settings);
+    assert!(!state.has_settings_tab());
+}
+
+#[test]
+fn closing_the_last_sftp_tab_releases_the_shared_icon_cache() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("SFTP", "sftp.example", "alice");
+    let first = state.open_sftp_tab(&profile);
+    let second = state.open_sftp_tab(&profile);
+
+    let first_closed = state.close_tab(first).expect("first SFTP tab should close");
+    assert_eq!(
+        first_closed.kind,
+        ClosedTabKind::Terminal {
+            release_file_icon_cache: false,
+        }
+    );
+
+    let second_closed = state
+        .close_tab(second)
+        .expect("second SFTP tab should close");
+    assert_eq!(
+        second_closed.kind,
+        ClosedTabKind::Terminal {
+            release_file_icon_cache: true,
+        }
+    );
 }
 
 #[test]
@@ -357,6 +422,20 @@ fn session_editor_can_switch_between_group_defaults_and_existing_profiles() {
             .credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
+}
+
+#[test]
+fn session_editor_maps_ssh_agent_without_a_private_key_path() {
+    let mut state = test_state();
+    let mut profile = SessionProfile::new("Agent", "agent.example", "alice");
+    profile.ssh_mut().expect("profile should be SSH").auth = AuthMethod::SshAgent;
+    state.sessions.upsert(profile.clone());
+
+    assert!(state.open_session_editor_for_profile(profile.id));
+    let editor = state.active_snapshot().editor.expect("editor should exist");
+    assert_eq!(editor.auth_method, "SSH agent");
+    assert!(editor.private_key_path.is_empty());
+    assert!(editor.credential_storage.is_empty());
 }
 
 #[test]
@@ -759,6 +838,16 @@ fn sftp_tab_is_a_separate_ssh_target() {
         Some(ConnectionTarget::Sftp)
     );
     assert!(state.terminal(sftp).is_some_and(TerminalTabState::is_sftp));
+    assert!(
+        state
+            .terminal(sftp)
+            .is_some_and(|terminal| terminal.terminal.is_none())
+    );
+    assert!(
+        state
+            .terminal(terminal)
+            .is_some_and(|terminal| terminal.terminal.is_some())
+    );
     assert_eq!(
         state
             .terminal(terminal)

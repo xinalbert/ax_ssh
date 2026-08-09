@@ -21,7 +21,10 @@ component WorkspaceTabContent inherits HorizontalLayout {
     in property <bool> active: false;
     in property <int> order;
     in property <bool> close-enabled: false;
+    in property <bool> window-action-enabled: false;
+    in property <bool> detached-window: false;
     callback close();
+    callback window-action();
     callback scroll-tabs(length, length);
 
     private property <length> close-glyph-height:
@@ -69,6 +72,33 @@ component WorkspaceTabContent inherits HorizontalLayout {
             : Theme.tab-title-inactive-font-weight;
         overflow: elide;
         vertical-alignment: center;
+    }
+    if root.window-action-enabled : Rectangle {
+        width: root.close-button-size;
+        height: root.close-button-size;
+        border-radius: Theme.radius;
+        background: window-action-touch.has-hover ? Theme.hover : transparent;
+        window-action-label := Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.detached-window ? "↩" : "↗";
+            color: Theme.muted;
+            font-size: Theme.tab-close-font-size;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        window-action-touch := TouchArea {
+            mouse-cursor: pointer;
+            accessible-role: button;
+            accessible-label: root.detached-window
+                ? "Return workspace to main window"
+                : "Move workspace to new window";
+            clicked => { root.window-action(); }
+            scroll-event(event) => {
+                root.scroll-tabs(event.delta-x, event.delta-y);
+                return EventResult.accept;
+            }
+        }
     }
     Rectangle {
         width: root.close-button-size;
@@ -257,10 +287,14 @@ export component WorkspaceTitlebar inherits Rectangle {
     in property <int> tab-width;
     in property <color> terminal-background;
     in property <bool> connection-picker-open;
+    in property <bool> connection-picker-enabled: true;
+    in property <bool> detached-window: false;
 
     callback activate-tab(string);
     callback close-tab(string);
     callback move-tab(string, int);
+    callback detach-workspace(string);
+    callback return-workspace(string);
     callback toggle-connection-picker();
 
     private property <int> drag-source-index: -1;
@@ -272,7 +306,8 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
     private property <length> add-glyph-height:
-        add-label.font-metrics.ascent - add-label.font-metrics.descent;
+        add-glyph-height-probe.font-metrics.ascent
+            - add-glyph-height-probe.font-metrics.descent;
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -342,6 +377,12 @@ export component WorkspaceTitlebar inherits Rectangle {
         connected: true;
         active: true;
         order: 1;
+        window-action-enabled: true;
+    }
+    add-glyph-height-probe := Text {
+        visible: false;
+        text: "+";
+        font-size: Theme.tab-add-font-size;
     }
 
     HorizontalLayout {
@@ -442,7 +483,16 @@ export component WorkspaceTitlebar inherits Rectangle {
                         active: tab.id == root.active-tab-id;
                         order: index + 1;
                         close-enabled: true;
+                        window-action-enabled: tab.kind == "terminal" || tab.kind == "sftp";
+                        detached-window: root.detached-window;
                         close => { root.close-tab(tab.id); }
+                        window-action => {
+                            if root.detached-window {
+                                root.return-workspace(tab.id);
+                            } else {
+                                root.detach-workspace(tab.id);
+                            }
+                        }
                         scroll-tabs(delta-x, delta-y) => {
                             root.scroll-tabs(delta-x, delta-y);
                         }
@@ -500,7 +550,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 }
             }
         }
-        Rectangle {
+        if root.connection-picker-enabled : Rectangle {
             width: parent.height;
             background: add-touch.has-hover || root.connection-picker-open
                 ? Theme.hover

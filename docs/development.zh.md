@@ -33,6 +33,9 @@ git diff --check
   密码，并且只向 SSH worker 返回临时 secret。
 - 私钥 profile 只能持久化文件路径；私钥内容和 passphrase 必须在 UI 线程外加载，
   且不得记录或持久化。
+- SSH agent profile 只能持久化认证方式。运行时 agent client 必须由 worker 独占，只能在精确
+  主机密钥校验后打开，保留 5 个 identity/30 秒上限并在认证后释放；socket 路径、identity 注释
+  和密钥数据均不得持久化或记录。agent forwarding 与密钥管理不属于该边界。
 - 不为了方便而接受未知 SSH 主机密钥；测试应注入确定性的 trust policy。
 - 进程持有的日志 guard 必须存活到应用退出，以刷新有界非阻塞队列；不得记录凭据
   或终端内容。
@@ -40,6 +43,12 @@ git diff --check
   receiver 暴露给 Slint。
 - 运行实例必须使用终端 Tab UUID，而不是已保存的 profile UUID；已保存连接的输入、
   resize、输出、重试、关闭和迟到事件都按 `tab_id + profile_id + attempt_id` 路由。
+- detached 原生窗口只是视图 owner，不是 transport owner。SSH Terminal/SFTP companion
+  必须使用只含受限 UUID 的 `WorkspaceTransfer` 移动；snapshot 由 `WindowRouter` 按窗口路由，
+  russh handle、receiver、终端缓冲区和秘密仍留在 `AppState`/worker。返回或关闭 detached 窗口
+  只能移除路由，不得重连或关闭已转移的 worker。其客户区只能渲染活动 Terminal/SFTP 内容；
+  detached 原生标题显示连接名，macOS 同一行标题栏的 **Return** 按钮调用既有路由 handler。主窗口
+  Tab 内联动作必须把 Tab UUID 直接传入该 handler，不得依赖多个 callback 的调用顺序。
 - 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
   `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
@@ -135,7 +144,8 @@ event-loop queue、应用和客户端输出总耗时，不包含终端内容或�
 ## 验证边界
 
 自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、保存并连接路由、认证存储选择映射、日志退出刷新，以及
-loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、PTY shell
+loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、只有精确主机密钥匹配后
+才执行外部签名的内存 agent protocol、PTY shell
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
 发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
@@ -148,7 +158,8 @@ subsystem 取消和 Tab shutdown join。文件图标测试覆盖有界规范化 
 `platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
 写入、读取和删除，并可能触发系统授权提示；应在每个受支持的凭据后端上主动运行。
 窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH/Telnet
-服务器仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实连接并发、目标平台
+服务器仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实连接并发、目标平台运行时
+SSH agent 选择、解锁/确认、多 identity 与失败行为，以及目标平台
 Serial 发现/权限/热插拔与设备输入输出、真实 SFTP 服务兼容性、SFTP 面板焦点/布局、macOS/
 Windows/Linux 默认程序调度与文件图标外观/主题变化、协议 resize、切换后的终端焦点保持和原生
 标题栏拖动命中区域。

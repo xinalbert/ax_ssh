@@ -16,10 +16,10 @@ cargo run --locked
 1. 选择 **File > New Server**，在 macOS 按 `Cmd+N`、Windows/Linux 按 `Ctrl+N`，
    或右击侧栏列表空白区域并选择 **New Server**。可在 **Settings > Shortcuts** 修改该快捷键。
 2. 选择 **SSH**、**Telnet** 或 **Serial**，再填写对应字段。SSH 使用 host、port、
-   username 和密码/私钥认证；**Forward X11 applications** 只适用于 SSH，新 profile
+   username 和密码、私钥或 **SSH agent** 认证；**Forward X11 applications** 只适用于 SSH，新 profile
    默认开启；Telnet 使用 host、port，并显示未加密警告；Serial 使用
-   端口名、baud rate、data bits、stop bits、parity 和 flow control。AxSSH 启动时会自动
-   列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。
+   端口名、baud rate、data bits、stop bits、parity 和 flow control。会话编辑器进入 Serial
+   模式时才列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。
 3. 保存会话并在会话导航中选择它。新建 SSH profile 时，也可以点击 **Save & connect**，
    保存成功后立即进入正常的主机密钥流程。会话编辑器中输入的密码默认只供本次连接使用，
    不需要保险库口令；只有主动勾选 **Remember password** 后才会保存，并可选择凭据后端，
@@ -28,7 +28,7 @@ cargo run --locked
    安全提示始终对应活动 Tab，切换 Tab 后其它等待提示仍会保留。
 4. 使用 SSH 首次连接时，先通过可信来源核对界面显示的 SHA-256 主机密钥指纹，再确认信任。
    主机密钥发生变化时必须再次明确确认，并应在接受前调查原因。
-5. 使用 SSH 时根据提示输入临时密码或私钥 passphrase；私钥 passphrase 永远不会持久化。若要记住
+5. 使用 SSH 密码或私钥认证时，根据提示输入临时密码或私钥 passphrase；私钥 passphrase 永远不会持久化。若要记住
    SSH 密码，先在 **Settings > General** 选择 **System credential store** 或
    **Encrypted application vault**。密码弹窗会以该设置为初始值，也可以在 **Credential
    storage** 菜单中只为本次提示改选后端，再勾选 **Remember password**。只有认证成功后才会
@@ -36,6 +36,13 @@ cargo run --locked
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
    关闭正在探测或等待认证的 Tab，只会取消或丢弃该 Tab 自己的连接流程。
+6. 使用 **SSH agent** 时，AxSSH 在连接开始时访问当时可用的 agent，不显示密码或 passphrase
+   弹窗。Unix/macOS 读取当前 `SSH_AUTH_SOCK`；Windows 优先使用该变量，未设置时使用 OpenSSH
+   agent 默认 named pipe。profile 只保存认证方式，不保存 socket 路径、identity 注释、公钥、私钥或
+   passphrase。AxSSH 在 30 秒 agent 认证总上限内最多尝试 5 个 identity，认证完成或取消后立即释放
+   agent 连接；锁定的 agent 仍可能显示自身的系统确认。agent 不可用、没有 identity、超时或所有
+   identity 被服务端拒绝时，解锁或更新当前 agent 后重新连接该 Tab。首次或主机密钥变化后的连接仍
+   必须先完成明确的主机密钥确认。
 
 在 **Settings > X11** 选择本机 server。macOS 提供 Auto、XQuartz、MacXServer、Custom；
 Windows 提供 Auto、VcXsrv、Xming、Custom；Linux 提供 System DISPLAY、Custom。已知 provider
@@ -139,6 +146,12 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 `Ctrl+Shift+[` / `Ctrl+Shift+]`。至少打开两个 Tab 时才可用；录制快捷键或处理安全提示时
 会暂时禁用。
 
+要把已连接的 SSH Terminal 及其 SFTP companion 作为独立原生窗口使用，可点击任一连接
+Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。两端会作为一个工作区组移动，
+保留已有终端输出、SFTP 目录状态、传输队列、主机密钥提示和认证阶段；AxSSH 不会重连。
+在 macOS 的 detached 窗口中点击同一行标题栏的 **Return** 按钮，可把同一组工作区合并回主窗口。
+直接关闭 detached 窗口也会执行合并，worker 继续运行。Settings 和会话编辑器 Tab 保留在主窗口。
+
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 `Ctrl+C` 会作为中断信号发送给活动终端。默认剪贴板快捷键在 macOS 上为
@@ -208,5 +221,5 @@ inactivity 策略，而不是 shell 输出计时器，来判断连接何时不�
 ## 当前限制
 
 共享的 OpenSSH 兼容 known-hosts 存储、主机密钥撤销、SFTP 上传、显式另存为、修改/编辑同步、
-SSH agent、自动重连、持久化工作区恢复和完整的全屏终端鼠标上报仍属于后续工作。
+自动重连、持久化工作区恢复和完整的全屏终端鼠标上报仍属于后续工作。
 Serial 的端口可见性、权限和参数支持取决于目标操作系统与硬件；Telnet 不提供加密或自动登录。

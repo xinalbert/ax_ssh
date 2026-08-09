@@ -4,7 +4,12 @@
 //! maps user intent to domain operations and returns owned worker events to the
 //! Slint event loop.
 
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -28,7 +33,7 @@ use ax_ssh::serial::{
     SerialPortDescriptor, SerialSessionEvent, SerialSessionHandle, discover_serial_ports,
     resolve_serial_port,
 };
-use ax_ssh::sftp::{SftpBrowserEvent, SftpEntry, SftpTransferEvent, cleanup_stale_sftp_open_cache};
+use ax_ssh::sftp::{SftpBrowserEvent, SftpEntry, SftpTransferEvent};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};
 use ax_ssh::telnet::{TelnetSessionEvent, TelnetSessionHandle};
 use ax_ssh::terminal::{TerminalSnapshot, encode_key as encode_terminal_key};
@@ -45,12 +50,13 @@ use self::session_groups::{
     profile_sidebar_endpoint, session_groups,
 };
 use self::state::{
-    ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ConnectionStart, ConnectionTarget,
-    PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation, SftpTransferPhase,
-    SshConnectionPhase, SshSftpNavigation, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
-    finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
-    prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
-    set_credential_storage, set_credential_storage_while_loading,
+    ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ClosedTabKind, ConnectionStart,
+    ConnectionTarget, PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation,
+    SftpTransferPhase, SshConnectionPhase, SshSftpNavigation, TerminalTabState, TerminalWorker,
+    WorkspaceTabSummary, WorkspaceTransfer, finish_stored_credential_retry,
+    prepare_authentication_retry, prepare_host_key_retry, prepare_stored_credential_retry,
+    retire_session_attempt, session_attempt_is_active, set_credential_storage,
+    set_credential_storage_while_loading,
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, TerminalRenderSettings, render_terminal,
@@ -79,7 +85,6 @@ mod workspace;
 use self::connection::*;
 use self::connection_monitor::*;
 use self::diagnostics::*;
-use self::file_icons::global_provider;
 use self::font_bridge::*;
 use self::serial_bridge::*;
 use self::settings_bridge::*;
@@ -92,38 +97,212 @@ slint::include_modules!();
 
 const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 
+const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
+
+#[derive(Clone)]
+struct WindowRouter {
+    inner: Arc<Mutex<WindowRouterState>>,
+}
+
+struct WindowRouterState {
+    routes: HashMap<Uuid, WindowRoute>,
+}
+
+struct WindowRoute {
+    ui: slint::Weak<AppWindow>,
+    transfer: Option<WorkspaceTransfer>,
+    active_tab_id: Option<Uuid>,
+}
+
+struct WindowView {
+    ui: slint::Weak<AppWindow>,
+    tabs: Vec<WorkspaceTabSummary>,
+    snapshot: ActiveTabSnapshot,
+}
+
+static GLOBAL_WINDOW_ROUTER: OnceLock<WindowRouter> = OnceLock::new();
+
+impl WindowRouter {
+    fn new(main_ui: slint::Weak<AppWindow>) -> Self {
+        let mut routes = HashMap::new();
+        routes.insert(
+            MAIN_WINDOW_ID,
+            WindowRoute {
+                ui: main_ui,
+                transfer: None,
+                active_tab_id: None,
+            },
+        );
+        Self {
+            inner: Arc::new(Mutex::new(WindowRouterState { routes })),
+        }
+    }
+
+    fn register_detached(
+        &self,
+        window_id: Uuid,
+        ui: slint::Weak<AppWindow>,
+        transfer: WorkspaceTransfer,
+    ) {
+        if let Ok(mut router) = self.inner.lock() {
+            router.routes.insert(
+                window_id,
+                WindowRoute {
+                    active_tab_id: transfer.active_tab_id,
+                    ui,
+                    transfer: Some(transfer),
+                },
+            );
+        }
+    }
+
+    fn set_active(&self, window_id: Uuid, tab_id: Uuid) {
+        if let Ok(mut router) = self.inner.lock()
+            && let Some(route) = router.routes.get_mut(&window_id)
+        {
+            route.active_tab_id = Some(tab_id);
+        }
+    }
+
+    fn main_ui(&self) -> Option<slint::Weak<AppWindow>> {
+        self.inner.lock().ok().and_then(|router| {
+            router
+                .routes
+                .get(&MAIN_WINDOW_ID)
+                .map(|route| route.ui.clone())
+        })
+    }
+
+    fn active_tab(&self, window_id: Uuid) -> Option<Uuid> {
+        self.inner.lock().ok().and_then(|router| {
+            router
+                .routes
+                .get(&window_id)
+                .and_then(|route| route.active_tab_id)
+        })
+    }
+
+    fn tab_ids(&self, window_id: Uuid, app: &AppState) -> Vec<Uuid> {
+        let Ok(router) = self.inner.lock() else {
+            return Vec::new();
+        };
+        let Some(route) = router.routes.get(&window_id) else {
+            return Vec::new();
+        };
+        route
+            .transfer
+            .as_ref()
+            .map(|transfer| transfer.tab_ids.clone())
+            .unwrap_or_else(|| {
+                let detached_ids = router
+                    .routes
+                    .values()
+                    .filter_map(|route| route.transfer.as_ref())
+                    .flat_map(|transfer| transfer.tab_ids.iter().copied())
+                    .collect::<HashSet<_>>();
+                app.tab_summaries()
+                    .into_iter()
+                    .filter(|tab| !detached_ids.contains(&tab.id))
+                    .map(|tab| tab.id)
+                    .collect()
+            })
+    }
+
+    fn remove_detached(&self, window_id: Uuid) -> Option<WorkspaceTransfer> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut router| router.routes.remove(&window_id))
+            .and_then(|route| {
+                let mut transfer = route.transfer?;
+                transfer.active_tab_id = route.active_tab_id.or(transfer.active_tab_id);
+                Some(transfer)
+            })
+    }
+
+    fn views(&self, app: &AppState) -> Vec<WindowView> {
+        let Ok(mut router) = self.inner.lock() else {
+            return Vec::new();
+        };
+        let detached_ids = router
+            .routes
+            .values()
+            .filter_map(|route| route.transfer.as_ref())
+            .flat_map(|transfer| transfer.tab_ids.iter().copied())
+            .collect::<HashSet<_>>();
+        router
+            .routes
+            .iter_mut()
+            .map(|(_, route)| {
+                let is_detached = route.transfer.is_some();
+                let transfer_active_tab_id = route
+                    .transfer
+                    .as_ref()
+                    .and_then(|transfer| transfer.active_tab_id);
+                let tabs = route
+                    .transfer
+                    .as_ref()
+                    .map(|transfer| app.tab_summaries_for(&transfer.tab_ids))
+                    .unwrap_or_else(|| {
+                        app.tab_summaries()
+                            .into_iter()
+                            .filter(|tab| !detached_ids.contains(&tab.id))
+                            .collect()
+                    });
+                let active_tab_id = route
+                    .active_tab_id
+                    .filter(|id| tabs.iter().any(|tab| tab.id == *id))
+                    .or_else(|| {
+                        transfer_active_tab_id.filter(|id| tabs.iter().any(|tab| tab.id == *id))
+                    })
+                    .or_else(|| {
+                        (!is_detached)
+                            .then(|| app.active_tab_id())
+                            .flatten()
+                            .filter(|id| tabs.iter().any(|tab| tab.id == *id))
+                    })
+                    .or_else(|| tabs.first().map(|tab| tab.id));
+                // Closing the active tab changes AppState's selection. Keep the
+                // route in sync so subsequent input cannot target the removed UUID.
+                route.active_tab_id = active_tab_id;
+                WindowView {
+                    ui: route.ui.clone(),
+                    tabs,
+                    snapshot: app.snapshot_for(active_tab_id),
+                }
+            })
+            .collect()
+    }
+}
+
+fn global_window_router() -> Option<WindowRouter> {
+    GLOBAL_WINDOW_ROUTER.get().cloned()
+}
+
+fn sync_window_active(router: &WindowRouter, window_id: Uuid, state: &Arc<Mutex<AppState>>) {
+    let Some(tab_id) = router.active_tab(window_id) else {
+        return;
+    };
+    if let Ok(mut app) = state.lock() {
+        let _ = app.activate_tab(tab_id);
+    }
+}
+
 pub fn run(log_directory: PathBuf) -> Result<()> {
-    let _file_icon_provider = global_provider();
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
-    let mut sessions = config.load().context("failed to load session profiles")?;
-    if sessions
-        .settings
-        .terminal
-        .merge_known_shells(discover_shells())
-        && let Err(error) = config.save(&sessions)
-    {
-        warn!(%error, "failed to persist newly discovered local shells");
-    }
+    let sessions = config.load().context("failed to load session profiles")?;
     let runtime = Runtime::new().context("failed to start Tokio runtime")?;
-    let _cache_cleanup_task = runtime.spawn(async {
-        match cleanup_stale_sftp_open_cache().await {
-            Ok(removed) if removed > 0 => {
-                debug!(removed, "removed stale SFTP open-cache files");
-            }
-            Ok(_) => {}
-            Err(error) => warn!(%error, "failed to clean stale SFTP open-cache files"),
-        }
-    });
-    let initial_font_families = vec![
-        sessions.settings.appearance.application_font_family.clone(),
-        sessions.settings.appearance.terminal_font_family.clone(),
-    ];
+    let initial_font_families = vec![sessions.settings.appearance.application_font_family.clone()];
     let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
     let initial_fonts =
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let ui = AppWindow::new().context("failed to create Slint window")?;
+    let window_router = WindowRouter::new(ui.as_weak());
+    let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
+    let detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>> =
+        Rc::new(RefCell::new(HashMap::new()));
 
     let (rows, groups, connection_options, settings) = {
         let app = state
@@ -204,13 +383,13 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         runtime.handle().clone(),
         font_registry,
         log_directory,
+        window_router,
+        MAIN_WINDOW_ID,
+        detached_windows,
     );
-    load_private_key_options(runtime.handle(), ui.as_weak());
-    load_font_options(runtime.handle(), ui.as_weak());
-    load_x11_server_installations(runtime.handle(), ui.as_weak());
+    ui.show().context("failed to show main window")?;
     #[cfg(target_os = "macos")]
     {
-        ui.show().context("failed to create macOS window")?;
         let ui_for_window = ui.as_weak();
         slint::Timer::single_shot(Duration::from_millis(100), move || {
             let Some(ui) = ui_for_window.upgrade() else {
@@ -226,7 +405,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         });
     }
     info!("AxSSH UI initialized");
-    let ui_result = ui.run().context("Slint event loop failed");
+    let ui_result = slint::run_event_loop().context("Slint event loop failed");
 
     let (workers, pending_probes) = {
         let mut app = state
@@ -249,6 +428,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
 
+    clear_file_icon_cache();
     drop(ui);
     runtime.shutdown_timeout(Duration::from_secs(3));
     ui_result?;
@@ -289,6 +469,9 @@ fn wire_callbacks(
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
     log_directory: PathBuf,
+    window_router: WindowRouter,
+    window_id: Uuid,
+    detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 ) {
     ui.on_log_keyboard_event(move |text, alt, control, meta, shift, route, action| {
         log_keyboard_event(
@@ -405,22 +588,325 @@ fn wire_callbacks(
             set_status(&ui_for_copy_session, "Address copied");
         }
     });
-    wire_workspace_tabs(ui, state.clone(), runtime.clone());
+    let terminal_font_started = Arc::new(AtomicBool::new(false));
+    let state_for_window_actions = state.clone();
+    let runtime_for_window_actions = runtime.clone();
+    let font_registry_for_window_actions = font_registry.clone();
+    wire_workspace_tabs(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        font_registry.clone(),
+        terminal_font_started.clone(),
+        window_router.clone(),
+        window_id,
+    );
     let profile_mutations = Arc::new(ProfileMutationCoordinator::default());
     wire_session_editor(
         ui,
         state.clone(),
         runtime.clone(),
         profile_mutations.clone(),
+        font_registry.clone(),
+        terminal_font_started.clone(),
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
     wire_session_management(ui, state.clone(), runtime.clone(), profile_mutations);
-    wire_connection_request(ui, state.clone(), runtime.clone());
-    wire_host_key_confirmation(ui, state.clone(), runtime.clone());
-    wire_authentication(ui, state.clone(), runtime.clone());
+    wire_connection_request(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        font_registry.clone(),
+        terminal_font_started,
+        window_router.clone(),
+        window_id,
+    );
+    wire_host_key_confirmation(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        window_router.clone(),
+        window_id,
+    );
+    wire_authentication(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        window_router.clone(),
+        window_id,
+    );
     wire_settings(ui, state.clone(), runtime.clone(), font_registry);
-    wire_sftp(ui, state.clone(), runtime.clone());
-    wire_terminal(ui, state);
+    wire_sftp(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        window_router.clone(),
+        window_id,
+    );
+    wire_terminal(ui, state, window_router.clone(), window_id);
+    wire_window_actions(
+        ui,
+        state_for_window_actions,
+        runtime_for_window_actions,
+        font_registry_for_window_actions,
+        log_directory,
+        window_router,
+        window_id,
+        detached_windows,
+    );
+}
+
+fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -> Result<()> {
+    let settings = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?
+        .sessions
+        .settings
+        .clone();
+    let sessions = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    ui.set_sessions(ModelRc::new(VecModel::from(session_group_rows(
+        &sessions.sessions,
+    ))));
+    ui.set_group_options(ModelRc::new(VecModel::from(group_option_rows(
+        &sessions.sessions,
+    ))));
+    ui.set_connection_options(ModelRc::new(VecModel::from(connection_option_rows(
+        &sessions.sessions,
+    ))));
+    drop(sessions);
+    ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_serial_port_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
+        Vec::<TerminalRenderLine>::new(),
+    )));
+    ui.set_sftp_entries(ModelRc::new(VecModel::from(Vec::<SftpEntryRow>::new())));
+    ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
+    ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(
+        ax_ssh::x_server::provider_options()
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+    ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_application_font_options(ModelRc::new(VecModel::from(font_option_rows(
+        &settings.appearance.application_font_family,
+        &[],
+    ))));
+    ui.set_terminal_font_options(ModelRc::new(VecModel::from(font_option_rows(
+        &settings.appearance.terminal_font_family,
+        &[],
+    ))));
+    let default_shortcuts = ShortcutSettings::default();
+    ui.set_default_open_settings_shortcut(default_shortcuts.open_settings.into());
+    ui.set_default_new_session_shortcut(default_shortcuts.new_session.into());
+    ui.set_default_toggle_sidebar_shortcut(default_shortcuts.toggle_sidebar.into());
+    ui.set_default_copy_selection_shortcut(default_shortcuts.copy_selection.into());
+    ui.set_default_paste_shortcut(default_shortcuts.paste.into());
+    ui.set_default_open_sftp_shortcut(default_shortcuts.open_sftp.into());
+    ui.set_apple_platform(cfg!(target_os = "macos"));
+    ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
+    apply_settings_to_component(ui, &settings);
+    apply_active_snapshot(ui, ActiveTabSnapshot::default());
+    ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
+    ui.set_status("".into());
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn wire_window_actions(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    log_directory: PathBuf,
+    window_router: WindowRouter,
+    window_id: Uuid,
+    detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
+) {
+    let ui_for_detach = ui.as_weak();
+    let state_for_detach = state.clone();
+    let runtime_for_detach = runtime.clone();
+    let font_registry_for_detach = font_registry.clone();
+    let router_for_detach = window_router.clone();
+    let windows_for_detach = detached_windows.clone();
+    ui.on_detach_workspace(move |id| {
+        log_ui_action("workspace.detach-window");
+        if window_id != MAIN_WINDOW_ID {
+            set_status(
+                &ui_for_detach,
+                "Return this workspace before moving it again",
+            );
+            return;
+        }
+        let tab_id = match parse_uuid(id.as_str(), "tab", &ui_for_detach) {
+            Some(tab_id) => tab_id,
+            None => return,
+        };
+        let transfer = match state_for_detach.lock() {
+            Ok(mut app) => {
+                if !router_for_detach.tab_ids(window_id, &app).contains(&tab_id) {
+                    set_status(&ui_for_detach, "Tab not found in this window");
+                    return;
+                }
+                let transfer = app.workspace_transfer_for(tab_id, window_id);
+                if transfer.is_some() {
+                    let _ = app.activate_tab(tab_id);
+                }
+                transfer
+            }
+            Err(_) => {
+                set_status(&ui_for_detach, "Cannot read workspace state");
+                return;
+            }
+        };
+        let Some(transfer) = transfer else {
+            set_status(&ui_for_detach, "Select a terminal workspace first");
+            return;
+        };
+        router_for_detach.set_active(window_id, tab_id);
+        // Winit delivers Slint callbacks while dispatching the source-window
+        // input event. Create the native window on the next UI turn so that
+        // its registration cannot re-enter that dispatch.
+        let ui_for_show = ui_for_detach.clone();
+        let state_for_show = state_for_detach.clone();
+        let runtime_for_show = runtime_for_detach.clone();
+        let font_registry_for_show = font_registry_for_detach.clone();
+        let router_for_show = router_for_detach.clone();
+        let windows_for_show = windows_for_detach.clone();
+        let log_directory_for_show = log_directory.clone();
+        slint::Timer::single_shot(Duration::from_millis(0), move || {
+            let detached_id = Uuid::new_v4();
+            let detached_ui = match AppWindow::new()
+                .context("failed to create detached Slint window")
+                .and_then(|detached_ui| {
+                    initialize_detached_component(&detached_ui, &state_for_show)?;
+                    detached_ui.set_detached_window(true);
+                    Ok(detached_ui)
+                }) {
+                Ok(detached_ui) => detached_ui,
+                Err(error) => {
+                    warn!(%error, "failed to create detached workspace window");
+                    set_status(
+                        &ui_for_show,
+                        &format!("Cannot open detached workspace: {error}"),
+                    );
+                    return;
+                }
+            };
+            router_for_show.register_detached(detached_id, detached_ui.as_weak(), transfer);
+            wire_callbacks(
+                &detached_ui,
+                state_for_show.clone(),
+                runtime_for_show,
+                font_registry_for_show,
+                log_directory_for_show,
+                router_for_show.clone(),
+                detached_id,
+                windows_for_show.clone(),
+            );
+            if let Err(error) = detached_ui.show() {
+                warn!(%error, "failed to show detached workspace window");
+                router_for_show.remove_detached(detached_id);
+                set_status(
+                    &ui_for_show,
+                    &format!("Cannot show detached workspace: {error}"),
+                );
+                return;
+            }
+            #[cfg(target_os = "macos")]
+            schedule_macos_detached_return_button(&detached_ui);
+            windows_for_show
+                .borrow_mut()
+                .insert(detached_id, detached_ui);
+            refresh_workspace(&ui_for_show, &state_for_show);
+        });
+    });
+
+    let ui_for_return = ui.as_weak();
+    let state_for_return = state.clone();
+    let router_for_return = window_router.clone();
+    let windows_for_return = detached_windows.clone();
+    ui.on_return_workspace(move |id| {
+        if window_id == MAIN_WINDOW_ID {
+            return;
+        }
+        let tab_id = match parse_uuid(id.as_str(), "tab", &ui_for_return) {
+            Some(tab_id) => tab_id,
+            None => return,
+        };
+        let belongs_to_window = state_for_return
+            .lock()
+            .is_ok_and(|app| router_for_return.tab_ids(window_id, &app).contains(&tab_id));
+        if !belongs_to_window {
+            set_status(&ui_for_return, "Tab not found in this window");
+            return;
+        }
+        router_for_return.set_active(window_id, tab_id);
+        let Some(transfer) = router_for_return.remove_detached(window_id) else {
+            return;
+        };
+        if let Some(active_tab_id) = transfer.active_tab_id {
+            if let Ok(mut app) = state_for_return.lock() {
+                app.activate_tab(active_tab_id);
+            }
+            router_for_return.set_active(MAIN_WINDOW_ID, active_tab_id);
+        }
+        if let Some(ui) = ui_for_return.upgrade() {
+            let _ = ui.window().hide();
+        }
+        let windows = windows_for_return.clone();
+        slint::Timer::single_shot(Duration::from_millis(0), move || {
+            windows.borrow_mut().remove(&window_id);
+        });
+        refresh_workspace(&ui_for_return, &state_for_return);
+    });
+
+    if window_id != MAIN_WINDOW_ID {
+        let state_for_close = state;
+        let router_for_close = window_router;
+        let windows_for_close = detached_windows;
+        ui.window().on_close_requested(move || {
+            if let Some(transfer) = router_for_close.remove_detached(window_id) {
+                if let Some(active_tab_id) = transfer.active_tab_id {
+                    if let Ok(mut app) = state_for_close.lock() {
+                        app.activate_tab(active_tab_id);
+                    }
+                    router_for_close.set_active(MAIN_WINDOW_ID, active_tab_id);
+                }
+                if let Some(main_ui) = router_for_close.main_ui() {
+                    refresh_workspace(&main_ui, &state_for_close);
+                }
+                let windows = windows_for_close.clone();
+                slint::Timer::single_shot(Duration::from_millis(0), move || {
+                    windows.borrow_mut().remove(&window_id);
+                });
+            }
+            slint::CloseRequestResponse::HideWindow
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn schedule_macos_detached_return_button(ui: &AppWindow) {
+    let ui_for_button = ui.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(100), move || {
+        let Some(ui) = ui_for_button.upgrade() else {
+            return;
+        };
+        let ui_for_return = ui.as_weak();
+        if let Err(error) =
+            macos_window::configure_detached_return_button(&ui.window(), move || {
+                log_ui_action("workspace.return-window");
+                if let Some(ui) = ui_for_return.upgrade() {
+                    ui.invoke_return_workspace(ui.get_active_tab_id());
+                }
+            })
+        {
+            warn!(%error, "failed to configure the detached macOS return button");
+        }
+    });
 }
 
 fn set_platform_clipboard_text(ui: &AppWindow, text: &str) {
@@ -489,19 +975,29 @@ mod support_tests {
             assert!(!diagnostics.contains(forbidden));
         }
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn retries_macos_application_menu_within_the_bounded_budget() {
+        assert!(should_retry_macos_application_menu_configuration(0));
+        assert!(should_retry_macos_application_menu_configuration(
+            MACOS_APPLICATION_MENU_MAX_RETRIES - 1
+        ));
+        assert!(!should_retry_macos_application_menu_configuration(
+            MACOS_APPLICATION_MENU_MAX_RETRIES
+        ));
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn configure_macos_application_menu(ui: &AppWindow) -> bool {
-    let shortcut = match menu_shortcut_from_setting(ui.get_open_settings_shortcut().as_str()) {
-        Ok(shortcut) => shortcut,
-        Err(error) => {
-            warn!(%error, "cannot configure the macOS Settings shortcut");
-            return false;
-        }
-    };
+const MACOS_APPLICATION_MENU_MAX_RETRIES: u8 = 8;
+
+#[cfg(target_os = "macos")]
+fn configure_macos_application_menu(ui: &AppWindow) -> Result<()> {
+    let shortcut = menu_shortcut_from_setting(ui.get_open_settings_shortcut().as_str())
+        .context("cannot configure the macOS Settings shortcut")?;
     let ui_for_menu = ui.as_weak();
-    if let Err(error) = macos_window::configure_application_menu(
+    macos_window::configure_application_menu(
         &shortcut.native,
         ui.get_menu_shortcuts_enabled(),
         move |section| {
@@ -521,38 +1017,41 @@ fn configure_macos_application_menu(ui: &AppWindow) -> bool {
             ui.invoke_request_settings_section(section.into());
             ui.invoke_open_settings();
         },
-    ) {
-        warn!(%error, "failed to connect the standard macOS application menu");
-        false
-    } else {
-        true
-    }
+    )
 }
 
 #[cfg(target_os = "macos")]
 fn schedule_macos_application_menu_configuration(ui: &AppWindow) {
     let ui_for_menu = ui.as_weak();
     slint::Timer::single_shot(Duration::from_millis(1), move || {
-        if let Some(ui) = ui_for_menu.upgrade() {
-            if !configure_macos_application_menu(&ui) {
-                retry_macos_application_menu_configuration(ui.as_weak(), 1);
-            }
-        }
+        retry_macos_application_menu_configuration(ui_for_menu, 0);
     });
 }
 
 #[cfg(target_os = "macos")]
 fn retry_macos_application_menu_configuration(ui: slint::Weak<AppWindow>, attempt: u8) {
-    const MAX_ATTEMPTS: u8 = 8;
-    if attempt > MAX_ATTEMPTS {
+    let Some(ui) = ui.upgrade() else {
         return;
-    }
-    slint::Timer::single_shot(Duration::from_millis(25), move || {
-        let Some(ui) = ui.upgrade() else {
-            return;
-        };
-        if !configure_macos_application_menu(&ui) {
-            retry_macos_application_menu_configuration(ui.as_weak(), attempt + 1);
+    };
+    match configure_macos_application_menu(&ui) {
+        Ok(()) => {}
+        Err(_) if should_retry_macos_application_menu_configuration(attempt) => {
+            let ui = ui.as_weak();
+            slint::Timer::single_shot(Duration::from_millis(25), move || {
+                retry_macos_application_menu_configuration(ui, attempt + 1);
+            });
         }
-    });
+        Err(error) => {
+            warn!(
+                attempts = u16::from(attempt) + 1,
+                %error,
+                "failed to connect the standard macOS application menu after retries"
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn should_retry_macos_application_menu_configuration(attempt: u8) -> bool {
+    attempt < MACOS_APPLICATION_MENU_MAX_RETRIES
 }

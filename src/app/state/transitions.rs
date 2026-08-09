@@ -157,8 +157,8 @@ pub(in crate::app) fn set_credential_storage(
     if ssh.credential_storage == credential_storage {
         return Ok(());
     }
-    if credential_storage.is_some() && matches!(ssh.auth, AuthMethod::PrivateKey { .. }) {
-        anyhow::bail!("private-key profiles cannot store password credentials");
+    if credential_storage.is_some() && !matches!(ssh.auth, AuthMethod::Password) {
+        anyhow::bail!("non-password profiles cannot store password credentials");
     }
     ssh.credential_storage = credential_storage;
     app.config.save(&candidate)?;
@@ -200,8 +200,8 @@ pub(in crate::app) fn set_credential_storage_while_loading(
     if ssh.credential_storage == credential_storage {
         return Ok(true);
     }
-    if credential_storage.is_some() && matches!(ssh.auth, AuthMethod::PrivateKey { .. }) {
-        anyhow::bail!("private-key profiles cannot store password credentials");
+    if credential_storage.is_some() && !matches!(ssh.auth, AuthMethod::Password) {
+        anyhow::bail!("non-password profiles cannot store password credentials");
     }
     ssh.credential_storage = credential_storage;
     app.config.save(&candidate)?;

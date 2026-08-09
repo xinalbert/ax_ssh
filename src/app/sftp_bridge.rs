@@ -7,11 +7,19 @@ use super::*;
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
+pub(super) fn wire_sftp(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    window_router: WindowRouter,
+    window_id: Uuid,
+) {
     let ui_for_list = ui.as_weak();
     let state_for_list = state.clone();
+    let router_for_list = window_router.clone();
     ui.on_list_sftp_directory(move |path| {
         log_ui_action("sftp.list-remote");
+        sync_window_active(&router_for_list, window_id, &state_for_list);
         let result = queue_remote_navigation(
             &state_for_list,
             SftpNavigation::Direct,
@@ -28,8 +36,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_back = ui.as_weak();
     let state_for_back = state.clone();
+    let router_for_back = window_router.clone();
     ui.on_navigate_sftp_back(move || {
         log_ui_action("sftp.navigate-back");
+        sync_window_active(&router_for_back, window_id, &state_for_back);
         let result = queue_remote_navigation(&state_for_back, SftpNavigation::Back, None);
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_back, &state_for_back),
@@ -42,8 +52,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_forward = ui.as_weak();
     let state_for_forward = state.clone();
+    let router_for_forward = window_router.clone();
     ui.on_navigate_sftp_forward(move || {
         log_ui_action("sftp.navigate-forward");
+        sync_window_active(&router_for_forward, window_id, &state_for_forward);
         let result = queue_remote_navigation(&state_for_forward, SftpNavigation::Forward, None);
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_forward, &state_for_forward),
@@ -59,8 +71,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_more = ui.as_weak();
     let state_for_more = state.clone();
+    let router_for_more = window_router.clone();
     ui.on_load_more_sftp(move || {
         log_ui_action("sftp.load-more");
+        sync_window_active(&router_for_more, window_id, &state_for_more);
         let result = with_active_sftp_terminal(&state_for_more, |terminal| {
             terminal
                 .worker
@@ -79,8 +93,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_close = ui.as_weak();
     let state_for_close = state.clone();
+    let router_for_close = window_router.clone();
     ui.on_close_sftp(move || {
         log_ui_action("sftp.close");
+        sync_window_active(&router_for_close, window_id, &state_for_close);
         let result = with_active_sftp_terminal(&state_for_close, |terminal| {
             terminal
                 .worker
@@ -98,8 +114,14 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_remote_selection = ui.as_weak();
     let state_for_remote_selection = state.clone();
+    let router_for_remote_selection = window_router.clone();
     ui.on_toggle_remote_sftp_selection(move |path, selected| {
         log_ui_action("sftp.toggle-remote-selection");
+        sync_window_active(
+            &router_for_remote_selection,
+            window_id,
+            &state_for_remote_selection,
+        );
         let result = with_active_sftp_terminal(&state_for_remote_selection, |terminal| {
             if !terminal.sftp.toggle_selection(path.as_str(), selected) {
                 anyhow::bail!("remote entry is no longer visible");
@@ -119,8 +141,14 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_remote_select_all = ui.as_weak();
     let state_for_remote_select_all = state.clone();
+    let router_for_remote_select_all = window_router.clone();
     ui.on_select_all_remote_sftp(move |selected| {
         log_ui_action("sftp.select-all-remote");
+        sync_window_active(
+            &router_for_remote_select_all,
+            window_id,
+            &state_for_remote_select_all,
+        );
         let result = with_active_sftp_terminal(&state_for_remote_select_all, |terminal| {
             terminal.sftp.select_all(selected);
             Ok(())
@@ -138,8 +166,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_remote_open = ui.as_weak();
     let state_for_remote_open = state.clone();
+    let router_for_remote_open = window_router.clone();
     ui.on_open_remote_sftp_file(move |path| {
         log_ui_action("sftp.open-remote-file");
+        sync_window_active(&router_for_remote_open, window_id, &state_for_remote_open);
         let result = with_active_sftp_terminal(&state_for_remote_open, |terminal| {
             let entry = terminal
                 .sftp
@@ -187,8 +217,14 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_transfer_cancel = ui.as_weak();
     let state_for_transfer_cancel = state.clone();
+    let router_for_transfer_cancel = window_router.clone();
     ui.on_cancel_sftp_transfer(move |id| {
         log_ui_action("sftp.cancel-transfer");
+        sync_window_active(
+            &router_for_transfer_cancel,
+            window_id,
+            &state_for_transfer_cancel,
+        );
         let result = id
             .as_str()
             .parse::<uuid::Uuid>()
@@ -220,8 +256,14 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_local_selection = ui.as_weak();
     let state_for_local_selection = state.clone();
+    let router_for_local_selection = window_router.clone();
     ui.on_toggle_local_sftp_selection(move |path, selected| {
         log_ui_action("sftp.toggle-local-selection");
+        sync_window_active(
+            &router_for_local_selection,
+            window_id,
+            &state_for_local_selection,
+        );
         let result = with_active_sftp_terminal(&state_for_local_selection, |terminal| {
             if !terminal
                 .sftp
@@ -243,8 +285,14 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_local_select_all = ui.as_weak();
     let state_for_local_select_all = state.clone();
+    let router_for_local_select_all = window_router.clone();
     ui.on_select_all_local_sftp(move |selected| {
         log_ui_action("sftp.select-all-local");
+        sync_window_active(
+            &router_for_local_select_all,
+            window_id,
+            &state_for_local_select_all,
+        );
         let result = with_active_sftp_terminal(&state_for_local_select_all, |terminal| {
             terminal.sftp.local.select_all(selected);
             Ok(())
@@ -263,8 +311,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
     let ui_for_local_open = ui.as_weak();
     let state_for_local_open = state.clone();
     let runtime_for_local_open = runtime.clone();
+    let router_for_local_open = window_router.clone();
     ui.on_open_local_sftp_file(move |path| {
         log_ui_action("sftp.open-local-file");
+        sync_window_active(&router_for_local_open, window_id, &state_for_local_open);
         let request = prepare_local_file_open(&state_for_local_open, path.as_str());
         match request {
             Ok(request) => {
@@ -288,8 +338,10 @@ pub(super) fn wire_sftp(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Ha
 
     let ui_for_local = ui.as_weak();
     let state_for_local = state;
+    let router_for_local = window_router;
     ui.on_list_local_sftp_directory(move |path| {
         log_ui_action("sftp.list-local");
+        sync_window_active(&router_for_local, window_id, &state_for_local);
         let path = path.as_str().trim().to_owned();
         if path.is_empty() || path.len() > LOCAL_DIRECTORY_PATH_LIMIT {
             set_status(&ui_for_local, "Choose a valid local directory path");

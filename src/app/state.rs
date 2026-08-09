@@ -174,7 +174,7 @@ impl AppState {
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
                 backend,
                 worker: None,
-                terminal,
+                terminal: Some(terminal),
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -203,11 +203,6 @@ impl AppState {
         companion_tab_id: Option<Uuid>,
     ) -> Uuid {
         let id = Uuid::new_v4();
-        let terminal = TerminalModel::new(
-            usize::from(self.sessions.settings.terminal.default_columns),
-            usize::from(self.sessions.settings.terminal.default_rows),
-            self.sessions.settings.terminal.scrollback_lines as usize,
-        );
         let tab = WorkspaceTab {
             id,
             title: format!("{} SFTP", profile.name),
@@ -217,7 +212,7 @@ impl AppState {
                     attempt_id: None,
                 },
                 worker: None,
-                terminal,
+                terminal: None,
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -244,7 +239,7 @@ impl AppState {
             kind: WorkspaceTabKind::Terminal(TerminalTabState {
                 backend: TerminalBackend::Local,
                 worker: None,
-                terminal,
+                terminal: Some(terminal),
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
@@ -267,6 +262,7 @@ impl AppState {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn cycle_tab(&mut self, next: bool) -> Option<Uuid> {
         if self.tabs.len() < 2 {
             return None;
@@ -282,6 +278,26 @@ impl AppState {
         let target_id = self.tabs[target_index].id;
         self.active_tab_id = Some(target_id);
         Some(target_id)
+    }
+
+    pub(super) fn cycle_tab_for(&mut self, tab_ids: &[Uuid], next: bool) -> Option<Uuid> {
+        if tab_ids.len() < 2 {
+            return None;
+        }
+        let active_index = self
+            .active_tab_id
+            .and_then(|active_id| tab_ids.iter().position(|tab_id| *tab_id == active_id))?;
+        let target_index = if next {
+            (active_index + 1) % tab_ids.len()
+        } else {
+            active_index.checked_sub(1).unwrap_or(tab_ids.len() - 1)
+        };
+        let target_id = tab_ids[target_index];
+        if self.activate_tab(target_id) {
+            Some(target_id)
+        } else {
+            None
+        }
     }
 
     pub(super) fn switch_ssh_sftp_tab(&mut self) -> Option<SshSftpNavigation> {
@@ -314,6 +330,7 @@ impl AppState {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn move_tab(&mut self, tab_id: Uuid, target_index: usize) -> bool {
         let Some(source_index) = self.tabs.iter().position(|tab| tab.id == tab_id) else {
             return false;
@@ -327,6 +344,36 @@ impl AppState {
         true
     }
 
+    pub(super) fn move_tab_for(
+        &mut self,
+        tab_id: Uuid,
+        target_index: usize,
+        visible_tab_ids: &[Uuid],
+    ) -> bool {
+        let Some(source_index) = visible_tab_ids.iter().position(|id| *id == tab_id) else {
+            return false;
+        };
+        let target_index = target_index.min(visible_tab_ids.len().saturating_sub(1));
+        if source_index == target_index {
+            return true;
+        }
+        let Some(global_source_index) = self.tabs.iter().position(|tab| tab.id == tab_id) else {
+            return false;
+        };
+        let target_id = visible_tab_ids[target_index];
+        let Some(global_target_index) = self.tabs.iter().position(|tab| tab.id == target_id) else {
+            return false;
+        };
+        let tab = self.tabs.remove(global_source_index);
+        let insertion_index = if global_source_index < global_target_index {
+            global_target_index.saturating_sub(1)
+        } else {
+            global_target_index
+        };
+        self.tabs.insert(insertion_index, tab);
+        true
+    }
+
     pub(super) fn close_tab(&mut self, tab_id: Uuid) -> Option<ClosedTab> {
         let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
         let mut tab = self.tabs.remove(index);
@@ -336,11 +383,25 @@ impl AppState {
         {
             companion.companion_tab_id = None;
         }
-        let (worker, pending_probe) = match &mut tab.kind {
-            WorkspaceTabKind::Terminal(terminal) => {
-                (terminal.worker.take(), terminal.take_pending_probe())
+        let (kind, worker, pending_probe) = match &mut tab.kind {
+            WorkspaceTabKind::Terminal(terminal) => (
+                ClosedTabKind::Terminal {
+                    release_file_icon_cache: terminal.is_sftp()
+                        && !self.tabs.iter().any(|tab| {
+                            matches!(
+                                &tab.kind,
+                                WorkspaceTabKind::Terminal(terminal) if terminal.is_sftp()
+                            )
+                        }),
+                },
+                terminal.worker.take(),
+                terminal.take_pending_probe(),
+            ),
+            WorkspaceTabKind::Settings => (ClosedTabKind::Settings, None, None),
+            WorkspaceTabKind::SessionEditor(_) => {
+                self.serial_ports.clear();
+                (ClosedTabKind::SessionEditor, None, None)
             }
-            WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => (None, None),
         };
         if self.active_tab_id == Some(tab_id) {
             self.active_tab_id = self
@@ -350,6 +411,7 @@ impl AppState {
                 .map(|tab| tab.id);
         }
         Some(ClosedTab {
+            kind,
             worker,
             pending_probe,
         })
@@ -449,7 +511,11 @@ impl AppState {
     }
 
     pub(super) fn active_snapshot(&self) -> ActiveTabSnapshot {
-        let Some(active_id) = self.active_tab_id else {
+        self.snapshot_for(self.active_tab_id)
+    }
+
+    pub(super) fn snapshot_for(&self, tab_id: Option<Uuid>) -> ActiveTabSnapshot {
+        let Some(active_id) = tab_id else {
             return ActiveTabSnapshot::default();
         };
         let Some(tab) = self.tabs.iter().find(|tab| tab.id == active_id) else {
@@ -469,11 +535,11 @@ impl AppState {
                     title: tab.title.clone(),
                     status: terminal.status.clone(),
                     editor: None,
-                    terminal: Some(terminal.terminal.snapshot()),
+                    terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
                     connected: terminal.connected,
                     worker_running: terminal.worker_running,
                     sftp,
-                    security_prompt: self.active_security_prompt(),
+                    security_prompt: self.security_prompt_for(Some(active_id)),
                 }
             }
             WorkspaceTabKind::Settings => ActiveTabSnapshot {
@@ -543,6 +609,22 @@ impl AppState {
         self.serial_ports = ports;
     }
 
+    pub(super) fn clear_serial_ports(&mut self) {
+        self.serial_ports.clear();
+    }
+
+    pub(super) fn has_settings_tab(&self) -> bool {
+        self.tabs
+            .iter()
+            .any(|tab| matches!(tab.kind, WorkspaceTabKind::Settings))
+    }
+
+    pub(super) fn has_session_editor_tab(&self) -> bool {
+        self.tabs
+            .iter()
+            .any(|tab| matches!(tab.kind, WorkspaceTabKind::SessionEditor(_)))
+    }
+
     pub(super) fn serial_ports(&self) -> &[SerialPortDescriptor] {
         &self.serial_ports
     }
@@ -557,10 +639,14 @@ impl AppState {
 
     pub(super) fn resize_active_terminal(&mut self, columns: u32, rows: u32) -> Result<()> {
         let terminal = self.active_terminal_mut().context("no active terminal")?;
+        let model = terminal
+            .terminal
+            .as_mut()
+            .context("active tab has no terminal model")?;
         if let Some(worker) = terminal.worker.as_ref() {
             worker.request_resize(columns, rows)?;
         }
-        terminal.terminal.resize(columns as usize, rows as usize);
+        model.resize(columns as usize, rows as usize);
         Ok(())
     }
 
@@ -592,13 +678,20 @@ impl AppState {
         let scrollback_lines = self.sessions.settings.terminal.scrollback_lines as usize;
         for tab in &mut self.tabs {
             if let WorkspaceTabKind::Terminal(terminal) = &mut tab.kind {
-                terminal.terminal.set_scrollback_lines(scrollback_lines);
+                if let Some(model) = terminal.terminal.as_mut() {
+                    model.set_scrollback_lines(scrollback_lines);
+                }
             }
         }
     }
 
+    #[cfg(test)]
     pub(super) fn active_security_prompt(&self) -> ActiveSecurityPrompt {
-        let Some(tab_id) = self.active_tab_id else {
+        self.security_prompt_for(self.active_tab_id)
+    }
+
+    pub(super) fn security_prompt_for(&self, tab_id: Option<Uuid>) -> ActiveSecurityPrompt {
+        let Some(tab_id) = tab_id else {
             return ActiveSecurityPrompt::None;
         };
         let Some(terminal) = self.terminal(tab_id) else {
@@ -638,6 +731,60 @@ impl AppState {
             | None => ActiveSecurityPrompt::None,
         }
     }
+
+    /// Returns the terminal tab and its SSH/SFTP companion as one movable UI group.
+    ///
+    /// The transfer contains identifiers only. Runtime workers, pending probes, and
+    /// authentication state remain owned by `AppState` while the group is displayed by
+    /// another native window.
+    pub(super) fn workspace_transfer_for(
+        &self,
+        tab_id: Uuid,
+        source_window_id: Uuid,
+    ) -> Option<WorkspaceTransfer> {
+        let tab = self.tabs.iter().find(|tab| tab.id == tab_id)?;
+        if !matches!(tab.kind, WorkspaceTabKind::Terminal(_)) {
+            return None;
+        }
+        let mut tab_ids = vec![tab.id];
+        if let Some(companion_id) = tab.companion_tab_id
+            && self
+                .tabs
+                .iter()
+                .any(|candidate| candidate.id == companion_id)
+        {
+            tab_ids.push(companion_id);
+        }
+        Some(WorkspaceTransfer {
+            source_window_id,
+            tab_ids,
+            active_tab_id: Some(tab_id),
+        })
+    }
+
+    pub(super) fn tab_summaries_for(&self, tab_ids: &[Uuid]) -> Vec<WorkspaceTabSummary> {
+        let allowed = tab_ids.iter().copied().collect::<HashSet<_>>();
+        self.tabs
+            .iter()
+            .filter(|tab| allowed.contains(&tab.id))
+            .map(|tab| WorkspaceTabSummary {
+                id: tab.id,
+                title: tab.title.clone(),
+                kind: tab.kind.name(),
+                connected: matches!(
+                    &tab.kind,
+                    WorkspaceTabKind::Terminal(terminal) if terminal.connected
+                ),
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct WorkspaceTransfer {
+    pub(super) source_window_id: Uuid,
+    pub(super) tab_ids: Vec<Uuid>,
+    pub(super) active_tab_id: Option<Uuid>,
 }
 
 enum WorkspaceTabKind {
@@ -726,6 +873,7 @@ impl SessionEditorState {
                     ax_ssh::config::AuthMethod::PrivateKey { path } => {
                         ("Private key", path.to_string_lossy().into_owned())
                     }
+                    ax_ssh::config::AuthMethod::SshAgent => ("SSH agent", String::new()),
                 };
                 (
                     "SSH",
@@ -823,7 +971,7 @@ impl WorkspaceTab {
 pub(super) struct TerminalTabState {
     pub(super) backend: TerminalBackend,
     pub(super) worker: Option<TerminalWorker>,
-    pub(super) terminal: TerminalModel,
+    pub(super) terminal: Option<TerminalModel>,
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
@@ -1749,8 +1897,16 @@ impl Default for SessionEditorSnapshot {
 }
 
 pub(super) struct ClosedTab {
+    pub(super) kind: ClosedTabKind,
     pub(super) worker: Option<TerminalWorker>,
     pub(super) pending_probe: Option<PendingProbe>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ClosedTabKind {
+    Terminal { release_file_icon_cache: bool },
+    Settings,
+    SessionEditor,
 }
 
 #[derive(Clone)]

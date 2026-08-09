@@ -37,6 +37,11 @@ registry.
   only an ephemeral secret to the SSH worker.
 - Private-key profiles may persist a filesystem path only. Load key contents
   and passphrases off the UI thread, and never log or persist either value.
+- SSH-agent profiles persist only their authentication method. Keep the runtime
+  agent client worker-owned, open it only after exact host-key verification,
+  retain the five-identity/30-second limits, drop it after authentication, and
+  never persist or log its socket path, identity comments, or key data. Agent
+  forwarding and key management remain outside this boundary.
 - Do not accept an unknown SSH host key for convenience or tests. Tests should
   inject a deterministic trust policy.
 - Keep the process-owned logging guard alive through application shutdown so
@@ -47,6 +52,17 @@ registry.
 - Use the terminal tab UUID, not the saved profile UUID, as the runtime
   instance key. Route saved-connection input, resize, output, retry, close, and
   late events by `tab_id + profile_id + attempt_id`.
+- A detached native window is a view owner, not a transport owner. Move SSH
+  Terminal/SFTP companion groups with an owned `WorkspaceTransfer` containing
+  only bounded UUIDs; route snapshots by `WindowRouter` and keep russh handles,
+  receivers, terminal buffers, and secrets in `AppState`/workers. Returning or
+  closing a detached window must remove only its route and must not reconnect or
+  shut down the transferred workers. Its client view may render only active
+  Terminal/SFTP content; the detached native title carries the connection name,
+  and the macOS title-bar **Return** button stays on that same row and invokes
+  the existing route handler.
+  Inline main-window actions must pass their Tab UUID directly to that handler
+  rather than relying on callback order.
 - Keep terminal input, output batches, event queues, and scrollback bounded.
 - Keep SFTP on a child subsystem channel of the authenticated SSH worker. Do
   not expose the russh handle or `RawSftpSession` to application state or Slint.
@@ -180,8 +196,9 @@ benchmark result.
 Automated checks cover profile validation, JSON round-trip, Slint compilation,
 save-and-connect routing and authentication storage-selection mapping,
 log flush behavior, and a loopback russh server that verifies rejected host-key
-probing, trusted password/private-key authentication, PTY shell input/output,
-resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,
+probing, trusted password/private-key authentication, an in-memory agent protocol
+that performs external signing only after exact host-key matching, PTY shell
+input/output, resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,
 bounded scrollback, terminal control/navigation encoding, legacy appearance
 migration into versioned settings, duplicate-profile tab isolation, local key
 discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
@@ -202,7 +219,8 @@ prompt. Run it deliberately on each supported credential backend. Manual
 follow-up is also required for window rendering, horizontal tab scrolling,
 native title-bar drag hit testing, keyboard/focus input, the visible
 group/host-key/authentication flows, concurrent login against real SSH servers,
-real Telnet servers, target-platform Serial discovery/permissions/hot-plug and
+runtime SSH-agent selection, unlock/confirmation, multiple-identity and failure
+behavior on each target platform, real Telnet servers, target-platform Serial discovery/permissions/hot-plug and
 device input/output, real SFTP server compatibility, SFTP pane focus/layout,
 default-application dispatch, and file-icon appearance/theme changes on macOS,
 Windows, and Linux, plus protocol-specific resize behavior and full-screen

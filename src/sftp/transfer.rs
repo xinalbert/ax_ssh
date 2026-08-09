@@ -168,10 +168,10 @@ impl Drop for SftpDownloadHandle {
 
 /// Removes only stale, AxSSH-named files directly inside the private cache.
 ///
-/// Call this from the Tokio runtime during application startup. Directories and
-/// unrecognized names are deliberately left untouched, and removal failures are
-/// best-effort so an external application holding a cached file cannot block
-/// startup.
+/// Call this explicitly when maintenance is requested. Download quota enforcement
+/// performs the same stale-file cleanup before creating a new cache target, so an
+/// application that never uses remote file opening does not need to scan this
+/// directory at startup. Directories and unrecognized names are left untouched.
 pub async fn cleanup_stale_sftp_open_cache() -> Result<usize> {
     tokio::task::spawn_blocking(|| {
         let cache_dir = cache_namespace()?;

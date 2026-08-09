@@ -17,13 +17,13 @@ cargo run --locked
    and Linux, or right-click blank sidebar list space and choose **New Server**.
    Change this shortcut in **Settings > Shortcuts**.
 2. Choose **SSH**, **Telnet**, or **Serial**, then enter the fields for that
-   protocol. SSH accepts host, port, username, and password/private-key
-   authentication. **Forward X11 applications** is SSH-only and defaults to on
+   protocol. SSH accepts host, port, username, and password, private-key, or
+   **SSH agent** authentication. **Forward X11 applications** is SSH-only and defaults to on
    for new profiles. Telnet accepts host and port and displays an unencrypted
    transport warning. Serial accepts a port name, baud rate, data bits, stop
-   bits, parity, and flow control. AxSSH lists detected ports automatically at
-   startup; use **Refresh** after a device is attached, or enter a path/name
-   manually.
+   bits, parity, and flow control. AxSSH lists detected ports when the editor
+   enters Serial mode; use **Refresh** after a device is attached, or enter a
+   path/name manually.
 3. Save the session, then select it in the session navigator. For a new SSH
    profile, **Save & connect** saves the profile and immediately starts the
    normal host-key flow. A password entered in the session editor is one-time by
@@ -39,7 +39,7 @@ cargo run --locked
    connection
    with a trusted source before confirming it. A changed key requires another
    explicit confirmation and should be investigated before acceptance.
-5. For SSH, enter a transient password or private-key passphrase when prompted. A
+5. For SSH password or private-key authentication, enter a transient password or private-key passphrase when prompted. A
    private-key passphrase is never persisted. To remember an SSH password,
    first choose **System credential store** or **Encrypted application vault**
    in **Settings > General**. The password prompt starts with that choice, and
@@ -52,6 +52,17 @@ cargo run --locked
    is cancelled.
    Closing a probing or pending-authentication Tab cancels or discards only that
    Tab's connection flow.
+6. For **SSH agent**, AxSSH uses the agent available when the connection starts
+   and does not show a password or passphrase prompt. Unix and macOS read the
+   current `SSH_AUTH_SOCK`; Windows uses `SSH_AUTH_SOCK` when set, otherwise the
+   default OpenSSH agent named pipe. The profile stores only the authentication
+   method, not the socket path, identity comments, public keys, private keys, or
+   passphrases. AxSSH tries at most five identities within one 30-second agent
+   authentication timeout and releases the agent connection when authentication
+   finishes or is cancelled. A locked agent may show its own system confirmation.
+   If the agent is unavailable, empty, times out, or every offered identity is
+   rejected, unlock or update the runtime agent and reconnect the Tab. Host-key
+   confirmation remains mandatory before every first or changed-host connection.
 
 Choose the local server under **Settings > X11**. macOS offers Auto, XQuartz,
 MacXServer, and Custom; Windows offers Auto, VcXsrv, Xming, and Custom; Linux
@@ -209,6 +220,16 @@ the selection wraps at either end. The fixed shortcuts are `Cmd+Shift+[` /
 They are available when at least two Tabs are open and are temporarily disabled
 while recording a shortcut or answering a security prompt.
 
+To make a connected SSH Terminal and its SFTP companion a separate native
+window, use the external-link button on either connection Tab or choose
+**Window > Move Current Workspace to New Window**. The pair is
+moved as one workspace group and keeps the existing terminal output, SFTP
+directory state, transfers, host-key prompt, and authentication phase; AxSSH
+does not reconnect. In the detached macOS window, use its same-row title-bar
+**Return** button to merge the same group back. Closing the detached window performs the
+same merge and leaves the workers
+running. Settings and session-editor Tabs remain in the main window.
+
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
 Home and End follow application-cursor mode in full-screen programs. Plain
@@ -306,7 +327,7 @@ when such a connection is no longer live.
 ## Current limitations
 
 Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP upload,
-explicit Save As, mutation/edit sync, SSH agent integration, reconnect, persisted
+explicit Save As, mutation/edit sync, reconnect, persisted
 workspace restoration, and complete full-screen terminal mouse reporting remain
 planned work. Serial availability, device permissions, and supported parameter
 combinations depend on the target operating system and hardware; Telnet has no

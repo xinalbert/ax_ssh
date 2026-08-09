@@ -31,10 +31,104 @@ export struct WorkspaceViewState {
     session_editor: SessionEditorViewState,
 }
 
+// The detached rendering path contains only the transferable Terminal/SFTP
+// surface. Its title and return control belong to the native window chrome.
+component DetachedWorkspaceContent inherits Rectangle {
+    in property <WorkspaceViewState> view;
+
+    callback close-tab(string);
+    callback list-sftp-directory(string);
+    callback load-more-sftp();
+    callback list-local-sftp-directory(string);
+    callback navigate-sftp-back();
+    callback navigate-sftp-forward();
+    callback toggle-remote-sftp-selection(string, bool);
+    callback select-all-remote-sftp(bool);
+    callback toggle-local-sftp-selection(string, bool);
+    callback select-all-local-sftp(bool);
+    callback open-remote-sftp-file(string);
+    callback open-local-sftp-file(string);
+    callback cancel-sftp-transfer(string);
+    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
+    callback resize-terminal(int, int);
+    callback scroll-terminal(int);
+    callback terminal-selection-text(int, int, int, int) -> string;
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback write-clipboard(string);
+    callback read-clipboard() -> string;
+
+    private property <float> sftp-directory-split-ratio: 0.5;
+    private property <float> sftp-files-split-ratio: 0.7;
+    private property <bool> sftp-transfers-collapsed: false;
+
+    background: Theme.background;
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: Theme.background;
+
+        if root.view.active_tab_kind == "terminal" : TerminalPane {
+            view: root.view.terminal;
+            format-shortcut(text, alt, control, meta, shift) => {
+                return root.format-shortcut(text, alt, control, meta, shift);
+            }
+            terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+                return root.terminal-key(
+                    text, alt, control, meta, shift, physical-key-event,
+                );
+            }
+            terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
+                return root.terminal-key-direct(
+                    text, alt, control, meta, shift, option-as-meta, preedit-active,
+                );
+            }
+            resized(columns, rows) => { root.resize-terminal(columns, rows); }
+            scrolled(lines) => { root.scroll-terminal(lines); }
+            selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+                return root.terminal-selection-text(
+                    anchor-row, anchor-column, focus-row, focus-column,
+                );
+            }
+            write-clipboard(text) => { root.write-clipboard(text); }
+            read-clipboard() => { return root.read-clipboard(); }
+        }
+
+        if root.view.active_tab_kind == "sftp" : SftpPane {
+            width: parent.width;
+            height: parent.height;
+            standalone: true;
+            view: root.view.sftp;
+            directory-split-ratio <=> root.sftp-directory-split-ratio;
+            files-split-ratio <=> root.sftp-files-split-ratio;
+            transfers-collapsed <=> root.sftp-transfers-collapsed;
+            list-directory(path) => { root.list-sftp-directory(path); }
+            load-more => { root.load-more-sftp(); }
+            list-local-directory(path) => { root.list-local-sftp-directory(path); }
+            navigate-back => { root.navigate-sftp-back(); }
+            navigate-forward => { root.navigate-sftp-forward(); }
+            toggle-remote-selection(path, selected) => {
+                root.toggle-remote-sftp-selection(path, selected);
+            }
+            select-all-remote(selected) => { root.select-all-remote-sftp(selected); }
+            toggle-local-selection(path, selected) => {
+                root.toggle-local-sftp-selection(path, selected);
+            }
+            select-all-local(selected) => { root.select-all-local-sftp(selected); }
+            open-remote-file(path) => { root.open-remote-sftp-file(path); }
+            open-local-file(path) => { root.open-local-sftp-file(path); }
+            cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
+            close => { root.close-tab(root.view.active_tab_id); }
+        }
+    }
+}
+
 export component WorkspaceShell inherits Rectangle {
     in property <WorkspaceViewState> view;
     in property <string> requested-settings-section: "General";
     in property <int> settings-section-request-revision: 0;
+    in property <bool> detached-window: false;
 
     out property <bool> shortcut-recording: false;
     private property <bool> sidebar-collapsed: false;
@@ -54,6 +148,8 @@ export component WorkspaceShell inherits Rectangle {
     callback activate-tab(string);
     callback close-tab(string);
     callback move-tab(string, int);
+    callback detach-workspace(string);
+    callback return-workspace(string);
     callback save-settings(
         string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
@@ -68,6 +164,8 @@ export component WorkspaceShell inherits Rectangle {
         string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
+    callback serial-mode-changed(bool);
+    callback private-key-mode-changed(bool);
     callback cancel-session-dialog();
     callback open-sftp();
     callback list-sftp-directory(string);
@@ -124,7 +222,51 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
-    HorizontalLayout {
+    if root.detached-window : DetachedWorkspaceContent {
+        width: parent.width;
+        height: parent.height;
+        view: root.view;
+        close-tab(id) => { root.close-tab(id); }
+        list-sftp-directory(path) => { root.list-sftp-directory(path); }
+        load-more-sftp => { root.load-more-sftp(); }
+        list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
+        navigate-sftp-back => { root.navigate-sftp-back(); }
+        navigate-sftp-forward => { root.navigate-sftp-forward(); }
+        toggle-remote-sftp-selection(path, selected) => {
+            root.toggle-remote-sftp-selection(path, selected);
+        }
+        select-all-remote-sftp(selected) => { root.select-all-remote-sftp(selected); }
+        toggle-local-sftp-selection(path, selected) => {
+            root.toggle-local-sftp-selection(path, selected);
+        }
+        select-all-local-sftp(selected) => { root.select-all-local-sftp(selected); }
+        open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
+        open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
+        cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
+        terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+            return root.terminal-key(text, alt, control, meta, shift, physical-key-event);
+        }
+        terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
+            return root.terminal-key-direct(
+                text, alt, control, meta, shift, option-as-meta, preedit-active,
+            );
+        }
+        resize-terminal(columns, rows) => { root.resize-terminal(columns, rows); }
+        scroll-terminal(lines) => { root.scroll-terminal(lines); }
+        terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+            return root.terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column);
+        }
+        format-shortcut(text, alt, control, meta, shift) => {
+            return root.format-shortcut(text, alt, control, meta, shift);
+        }
+        write-clipboard(text) => { root.write-clipboard(text); }
+        read-clipboard() => { return root.read-clipboard(); }
+    }
+
+    workspace-main := HorizontalLayout {
+        visible: !root.detached-window;
+        width: parent.width;
+        height: parent.height;
         spacing: 0px;
 
         session-navigation := SessionNavigation {
@@ -168,6 +310,7 @@ export component WorkspaceShell inherits Rectangle {
                     tab-width: root.view.tab_width;
                     terminal-background: root.view.terminal_background;
                     connection-picker-open: root.connection-picker-open;
+                    detached-window: root.detached-window;
                     activate-tab(id) => {
                         root.connection-picker-open = false;
                         root.activate-tab(id);
@@ -178,6 +321,14 @@ export component WorkspaceShell inherits Rectangle {
                     move-tab(id, target-index) => {
                         root.connection-picker-open = false;
                         root.move-tab(id, target-index);
+                    }
+                    detach-workspace(id) => {
+                        root.connection-picker-open = false;
+                        root.detach-workspace(id);
+                    }
+                    return-workspace(id) => {
+                        root.connection-picker-open = false;
+                        root.return-workspace(id);
                     }
                     toggle-connection-picker => {
                         root.connection-picker-open = !root.connection-picker-open;
@@ -301,6 +452,8 @@ export component WorkspaceShell inherits Rectangle {
                             );
                         }
                         refresh-serial-ports => { root.refresh-serial-ports(); }
+                        serial-mode-changed(enabled) => { root.serial-mode-changed(enabled); }
+                        private-key-mode-changed(enabled) => { root.private-key-mode-changed(enabled); }
                         cancel => { root.cancel-session-dialog(); }
                     }
 

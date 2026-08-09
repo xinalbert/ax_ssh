@@ -52,6 +52,7 @@ impl CredentialStorage {
 pub enum AuthMethod {
     Password,
     PrivateKey { path: PathBuf },
+    SshAgent,
 }
 
 impl Default for AuthMethod {
@@ -455,14 +456,14 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
                     MAX_HOST_KEY_FINGERPRINT_CHARS,
                 )?;
             }
+            if !matches!(config.auth, AuthMethod::Password) && config.credential_storage.is_some() {
+                anyhow::bail!("non-password profiles cannot store password credentials");
+            }
             if let AuthMethod::PrivateKey { path } = &config.auth {
                 let path = path
                     .to_str()
                     .context("private key path must be valid UTF-8")?;
                 validate_required_text("private key path", path, MAX_PRIVATE_KEY_PATH_CHARS)?;
-                if config.credential_storage.is_some() {
-                    anyhow::bail!("private-key profiles cannot store password credentials");
-                }
             }
         }
         ConnectionProfile::Telnet(config) => validate_host_and_port(&config.host, config.port)?,

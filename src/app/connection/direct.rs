@@ -218,7 +218,11 @@ fn spawn_telnet_monitor(
                         profile.id,
                         attempt_id,
                         DirectProtocol::Telnet,
-                        |terminal| terminal.terminal.process(&data),
+                        |terminal| {
+                            if let Some(model) = terminal.terminal.as_mut() {
+                                model.process(&data);
+                            }
+                        },
                     ) {
                         dispatch_active_snapshot(&ui, &state);
                     }
@@ -307,7 +311,11 @@ fn spawn_serial_monitor(
                         profile.id,
                         attempt_id,
                         DirectProtocol::Serial,
-                        |terminal| terminal.terminal.process(&data),
+                        |terminal| {
+                            if let Some(model) = terminal.terminal.as_mut() {
+                                model.process(&data);
+                            }
+                        },
                     ) {
                         dispatch_active_snapshot(&ui, &state);
                     }

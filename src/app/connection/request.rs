@@ -16,16 +16,24 @@ pub(in crate::app) fn wire_connection_request(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    window_router: WindowRouter,
+    window_id: Uuid,
 ) {
     let ui_for_connect = ui.as_weak();
     let state_for_connect = state.clone();
     let runtime_for_connect = runtime.clone();
+    let font_registry_for_connect = font_registry.clone();
+    let terminal_font_started_for_connect = terminal_font_started.clone();
     ui.on_connect_session(move |id| {
         log_ui_action("connection.open-terminal");
         request_connection(
             &ui_for_connect,
             &state_for_connect,
             &runtime_for_connect,
+            font_registry_for_connect.clone(),
+            terminal_font_started_for_connect.clone(),
             id.as_str(),
             ConnectionTarget::Terminal,
             None,
@@ -35,12 +43,16 @@ pub(in crate::app) fn wire_connection_request(
     let ui_for_sftp = ui.as_weak();
     let state_for_sftp = state.clone();
     let runtime_for_sftp = runtime.clone();
+    let font_registry_for_sftp = font_registry.clone();
+    let terminal_font_started_for_sftp = terminal_font_started.clone();
     ui.on_open_sftp_session(move |id| {
         log_ui_action("connection.open-sftp-session");
         request_connection(
             &ui_for_sftp,
             &state_for_sftp,
             &runtime_for_sftp,
+            font_registry_for_sftp.clone(),
+            terminal_font_started_for_sftp.clone(),
             id.as_str(),
             ConnectionTarget::Sftp,
             None,
@@ -49,8 +61,12 @@ pub(in crate::app) fn wire_connection_request(
 
     let ui_for_active_sftp = ui.as_weak();
     let state_for_active_sftp = state;
+    let font_registry_for_active_sftp = font_registry;
+    let terminal_font_started_for_active_sftp = terminal_font_started;
+    let router_for_active_sftp = window_router;
     ui.on_open_sftp(move || {
         log_ui_action("connection.switch-ssh-sftp");
+        sync_window_active(&router_for_active_sftp, window_id, &state_for_active_sftp);
         let navigation = match state_for_active_sftp.lock() {
             Ok(mut app) => app.switch_ssh_sftp_tab(),
             Err(_) => {
@@ -74,6 +90,8 @@ pub(in crate::app) fn wire_connection_request(
                 &ui_for_active_sftp,
                 &state_for_active_sftp,
                 &runtime,
+                font_registry_for_active_sftp.clone(),
+                terminal_font_started_for_active_sftp.clone(),
                 profile_id,
                 target,
                 Some(companion_tab_id),
@@ -87,6 +105,8 @@ fn request_connection(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
     runtime: &Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
     id: &str,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
@@ -99,6 +119,8 @@ fn request_connection(
         ui,
         state,
         runtime,
+        font_registry,
+        terminal_font_started,
         profile_id,
         target,
         companion_tab_id,
@@ -110,11 +132,16 @@ pub(in crate::app) fn request_profile_connection(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
     runtime: &Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
     profile_id: Uuid,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
     one_time_password: Option<zeroize::Zeroizing<String>>,
 ) {
+    if target == ConnectionTarget::Terminal {
+        load_terminal_font_on_demand(runtime, ui.clone(), font_registry, terminal_font_started);
+    }
     let start = {
         let mut app = match state.lock() {
             Ok(app) => app,

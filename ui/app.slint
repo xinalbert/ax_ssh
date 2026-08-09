@@ -11,7 +11,9 @@ import { WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
-    title: "AxSSH";
+    title: root.detached-window && !root.active-tab-title.is-empty
+        ? root.active-tab-title
+        : "AxSSH";
     icon: @image-url("../assets/ion/terminal_icon_all_formats/terminal_icon_256.png");
     min-width: Theme.window-min-width;
     min-height: Theme.window-min-height;
@@ -189,6 +191,7 @@ export component AppWindow inherits Window {
     in property <string> default-paste-shortcut;
     in property <string> default-open-sftp-shortcut;
     in property <bool> apple-platform: false;
+    in property <bool> detached-window: false;
     in property <string> app-version;
     private property <string> settings-section: "General";
     private property <int> settings-section-request-revision: 0;
@@ -344,6 +347,8 @@ export component AppWindow inherits Window {
         string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
+    callback serial-mode-changed(bool);
+    callback private-key-mode-changed(bool);
     callback cancel-session-dialog();
     callback confirm-host-key();
     callback reject-host-key();
@@ -379,6 +384,8 @@ export component AppWindow inherits Window {
     callback open-log-directory();
     callback copy-diagnostic-info();
     callback refresh-terminal-appearance();
+    callback detach-workspace(string);
+    callback return-workspace(string);
 
     public function request-settings-section(section: string) {
         root.settings-section = section;
@@ -392,7 +399,7 @@ export component AppWindow inherits Window {
     changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
     changed theme-revision => { root.refresh-terminal-appearance(); }
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
-    MenuBar {
+    if !root.detached-window : MenuBar {
         Menu {
             title: "File";
             MenuItem {
@@ -478,6 +485,25 @@ export component AppWindow inherits Window {
                 activated => { root.menu-action("next-tab"); root.cycle-tab(true); }
             }
             MenuSeparator { }
+            MenuItem {
+                title: "Move Current Workspace to New Window";
+                enabled: root.menu-shortcuts-enabled
+                    && !root.detached-window
+                    && !root.active-tab-id.is-empty;
+                activated => {
+                    root.menu-action("detach-workspace");
+                    root.detach-workspace(root.active-tab-id);
+                }
+            }
+            MenuItem {
+                title: "Return Workspace to Main Window";
+                enabled: root.menu-shortcuts-enabled && root.detached-window;
+                activated => {
+                    root.menu-action("return-workspace");
+                    root.return-workspace(root.active-tab-id);
+                }
+            }
+            MenuSeparator { }
             if root.apple-platform : MenuItem {
                 title: "Close Current Tab";
                 activated => {
@@ -538,6 +564,7 @@ export component AppWindow inherits Window {
             width: parent.width;
             height: parent.height;
             view: root.workspace-view;
+            detached-window: root.detached-window;
             requested-settings-section: root.settings-section;
             settings-section-request-revision: root.settings-section-request-revision;
             new-session => { root.new-session(); }
@@ -555,6 +582,12 @@ export component AppWindow inherits Window {
             activate-tab(id) => { root.activate-tab(id); }
             close-tab(id) => { root.close-tab(id); }
             move-tab(id, target-index) => { root.move-tab(id, target-index); }
+            detach-workspace(id) => {
+                root.detach-workspace(id);
+            }
+            return-workspace(id) => {
+                root.return-workspace(id);
+            }
             save-settings(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold, theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
                           theme-light-text, theme-light-muted, theme-light-accent, theme-light-success,
@@ -594,6 +627,8 @@ export component AppWindow inherits Window {
                 );
             }
             refresh-serial-ports => { root.refresh-serial-ports(); }
+            serial-mode-changed(enabled) => { root.serial-mode-changed(enabled); }
+            private-key-mode-changed(enabled) => { root.private-key-mode-changed(enabled); }
             cancel-session-dialog => { root.cancel-session-dialog(); }
             open-sftp => { root.open-sftp(); }
             list-sftp-directory(path) => { root.list-sftp-directory(path); }

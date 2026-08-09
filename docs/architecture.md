@@ -27,7 +27,7 @@ Application controller (src/app.rs)
        ├──────────────► Local PTY (src/local_shell.rs)
        │                 bounded thread + portable-pty process
        ├──────────────► SSH boundary (src/ssh.rs)
-       │                 Tokio tasks + russh handles/channels + X11 relay + key loading
+       │                 Tokio tasks + russh handles/channels + X11 relay + key/agent signing
        ├──────────────► SFTP domain (src/sftp.rs + src/sftp/)
        │                 bounded browser + read-only download-to-open cache
        ├──────────────► Telnet boundary (src/telnet.rs)
@@ -58,7 +58,7 @@ Process startup (src/main.rs)
 | `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
 | `src/x_server.rs` | Platform X-server provider options, system application discovery with standard-path fallback, local display candidates, and bounded process startup | SSH channels, UI state, cookies, profile mutation, or remote server configuration |
-| `src/ssh.rs` | russh handler, host-key decision, authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting |
+| `src/ssh.rs` | russh handler, host-key decision, password/private-key/runtime-agent authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting, agent identity management |
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
 | `src/ssh/worker.rs` | Bounded shell/X11/SFTP commands, coalesced resize state, batched events, download task ownership, cancellation, and shutdown | UI state or profile persistence |
@@ -176,7 +176,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
    profile save only when **Remember password** is checked. Private-key profiles
    load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
-   without one. The security overlay renders only the active Tab's pending
+   without one. SSH-agent profiles bypass credential storage and the secret
+   prompt, then let the worker connect to the current runtime agent after host
+   trust is established. The security overlay renders only the active Tab's pending
    phase; inactive Tabs retain their own prompt until activated, and changing an
    authentication prompt clears its secret inputs before it becomes visible.
 4. Settings > General owns the default backend for a newly remembered SSH
@@ -191,7 +193,7 @@ must not locally hide either dialog before the Rust state transition accepts it.
    password is required only for the encrypted application vault. The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
-   to private-key authentication, or rejecting a stored password removes its
+   to private-key or SSH-agent authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
    terminal worker. Profile save and delete operations share one asynchronous
    credential gate and assign a latest-mutation token per profile. They validate
@@ -266,7 +268,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
    and waits asynchronously until the worker is joinable. A full event queue is
    cancellation-aware and cannot strand the reader; no timed-out blocking join
    is detached from its owner.
-8. Each terminal tab also owns one bounded `TerminalModel`. `vt100` owns the
+8. Each tab that renders a terminal owns one bounded `TerminalModel`. An
+   SFTP-only tab deliberately keeps this model absent because it never renders
+   terminal cells; its browser state remains independent. `vt100` owns the
    rows, cell styles, cursor, scrollback, wide characters, and application
    cursor mode. The checked-in `vendor/vt100` patch keeps its locked `0.16.2`
    API but clears a wide character whose continuation cell would be removed
@@ -374,7 +378,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
     the current Settings/About items. Rebinding scans the current native menu
     tree for the application submenu and About title, accepts the platform's
     ellipsis spelling for Settings, and retries briefly when AppKit has not
-    published the rebuilt menu yet.
+    published the rebuilt menu yet. Transient lookup failures remain silent
+    within the bounded retry budget; only exhaustion emits one warning with
+    the total attempt count.
     Windows/Linux retain dynamic close-tab state, keep Settings in Edit, and
     keep About in Help. File, View, Pane, Window, and Help reuse existing
     new-session, sidebar, local-shell, close-tab, clipboard-transfer, and
@@ -437,6 +443,32 @@ must not locally hide either dialog before the Rust state transition accepts it.
     Slint model. Static geometry is in `ui/theme.slint`; the persisted
     single-character mask setting is owned by `WorkspaceSettings`.
 
+## Multi-window workspace transfer
+
+The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
+that workspace into a second native Slint window. A detached window uses the
+active connection title as its native title and, on macOS, provides a native
+title-bar **Return** button on that same title-bar row. Its client content contains only the active
+`TerminalPane` or `SftpPane`: it has no Tab strip, session sidebar, saved-
+connection picker, Settings, session editor, or client menu. `AppState` remains
+the sole owner of the Tab
+runtime objects, terminal models, pending trust/authentication phases, and
+transport workers. The `WorkspaceTransfer` payload contains only the source
+window ID, the bounded pair of Tab UUIDs, and the active Tab UUID; it never
+contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
+secret.
+
+`WindowRouter` maps each transferred Tab UUID to the current window's weak UI
+handle. Refreshes publish a filtered Tab model and the snapshot for each route,
+so late worker events can repaint the window that currently owns the workspace.
+The inline and menu controls pass their selected Tab UUID directly to the Rust
+route handler, which validates that it belongs to the invoking window and makes
+it active before creating or returning the native window. Detaching and
+returning only change this route map. Closing a detached window returns its
+transfer to the main route and hides the native window; it does not disconnect
+or re-authenticate SSH/SFTP. The paired Terminal/SFTP UUIDs move together,
+while their two independent russh workers remain independent.
+
 ## SSH security contract
 
 `russh::client::Handler::check_server_key` is the trust boundary. Unknown and
@@ -460,7 +492,26 @@ encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
 keeps the vault password transient. Private-key profiles persist only a path.
 The key bytes and optional passphrase are loaded in one blocking task, used for
 one authentication attempt, and then dropped without entering configuration,
-tracing fields, or UI models.
+tracing fields, or UI models. The separate, non-secret `.ssh` candidate-path
+scan starts only when the Session Editor enters Private key mode. Leaving that
+mode or closing the editor clears its option model and advances a generation so
+an in-flight scan cannot repopulate released UI state.
+
+An SSH-agent profile persists only `AuthMethod::SshAgent`; it cannot contain a
+password credential reference and never stores an agent socket path, identity
+comment, public key, private key, or passphrase. After the real SSH handshake
+has passed the same exact host-key check described above, `src/ssh.rs` connects
+to the runtime agent for that connection only. Unix and macOS use the current
+`SSH_AUTH_SOCK`; Windows uses that variable or the default OpenSSH agent named
+pipe. The agent lists identities and signs authentication requests while the
+russh worker retains sole ownership of the client. AxSSH attempts at most five
+identities and applies one 30-second timeout to agent connection, identity
+listing, algorithm negotiation, signing, and authentication. The client drops
+on success, failure, cancellation, or timeout. Application-owned errors use
+fixed categories and do not include socket paths, identity comments, or key
+data; any unlock or confirmation UI remains owned by the system agent. This is
+client authentication only and does not implement agent forwarding or agent key
+management.
 
 X11 forwarding is an SSH-profile setting that defaults on for new profiles and
 for legacy data that omitted the field; an explicit saved `false` remains off.
@@ -605,7 +656,10 @@ at most 64 unique keys per batch, and retain at most 128 process-local entries.
 macOS resolves UTType icons through NSWorkspace, Windows uses synthetic file
 attributes with the Shell API, and Linux maps extensions to MIME and freedesktop
 icon themes. No remote name is treated as a local path for icon resolution, and
-Slint never calls a platform or filesystem icon API.
+Slint never calls a platform or filesystem icon API. The provider is first
+created by SFTP icon prewarm, not process startup. Closing the final SFTP Tab
+clears resolved extension icons and invalidates pending prewarm generations;
+fixed fallback icons remain available.
 
 Double-clicking a local regular-file row is a read-only open intent. The bridge
 first requires that exact path in the active SFTP Tab's current local snapshot,
@@ -626,9 +680,11 @@ It writes a UUID-prefixed, sanitized basename inside AxSSH's private cache,
 using a `0600` part file and `0700` namespace on Unix, then flushes, fsyncs, and
 atomically renames the part before the application invokes the detached opener.
 Cancelled or failed transfers never open a part file. Tab shutdown cancels and
-joins both pending subsystem openings and active transfers. Startup cleanup
-examines at most 4,096 direct cache entries and removes recognized stale part
-files after one hour and published files after 24 hours on a best-effort basis.
+joins both pending subsystem openings and active transfers. The first download
+enforces the same quota and stale-file cleanup over at most 4,096 direct cache
+entries; an application that never uses remote file opening does not scan this
+directory at startup. Cleanup removes recognized stale part files after one hour
+and published files after 24 hours on a best-effort basis.
 
 This is download-to-open, not a general save or managed-edit workflow. Upload,
 explicit download/save-as, deletion, renaming, drag-and-drop, change watching,
@@ -650,13 +706,16 @@ errors, queues, and shutdown waits are bounded.
 
 Serial discovery calls the operating system enumeration API on a blocking Tokio
 boundary and returns descriptors only. It does not open candidate devices,
-toggle modem lines, write probe bytes, or infer baud/parity settings. The UI
-starts one scan during application setup and exposes an explicit refresh. A
+toggle modem lines, write probe bytes, or infer baud/parity settings. The
+Session Editor requests a scan when Serial is selected or the user explicitly
+refreshes the list; application startup performs no serial enumeration. A
 connect action performs a fresh scan, resolves a unique saved USB identity when
 available, and only then starts one worker-owned serial handle. Missing and
 ambiguous matches fail closed. Manual port names remain supported. Serial
 parameters and optional non-secret USB identity metadata may be persisted;
-device handles and traffic never are.
+device handles and traffic never are. Leaving Serial mode or closing the editor
+clears both descriptors and the Slint option model; generation checks discard
+late discovery results.
 
 ## Logging lifecycle
 
@@ -675,14 +734,14 @@ through the application bridge without changing the logging owner.
 `assets/fonts/` contains project-owned Maple Mono NF CN, Iosevka Term,
 JetBrains Mono, and Monaspace Neon files with their family-specific notices.
 They are not Slint imports and are not embedded in the executable. At startup,
-a Tokio blocking task reads the independently selected bundled application and
-Terminal families from the AxSSH resource path, with duplicate families loaded
-once; the Slint UI thread registers their bytes with its shared collection.
-Later bundled selections are read on demand when a live Settings preview first
-selects them, still on a Tokio blocking task. The UI applies the candidate
-immediately, then reapplies the current in-memory settings after registration
-so a delayed font read cannot restore stale choices. Appearance owns the application
-font, display mode, and palette; Terminal owns its font, size, line height,
+a Tokio blocking task reads only the selected bundled application family from
+the AxSSH resource path; the Slint UI thread registers its bytes with its shared
+collection. The selected Terminal family is read on the first Terminal or local
+shell tab, while later bundled selections are read on demand when a live Settings
+preview first selects them. All reads remain on Tokio blocking tasks. The UI
+applies the candidate immediately, then reapplies the current in-memory settings
+after registration so a delayed font read cannot restore stale choices. Appearance
+owns the application font, display mode, and palette; Terminal owns its font, size, line height,
 minimum contrast ratio, bold-color behavior, and terminal interactions. Both font lists
 place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
@@ -698,6 +757,15 @@ rendered above the bottom-aligned grid, while IME and pointer coordinates use
 that same origin; the terminal batches the resulting resize only after those
 metrics and its layout have settled.
 
+The first Settings opening discovers local shells, system monospace families,
+and known X-server installations on blocking workers. Reactivating the existing
+singleton tab does not repeat those scans. Closing Settings drops discovered
+system font and X-server option models while retaining bundled font choices and
+the bounded in-memory shell list. Registered Fontique/Slint families have no
+reliable unload API and remain process-wide; platform font/application/icon
+databases and the allocator may also retain their own caches after AxSSH drops
+its references, so process RSS is not expected to fall immediately.
+
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
@@ -705,7 +773,8 @@ minimum contrast ratio, bold-color and right-click behavior, scrollback, default
     dimensions, local-shell choice and bounded discovered-shell cache, the macOS
     Option-as-Meta preference, sidebar/tab widths, session mask character,
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
-    non-secret X11 provider/path/launch/compatibility settings, and the default
+    non-secret X11 provider/path/launch/compatibility settings, SSH authentication
+    method (including agent selection but no agent endpoint or identity), and the default
     remembered-password backend. Schema version 17 replaces the former
     `terminal_brightness_percent` remapping with a fixed-point
     `terminal_minimum_contrast_ratio_tenths` setting. The value is stored in
@@ -741,9 +810,9 @@ combinations with same-side defaults.
 Schema version 10 promotes legacy profile group values into a normalized,
 de-duplicated group list so empty groups and group renames can be persisted.
 Schema version 9 migrates the former terminal color scheme into its matching
-fixed theme so an upgrade preserves the prior appearance. Shell
-discovery validates the saved cache and appends only newly available names after
-load. Earlier migrations retain the schema version 7 compact 220px sidebar
+fixed theme so an upgrade preserves the prior appearance. Shell discovery runs
+when Settings is first opened (and is merged into the in-memory settings); the
+next explicit settings save persists the bounded list. Earlier migrations retain the schema version 7 compact 220px sidebar
 default and the schema version 8 `*` mask default without overwriting custom
 values. Passwords, passphrases, private-key contents, terminal output, tab
 runtime IDs, child processes, and workers are never serialized.
@@ -823,7 +892,7 @@ the Theme global remains a visual resolver rather than a persistence owner.
 
 The current application validates and persists SSH, Telnet, and Serial profiles;
 confirms per-profile SSH host fingerprints; authenticates SSH with transient
-passwords or local private keys; provides bounded remote SFTP and local metadata
+passwords, local private keys, or a bounded runtime SSH agent; provides bounded remote SFTP and local metadata
 directory browsing plus regular-file download-to-open for an authenticated SSH
 Tab; and owns multiple independent transport or
 local-shell terminal tabs, including duplicate targets. New-session editing and the singleton Settings
@@ -833,5 +902,5 @@ separate steps:
 
 - shared OpenSSH-compatible known-hosts storage and host-key revocation;
 - SFTP upload, explicit save-as, mutation, and managed edit sync;
-- SSH agent integration, reconnect, and persisted workspace restoration;
+- reconnect and persisted workspace restoration;
 - richer full-screen terminal compatibility and mouse reporting.

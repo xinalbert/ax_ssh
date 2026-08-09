@@ -41,6 +41,8 @@ export component SessionEditorPane inherits Rectangle {
         string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
+    callback serial-mode-changed(bool);
+    callback private-key-mode-changed(bool);
     callback cancel();
 
     private property <string> incoming-draft-id: root.source.draft_id;
@@ -136,9 +138,9 @@ export component SessionEditorPane inherits Rectangle {
             root.port-draft = "23";
         } else if root.protocol == "SSH" && root.port-draft == "23" {
             root.port-draft = "22";
-        } else if root.protocol == "Serial" {
-            root.refresh-serial-ports();
         }
+        root.serial-mode-changed(root.protocol == "Serial");
+        root.private-key-mode-changed(root.protocol == "SSH" && root.auth-method == "Private key");
     }
     changed auth-method => {
         if root.auth-method != "Password" {
@@ -146,6 +148,7 @@ export component SessionEditorPane inherits Rectangle {
             root.remember-password-draft = false;
             root.vault-password-draft = "";
         }
+        root.private-key-mode-changed(root.protocol == "SSH" && root.auth-method == "Private key");
     }
     changed password-draft => {
         if root.password-draft.is-empty {
@@ -427,12 +430,13 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: "Authentication";
-                        description: "Use the password once for Save & connect, or choose to remember it securely.";
+                        description: "Credentials used for this SSH connection.";
                     }
                     AuthenticationMethodSelector {
                         options: [
                             { label: "Password", value: "Password" },
                             { label: "Private key", value: "Private key" },
+                            { label: "SSH agent", value: "SSH agent" },
                         ];
                         selected-method <=> root.auth-method;
                         accessible-name: "SSH authentication method";

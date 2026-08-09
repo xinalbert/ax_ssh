@@ -58,7 +58,11 @@ pub(super) fn spawn_session_monitor(
                         tab_id,
                         profile.id,
                         attempt_id,
-                        |terminal| terminal.terminal.process(&data),
+                        |terminal| {
+                            if let Some(model) = terminal.terminal.as_mut() {
+                                model.process(&data);
+                            }
+                        },
                     ) {
                         dispatch_terminal_output_snapshot(&ui, &state, received_at);
                     }
@@ -269,6 +273,18 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::AuthenticationFailed => {
                     terminal_event = true;
+                    if matches!(ssh.auth, AuthMethod::SshAgent) {
+                        if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
+                            set_tab_status(
+                                &state,
+                                &ui,
+                                tab_id,
+                                "The SSH server rejected the available agent identities",
+                            );
+                            refresh_workspace(&ui, &state);
+                        }
+                        continue;
+                    }
                     let retry = if used_stored_credential {
                         prepare_stored_credential_retry(&state, tab_id, profile.id, attempt_id)
                     } else {

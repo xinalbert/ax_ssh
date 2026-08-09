@@ -119,3 +119,25 @@
 - 受影响文件：`src/{app,config,ssh,local_shell}.rs`、对应子模块/UI/测试，以及双语架构与项目追踪记录。
 - 更新后的命令或环境：Rust 2024、MSRV 1.92.0、Cargo locked/offline 和既有三平台 CI 不变；本机继续使用直接 `rustfmt`，Cargo fmt/clippy 组件仍未安装。
 - 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 117、应用 84、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过；真实三平台 GUI、SSH/SFTP、凭据后端与本地 PTY 关闭留给目标环境验收。
+
+## 2026-08-08 完成按需加载与资源回收环境门禁
+
+- 日期：2026-08-08
+- 变化摘要：启动扫描改为 Settings/Private key/Serial/Terminal/SFTP 操作按需触发，并为页面、模式和图标缓存增加释放边界；未新增依赖或改变工具链、MSRV、Cargo lock 与 CI 命令。
+- 受影响文件：`src/app.rs`、`src/app/`、`src/sftp/transfer.rs`、`ui/{app,workspace-shell,session-editor}.slint`、`docs/`。
+- 更新后的命令或环境：Rust 2024、MSRV 1.92.0、Cargo locked/offline 和三平台 CI 保持不变；本机仍使用直接 `rustfmt` 替代缺失的 Cargo fmt，Clippy 继续由安装组件的 CI 执行。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 137、应用 104、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过；目标平台 GUI、冷启动和 RSS 趋势留给用户人工验收。
+
+## 2026-08-09 增加运行时 SSH agent 认证环境
+
+- 日期：2026-08-09
+- 变化摘要：基于已锁定的 russh 0.62.2 agent client 和外部 signer API 增加按连接 SSH agent 认证；未新增依赖，未改变 Rust edition、MSRV、Cargo lock 或 CI 命令。
+- 受影响文件：`src/{config,ssh}.rs`、`src/app/`、`ui/session-editor.slint`、双语入口/usage/architecture/development、环境记录与项目实施记录。
+- 更新后的命令或环境：Unix/macOS 运行时需可用的 `SSH_AUTH_SOCK`；Windows 使用该变量或 OpenSSH 默认 named pipe。agent 操作由 SSH worker 独占，最多尝试 5 个 identity，并受 30 秒总认证上限约束；profile 不保存 socket、identity 或秘密。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 106、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过；Cargo fmt/Clippy 因本机未安装对应子命令无法执行。内存 agent signer + loopback russh 已验证精确主机密钥后的真实外部签名；真实目标平台 agent 解锁/确认、多 identity 和失败恢复仍需用户手工验收，Windows 分支未在本机编译。
+## 2026-08-09 增加 Slint 多窗口工作区环境事实
+
+- 变化摘要：核对锁定的 Slint 1.17.1 本地 API，确认多个 `AppWindow` 可共享同一 UI event loop；`ComponentHandle::show/hide` 用于 detached 生命周期，`Window::on_close_requested` 可在隐藏前合并 workspace route。未新增依赖、工具链或 Cargo.lock 变化。
+- 受影响文件：`src/app.rs`、`src/app/state.rs`、`src/app/view.rs`、`src/app/workspace.rs`、`src/app/terminal_bridge.rs`、`src/app/sftp_bridge.rs`、`ui/app.slint`、双语文档和实施记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、locked/offline check/test；`cargo fmt` 与 `cargo clippy` 子命令仍由 CI/已安装组件提供，本机无法执行。
+- 验证结果：`cargo check --locked --offline` 和两项 workspace transfer focused tests 通过；真实 macOS/Windows/Linux 原生窗口、关闭/合并、焦点、拖动和不重连行为需目标平台手工验收。

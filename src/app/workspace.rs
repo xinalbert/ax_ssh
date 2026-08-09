@@ -37,21 +37,39 @@ enum SessionImportMode {
     Automatic,
 }
 
-pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, runtime: Handle) {
+pub(super) fn wire_workspace_tabs(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    window_router: WindowRouter,
+    window_id: Uuid,
+) {
     let ui_for_settings = ui.as_weak();
     let state_for_settings = state.clone();
+    let runtime_for_settings = runtime.clone();
     ui.on_open_settings(move || {
         log_ui_action("workspace.open-settings");
-        match state_for_settings.lock() {
+        let load_options = match state_for_settings.lock() {
             Ok(mut app) => {
+                let load_options = !app.has_settings_tab();
                 app.open_settings_tab();
+                load_options
             }
             Err(_) => {
                 set_status(&ui_for_settings, "Cannot update workspace tabs");
                 return;
             }
-        }
+        };
         refresh_workspace(&ui_for_settings, &state_for_settings);
+        if load_options {
+            load_settings_option_models(
+                &runtime_for_settings,
+                state_for_settings.clone(),
+                ui_for_settings.clone(),
+            );
+        }
     });
 
     let ui_for_new = ui.as_weak();
@@ -107,8 +125,16 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
     let ui_for_local = ui.as_weak();
     let state_for_local = state.clone();
     let runtime_for_local = runtime.clone();
+    let font_registry_for_local = font_registry.clone();
+    let terminal_font_started_for_local = terminal_font_started.clone();
     ui.on_open_local_shell(move || {
         log_ui_action("workspace.open-local-shell");
+        load_terminal_font_on_demand(
+            &runtime_for_local,
+            ui_for_local.clone(),
+            font_registry_for_local.clone(),
+            terminal_font_started_for_local.clone(),
+        );
         if let Err(error) = start_local_shell(
             &runtime_for_local,
             state_for_local.clone(),
@@ -120,6 +146,7 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
 
     let ui_for_activate = ui.as_weak();
     let state_for_activate = state.clone();
+    let router_for_activate = window_router.clone();
     ui.on_activate_tab(move |id| {
         log_ui_action("workspace.activate-tab");
         let id = match parse_uuid(id.as_str(), "tab", &ui_for_activate) {
@@ -133,11 +160,13 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             set_status(&ui_for_activate, "Tab not found");
             return;
         }
+        router_for_activate.set_active(window_id, id);
         refresh_workspace(&ui_for_activate, &state_for_activate);
     });
 
     let ui_for_cycle = ui.as_weak();
     let state_for_cycle = state.clone();
+    let router_for_cycle = window_router.clone();
     ui.on_cycle_tab(move |next| {
         log_ui_action(if next {
             "workspace.next-tab"
@@ -145,7 +174,10 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
             "workspace.previous-tab"
         });
         let cycled = match state_for_cycle.lock() {
-            Ok(mut app) => app.cycle_tab(next).is_some(),
+            Ok(mut app) => {
+                let tab_ids = router_for_cycle.tab_ids(window_id, &app);
+                app.cycle_tab_for(&tab_ids, next).is_some()
+            }
             Err(_) => {
                 set_status(&ui_for_cycle, "Cannot update workspace tabs");
                 return;
@@ -158,15 +190,17 @@ pub(super) fn wire_workspace_tabs(ui: &AppWindow, state: Arc<Mutex<AppState>>, r
 
     let ui_for_move = ui.as_weak();
     let state_for_move = state.clone();
+    let router_for_move = window_router.clone();
     ui.on_move_tab(move |id, target_index| {
         log_ui_action("workspace.move-tab");
         let id = match parse_uuid(id.as_str(), "tab", &ui_for_move) {
             Some(id) => id,
             None => return,
         };
-        let moved = state_for_move
-            .lock()
-            .is_ok_and(|mut app| app.move_tab(id, target_index.max(0) as usize));
+        let moved = state_for_move.lock().is_ok_and(|mut app| {
+            let tab_ids = router_for_move.tab_ids(window_id, &app);
+            app.move_tab_for(id, target_index.max(0) as usize, &tab_ids)
+        });
         if !moved {
             set_status(&ui_for_move, "Tab not found");
             return;
@@ -222,6 +256,16 @@ pub(super) fn close_workspace_tab(
         set_status(ui, "Tab not found");
         return;
     };
+    match closed.kind {
+        ClosedTabKind::Settings => clear_settings_option_models(ui, state),
+        ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
+        ClosedTabKind::Terminal {
+            release_file_icon_cache: true,
+        } => clear_file_icon_cache(),
+        ClosedTabKind::Terminal {
+            release_file_icon_cache: false,
+        } => {}
+    }
     if let Some(probe) = closed.pending_probe
         && probe.cancel.send(()).is_err()
     {
@@ -242,12 +286,45 @@ pub(super) fn close_workspace_tab(
     refresh_workspace(ui, state);
 }
 
+fn clear_session_editor_resources(ui: &slint::Weak<AppWindow>) {
+    invalidate_serial_port_discovery();
+    clear_session_editor_option_models(ui);
+}
+
+fn load_settings_option_models(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
+    load_local_shell_options(runtime, state.clone(), ui.clone());
+    load_font_options(runtime, state.clone(), ui.clone());
+    load_x11_server_installations(runtime, state, ui);
+}
+
 pub(super) fn wire_session_editor(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
     profile_mutations: Arc<ProfileMutationCoordinator>,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
 ) {
+    let ui_for_private_keys = ui.as_weak();
+    let state_for_private_keys = state.clone();
+    let runtime_for_private_keys = runtime.clone();
+    ui.on_private_key_mode_changed(move |enabled| {
+        if enabled {
+            log_ui_action("session-editor.enter-private-key-mode");
+            load_private_key_options(
+                &runtime_for_private_keys,
+                state_for_private_keys.clone(),
+                ui_for_private_keys.clone(),
+            );
+        } else {
+            clear_private_key_option_model(&ui_for_private_keys);
+        }
+    });
+
     let ui_for_save = ui.as_weak();
     let state_for_save = state.clone();
     ui.on_save_session(
@@ -364,6 +441,8 @@ pub(super) fn wire_session_editor(
             set_status(&ui_for_save, "Saving session...");
             let runtime_for_save = runtime.clone();
             let runtime_for_connect = runtime.clone();
+            let font_registry_for_connect = font_registry.clone();
+            let terminal_font_started_for_connect = terminal_font_started.clone();
             let profile_mutations = profile_mutations.clone();
             runtime_for_save.spawn(async move {
                 let _mutation_guard = profile_mutations.gate.lock().await;
@@ -418,17 +497,24 @@ pub(super) fn wire_session_editor(
                     "session profile saved"
                 );
                 refresh_session_models(&ui, &state);
-                let _ = state.lock().map(|mut app| {
+                let editor_closed = state.lock().is_ok_and(|mut app| {
                     if app.editor_matches(editor_tab_id, editor_draft_id) {
-                        let _ = app.close_tab(editor_tab_id);
+                        app.close_tab(editor_tab_id).is_some()
+                    } else {
+                        false
                     }
                 });
+                if editor_closed {
+                    clear_session_editor_resources(&ui);
+                }
                 refresh_workspace(&ui, &state);
                 if should_connect {
                     request_profile_connection(
                         &ui,
                         &state,
                         &runtime_for_connect,
+                        font_registry_for_connect,
+                        terminal_font_started_for_connect,
                         profile_id,
                         ConnectionTarget::Terminal,
                         None,
@@ -591,6 +677,11 @@ pub(super) fn wire_session_management(
             };
             match result {
                 Ok(message) => {
+                    if action == "delete-session"
+                        && !state.lock().is_ok_and(|app| app.has_session_editor_tab())
+                    {
+                        clear_session_editor_resources(&ui);
+                    }
                     refresh_session_models(&ui, &state);
                     refresh_workspace(&ui, &state);
                     set_status(&ui, &message);
@@ -1320,12 +1411,16 @@ fn profile_from_editor_with_password(
     CredentialChange,
     Option<zeroize::Zeroizing<String>>,
 )> {
-    let private_key = auth_method == "Private key";
     let ssh_protocol = protocol.eq_ignore_ascii_case("SSH");
+    let password_auth = ssh_protocol && auth_method == "Password";
+    let private_key = ssh_protocol && auth_method == "Private key";
+    let ssh_agent = ssh_protocol && auth_method == "SSH agent";
+    if ssh_protocol && !password_auth && !private_key && !ssh_agent {
+        anyhow::bail!("unsupported SSH authentication method");
+    }
     let existing_storage = existing
         .and_then(SessionProfile::ssh)
         .and_then(|ssh| ssh.credential_storage);
-    let password_auth = !private_key && ssh_protocol;
     let password_storage = (password_auth && !password.is_empty() && remember_password)
         .then(|| CredentialStorage::from_setting(credential_storage));
     if let Some(storage) = password_storage
@@ -1342,7 +1437,7 @@ fn profile_from_editor_with_password(
             vault_password: (storage == CredentialStorage::EncryptedVault)
                 .then(|| zeroize::Zeroizing::new(vault_password.to_owned())),
         }
-    } else if !ssh_protocol || private_key {
+    } else if !ssh_protocol || !password_auth {
         existing_storage.map_or(CredentialChange::None, CredentialChange::Delete)
     } else {
         CredentialChange::None
@@ -1363,17 +1458,18 @@ fn profile_from_editor_with_password(
             .ssh_mut()
             .context("new SSH profile is missing SSH configuration")?;
         ssh.port = port;
-        ssh.auth = if private_key {
-            AuthMethod::PrivateKey {
+        ssh.auth = match auth_method {
+            "Password" => AuthMethod::Password,
+            "Private key" => AuthMethod::PrivateKey {
                 path: PathBuf::from(private_key_path.trim()),
-            }
-        } else {
-            AuthMethod::Password
+            },
+            "SSH agent" => AuthMethod::SshAgent,
+            _ => anyhow::bail!("unsupported SSH authentication method"),
         };
-        ssh.credential_storage = if private_key {
-            None
-        } else {
+        ssh.credential_storage = if password_auth {
             password_storage.or(existing_storage)
+        } else {
+            None
         };
         ssh.host_key_fingerprint = preserved_fingerprint;
         ssh.x11_forwarding = x11_forwarding;
@@ -1787,6 +1883,49 @@ mod tests {
                 .expect("existing profile should be SSH")
                 .host_key_fingerprint
         );
+        assert!(matches!(
+            change,
+            CredentialChange::Delete(CredentialStorage::SystemKeyring)
+        ));
+    }
+
+    #[test]
+    fn switching_to_ssh_agent_discards_password_input_and_credential_reference() {
+        let mut existing = SessionProfile::new("old", "old.example", "alice");
+        let ssh = existing.ssh_mut().expect("profile should be SSH");
+        ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
+        ssh.host_key_fingerprint = Some("SHA256:trusted".into());
+
+        let (profile, change, connection_password) = profile_from_editor_with_password(
+            Some(&existing),
+            "agent",
+            "",
+            "SSH",
+            "old.example",
+            "22",
+            "alice",
+            "SSH agent",
+            "/must/not/be/used",
+            "must-not-be-used",
+            true,
+            "system-keyring",
+            "must-not-be-used",
+            false,
+            "",
+            "115200",
+            "8",
+            "1",
+            "none",
+            "none",
+            None,
+        )
+        .expect("agent profile should update");
+
+        let ssh = profile.ssh().expect("updated profile should be SSH");
+        assert_eq!(ssh.auth, AuthMethod::SshAgent);
+        assert_eq!(ssh.credential_storage, None);
+        assert_eq!(ssh.host_key_fingerprint.as_deref(), Some("SHA256:trusted"));
+        assert!(connection_password.is_none());
         assert!(matches!(
             change,
             CredentialChange::Delete(CredentialStorage::SystemKeyring)

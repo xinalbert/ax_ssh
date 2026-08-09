@@ -17,10 +17,20 @@ pub(super) fn begin_authentication(
         );
         return;
     };
-    let private_key = matches!(ssh.auth, AuthMethod::PrivateKey { .. });
     let credential_storage = ssh.credential_storage;
-    if private_key {
-        set_tab_status(&state, &ui, tab_id, "Loading private key...");
+    let direct_authentication = match ssh.auth {
+        AuthMethod::Password => None,
+        AuthMethod::PrivateKey { .. } => Some((
+            "Loading private key...",
+            "Cannot start private-key connection",
+        )),
+        AuthMethod::SshAgent => Some((
+            "Connecting with SSH agent...",
+            "Cannot start SSH-agent connection",
+        )),
+    };
+    if let Some((status, failure)) = direct_authentication {
+        set_tab_status(&state, &ui, tab_id, status);
         if let Err(error) = start_session_worker(
             runtime,
             state.clone(),
@@ -34,12 +44,7 @@ pub(super) fn begin_authentication(
             target,
         ) {
             set_awaiting_authentication(&state, tab_id, profile.id, false);
-            set_tab_status(
-                &state,
-                &ui,
-                tab_id,
-                &format!("Cannot start private-key connection: {error}"),
-            );
+            set_tab_status(&state, &ui, tab_id, &format!("{failure}: {error}"));
             refresh_workspace(&ui, &state);
         }
         return;
@@ -203,12 +208,16 @@ pub(in crate::app) fn wire_authentication(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
+    window_router: WindowRouter,
+    window_id: Uuid,
 ) {
     let ui_for_auth = ui.as_weak();
     let state_for_auth = state.clone();
     let runtime_for_auth = runtime.clone();
+    let router_for_auth = window_router.clone();
     ui.on_authenticate_session(move |password, vault_password, remember_password, storage| {
         log_ui_action("authentication.submit");
+        sync_window_active(&router_for_auth, window_id, &state_for_auth);
         let password = zeroize::Zeroizing::new(password.as_str().to_owned());
         let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
         let target = match state_for_auth.lock() {
@@ -366,8 +375,10 @@ pub(in crate::app) fn wire_authentication(
 
     let ui_for_cancel = ui.as_weak();
     let state_for_cancel = state.clone();
+    let router_for_cancel = window_router.clone();
     ui.on_cancel_password_dialog(move || {
         log_ui_action("authentication.cancel");
+        sync_window_active(&router_for_cancel, window_id, &state_for_cancel);
         let pending = match state_for_cancel.lock() {
             Ok(mut app) => {
                 let tab_id = app.active_tab_id();
@@ -404,9 +415,12 @@ pub(in crate::app) fn wire_authentication(
     });
 
     let ui_for_disconnect = ui.as_weak();
+    let router_for_disconnect = window_router;
+    let state_for_disconnect = state;
     ui.on_disconnect_session(move || {
         log_ui_action("connection.disconnect");
-        let result = state
+        sync_window_active(&router_for_disconnect, window_id, &state_for_disconnect);
+        let result = state_for_disconnect
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
             .and_then(|app| {

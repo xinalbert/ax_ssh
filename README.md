@@ -6,16 +6,18 @@ AxSSH is a cross-platform desktop terminal workspace built with Rust, Slint,
 and Tokio. It combines saved SSH, Telnet, and serial sessions with independent
 local and remote terminal tabs and persistent workspace settings.
 
-Current functionality includes SSH password/private-key authentication and
-explicit host-key confirmation, plaintext Telnet, manually initiated serial
+Current functionality includes SSH password, private-key, and runtime-agent
+authentication with explicit host-key confirmation, plaintext Telnet, manually initiated serial
 connections with automatic port discovery, bounded terminal scrollback, ANSI
 rendering, selection, clipboard shortcuts, native input-method support, and
 bounded remote SFTP directory browsing in dedicated dual-pane SFTP tabs. The
 local pane reads only bounded directory metadata and can open regular files with
 the platform default application. Remote regular files can be downloaded into a
 private cache and opened from the bounded transfer queue. SFTP upload, delete,
-edit, SSH agent integration, reconnect, workspace restoration, and full
-terminal mouse reporting are not implemented yet.
+edit, reconnect, workspace restoration, and full
+terminal mouse reporting are not implemented yet. A connected SSH Terminal and
+its SFTP companion can move together into a separate native window and return
+without reconnecting.
 
 ## Quick start
 
@@ -42,8 +44,9 @@ for session setup, terminal controls, settings, and data-storage behavior.
 
 Unknown and changed SSH host keys are denied by default. Remembered passwords are
 stored by macOS Keychain, Windows Credential Manager, or Unix Secret Service;
-passwords, private-key passphrases, private-key contents, terminal output, and
-live worker state are never written to the session JSON. Telnet is unencrypted.
+passwords, private-key passphrases, private-key contents, SSH-agent socket paths
+and identities, terminal output, and live worker state are never written to the
+session JSON. Telnet is unencrypted.
 Serial discovery lists device metadata only; a device is opened only after an
 explicit connect action.
 

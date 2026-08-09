@@ -4,11 +4,15 @@ pub(in crate::app) fn wire_host_key_confirmation(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
+    window_router: WindowRouter,
+    window_id: Uuid,
 ) {
     let ui_for_confirm = ui.as_weak();
     let state_for_confirm = state.clone();
+    let router_for_confirm = window_router.clone();
     ui.on_confirm_host_key(move || {
         log_ui_action("host-key.confirm");
+        sync_window_active(&router_for_confirm, window_id, &state_for_confirm);
         let (tab_id, profile, target) = {
             let mut app = match state_for_confirm.lock() {
                 Ok(app) => app,
@@ -130,8 +134,10 @@ pub(in crate::app) fn wire_host_key_confirmation(
 
     let ui_for_reject = ui.as_weak();
     let state_for_reject = state.clone();
+    let router_for_reject = window_router;
     ui.on_reject_host_key(move || {
         log_ui_action("host-key.reject");
+        sync_window_active(&router_for_reject, window_id, &state_for_reject);
         let pending = match state_for_reject.lock() {
             Ok(mut app) => {
                 let active_tab_id = app.active_tab_id();
