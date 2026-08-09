@@ -637,17 +637,49 @@ impl AppState {
         self.active_tab_id.and_then(|id| self.terminal_mut(id))
     }
 
+    #[cfg(test)]
     pub(super) fn resize_active_terminal(&mut self, columns: u32, rows: u32) -> Result<()> {
-        let terminal = self.active_terminal_mut().context("no active terminal")?;
+        let tab_id = self.active_tab_id.context("no active terminal")?;
+        self.resize_terminal(tab_id, columns, rows)
+    }
+
+    pub(super) fn resize_terminal(&mut self, tab_id: Uuid, columns: u32, rows: u32) -> Result<()> {
+        let terminal = self
+            .terminal_mut(tab_id)
+            .context("terminal tab not found")?;
         let model = terminal
             .terminal
             .as_mut()
-            .context("active tab has no terminal model")?;
+            .context("terminal tab has no terminal model")?;
         if let Some(worker) = terminal.worker.as_ref() {
             worker.request_resize(columns, rows)?;
         }
         model.resize(columns as usize, rows as usize);
         Ok(())
+    }
+
+    pub(super) fn pane_session_source(&self, tab_id: Uuid) -> Option<PaneSessionSource> {
+        let terminal = self.terminal(tab_id)?;
+        if terminal.is_sftp() {
+            return None;
+        }
+        if terminal.is_local() {
+            return Some(PaneSessionSource::LocalShell);
+        }
+        terminal
+            .profile_id()
+            .map(PaneSessionSource::ProfileConnection)
+    }
+
+    pub(super) fn terminal_companion_id(&self, tab_id: Uuid) -> Option<Uuid> {
+        let companion_id = self
+            .tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)?
+            .companion_tab_id?;
+        self.terminal(companion_id)
+            .is_some_and(|terminal| !terminal.is_sftp())
+            .then_some(companion_id)
     }
 
     pub(super) fn terminal(&self, tab_id: Uuid) -> Option<&TerminalTabState> {
@@ -737,29 +769,65 @@ impl AppState {
     /// The transfer contains identifiers only. Runtime workers, pending probes, and
     /// authentication state remain owned by `AppState` while the group is displayed by
     /// another native window.
+    #[cfg(test)]
     pub(super) fn workspace_transfer_for(
         &self,
         tab_id: Uuid,
         source_window_id: Uuid,
     ) -> Option<WorkspaceTransfer> {
-        let tab = self.tabs.iter().find(|tab| tab.id == tab_id)?;
-        if !matches!(tab.kind, WorkspaceTabKind::Terminal(_)) {
+        self.workspace_transfer_for_terminal_panes(&[tab_id], source_window_id, tab_id)
+    }
+
+    pub(super) fn workspace_transfer_for_terminal_panes(
+        &self,
+        pane_tab_ids: &[Uuid],
+        source_window_id: Uuid,
+        active_tab_id: Uuid,
+    ) -> Option<WorkspaceTransfer> {
+        if pane_tab_ids.is_empty()
+            || !pane_tab_ids.iter().all(|tab_id| {
+                self.terminal(*tab_id)
+                    .is_some_and(|terminal| !terminal.is_sftp())
+            })
+        {
             return None;
         }
-        let mut tab_ids = vec![tab.id];
-        if let Some(companion_id) = tab.companion_tab_id
-            && self
+        let mut included = pane_tab_ids.iter().copied().collect::<HashSet<_>>();
+        for tab_id in pane_tab_ids {
+            if let Some(companion_id) = self
                 .tabs
                 .iter()
-                .any(|candidate| candidate.id == companion_id)
-        {
-            tab_ids.push(companion_id);
+                .find(|tab| tab.id == *tab_id)
+                .and_then(|tab| tab.companion_tab_id)
+            {
+                included.insert(companion_id);
+            }
         }
+        let tab_ids = self
+            .tabs
+            .iter()
+            .filter(|tab| included.contains(&tab.id))
+            .map(|tab| tab.id)
+            .collect();
         Some(WorkspaceTransfer {
             source_window_id,
             tab_ids,
-            active_tab_id: Some(tab_id),
+            active_tab_id: Some(active_tab_id),
         })
+    }
+
+    pub(super) fn workspace_transfer_for_sftp(
+        &self,
+        tab_id: Uuid,
+        source_window_id: Uuid,
+    ) -> Option<WorkspaceTransfer> {
+        self.terminal(tab_id)
+            .is_some_and(TerminalTabState::is_sftp)
+            .then_some(WorkspaceTransfer {
+                source_window_id,
+                tab_ids: vec![tab_id],
+                active_tab_id: Some(tab_id),
+            })
     }
 
     pub(super) fn tab_summaries_for(&self, tab_ids: &[Uuid]) -> Vec<WorkspaceTabSummary> {
@@ -1520,6 +1588,16 @@ pub(super) struct SftpTransferSnapshot {
 }
 
 impl TerminalTabState {
+    pub(super) fn profile_id(&self) -> Option<Uuid> {
+        match self.backend {
+            TerminalBackend::Ssh { profile_id, .. }
+            | TerminalBackend::Sftp { profile_id, .. }
+            | TerminalBackend::Telnet { profile_id, .. }
+            | TerminalBackend::Serial { profile_id, .. } => Some(profile_id),
+            TerminalBackend::Local => None,
+        }
+    }
+
     pub(super) fn ssh_route(&self) -> Option<(Uuid, Option<Uuid>)> {
         match self.backend {
             TerminalBackend::Ssh {
@@ -1708,6 +1786,12 @@ pub(super) enum TerminalBackend {
         attempt_id: Option<Uuid>,
     },
     Local,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PaneSessionSource {
+    LocalShell,
+    ProfileConnection(Uuid),
 }
 
 impl TerminalBackend {

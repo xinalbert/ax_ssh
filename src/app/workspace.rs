@@ -49,12 +49,14 @@ pub(super) fn wire_workspace_tabs(
     let ui_for_settings = ui.as_weak();
     let state_for_settings = state.clone();
     let runtime_for_settings = runtime.clone();
+    let router_for_settings = window_router.clone();
     ui.on_open_settings(move || {
         log_ui_action("workspace.open-settings");
         let load_options = match state_for_settings.lock() {
             Ok(mut app) => {
                 let load_options = !app.has_settings_tab();
-                app.open_settings_tab();
+                let tab_id = app.open_settings_tab();
+                let _ = router_for_settings.activate_tab(window_id, tab_id, &mut app);
                 load_options
             }
             Err(_) => {
@@ -74,11 +76,13 @@ pub(super) fn wire_workspace_tabs(
 
     let ui_for_new = ui.as_weak();
     let state_for_new = state.clone();
+    let router_for_new = window_router.clone();
     ui.on_new_session(move || {
         log_ui_action("workspace.new-session");
         match state_for_new.lock() {
             Ok(mut app) => {
-                app.open_session_editor_tab();
+                let tab_id = app.open_session_editor_tab();
+                let _ = router_for_new.activate_tab(window_id, tab_id, &mut app);
             }
             Err(_) => {
                 set_status(&ui_for_new, "Cannot update workspace tabs");
@@ -90,11 +94,13 @@ pub(super) fn wire_workspace_tabs(
 
     let ui_for_new_in_group = ui.as_weak();
     let state_for_new_in_group = state.clone();
+    let router_for_new_in_group = window_router.clone();
     ui.on_new_session_in_group(move |group_name| {
         log_ui_action("workspace.new-session-in-group");
         match state_for_new_in_group.lock() {
             Ok(mut app) => {
-                app.open_session_editor_for_group(group_name.as_str());
+                let tab_id = app.open_session_editor_for_group(group_name.as_str());
+                let _ = router_for_new_in_group.activate_tab(window_id, tab_id, &mut app);
             }
             Err(_) => {
                 set_status(&ui_for_new_in_group, "Cannot update workspace tabs");
@@ -106,15 +112,22 @@ pub(super) fn wire_workspace_tabs(
 
     let ui_for_edit = ui.as_weak();
     let state_for_edit = state.clone();
+    let router_for_edit = window_router.clone();
     ui.on_edit_session(move |id| {
         log_ui_action("workspace.edit-session");
         let id = match parse_uuid(id.as_str(), "session", &ui_for_edit) {
             Some(id) => id,
             None => return,
         };
-        let opened = state_for_edit
-            .lock()
-            .is_ok_and(|mut app| app.open_session_editor_for_profile(id));
+        let opened = state_for_edit.lock().is_ok_and(|mut app| {
+            if !app.open_session_editor_for_profile(id) {
+                return false;
+            }
+            let Some(tab_id) = app.active_tab_id() else {
+                return false;
+            };
+            router_for_edit.activate_tab(window_id, tab_id, &mut app)
+        });
         if !opened {
             set_status(&ui_for_edit, "Session not found");
             return;
@@ -127,6 +140,7 @@ pub(super) fn wire_workspace_tabs(
     let runtime_for_local = runtime.clone();
     let font_registry_for_local = font_registry.clone();
     let terminal_font_started_for_local = terminal_font_started.clone();
+    let router_for_local = window_router.clone();
     ui.on_open_local_shell(move || {
         log_ui_action("workspace.open-local-shell");
         load_terminal_font_on_demand(
@@ -135,12 +149,19 @@ pub(super) fn wire_workspace_tabs(
             font_registry_for_local.clone(),
             terminal_font_started_for_local.clone(),
         );
-        if let Err(error) = start_local_shell(
+        match start_local_shell(
             &runtime_for_local,
             state_for_local.clone(),
             ui_for_local.clone(),
+            {
+                let router = router_for_local.clone();
+                move |tab_id, app| router.activate_tab(window_id, tab_id, app)
+            },
         ) {
-            set_status(&ui_for_local, &format!("Cannot open local shell: {error}"));
+            Ok(_) => {}
+            Err(error) => {
+                set_status(&ui_for_local, &format!("Cannot open local shell: {error}"));
+            }
         }
     });
 
@@ -155,12 +176,11 @@ pub(super) fn wire_workspace_tabs(
         };
         let activated = state_for_activate
             .lock()
-            .is_ok_and(|mut app| app.activate_tab(id));
+            .is_ok_and(|mut app| router_for_activate.activate_tab(window_id, id, &mut app));
         if !activated {
             set_status(&ui_for_activate, "Tab not found");
             return;
         }
-        router_for_activate.set_active(window_id, id);
         refresh_workspace(&ui_for_activate, &state_for_activate);
     });
 
@@ -176,7 +196,10 @@ pub(super) fn wire_workspace_tabs(
         let cycled = match state_for_cycle.lock() {
             Ok(mut app) => {
                 let tab_ids = router_for_cycle.tab_ids(window_id, &app);
-                app.cycle_tab_for(&tab_ids, next).is_some()
+                let Some(tab_id) = app.cycle_tab_for(&tab_ids, next) else {
+                    return;
+                };
+                router_for_cycle.activate_tab(window_id, tab_id, &mut app)
             }
             Err(_) => {
                 set_status(&ui_for_cycle, "Cannot update workspace tabs");
@@ -245,6 +268,12 @@ pub(super) fn close_workspace_tab(
     ui: &slint::Weak<AppWindow>,
     runtime: &Handle,
 ) {
+    let is_terminal_pane = state.lock().is_ok_and(|app| {
+        app.terminal(tab_id)
+            .is_some_and(|terminal| !terminal.is_sftp())
+    });
+    let replacement =
+        global_window_router().and_then(|router| router.remove_tab(tab_id, is_terminal_pane));
     let closed = match state.lock() {
         Ok(mut app) => app.close_tab(tab_id),
         Err(_) => {
@@ -256,6 +285,12 @@ pub(super) fn close_workspace_tab(
         set_status(ui, "Tab not found");
         return;
     };
+    if let Some(replacement) = replacement
+        && let Ok(mut app) = state.lock()
+        && app.terminal(replacement).is_some()
+    {
+        let _ = app.activate_tab(replacement);
+    }
     match closed.kind {
         ClosedTabKind::Settings => clear_settings_option_models(ui, state),
         ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
@@ -308,6 +343,8 @@ pub(super) fn wire_session_editor(
     profile_mutations: Arc<ProfileMutationCoordinator>,
     font_registry: Arc<Mutex<FontRegistry>>,
     terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    window_router: WindowRouter,
+    window_id: Uuid,
 ) {
     let ui_for_private_keys = ui.as_weak();
     let state_for_private_keys = state.clone();
@@ -327,6 +364,7 @@ pub(super) fn wire_session_editor(
 
     let ui_for_save = ui.as_weak();
     let state_for_save = state.clone();
+    let router_for_save = window_router;
     ui.on_save_session(
         move |name,
               group_name,
@@ -438,6 +476,7 @@ pub(super) fn wire_session_editor(
             };
             let state = state_for_save.clone();
             let ui = ui_for_save.clone();
+            let router = router_for_save.clone();
             set_status(&ui_for_save, "Saving session...");
             let runtime_for_save = runtime.clone();
             let runtime_for_connect = runtime.clone();
@@ -509,7 +548,7 @@ pub(super) fn wire_session_editor(
                 }
                 refresh_workspace(&ui, &state);
                 if should_connect {
-                    request_profile_connection(
+                    let _ = request_profile_connection(
                         &ui,
                         &state,
                         &runtime_for_connect,
@@ -519,6 +558,7 @@ pub(super) fn wire_session_editor(
                         ConnectionTarget::Terminal,
                         None,
                         connection_password,
+                        move |tab_id, app| router.activate_tab(window_id, tab_id, app),
                     );
                 } else if has_connection_password && !remember_password {
                     set_status(&ui, "Session saved; password was not remembered");

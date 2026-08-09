@@ -31,6 +31,7 @@ export struct TerminalViewState {
 
 export component TerminalPane inherits Rectangle {
     in property <TerminalViewState> view;
+    in property <bool> focused: false;
     private property <bool> connected: root.view.connected;
     private property <string> terminal-id: root.view.terminal_id;
     private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
@@ -58,6 +59,8 @@ export component TerminalPane inherits Rectangle {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    callback pane-focus(string);
+    callback pane-command(string, string) -> bool;
 
     private property <length> font-cell-width:
         max(1px, cell-probe.preferred-width / 50);
@@ -111,10 +114,15 @@ export component TerminalPane inherits Rectangle {
         last_column: root.selection-last-column,
     };
 
-    public function focus-terminal() {
+    function focus-input() {
         if root.connected {
             ime-input.focus();
         }
+    }
+
+    public function focus-terminal() {
+        root.pane-focus(root.terminal-id);
+        root.focus-input();
     }
 
     function update-terminal-size() {
@@ -169,18 +177,24 @@ export component TerminalPane inherits Rectangle {
     changed terminal-id => { root.schedule-terminal-size-update(); }
     changed connected => {
         root.schedule-terminal-size-update();
-        if root.connected {
-            root.focus-terminal();
+        if root.connected && root.focused {
+            root.focus-input();
+        }
+    }
+    changed focused => {
+        if root.focused && root.connected {
+            root.focus-input();
         }
     }
     changed visible => {
-        if self.visible && root.connected {
-            root.focus-terminal();
+        if self.visible && root.focused && root.connected {
+            root.focus-input();
         }
     }
 
     background: root.terminal-background;
-    border-width: 0px;
+    border-width: root.focused ? Theme.hairline : 0px;
+    border-color: Theme.accent;
     forward-focus: ime-input;
     accessible-role: text;
     accessible-label: "Terminal";
@@ -238,6 +252,21 @@ export component TerminalPane inherits Rectangle {
             }
         }
         key-pressed(event) => {
+            if event.modifiers.alt && !event.modifiers.control && !event.modifiers.meta {
+                let pane-command =
+                    (event.text == "h" || event.text == "H")
+                        ? (event.modifiers.shift ? "split-left" : "focus-left")
+                    : (event.text == "j" || event.text == "J")
+                        ? (event.modifiers.shift ? "split-down" : "focus-down")
+                    : (event.text == "k" || event.text == "K")
+                        ? (event.modifiers.shift ? "split-up" : "focus-up")
+                    : (event.text == "l" || event.text == "L")
+                        ? (event.modifiers.shift ? "split-right" : "focus-right")
+                    : "";
+                if !pane-command.is-empty && root.pane-command(root.terminal-id, pane-command) {
+                    return EventResult.accept;
+                }
+            }
             if !root.connected {
                 return EventResult.reject;
             }

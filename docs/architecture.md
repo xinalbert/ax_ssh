@@ -99,9 +99,13 @@ Rust
 visibility, picker dismissal, and sidebar/tab/content composition. Its tab,
 profile, terminal, and settings data is a read-only `WorkspaceViewState`; it
 sends user intent such as activation, close, connect, save, or cancel upward by
-callback. `TerminalPane` receives a read-only `TerminalViewState` and owns only
-terminal-local focus, IME proxy, selection, cursor blink, and measured sizing.
-It never owns a worker, a terminal buffer, or connection state.
+callback. `TerminalPaneGroup` renders a bounded per-window list of normalized
+`TerminalPane` placements. Each `TerminalPane` receives a read-only
+`TerminalViewState` and owns only terminal-local focus, IME proxy, selection,
+cursor blink, and measured sizing. It never owns a worker, a terminal buffer,
+or connection state. Terminal input, resize, scroll, and selection callbacks
+carry the terminal Tab UUID, which the application validates against the
+current window's pane tree before acting.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
@@ -280,8 +284,8 @@ must not locally hide either dialog before the Rust state transition accepts it.
    scrollback while shrinking, keeping the cursor and newest content at the new
    bottom edge. Alternate screens, an active scroll region, a non-bottom cursor,
    and a user viewing scrollback retain upstream resize semantics. Output for inactive
-   tabs stays in Rust state; only the active cell snapshot crosses the
-   Slint event loop. UI updates use
+   tabs stays in Rust state; each visible pane contributes only its bounded cell
+   snapshot across the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
    keep a window alive.
    The small-screen window floor is `520x360`; terminal layout, persisted
@@ -290,7 +294,7 @@ must not locally hide either dialog before the Rust state transition accepts it.
    can collapse the existing session sidebar to reserve additional terminal
    columns on narrow displays.
    `TerminalPane` coalesces changes to its measured grid, configured font
-   metrics, active terminal-tab identity, and connection state until the next
+   metrics, terminal-tab identity, and connection state until the next
    UI turn, then requests one final PTY size. This keeps a Settings font
    change and a later return to a connected terminal on the same current-grid
    path as a window resize. Complete character rows are bottom-aligned inside
@@ -298,13 +302,14 @@ must not locally hide either dialog before the Rust state transition accepts it.
    calculation is placed above the first row, not below the last row. The same
    local offset is applied to grid cells, cursor/IME preedit, and pointer row
    mapping; it does not alter the calculated row count or any PTY request.
-   `AppState::resize_active_terminal` is the single application entry for a UI
-   grid change: it requests an existing active worker resize first and then immediately
-   resizes that tab's local `TerminalModel`. Local and SSH workers receive PTY
+   `AppState::resize_terminal(tab_id, ...)` is the single application entry for
+   a UI grid change: it requests the specified visible pane's existing worker
+   resize first and then immediately resizes that Tab's local `TerminalModel`.
+   Local and SSH workers receive PTY
    resize requests; Telnet sends NAWS only after the peer accepts that option.
    Serial has no remote terminal-size contract, so its worker request is a no-op
-   and the same entry changes only the local model. After any
-   accepted UI resize, the application schedules an active-terminal refresh. When
+   and the same entry changes only the local model. After any accepted UI
+   resize, the application schedules a visible-pane refresh. When
    that UI task executes, it copies the current snapshot from `AppState` rather
    than applying a snapshot captured by an earlier worker event. Therefore an
    already queued Output update cannot restore an older grid while the user is
@@ -449,18 +454,24 @@ The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
 that workspace into a second native Slint window. A detached window uses the
 active connection title as its native title and, on macOS, provides a native
 title-bar **Return** button on that same title-bar row. Its client content contains only the active
-`TerminalPane` or `SftpPane`: it has no Tab strip, session sidebar, saved-
+`TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
 connection picker, Settings, session editor, or client menu. `AppState` remains
 the sole owner of the Tab
 runtime objects, terminal models, pending trust/authentication phases, and
 transport workers. The `WorkspaceTransfer` payload contains only the source
-window ID, the bounded pair of Tab UUIDs, and the active Tab UUID; it never
+window ID, terminal-pane UUIDs with their SSH/SFTP companions, and the active
+Tab UUID; it never
 contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
 secret.
 
 `WindowRouter` maps each transferred Tab UUID to the current window's weak UI
 handle. Refreshes publish a filtered Tab model and the snapshot for each route,
 so late worker events can repaint the window that currently owns the workspace.
+It owns the volatile `PaneTree` for each native window; the tree is capped at
+eight terminal leaves and contains only UUID layout and focus state. Closing a
+terminal pane removes its leaf and collapses a resulting one-child branch.
+Detached return or close restores the same pane tree to the main route without
+reconnecting or stopping workers.
 The inline and menu controls pass their selected Tab UUID directly to the Rust
 route handler, which validates that it belongs to the invoking window and makes
 it active before creating or returning the native window. Detaching and
@@ -468,6 +479,15 @@ returning only change this route map. Closing a detached window returns its
 transfer to the main route and hides the native window; it does not disconnect
 or re-authenticate SSH/SFTP. The paired Terminal/SFTP UUIDs move together,
 while their two independent russh workers remain independent.
+
+Terminal panes use `Alt+H/J/K/L` to focus the left/down/up/right neighbor and
+`Alt+Shift+H/J/K/L` to create a fresh terminal session on that side. A split of
+a local shell creates a new PTY; a split of SSH, Telnet, or Serial repeats the
+normal profile connection flow. A split SSH child repeats host-key and
+authentication handling and never inherits a one-time password or private-key
+passphrase. SFTP is a standalone surface and cannot be a terminal pane. The UI
+consumes these Alt combinations only after the router accepts the command, so an
+unsupported direction or a full pane tree preserves ordinary terminal Meta input.
 
 ## SSH security contract
 

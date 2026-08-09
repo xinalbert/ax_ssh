@@ -141,3 +141,11 @@
 - 受影响文件：`src/app.rs`、`src/app/state.rs`、`src/app/view.rs`、`src/app/workspace.rs`、`src/app/terminal_bridge.rs`、`src/app/sftp_bridge.rs`、`ui/app.slint`、双语文档和实施记录。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、locked/offline check/test；`cargo fmt` 与 `cargo clippy` 子命令仍由 CI/已安装组件提供，本机无法执行。
 - 验证结果：`cargo check --locked --offline` 和两项 workspace transfer focused tests 通过；真实 macOS/Windows/Linux 原生窗口、关闭/合并、焦点、拖动和不重连行为需目标平台手工验收。
+
+## 2026-08-09 记录终端窗格拆分环境基线
+
+- 日期：2026-08-09
+- 变化摘要：主窗口和 detached Terminal 现在使用同一窗口级窗格布局与 UUID 定向终端 callback；没有新增 crate、修改 `Cargo.toml`/`Cargo.lock`、调整 Rust edition/MSRV 或 CI 命令。
+- 受影响文件：`src/app.rs`、`src/app/`、`ui/{app,workspace-shell,terminal-pane}.slint`、`docs/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0 和 locked/offline Cargo 门禁；本机缺少 Cargo fmt/Clippy 子命令时，使用直接 `rustfmt --edition 2024` 检查已改 Rust 文件。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；目标平台 GUI/真实 SSH、Telnet、Serial 生命周期验收仍待用户完成。

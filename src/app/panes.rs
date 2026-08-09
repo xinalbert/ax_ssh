@@ -115,6 +115,7 @@ impl PaneTree {
         self.tab_ids().contains(&tab_id)
     }
 
+    #[cfg(test)]
     pub(super) const fn focused_tab_id(&self) -> Uuid {
         self.focused_tab_id
     }
@@ -244,7 +245,11 @@ fn collect_placements(
             height: rect.height,
             focused: *tab_id == focused_tab_id,
         }),
-        PaneNode::Split { axis, first, second } => {
+        PaneNode::Split {
+            axis,
+            first,
+            second,
+        } => {
             let (first_rect, second_rect) = match axis {
                 SplitAxis::Columns => (
                     PaneRect {
@@ -308,7 +313,11 @@ fn replace_leaf_with_split(
 fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
     match node {
         PaneNode::Leaf(candidate) => (candidate != tab_id).then_some(PaneNode::Leaf(candidate)),
-        PaneNode::Split { axis, first, second } => {
+        PaneNode::Split {
+            axis,
+            first,
+            second,
+        } => {
             let first = remove_leaf(*first, tab_id);
             let second = remove_leaf(*second, tab_id);
             match (first, second) {
@@ -324,26 +333,30 @@ fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
     }
 }
 
-fn directional_distance(current: PaneRect, candidate: PaneRect, direction: PaneDirection) -> Option<f32> {
+fn directional_distance(
+    current: PaneRect,
+    candidate: PaneRect,
+    direction: PaneDirection,
+) -> Option<f32> {
     const EPSILON: f32 = 0.000_1;
     let (gap, overlap, center_offset) = match direction {
-        PaneDirection::Left if candidate.right() <= current.x + EPSILON => (
-            current.x - candidate.right(),
+        PaneDirection::Left if candidate.center_x() < current.center_x() - EPSILON => (
+            (current.x - candidate.right()).max(0.0),
             vertical_overlap(current, candidate),
             (current.center_y() - candidate.center_y()).abs(),
         ),
-        PaneDirection::Right if candidate.x >= current.right() - EPSILON => (
-            candidate.x - current.right(),
+        PaneDirection::Right if candidate.center_x() > current.center_x() + EPSILON => (
+            (candidate.x - current.right()).max(0.0),
             vertical_overlap(current, candidate),
             (current.center_y() - candidate.center_y()).abs(),
         ),
-        PaneDirection::Up if candidate.bottom() <= current.y + EPSILON => (
-            current.y - candidate.bottom(),
+        PaneDirection::Up if candidate.center_y() < current.center_y() - EPSILON => (
+            (current.y - candidate.bottom()).max(0.0),
             horizontal_overlap(current, candidate),
             (current.center_x() - candidate.center_x()).abs(),
         ),
-        PaneDirection::Down if candidate.y >= current.bottom() - EPSILON => (
-            candidate.y - current.bottom(),
+        PaneDirection::Down if candidate.center_y() > current.center_y() + EPSILON => (
+            (candidate.y - current.bottom()).max(0.0),
             horizontal_overlap(current, candidate),
             (current.center_x() - candidate.center_x()).abs(),
         ),
@@ -408,7 +421,7 @@ mod tests {
         assert!(panes.split_focused(PaneDirection::Right, id(2)));
         assert!(panes.split_focused(PaneDirection::Down, id(3)));
 
-        assert_eq!(panes.remove(id(2)), Some(id(1)));
+        assert_eq!(panes.remove(id(2)), Some(id(3)));
         assert_eq!(panes.tab_ids(), vec![id(1), id(3)]);
         assert_eq!(panes.remove(id(1)), Some(id(3)));
         assert_eq!(panes.tab_ids(), vec![id(3)]);

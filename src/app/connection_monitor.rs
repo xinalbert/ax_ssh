@@ -608,7 +608,7 @@ pub(super) fn mutate_terminal_attempt(
         return None;
     }
     action(app.terminal_mut(tab_id)?);
-    Some(app.active_tab_id() == Some(tab_id))
+    Some(true)
 }
 
 fn session_is_loading_stored_credential(

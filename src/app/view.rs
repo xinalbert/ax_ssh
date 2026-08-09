@@ -140,6 +140,7 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
                 ))));
                 ui.set_settings_tab_id(settings_tab_id.into());
                 apply_active_snapshot(ui, view.snapshot);
+                apply_terminal_panes(ui, view.terminal_panes);
                 drop(state);
                 #[cfg(target_os = "macos")]
                 schedule_macos_application_menu_configuration(ui);
@@ -167,6 +168,7 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
         ui.set_settings_tab_id(settings_tab_id);
         apply_active_snapshot(ui, snapshot);
+        ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
         #[cfg(target_os = "macos")]
         schedule_macos_application_menu_configuration(ui);
     });
@@ -502,7 +504,7 @@ pub(super) fn set_tab_status(
             return;
         }
     };
-    if active {
+    if active || global_window_router().is_some() {
         dispatch_active_snapshot(ui, state);
     }
 }
@@ -664,6 +666,76 @@ pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot)
     ui.set_worker_running(snapshot.worker_running);
     apply_sftp_snapshot(ui, snapshot.sftp);
     apply_security_prompt(ui, snapshot.security_prompt);
+}
+
+fn apply_terminal_panes(ui: &AppWindow, panes: Vec<WindowTerminalPane>) {
+    let settings = TerminalRenderSettings {
+        color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
+        default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
+        default_background: to_rgb_color(ui.get_theme_terminal_background()),
+        selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
+        minimum_contrast_ratio: f64::from(
+            ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
+        ),
+        bright_bold_text: ui.get_bright_bold_text(),
+    };
+    let panes = panes
+        .into_iter()
+        .map(|pane| {
+            let terminal = pane
+                .snapshot
+                .terminal
+                .unwrap_or_else(empty_terminal_snapshot);
+            let rendered = render_terminal(terminal, settings);
+            TerminalPaneView {
+                terminal: terminal_view_from_rendered(
+                    pane.placement.tab_id,
+                    pane.snapshot.connected,
+                    rendered,
+                    ui,
+                ),
+                x: pane.placement.x,
+                y: pane.placement.y,
+                width: pane.placement.width,
+                height: pane.placement.height,
+                focused: pane.placement.focused,
+            }
+        })
+        .collect::<Vec<_>>();
+    ui.set_terminal_panes(ModelRc::new(VecModel::from(panes)));
+}
+
+fn terminal_view_from_rendered(
+    tab_id: Uuid,
+    connected: bool,
+    rendered: terminal_render::RenderedTerminal,
+    ui: &AppWindow,
+) -> TerminalViewState {
+    let lines = rendered
+        .lines
+        .into_iter()
+        .map(terminal_render_line)
+        .collect::<Vec<_>>();
+    TerminalViewState {
+        terminal_id: tab_id.to_string().into(),
+        connected,
+        render_lines: ModelRc::new(VecModel::from(lines)),
+        content_columns: rendered.max_columns.min(i32::MAX as usize) as i32,
+        cursor_row: rendered.cursor_row.min(i32::MAX as usize) as i32,
+        cursor_column: rendered.cursor_column.min(i32::MAX as usize) as i32,
+        cursor_visible: rendered.cursor_visible,
+        cursor_text: rendered.cursor_text.into(),
+        font_family: ui.get_terminal_font_family(),
+        font_size: ui.get_terminal_font_size() as f32,
+        line_height_percent: ui.get_terminal_line_height_percent(),
+        foreground: to_slint_color(rendered.foreground),
+        background: to_slint_color(rendered.background),
+        selection_background: to_slint_color(rendered.selection_background),
+        right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
+        option_as_meta: ui.get_option_as_meta(),
+        copy_selection_shortcut: ui.get_copy_selection_shortcut(),
+        paste_shortcut: ui.get_paste_shortcut(),
+    }
 }
 
 fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {

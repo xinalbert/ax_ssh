@@ -90,9 +90,11 @@ Rust
 
 `WorkspaceShell` 拥有侧栏收起、已保存连接选择器开关、选择器关闭以及侧栏/Tab/内容编排。
 它通过只读 `WorkspaceViewState` 接收 Tab、Profile、终端和设置数据，并用 callback 向上发送
-激活、关闭、连接、保存和取消等用户意图。`TerminalPane` 接收只读
-`TerminalViewState`，只拥有终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有
-worker、终端缓冲区或连接状态。
+激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
+`TerminalPane` placement 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
+终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有 worker、终端缓冲区或连接状态。
+终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
+pane tree 时才处理。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
@@ -201,22 +203,22 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    同时覆盖普通与备用屏幕。实时主屏的光标位于底行且改变高度时，补丁会在放大时把最近的
    scrollback 行恢复到视图顶部、缩小时把顶部行送回有界 scrollback，并将光标和最新内容
    保持在新的底边；备用屏、活动滚动区域、非底行光标和用户正在查看 scrollback 时保持上游
-   resize 语义。非活动 Tab 的输出留在 Rust 状态，只有活动字符格快照进入
-   Slint event loop；更新统一使用
+   resize 语义。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
+   snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
    网格下限，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
    现有侧栏收起动作优先为终端让出列数。
-   `TerminalPane` 会把测得的网格、配置字体度量、活动终端 Tab 身份和连接状态变化合并到
+   `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
    下一次 UI 轮转后，再请求一次最终 PTY 尺寸。因此 Settings 修改字体后返回已连接终端时，
    与窗口缩放会走同一条当前网格更新路径。完整字符行在测得网格区域内向下对齐：行数向下
    取整后剩余的零散高度放在第一行上方，而非最后一行下方。同一局部偏移同时用于字符格、
    光标/IME 预编辑和指针行映射，不会改变计算出的行数或任何 PTY 请求。
-   `AppState::resize_active_terminal` 是 UI 网格变化的单一应用入口：它先请求已有的活动 worker resize，
-   再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
+   `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
+   对应 worker 的 resize，再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
    对端接受选项后发送 NAWS；Serial 没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口
-   只调整本地模型。任何 UI resize 被接受后，
-   应用都会安排活动终端刷新。该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
+   只调整本地模型。任何 UI resize 被接受后，应用都会安排可见 pane 刷新。
+   该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
    worker 事件已捕获的旧快照；因此已经排队的 Output 不会在用户持续拖动窗口时把界面
    恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
    SSH 输出通常以有界的 16 ms/16 KiB 批次跨越 worker 边界；终端输入后观察到的首个输出会
@@ -301,10 +303,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
 Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 还在同一行标题栏提供 **Return**
-按钮。其客户区使用专门的精简组合，只含当前 `TerminalPane` 或 `SftpPane`，不包含 Tab 条、
+按钮。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup` 或 `SftpPane`，不包含 Tab 条、
 会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
-受限的配对 Tab UUID 列表和活动 Tab UUID；不会携带 Slint component、russh handle、
+终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
 Tokio receiver、终端缓冲区或秘密。
 
 `WindowRouter` 按转移后的 Tab UUID 映射当前窗口的 weak UI handle。刷新时每个路由
@@ -313,6 +315,17 @@ Tokio receiver、终端缓冲区或秘密。
 UUID 属于发起窗口并设为活动 Tab，再创建或返回原生窗口。转移和返回只修改路由表；关闭
 detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断开或重新认证 SSH/SFTP。
 配对的 Terminal/SFTP UUID 总是一起移动，但两端原本独立的 russh worker 仍保持独立。
+
+`WindowRouter` 还拥有每个原生窗口的 volatile `PaneTree`。树最多包含 8 个 terminal 叶节点，
+只保存 UUID、布局和焦点，不保存 Slint handle、worker、终端 buffer 或秘密。关闭终端 pane 会移除
+叶节点并折叠只剩单子的分支；detached 窗口 Return 或关闭时，会把同一份 pane tree 恢复到主窗口，
+不会重连或停止 worker。
+
+终端 pane 可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用 `Alt+Shift+H/J/K/L` 在对应方向
+创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和 Serial 会重新走对应 profile 的
+常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或私钥 passphrase。SFTP
+保持独立表面，不能作为 terminal pane 分屏。只有路由成功受理时 UI 才消费这些 Alt 组合，因此不支持的
+方向或已达 pane 上限时，普通终端 Meta 输入不会被吞掉。
 
 ## SSH 安全契约
 

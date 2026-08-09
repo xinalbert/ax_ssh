@@ -11,6 +11,15 @@ import {
     WorkspaceTitlebar,
 } from "components/workspace-titlebar.slint";
 
+export struct TerminalPaneView {
+    terminal: TerminalViewState,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    focused: bool,
+}
+
 // This is the only AppWindow-to-workspace visual contract. Rust-owned values
 // arrive as immutable data; all sidebar, picker, and page-local state stays here.
 export struct WorkspaceViewState {
@@ -26,9 +35,58 @@ export struct WorkspaceViewState {
     collapsed_group_label_chars: int,
     terminal_background: color,
     terminal: TerminalViewState,
+    terminal_panes: [TerminalPaneView],
     sftp: SftpViewState,
     settings: SettingsViewState,
     session_editor: SessionEditorViewState,
+}
+
+component TerminalPaneGroup inherits Rectangle {
+    in property <[TerminalPaneView]> panes;
+
+    callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
+    callback resize-terminal(string, int, int);
+    callback scroll-terminal(string, int);
+    callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-pane-focus(string);
+    callback terminal-pane-command(string, string) -> bool;
+    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback write-clipboard(string);
+    callback read-clipboard() -> string;
+
+    for pane in root.panes : TerminalPane {
+        x: pane.x * parent.width;
+        y: pane.y * parent.height;
+        width: pane.width * parent.width;
+        height: pane.height * parent.height;
+        view: pane.terminal;
+        focused: pane.focused;
+        terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+            return root.terminal-key(
+                pane.terminal.terminal_id, text, alt, control, meta, shift, physical-key-event,
+            );
+        }
+        terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
+            return root.terminal-key-direct(
+                text, alt, control, meta, shift, option-as-meta, preedit-active,
+            );
+        }
+        resized(columns, rows) => { root.resize-terminal(pane.terminal.terminal_id, columns, rows); }
+        scrolled(lines) => { root.scroll-terminal(pane.terminal.terminal_id, lines); }
+        selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+            return root.terminal-selection-text(
+                pane.terminal.terminal_id, anchor-row, anchor-column, focus-row, focus-column,
+            );
+        }
+        pane-focus(id) => { root.terminal-pane-focus(id); }
+        pane-command(id, command) => { return root.terminal-pane-command(id, command); }
+        format-shortcut(text, alt, control, meta, shift) => {
+            return root.format-shortcut(text, alt, control, meta, shift);
+        }
+        write-clipboard(text) => { root.write-clipboard(text); }
+        read-clipboard() => { return root.read-clipboard(); }
+    }
 }
 
 // The detached rendering path contains only the transferable Terminal/SFTP
@@ -49,11 +107,13 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback open-remote-sftp-file(string);
     callback open-local-sftp-file(string);
     callback cancel-sftp-transfer(string);
-    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
-    callback resize-terminal(int, int);
-    callback scroll-terminal(int);
-    callback terminal-selection-text(int, int, int, int) -> string;
+    callback resize-terminal(string, int, int);
+    callback scroll-terminal(string, int);
+    callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-pane-focus(string);
+    callback terminal-pane-command(string, string) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -69,14 +129,16 @@ component DetachedWorkspaceContent inherits Rectangle {
         height: parent.height;
         background: Theme.background;
 
-        if root.view.active_tab_kind == "terminal" : TerminalPane {
-            view: root.view.terminal;
+        if root.view.active_tab_kind == "terminal" : TerminalPaneGroup {
+            width: parent.width;
+            height: parent.height;
+            panes: root.view.terminal_panes;
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }
-            terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+            terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
                 return root.terminal-key(
-                    text, alt, control, meta, shift, physical-key-event,
+                    id, text, alt, control, meta, shift, physical-key-event,
                 );
             }
             terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
@@ -84,13 +146,15 @@ component DetachedWorkspaceContent inherits Rectangle {
                     text, alt, control, meta, shift, option-as-meta, preedit-active,
                 );
             }
-            resized(columns, rows) => { root.resize-terminal(columns, rows); }
-            scrolled(lines) => { root.scroll-terminal(lines); }
-            selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+            resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+            scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+            terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                 return root.terminal-selection-text(
-                    anchor-row, anchor-column, focus-row, focus-column,
+                    id, anchor-row, anchor-column, focus-row, focus-column,
                 );
             }
+            terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
+            terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
             write-clipboard(text) => { root.write-clipboard(text); }
             read-clipboard() => { return root.read-clipboard(); }
         }
@@ -181,11 +245,13 @@ export component WorkspaceShell inherits Rectangle {
     callback open-local-sftp-file(string);
     callback cancel-sftp-transfer(string);
     callback close-sftp();
-    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
-    callback resize-terminal(int, int);
-    callback scroll-terminal(int);
-    callback terminal-selection-text(int, int, int, int) -> string;
+    callback resize-terminal(string, int, int);
+    callback scroll-terminal(string, int);
+    callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-pane-focus(string);
+    callback terminal-pane-command(string, string) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -243,19 +309,23 @@ export component WorkspaceShell inherits Rectangle {
         open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
         open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
         cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
-        terminal-key(text, alt, control, meta, shift, physical-key-event) => {
-            return root.terminal-key(text, alt, control, meta, shift, physical-key-event);
+        terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
+            return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
         }
         terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
             return root.terminal-key-direct(
                 text, alt, control, meta, shift, option-as-meta, preedit-active,
             );
         }
-        resize-terminal(columns, rows) => { root.resize-terminal(columns, rows); }
-        scroll-terminal(lines) => { root.scroll-terminal(lines); }
-        terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
-            return root.terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column);
+        resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+        scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+        terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
+            return root.terminal-selection-text(
+                id, anchor-row, anchor-column, focus-row, focus-column,
+            );
         }
+        terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
+        terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
         format-shortcut(text, alt, control, meta, shift) => {
             return root.format-shortcut(text, alt, control, meta, shift);
         }
@@ -339,14 +409,16 @@ export component WorkspaceShell inherits Rectangle {
                     vertical-stretch: 1;
                     background: Theme.background;
 
-                    if root.view.active_tab_kind == "terminal" : TerminalPane {
-                        view: root.view.terminal;
+                    if root.view.active_tab_kind == "terminal" : TerminalPaneGroup {
+                        width: parent.width;
+                        height: parent.height;
+                        panes: root.view.terminal_panes;
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }
-                        terminal-key(text, alt, control, meta, shift, physical-key-event) => {
+                        terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
                             return root.terminal-key(
-                                text, alt, control, meta, shift, physical-key-event,
+                                id, text, alt, control, meta, shift, physical-key-event,
                             );
                         }
                         terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
@@ -354,12 +426,16 @@ export component WorkspaceShell inherits Rectangle {
                                 text, alt, control, meta, shift, option-as-meta, preedit-active,
                             );
                         }
-                        resized(columns, rows) => { root.resize-terminal(columns, rows); }
-                        scrolled(lines) => { root.scroll-terminal(lines); }
-                        selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
+                        resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+                        scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+                        terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                             return root.terminal-selection-text(
-                                anchor-row, anchor-column, focus-row, focus-column,
+                                id, anchor-row, anchor-column, focus-row, focus-column,
                             );
+                        }
+                        terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
+                        terminal-pane-command(id, command) => {
+                            return root.terminal-pane-command(id, command);
                         }
                         write-clipboard(text) => { root.write-clipboard(text); }
                         read-clipboard() => { return root.read-clipboard(); }

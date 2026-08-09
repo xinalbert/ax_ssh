@@ -6,7 +6,7 @@ import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-tit
 import { TerminalRenderLine } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
-import { WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
+import { TerminalPaneView, WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
@@ -93,6 +93,7 @@ export component AppWindow inherits Window {
     in property <int> sftp-transfer-failed-count: 0;
     in property <int> sftp-transfer-completed-count: 0;
     in property <[TerminalRenderLine]> terminal-render-lines;
+    in property <[TerminalPaneView]> terminal-panes;
     in property <int> terminal-content-columns: 0;
     in property <int> terminal-cursor-row: 0;
     in property <int> terminal-cursor-column: 0;
@@ -223,6 +224,7 @@ export component AppWindow inherits Window {
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
         },
+        terminal_panes: root.terminal-panes,
         sftp: {
             available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
             home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
@@ -369,11 +371,13 @@ export component AppWindow inherits Window {
     callback open-local-sftp-file(string);
     callback cancel-sftp-transfer(string);
     callback close-sftp();
-    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
-    callback resize-terminal(int, int);
-    callback scroll-terminal(int);
-    callback terminal-selection-text(int, int, int, int) -> string;
+    callback resize-terminal(string, int, int);
+    callback scroll-terminal(string, int);
+    callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-pane-focus(string);
+    callback terminal-pane-command(string, string) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback log-keyboard-event(string, bool, bool, bool, bool, string, string);
     callback menu-action(string);
@@ -648,19 +652,23 @@ export component AppWindow inherits Window {
             open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
             cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
             close-sftp => { root.close-sftp(); }
-            terminal-key(text, alt, control, meta, shift, physical-key-event) => {
-                return root.terminal-key(text, alt, control, meta, shift, physical-key-event);
+            terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
+                return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
             }
             terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
                 return root.terminal-key-direct(
                     text, alt, control, meta, shift, option-as-meta, preedit-active,
                 );
             }
-            resize-terminal(columns, rows) => { root.resize-terminal(columns, rows); }
-            scroll-terminal(lines) => { root.scroll-terminal(lines); }
-            terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
-                return root.terminal-selection-text(anchor-row, anchor-column, focus-row, focus-column);
+            resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+            scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+            terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
+                return root.terminal-selection-text(
+                    id, anchor-row, anchor-column, focus-row, focus-column,
+                );
             }
+            terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
+            terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }

@@ -53,6 +53,76 @@ fn workspace_transfer_keeps_ssh_and_sftp_companion_together() {
 }
 
 #[test]
+fn terminal_pane_transfer_keeps_every_terminal_and_its_companion() {
+    let mut state = test_state();
+    let first_profile = SessionProfile::new("first", "first.example", "alice");
+    let second_profile = SessionProfile::new("second", "second.example", "bob");
+    let first_terminal = state.open_terminal_tab(&first_profile);
+    let second_terminal = state.open_terminal_tab(&second_profile);
+    let sftp_id = state.open_sftp_tab_with_companion(&first_profile, Some(first_terminal));
+
+    let transfer = state
+        .workspace_transfer_for_terminal_panes(
+            &[first_terminal, second_terminal],
+            Uuid::new_v4(),
+            second_terminal,
+        )
+        .expect("terminal panes should be transferable");
+
+    assert_eq!(transfer.active_tab_id, Some(second_terminal));
+    assert!(transfer.tab_ids.contains(&first_terminal));
+    assert!(transfer.tab_ids.contains(&second_terminal));
+    assert!(transfer.tab_ids.contains(&sftp_id));
+    assert_eq!(transfer.tab_ids.len(), 3);
+}
+
+#[test]
+fn standalone_sftp_tab_can_transfer_without_becoming_a_terminal_pane() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let sftp_id = state.open_sftp_tab(&profile);
+
+    let transfer = state
+        .workspace_transfer_for_sftp(sftp_id, Uuid::new_v4())
+        .expect("standalone SFTP tab should be transferable");
+
+    assert_eq!(transfer.tab_ids, vec![sftp_id]);
+    assert_eq!(transfer.active_tab_id, Some(sftp_id));
+}
+
+#[test]
+fn new_ssh_terminal_does_not_inherit_a_one_time_password() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let source = state.open_terminal_tab(&profile);
+    assert!(
+        state
+            .terminal_mut(source)
+            .expect("source terminal should exist")
+            .set_pending_auth_secret(zeroize::Zeroizing::new("temporary-password".to_owned()))
+    );
+
+    let child = state.open_terminal_tab(&profile);
+
+    assert!(
+        state
+            .terminal_mut(child)
+            .expect("child terminal should exist")
+            .take_pending_auth_secret()
+            .is_none()
+    );
+    assert_eq!(
+        state
+            .terminal_mut(source)
+            .expect("source terminal should remain")
+            .take_pending_auth_secret()
+            .expect("source one-time password should remain scoped to its tab")
+            .as_str(),
+        "temporary-password"
+    );
+}
+
+#[test]
 fn non_terminal_tabs_cannot_be_detached() {
     let mut state = test_state();
     let settings_id = state.open_settings_tab();
@@ -625,6 +695,37 @@ fn switching_terminal_tabs_exposes_each_tab_grid_size() {
         .active_snapshot()
         .terminal
         .expect("second terminal snapshot should be present");
+    assert_eq!(
+        (second_snapshot.max_columns, second_snapshot.lines.len()),
+        (20, 6)
+    );
+}
+
+#[test]
+fn resizing_a_terminal_by_id_does_not_resize_another_pane() {
+    let mut state = test_state();
+    let first = state.open_local_shell_tab();
+    let second = state.open_local_shell_tab();
+
+    state
+        .resize_terminal(first, 12, 4)
+        .expect("first terminal should resize");
+    state
+        .resize_terminal(second, 20, 6)
+        .expect("second terminal should resize");
+
+    let first_snapshot = state
+        .snapshot_for(Some(first))
+        .terminal
+        .expect("first snapshot should contain a terminal");
+    let second_snapshot = state
+        .snapshot_for(Some(second))
+        .terminal
+        .expect("second snapshot should contain a terminal");
+    assert_eq!(
+        (first_snapshot.max_columns, first_snapshot.lines.len()),
+        (12, 4)
+    );
     assert_eq!(
         (second_snapshot.max_columns, second_snapshot.lines.len()),
         (20, 6)

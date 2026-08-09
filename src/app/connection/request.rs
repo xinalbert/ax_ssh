@@ -26,9 +26,10 @@ pub(in crate::app) fn wire_connection_request(
     let runtime_for_connect = runtime.clone();
     let font_registry_for_connect = font_registry.clone();
     let terminal_font_started_for_connect = terminal_font_started.clone();
+    let router_for_connect = window_router.clone();
     ui.on_connect_session(move |id| {
         log_ui_action("connection.open-terminal");
-        request_connection(
+        let Some(_) = request_connection(
             &ui_for_connect,
             &state_for_connect,
             &runtime_for_connect,
@@ -37,7 +38,13 @@ pub(in crate::app) fn wire_connection_request(
             id.as_str(),
             ConnectionTarget::Terminal,
             None,
-        );
+            {
+                let router = router_for_connect.clone();
+                move |tab_id, app| router.activate_tab(window_id, tab_id, app)
+            },
+        ) else {
+            return;
+        };
     });
 
     let ui_for_sftp = ui.as_weak();
@@ -45,9 +52,10 @@ pub(in crate::app) fn wire_connection_request(
     let runtime_for_sftp = runtime.clone();
     let font_registry_for_sftp = font_registry.clone();
     let terminal_font_started_for_sftp = terminal_font_started.clone();
+    let router_for_sftp = window_router.clone();
     ui.on_open_sftp_session(move |id| {
         log_ui_action("connection.open-sftp-session");
-        request_connection(
+        let Some(_) = request_connection(
             &ui_for_sftp,
             &state_for_sftp,
             &runtime_for_sftp,
@@ -56,7 +64,13 @@ pub(in crate::app) fn wire_connection_request(
             id.as_str(),
             ConnectionTarget::Sftp,
             None,
-        );
+            {
+                let router = router_for_sftp.clone();
+                move |tab_id, app| router.activate_tab(window_id, tab_id, app)
+            },
+        ) else {
+            return;
+        };
     });
 
     let ui_for_active_sftp = ui.as_weak();
@@ -79,29 +93,39 @@ pub(in crate::app) fn wire_connection_request(
             return;
         };
         match navigation {
-            SshSftpNavigation::Activated(_) => {
+            SshSftpNavigation::Activated(tab_id) => {
+                router_for_active_sftp.set_active(window_id, tab_id);
                 refresh_workspace(&ui_for_active_sftp, &state_for_active_sftp);
             }
             SshSftpNavigation::Connect {
                 profile_id,
                 target,
                 companion_tab_id,
-            } => request_profile_connection(
-                &ui_for_active_sftp,
-                &state_for_active_sftp,
-                &runtime,
-                font_registry_for_active_sftp.clone(),
-                terminal_font_started_for_active_sftp.clone(),
-                profile_id,
-                target,
-                Some(companion_tab_id),
-                None,
-            ),
+            } => {
+                let _ = request_profile_connection(
+                    &ui_for_active_sftp,
+                    &state_for_active_sftp,
+                    &runtime,
+                    font_registry_for_active_sftp.clone(),
+                    terminal_font_started_for_active_sftp.clone(),
+                    profile_id,
+                    target,
+                    Some(companion_tab_id),
+                    None,
+                    {
+                        let router = router_for_active_sftp.clone();
+                        move |new_tab_id, app| {
+                            router.include_tab(window_id, new_tab_id)
+                                && router.activate_tab(window_id, new_tab_id, app)
+                        }
+                    },
+                );
+            }
         }
     });
 }
 
-fn request_connection(
+fn request_connection<F>(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
     runtime: &Handle,
@@ -110,10 +134,14 @@ fn request_connection(
     id: &str,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
-) {
+    register_tab: F,
+) -> Option<Uuid>
+where
+    F: FnOnce(Uuid, &mut AppState) -> bool,
+{
     let profile_id = match parse_uuid(id, "session", ui) {
         Some(id) => id,
-        None => return,
+        None => return None,
     };
     request_profile_connection(
         ui,
@@ -125,10 +153,11 @@ fn request_connection(
         target,
         companion_tab_id,
         None,
-    );
+        register_tab,
+    )
 }
 
-pub(in crate::app) fn request_profile_connection(
+pub(in crate::app) fn request_profile_connection<F>(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
     runtime: &Handle,
@@ -138,7 +167,11 @@ pub(in crate::app) fn request_profile_connection(
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
     one_time_password: Option<zeroize::Zeroizing<String>>,
-) {
+    register_tab: F,
+) -> Option<Uuid>
+where
+    F: FnOnce(Uuid, &mut AppState) -> bool,
+{
     if target == ConnectionTarget::Terminal {
         load_terminal_font_on_demand(runtime, ui.clone(), font_registry, terminal_font_started);
     }
@@ -147,7 +180,7 @@ pub(in crate::app) fn request_profile_connection(
             Ok(app) => app,
             Err(_) => {
                 set_status(ui, "Cannot read session state");
-                return;
+                return None;
             }
         };
         let Some(profile) = app
@@ -158,11 +191,11 @@ pub(in crate::app) fn request_profile_connection(
             .cloned()
         else {
             set_status(ui, "Session not found");
-            return;
+            return None;
         };
         if target == ConnectionTarget::Sftp && profile.ssh().is_none() {
             set_status(ui, "SFTP is available only for SSH servers");
-            return;
+            return None;
         }
         let tab_id = match target {
             ConnectionTarget::Terminal => {
@@ -176,11 +209,19 @@ pub(in crate::app) fn request_profile_connection(
         {
             terminal.set_pending_auth_secret(password);
         }
+        if !register_tab(tab_id, &mut app) {
+            let _ = app.close_tab(tab_id);
+            set_status(
+                ui,
+                "Cannot attach connection to the requested terminal pane",
+            );
+            return None;
+        }
         match &profile.connection {
             ConnectionProfile::Ssh(ssh) if ssh.host_key_fingerprint.is_some() => {
                 let Some(terminal) = app.terminal_mut(tab_id) else {
                     set_status(ui, "Cannot prepare SSH tab");
-                    return;
+                    return None;
                 };
                 terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
                     vault_unlock_only: false,
@@ -200,7 +241,7 @@ pub(in crate::app) fn request_profile_connection(
                 };
                 let Some(terminal) = app.terminal_mut(tab_id) else {
                     set_status(ui, "Cannot prepare SSH tab");
-                    return;
+                    return None;
                 };
                 terminal.set_ssh_phase(SshConnectionPhase::Probing(probe));
                 ConnectionRequest::Ssh(ConnectionStart::Probe {
@@ -228,7 +269,7 @@ pub(in crate::app) fn request_profile_connection(
                     &format!("Cannot start Telnet connection: {error}"),
                 );
             }
-            return;
+            return Some(tab_id);
         }
         ConnectionRequest::Serial { tab_id, profile } => {
             if let Err(error) =
@@ -241,7 +282,7 @@ pub(in crate::app) fn request_profile_connection(
                     &format!("Cannot start serial connection: {error}"),
                 );
             }
-            return;
+            return Some(tab_id);
         }
         ConnectionRequest::Ssh(start) => start,
     };
@@ -253,7 +294,7 @@ pub(in crate::app) fn request_profile_connection(
             target,
         } => {
             begin_authentication(runtime, state.clone(), ui.clone(), tab_id, profile, target);
-            return;
+            return Some(tab_id);
         }
         ConnectionStart::Probe {
             tab_id,
@@ -266,7 +307,7 @@ pub(in crate::app) fn request_profile_connection(
     set_tab_status(state, ui, tab_id, "Checking SSH host key...");
     let Some(ssh) = profile.ssh() else {
         set_tab_status(state, ui, tab_id, "SSH profile is no longer available");
-        return;
+        return Some(tab_id);
     };
     let host = ssh.host.clone();
     let port = ssh.port;
@@ -345,4 +386,5 @@ pub(in crate::app) fn request_profile_connection(
             None => debug!(tab_id = %tab_id, "cancelled or stale host-key probe result ignored"),
         }
     });
+    Some(tab_id)
 }

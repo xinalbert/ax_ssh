@@ -146,11 +146,19 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 `Ctrl+Shift+[` / `Ctrl+Shift+]`。至少打开两个 Tab 时才可用；录制快捷键或处理安全提示时
 会暂时禁用。
 
-要把已连接的 SSH Terminal 及其 SFTP companion 作为独立原生窗口使用，可点击任一连接
-Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。两端会作为一个工作区组移动，
-保留已有终端输出、SFTP 目录状态、传输队列、主机密钥提示和认证阶段；AxSSH 不会重连。
-在 macOS 的 detached 窗口中点击同一行标题栏的 **Return** 按钮，可把同一组工作区合并回主窗口。
-直接关闭 detached 窗口也会执行合并，worker 继续运行。Settings 和会话编辑器 Tab 保留在主窗口。
+要把已连接 Terminal 及其当前工作区中的 terminal pane 作为独立原生窗口使用，可点击连接
+Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
+及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
+主机密钥提示和认证阶段；AxSSH 不会重连。detached Terminal 窗口只显示 terminal pane，detached
+SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标题栏的 **Return** 按钮，可把同一份
+工作区布局合并回主窗口。直接关闭 detached 窗口也会执行合并，worker 继续运行。Settings 和会话
+编辑器 Tab 保留在主窗口。
+
+在终端中使用 `Alt+H`、`Alt+J`、`Alt+K`、`Alt+L` 可聚焦左、下、上、右 pane；使用
+`Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 可在对应方向创建独立终端会话。
+每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
+包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane。关闭 terminal Tab 会移除
+对应 pane 并折叠其布局分支。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通

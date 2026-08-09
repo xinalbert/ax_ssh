@@ -45,6 +45,7 @@ use self::input::{
     format_shortcut_event_with_current_modifiers, menu_shortcut_from_setting,
     terminal_input_modifiers, terminal_key_from_slint, terminal_key_is_direct,
 };
+use self::panes::{MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PanePlacement, PaneTree};
 use self::session_groups::{
     compact_label, group_options, profile_endpoint, profile_sidebar_details,
     profile_sidebar_endpoint, session_groups,
@@ -113,12 +114,24 @@ struct WindowRoute {
     ui: slint::Weak<AppWindow>,
     transfer: Option<WorkspaceTransfer>,
     active_tab_id: Option<Uuid>,
+    pane_tree: Option<PaneTree>,
 }
 
 struct WindowView {
     ui: slint::Weak<AppWindow>,
     tabs: Vec<WorkspaceTabSummary>,
     snapshot: ActiveTabSnapshot,
+    terminal_panes: Vec<WindowTerminalPane>,
+}
+
+struct WindowTerminalPane {
+    placement: PanePlacement,
+    snapshot: ActiveTabSnapshot,
+}
+
+struct DetachedRoute {
+    transfer: WorkspaceTransfer,
+    pane_tree: Option<PaneTree>,
 }
 
 static GLOBAL_WINDOW_ROUTER: OnceLock<WindowRouter> = OnceLock::new();
@@ -132,6 +145,7 @@ impl WindowRouter {
                 ui: main_ui,
                 transfer: None,
                 active_tab_id: None,
+                pane_tree: None,
             },
         );
         Self {
@@ -144,6 +158,7 @@ impl WindowRouter {
         window_id: Uuid,
         ui: slint::Weak<AppWindow>,
         transfer: WorkspaceTransfer,
+        pane_tree: Option<PaneTree>,
     ) {
         if let Ok(mut router) = self.inner.lock() {
             router.routes.insert(
@@ -152,6 +167,7 @@ impl WindowRouter {
                     active_tab_id: transfer.active_tab_id,
                     ui,
                     transfer: Some(transfer),
+                    pane_tree,
                 },
             );
         }
@@ -183,33 +199,224 @@ impl WindowRouter {
         })
     }
 
-    fn tab_ids(&self, window_id: Uuid, app: &AppState) -> Vec<Uuid> {
-        let Ok(router) = self.inner.lock() else {
-            return Vec::new();
+    fn activate_tab(&self, window_id: Uuid, tab_id: Uuid, app: &mut AppState) -> bool {
+        let is_terminal = app
+            .terminal(tab_id)
+            .is_some_and(|terminal| !terminal.is_sftp());
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
         };
-        let Some(route) = router.routes.get(&window_id) else {
-            return Vec::new();
+        if !route_tab_ids(&router, window_id, app).contains(&tab_id) {
+            return false;
+        }
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
         };
-        route
-            .transfer
-            .as_ref()
-            .map(|transfer| transfer.tab_ids.clone())
-            .unwrap_or_else(|| {
-                let detached_ids = router
+        route.active_tab_id = Some(tab_id);
+        if is_terminal {
+            let focused_existing_pane = route
+                .pane_tree
+                .as_mut()
+                .is_some_and(|tree| tree.set_focused(tab_id));
+            if !focused_existing_pane {
+                route.pane_tree = Some(PaneTree::new(tab_id));
+            }
+        }
+        app.activate_tab(tab_id)
+    }
+
+    fn focus_terminal_pane(&self, window_id: Uuid, tab_id: Uuid, app: &mut AppState) -> bool {
+        if !app
+            .terminal(tab_id)
+            .is_some_and(|terminal| !terminal.is_sftp())
+        {
+            return false;
+        }
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
+        };
+        if !route_tab_ids(&router, window_id, app).contains(&tab_id) {
+            return false;
+        }
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
+        };
+        let focused_existing_pane = route
+            .pane_tree
+            .as_mut()
+            .is_some_and(|tree| tree.set_focused(tab_id));
+        if !focused_existing_pane {
+            route.pane_tree = Some(PaneTree::new(tab_id));
+        }
+        route.active_tab_id = Some(tab_id);
+        app.activate_tab(tab_id)
+    }
+
+    fn focus_pane_direction(
+        &self,
+        window_id: Uuid,
+        direction: PaneDirection,
+        app: &mut AppState,
+    ) -> bool {
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
+        };
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
+        };
+        let Some(tab_id) = route
+            .pane_tree
+            .as_mut()
+            .and_then(|tree| tree.focus_direction(direction))
+        else {
+            return false;
+        };
+        route.active_tab_id = Some(tab_id);
+        app.activate_tab(tab_id)
+    }
+
+    fn prepare_pane_split(&self, window_id: Uuid, tab_id: Uuid, app: &mut AppState) -> bool {
+        if !self.focus_terminal_pane(window_id, tab_id, app) {
+            return false;
+        }
+        self.inner.lock().is_ok_and(|router| {
+            router
+                .routes
+                .get(&window_id)
+                .and_then(|route| route.pane_tree.as_ref())
+                .is_some_and(|tree| tree.pane_count() < MAX_TERMINAL_PANES)
+        })
+    }
+
+    fn complete_pane_split(
+        &self,
+        window_id: Uuid,
+        source_tab_id: Uuid,
+        direction: PaneDirection,
+        new_tab_id: Uuid,
+        app: &mut AppState,
+    ) -> bool {
+        if !app
+            .terminal(new_tab_id)
+            .is_some_and(|terminal| !terminal.is_sftp())
+        {
+            return false;
+        }
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
+        };
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
+        };
+        let split = route.pane_tree.as_mut().is_some_and(|tree| {
+            tree.set_focused(source_tab_id);
+            tree.split_focused(direction, new_tab_id)
+        });
+        if !split {
+            return false;
+        }
+        if let Some(transfer) = &mut route.transfer
+            && !transfer.tab_ids.contains(&new_tab_id)
+        {
+            transfer.tab_ids.push(new_tab_id);
+        }
+        route.active_tab_id = Some(new_tab_id);
+        app.activate_tab(new_tab_id)
+    }
+
+    fn owns_terminal_pane(&self, window_id: Uuid, tab_id: Uuid, app: &AppState) -> bool {
+        app.terminal(tab_id)
+            .is_some_and(|terminal| !terminal.is_sftp())
+            && self.inner.lock().is_ok_and(|router| {
+                router
                     .routes
-                    .values()
-                    .filter_map(|route| route.transfer.as_ref())
-                    .flat_map(|transfer| transfer.tab_ids.iter().copied())
-                    .collect::<HashSet<_>>();
-                app.tab_summaries()
-                    .into_iter()
-                    .filter(|tab| !detached_ids.contains(&tab.id))
-                    .map(|tab| tab.id)
-                    .collect()
+                    .get(&window_id)
+                    .and_then(|route| route.pane_tree.as_ref())
+                    .is_some_and(|tree| tree.contains(tab_id))
             })
     }
 
-    fn remove_detached(&self, window_id: Uuid) -> Option<WorkspaceTransfer> {
+    fn tab_ids(&self, window_id: Uuid, app: &AppState) -> Vec<Uuid> {
+        self.inner
+            .lock()
+            .map(|router| route_tab_ids(&router, window_id, app))
+            .unwrap_or_default()
+    }
+
+    fn include_tab(&self, window_id: Uuid, tab_id: Uuid) -> bool {
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
+        };
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
+        };
+        if let Some(transfer) = &mut route.transfer
+            && !transfer.tab_ids.contains(&tab_id)
+        {
+            transfer.tab_ids.push(tab_id);
+        }
+        true
+    }
+
+    fn take_pane_tree_for_detach(&self, window_id: Uuid, tab_id: Uuid) -> Option<PaneTree> {
+        self.inner.lock().ok().and_then(|mut router| {
+            let route = router.routes.get_mut(&window_id)?;
+            match route.pane_tree.as_ref() {
+                Some(tree) if tree.contains(tab_id) => route.pane_tree.take(),
+                _ => Some(PaneTree::new(tab_id)),
+            }
+        })
+    }
+
+    fn pane_tab_ids(&self, window_id: Uuid, tab_id: Uuid) -> Vec<Uuid> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|router| {
+                router
+                    .routes
+                    .get(&window_id)
+                    .and_then(|route| route.pane_tree.as_ref())
+                    .filter(|tree| tree.contains(tab_id))
+                    .map(PaneTree::tab_ids)
+            })
+            .unwrap_or_else(|| vec![tab_id])
+    }
+
+    fn remove_tab(&self, tab_id: Uuid, is_terminal_pane: bool) -> Option<Uuid> {
+        let Ok(mut router) = self.inner.lock() else {
+            return None;
+        };
+        let mut replacement = None;
+        for route in router.routes.values_mut() {
+            if let Some(transfer) = &mut route.transfer {
+                transfer.tab_ids.retain(|candidate| *candidate != tab_id);
+            }
+            if !is_terminal_pane {
+                continue;
+            }
+            let Some(tree) = route.pane_tree.as_mut() else {
+                continue;
+            };
+            if !tree.contains(tab_id) {
+                continue;
+            }
+            if tree.pane_count() == 1 {
+                route.pane_tree = None;
+                if route.active_tab_id == Some(tab_id) {
+                    route.active_tab_id = None;
+                }
+                continue;
+            }
+            replacement = tree.remove(tab_id);
+            if route.active_tab_id == Some(tab_id) {
+                route.active_tab_id = replacement;
+            }
+        }
+        replacement
+    }
+
+    fn remove_detached(&self, window_id: Uuid) -> Option<DetachedRoute> {
         self.inner
             .lock()
             .ok()
@@ -217,8 +424,20 @@ impl WindowRouter {
             .and_then(|route| {
                 let mut transfer = route.transfer?;
                 transfer.active_tab_id = route.active_tab_id.or(transfer.active_tab_id);
-                Some(transfer)
+                Some(DetachedRoute {
+                    transfer,
+                    pane_tree: route.pane_tree,
+                })
             })
+    }
+
+    fn restore_detached(&self, detached: &DetachedRoute) {
+        if let Ok(mut router) = self.inner.lock()
+            && let Some(main) = router.routes.get_mut(&MAIN_WINDOW_ID)
+        {
+            main.active_tab_id = detached.transfer.active_tab_id;
+            main.pane_tree = detached.pane_tree.clone();
+        }
     }
 
     fn views(&self, app: &AppState) -> Vec<WindowView> {
@@ -263,17 +482,70 @@ impl WindowRouter {
                             .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     })
                     .or_else(|| tabs.first().map(|tab| tab.id));
+                let snapshot = app.snapshot_for(active_tab_id);
+                if snapshot.kind == "terminal" {
+                    if let Some(tab_id) = active_tab_id
+                        && route
+                            .pane_tree
+                            .as_ref()
+                            .is_none_or(|tree| !tree.contains(tab_id))
+                    {
+                        route.pane_tree = Some(PaneTree::new(tab_id));
+                    }
+                }
                 // Closing the active tab changes AppState's selection. Keep the
                 // route in sync so subsequent input cannot target the removed UUID.
                 route.active_tab_id = active_tab_id;
+                let terminal_panes = if snapshot.kind == "terminal" {
+                    route
+                        .pane_tree
+                        .as_ref()
+                        .map(PaneTree::placements)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|placement| {
+                            let pane_snapshot = app.snapshot_for(Some(placement.tab_id));
+                            (pane_snapshot.kind == "terminal").then_some(WindowTerminalPane {
+                                placement,
+                                snapshot: pane_snapshot,
+                            })
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
                 WindowView {
                     ui: route.ui.clone(),
                     tabs,
-                    snapshot: app.snapshot_for(active_tab_id),
+                    snapshot,
+                    terminal_panes,
                 }
             })
             .collect()
     }
+}
+
+fn route_tab_ids(router: &WindowRouterState, window_id: Uuid, app: &AppState) -> Vec<Uuid> {
+    let Some(route) = router.routes.get(&window_id) else {
+        return Vec::new();
+    };
+    route
+        .transfer
+        .as_ref()
+        .map(|transfer| transfer.tab_ids.clone())
+        .unwrap_or_else(|| {
+            let detached_ids = router
+                .routes
+                .values()
+                .filter_map(|route| route.transfer.as_ref())
+                .flat_map(|transfer| transfer.tab_ids.iter().copied())
+                .collect::<HashSet<_>>();
+            app.tab_summaries()
+                .into_iter()
+                .filter(|tab| !detached_ids.contains(&tab.id))
+                .map(|tab| tab.id)
+                .collect()
+        })
 }
 
 fn global_window_router() -> Option<WindowRouter> {
@@ -324,6 +596,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
         Vec::<TerminalRenderLine>::new(),
     )));
+    ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
     ui.set_sftp_entries(ModelRc::new(VecModel::from(Vec::<SftpEntryRow>::new())));
     ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(
@@ -610,6 +883,8 @@ fn wire_callbacks(
         profile_mutations.clone(),
         font_registry.clone(),
         terminal_font_started.clone(),
+        window_router.clone(),
+        window_id,
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
     wire_session_management(ui, state.clone(), runtime.clone(), profile_mutations);
@@ -618,7 +893,7 @@ fn wire_callbacks(
         state.clone(),
         runtime.clone(),
         font_registry.clone(),
-        terminal_font_started,
+        terminal_font_started.clone(),
         window_router.clone(),
         window_id,
     );
@@ -636,7 +911,7 @@ fn wire_callbacks(
         window_router.clone(),
         window_id,
     );
-    wire_settings(ui, state.clone(), runtime.clone(), font_registry);
+    wire_settings(ui, state.clone(), runtime.clone(), font_registry.clone());
     wire_sftp(
         ui,
         state.clone(),
@@ -644,7 +919,15 @@ fn wire_callbacks(
         window_router.clone(),
         window_id,
     );
-    wire_terminal(ui, state, window_router.clone(), window_id);
+    wire_terminal(
+        ui,
+        state,
+        runtime,
+        font_registry,
+        terminal_font_started,
+        window_router.clone(),
+        window_id,
+    );
     wire_window_actions(
         ui,
         state_for_window_actions,
@@ -682,6 +965,7 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
     ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
         Vec::<TerminalRenderLine>::new(),
     )));
+    ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
     ui.set_sftp_entries(ModelRc::new(VecModel::from(Vec::<SftpEntryRow>::new())));
     ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(
@@ -745,17 +1029,32 @@ fn wire_window_actions(
             Some(tab_id) => tab_id,
             None => return,
         };
-        let transfer = match state_for_detach.lock() {
+        let (transfer, pane_tree) = match state_for_detach.lock() {
             Ok(mut app) => {
                 if !router_for_detach.tab_ids(window_id, &app).contains(&tab_id) {
                     set_status(&ui_for_detach, "Tab not found in this window");
                     return;
                 }
-                let transfer = app.workspace_transfer_for(tab_id, window_id);
+                let pane_anchor = app.terminal_companion_id(tab_id).or_else(|| {
+                    app.terminal(tab_id)
+                        .is_some_and(|terminal| !terminal.is_sftp())
+                        .then_some(tab_id)
+                });
+                let pane_tab_ids = pane_anchor
+                    .map(|anchor| router_for_detach.pane_tab_ids(window_id, anchor))
+                    .unwrap_or_default();
+                let transfer = if pane_tab_ids.is_empty() {
+                    app.workspace_transfer_for_sftp(tab_id, window_id)
+                } else {
+                    app.workspace_transfer_for_terminal_panes(&pane_tab_ids, window_id, tab_id)
+                };
                 if transfer.is_some() {
                     let _ = app.activate_tab(tab_id);
                 }
-                transfer
+                let pane_tree = pane_anchor.and_then(|anchor| {
+                    router_for_detach.take_pane_tree_for_detach(window_id, anchor)
+                });
+                (transfer, pane_tree)
             }
             Err(_) => {
                 set_status(&ui_for_detach, "Cannot read workspace state");
@@ -766,7 +1065,6 @@ fn wire_window_actions(
             set_status(&ui_for_detach, "Select a terminal workspace first");
             return;
         };
-        router_for_detach.set_active(window_id, tab_id);
         // Winit delivers Slint callbacks while dispatching the source-window
         // input event. Create the native window on the next UI turn so that
         // its registration cannot re-enter that dispatch.
@@ -788,6 +1086,10 @@ fn wire_window_actions(
                 }) {
                 Ok(detached_ui) => detached_ui,
                 Err(error) => {
+                    router_for_show.restore_detached(&DetachedRoute {
+                        transfer: transfer.clone(),
+                        pane_tree: pane_tree.clone(),
+                    });
                     warn!(%error, "failed to create detached workspace window");
                     set_status(
                         &ui_for_show,
@@ -796,7 +1098,12 @@ fn wire_window_actions(
                     return;
                 }
             };
-            router_for_show.register_detached(detached_id, detached_ui.as_weak(), transfer);
+            router_for_show.register_detached(
+                detached_id,
+                detached_ui.as_weak(),
+                transfer,
+                pane_tree,
+            );
             wire_callbacks(
                 &detached_ui,
                 state_for_show.clone(),
@@ -809,7 +1116,9 @@ fn wire_window_actions(
             );
             if let Err(error) = detached_ui.show() {
                 warn!(%error, "failed to show detached workspace window");
-                router_for_show.remove_detached(detached_id);
+                if let Some(detached) = router_for_show.remove_detached(detached_id) {
+                    router_for_show.restore_detached(&detached);
+                }
                 set_status(
                     &ui_for_show,
                     &format!("Cannot show detached workspace: {error}"),
@@ -845,14 +1154,14 @@ fn wire_window_actions(
             return;
         }
         router_for_return.set_active(window_id, tab_id);
-        let Some(transfer) = router_for_return.remove_detached(window_id) else {
+        let Some(detached) = router_for_return.remove_detached(window_id) else {
             return;
         };
-        if let Some(active_tab_id) = transfer.active_tab_id {
+        router_for_return.restore_detached(&detached);
+        if let Some(active_tab_id) = detached.transfer.active_tab_id {
             if let Ok(mut app) = state_for_return.lock() {
                 app.activate_tab(active_tab_id);
             }
-            router_for_return.set_active(MAIN_WINDOW_ID, active_tab_id);
         }
         if let Some(ui) = ui_for_return.upgrade() {
             let _ = ui.window().hide();
@@ -869,12 +1178,12 @@ fn wire_window_actions(
         let router_for_close = window_router;
         let windows_for_close = detached_windows;
         ui.window().on_close_requested(move || {
-            if let Some(transfer) = router_for_close.remove_detached(window_id) {
-                if let Some(active_tab_id) = transfer.active_tab_id {
+            if let Some(detached) = router_for_close.remove_detached(window_id) {
+                router_for_close.restore_detached(&detached);
+                if let Some(active_tab_id) = detached.transfer.active_tab_id {
                     if let Ok(mut app) = state_for_close.lock() {
                         app.activate_tab(active_tab_id);
                     }
-                    router_for_close.set_active(MAIN_WINDOW_ID, active_tab_id);
                 }
                 if let Some(main_ui) = router_for_close.main_ui() {
                     refresh_workspace(&main_ui, &state_for_close);

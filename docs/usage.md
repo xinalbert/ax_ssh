@@ -220,15 +220,25 @@ the selection wraps at either end. The fixed shortcuts are `Cmd+Shift+[` /
 They are available when at least two Tabs are open and are temporarily disabled
 while recording a shortcut or answering a security prompt.
 
-To make a connected SSH Terminal and its SFTP companion a separate native
-window, use the external-link button on either connection Tab or choose
-**Window > Move Current Workspace to New Window**. The pair is
-moved as one workspace group and keeps the existing terminal output, SFTP
-directory state, transfers, host-key prompt, and authentication phase; AxSSH
-does not reconnect. In the detached macOS window, use its same-row title-bar
-**Return** button to merge the same group back. Closing the detached window performs the
-same merge and leaves the workers
-running. Settings and session-editor Tabs remain in the main window.
+To make a connected Terminal and any terminal panes in its current workspace a
+separate native window, use the external-link button on a connection Tab or
+choose **Window > Move Current Workspace to New Window**. The terminal panes and
+their SSH/SFTP companions move as one workspace group and keep existing terminal
+output, SFTP directory state, transfers, host-key prompts, and authentication
+phases; AxSSH does not reconnect. A detached Terminal window shows only its
+terminal panes, while a detached SFTP view shows only SFTP. In the detached
+macOS window, use its same-row title-bar **Return** button to merge the same
+workspace layout back. Closing the detached window performs the same merge and
+leaves workers running. Settings and session-editor Tabs remain in the main
+window.
+
+Use `Alt+H`, `Alt+J`, `Alt+K`, and `Alt+L` in a terminal to focus the left,
+down, up, and right pane. Use `Alt+Shift+H`, `Alt+Shift+J`, `Alt+Shift+K`, and
+`Alt+Shift+L` to create an independent terminal session on that side. Each pane
+has its own local PTY or profile connection; SSH panes repeat normal trust and
+authentication, including any required password or passphrase prompt. SFTP
+cannot be split into a terminal pane. Closing a terminal Tab removes its pane
+and collapses its layout branch.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.

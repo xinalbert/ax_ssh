@@ -398,7 +398,7 @@ fn mutate_direct_attempt(
         return None;
     }
     action(app.terminal_mut(tab_id)?);
-    Some(app.active_tab_id() == Some(tab_id))
+    Some(true)
 }
 
 fn finish_direct_attempt(
