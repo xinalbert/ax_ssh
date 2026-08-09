@@ -72,6 +72,7 @@ mod input;
 mod local_files;
 #[cfg(target_os = "macos")]
 mod macos_window;
+mod panes;
 mod serial_bridge;
 mod session_groups;
 mod settings_bridge;
