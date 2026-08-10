@@ -27,11 +27,14 @@ export struct TerminalViewState {
     option_as_meta: bool,
     copy_selection_shortcut: string,
     paste_shortcut: string,
+    select_all_shortcut: string,
 }
 
 export component TerminalPane inherits Rectangle {
     in property <TerminalViewState> view;
     in property <bool> focused: false;
+    in property <string> edit-command;
+    in property <int> edit-command-revision: 0;
     private property <bool> connected: root.view.connected;
     private property <string> terminal-id: root.view.terminal_id;
     private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
@@ -50,6 +53,7 @@ export component TerminalPane inherits Rectangle {
     private property <bool> option-as-meta: root.view.option_as_meta;
     private property <string> copy-selection-shortcut: root.view.copy_selection_shortcut;
     private property <string> paste-shortcut: root.view.paste_shortcut;
+    private property <string> select-all-shortcut: root.view.select_all_shortcut;
 
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -186,6 +190,17 @@ export component TerminalPane inherits Rectangle {
             root.focus-input();
         }
     }
+    changed edit-command-revision => {
+        if root.focused {
+            if root.edit-command == "copy" {
+                root.copy-selection();
+            } else if root.edit-command == "paste" {
+                root.paste-from-clipboard();
+            } else if root.edit-command == "select-all" {
+                root.select-all-visible();
+            }
+        }
+    }
     changed visible => {
         if self.visible && root.focused && root.connected {
             root.focus-input();
@@ -283,6 +298,10 @@ export component TerminalPane inherits Rectangle {
             }
             if shortcut == root.paste-shortcut {
                 root.paste-from-clipboard();
+                return EventResult.accept;
+            }
+            if shortcut == root.select-all-shortcut {
+                root.select-all-visible();
                 return EventResult.accept;
             }
             let direct-terminal-key = root.terminal-key-direct(

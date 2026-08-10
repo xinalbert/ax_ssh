@@ -13,6 +13,14 @@ const ICON_PREWARM_PENDING_KEY_LIMIT: usize = 256;
 const ICON_PREWARM_BATCH_KEY_LIMIT: usize = 64;
 static PRIVATE_KEY_OPTION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+fn terminal_select_all_shortcut_for_platform(apple_platform: bool) -> &'static str {
+    if apple_platform {
+        "Cmd+A"
+    } else {
+        "Ctrl+Shift+A"
+    }
+}
+
 pub(super) fn session_group_rows(sessions: &SessionStore) -> Vec<SessionGroupRow> {
     session_groups(sessions)
         .into_iter()
@@ -763,6 +771,7 @@ fn terminal_view_from_rendered(
         option_as_meta: ui.get_option_as_meta(),
         copy_selection_shortcut: ui.get_copy_selection_shortcut(),
         paste_shortcut: ui.get_paste_shortcut(),
+        select_all_shortcut: ui.get_select_all_shortcut(),
     }
 }
 
@@ -921,6 +930,8 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_toggle_sidebar_shortcut(settings.shortcuts.toggle_sidebar.clone().into());
     ui.set_copy_selection_shortcut(settings.shortcuts.copy_selection.clone().into());
     ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
+    let select_all_shortcut = terminal_select_all_shortcut_for_platform(cfg!(target_os = "macos"));
+    ui.set_select_all_shortcut(select_all_shortcut.into());
     ui.set_open_sftp_shortcut(settings.shortcuts.open_sftp.clone().into());
     ui.set_open_settings_menu_shortcut(menu_shortcut_keys(
         "open-settings",
@@ -941,6 +952,18 @@ pub(super) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings
     ui.set_toggle_sidebar_menu_shortcut(menu_shortcut_keys(
         "toggle-sidebar",
         &settings.shortcuts.toggle_sidebar,
+    ));
+    ui.set_copy_selection_menu_shortcut(menu_shortcut_keys(
+        "copy-terminal",
+        &settings.shortcuts.copy_selection,
+    ));
+    ui.set_paste_menu_shortcut(menu_shortcut_keys(
+        "paste-terminal",
+        &settings.shortcuts.paste,
+    ));
+    ui.set_select_all_menu_shortcut(menu_shortcut_keys(
+        "select-all-terminal",
+        select_all_shortcut,
     ));
     ui.set_open_sftp_menu_shortcut(menu_shortcut_keys(
         "open-sftp",
@@ -1401,6 +1424,15 @@ pub(super) fn dispatch_ui_result(
 mod tests {
     use super::*;
     use slint::Model;
+
+    #[test]
+    fn terminal_select_all_shortcut_preserves_shell_control_a() {
+        assert_eq!(terminal_select_all_shortcut_for_platform(true), "Cmd+A");
+        assert_eq!(
+            terminal_select_all_shortcut_for_platform(false),
+            "Ctrl+Shift+A"
+        );
+    }
 
     #[test]
     fn settings_workbench_is_exposed_as_a_workspace_tab() {

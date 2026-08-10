@@ -256,9 +256,15 @@ round trips during the current run, then return to equal splits after restart.
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
 Home and End follow application-cursor mode in full-screen programs. Plain
-`Ctrl+C` is sent to the active terminal as an interrupt. Default clipboard
-shortcuts are `Cmd+C` / `Cmd+V` on macOS and `Ctrl+Shift+C` / `Ctrl+Shift+V` on
-Windows and Linux. These shortcuts can be changed in Settings.
+`Ctrl+C` is sent to the active terminal as an interrupt. With a Terminal Tab
+active, **Edit > Copy**, **Paste**, and **Select All** affect only the focused
+terminal pane. Default Copy/Paste shortcuts are `Cmd+C` / `Cmd+V` on macOS and
+`Ctrl+Shift+C` / `Ctrl+Shift+V` on Windows and Linux; these can be changed in
+Settings. Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` elsewhere.
+Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
+The same keyboard shortcuts work in a detached Terminal window even though it
+has no client-area menu. Non-secret text fields retain their native editing
+shortcuts and context menus; secret fields remain non-copyable.
 The default **New Server** shortcut is `Cmd+N` on macOS and `Ctrl+N` elsewhere.
 The default File-menu transfer shortcuts are `Cmd/Ctrl+Shift+I` for import and
 `Cmd/Ctrl+Shift+E` for export of the selected group or server. Menu commands

@@ -181,12 +181,16 @@ export component AppWindow inherits Window {
     in property <string> toggle-sidebar-shortcut;
     in property <string> copy-selection-shortcut;
     in property <string> paste-shortcut;
+    in property <string> select-all-shortcut;
     in property <string> open-sftp-shortcut;
     in property <keys> open-settings-menu-shortcut;
     in property <keys> new-session-menu-shortcut;
     in property <keys> import-sessions-menu-shortcut;
     in property <keys> export-selected-menu-shortcut;
     in property <keys> toggle-sidebar-menu-shortcut;
+    in property <keys> copy-selection-menu-shortcut;
+    in property <keys> paste-menu-shortcut;
+    in property <keys> select-all-menu-shortcut;
     in property <keys> open-sftp-menu-shortcut;
     in property <keys> previous-tab-menu-shortcut;
     in property <keys> next-tab-menu-shortcut;
@@ -231,6 +235,7 @@ export component AppWindow inherits Window {
             right_click_copy_or_paste: root.right-click-copy-or-paste,
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
+            select_all_shortcut: root.select-all-shortcut,
         },
         terminal_panes: root.terminal-panes,
         terminal_dividers: root.terminal-dividers,
@@ -444,7 +449,35 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: "Edit";
-            MenuItem { title: "Undo"; enabled: false; }
+            MenuItem {
+                title: "Copy";
+                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                shortcut: root.copy-selection-menu-shortcut;
+                activated => {
+                    root.menu-action("copy-terminal");
+                    workspace-shell.terminal-edit-action("copy");
+                }
+            }
+            MenuItem {
+                title: "Paste";
+                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                shortcut: root.paste-menu-shortcut;
+                activated => {
+                    root.menu-action("paste-terminal");
+                    workspace-shell.terminal-edit-action("paste");
+                }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Select All";
+                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                shortcut: root.select-all-menu-shortcut;
+                activated => {
+                    root.menu-action("select-all-terminal");
+                    workspace-shell.terminal-edit-action("select-all");
+                }
+            }
+            if !root.apple-platform : MenuSeparator { }
             if !root.apple-platform : MenuItem {
                 title: "Settings...";
                 enabled: root.menu-shortcuts-enabled;

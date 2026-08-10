@@ -545,6 +545,18 @@ mod tests {
         let expected_other_next = slint::Keys::from_parts(["Control", "Shift", "]"])
             .expect("expected non-Apple next-tab shortcut should parse");
         assert!(other_next.keys == expected_other_next);
+
+        let apple_select_all = menu_shortcut_from_setting_for_platform("Cmd+A", true)
+            .expect("Apple terminal select-all shortcut should parse");
+        let expected_apple_select_all = slint::Keys::from_parts(["Control", "A"])
+            .expect("expected Apple terminal select-all shortcut should parse");
+        assert!(apple_select_all.keys == expected_apple_select_all);
+
+        let other_select_all = menu_shortcut_from_setting_for_platform("Ctrl+Shift+A", false)
+            .expect("non-Apple terminal select-all shortcut should parse");
+        let expected_other_select_all = slint::Keys::from_parts(["Control", "Shift", "A"])
+            .expect("expected non-Apple terminal select-all shortcut should parse");
+        assert!(other_select_all.keys == expected_other_select_all);
     }
 
     #[test]

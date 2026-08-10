@@ -95,6 +95,9 @@ Rust
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有 worker、终端缓冲区或连接状态。
 终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
+Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
+但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
+应用状态。
 divider 手势只携带稳定的前序 divider ID 和标准化比例；`WindowRouter` 会对当前活动 `PaneTree`
 重验，比例及重新发布的叶节点/divider 几何都由该树拥有。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
@@ -253,14 +256,20 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     target 只在主线程运行且只捕获 `Weak<AppWindow>`；由于 target 为弱引用，菜单项用
     represented object 保持其生命周期。应用边界用单一解析器把配置字符串转换为
     `slint::Keys`；Apple 上持久化的 `Cmd` 映射为 Slint `Control`，物理 `Ctrl` 映射为
-    Slint `Meta`，因此 Muda 负责绘制和激活原生 accelerator，不在标题后拼接文字。macOS
+    Slint `Meta`，因此 Muda 负责绘制和激活原生 accelerator，不在标题后拼接文字。Edit 菜单
+    只为 Terminal 提供 **Copy**、**Paste** 和 **Select All**，并移除永久 disabled 的 Undo
+    占位。Copy/Paste 复用可配置的终端快捷键；Select All 固定为 macOS `Cmd+A`、
+    Windows/Linux `Ctrl+Shift+A`，从而保留这些平台终端内普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V`
+    的输入语义。非 Terminal Tab 中这些命令保持 disabled，因此普通非秘密文本字段继续使用
+    原生编辑快捷键和右键菜单，秘密字段仍不可复制；本轮不增加通用文本焦点 bridge、Cut 或 Undo。
+    macOS
     的 **Previous Tab** / **Next Tab** 通过同一解析器使用固定 `Cmd+Shift+[` /
     `Cmd+Shift+]`，Windows/Linux 使用 `Ctrl+Shift+[` / `Ctrl+Shift+]`。它们只在多于一个
     Tab 时启用，并共用快捷键录制/安全提示禁用闸门。macOS
     的关闭 Tab 菜单项与跨平台固定的 **Switch SSH/SFTP Tab** 菜单项刻意不绑定动态活动 Tab
-    属性。应用 callback 只在命令触发时解析当前运行时 Tab，因此 Tab 身份、类型、连接和
-    SFTP loading 变化不会重建原生菜单。快捷键、安全状态变化以及替换工作区 Tab model 仍可能触发
-    原生菜单重建，AppKit bridge 随后会幂等重绑当前 Settings/About；重绑会扫描当前 native menu
+    属性，其应用 callback 只在命令触发时解析当前运行时 Tab。只有 Terminal Edit 的 enabled
+    状态跟随活动 Tab 类型；工作区刷新、快捷键/安全状态变化以及替换工作区 Tab model 都可能触发
+    原生菜单重建，既有 AppKit bridge 随后会幂等重绑当前 Settings/About；重绑会扫描当前 native menu
     tree 的应用 submenu 和 About 标题，兼容平台使用的省略号写法，并在 AppKit 尚未发布重建菜单时
     短暂重试。有界重试预算内的瞬时查找失败保持静默；只有预算耗尽后才输出一条带总尝试次数的
     warning。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
@@ -312,6 +321,7 @@ Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；ma
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
 终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
 Tokio receiver、终端缓冲区或秘密。
+独立 Terminal 虽然不增加客户区菜单，仍保留相同的 Copy/Paste/Select All 直接键盘处理。
 
 `WindowRouter` 按转移后的 Tab UUID 映射当前窗口的 weak UI handle。刷新时每个路由
 得到过滤后的 Tab model 和对应 snapshot，因此 worker 的迟到事件仍会更新当前拥有该

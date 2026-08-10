@@ -167,6 +167,8 @@ component TerminalPaneDivider inherits FocusScope {
 component TerminalPaneGroup inherits Rectangle {
     in property <[TerminalPaneView]> panes;
     in property <[TerminalPaneDividerView]> dividers;
+    in property <string> terminal-edit-command;
+    in property <int> terminal-edit-command-revision: 0;
 
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -187,6 +189,8 @@ component TerminalPaneGroup inherits Rectangle {
         height: pane.height * parent.height;
         view: pane.terminal;
         focused: pane.focused;
+        edit-command: root.terminal-edit-command;
+        edit-command-revision: root.terminal-edit-command-revision;
         terminal-key(text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(
                 pane.terminal.terminal_id, text, alt, control, meta, shift, physical-key-event,
@@ -240,6 +244,8 @@ component TerminalPaneGroup inherits Rectangle {
 // surface. Its title and return control belong to the native window chrome.
 component DetachedWorkspaceContent inherits Rectangle {
     in property <WorkspaceViewState> view;
+    in property <string> terminal-edit-command;
+    in property <int> terminal-edit-command-revision: 0;
 
     callback close-tab(string);
     callback list-sftp-directory(string);
@@ -282,6 +288,8 @@ component DetachedWorkspaceContent inherits Rectangle {
             height: parent.height;
             panes: root.view.terminal_panes;
             dividers: root.view.terminal_dividers;
+            terminal-edit-command: root.terminal-edit-command;
+            terminal-edit-command-revision: root.terminal-edit-command-revision;
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }
@@ -352,6 +360,8 @@ export component WorkspaceShell inherits Rectangle {
     private property <float> sftp-directory-split-ratio: 0.5;
     private property <float> sftp-files-split-ratio: 0.7;
     private property <bool> sftp-transfers-collapsed: false;
+    private property <string> terminal-edit-command: "";
+    private property <int> terminal-edit-command-revision: 0;
 
     callback new-session();
     callback new-session-in-group(string);
@@ -424,6 +434,15 @@ export component WorkspaceShell inherits Rectangle {
         session-navigation.export-selected-session-config();
     }
 
+    public function terminal-edit-action(command: string) {
+        if command == "copy" || command == "paste" || command == "select-all" {
+            root.terminal-edit-command = command;
+            root.terminal-edit-command-revision = root.terminal-edit-command-revision == 2147483647
+                ? 1
+                : root.terminal-edit-command-revision + 1;
+        }
+    }
+
     public function dismiss-transient-controls() -> bool {
         if root.connection-picker-open {
             root.connection-picker-open = false;
@@ -445,6 +464,8 @@ export component WorkspaceShell inherits Rectangle {
         width: parent.width;
         height: parent.height;
         view: root.view;
+        terminal-edit-command: root.terminal-edit-command;
+        terminal-edit-command-revision: root.terminal-edit-command-revision;
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
         load-more-sftp => { root.load-more-sftp(); }
@@ -574,6 +595,8 @@ export component WorkspaceShell inherits Rectangle {
                         height: parent.height;
                         panes: root.view.terminal_panes;
                         dividers: root.view.terminal_dividers;
+                        terminal-edit-command: root.terminal-edit-command;
+                        terminal-edit-command-revision: root.terminal-edit-command-revision;
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }

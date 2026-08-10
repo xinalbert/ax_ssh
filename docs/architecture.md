@@ -106,6 +106,10 @@ cursor blink, and measured sizing. It never owns a worker, a terminal buffer,
 or connection state. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
+Terminal Edit-menu intent stays in Slint as a validated command plus bounded
+revision. Every pane observes that signal, but only the focused pane invokes its
+existing local copy, paste, or select-all operation; selection coordinates and
+text are not promoted into application state for menu routing.
 Divider gestures carry only the stable preorder divider ID and a normalized
 ratio. `WindowRouter` validates them against the active `PaneTree`, which owns
 the bounded ratio and republishes both leaf geometry and divider geometry.
@@ -372,18 +376,25 @@ must not locally hide either dialog before the Rust state transition accepts it.
     converted in one application-boundary parser to `slint::Keys`; on Apple,
     persisted `Cmd` maps to Slint `Control`, while physical `Ctrl` maps to Slint
     `Meta`. Muda therefore renders and activates native accelerators instead of
-    appending shortcut text to titles. **Previous Tab** and **Next Tab** use the
+    appending shortcut text to titles. Edit exposes terminal-only **Copy**,
+    **Paste**, and **Select All** commands and removes the permanently disabled
+    Undo placeholder. Copy/Paste reuse their configurable terminal shortcuts;
+    Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` on Windows/Linux,
+    preserving plain terminal `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` on those platforms.
+    The commands are disabled outside a Terminal Tab, so ordinary non-secret
+    text fields retain native editing shortcuts and context menus; secret fields
+    remain non-copyable. No generic text-focus bridge, Cut, or Undo command is
+    introduced. **Previous Tab** and **Next Tab** use the
     same parser for fixed `Cmd+Shift+[` / `Cmd+Shift+]` accelerators on macOS
     and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows/Linux. They are enabled only
     with more than one Tab and share the shortcut-recording/security gate. The
-    macOS close-tab item and the
-    cross-platform fixed **Switch SSH/SFTP Tab** item intentionally have no
-    dynamic active-tab menu properties. The application callback resolves the
-    active runtime Tab only when the command is invoked, so Tab identity, kind,
-    connection, and SFTP loading changes do not rebuild the native menu.
-    Shortcut or security-state changes, and replacement of the workspace Tab
-    model, may still rebuild it; the AppKit bridge then idempotently rebinds
-    the current Settings/About items. Rebinding scans the current native menu
+    macOS close-tab item and the cross-platform fixed **Switch SSH/SFTP Tab**
+    item intentionally have no dynamic active-tab menu properties. Their
+    application callbacks resolve the active runtime Tab only when invoked.
+    Terminal Edit enablement alone follows the active Tab kind; workspace
+    refreshes, shortcut/security-state changes, and replacement of the workspace
+    Tab model may therefore rebuild the native menu. The existing AppKit bridge
+    then idempotently rebinds the current Settings/About items. Rebinding scans the current native menu
     tree for the application submenu and About title, accepts the platform's
     ellipsis spelling for Settings, and retries briefly when AppKit has not
     published the rebuilt menu yet. Transient lookup failures remain silent
@@ -468,6 +479,8 @@ window ID, terminal-pane UUIDs with their SSH/SFTP companions, and the active
 Tab UUID; it never
 contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
 secret.
+Detached Terminal panes keep the same direct Copy/Paste/Select All keyboard
+handling even though no client menu is added.
 
 `WindowRouter` maps each transferred Tab UUID to the current window's weak UI
 handle. Refreshes publish a filtered Tab model and the snapshot for each route,

@@ -189,3 +189,19 @@
 - 受影响文件：`src/app.rs`、`src/app/{panes,terminal_bridge,view}.rs`、`ui/{app,workspace-shell,theme}.slint`、双语多 pane 说明和项目记录。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机仍以直接 Rustfmt 代替缺失的 Cargo fmt，Clippy 由安装组件的 CI 执行。
 - 验证结果：6 项 pane 定向测试、比例跨 Tab/detach/return 路由测试、直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 124、Doc tests 0）、tracker validator、44 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；真实 divider 对比度、宽高拖动、键盘焦点、无障碍读取和 PTY resize 需目标平台人工验收。
+
+## 2026-08-10 记录跨平台 Terminal Edit 菜单环境
+
+- 日期：2026-08-10
+- 变化摘要：主窗口 Edit 增加只作用于 focused Terminal pane 的 Copy/Paste/Select All，detached Terminal 增加相同直接键盘路径；复用锁定的 Slint 1.17.1、现有 shortcut parser 和 clipboard callback，没有新增运行时依赖或外部服务。
+- 受影响文件：`src/app/{input,view,diagnostics}.rs`、`ui/{app,workspace-shell,terminal-pane}.slint`、双语架构/使用说明和项目记录。
+- 更新后的命令或环境：Rust 2024、MSRV 1.92.0、Cargo locked/offline 与三平台 CI 命令不变；Select All 固定为 macOS `Cmd+A`、Windows/Linux `Ctrl+Shift+A`，不增加配置 schema。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、3 项定向测试、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过；本机仍缺 Cargo fmt/Clippy 子命令，完整测试和目标平台原生菜单/焦点行为待最终门禁。
+
+## 2026-08-10 完成跨平台 Terminal Edit 菜单环境门禁
+
+- 日期：2026-08-10
+- 变化摘要：完成 Terminal-only Edit menu、focused pane 本地命令路由和 detached 直接快捷键的完整 locked/offline 验证；环境事实与预检一致。
+- 受影响文件：`src/app/{input,view,diagnostics}.rs`、`ui/{app,workspace-shell,terminal-pane}.slint`、双语架构/使用说明和项目记录。
+- 更新后的命令或环境：依赖、锁文件、Rust edition/MSRV、配置 schema 和 CI 命令均不变；本机继续用直接 Rustfmt 覆盖格式检查，Cargo fmt/Clippy 由安装相应组件的环境执行。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 125、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；三平台原生菜单显示、focused pane 定向和 detached 快捷键需用户人工验收。

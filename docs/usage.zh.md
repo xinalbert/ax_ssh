@@ -171,9 +171,13 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
-`Ctrl+C` 会作为中断信号发送给活动终端。默认剪贴板快捷键在 macOS 上为
-`Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`；
-这些快捷键可以在 Settings 中修改。
+`Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、
+**Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
+`Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`，并可在
+Settings 中修改；Select All 固定为 macOS `Cmd+A`、其它平台 `Ctrl+Shift+A`。
+Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。detached Terminal
+虽然没有客户区菜单，仍可使用相同键盘快捷键。普通非秘密文本字段继续使用原生编辑快捷键和
+右键菜单，秘密字段仍不可复制。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。
 File 菜单导入默认使用 `Cmd/Ctrl+Shift+I`，导出所选 Group 或服务器默认使用
 `Cmd/Ctrl+Shift+E`。菜单命令会把当前配置显示为原生 accelerator；录制快捷键或处理安全
