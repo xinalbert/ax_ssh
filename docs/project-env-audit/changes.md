@@ -173,3 +173,11 @@
 - 受影响文件：`src/app.rs`、`src/app/`、`ui/{app,workspace-shell,terminal-pane}.slint`、`docs/`。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0 和 locked/offline Cargo 门禁；本机缺少 Cargo fmt/Clippy 子命令时，使用直接 `rustfmt --edition 2024` 检查已改 Rust 文件。
 - 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；目标平台 GUI/真实 SSH、Telnet、Serial 生命周期验收仍待用户完成。
+
+## 2026-08-10 启用 macOS image-only 返回图标 API
+
+- 日期：2026-08-10
+- 变化摘要：在已锁定的 `objc2-app-kit 0.3.2` 上启用 `NSCell` feature，使 detached 标题栏按钮可使用 `NSCellImagePosition::ImageOnly`；没有新增 crate、升级版本或修改 `Cargo.lock`。
+- 受影响文件：`Cargo.toml`、`src/app/macos_window.rs`、双语多窗口说明和项目记录。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、macOS 11.0 与 locked/offline 门禁；按钮优先使用 SF Symbol `arrow.uturn.backward`，并回退到 AppKit `NSImageNameGoBackTemplate`。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 121、Doc tests 0）、tracker validator、44 个 Markdown 相对链接和 `git diff --check` 通过；`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行。真实标题栏图标、Tooltip、无障碍读取与点击行为需目标 macOS 用户验收。

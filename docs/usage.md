@@ -227,8 +227,9 @@ their SSH/SFTP companions move as one workspace group and keep existing terminal
 output, SFTP directory state, transfers, host-key prompts, and authentication
 phases; AxSSH does not reconnect. A detached Terminal window shows only its
 terminal panes, while a detached SFTP view shows only SFTP. In the detached
-macOS window, use its same-row title-bar **Return** button to merge the same
-workspace layout back. Closing the detached window performs the same merge and
+macOS window, use the same-row return icon in the title bar to merge the same
+workspace layout back. Hovering the icon shows **Return workspace to main
+window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
 

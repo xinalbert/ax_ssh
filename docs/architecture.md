@@ -453,7 +453,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
 The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
 that workspace into a second native Slint window. A detached window uses the
 active connection title as its native title and, on macOS, provides a native
-title-bar **Return** button on that same title-bar row. Its client content contains only the active
+icon-only return button on that same title-bar row. It uses the system return
+symbol with an AppKit template fallback and exposes its purpose through a
+tooltip and accessibility description. Its client content contains only the active
 `TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
 connection picker, Settings, session editor, or client menu. `AppState` remains
 the sole owner of the Tab

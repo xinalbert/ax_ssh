@@ -6,11 +6,11 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSButton, NSDeleteFunctionKey,
+    NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSDeleteFunctionKey,
     NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags, NSF1FunctionKey,
-    NSHomeFunctionKey, NSImage, NSInsertFunctionKey, NSLeftArrowFunctionKey, NSMenu, NSMenuItem,
-    NSPageDownFunctionKey, NSPageUpFunctionKey, NSRightArrowFunctionKey, NSUpArrowFunctionKey,
-    NSView, NSWindow, NSWindowButton,
+    NSHomeFunctionKey, NSImage, NSImageNameGoBackTemplate, NSInsertFunctionKey,
+    NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
+    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
 };
 use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -66,7 +66,7 @@ impl NativeMenuTarget {
     }
 }
 
-const RETURN_BUTTON_WIDTH: f64 = 58.0;
+const RETURN_BUTTON_WIDTH: f64 = 28.0;
 const RETURN_BUTTON_HEIGHT: f64 = 20.0;
 const RETURN_BUTTON_TRAILING_MARGIN: f64 = 12.0;
 
@@ -124,9 +124,24 @@ pub(super) fn configure_detached_return_button(
     let mtm =
         MainThreadMarker::new().context("macOS title-bar setup must run on the main thread")?;
     let button = NativeReturnButton::new(mtm, return_workspace);
-    let title = NSString::from_str("Return");
-    button.setTitle(&title);
-    button.setToolTip(Some(&NSString::from_str("Return workspace to main window")));
+    let accessibility_description = NSString::from_str("Return workspace to main window");
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str("arrow.uturn.backward"),
+        Some(&accessibility_description),
+    )
+    .or_else(|| {
+        // SAFETY: AppKit exports this process-lifetime NSImageName constant on
+        // every supported macOS version; this code only reads its shared value.
+        let fallback_name = unsafe { NSImageNameGoBackTemplate };
+        let image = NSImage::imageNamed(fallback_name)?;
+        image.setAccessibilityDescription(Some(&accessibility_description));
+        Some(image)
+    })
+    .context("AppKit could not load the detached workspace return icon")?;
+    button.setTitle(&NSString::new());
+    button.setImage(Some(&image));
+    button.setImagePosition(NSCellImagePosition::ImageOnly);
+    button.setToolTip(Some(&accessibility_description));
     // SAFETY: `returnWorkspace:` is implemented by NativeReturnButton. NSControl
     // keeps targets weakly, while the title-bar view retains the button itself.
     unsafe {

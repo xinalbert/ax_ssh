@@ -59,8 +59,8 @@ registry.
   closing a detached window must remove only its route and must not reconnect or
   shut down the transferred workers. Its client view may render only active
   Terminal/SFTP content; the detached native title carries the connection name,
-  and the macOS title-bar **Return** button stays on that same row and invokes
-  the existing route handler.
+  and the macOS title-bar icon-only return button stays on that same row, exposes
+  a tooltip/accessibility description, and invokes the existing route handler.
   Inline main-window actions must pass their Tab UUID directly to that handler
   rather than relying on callback order.
 - Keep terminal input, output batches, event queues, and scrollback bounded.

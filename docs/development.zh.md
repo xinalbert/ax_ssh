@@ -47,7 +47,8 @@ git diff --check
   必须使用只含受限 UUID 的 `WorkspaceTransfer` 移动；snapshot 由 `WindowRouter` 按窗口路由，
   russh handle、receiver、终端缓冲区和秘密仍留在 `AppState`/worker。返回或关闭 detached 窗口
   只能移除路由，不得重连或关闭已转移的 worker。其客户区只能渲染活动 Terminal/SFTP 内容；
-  detached 原生标题显示连接名，macOS 同一行标题栏的 **Return** 按钮调用既有路由 handler。主窗口
+  detached 原生标题显示连接名，macOS 同一行标题栏的纯图标返回按钮通过 Tooltip/无障碍描述说明
+  用途，并调用既有路由 handler。主窗口
   Tab 内联动作必须把 Tab UUID 直接传入该 handler，不得依赖多个 callback 的调用顺序。
 - 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或

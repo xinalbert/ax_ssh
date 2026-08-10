@@ -150,8 +150,9 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
 及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
 主机密钥提示和认证阶段；AxSSH 不会重连。detached Terminal 窗口只显示 terminal pane，detached
-SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标题栏的 **Return** 按钮，可把同一份
-工作区布局合并回主窗口。直接关闭 detached 窗口也会执行合并，worker 继续运行。Settings 和会话
+SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标题栏的返回图标，可把同一份
+工作区布局合并回主窗口；悬停时会显示 **Return workspace to main window**。直接关闭 detached
+窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
 
 终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标：左侧为纵向分屏，在右侧新建 pane；

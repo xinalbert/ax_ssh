@@ -302,8 +302,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
-Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 还在同一行标题栏提供 **Return**
-按钮。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup` 或 `SftpPane`，不包含 Tab 条、
+Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 还在同一行标题栏提供只显示
+系统返回符号的图标按钮，并在系统符号不可用时回退到 AppKit 模板图标。按钮通过 Tooltip 和
+无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
+或 `SftpPane`，不包含 Tab 条、
 会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
 终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
