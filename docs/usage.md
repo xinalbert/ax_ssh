@@ -232,11 +232,15 @@ workspace layout back. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
 
-Use `Alt+H`, `Alt+J`, `Alt+K`, and `Alt+L` in a terminal to focus the left,
-down, up, and right pane. Use `Alt+Shift+H`, `Alt+Shift+J`, `Alt+Shift+K`, and
-`Alt+Shift+L` to create an independent terminal session on that side. Each pane
-has its own local PTY or profile connection; SSH panes repeat normal trust and
-authentication, including any required password or passphrase prompt. SFTP
+The terminal Tab toolbar has two controls beside the saved-connection button:
+the left control splits vertically and opens a new pane to the right, while the
+right control splits horizontally and opens a new pane below. They always act
+on the active terminal pane. Use `Alt+H`, `Alt+J`,
+`Alt+K`, and `Alt+L` in a terminal to focus the left, down, up, and right
+pane. Use `Alt+Shift+H`, `Alt+Shift+J`, `Alt+Shift+K`, and
+`Alt+Shift+L` to create an independent terminal session on that side. Each
+pane has its own local PTY or profile connection; SSH panes repeat normal trust
+and authentication, including any required password or passphrase prompt. SFTP
 cannot be split into a terminal pane. Closing a terminal Tab removes its pane
 and collapses its layout branch.
 

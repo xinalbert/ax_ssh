@@ -1,5 +1,13 @@
 # 项目环境变化记录
 
+## 2026-08-10 记录终端 pane 可见分屏控件环境事实
+
+- 日期：2026-08-10
+- 变化摘要：在主窗口 `WorkspaceTitlebar` 内增加一组可聚焦的纵向/横向分屏图标和 Tooltip；控件复用活动 pane UUID 的 callback，没有新增 crate、修改 `Cargo.toml`/`Cargo.lock`、调整 Rust edition/MSRV 或 CI 命令。
+- 受影响文件：`ui/{components/workspace-titlebar,workspace-shell,theme}.slint`、`docs/{usage,usage.zh,architecture,architecture.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 locked/offline Cargo 门禁；本机 `cargo fmt`/`cargo clippy` 子命令仍不可用。
+- 验证结果：`cargo check --locked --offline` 已重新编译完整 Slint 图，完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）、tracker validator、Markdown 相对链接检查和 `git diff --check` 均通过；`cargo fmt`/`cargo clippy` 因本机未安装对应子命令无法执行。目标平台 GUI/真实连接验收仍待用户完成。
+
 ## 2026-08-03 刷新最终提交门禁环境
 
 - 日期：2026-08-03

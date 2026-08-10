@@ -154,8 +154,10 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 工作区布局合并回主窗口。直接关闭 detached 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
 
-在终端中使用 `Alt+H`、`Alt+J`、`Alt+K`、`Alt+L` 可聚焦左、下、上、右 pane；使用
-`Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 可在对应方向创建独立终端会话。
+终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标：左侧为纵向分屏，在右侧新建 pane；
+右侧为横向分屏，在下方新建 pane。它们始终作用于当前活动的终端 pane。也可在终端中使用
+`Alt+H`、`Alt+J`、`Alt+K`、`Alt+L` 聚焦左、下、上、右 pane；
+使用 `Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 在对应方向创建独立终端会话。
 每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
 包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane。关闭 terminal Tab 会移除
 对应 pane 并折叠其布局分支。

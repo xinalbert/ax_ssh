@@ -47,6 +47,8 @@ git diff --check
 
 ## 证据文件
 
+- 2026-08-10 主窗口 Tab 管理栏的纵向/横向分屏控件已通过 `cargo check --locked --offline` 重新编译完整 Slint 图和完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）；没有 Cargo 依赖、锁文件、工具链或 CI 契约变化。`cargo fmt`/`cargo clippy` 子命令本机未安装；目标平台按钮可见性/focus/点击和实际 SSH/Telnet/Serial 生命周期仍需用户验收。
+
 - `Cargo.toml`
 - `Cargo.lock`
 - `.github/workflows/ci.yml`
@@ -55,4 +57,4 @@ git diff --check
 
 ## 最后确认时间
 
-- 2026-08-09 23:52 +0800
+- 2026-08-10 08:02 +0800

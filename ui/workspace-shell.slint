@@ -377,6 +377,7 @@ export component WorkspaceShell inherits Rectangle {
                 workspace-titlebar := WorkspaceTitlebar {
                     tabs: root.view.workspace_tabs;
                     active-tab-id: root.view.active_tab_id;
+                    active-tab-kind: root.view.active_tab_kind;
                     tab-width: root.view.tab_width;
                     terminal-background: root.view.terminal_background;
                     connection-picker-open: root.connection-picker-open;
@@ -399,6 +400,9 @@ export component WorkspaceShell inherits Rectangle {
                     return-workspace(id) => {
                         root.connection-picker-open = false;
                         root.return-workspace(id);
+                    }
+                    terminal-pane-command(command) => {
+                        root.terminal-pane-command(root.view.active_tab_id, command);
                     }
                     toggle-connection-picker => {
                         root.connection-picker-open = !root.connection-picker-open;

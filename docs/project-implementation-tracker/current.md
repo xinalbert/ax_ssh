@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260809-terminal-pane-splitting
-- 目标：让主窗口和 detached Terminal 窗口都能将终端按行或列拆分，并提供与参考产品一致的方向焦点和拆分快捷键。
-- 交付物：有界且可测试的窗口内窗格树、每窗格独立 Terminal Tab/worker、按 Tab UUID 定向的终端 callback、主窗口与 detached 窗口共享的窗格 UI、快捷键、双语说明、回归测试和独立提交。
+- 目标 ID：20260810-terminal-pane-controls
+- 目标：为主窗口 Terminal Tab 管理栏添加可发现的横向、纵向分屏图标按钮，同时保留主窗口和 detached Terminal 的现有方向快捷键。
+- 交付物：顶部一组有无障碍名称与悬停说明的紧凑分屏按钮、复用既有活动 pane UUID pane-command callback 的实现、双语使用/架构说明、跟踪记录和独立提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app.rs`、新增 `src/app/panes.rs`、`src/app/{state,terminal_bridge,view,workspace}.rs`、`ui/{app,workspace-shell,terminal-pane}.slint`、相关单元测试、双语架构/使用文档和项目实施记录。
-- 不在本轮范围内：SFTP 分栏、同一 PTY/SSH channel 的双重渲染、worker/russh handle 迁移、配置持久化恢复、SSH trust/credential 契约、依赖或工具链升级，以及 `third_package/axshell`。
+- 当前范围：`ui/{components/workspace-titlebar,workspace-shell,theme}.slint`、`docs/{usage,usage.zh,architecture,architecture.zh}.md`、`docs/project-{implementation-tracker,env-audit}/` 与当前提交。
+- 不在本轮范围内：PaneTree 行为、Rust callback/worker/SSH transport、SFTP pane、同一 PTY 或 SSH channel 的多重渲染、持久化、依赖或工具链升级，以及 `third_package/axshell`。
 
 ## 当前状态
 
@@ -23,40 +23,32 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| PANE1 | completed | 确认既有未提交变更的提交边界，并定义窗口级有界窗格树和方向操作 | staged diff review、窗格树单元测试 | 窗格树只保存 UUID 与布局，不持有 Slint、worker、receiver 或秘密。 |
-| PANE2 | completed | 为拆分创建独立 terminal session，并把输入、resize、scroll、selection 精确路由到目标 UUID | focused application/state tests、Cargo check | 不复制 live PTY/russh handle；SSH child 沿正常认证流程且不继承短期秘密。 |
-| PANE3 | completed | 主窗口与 detached 窗口渲染同一窗格布局，提供关闭、聚焦和行/列拆分意图 | Slint compile、Cargo check | SFTP 保持独立 surface；返回主窗口时保留该窗口的 pane layout。 |
-| PANE4 | completed | 接入 `Alt+H/J/K/L` 焦点与 `Alt+Shift+H/J/K/L` 方向拆分快捷键 | pane/state tests、目标平台手工验收 | macOS Option/Meta 语义保持可用，未知或被拒绝操作不吞掉普通终端输入。 |
-| PANE5 | completed | 补齐双语文档、项目地图和月度记录，执行全量门禁并按逻辑范围提交 | Rustfmt/Cargo/test/tracker/Markdown/diff/staged review | 不引入参考项目源码、依赖或文档链接。 |
+| PCTRL1 | completed | 在主窗口 Tab 管理栏增加一组纵向、横向分屏图标，并将 intent 定向到活动 pane UUID | `cargo check --locked --offline` | 控件只调用既有 `pane-command`，不会持有 worker、连接或秘密。 |
+| PCTRL2 | completed | 同步双语使用/架构说明、环境审计和实施跟踪 | tracker validator、Markdown 相对链接检查 | 说明现有 Alt 快捷键和点击后的独立会话语义。 |
+| PCTRL3 | completed | 运行 Rust/Slint 自动化门禁，审阅提交范围并创建逻辑独立提交 | check/test/tracker/Markdown/diff/staged review | GUI 视觉、焦点和真实连接生命周期仍由目标平台用户验收。 |
 
 ## 已完成
 
-- 已完成环境复核：Rust 2024、MSRV 1.92.0、Cargo locked/offline、Slint 1.17.1、Tokio/russh 版本和 CI 契约未漂移；本机 `cargo fmt` 与 `cargo clippy` 子命令仍缺失。
-- 已审阅参考产品的窗格产品行为和默认快捷键，但不会引入其代码、Cargo 依赖、生成输入或文档链接。
-- 已确认 ownership：`AppState` 继续独占每个 Terminal Tab 及其 worker，`WindowRouter` 拥有每个 window 的 volatile pane tree，Slint 只接收有界 snapshot 并发出 UUID intent。SSH host-key trust、credential 和 transport API 不改变。
-- 已完成窗口内 `PaneTree`：支持最多 8 个 terminal UUID 叶节点、左/右/上/下创建、基于标准化矩形的相邻焦点、关闭后折叠单子树和焦点恢复；定向单元测试通过。
-- 拆分 Local Shell 会新建 PTY；SSH、Telnet 与 Serial 会新建 profile connection。SSH child 不继承 one-time password 或 private-key passphrase，仍按正常 host-key/认证流程运行。
-- 主窗口和 detached Terminal 共同使用 `TerminalPaneGroup`。每个可见 pane 的输入、resize、scroll 和 selection callback 都带 Tab UUID，并在 `WindowRouter` 中校验所有权；SFTP 不可分屏，但可以保持单独的 detached view。
-- detached Return/关闭会恢复同一 pane tree，不会停止 worker 或重连。关闭 terminal Tab 会移除该 leaf 并折叠单子树分支。
-- 已更新双语 architecture/usage、项目地图、环境审计和月度记录；没有联网或使用多 agent。
-- 已完成直接 Rustfmt、完整 locked/offline Cargo check/test、tracker validator、46 个仓库 Markdown 相对链接和 `git diff --check`；库测试 141 项、应用测试 116 项、Doc tests 0 项均通过。
+- 已重新审阅根工程规则、AxSSH Rust/Slint UI 规范、项目地图、环境记录、现有 `TerminalPane` 输入处理和 `terminal_bridge` 的 pane-command 路径。
+- 已确认现有分屏快捷键为 `Alt+Shift+H/J/K/L`，对应左/下/上/右；按钮可直接复用同一 callback，避免增加 Rust 或 SSH 侧状态。
+- 已确认本机 Rust 1.96.1、Cargo 1.96.1、锁定 Slint 1.17.1 和离线 Cargo 合同未漂移；无需联网或多 agent。
+- 已完成主窗口 Tab 管理栏、保存连接按钮左侧的固定尺寸纵向/横向分屏图标，均提供 Tooltip、accessible label 和 Enter/Space 激活；它们只作用于当前活动 pane。完整 Slint 图已由 `cargo check --locked --offline` 编译。
+- 已更新双语 usage/architecture、项目地图和环境记忆；无新增文件、依赖、工具链、Rust callback 或 SSH 安全契约。
 
 ## 验证
 
-- 已完成：本轮计划、现有项目地图和环境证据审阅；pane、会话隔离、UUID resize、terminal/SFTP companion transfer 与 standalone SFTP detach 回归；直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check`。`cargo fmt` 与 `cargo clippy` 已实际尝试，但本机缺少对应 Cargo 子命令。
-- 未完成：主/独立窗口的真实焦点、Alt 快捷键、pane resize、原生 Return，以及实际 SSH/Telnet/Serial 生命周期仍需目标平台用户验收；按项目约束未自行截图替代该验收。
+- 已完成：范围/所有权/安全复核、Cargo 与工具链预检，重新编译完整 Slint 图的 `cargo check --locked --offline`，以及完整 `cargo test --locked --offline`（库 141、应用 116、Doc tests 0）、tracker validator、Markdown 相对链接检查、静态残留扫描与 `git diff --check`。
+- 未完成：主/独立窗口的按钮可见性、hover、点击、焦点、快捷键和真实连接生命周期人工验收。
 
 ## 风险与阻塞
 
-- 拆分只能创建独立会话，不能把一个 live PTY 或 SSH channel 绘制到多个窗格；否则输入、resize 和 worker lifetime 会失去单一所有权。
-- 新 SSH child 不得复制未持久化密码或私钥口令，可能要求用户按既有流程认证。
-- `Alt` 在 macOS 可作为终端 Meta；只有匹配已支持 pane 指令且操作可受理时才消费该组合。
-- 主/独立窗口的真实焦点、resize、Return merge 和 SSH/SFTP worker 连续性须由目标平台用户验收。
+- 按钮只能创建独立会话，不能将同一个 live PTY 或 SSH channel 渲染到多个 pane；SSH 新 pane 仍可能需要正常的 host-key/认证流程。
+- macOS 的 Option 修饰键仍可能受本机输入法布局影响；主窗口顶部按钮提供与键盘无关的入口，独立 Terminal 窗口仍使用快捷键。
 
 ## 下一步
 
-- 本轮实现与自动化门禁已完成；等待目标平台 GUI 和实际连接生命周期反馈。
+- 本轮实现、自动化验证和独立提交已完成；等待用户在目标平台确认主窗口按钮位置和实际连接生命周期。
 
 ## 最后更新时间
 
-- 2026-08-09 23:55 CST
+- 2026-08-10 08:02 CST

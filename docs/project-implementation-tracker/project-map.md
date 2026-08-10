@@ -90,9 +90,10 @@
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
 | `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalRenderLine` | 绘制底部对齐的 Rust 可见字符格、选区/光标/preedit 覆盖，并转换指针、滚动、复制/粘贴/全选意图；不持有终端数据、worker 状态、焦点或 IME 输入 |
-| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`pane-command` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、`Alt+H/J/K/L` pane intent、底部对齐的网格余量、复制粘贴和 UUID 定向 PTY resize callback |
+| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`pane-command` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、`Alt+H/J/K/L` pane intent、复制粘贴和 UUID 定向 PTY resize callback |
+| `ui/components/workspace-titlebar.slint` | Tab 顶部管理栏与连接入口 | `WorkspaceTitlebar`、`TerminalSplitButton`、`TerminalSplitGlyph` | 主窗口活动 Terminal 的纵向/横向分屏图标、Tab 激活/关闭/拖动、外链/返回和保存连接按钮；分屏 intent 仍携带活动 pane UUID |
 | `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpEntryRow`、`SftpTransferRow`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 固定图标槽、regular file 双击 intent、进度/取消列表、splitter、选中/过滤/分页；不执行文件系统、opener、网络或传输 |
-| `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
+| `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、terminal split toolbar、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 矢量图标、导航、标题、紧凑字段和行布局；标题不再承载 Save/Close 状态操作 |
 | `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsViewState`、统一草稿、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
@@ -130,8 +131,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-08-10 在主窗口 Tab 管理栏、保存连接按钮左侧增加一组纵向/横向分屏图标，复用当前活动 pane UUID 的 `pane-command` 与现有方向快捷键；独立 Terminal 不显示重复控件，不改变 worker 或 SSH 所有权。
 - 最近依据：2026-08-09 完成多窗口 `WorkspaceTransfer`/`WindowRouter`、SSH/SFTP companion 成组 detached/merge、共享 Slint event loop、窗口内 Tab 路由和 Tab inline Move/Return 动作；其后将 detached 客户区收紧为仅当前 Terminal/SFTP，移除 Tab 条、sidebar、连接选择器、Settings、会话编辑器和客户区菜单，并让 Move/Return 直接携带 Tab UUID；macOS detached Return 随后从会额外占行的 titlebar accessory 改为标准标题栏父视图内的同一行原生按钮；同日完成窗口级、最多八叶的 `PaneTree` 和 UUID 定向 `TerminalPaneGroup`，支持主窗口及 detached Terminal 的独立会话拆分、方向焦点和布局恢复，SFTP 保持不可分屏的独立 surface；同日完成 `SshAgent` profile、无密码应用路由、russh 运行时外部 signer、5 identity/30 秒边界与内存 agent loopback 回归；2026-08-08 完成启动资源懒加载、Private key/Serial 模式级发现与代际清理、SFTP-only 终端模型省略和文件图标 cache 回收；2026-08-06 已完成的 SFTP 平台文件图标、snapshot 重验本地打开、独立 subsystem 分块下载后打开、进度/取消、私有缓存清理、取消/预热/GDI 静态竞态修复及 P1-P9 验证记录；2026-08-05 的工作区 Tab 固定跨平台前后循环 accelerator；2026-08-04 的 SSH 认证前命令隔离、connected-only terminal/SFTP 操作、profile mutation token 与凭据回滚、私有唯一临时文件、配置统一上限和 owned PTY shutdown；同日的会话编辑器可选密码保存、逐 Tab 一次性认证秘密，以及 Terminal 最小对比度设置、schema v17 迁移和按实际单元格背景的 WCAG 前景修正；2026-08-03 的运行时 SSH/SFTP companion UUID、双向 Tab 切换、独立 transport 和 Settings 单例快捷键激活，以及 X11 首个远端 channel 按需本机准备、X server 已知安装位置快照和 Custom executable 设置入口；2026-08-02 的跨平台 X server provider/启动设置、默认开启的 SSH X11 forwarding、显式 loopback no-auth 兼容；2026-08-01 的独立双栏 SFTP Tab、脱敏 diagnostics、终端主屏 reflow、运行时字体资源和双字体设置分离。
 
 ## 最后更新时间
 
-- 2026-08-09 23:52 +0800
+- 2026-08-10 00:35 +0800

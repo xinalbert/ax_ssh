@@ -281,11 +281,103 @@ export component ConnectionPicker inherits FocusScope {
     }
 }
 
+component TerminalSplitGlyph inherits Rectangle {
+    in property <bool> vertical;
+    in property <brush> glyph-color: Theme.text;
+
+    width: Theme.terminal-split-glyph-size;
+    height: Theme.terminal-split-glyph-size;
+    background: transparent;
+
+    Rectangle {
+        x: Theme.hairline;
+        y: Theme.hairline;
+        width: parent.width - 2 * Theme.hairline;
+        height: parent.height - 2 * Theme.hairline;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+    }
+    if root.vertical : Rectangle {
+        x: (parent.width - Theme.hairline) / 2;
+        y: 2 * Theme.hairline;
+        width: Theme.hairline;
+        height: parent.height - 4 * Theme.hairline;
+        background: root.glyph-color;
+    }
+    if !root.vertical : Rectangle {
+        x: 2 * Theme.hairline;
+        y: (parent.height - Theme.hairline) / 2;
+        width: parent.width - 4 * Theme.hairline;
+        height: Theme.hairline;
+        background: root.glyph-color;
+    }
+}
+
+component TerminalSplitButton inherits FocusScope {
+    in property <bool> vertical;
+    in property <string> accessible-name;
+    in property <string> tooltip-text;
+    callback activated();
+
+    width: Theme.terminal-split-button-size;
+    height: Theme.terminal-split-button-size;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.activated();
+        }
+    }
+
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: split-touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        border-width: root.has-focus ? Theme.hairline : 0px;
+        border-color: Theme.focus;
+        border-radius: Theme.radius-small;
+
+        TerminalSplitGlyph {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            vertical: root.vertical;
+            glyph-color: root.has-focus || split-touch.has-hover ? Theme.text : Theme.muted;
+        }
+
+        split-touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.activated(); }
+        }
+
+        if !root.tooltip-text.is-empty : Tooltip {
+            Text {
+                text: root.tooltip-text;
+                color: Theme.text;
+                font-family: Theme.application-font-family;
+                font-size: Theme.font-caption;
+            }
+        }
+    }
+}
+
 export component WorkspaceTitlebar inherits Rectangle {
     in property <[WorkspaceTabRow]> tabs;
     in property <string> active-tab-id;
     in property <int> tab-width;
     in property <color> terminal-background;
+    in property <string> active-tab-kind;
     in property <bool> connection-picker-open;
     in property <bool> connection-picker-enabled: true;
     in property <bool> detached-window: false;
@@ -295,6 +387,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     callback move-tab(string, int);
     callback detach-workspace(string);
     callback return-workspace(string);
+    callback terminal-pane-command(string);
     callback toggle-connection-picker();
 
     private property <int> drag-source-index: -1;
@@ -547,6 +640,34 @@ export component WorkspaceTitlebar inherits Rectangle {
                     connected: root.drag-connected;
                     active: true;
                     order: root.drag-order;
+                }
+            }
+        }
+        if root.active-tab-kind == "terminal" : Rectangle {
+            width: 2 * Theme.terminal-split-button-size + Theme.terminal-split-button-spacing;
+            background: Theme.panel;
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+            HorizontalLayout {
+                y: (parent.height - self.height) / 2;
+                height: Theme.terminal-split-button-size;
+                spacing: Theme.terminal-split-button-spacing;
+
+                TerminalSplitButton {
+                    vertical: true;
+                    accessible-name: "Split active terminal vertically";
+                    tooltip-text: "Split vertically (Alt+Shift+L)";
+                    activated => { root.terminal-pane-command("split-right"); }
+                }
+                TerminalSplitButton {
+                    vertical: false;
+                    accessible-name: "Split active terminal horizontally";
+                    tooltip-text: "Split horizontally (Alt+Shift+J)";
+                    activated => { root.terminal-pane-command("split-down"); }
                 }
             }
         }

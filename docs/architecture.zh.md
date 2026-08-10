@@ -321,11 +321,14 @@ detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断�
 叶节点并折叠只剩单子的分支；detached 窗口 Return 或关闭时，会把同一份 pane tree 恢复到主窗口，
 不会重连或停止 worker。
 
-终端 pane 可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用 `Alt+Shift+H/J/K/L` 在对应方向
-创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和 Serial 会重新走对应 profile 的
-常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或私钥 passphrase。SFTP
-保持独立表面，不能作为 terminal pane 分屏。只有路由成功受理时 UI 才消费这些 Alt 组合，因此不支持的
-方向或已达 pane 上限时，普通终端 Meta 输入不会被吞掉。
+主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
+它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；
+Slint 不创建 worker，也不直接修改布局。独立 Terminal 窗口没有 Tab 管理栏，继续使用键盘快捷键。
+终端 pane 还可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用
+`Alt+Shift+H/J/K/L` 在对应方向创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和
+Serial 会重新走对应 profile 的常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或
+私钥 passphrase。SFTP 保持独立表面，不能作为 terminal pane 分屏。只有路由成功受理时 UI 才消费这些
+Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Meta 输入不会被吞掉。
 
 ## SSH 安全契约
 

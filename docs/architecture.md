@@ -480,14 +480,20 @@ transfer to the main route and hides the native window; it does not disconnect
 or re-authenticate SSH/SFTP. The paired Terminal/SFTP UUIDs move together,
 while their two independent russh workers remain independent.
 
-Terminal panes use `Alt+H/J/K/L` to focus the left/down/up/right neighbor and
-`Alt+Shift+H/J/K/L` to create a fresh terminal session on that side. A split of
-a local shell creates a new PTY; a split of SSH, Telnet, or Serial repeats the
-normal profile connection flow. A split SSH child repeats host-key and
-authentication handling and never inherits a one-time password or private-key
-passphrase. SFTP is a standalone surface and cannot be a terminal pane. The UI
-consumes these Alt combinations only after the router accepts the command, so an
-unsupported direction or a full pane tree preserves ordinary terminal Meta input.
+The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
+of vertical and horizontal split controls beside the saved-connection button.
+They emit the active pane UUID with `split-right` or `split-down` through
+the same `pane-command` callback as the keyboard route; Slint does not create a
+worker or mutate the layout. Detached Terminal windows have no Tab toolbar and
+continue to use the keyboard route. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
+neighbor and `Alt+Shift+H/J/K/L` to create a fresh terminal session on that
+side. A split of a local shell creates a new PTY; a split of SSH, Telnet, or
+Serial repeats the normal profile connection flow. A split SSH child repeats
+host-key and authentication handling and never inherits a one-time password or
+private-key passphrase. SFTP is a standalone surface and cannot be a terminal
+pane. The UI consumes these Alt combinations only after the router accepts the
+command, so an unsupported direction or a full pane tree preserves ordinary
+terminal Meta input.
 
 ## SSH security contract
 
