@@ -741,6 +741,76 @@ fn apply_terminal_panes(
     ui.set_terminal_dividers(ModelRc::new(VecModel::from(dividers)));
 }
 
+pub(super) fn apply_terminal_pane_layout(ui: &AppWindow, layout: PaneLayout) -> bool {
+    update_terminal_pane_layout_models(
+        &ui.get_terminal_panes(),
+        &ui.get_terminal_dividers(),
+        layout,
+    )
+}
+
+fn update_terminal_pane_layout_models(
+    panes: &ModelRc<TerminalPaneView>,
+    dividers: &ModelRc<TerminalPaneDividerView>,
+    layout: PaneLayout,
+) -> bool {
+    if panes.row_count() != layout.panes.len() || dividers.row_count() != layout.dividers.len() {
+        return false;
+    }
+
+    let pane_updates = layout
+        .panes
+        .into_iter()
+        .enumerate()
+        .map(|(index, placement)| {
+            let mut pane = panes.row_data(index)?;
+            if pane.terminal.terminal_id.as_str() != placement.tab_id.to_string() {
+                return None;
+            }
+            pane.x = placement.x;
+            pane.y = placement.y;
+            pane.width = placement.width;
+            pane.height = placement.height;
+            pane.focused = placement.focused;
+            Some((index, pane))
+        })
+        .collect::<Option<Vec<_>>>();
+    let divider_updates = layout
+        .dividers
+        .into_iter()
+        .enumerate()
+        .map(|(index, placement)| {
+            let divider = dividers.row_data(index)?;
+            if divider.id != placement.id || divider.vertical != placement.vertical {
+                return None;
+            }
+            Some((
+                index,
+                TerminalPaneDividerView {
+                    id: placement.id,
+                    x: placement.x,
+                    y: placement.y,
+                    width: placement.width,
+                    height: placement.height,
+                    ratio: placement.ratio,
+                    vertical: placement.vertical,
+                },
+            ))
+        })
+        .collect::<Option<Vec<_>>>();
+    let (Some(pane_updates), Some(divider_updates)) = (pane_updates, divider_updates) else {
+        return false;
+    };
+
+    for (index, pane) in pane_updates {
+        panes.set_row_data(index, pane);
+    }
+    for (index, divider) in divider_updates {
+        dividers.set_row_data(index, divider);
+    }
+    true
+}
+
 fn terminal_view_from_rendered(
     tab_id: Uuid,
     connected: bool,
@@ -1424,6 +1494,101 @@ pub(super) fn dispatch_ui_result(
 mod tests {
     use super::*;
     use slint::Model;
+
+    fn terminal_pane_view(tab_id: Uuid, x: f32, width: f32) -> TerminalPaneView {
+        TerminalPaneView {
+            terminal: TerminalViewState {
+                terminal_id: tab_id.to_string().into(),
+                ..Default::default()
+            },
+            x,
+            y: 0.0,
+            width,
+            height: 1.0,
+            focused: x == 0.0,
+        }
+    }
+
+    #[test]
+    fn terminal_pane_layout_updates_existing_model_rows() {
+        let first_id = Uuid::from_u128(1);
+        let second_id = Uuid::from_u128(2);
+        let panes = ModelRc::new(VecModel::from(vec![
+            terminal_pane_view(first_id, 0.0, 0.5),
+            terminal_pane_view(second_id, 0.5, 0.5),
+        ]));
+        let dividers = ModelRc::new(VecModel::from(vec![TerminalPaneDividerView {
+            id: 0,
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+            ratio: 0.5,
+            vertical: true,
+        }]));
+        let layout = PaneLayout {
+            panes: vec![
+                PanePlacement {
+                    tab_id: first_id,
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.7,
+                    height: 1.0,
+                    focused: true,
+                },
+                PanePlacement {
+                    tab_id: second_id,
+                    x: 0.7,
+                    y: 0.0,
+                    width: 0.3,
+                    height: 1.0,
+                    focused: false,
+                },
+            ],
+            dividers: vec![PaneDividerPlacement {
+                id: 0,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+                ratio: 0.7,
+                vertical: true,
+            }],
+        };
+
+        assert!(update_terminal_pane_layout_models(
+            &panes, &dividers, layout
+        ));
+        assert_eq!(panes.row_data(0).unwrap().width, 0.7);
+        assert_eq!(panes.row_data(1).unwrap().x, 0.7);
+        assert_eq!(dividers.row_data(0).unwrap().ratio, 0.7);
+    }
+
+    #[test]
+    fn terminal_pane_layout_rejects_stale_model_identity_without_partial_update() {
+        let visible_id = Uuid::from_u128(1);
+        let stale_id = Uuid::from_u128(2);
+        let panes = ModelRc::new(VecModel::from(vec![terminal_pane_view(
+            visible_id, 0.0, 1.0,
+        )]));
+        let dividers = ModelRc::new(VecModel::from(Vec::<TerminalPaneDividerView>::new()));
+        let layout = PaneLayout {
+            panes: vec![PanePlacement {
+                tab_id: stale_id,
+                x: 0.0,
+                y: 0.0,
+                width: 0.7,
+                height: 1.0,
+                focused: true,
+            }],
+            dividers: Vec::new(),
+        };
+
+        assert!(!update_terminal_pane_layout_models(
+            &panes, &dividers, layout
+        ));
+        assert_eq!(panes.row_data(0).unwrap().width, 1.0);
+    }
 
     #[test]
     fn terminal_select_all_shortcut_preserves_shell_control_a() {

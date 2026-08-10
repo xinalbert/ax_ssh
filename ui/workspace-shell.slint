@@ -59,11 +59,13 @@ component TerminalPaneDivider inherits FocusScope {
     in property <length> available-length;
     callback set-value(float);
     callback reset();
+    callback released();
 
     private property <float> minimum: Theme.terminal-pane-divider-min-ratio;
     private property <float> maximum: 1.0 - Theme.terminal-pane-divider-min-ratio;
     private property <float> drag-start-ratio: root.ratio;
     private property <length> drag-start-position: 0px;
+    private property <bool> dragging: false;
     private property <bool> active: root.has-focus || divider-touch.has-hover || divider-touch.pressed;
 
     focus-on-click: true;
@@ -137,15 +139,21 @@ component TerminalPaneDivider inherits FocusScope {
         mouse-cursor: root.vertical ? ew-resize : ns-resize;
         pointer-event(event) => {
             if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.dragging = true;
                 root.drag-start-ratio = root.ratio;
                 root.drag-start-position = root.vertical
                     ? root.x + self.mouse-x
                     : root.y + self.mouse-y;
                 root.focus();
+            } else if root.dragging
+                && (event.kind == PointerEventKind.up
+                    || event.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+                root.released();
             }
         }
         moved => {
-            if self.pressed && root.available-length > 0px {
+            if root.dragging && root.available-length > 0px {
                 let pointer-position = root.vertical
                     ? root.x + self.mouse-x
                     : root.y + self.mouse-y;
@@ -169,6 +177,13 @@ component TerminalPaneGroup inherits Rectangle {
     in property <[TerminalPaneDividerView]> dividers;
     in property <string> terminal-edit-command;
     in property <int> terminal-edit-command-revision: 0;
+    private property <int> focus-request-revision: 0;
+
+    function restore-terminal-input-focus() {
+        root.focus-request-revision = root.focus-request-revision == 2147483647
+            ? 1
+            : root.focus-request-revision + 1;
+    }
 
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -191,6 +206,7 @@ component TerminalPaneGroup inherits Rectangle {
         focused: pane.focused;
         edit-command: root.terminal-edit-command;
         edit-command-revision: root.terminal-edit-command-revision;
+        focus-request-revision: root.focus-request-revision;
         terminal-key(text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(
                 pane.terminal.terminal_id, text, alt, control, meta, shift, physical-key-event,
@@ -237,6 +253,7 @@ component TerminalPaneGroup inherits Rectangle {
             : divider.height * parent.height;
         set-value(candidate) => { root.resize-terminal-divider(divider.id, candidate); }
         reset => { root.resize-terminal-divider(divider.id, 0.5); }
+        released => { root.restore-terminal-input-focus(); }
     }
 }
 

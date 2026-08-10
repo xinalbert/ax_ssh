@@ -35,6 +35,7 @@ export component TerminalPane inherits Rectangle {
     in property <bool> focused: false;
     in property <string> edit-command;
     in property <int> edit-command-revision: 0;
+    in property <int> focus-request-revision: 0;
     private property <bool> connected: root.view.connected;
     private property <string> terminal-id: root.view.terminal_id;
     private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
@@ -199,6 +200,11 @@ export component TerminalPane inherits Rectangle {
             } else if root.edit-command == "select-all" {
                 root.select-all-visible();
             }
+        }
+    }
+    changed focus-request-revision => {
+        if root.focused && root.connected {
+            root.focus-input();
         }
     }
     changed visible => {

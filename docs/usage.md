@@ -252,6 +252,9 @@ equal split. Dividers participate in Tab focus and accept the matching arrow
 keys, Home, End, and Enter or Space for reset. Each side remains between 10%
 and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
+Releasing or cancelling a mouse drag returns input focus to the focused,
+connected terminal pane; keyboard and accessibility divider actions retain
+divider focus.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.

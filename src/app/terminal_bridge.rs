@@ -247,11 +247,17 @@ pub(super) fn wire_terminal(
     let state_for_divider = state.clone();
     let router_for_divider = window_router.clone();
     ui.on_resize_terminal_divider(move |divider_id, ratio| {
-        let resized = router_for_divider.resize_terminal_divider(window_id, divider_id, ratio);
-        if resized {
+        let Some(layout) = router_for_divider.resize_terminal_divider(window_id, divider_id, ratio)
+        else {
+            return false;
+        };
+        let applied_in_place = ui_for_divider
+            .upgrade()
+            .is_some_and(|ui| apply_terminal_pane_layout(&ui, layout));
+        if !applied_in_place {
             refresh_workspace(&ui_for_divider, &state_for_divider);
         }
-        resized
+        true
     });
 
     let ui_for_command = ui.as_weak();

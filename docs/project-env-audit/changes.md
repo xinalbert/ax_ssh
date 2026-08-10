@@ -205,3 +205,19 @@
 - 受影响文件：`src/app/{input,view,diagnostics}.rs`、`ui/{app,workspace-shell,terminal-pane}.slint`、双语架构/使用说明和项目记录。
 - 更新后的命令或环境：依赖、锁文件、Rust edition/MSRV、配置 schema 和 CI 命令均不变；本机继续用直接 Rustfmt 覆盖格式检查，Cargo fmt/Clippy 由安装相应组件的环境执行。
 - 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 125、Doc tests 0）、tracker validator、46 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；三平台原生菜单显示、focused pane 定向和 detached 快捷键需用户人工验收。
+
+## 2026-08-11 记录 Terminal divider drag/focus 修复环境
+
+- 日期：2026-08-11
+- 变化摘要：divider 几何改为对 UUID、divider identity/方向和 model 行数均匹配的 Slint `ModelRc` 原地更新，保持拖动中的 repeater 实例；鼠标 release/cancel 后以本地有界 revision 恢复 focused、connected terminal 的 IME 输入焦点。未新增依赖或外部服务，也未修改 Rust edition、MSRV、`Cargo.toml`、`Cargo.lock`、配置 schema、CI、worker 或 SSH 安全边界。
+- 受影响文件：`src/app.rs`、`src/app/{terminal_bridge,view}.rs`、`ui/{workspace-shell,terminal-pane}.slint`、双语 architecture/usage、项目跟踪与环境记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机仍以直接 Rustfmt 代替缺失的 Cargo fmt，Clippy 由安装组件的 CI 执行。
+- 验证结果：`cargo check --locked --offline`、2 项 `app::view::tests::terminal_pane_layout` 定向测试及完整 `cargo test --locked --offline` 通过（库 141、应用 127、Doc tests 0）；直接 Rustfmt、tracker/Markdown/diff 门禁和目标平台连续拖动、焦点恢复、键盘/无障碍 divider、PTY resize 仍待本轮收口/用户验收。
+
+## 2026-08-11 完成 Terminal divider drag/focus 环境门禁
+
+- 日期：2026-08-11
+- 变化摘要：已完成原地 Slint model 更新与鼠标 drag 后 IME focus 恢复的完整本机门禁；环境、依赖、配置 schema、工具链和 CI 契约均无变化。
+- 受影响文件：`src/app.rs`、`src/app/{terminal_bridge,view}.rs`、`ui/{workspace-shell,terminal-pane}.slint`、双语 architecture/usage、项目跟踪与环境记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机直接 Rustfmt 已通过，Cargo fmt/Clippy 仍由安装组件的 CI/目标环境执行。
+- 验证结果：`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 127、Doc tests 0）、`rustfmt --edition 2024 --check`、tracker validator、44 个 Markdown 相对链接目标和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 子命令未安装；真实主/独立窗口连续拖动、焦点恢复、键盘/无障碍 divider 和 PTY resize 仍需用户验收。

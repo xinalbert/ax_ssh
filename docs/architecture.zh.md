@@ -99,7 +99,9 @@ Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Sl
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
 应用状态。
 divider 手势只携带稳定的前序 divider ID 和标准化比例；`WindowRouter` 会对当前活动 `PaneTree`
-重验，比例及重新发布的叶节点/divider 几何都由该树拥有。
+重验，比例及重新发布的叶节点/divider 几何都由该树拥有。当 pane UUID、divider identity 和行数
+仍匹配时，bridge 会原地更新既有 Slint model 行，保留 divider 的 repeater 实例和 pointer capture；
+不匹配时才回退到常规全量 snapshot 刷新。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
@@ -342,6 +344,8 @@ detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断�
 无障碍 slider 操作，以及双击或 Enter/Space 复位都会映射到 0.1-0.9 的比例。比例变化复用每个 pane
 按 UUID 定向的 terminal resize 路径，因此 PTY/NAWS/本地模型尺寸会跟随新几何。比例在 Tab 切换和
 detached/return 转移中保留，但应用重启后恢复默认，也不会进入设置、worker 或 transport 状态。
+divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只请求当前 focused、connected terminal pane
+的 IME proxy 取得焦点。键盘和无障碍 divider 操作继续保留自身焦点。
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；

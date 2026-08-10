@@ -112,7 +112,11 @@ existing local copy, paste, or select-all operation; selection coordinates and
 text are not promoted into application state for menu routing.
 Divider gestures carry only the stable preorder divider ID and a normalized
 ratio. `WindowRouter` validates them against the active `PaneTree`, which owns
-the bounded ratio and republishes both leaf geometry and divider geometry.
+the bounded ratio and republishes both leaf geometry and divider geometry. When
+the pane UUIDs, divider identities, and row counts still match, the bridge
+updates those existing Slint model rows in place, preserving the divider's
+repeater instance and pointer capture; a mismatch falls back to the normal
+full snapshot refresh.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
@@ -510,6 +514,9 @@ reuses each pane's UUID-directed terminal resize path, so PTY/NAWS/local model
 sizes follow the new geometry. Ratios remain while switching Tabs or moving the
 tree through detach/return, but are intentionally reset after application
 restart and never enter settings, workers, or transport state.
+The divider keeps its local drag state through pointer release or cancellation,
+then requests focus only for the currently focused, connected terminal pane's
+IME proxy. Keyboard and accessibility divider actions retain their own focus.
 
 The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.

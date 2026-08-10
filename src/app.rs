@@ -46,7 +46,8 @@ use self::input::{
     terminal_input_modifiers, terminal_key_from_slint, terminal_key_is_direct,
 };
 use self::panes::{
-    MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PaneDividerPlacement, PanePlacement, PaneTree,
+    MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PaneDividerPlacement, PaneLayout,
+    PanePlacement, PaneTree,
 };
 use self::session_groups::{
     compact_label, group_options, profile_endpoint, profile_sidebar_details,
@@ -313,20 +314,23 @@ impl WindowRouter {
         })
     }
 
-    fn resize_terminal_divider(&self, window_id: Uuid, divider_id: i32, ratio: f32) -> bool {
+    fn resize_terminal_divider(
+        &self,
+        window_id: Uuid,
+        divider_id: i32,
+        ratio: f32,
+    ) -> Option<PaneLayout> {
         let Ok(mut router) = self.inner.lock() else {
-            return false;
+            return None;
         };
         let Some(route) = router.routes.get_mut(&window_id) else {
-            return false;
+            return None;
         };
         let Some(workspace_tab_id) = route.active_tab_id else {
-            return false;
+            return None;
         };
-        route
-            .pane_trees
-            .get_mut(&workspace_tab_id)
-            .is_some_and(|tree| tree.resize_split(divider_id, ratio))
+        let tree = route.pane_trees.get_mut(&workspace_tab_id)?;
+        tree.resize_split(divider_id, ratio).then(|| tree.layout())
     }
 
     fn complete_pane_split(
@@ -1526,11 +1530,19 @@ mod support_tests {
             child_tab_id,
             &mut app,
         ));
-        assert!(router.resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.7));
+        assert!(
+            router
+                .resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.7)
+                .is_some()
+        );
 
         let other_tab_id = app.open_local_shell_tab();
         assert!(router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
-        assert!(!router.resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.4));
+        assert!(
+            router
+                .resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.4)
+                .is_none()
+        );
         assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
         let view = router.views(&app).pop().expect("main window view");
         assert!((view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);

@@ -45,9 +45,9 @@
 | `src/app/workspace.rs` | 工作区与 profile/group bridge | `ProfileMutationCoordinator`、`wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`SessionTransferEnvelope`、`import_session_transfer_into_store`、`close_workspace_tab` | 可见 Tab 激活/循环/内存排序、Terminal pane group 整组关闭、会话 CRUD、逐 profile 最新 mutation token、串行凭据副作用与过期回滚、编辑器一次性密码/显式保存分流、Group/Server Duplicate、脱敏 JSON 导入导出和关闭资源回收 |
 | `src/app/connection.rs` 与 `src/app/connection/` | 多协议连接控制器组装入口与单一流程模块 | `wire_connection_request`、`request_profile_connection`、`begin_authentication`、`start_telnet_connection`、`start_serial_connection`、`start_session_worker` | `request` 解析 SSH/SFTP companion 导航、分发协议并以原子注册将新 Tab 加入目标窗口/pane；拆分 SSH child 不继承一次性密码；`authentication` 让 agent profile 绕过密码加载/弹窗并直接启动 worker；`direct` 负责 Telnet/Serial attempt 与 monitor；其余模块保持 SSH probe、信任、认证和 worker phase；未知或变化密钥仍须明确确认 |
 | `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`open_downloaded_sftp_file`、`persist_authenticated_credential` | attempt 路由、SFTP transfer 状态/完成后 detached open、带接收时间的输出/失败事件、凭据保存和迟到结果隔离；pane 输出刷新不依赖全局 active Tab |
-| `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 仅在 connected 后接收 UUID 定向 terminal 输入/selection；处理 pane focus/split/divider ratio、独立 local PTY 创建和方向快捷键；终端网格 resize 只进入 `AppState::resize_terminal(tab_id, ...)` |
+| `src/app/terminal_bridge.rs` | 终端与本地 shell bridge | `wire_terminal`、`start_local_shell`、`spawn_local_shell_monitor` | 仅在 connected 后接收 UUID 定向 terminal 输入/selection；处理 pane focus/split/divider ratio、原地 layout 发布、独立 local PTY 创建和方向快捷键；终端网格 resize 只进入 `AppState::resize_terminal(tab_id, ...)` |
 | `src/app/settings_bridge.rs` | Settings 预览/保存 bridge | `wire_settings`、`apply_preview_settings` | 合并草稿即时更新内存/Theme/终端/布局；新自带字体异步注册；关闭请求才原子保存并关闭指定 Settings Tab |
-| `src/app/view.rs` | Slint model/snapshot/主题映射 | `refresh_workspace`、`apply_terminal_panes`、`apply_sftp_snapshot`、`prewarm_file_icons`、`load_private_key_options`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component` | 按 WindowRouter 过滤 workspace Tab 与 active snapshot；将 pane 终端 snapshot 与 divider 几何映射到 Slint DTO；SFTP 图标/transfer DTO、font/private-key options、Light/Dark 主题、活动 Tab 安全覆盖层、blocking 快照更新，以及去重/有界且带 generation 的图标与私钥发现调度 |
+| `src/app/view.rs` | Slint model/snapshot/主题映射 | `refresh_workspace`、`apply_terminal_panes`、`apply_terminal_pane_layout`、`apply_sftp_snapshot`、`prewarm_file_icons`、`load_private_key_options`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component` | 按 WindowRouter 过滤 workspace Tab 与 active snapshot；将 pane 终端 snapshot 与 divider 几何映射到 Slint DTO，并按 UUID/identity 原地更新稳定 model 行；SFTP 图标/transfer DTO、font/private-key options、Light/Dark 主题、活动 Tab 安全覆盖层、blocking 快照更新，以及去重/有界且带 generation 的图标与私钥发现调度 |
 | `src/app/file_icons.rs` | 跨平台文件图标 provider/cache | `FileIconKey`、`FileIconProvider`、`prewarm_async`、platform `Resolver` | 24x24 owned RGBA、128 项 LRU、64-key 预热、fallback，以及 macOS NSWorkspace/UTType、Windows Shell/GDI（COM/句柄恢复保护）、Linux MIME/freedesktop 解析；不得把远端名称当本机路径 |
 | `src/app/input.rs` | Slint 输入边界映射 | `terminal_key_from_slint`、`format_shortcut_event`、`menu_shortcut_from_setting` | 特殊键（含 F1-F12）、Tab/Terminal Edit accelerator、原生菜单 `slint::Keys` 和 Apple 物理修饰键还原 |
 | `src/app/diagnostics.rs` | 脱敏键盘、UI/menu action 和输入耗时日志边界 | `log_keyboard_event`、`log_terminal_input`、`log_terminal_input_latency`、`log_ui_action`、`log_menu_action` | 调试快捷键/功能调用/输入请求耗时；文字只记 `Text`，菜单只记白名单 action，不得增加内容长度、路径、主机、名称、Clipboard 或秘密字段 |
@@ -79,7 +79,7 @@
 | `src/telnet.rs` | Telnet transport 与 worker | `TelnetFrameBuffer`、`TelnetSessionHandle`、`TelnetSessionEvent` | 明文 TCP、64 KiB 完整帧组装、IAC 过滤、选项拒绝、NAWS、有界队列、取消和分片/loopback 回归 |
 | `src/serial.rs` | Serial 发现、身份解析与 worker | `discover_serial_ports`、`resolve_serial_port`、`SerialSessionHandle` | 只读枚举、稳定 USB 匹配、歧义拒绝、串口参数、设备 I/O 和有界关闭；发现不得自动打开 |
 | `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar` | Rust property/callback 接口、共享 event loop 的多窗口标记、detached 原生标题、仅主窗口的 File/Edit/Window 菜单、Terminal Edit accelerator、直接 Tab UUID 的 Move/Return/terminal/divider callbacks、DTO 组装、主题刷新和安全 phase 输入；不在此保存选区或局部草稿 |
-| `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合、focused pane Edit command + revision、可访问拖拽/键盘 resize、UUID 定向 terminal callback 转发、SFTP 运行时分栏比例/Transfers 折叠、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
+| `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合、drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、UUID 定向 terminal callback 转发、SFTP 运行时分栏比例/Transfers 折叠、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/components/workspace-titlebar.slint` | 工作区标题栏组件 | `WorkspaceTitlebar`、`WorkspaceTabContent`、`WorkspaceTabRow`、`ConnectableSessionRow`、`ConnectionPicker` | 左起 Tab strip、跟随指针的拖拽副本/源槽/目标槽、位置序号、SSH/SFTP inline Move/Return 动作、仅主窗口的最右保存连接选择器、滚动和关闭 |
 | `ui/components/flat-action-menu.slint` | 通用扁平动作菜单 | `ActionMenuItem`、`FlatActionMenu`、`show-at` | 用同一 action model 承载原生右键菜单与按钮主动触发的下拉菜单 |
 | `ui/components/session-navigation.slint` | 会话导航组件 | `SessionNavigation`、`SessionNavigationGroup`、`CompactSessionNavigationGroup`、`SessionProfileRow`、`SessionGroupRow`、`SessionActionMenu` | 全高/紧凑侧栏共享本地选择身份和 Group 展开；对象菜单保留 Copy/Duplicate/Open SFTP，File 菜单调用其 Import/Export 函数 |
@@ -90,7 +90,7 @@
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
 | `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalRenderLine` | 绘制底部对齐的 Rust 可见字符格、选区/光标/preedit 覆盖，并转换指针、滚动、复制/粘贴/全选意图；不持有终端数据、worker 状态、焦点或 IME 输入 |
-| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`pane-command` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、特殊键 callback 与原生文本/IME 分流、`Alt+H/J/K/L` pane intent、focused Copy/Paste/Select All 和 UUID 定向 PTY resize callback |
+| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`pane-command` | 只读终端 snapshot、局部焦点/选择/光标/尺寸、drag 后的有界 IME focus request、特殊键 callback 与原生文本/IME 分流、`Alt+H/J/K/L` pane intent、focused Copy/Paste/Select All 和 UUID 定向 PTY resize callback |
 | `ui/components/workspace-titlebar.slint` | Tab 顶部管理栏与连接入口 | `WorkspaceTitlebar`、`TerminalSplitButton`、`TerminalSplitGlyph` | 主窗口活动 Terminal 的纵向/横向分屏图标、Tab 激活/关闭/拖动、外链/返回和保存连接按钮；分屏 intent 仍携带活动 pane UUID |
 | `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpEntryRow`、`SftpTransferRow`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 固定图标槽、regular file 双击 intent、进度/取消列表、splitter、选中/过滤/分页；不执行文件系统、opener、网络或传输 |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、terminal split toolbar/divider、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
@@ -131,6 +131,7 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-08-11 Terminal divider 在 UUID、identity 和行数一致时原地更新 Slint model 行，避免替换 pressed repeater 实例；鼠标 drag release/cancel 后以有界 revision 恢复 focused、connected terminal pane 的 IME 输入焦点，键盘/无障碍 divider 焦点不受影响。比例仍只属于 `PaneTree`，不进入配置、worker 或 transport。
 - 最近依据：2026-08-10 为 `PaneTree` 内部 split 增加 0.1-0.9 volatile ratio 和稳定 divider 快照，主/独立窗口共用可见 hairline、拖拽、方向键、Home/End、双击复位与 slider 无障碍操作；比例随 Tab 切换及 detached/Return 保留，不进入配置或 worker；同日将 macOS detached 标题栏 Return 文字按钮改为紧凑系统返回图标，并将 Terminal 分屏收紧为“一棵 PaneTree 属于一个可见 Terminal Tab”。
 - 最近依据：2026-08-10 在主窗口 Tab 管理栏、保存连接按钮左侧增加一组纵向/横向分屏图标，复用当前活动 pane UUID 的 `pane-command` 与现有方向快捷键；独立 Terminal 不显示重复控件，不改变 worker 或 SSH 所有权。
 - 最近依据：2026-08-10 用 Slint-local command + bounded revision 增加 Terminal-only Edit Copy/Paste/Select All；主/独立窗口共用 `TerminalPaneGroup`，只有 focused pane 执行，Copy/Paste 复用配置快捷键，Select All 使用不占用 Windows/Linux `Ctrl+A` 的固定 accelerator。
@@ -138,4 +139,4 @@
 
 ## 最后更新时间
 
-- 2026-08-10 22:05 CST
+- 2026-08-11 CST
