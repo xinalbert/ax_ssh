@@ -181,3 +181,11 @@
 - 受影响文件：`Cargo.toml`、`src/app/macos_window.rs`、双语多窗口说明和项目记录。
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、macOS 11.0 与 locked/offline 门禁；按钮优先使用 SF Symbol `arrow.uturn.backward`，并回退到 AppKit `NSImageNameGoBackTemplate`。
 - 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 121、Doc tests 0）、tracker validator、44 个 Markdown 相对链接和 `git diff --check` 通过；`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行。真实标题栏图标、Tooltip、无障碍读取与点击行为需目标 macOS 用户验收。
+
+## 2026-08-10 记录可调 Terminal pane divider 环境
+
+- 日期：2026-08-10
+- 变化摘要：Terminal `PaneTree` 增加当前运行期的有界 split ratio/divider 快照，Slint 增加主/独立窗口共用的拖拽、键盘和无障碍 divider；未新增依赖，未修改 `Cargo.toml`、`Cargo.lock`、Rust edition、MSRV 或 CI 命令。
+- 受影响文件：`src/app.rs`、`src/app/{panes,terminal_bridge,view}.rs`、`ui/{app,workspace-shell,theme}.slint`、双语多 pane 说明和项目记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机仍以直接 Rustfmt 代替缺失的 Cargo fmt，Clippy 由安装组件的 CI 执行。
+- 验证结果：6 项 pane 定向测试、比例跨 Tab/detach/return 路由测试、直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 124、Doc tests 0）、tracker validator、44 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 因本机没有对应子命令无法执行；真实 divider 对比度、宽高拖动、键盘焦点、无障碍读取和 PTY resize 需目标平台人工验收。

@@ -20,6 +20,16 @@ export struct TerminalPaneView {
     focused: bool,
 }
 
+export struct TerminalPaneDividerView {
+    id: int,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    ratio: float,
+    vertical: bool,
+}
+
 // This is the only AppWindow-to-workspace visual contract. Rust-owned values
 // arrive as immutable data; all sidebar, picker, and page-local state stays here.
 export struct WorkspaceViewState {
@@ -37,13 +47,126 @@ export struct WorkspaceViewState {
     terminal_background: color,
     terminal: TerminalViewState,
     terminal_panes: [TerminalPaneView],
+    terminal_dividers: [TerminalPaneDividerView],
     sftp: SftpViewState,
     settings: SettingsViewState,
     session_editor: SessionEditorViewState,
 }
 
+component TerminalPaneDivider inherits FocusScope {
+    in property <bool> vertical;
+    in property <float> ratio;
+    in property <length> available-length;
+    callback set-value(float);
+    callback reset();
+
+    private property <float> minimum: Theme.terminal-pane-divider-min-ratio;
+    private property <float> maximum: 1.0 - Theme.terminal-pane-divider-min-ratio;
+    private property <float> drag-start-ratio: root.ratio;
+    private property <length> drag-start-position: 0px;
+    private property <bool> active: root.has-focus || divider-touch.has-hover || divider-touch.pressed;
+
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: slider;
+    accessible-label: root.vertical ? "Terminal pane widths" : "Terminal pane heights";
+    accessible-enabled: root.enabled;
+    accessible-orientation: root.vertical ? Orientation.horizontal : Orientation.vertical;
+    accessible-value: root.ratio;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: Theme.terminal-pane-divider-step;
+    accessible-action-set-value(candidate) => {
+        if candidate.is-float() {
+            root.set-value(max(root.minimum, min(root.maximum, candidate.to-float())));
+        }
+    }
+    accessible-action-increment => {
+        root.set-value(min(root.maximum, root.ratio + Theme.terminal-pane-divider-step));
+    }
+    accessible-action-decrement => {
+        root.set-value(max(root.minimum, root.ratio - Theme.terminal-pane-divider-step));
+    }
+    accessible-action-default => { root.reset(); }
+
+    key-pressed(event) => {
+        if root.vertical && event.text == Key.RightArrow {
+            root.set-value(min(root.maximum, root.ratio + Theme.terminal-pane-divider-step));
+            return EventResult.accept;
+        }
+        if root.vertical && event.text == Key.LeftArrow {
+            root.set-value(max(root.minimum, root.ratio - Theme.terminal-pane-divider-step));
+            return EventResult.accept;
+        }
+        if !root.vertical && event.text == Key.DownArrow {
+            root.set-value(min(root.maximum, root.ratio + Theme.terminal-pane-divider-step));
+            return EventResult.accept;
+        }
+        if !root.vertical && event.text == Key.UpArrow {
+            root.set-value(max(root.minimum, root.ratio - Theme.terminal-pane-divider-step));
+            return EventResult.accept;
+        }
+        if event.text == Key.Home {
+            root.set-value(root.minimum);
+            return EventResult.accept;
+        }
+        if event.text == Key.End {
+            root.set-value(root.maximum);
+            return EventResult.accept;
+        }
+        if event.text == Key.Return || event.text == Key.Space {
+            root.reset();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        x: root.vertical ? (parent.width - self.width) / 2 : 0px;
+        y: root.vertical ? 0px : (parent.height - self.height) / 2;
+        width: root.vertical
+            ? (root.active ? Theme.terminal-pane-divider-active-thickness : Theme.hairline)
+            : parent.width;
+        height: root.vertical
+            ? parent.height
+            : (root.active ? Theme.terminal-pane-divider-active-thickness : Theme.hairline);
+        background: root.active ? Theme.accent : Theme.divider;
+    }
+
+    divider-touch := TouchArea {
+        mouse-cursor: root.vertical ? ew-resize : ns-resize;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.drag-start-ratio = root.ratio;
+                root.drag-start-position = root.vertical
+                    ? root.x + self.mouse-x
+                    : root.y + self.mouse-y;
+                root.focus();
+            }
+        }
+        moved => {
+            if self.pressed && root.available-length > 0px {
+                let pointer-position = root.vertical
+                    ? root.x + self.mouse-x
+                    : root.y + self.mouse-y;
+                root.set-value(max(
+                    root.minimum,
+                    min(
+                        root.maximum,
+                        root.drag-start-ratio
+                            + (pointer-position - root.drag-start-position)
+                                / root.available-length,
+                    ),
+                ));
+            }
+        }
+        double-clicked => { root.reset(); }
+    }
+}
+
 component TerminalPaneGroup inherits Rectangle {
     in property <[TerminalPaneView]> panes;
+    in property <[TerminalPaneDividerView]> dividers;
 
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
@@ -52,6 +175,7 @@ component TerminalPaneGroup inherits Rectangle {
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
+    callback resize-terminal-divider(int, float) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -88,6 +212,28 @@ component TerminalPaneGroup inherits Rectangle {
         write-clipboard(text) => { root.write-clipboard(text); }
         read-clipboard() => { return root.read-clipboard(); }
     }
+
+    for divider in root.dividers : TerminalPaneDivider {
+        x: divider.vertical
+            ? (divider.x + divider.width * divider.ratio) * parent.width - self.width / 2
+            : divider.x * parent.width;
+        y: divider.vertical
+            ? divider.y * parent.height
+            : (divider.y + divider.height * divider.ratio) * parent.height - self.height / 2;
+        width: divider.vertical
+            ? Theme.terminal-pane-divider-size
+            : divider.width * parent.width;
+        height: divider.vertical
+            ? divider.height * parent.height
+            : Theme.terminal-pane-divider-size;
+        vertical: divider.vertical;
+        ratio: divider.ratio;
+        available-length: divider.vertical
+            ? divider.width * parent.width
+            : divider.height * parent.height;
+        set-value(candidate) => { root.resize-terminal-divider(divider.id, candidate); }
+        reset => { root.resize-terminal-divider(divider.id, 0.5); }
+    }
 }
 
 // The detached rendering path contains only the transferable Terminal/SFTP
@@ -115,6 +261,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
+    callback resize-terminal-divider(int, float) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -134,6 +281,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             width: parent.width;
             height: parent.height;
             panes: root.view.terminal_panes;
+            dividers: root.view.terminal_dividers;
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }
@@ -156,6 +304,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             }
             terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
             terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
+            resize-terminal-divider(id, ratio) => {
+                return root.resize-terminal-divider(id, ratio);
+            }
             write-clipboard(text) => { root.write-clipboard(text); }
             read-clipboard() => { return root.read-clipboard(); }
         }
@@ -253,6 +404,7 @@ export component WorkspaceShell inherits Rectangle {
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
+    callback resize-terminal-divider(int, float) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -327,6 +479,9 @@ export component WorkspaceShell inherits Rectangle {
         }
         terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
         terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
+        resize-terminal-divider(id, ratio) => {
+            return root.resize-terminal-divider(id, ratio);
+        }
         format-shortcut(text, alt, control, meta, shift) => {
             return root.format-shortcut(text, alt, control, meta, shift);
         }
@@ -418,6 +573,7 @@ export component WorkspaceShell inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         panes: root.view.terminal_panes;
+                        dividers: root.view.terminal_dividers;
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }
@@ -441,6 +597,9 @@ export component WorkspaceShell inherits Rectangle {
                         terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
                         terminal-pane-command(id, command) => {
                             return root.terminal-pane-command(id, command);
+                        }
+                        resize-terminal-divider(id, ratio) => {
+                            return root.resize-terminal-divider(id, ratio);
                         }
                         write-clipboard(text) => { root.write-clipboard(text); }
                         read-clipboard() => { return root.read-clipboard(); }

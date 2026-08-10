@@ -164,6 +164,11 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane，并继续作为独立可见 Tab。
 关闭这个可见 Terminal Tab 会关闭其布局中的全部 terminal pane。
 
+每个 split 都有可见分隔线。拖动竖线可调整 pane 宽度，拖动横线可调整 pane 高度；双击会恢复
+等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
+两侧分别限制在该 split 的 10%-90%。比例在当前运行期的 Tab 切换和 detached 窗口往返中保留，
+应用重启后恢复等分。
+
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 `Ctrl+C` 会作为中断信号发送给活动终端。默认剪贴板快捷键在 macOS 上为

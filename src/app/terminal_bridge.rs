@@ -243,6 +243,17 @@ pub(super) fn wire_terminal(
         }
     });
 
+    let ui_for_divider = ui.as_weak();
+    let state_for_divider = state.clone();
+    let router_for_divider = window_router.clone();
+    ui.on_resize_terminal_divider(move |divider_id, ratio| {
+        let resized = router_for_divider.resize_terminal_divider(window_id, divider_id, ratio);
+        if resized {
+            refresh_workspace(&ui_for_divider, &state_for_divider);
+        }
+        resized
+    });
+
     let ui_for_command = ui.as_weak();
     let state_for_command = state.clone();
     let runtime_for_command = runtime;

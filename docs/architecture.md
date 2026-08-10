@@ -99,13 +99,16 @@ Rust
 visibility, picker dismissal, and sidebar/tab/content composition. Its tab,
 profile, terminal, and settings data is a read-only `WorkspaceViewState`; it
 sends user intent such as activation, close, connect, save, or cancel upward by
-callback. `TerminalPaneGroup` renders a bounded per-window list of normalized
-`TerminalPane` placements. Each `TerminalPane` receives a read-only
+callback. `TerminalPaneGroup` renders bounded per-window lists of normalized
+`TerminalPane` placements and internal split dividers. Each `TerminalPane` receives a read-only
 `TerminalViewState` and owns only terminal-local focus, IME proxy, selection,
 cursor blink, and measured sizing. It never owns a worker, a terminal buffer,
 or connection state. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
+Divider gestures carry only the stable preorder divider ID and a normalized
+ratio. `WindowRouter` validates them against the active `PaneTree`, which owns
+the bounded ratio and republishes both leaf geometry and divider geometry.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
@@ -471,7 +474,7 @@ handle. Refreshes publish a filtered Tab model and the snapshot for each route,
 so late worker events can repaint the window that currently owns the workspace.
 Within each route, it owns one volatile `PaneTree` per visible Terminal Tab.
 The tree keeps a stable workspace Tab UUID plus at most eight terminal leaf
-UUIDs, layout, and focus state. Only the stable workspace UUID is published in
+UUIDs, bounded split ratios, layout, and focus state. Only the stable workspace UUID is published in
 the top-level Tab model; child pane sessions remain independent in `AppState`
 but are filtered from the Tab strip. Closing that visible Terminal Tab closes
 every terminal session in its tree, while an SFTP companion remains a separate
@@ -484,6 +487,16 @@ returning only change this route map. Closing a detached window returns its
 transfer to the main route and hides the native window; it does not disconnect
 or re-authenticate SSH/SFTP. The paired Terminal/SFTP UUIDs move together,
 while their two independent russh workers remain independent.
+
+Every internal split publishes one divider overlay. Its idle hairline uses the
+semantic divider color; hover, drag, and keyboard focus use the accent color
+and a thicker stroke without changing the hit-area geometry. Mouse dragging,
+matching arrow keys, Home/End, accessibility slider actions, and double-click
+or Enter/Space reset are mapped to ratios between 0.1 and 0.9. Updating a ratio
+reuses each pane's UUID-directed terminal resize path, so PTY/NAWS/local model
+sizes follow the new geometry. Ratios remain while switching Tabs or moving the
+tree through detach/return, but are intentionally reset after application
+restart and never enter settings, workers, or transport state.
 
 The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.

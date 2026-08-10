@@ -246,6 +246,13 @@ and authentication, including any required password or passphrase prompt. SFTP
 cannot be split into a terminal pane and remains an independent visible Tab.
 Closing the visible Terminal Tab closes every terminal pane in that layout.
 
+Each split has a visible divider. Drag a vertical divider to change pane widths
+or a horizontal divider to change pane heights; double-click it to restore an
+equal split. Dividers participate in Tab focus and accept the matching arrow
+keys, Home, End, and Enter or Space for reset. Each side remains between 10%
+and 90% of that split. The ratios survive Tab switching and detached-window
+round trips during the current run, then return to equal splits after restart.
+
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
 Home and End follow application-cursor mode in full-screen programs. Plain

@@ -6,7 +6,12 @@ import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-tit
 import { TerminalRenderLine } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
-import { TerminalPaneView, WorkspaceShell, WorkspaceViewState } from "workspace-shell.slint";
+import {
+    TerminalPaneDividerView,
+    TerminalPaneView,
+    WorkspaceShell,
+    WorkspaceViewState,
+} from "workspace-shell.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
@@ -95,6 +100,7 @@ export component AppWindow inherits Window {
     in property <int> sftp-transfer-completed-count: 0;
     in property <[TerminalRenderLine]> terminal-render-lines;
     in property <[TerminalPaneView]> terminal-panes;
+    in property <[TerminalPaneDividerView]> terminal-dividers;
     in property <int> terminal-content-columns: 0;
     in property <int> terminal-cursor-row: 0;
     in property <int> terminal-cursor-column: 0;
@@ -227,6 +233,7 @@ export component AppWindow inherits Window {
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
         },
         terminal_panes: root.terminal-panes,
+        terminal_dividers: root.terminal-dividers,
         sftp: {
             available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
             home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
@@ -380,6 +387,7 @@ export component AppWindow inherits Window {
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
+    callback resize-terminal-divider(int, float) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback log-keyboard-event(string, bool, bool, bool, bool, string, string);
     callback menu-action(string);
@@ -671,6 +679,9 @@ export component AppWindow inherits Window {
             }
             terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
             terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }
+            resize-terminal-divider(id, ratio) => {
+                return root.resize-terminal-divider(id, ratio);
+            }
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }

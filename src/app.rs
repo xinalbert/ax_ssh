@@ -45,7 +45,9 @@ use self::input::{
     format_shortcut_event_with_current_modifiers, menu_shortcut_from_setting,
     terminal_input_modifiers, terminal_key_from_slint, terminal_key_is_direct,
 };
-use self::panes::{MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PanePlacement, PaneTree};
+use self::panes::{
+    MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PaneDividerPlacement, PanePlacement, PaneTree,
+};
 use self::session_groups::{
     compact_label, group_options, profile_endpoint, profile_sidebar_details,
     profile_sidebar_endpoint, session_groups,
@@ -124,6 +126,7 @@ struct WindowView {
     active_tab_id: Option<Uuid>,
     snapshot: ActiveTabSnapshot,
     terminal_panes: Vec<WindowTerminalPane>,
+    terminal_dividers: Vec<PaneDividerPlacement>,
 }
 
 struct WindowTerminalPane {
@@ -308,6 +311,22 @@ impl WindowRouter {
                 .and_then(|route| route.active_tab_id.and_then(|id| route.pane_trees.get(&id)))
                 .is_some_and(|tree| tree.pane_count() < MAX_TERMINAL_PANES)
         })
+    }
+
+    fn resize_terminal_divider(&self, window_id: Uuid, divider_id: i32, ratio: f32) -> bool {
+        let Ok(mut router) = self.inner.lock() else {
+            return false;
+        };
+        let Some(route) = router.routes.get_mut(&window_id) else {
+            return false;
+        };
+        let Some(workspace_tab_id) = route.active_tab_id else {
+            return false;
+        };
+        route
+            .pane_trees
+            .get_mut(&workspace_tab_id)
+            .is_some_and(|tree| tree.resize_split(divider_id, ratio))
     }
 
     fn complete_pane_split(
@@ -603,11 +622,13 @@ impl WindowRouter {
                 });
                 let snapshot = app.snapshot_for(active_session_id);
                 route.active_tab_id = active_tab_id;
-                let terminal_panes = active_tab_id
+                let (terminal_panes, terminal_dividers) = active_tab_id
                     .and_then(|tab_id| route.pane_trees.get(&tab_id))
                     .filter(|_| snapshot.kind == "terminal")
                     .map(|tree| {
-                        tree.placements()
+                        let layout = tree.layout();
+                        let panes = layout
+                            .panes
                             .into_iter()
                             .filter_map(|placement| {
                                 let pane_snapshot = app.snapshot_for(Some(placement.tab_id));
@@ -616,7 +637,8 @@ impl WindowRouter {
                                     snapshot: pane_snapshot,
                                 })
                             })
-                            .collect()
+                            .collect();
+                        (panes, layout.dividers)
                     })
                     .unwrap_or_default();
                 WindowView {
@@ -625,6 +647,7 @@ impl WindowRouter {
                     active_tab_id,
                     snapshot,
                     terminal_panes,
+                    terminal_dividers,
                 }
             })
             .collect()
@@ -716,6 +739,9 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         Vec::<TerminalRenderLine>::new(),
     )));
     ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
+    ui.set_terminal_dividers(ModelRc::new(VecModel::from(
+        Vec::<TerminalPaneDividerView>::new(),
+    )));
     ui.set_sftp_entries(ModelRc::new(VecModel::from(Vec::<SftpEntryRow>::new())));
     ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(
@@ -1085,6 +1111,9 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
         Vec::<TerminalRenderLine>::new(),
     )));
     ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
+    ui.set_terminal_dividers(ModelRc::new(VecModel::from(
+        Vec::<TerminalPaneDividerView>::new(),
+    )));
     ui.set_sftp_entries(ModelRc::new(VecModel::from(Vec::<SftpEntryRow>::new())));
     ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_option_rows(&settings))));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(
@@ -1481,6 +1510,63 @@ mod support_tests {
         assert_eq!(view.active_tab_id, Some(other_tab_id));
         assert_eq!(view.snapshot.id, Some(other_child_tab_id));
         assert_eq!(view.terminal_panes.len(), 2);
+    }
+
+    #[test]
+    fn resized_terminal_layout_survives_tab_switch_and_detach_return() {
+        let router = test_router();
+        let mut app = router_test_state();
+        let root_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let child_tab_id = app.open_local_shell_tab();
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            root_tab_id,
+            PaneDirection::Right,
+            child_tab_id,
+            &mut app,
+        ));
+        assert!(router.resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.7));
+
+        let other_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
+        assert!(!router.resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.4));
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let view = router.views(&app).pop().expect("main window view");
+        assert!((view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);
+        assert!((view.terminal_panes[0].placement.width - 0.7).abs() < f32::EPSILON);
+
+        let pane_tab_ids = router.pane_tab_ids(MAIN_WINDOW_ID, root_tab_id);
+        let pane_tree = router
+            .take_pane_tree_for_detach(MAIN_WINDOW_ID, root_tab_id)
+            .expect("pane group should detach");
+        let detached_id = Uuid::new_v4();
+        let transfer = app
+            .workspace_transfer_for_terminal_panes(&pane_tab_ids, MAIN_WINDOW_ID, root_tab_id)
+            .expect("pane group transfer");
+        router.register_detached(
+            detached_id,
+            slint::Weak::<AppWindow>::default(),
+            transfer,
+            Some(pane_tree),
+        );
+        let detached_view = router
+            .views(&app)
+            .into_iter()
+            .find(|view| view.active_tab_id == Some(root_tab_id))
+            .expect("detached window view");
+        assert!((detached_view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);
+
+        let detached = router
+            .remove_detached(detached_id)
+            .expect("detached route should return");
+        assert_eq!(router.restore_detached(&detached), Some(child_tab_id));
+        let main_view = router
+            .views(&app)
+            .into_iter()
+            .find(|view| view.active_tab_id == Some(root_tab_id))
+            .expect("returned main window view");
+        assert!((main_view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);
     }
 
     #[test]

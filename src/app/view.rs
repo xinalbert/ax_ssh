@@ -140,7 +140,7 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
                 ))));
                 ui.set_settings_tab_id(settings_tab_id.into());
                 apply_active_snapshot(ui, view.snapshot, view.active_tab_id);
-                apply_terminal_panes(ui, view.terminal_panes);
+                apply_terminal_panes(ui, view.terminal_panes, view.terminal_dividers);
                 drop(state);
                 #[cfg(target_os = "macos")]
                 schedule_macos_application_menu_configuration(ui);
@@ -169,6 +169,9 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
         ui.set_settings_tab_id(settings_tab_id);
         apply_active_snapshot(ui, snapshot, None);
         ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
+        ui.set_terminal_dividers(ModelRc::new(VecModel::from(
+            Vec::<TerminalPaneDividerView>::new(),
+        )));
         #[cfg(target_os = "macos")]
         schedule_macos_application_menu_configuration(ui);
     });
@@ -676,7 +679,11 @@ pub(super) fn apply_active_snapshot(
     apply_security_prompt(ui, snapshot.security_prompt);
 }
 
-fn apply_terminal_panes(ui: &AppWindow, panes: Vec<WindowTerminalPane>) {
+fn apply_terminal_panes(
+    ui: &AppWindow,
+    panes: Vec<WindowTerminalPane>,
+    dividers: Vec<PaneDividerPlacement>,
+) {
     let settings = TerminalRenderSettings {
         color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
         default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
@@ -711,6 +718,19 @@ fn apply_terminal_panes(ui: &AppWindow, panes: Vec<WindowTerminalPane>) {
         })
         .collect::<Vec<_>>();
     ui.set_terminal_panes(ModelRc::new(VecModel::from(panes)));
+    let dividers = dividers
+        .into_iter()
+        .map(|divider| TerminalPaneDividerView {
+            id: divider.id,
+            x: divider.x,
+            y: divider.y,
+            width: divider.width,
+            height: divider.height,
+            ratio: divider.ratio,
+            vertical: divider.vertical,
+        })
+        .collect::<Vec<_>>();
+    ui.set_terminal_dividers(ModelRc::new(VecModel::from(dividers)));
 }
 
 fn terminal_view_from_rendered(

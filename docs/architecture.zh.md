@@ -91,10 +91,12 @@ Rust
 `WorkspaceShell` 拥有侧栏收起、已保存连接选择器开关、选择器关闭以及侧栏/Tab/内容编排。
 它通过只读 `WorkspaceViewState` 接收 Tab、Profile、终端和设置数据，并用 callback 向上发送
 激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
-`TerminalPane` placement 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
+`TerminalPane` placement 与内部 split divider 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有 worker、终端缓冲区或连接状态。
 终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
+divider 手势只携带稳定的前序 divider ID 和标准化比例；`WindowRouter` 会对当前活动 `PaneTree`
+重验，比例及重新发布的叶节点/divider 几何都由该树拥有。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
@@ -319,11 +321,17 @@ detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断�
 配对的 Terminal/SFTP UUID 总是一起移动，但两端原本独立的 russh worker 仍保持独立。
 
 `WindowRouter` 在每个窗口路由中为每个可见 Terminal Tab 保存一棵 volatile `PaneTree`。树保存稳定的
-工作区 Tab UUID，以及最多 8 个 terminal 叶节点 UUID、布局和焦点，不保存 Slint handle、worker、
+工作区 Tab UUID，以及最多 8 个 terminal 叶节点 UUID、有界 split 比例、布局和焦点，不保存 Slint handle、worker、
 终端 buffer 或秘密。顶部 Tab model 只发布稳定的工作区 UUID；子 pane 会话仍由 `AppState` 独立管理，
 但不会进入 Tab 条。关闭这个可见 Terminal Tab 会关闭树中的全部 terminal 会话，SFTP companion 则
 继续作为独立可见 Tab。detached 窗口 Return 或关闭时，会把同一份 pane tree 和子 pane 焦点恢复到
 主窗口，不会重连或停止 worker。
+
+每个内部 split 只发布一个 divider overlay。普通态使用语义 divider 色的 hairline，hover、拖拽和
+键盘焦点使用 accent 色与较粗线条，但不改变命中区域尺寸。鼠标拖动、对应方向键、Home/End、
+无障碍 slider 操作，以及双击或 Enter/Space 复位都会映射到 0.1-0.9 的比例。比例变化复用每个 pane
+按 UUID 定向的 terminal resize 路径，因此 PTY/NAWS/本地模型尺寸会跟随新几何。比例在 Tab 切换和
+detached/return 转移中保留，但应用重启后恢复默认，也不会进入设置、worker 或 transport 状态。
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；

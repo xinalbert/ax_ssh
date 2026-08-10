@@ -1,6 +1,8 @@
 use uuid::Uuid;
 
 pub(super) const MAX_TERMINAL_PANES: usize = 8;
+const MIN_PANE_SPLIT_RATIO: f32 = 0.1;
+const DEFAULT_PANE_SPLIT_RATIO: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PaneDirection {
@@ -54,6 +56,23 @@ pub(super) struct PanePlacement {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct PaneDividerPlacement {
+    pub(super) id: i32,
+    pub(super) x: f32,
+    pub(super) y: f32,
+    pub(super) width: f32,
+    pub(super) height: f32,
+    pub(super) ratio: f32,
+    pub(super) vertical: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub(super) struct PaneLayout {
+    pub(super) panes: Vec<PanePlacement>,
+    pub(super) dividers: Vec<PaneDividerPlacement>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct PaneRect {
     x: f32,
     y: f32,
@@ -90,6 +109,7 @@ enum PaneNode {
     Leaf(Uuid),
     Split {
         axis: SplitAxis,
+        ratio: f32,
         first: Box<Self>,
         second: Box<Self>,
     },
@@ -148,9 +168,11 @@ impl PaneTree {
         first_tab_id(&self.root)
     }
 
-    pub(super) fn placements(&self) -> Vec<PanePlacement> {
+    pub(super) fn layout(&self) -> PaneLayout {
         let mut placements = Vec::with_capacity(self.pane_count());
-        collect_placements(
+        let mut dividers = Vec::with_capacity(self.pane_count().saturating_sub(1));
+        let mut next_divider_id = 0;
+        collect_layout(
             &self.root,
             PaneRect {
                 x: 0.0,
@@ -160,8 +182,26 @@ impl PaneTree {
             },
             self.focused_tab_id,
             &mut placements,
+            &mut dividers,
+            &mut next_divider_id,
         );
-        placements
+        PaneLayout {
+            panes: placements,
+            dividers,
+        }
+    }
+
+    pub(super) fn placements(&self) -> Vec<PanePlacement> {
+        self.layout().panes
+    }
+
+    pub(super) fn resize_split(&mut self, divider_id: i32, ratio: f32) -> bool {
+        if divider_id < 0 || !ratio.is_finite() {
+            return false;
+        }
+        let ratio = ratio.clamp(MIN_PANE_SPLIT_RATIO, 1.0 - MIN_PANE_SPLIT_RATIO);
+        let mut next_divider_id = 0;
+        resize_split(&mut self.root, divider_id, ratio, &mut next_divider_id).unwrap_or(false)
     }
 
     pub(super) fn split_focused(&mut self, direction: PaneDirection, new_tab_id: Uuid) -> bool {
@@ -238,11 +278,13 @@ fn first_tab_id(node: &PaneNode) -> Uuid {
     }
 }
 
-fn collect_placements(
+fn collect_layout(
     node: &PaneNode,
     rect: PaneRect,
     focused_tab_id: Uuid,
     placements: &mut Vec<PanePlacement>,
+    dividers: &mut Vec<PaneDividerPlacement>,
+    next_divider_id: &mut i32,
 ) {
     match node {
         PaneNode::Leaf(tab_id) => placements.push(PanePlacement {
@@ -255,35 +297,88 @@ fn collect_placements(
         }),
         PaneNode::Split {
             axis,
+            ratio,
             first,
             second,
         } => {
+            let divider_id = *next_divider_id;
+            *next_divider_id += 1;
+            dividers.push(PaneDividerPlacement {
+                id: divider_id,
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+                ratio: *ratio,
+                vertical: *axis == SplitAxis::Columns,
+            });
             let (first_rect, second_rect) = match axis {
                 SplitAxis::Columns => (
                     PaneRect {
-                        width: rect.width / 2.0,
+                        width: rect.width * ratio,
                         ..rect
                     },
                     PaneRect {
-                        x: rect.x + rect.width / 2.0,
-                        width: rect.width / 2.0,
+                        x: rect.x + rect.width * ratio,
+                        width: rect.width * (1.0 - ratio),
                         ..rect
                     },
                 ),
                 SplitAxis::Rows => (
                     PaneRect {
-                        height: rect.height / 2.0,
+                        height: rect.height * ratio,
                         ..rect
                     },
                     PaneRect {
-                        y: rect.y + rect.height / 2.0,
-                        height: rect.height / 2.0,
+                        y: rect.y + rect.height * ratio,
+                        height: rect.height * (1.0 - ratio),
                         ..rect
                     },
                 ),
             };
-            collect_placements(first, first_rect, focused_tab_id, placements);
-            collect_placements(second, second_rect, focused_tab_id, placements);
+            collect_layout(
+                first,
+                first_rect,
+                focused_tab_id,
+                placements,
+                dividers,
+                next_divider_id,
+            );
+            collect_layout(
+                second,
+                second_rect,
+                focused_tab_id,
+                placements,
+                dividers,
+                next_divider_id,
+            );
+        }
+    }
+}
+
+fn resize_split(
+    node: &mut PaneNode,
+    target_id: i32,
+    candidate: f32,
+    next_divider_id: &mut i32,
+) -> Option<bool> {
+    match node {
+        PaneNode::Leaf(_) => None,
+        PaneNode::Split {
+            ratio,
+            first,
+            second,
+            ..
+        } => {
+            let divider_id = *next_divider_id;
+            *next_divider_id += 1;
+            if divider_id == target_id {
+                let changed = (*ratio - candidate).abs() > f32::EPSILON;
+                *ratio = candidate;
+                return Some(changed);
+            }
+            resize_split(first, target_id, candidate, next_divider_id)
+                .or_else(|| resize_split(second, target_id, candidate, next_divider_id))
         }
     }
 }
@@ -305,6 +400,7 @@ fn replace_leaf_with_split(
             };
             *node = PaneNode::Split {
                 axis: direction.split_axis(),
+                ratio: DEFAULT_PANE_SPLIT_RATIO,
                 first: Box::new(first),
                 second: Box::new(second),
             };
@@ -324,6 +420,7 @@ fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
         PaneNode::Leaf(candidate) => (candidate != tab_id).then_some(PaneNode::Leaf(candidate)),
         PaneNode::Split {
             axis,
+            ratio,
             first,
             second,
         } => {
@@ -332,6 +429,7 @@ fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
             match (first, second) {
                 (Some(first), Some(second)) => Some(PaneNode::Split {
                     axis,
+                    ratio,
                     first: Box::new(first),
                     second: Box::new(second),
                 }),
@@ -446,5 +544,70 @@ mod tests {
         }
         assert_eq!(panes.pane_count(), MAX_TERMINAL_PANES);
         assert!(!panes.split_focused(PaneDirection::Right, id(99)));
+    }
+
+    #[test]
+    fn split_ratios_resize_panes_and_stay_bounded() {
+        let mut panes = PaneTree::new(id(1));
+        assert!(panes.split_focused(PaneDirection::Right, id(2)));
+
+        let layout = panes.layout();
+        assert_eq!(layout.dividers.len(), 1);
+        assert!(layout.dividers[0].vertical);
+        assert_eq!(layout.dividers[0].ratio, DEFAULT_PANE_SPLIT_RATIO);
+
+        assert!(panes.resize_split(layout.dividers[0].id, 0.7));
+        let placements = panes.placements();
+        assert!((placements[0].width - 0.7).abs() < f32::EPSILON);
+        assert!((placements[1].width - 0.3).abs() < f32::EPSILON);
+
+        assert!(panes.resize_split(layout.dividers[0].id, 0.99));
+        assert_eq!(panes.layout().dividers[0].ratio, 1.0 - MIN_PANE_SPLIT_RATIO);
+        assert!(panes.resize_split(layout.dividers[0].id, 0.0));
+        assert_eq!(panes.layout().dividers[0].ratio, MIN_PANE_SPLIT_RATIO);
+        assert!(!panes.resize_split(layout.dividers[0].id, MIN_PANE_SPLIT_RATIO));
+        assert!(!panes.resize_split(layout.dividers[0].id, f32::NAN));
+        assert!(!panes.resize_split(-1, 0.5));
+        assert!(!panes.resize_split(99, 0.5));
+
+        let mut rows = PaneTree::new(id(3));
+        assert!(rows.split_focused(PaneDirection::Down, id(4)));
+        assert!(!rows.layout().dividers[0].vertical);
+        assert!(rows.resize_split(0, 0.3));
+        let placements = rows.placements();
+        assert!((placements[0].height - 0.3).abs() < f32::EPSILON);
+        assert!((placements[1].height - 0.7).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn nested_split_dividers_keep_stable_preorder_ids() {
+        let mut panes = PaneTree::new(id(1));
+        assert!(panes.split_focused(PaneDirection::Right, id(2)));
+        assert!(panes.split_focused(PaneDirection::Down, id(3)));
+
+        let layout = panes.layout();
+        assert_eq!(
+            layout
+                .dividers
+                .iter()
+                .map(|divider| divider.id)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+        assert!(layout.dividers[0].vertical);
+        assert!(!layout.dividers[1].vertical);
+        assert!(panes.resize_split(1, 0.65));
+
+        let resized = panes.layout();
+        assert_eq!(resized.dividers[0].ratio, DEFAULT_PANE_SPLIT_RATIO);
+        assert!((resized.dividers[1].ratio - 0.65).abs() < f32::EPSILON);
+        assert_eq!(
+            resized
+                .dividers
+                .iter()
+                .map(|divider| divider.id)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
     }
 }
