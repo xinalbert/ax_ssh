@@ -139,7 +139,7 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
                     view.tabs,
                 ))));
                 ui.set_settings_tab_id(settings_tab_id.into());
-                apply_active_snapshot(ui, view.snapshot);
+                apply_active_snapshot(ui, view.snapshot, view.active_tab_id);
                 apply_terminal_panes(ui, view.terminal_panes);
                 drop(state);
                 #[cfg(target_os = "macos")]
@@ -167,7 +167,7 @@ pub(super) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<A
             .unwrap_or_default();
         ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
         ui.set_settings_tab_id(settings_tab_id);
-        apply_active_snapshot(ui, snapshot);
+        apply_active_snapshot(ui, snapshot, None);
         ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
         #[cfg(target_os = "macos")]
         schedule_macos_application_menu_configuration(ui);
@@ -539,7 +539,7 @@ pub(super) fn dispatch_active_snapshot(ui: &slint::Weak<AppWindow>, state: &Arc<
                 return;
             }
         };
-        apply_active_snapshot(ui, snapshot);
+        apply_active_snapshot(ui, snapshot, None);
     }) {
         if let Ok(app) = state.lock() {
             app.clear_ui_refresh_pending();
@@ -581,7 +581,7 @@ pub(super) fn dispatch_terminal_output_snapshot(
                 return;
             }
         };
-        apply_active_snapshot(ui, snapshot);
+        apply_active_snapshot(ui, snapshot, None);
         tracing::debug!(
             target: "ax_ssh::latency",
             event = "ssh-output",
@@ -607,9 +607,17 @@ fn duration_micros(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
-pub(super) fn apply_active_snapshot(ui: &AppWindow, snapshot: ActiveTabSnapshot) {
-    let active_tab_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
+pub(super) fn apply_active_snapshot(
+    ui: &AppWindow,
+    snapshot: ActiveTabSnapshot,
+    workspace_tab_id: Option<Uuid>,
+) {
+    let active_pane_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
+    let active_tab_id = workspace_tab_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| active_pane_id.clone());
     ui.set_active_tab_id(active_tab_id.into());
+    ui.set_active_pane_id(active_pane_id.into());
     ui.set_active_tab_kind(snapshot.kind.into());
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());

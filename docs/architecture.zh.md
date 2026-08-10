@@ -316,14 +316,17 @@ UUID 属于发起窗口并设为活动 Tab，再创建或返回原生窗口。�
 detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断开或重新认证 SSH/SFTP。
 配对的 Terminal/SFTP UUID 总是一起移动，但两端原本独立的 russh worker 仍保持独立。
 
-`WindowRouter` 还拥有每个原生窗口的 volatile `PaneTree`。树最多包含 8 个 terminal 叶节点，
-只保存 UUID、布局和焦点，不保存 Slint handle、worker、终端 buffer 或秘密。关闭终端 pane 会移除
-叶节点并折叠只剩单子的分支；detached 窗口 Return 或关闭时，会把同一份 pane tree 恢复到主窗口，
-不会重连或停止 worker。
+`WindowRouter` 在每个窗口路由中为每个可见 Terminal Tab 保存一棵 volatile `PaneTree`。树保存稳定的
+工作区 Tab UUID，以及最多 8 个 terminal 叶节点 UUID、布局和焦点，不保存 Slint handle、worker、
+终端 buffer 或秘密。顶部 Tab model 只发布稳定的工作区 UUID；子 pane 会话仍由 `AppState` 独立管理，
+但不会进入 Tab 条。关闭这个可见 Terminal Tab 会关闭树中的全部 terminal 会话，SFTP companion 则
+继续作为独立可见 Tab。detached 窗口 Return 或关闭时，会把同一份 pane tree 和子 pane 焦点恢复到
+主窗口，不会重连或停止 worker。
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；
-Slint 不创建 worker，也不直接修改布局。独立 Terminal 窗口没有 Tab 管理栏，继续使用键盘快捷键。
+Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。独立 Terminal 窗口没有 Tab 管理栏，
+继续使用键盘快捷键。
 终端 pane 还可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用
 `Alt+Shift+H/J/K/L` 在对应方向创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和
 Serial 会重新走对应 profile 的常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或

@@ -570,6 +570,25 @@ fn moving_workspace_tabs_changes_position_without_renumbering_instances() {
 }
 
 #[test]
+fn moving_visible_tabs_ignores_hidden_pane_sessions() {
+    let mut state = test_state();
+    let first = state.open_local_shell_tab();
+    let hidden_pane = state.open_local_shell_tab();
+    let second = state.open_local_shell_tab();
+
+    assert!(state.move_tab_for(first, 1, &[first, second]));
+    assert_eq!(
+        state
+            .tab_summaries()
+            .into_iter()
+            .filter(|tab| tab.id != hidden_pane)
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
+}
+
+#[test]
 fn retiring_one_duplicate_profile_attempt_does_not_touch_the_other() {
     let mut state = test_state();
     let profile = SessionProfile::new("Local", "localhost", "alice");

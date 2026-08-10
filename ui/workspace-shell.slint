@@ -27,6 +27,7 @@ export struct WorkspaceViewState {
     workspace_tabs: [WorkspaceTabRow],
     connection_options: [ConnectableSessionRow],
     active_tab_id: string,
+    active_pane_id: string,
     settings_tab_id: string,
     active_tab_kind: string,
     status: string,
@@ -402,7 +403,7 @@ export component WorkspaceShell inherits Rectangle {
                         root.return-workspace(id);
                     }
                     terminal-pane-command(command) => {
-                        root.terminal-pane-command(root.view.active_tab_id, command);
+                        root.terminal-pane-command(root.view.active_pane_id, command);
                     }
                     toggle-connection-picker => {
                         root.connection-picker-open = !root.connection-picker-open;

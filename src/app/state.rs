@@ -280,26 +280,6 @@ impl AppState {
         Some(target_id)
     }
 
-    pub(super) fn cycle_tab_for(&mut self, tab_ids: &[Uuid], next: bool) -> Option<Uuid> {
-        if tab_ids.len() < 2 {
-            return None;
-        }
-        let active_index = self
-            .active_tab_id
-            .and_then(|active_id| tab_ids.iter().position(|tab_id| *tab_id == active_id))?;
-        let target_index = if next {
-            (active_index + 1) % tab_ids.len()
-        } else {
-            active_index.checked_sub(1).unwrap_or(tab_ids.len() - 1)
-        };
-        let target_id = tab_ids[target_index];
-        if self.activate_tab(target_id) {
-            Some(target_id)
-        } else {
-            None
-        }
-    }
-
     pub(super) fn switch_ssh_sftp_tab(&mut self) -> Option<SshSftpNavigation> {
         let active_tab_id = self.active_tab_id?;
         let (profile_id, current_target, companion_tab_id) = self
@@ -357,18 +337,30 @@ impl AppState {
         if source_index == target_index {
             return true;
         }
+        let mut desired_order = visible_tab_ids.to_vec();
+        let moved_id = desired_order.remove(source_index);
+        desired_order.insert(target_index, moved_id);
         let Some(global_source_index) = self.tabs.iter().position(|tab| tab.id == tab_id) else {
             return false;
         };
-        let target_id = visible_tab_ids[target_index];
-        let Some(global_target_index) = self.tabs.iter().position(|tab| tab.id == target_id) else {
-            return false;
-        };
         let tab = self.tabs.remove(global_source_index);
-        let insertion_index = if global_source_index < global_target_index {
-            global_target_index.saturating_sub(1)
+        let insertion_index = if let Some(next_id) = desired_order.get(target_index + 1) {
+            self.tabs.iter().position(|tab| tab.id == *next_id)
+        } else if let Some(previous_id) = target_index
+            .checked_sub(1)
+            .and_then(|index| desired_order.get(index))
+        {
+            self.tabs
+                .iter()
+                .position(|tab| tab.id == *previous_id)
+                .map(|index| index + 1)
         } else {
-            global_target_index
+            Some(0)
+        };
+        let Some(insertion_index) = insertion_index else {
+            self.tabs
+                .insert(global_source_index.min(self.tabs.len()), tab);
+            return false;
         };
         self.tabs.insert(insertion_index, tab);
         true

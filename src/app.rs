@@ -113,13 +113,15 @@ struct WindowRouterState {
 struct WindowRoute {
     ui: slint::Weak<AppWindow>,
     transfer: Option<WorkspaceTransfer>,
+    /// The stable identity shown in the workspace Tab strip.
     active_tab_id: Option<Uuid>,
-    pane_tree: Option<PaneTree>,
+    pane_trees: HashMap<Uuid, PaneTree>,
 }
 
 struct WindowView {
     ui: slint::Weak<AppWindow>,
     tabs: Vec<WorkspaceTabSummary>,
+    active_tab_id: Option<Uuid>,
     snapshot: ActiveTabSnapshot,
     terminal_panes: Vec<WindowTerminalPane>,
 }
@@ -145,7 +147,7 @@ impl WindowRouter {
                 ui: main_ui,
                 transfer: None,
                 active_tab_id: None,
-                pane_tree: None,
+                pane_trees: HashMap::new(),
             },
         );
         Self {
@@ -161,13 +163,17 @@ impl WindowRouter {
         pane_tree: Option<PaneTree>,
     ) {
         if let Ok(mut router) = self.inner.lock() {
+            let mut pane_trees = HashMap::new();
+            if let Some(pane_tree) = pane_tree {
+                pane_trees.insert(pane_tree.workspace_tab_id(), pane_tree);
+            }
             router.routes.insert(
                 window_id,
                 WindowRoute {
                     active_tab_id: transfer.active_tab_id,
                     ui,
                     transfer: Some(transfer),
-                    pane_tree,
+                    pane_trees,
                 },
             );
         }
@@ -177,7 +183,18 @@ impl WindowRouter {
         if let Ok(mut router) = self.inner.lock()
             && let Some(route) = router.routes.get_mut(&window_id)
         {
-            route.active_tab_id = Some(tab_id);
+            if route.pane_trees.contains_key(&tab_id) {
+                route.active_tab_id = Some(tab_id);
+            } else if let Some((workspace_tab_id, tree)) = route
+                .pane_trees
+                .iter_mut()
+                .find(|(_, tree)| tree.contains(tab_id))
+            {
+                let _ = tree.set_focused(tab_id);
+                route.active_tab_id = Some(*workspace_tab_id);
+            } else {
+                route.active_tab_id = Some(tab_id);
+            }
         }
     }
 
@@ -192,10 +209,15 @@ impl WindowRouter {
 
     fn active_tab(&self, window_id: Uuid) -> Option<Uuid> {
         self.inner.lock().ok().and_then(|router| {
-            router
-                .routes
-                .get(&window_id)
-                .and_then(|route| route.active_tab_id)
+            let route = router.routes.get(&window_id)?;
+            let workspace_tab_id = route.active_tab_id?;
+            Some(
+                route
+                    .pane_trees
+                    .get(&workspace_tab_id)
+                    .map(PaneTree::focused_tab_id)
+                    .unwrap_or(workspace_tab_id),
+            )
         })
     }
 
@@ -213,16 +235,16 @@ impl WindowRouter {
             return false;
         };
         route.active_tab_id = Some(tab_id);
-        if is_terminal {
-            let focused_existing_pane = route
-                .pane_tree
-                .as_mut()
-                .is_some_and(|tree| tree.set_focused(tab_id));
-            if !focused_existing_pane {
-                route.pane_tree = Some(PaneTree::new(tab_id));
-            }
-        }
-        app.activate_tab(tab_id)
+        let active_session_id = if is_terminal {
+            route
+                .pane_trees
+                .entry(tab_id)
+                .or_insert_with(|| PaneTree::new(tab_id))
+                .focused_tab_id()
+        } else {
+            tab_id
+        };
+        app.activate_tab(active_session_id)
     }
 
     fn focus_terminal_pane(&self, window_id: Uuid, tab_id: Uuid, app: &mut AppState) -> bool {
@@ -235,20 +257,18 @@ impl WindowRouter {
         let Ok(mut router) = self.inner.lock() else {
             return false;
         };
-        if !route_tab_ids(&router, window_id, app).contains(&tab_id) {
-            return false;
-        }
         let Some(route) = router.routes.get_mut(&window_id) else {
             return false;
         };
-        let focused_existing_pane = route
-            .pane_tree
-            .as_mut()
-            .is_some_and(|tree| tree.set_focused(tab_id));
-        if !focused_existing_pane {
-            route.pane_tree = Some(PaneTree::new(tab_id));
-        }
-        route.active_tab_id = Some(tab_id);
+        let Some((workspace_tab_id, tree)) = route
+            .pane_trees
+            .iter_mut()
+            .find(|(_, tree)| tree.contains(tab_id))
+        else {
+            return false;
+        };
+        let _ = tree.set_focused(tab_id);
+        route.active_tab_id = Some(*workspace_tab_id);
         app.activate_tab(tab_id)
     }
 
@@ -264,14 +284,16 @@ impl WindowRouter {
         let Some(route) = router.routes.get_mut(&window_id) else {
             return false;
         };
+        let Some(workspace_tab_id) = route.active_tab_id else {
+            return false;
+        };
         let Some(tab_id) = route
-            .pane_tree
-            .as_mut()
+            .pane_trees
+            .get_mut(&workspace_tab_id)
             .and_then(|tree| tree.focus_direction(direction))
         else {
             return false;
         };
-        route.active_tab_id = Some(tab_id);
         app.activate_tab(tab_id)
     }
 
@@ -283,7 +305,7 @@ impl WindowRouter {
             router
                 .routes
                 .get(&window_id)
-                .and_then(|route| route.pane_tree.as_ref())
+                .and_then(|route| route.active_tab_id.and_then(|id| route.pane_trees.get(&id)))
                 .is_some_and(|tree| tree.pane_count() < MAX_TERMINAL_PANES)
         })
     }
@@ -308,10 +330,15 @@ impl WindowRouter {
         let Some(route) = router.routes.get_mut(&window_id) else {
             return false;
         };
-        let split = route.pane_tree.as_mut().is_some_and(|tree| {
-            tree.set_focused(source_tab_id);
-            tree.split_focused(direction, new_tab_id)
-        });
+        let Some((workspace_tab_id, tree)) = route
+            .pane_trees
+            .iter_mut()
+            .find(|(_, tree)| tree.contains(source_tab_id))
+        else {
+            return false;
+        };
+        let workspace_tab_id = *workspace_tab_id;
+        let split = tree.set_focused(source_tab_id) && tree.split_focused(direction, new_tab_id);
         if !split {
             return false;
         }
@@ -320,7 +347,7 @@ impl WindowRouter {
         {
             transfer.tab_ids.push(new_tab_id);
         }
-        route.active_tab_id = Some(new_tab_id);
+        route.active_tab_id = Some(workspace_tab_id);
         app.activate_tab(new_tab_id)
     }
 
@@ -328,11 +355,9 @@ impl WindowRouter {
         app.terminal(tab_id)
             .is_some_and(|terminal| !terminal.is_sftp())
             && self.inner.lock().is_ok_and(|router| {
-                router
-                    .routes
-                    .get(&window_id)
-                    .and_then(|route| route.pane_tree.as_ref())
-                    .is_some_and(|tree| tree.contains(tab_id))
+                router.routes.get(&window_id).is_some_and(|route| {
+                    route.pane_trees.values().any(|tree| tree.contains(tab_id))
+                })
             })
     }
 
@@ -341,6 +366,34 @@ impl WindowRouter {
             .lock()
             .map(|router| route_tab_ids(&router, window_id, app))
             .unwrap_or_default()
+    }
+
+    fn cycle_tab(&self, window_id: Uuid, next: bool, app: &mut AppState) -> bool {
+        let (tab_ids, active_tab_id) = match self.inner.lock() {
+            Ok(router) => {
+                let tab_ids = route_tab_ids(&router, window_id, app);
+                let active_tab_id = router
+                    .routes
+                    .get(&window_id)
+                    .and_then(|route| route.active_tab_id);
+                (tab_ids, active_tab_id)
+            }
+            Err(_) => return false,
+        };
+        if tab_ids.len() < 2 {
+            return false;
+        }
+        let Some(active_index) = active_tab_id
+            .and_then(|active_tab_id| tab_ids.iter().position(|id| *id == active_tab_id))
+        else {
+            return false;
+        };
+        let target_index = if next {
+            (active_index + 1) % tab_ids.len()
+        } else {
+            active_index.checked_sub(1).unwrap_or(tab_ids.len() - 1)
+        };
+        self.activate_tab(window_id, tab_ids[target_index], app)
     }
 
     fn include_tab(&self, window_id: Uuid, tab_id: Uuid) -> bool {
@@ -361,10 +414,14 @@ impl WindowRouter {
     fn take_pane_tree_for_detach(&self, window_id: Uuid, tab_id: Uuid) -> Option<PaneTree> {
         self.inner.lock().ok().and_then(|mut router| {
             let route = router.routes.get_mut(&window_id)?;
-            match route.pane_tree.as_ref() {
-                Some(tree) if tree.contains(tab_id) => route.pane_tree.take(),
-                _ => Some(PaneTree::new(tab_id)),
-            }
+            let workspace_tab_id =
+                route
+                    .pane_trees
+                    .iter()
+                    .find_map(|(workspace_tab_id, tree)| {
+                        tree.contains(tab_id).then_some(*workspace_tab_id)
+                    })?;
+            route.pane_trees.remove(&workspace_tab_id)
         })
     }
 
@@ -376,44 +433,49 @@ impl WindowRouter {
                 router
                     .routes
                     .get(&window_id)
-                    .and_then(|route| route.pane_tree.as_ref())
-                    .filter(|tree| tree.contains(tab_id))
+                    .and_then(|route| route.pane_trees.values().find(|tree| tree.contains(tab_id)))
                     .map(PaneTree::tab_ids)
             })
             .unwrap_or_else(|| vec![tab_id])
     }
 
-    fn remove_tab(&self, tab_id: Uuid, is_terminal_pane: bool) -> Option<Uuid> {
+    fn take_workspace_tab_ids(&self, tab_id: Uuid) -> Vec<Uuid> {
         let Ok(mut router) = self.inner.lock() else {
-            return None;
+            return vec![tab_id];
         };
-        let mut replacement = None;
+        let owner = router.routes.iter().find_map(|(window_id, route)| {
+            route
+                .pane_trees
+                .iter()
+                .find_map(|(workspace_tab_id, tree)| {
+                    tree.contains(tab_id)
+                        .then_some((*window_id, *workspace_tab_id))
+                })
+        });
+        let workspace_tab_id = owner
+            .map(|(_, workspace_tab_id)| workspace_tab_id)
+            .unwrap_or(tab_id);
+        let removed = owner
+            .and_then(|(window_id, workspace_tab_id)| {
+                router
+                    .routes
+                    .get_mut(&window_id)?
+                    .pane_trees
+                    .remove(&workspace_tab_id)
+            })
+            .map(|tree| tree.tab_ids())
+            .unwrap_or_else(|| vec![tab_id]);
         for route in router.routes.values_mut() {
             if let Some(transfer) = &mut route.transfer {
-                transfer.tab_ids.retain(|candidate| *candidate != tab_id);
+                transfer
+                    .tab_ids
+                    .retain(|candidate| !removed.contains(candidate));
             }
-            if !is_terminal_pane {
-                continue;
-            }
-            let Some(tree) = route.pane_tree.as_mut() else {
-                continue;
-            };
-            if !tree.contains(tab_id) {
-                continue;
-            }
-            if tree.pane_count() == 1 {
-                route.pane_tree = None;
-                if route.active_tab_id == Some(tab_id) {
-                    route.active_tab_id = None;
-                }
-                continue;
-            }
-            replacement = tree.remove(tab_id);
-            if route.active_tab_id == Some(tab_id) {
-                route.active_tab_id = replacement;
+            if route.active_tab_id == Some(workspace_tab_id) {
+                route.active_tab_id = None;
             }
         }
-        replacement
+        removed
     }
 
     fn remove_detached(&self, window_id: Uuid) -> Option<DetachedRoute> {
@@ -426,18 +488,33 @@ impl WindowRouter {
                 transfer.active_tab_id = route.active_tab_id.or(transfer.active_tab_id);
                 Some(DetachedRoute {
                     transfer,
-                    pane_tree: route.pane_tree,
+                    pane_tree: route.pane_trees.into_values().next(),
                 })
             })
     }
 
-    fn restore_detached(&self, detached: &DetachedRoute) {
-        if let Ok(mut router) = self.inner.lock()
-            && let Some(main) = router.routes.get_mut(&MAIN_WINDOW_ID)
-        {
-            main.active_tab_id = detached.transfer.active_tab_id;
-            main.pane_tree = detached.pane_tree.clone();
+    fn restore_detached(&self, detached: &DetachedRoute) -> Option<Uuid> {
+        let mut router = self.inner.lock().ok()?;
+        let main = router.routes.get_mut(&MAIN_WINDOW_ID)?;
+        let pane_tree = detached.pane_tree.clone();
+        main.active_tab_id = detached.transfer.active_tab_id.map(|active_tab_id| {
+            pane_tree
+                .as_ref()
+                .filter(|tree| tree.contains(active_tab_id))
+                .map(PaneTree::workspace_tab_id)
+                .unwrap_or(active_tab_id)
+        });
+        if let Some(pane_tree) = pane_tree {
+            main.pane_trees
+                .insert(pane_tree.workspace_tab_id(), pane_tree);
         }
+        let workspace_tab_id = main.active_tab_id?;
+        Some(
+            main.pane_trees
+                .get(&workspace_tab_id)
+                .map(PaneTree::focused_tab_id)
+                .unwrap_or(workspace_tab_id),
+        )
     }
 
     fn views(&self, app: &AppState) -> Vec<WindowView> {
@@ -459,6 +536,16 @@ impl WindowRouter {
                     .transfer
                     .as_ref()
                     .and_then(|transfer| transfer.active_tab_id);
+                let hidden_pane_ids = route
+                    .pane_trees
+                    .iter()
+                    .flat_map(|(workspace_tab_id, tree)| {
+                        let workspace_tab_id = *workspace_tab_id;
+                        tree.tab_ids()
+                            .into_iter()
+                            .filter(move |tab_id| *tab_id != workspace_tab_id)
+                    })
+                    .collect::<HashSet<_>>();
                 let tabs = route
                     .transfer
                     .as_ref()
@@ -468,55 +555,74 @@ impl WindowRouter {
                             .into_iter()
                             .filter(|tab| !detached_ids.contains(&tab.id))
                             .collect()
-                    });
+                    })
+                    .into_iter()
+                    .filter(|tab| !hidden_pane_ids.contains(&tab.id))
+                    .collect::<Vec<_>>();
+                let workspace_tab_for = |tab_id| {
+                    route
+                        .pane_trees
+                        .iter()
+                        .find_map(|(workspace_tab_id, tree)| {
+                            tree.contains(tab_id).then_some(*workspace_tab_id)
+                        })
+                        .unwrap_or(tab_id)
+                };
                 let active_tab_id = route
                     .active_tab_id
                     .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     .or_else(|| {
-                        transfer_active_tab_id.filter(|id| tabs.iter().any(|tab| tab.id == *id))
+                        transfer_active_tab_id
+                            .map(|tab_id| workspace_tab_for(tab_id))
+                            .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     })
                     .or_else(|| {
                         (!is_detached)
                             .then(|| app.active_tab_id())
                             .flatten()
+                            .map(|tab_id| workspace_tab_for(tab_id))
                             .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     })
                     .or_else(|| tabs.first().map(|tab| tab.id));
-                let snapshot = app.snapshot_for(active_tab_id);
-                if snapshot.kind == "terminal" {
-                    if let Some(tab_id) = active_tab_id
-                        && route
-                            .pane_tree
-                            .as_ref()
-                            .is_none_or(|tree| !tree.contains(tab_id))
-                    {
-                        route.pane_tree = Some(PaneTree::new(tab_id));
-                    }
-                }
-                // Closing the active tab changes AppState's selection. Keep the
-                // route in sync so subsequent input cannot target the removed UUID.
-                route.active_tab_id = active_tab_id;
-                let terminal_panes = if snapshot.kind == "terminal" {
+                if let Some(tab_id) = active_tab_id
+                    && app
+                        .terminal(tab_id)
+                        .is_some_and(|terminal| !terminal.is_sftp())
+                {
                     route
-                        .pane_tree
-                        .as_ref()
-                        .map(PaneTree::placements)
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter_map(|placement| {
-                            let pane_snapshot = app.snapshot_for(Some(placement.tab_id));
-                            (pane_snapshot.kind == "terminal").then_some(WindowTerminalPane {
-                                placement,
-                                snapshot: pane_snapshot,
+                        .pane_trees
+                        .entry(tab_id)
+                        .or_insert_with(|| PaneTree::new(tab_id));
+                }
+                let active_session_id = active_tab_id.map(|tab_id| {
+                    route
+                        .pane_trees
+                        .get(&tab_id)
+                        .map(PaneTree::focused_tab_id)
+                        .unwrap_or(tab_id)
+                });
+                let snapshot = app.snapshot_for(active_session_id);
+                route.active_tab_id = active_tab_id;
+                let terminal_panes = active_tab_id
+                    .and_then(|tab_id| route.pane_trees.get(&tab_id))
+                    .filter(|_| snapshot.kind == "terminal")
+                    .map(|tree| {
+                        tree.placements()
+                            .into_iter()
+                            .filter_map(|placement| {
+                                let pane_snapshot = app.snapshot_for(Some(placement.tab_id));
+                                (pane_snapshot.kind == "terminal").then_some(WindowTerminalPane {
+                                    placement,
+                                    snapshot: pane_snapshot,
+                                })
                             })
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                };
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 WindowView {
                     ui: route.ui.clone(),
                     tabs,
+                    active_tab_id,
                     snapshot,
                     terminal_panes,
                 }
@@ -529,6 +635,16 @@ fn route_tab_ids(router: &WindowRouterState, window_id: Uuid, app: &AppState) ->
     let Some(route) = router.routes.get(&window_id) else {
         return Vec::new();
     };
+    let hidden_pane_ids = route
+        .pane_trees
+        .iter()
+        .flat_map(|(workspace_tab_id, tree)| {
+            let workspace_tab_id = *workspace_tab_id;
+            tree.tab_ids()
+                .into_iter()
+                .filter(move |tab_id| *tab_id != workspace_tab_id)
+        })
+        .collect::<HashSet<_>>();
     route
         .transfer
         .as_ref()
@@ -546,6 +662,9 @@ fn route_tab_ids(router: &WindowRouterState, window_id: Uuid, app: &AppState) ->
                 .map(|tab| tab.id)
                 .collect()
         })
+        .into_iter()
+        .filter(|tab_id| !hidden_pane_ids.contains(tab_id))
+        .collect()
 }
 
 fn global_window_router() -> Option<WindowRouter> {
@@ -648,7 +767,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
     apply_settings_to_component(&ui, &settings);
-    apply_active_snapshot(&ui, ActiveTabSnapshot::default());
+    apply_active_snapshot(&ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
     ui.set_status("".into());
     wire_callbacks(
@@ -993,7 +1112,7 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
     ui.set_apple_platform(cfg!(target_os = "macos"));
     ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
     apply_settings_to_component(ui, &settings);
-    apply_active_snapshot(ui, ActiveTabSnapshot::default());
+    apply_active_snapshot(ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
     ui.set_status("".into());
     Ok(())
@@ -1086,10 +1205,15 @@ fn wire_window_actions(
                 }) {
                 Ok(detached_ui) => detached_ui,
                 Err(error) => {
-                    router_for_show.restore_detached(&DetachedRoute {
+                    let active_tab_id = router_for_show.restore_detached(&DetachedRoute {
                         transfer: transfer.clone(),
                         pane_tree: pane_tree.clone(),
                     });
+                    if let Some(active_tab_id) = active_tab_id
+                        && let Ok(mut app) = state_for_show.lock()
+                    {
+                        let _ = app.activate_tab(active_tab_id);
+                    }
                     warn!(%error, "failed to create detached workspace window");
                     set_status(
                         &ui_for_show,
@@ -1117,7 +1241,12 @@ fn wire_window_actions(
             if let Err(error) = detached_ui.show() {
                 warn!(%error, "failed to show detached workspace window");
                 if let Some(detached) = router_for_show.remove_detached(detached_id) {
-                    router_for_show.restore_detached(&detached);
+                    let active_tab_id = router_for_show.restore_detached(&detached);
+                    if let Some(active_tab_id) = active_tab_id
+                        && let Ok(mut app) = state_for_show.lock()
+                    {
+                        let _ = app.activate_tab(active_tab_id);
+                    }
                 }
                 set_status(
                     &ui_for_show,
@@ -1157,10 +1286,10 @@ fn wire_window_actions(
         let Some(detached) = router_for_return.remove_detached(window_id) else {
             return;
         };
-        router_for_return.restore_detached(&detached);
-        if let Some(active_tab_id) = detached.transfer.active_tab_id {
+        let active_tab_id = router_for_return.restore_detached(&detached);
+        if let Some(active_tab_id) = active_tab_id {
             if let Ok(mut app) = state_for_return.lock() {
-                app.activate_tab(active_tab_id);
+                let _ = app.activate_tab(active_tab_id);
             }
         }
         if let Some(ui) = ui_for_return.upgrade() {
@@ -1179,10 +1308,10 @@ fn wire_window_actions(
         let windows_for_close = detached_windows;
         ui.window().on_close_requested(move || {
             if let Some(detached) = router_for_close.remove_detached(window_id) {
-                router_for_close.restore_detached(&detached);
-                if let Some(active_tab_id) = detached.transfer.active_tab_id {
+                let active_tab_id = router_for_close.restore_detached(&detached);
+                if let Some(active_tab_id) = active_tab_id {
                     if let Ok(mut app) = state_for_close.lock() {
-                        app.activate_tab(active_tab_id);
+                        let _ = app.activate_tab(active_tab_id);
                     }
                 }
                 if let Some(main_ui) = router_for_close.main_ui() {
@@ -1271,6 +1400,184 @@ fn open_external_path(ui: &slint::Weak<AppWindow>, path: &Path, failure_message:
 #[cfg(test)]
 mod support_tests {
     use super::*;
+
+    fn router_test_state() -> AppState {
+        AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("ax-ssh-router-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        )
+    }
+
+    fn test_router() -> WindowRouter {
+        WindowRouter::new(slint::Weak::<AppWindow>::default())
+    }
+
+    #[test]
+    fn split_sessions_share_one_visible_workspace_tab() {
+        let router = test_router();
+        let mut app = router_test_state();
+        let root_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let child_tab_id = app.open_local_shell_tab();
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            root_tab_id,
+            PaneDirection::Right,
+            child_tab_id,
+            &mut app,
+        ));
+
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(
+            view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            vec![root_tab_id]
+        );
+        assert_eq!(view.active_tab_id, Some(root_tab_id));
+        assert_eq!(view.snapshot.id, Some(child_tab_id));
+        assert_eq!(view.terminal_panes.len(), 2);
+        assert_eq!(router.tab_ids(MAIN_WINDOW_ID, &app), vec![root_tab_id]);
+    }
+
+    #[test]
+    fn switching_workspace_tabs_restores_the_group_focus_and_layout() {
+        let router = test_router();
+        let mut app = router_test_state();
+        let root_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let child_tab_id = app.open_local_shell_tab();
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            root_tab_id,
+            PaneDirection::Down,
+            child_tab_id,
+            &mut app,
+        ));
+        let other_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
+        let other_child_tab_id = app.open_local_shell_tab();
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            other_tab_id,
+            PaneDirection::Right,
+            other_child_tab_id,
+            &mut app,
+        ));
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(
+            view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            vec![root_tab_id, other_tab_id]
+        );
+        assert_eq!(view.active_tab_id, Some(root_tab_id));
+        assert_eq!(view.snapshot.id, Some(child_tab_id));
+        assert_eq!(view.terminal_panes.len(), 2);
+        assert_eq!(app.active_tab_id(), Some(child_tab_id));
+
+        assert!(router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(view.active_tab_id, Some(other_tab_id));
+        assert_eq!(view.snapshot.id, Some(other_child_tab_id));
+        assert_eq!(view.terminal_panes.len(), 2);
+    }
+
+    #[test]
+    fn closing_and_detaching_use_the_whole_terminal_pane_group() {
+        let router = test_router();
+        let mut app = router_test_state();
+        let root_tab_id = app.open_local_shell_tab();
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let child_tab_id = app.open_local_shell_tab();
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            root_tab_id,
+            PaneDirection::Right,
+            child_tab_id,
+            &mut app,
+        ));
+        let pane_tab_ids = router.pane_tab_ids(MAIN_WINDOW_ID, root_tab_id);
+        let pane_tree = router
+            .take_pane_tree_for_detach(MAIN_WINDOW_ID, root_tab_id)
+            .expect("pane group should detach");
+        let detached_id = Uuid::new_v4();
+        let transfer = app
+            .workspace_transfer_for_terminal_panes(&pane_tab_ids, MAIN_WINDOW_ID, root_tab_id)
+            .expect("pane group transfer");
+        router.register_detached(
+            detached_id,
+            slint::Weak::<AppWindow>::default(),
+            transfer,
+            Some(pane_tree),
+        );
+
+        assert!(router.tab_ids(MAIN_WINDOW_ID, &app).is_empty());
+        assert_eq!(router.tab_ids(detached_id, &app), vec![root_tab_id]);
+        assert_eq!(router.active_tab(detached_id), Some(child_tab_id));
+        router.set_active(detached_id, root_tab_id);
+        assert_eq!(router.active_tab(detached_id), Some(child_tab_id));
+        let detached = router
+            .remove_detached(detached_id)
+            .expect("detached route should return");
+        assert_eq!(router.restore_detached(&detached), Some(child_tab_id));
+        assert_eq!(router.tab_ids(MAIN_WINDOW_ID, &app), vec![root_tab_id]);
+        let closed_tab_ids = router.take_workspace_tab_ids(root_tab_id);
+        assert_eq!(closed_tab_ids, vec![root_tab_id, child_tab_id]);
+        for tab_id in closed_tab_ids {
+            assert!(app.close_tab(tab_id).is_some());
+        }
+        assert!(app.terminal(root_tab_id).is_none());
+        assert!(app.terminal(child_tab_id).is_none());
+    }
+
+    #[test]
+    fn child_pane_sftp_companion_stays_visible_and_returns_to_the_group() {
+        let router = test_router();
+        let mut app = router_test_state();
+        let profile = SessionProfile::new("server", "server.example", "alice");
+        let root_tab_id = app.open_terminal_tab(&profile);
+        assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
+        let child_tab_id = app.open_terminal_tab(&profile);
+        assert!(router.complete_pane_split(
+            MAIN_WINDOW_ID,
+            root_tab_id,
+            PaneDirection::Right,
+            child_tab_id,
+            &mut app,
+        ));
+        let sftp_tab_id = app.open_sftp_tab_with_companion(&profile, Some(child_tab_id));
+        assert!(router.include_tab(MAIN_WINDOW_ID, sftp_tab_id));
+        assert!(router.activate_tab(MAIN_WINDOW_ID, sftp_tab_id, &mut app));
+
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(
+            view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            vec![root_tab_id, sftp_tab_id]
+        );
+        assert_eq!(view.active_tab_id, Some(sftp_tab_id));
+        assert_eq!(
+            app.switch_ssh_sftp_tab(),
+            Some(SshSftpNavigation::Activated(child_tab_id))
+        );
+        router.set_active(MAIN_WINDOW_ID, child_tab_id);
+
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(view.active_tab_id, Some(root_tab_id));
+        assert_eq!(view.snapshot.id, Some(child_tab_id));
+        assert_eq!(view.terminal_panes.len(), 2);
+
+        let closed_tab_ids = router.take_workspace_tab_ids(root_tab_id);
+        for tab_id in closed_tab_ids {
+            assert!(app.close_tab(tab_id).is_some());
+        }
+        let view = router.views(&app).pop().expect("main window view");
+        assert_eq!(
+            view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            vec![sftp_tab_id]
+        );
+        assert_eq!(view.active_tab_id, Some(sftp_tab_id));
+    }
 
     #[test]
     fn copied_diagnostics_are_build_metadata_only() {

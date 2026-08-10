@@ -51,6 +51,7 @@ export component AppWindow inherits Window {
     in property <[string]> local-shell-options;
     in property <string> status: "";
     in property <string> active-tab-id: "";
+    in property <string> active-pane-id: "";
     in property <string> settings-tab-id: "";
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
@@ -205,6 +206,7 @@ export component AppWindow inherits Window {
         workspace_tabs: root.workspace-tabs,
         connection_options: root.connection-options,
         active_tab_id: root.active-tab-id,
+        active_pane_id: root.active-pane-id,
         settings_tab_id: root.settings-tab-id,
         active_tab_kind: root.active-tab-kind,
         status: root.status,
@@ -213,7 +215,7 @@ export component AppWindow inherits Window {
         collapsed_group_label_chars: root.collapsed-group-label-chars,
         terminal_background: root.terminal-background,
         terminal: {
-            terminal_id: root.active-tab-id, connected: root.connected,
+            terminal_id: root.active-pane-id, connected: root.connected,
             render_lines: root.terminal-render-lines, content_columns: root.terminal-content-columns,
             cursor_row: root.terminal-cursor-row, cursor_column: root.terminal-cursor-column,
             cursor_visible: root.terminal-cursor-visible, cursor_text: root.terminal-cursor-text,

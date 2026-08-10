@@ -1,5 +1,21 @@
 # 项目环境变化记录
 
+## 2026-08-10 复核单 Tab pane group 实施环境
+
+- 日期：2026-08-10
+- 变化摘要：本轮只调整现有 Rust/Slint 窗口、Tab 和 pane 路由，不新增 crate，不修改 `Cargo.toml`、`Cargo.lock`、Rust edition、MSRV 或 CI 命令。
+- 受影响文件：预计为 `src/app.rs`、`src/app/{panes,state,view,workspace}.rs`、`ui/{app,workspace-shell}.slint`、相关测试和文档。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 locked/offline Cargo 门禁；本机 `cargo fmt`/`cargo clippy` 子命令仍不可用。
+- 验证结果：已从 `Cargo.toml`、`Cargo.lock`、CI、当前环境记忆和已通过的上一轮 257 项测试确认可以开工；本轮实现后的 Cargo/Slint 门禁待执行。
+
+## 2026-08-10 完成单 Tab pane group 环境门禁
+
+- 日期：2026-08-10
+- 变化摘要：一个可见 Terminal Tab 现在管理其内部的独立 pane sessions；只调整现有 Rust/Slint 路由和文档，没有新增依赖、修改工具链、MSRV、Cargo lock 或 CI 命令。
+- 受影响文件：`src/app.rs`、`src/app/{panes,state,view,workspace}.rs`、`ui/{app,workspace-shell}.slint`、相关测试和双语/跟踪文档。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机使用直接 `rustfmt` 回退，Cargo fmt/Clippy 由安装组件的 CI 执行。
+- 验证结果：直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 121、Doc tests 0）、tracker validator、44 个 Markdown 相对链接和 `git diff --check` 通过；`cargo fmt`/`cargo clippy` 因子命令未安装无法执行，目标平台 GUI 和真实连接生命周期仍需用户验收。
+
 ## 2026-08-10 记录终端 pane 可见分屏控件环境事实
 
 - 日期：2026-08-10

@@ -155,12 +155,13 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 编辑器 Tab 保留在主窗口。
 
 终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标：左侧为纵向分屏，在右侧新建 pane；
-右侧为横向分屏，在下方新建 pane。它们始终作用于当前活动的终端 pane。也可在终端中使用
+右侧为横向分屏，在下方新建 pane。它们始终作用于当前活动的终端 pane。分屏不会新增顶部 Tab：
+一个可见 Terminal Tab 管理整套 pane 布局。也可在终端中使用
 `Alt+H`、`Alt+J`、`Alt+K`、`Alt+L` 聚焦左、下、上、右 pane；
 使用 `Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 在对应方向创建独立终端会话。
 每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
-包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane。关闭 terminal Tab 会移除
-对应 pane 并折叠其布局分支。
+包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane，并继续作为独立可见 Tab。
+关闭这个可见 Terminal Tab 会关闭其布局中的全部 terminal pane。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通

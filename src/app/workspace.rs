@@ -194,13 +194,7 @@ pub(super) fn wire_workspace_tabs(
             "workspace.previous-tab"
         });
         let cycled = match state_for_cycle.lock() {
-            Ok(mut app) => {
-                let tab_ids = router_for_cycle.tab_ids(window_id, &app);
-                let Some(tab_id) = app.cycle_tab_for(&tab_ids, next) else {
-                    return;
-                };
-                router_for_cycle.activate_tab(window_id, tab_id, &mut app)
-            }
+            Ok(mut app) => router_for_cycle.cycle_tab(window_id, next, &mut app),
             Err(_) => {
                 set_status(&ui_for_cycle, "Cannot update workspace tabs");
                 return;
@@ -268,55 +262,54 @@ pub(super) fn close_workspace_tab(
     ui: &slint::Weak<AppWindow>,
     runtime: &Handle,
 ) {
-    let is_terminal_pane = state.lock().is_ok_and(|app| {
-        app.terminal(tab_id)
-            .is_some_and(|terminal| !terminal.is_sftp())
-    });
-    let replacement =
-        global_window_router().and_then(|router| router.remove_tab(tab_id, is_terminal_pane));
-    let closed = match state.lock() {
-        Ok(mut app) => app.close_tab(tab_id),
+    let tab_ids = global_window_router()
+        .map(|router| router.take_workspace_tab_ids(tab_id))
+        .unwrap_or_else(|| vec![tab_id]);
+    let closed_tabs = match state.lock() {
+        Ok(mut app) => tab_ids
+            .into_iter()
+            .filter_map(|closed_tab_id| {
+                app.close_tab(closed_tab_id)
+                    .map(|closed| (closed_tab_id, closed))
+            })
+            .collect::<Vec<_>>(),
         Err(_) => {
             set_status(ui, "Cannot update workspace tabs");
             return;
         }
     };
-    let Some(closed) = closed else {
+    if closed_tabs.is_empty() {
         set_status(ui, "Tab not found");
         return;
-    };
-    if let Some(replacement) = replacement
-        && let Ok(mut app) = state.lock()
-        && app.terminal(replacement).is_some()
-    {
-        let _ = app.activate_tab(replacement);
     }
-    match closed.kind {
-        ClosedTabKind::Settings => clear_settings_option_models(ui, state),
-        ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
-        ClosedTabKind::Terminal {
-            release_file_icon_cache: true,
-        } => clear_file_icon_cache(),
-        ClosedTabKind::Terminal {
-            release_file_icon_cache: false,
-        } => {}
-    }
-    if let Some(probe) = closed.pending_probe
-        && probe.cancel.send(()).is_err()
-    {
-        debug!(tab_id = %tab_id, "host-key probe already stopped while closing tab");
-    }
-    if let Some(worker) = closed.worker {
-        let ui = ui.clone();
-        runtime.spawn(async move {
-            if let Err(error) = worker.shutdown().await {
-                warn!(tab_id = %tab_id, %error, "failed to shut down closed tab worker");
-                set_status(
-                    &ui,
-                    &format!("Cannot close terminal worker cleanly: {error}"),
-                );
-            }
-        });
+    for (closed_tab_id, closed) in closed_tabs {
+        match closed.kind {
+            ClosedTabKind::Settings => clear_settings_option_models(ui, state),
+            ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
+            ClosedTabKind::Terminal {
+                release_file_icon_cache: true,
+            } => clear_file_icon_cache(),
+            ClosedTabKind::Terminal {
+                release_file_icon_cache: false,
+            } => {}
+        }
+        if let Some(probe) = closed.pending_probe
+            && probe.cancel.send(()).is_err()
+        {
+            debug!(tab_id = %closed_tab_id, "host-key probe already stopped while closing tab");
+        }
+        if let Some(worker) = closed.worker {
+            let ui = ui.clone();
+            runtime.spawn(async move {
+                if let Err(error) = worker.shutdown().await {
+                    warn!(tab_id = %closed_tab_id, %error, "failed to shut down closed tab worker");
+                    set_status(
+                        &ui,
+                        &format!("Cannot close terminal worker cleanly: {error}"),
+                    );
+                }
+            });
+        }
     }
     refresh_workspace(ui, state);
 }

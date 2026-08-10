@@ -99,6 +99,7 @@ enum PaneNode {
 /// and intentionally has no persistence, UI handle, worker, or credential state.
 #[derive(Clone, Debug)]
 pub(super) struct PaneTree {
+    workspace_tab_id: Uuid,
     root: PaneNode,
     focused_tab_id: Uuid,
 }
@@ -106,6 +107,7 @@ pub(super) struct PaneTree {
 impl PaneTree {
     pub(super) fn new(tab_id: Uuid) -> Self {
         Self {
+            workspace_tab_id: tab_id,
             root: PaneNode::Leaf(tab_id),
             focused_tab_id: tab_id,
         }
@@ -115,7 +117,10 @@ impl PaneTree {
         self.tab_ids().contains(&tab_id)
     }
 
-    #[cfg(test)]
+    pub(super) const fn workspace_tab_id(&self) -> Uuid {
+        self.workspace_tab_id
+    }
+
     pub(super) const fn focused_tab_id(&self) -> Uuid {
         self.focused_tab_id
     }
@@ -138,6 +143,7 @@ impl PaneTree {
         ids
     }
 
+    #[cfg(test)]
     pub(super) fn root_tab_id(&self) -> Uuid {
         first_tab_id(&self.root)
     }
@@ -200,6 +206,7 @@ impl PaneTree {
         Some(next.tab_id)
     }
 
+    #[cfg(test)]
     pub(super) fn remove(&mut self, tab_id: Uuid) -> Option<Uuid> {
         if !self.contains(tab_id) {
             return Some(self.focused_tab_id);
@@ -223,6 +230,7 @@ fn collect_tab_ids(node: &PaneNode, ids: &mut Vec<Uuid>) {
     }
 }
 
+#[cfg(test)]
 fn first_tab_id(node: &PaneNode) -> Uuid {
     match node {
         PaneNode::Leaf(tab_id) => *tab_id,
@@ -310,6 +318,7 @@ fn replace_leaf_with_split(
     }
 }
 
+#[cfg(test)]
 fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
     match node {
         PaneNode::Leaf(candidate) => (candidate != tab_id).then_some(PaneNode::Leaf(candidate)),
@@ -390,6 +399,7 @@ mod tests {
         assert_eq!(panes.focused_tab_id(), id(2));
 
         assert!(panes.split_focused(PaneDirection::Up, id(3)));
+        assert_eq!(panes.workspace_tab_id(), id(1));
         assert_eq!(panes.tab_ids(), vec![id(1), id(3), id(2)]);
         let placements = panes.placements();
         let upper = placements

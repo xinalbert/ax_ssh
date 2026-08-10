@@ -467,11 +467,14 @@ secret.
 `WindowRouter` maps each transferred Tab UUID to the current window's weak UI
 handle. Refreshes publish a filtered Tab model and the snapshot for each route,
 so late worker events can repaint the window that currently owns the workspace.
-It owns the volatile `PaneTree` for each native window; the tree is capped at
-eight terminal leaves and contains only UUID layout and focus state. Closing a
-terminal pane removes its leaf and collapses a resulting one-child branch.
-Detached return or close restores the same pane tree to the main route without
-reconnecting or stopping workers.
+Within each route, it owns one volatile `PaneTree` per visible Terminal Tab.
+The tree keeps a stable workspace Tab UUID plus at most eight terminal leaf
+UUIDs, layout, and focus state. Only the stable workspace UUID is published in
+the top-level Tab model; child pane sessions remain independent in `AppState`
+but are filtered from the Tab strip. Closing that visible Terminal Tab closes
+every terminal session in its tree, while an SFTP companion remains a separate
+visible Tab. Detached return or close restores the same pane tree and focused
+child to the main route without reconnecting or stopping workers.
 The inline and menu controls pass their selected Tab UUID directly to the Rust
 route handler, which validates that it belongs to the invoking window and makes
 it active before creating or returning the native window. Detaching and
@@ -484,7 +487,7 @@ The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.
 They emit the active pane UUID with `split-right` or `split-down` through
 the same `pane-command` callback as the keyboard route; Slint does not create a
-worker or mutate the layout. Detached Terminal windows have no Tab toolbar and
+worker, mutate the layout, or add another top-level Tab. Detached Terminal windows have no Tab toolbar and
 continue to use the keyboard route. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
 neighbor and `Alt+Shift+H/J/K/L` to create a fresh terminal session on that
 side. A split of a local shell creates a new PTY; a split of SSH, Telnet, or
