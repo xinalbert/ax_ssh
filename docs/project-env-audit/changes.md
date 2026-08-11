@@ -221,3 +221,81 @@
 - 受影响文件：`src/app.rs`、`src/app/{terminal_bridge,view}.rs`、`ui/{workspace-shell,terminal-pane}.slint`、双语 architecture/usage、项目跟踪与环境记录。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机直接 Rustfmt 已通过，Cargo fmt/Clippy 仍由安装组件的 CI/目标环境执行。
 - 验证结果：`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 141、应用 127、Doc tests 0）、`rustfmt --edition 2024 --check`、tracker validator、44 个 Markdown 相对链接目标和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 子命令未安装；真实主/独立窗口连续拖动、焦点恢复、键盘/无障碍 divider 和 PTY resize 仍需用户验收。
+
+## 2026-08-11 记录独立 Terminal 分屏入口环境
+
+- 日期：2026-08-11
+- 变化摘要：独立 Terminal 的紧凑分屏工具栏复用锁定 Slint 1.17.1 的可访问图标组件和既有 `pane-command` callback；未新增 crate、版本升级、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变更。
+- 受影响文件：`ui/{components/workspace-titlebar,workspace-shell}.slint`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 Cargo locked/offline 门禁；工具栏只发出既有 pane intent，不持有 `PaneTree`、Tokio worker、SSH transport 或凭据。
+- 验证结果：`cargo check --locked --offline`、`cargo test --locked --offline`、46 个 Markdown 相对链接目标与 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 子命令未安装，需 CI 补充；真实 detached 窗口控件可见性、点击、焦点和 PTY resize 仍需用户验收。
+
+## 2026-08-11 记录工作区窗口与分屏 glyph 环境
+
+- 日期：2026-08-11
+- 变化摘要：Tab Move/Return 和 Terminal split 图标统一为锁定 Slint 1.17.1 的 Rectangle/color glyph；没有新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置、工具链或 CI 变化。
+- 受影响文件：`ui/{components/workspace-titlebar,theme}.slint`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁。绘图仅在 UI 线程本地发生，既有 callback、`WindowRouter`、Tokio worker、SSH transport 与凭据边界不变。
+- 验证结果：`cargo check --locked --offline`、`cargo test --locked --offline`、46 个 Markdown 相对链接和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 子命令未安装；目标平台图标锐度、方向可辨性、hover/focus 与原生 Return 协调性仍需用户验收。
+
+## 2026-08-11 记录 detached 标题栏分屏入口环境
+
+- 日期：2026-08-11
+- 变化摘要：detached Terminal 删除客户区分屏条，改在 macOS 原生标题栏的 Return 左侧使用 image-only 分屏按钮；返回按钮继续使用系统符号与 AppKit 模板回退。未新增 crate、版本升级、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变更。
+- 受影响文件：`src/{app,app/macos_window}.rs`、`ui/workspace-shell.slint`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、`objc2-app-kit 0.3.2` 和 locked/offline Cargo 门禁；原生 button 只经 weak `AppWindow` 发出已有 pane intent，不持有 `PaneTree`、Tokio worker、SSH transport 或凭据。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 145、应用 134、Doc tests 0）和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 子命令未安装，需 CI 补充；目标 macOS 标题栏图标、Tooltip、点击、焦点和 PTY resize 仍需用户验收。
+
+## 2026-08-11 记录 Terminal URL 与路径目标环境
+
+- 目的：为可见 Terminal 内容增加受平台主修饰键保护的 URL/远端路径打开，并确保 SFTP 路由不改变已声明的安全与运行环境。
+- 改动范围：`src/terminal.rs`、`src/app/{terminal_targets,terminal_bridge,sftp_bridge,connection}.rs`、`src/app/state/`、`ui/{app,workspace-shell,terminal-pane,components/terminal-grid}.slint`、双语契约和项目跟踪记录。
+- 执行内容：复用锁定的 Slint 1.17.1 pointer modifier callback、已有 `open` crate、现有 SSH/SFTP companion UUID 路由和 SFTP-only worker；不新增依赖或外部服务。可见行仅做有界解析，宽字符 cell 坐标在终端模型内映射；URL 不被 AxSSH 请求，新的 SFTP Tab 仍是独立 SSH transport 并走正常 host-key/认证。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、4 项 `terminal_targets` parser 测试、`visible_row_target_text_preserves_cell_columns_after_wide_characters` 和 `targeted_sftp_companion_path_stays_on_the_runtime_tab` 通过。完整 locked/offline check/test、Markdown/tracker/diff 门禁待本轮收口；本机 `cargo fmt`/`cargo clippy` 子命令未安装。
+- 风险/待办：目标 macOS/Windows/Linux 的 `Cmd/Ctrl` hover/click、默认 URL opener、主机密钥确认、认证和远端路径实际目录需用户验证；连接中的 companion 至多保留一个运行时路径，绝不持久化。
+
+## 2026-08-11 完成 Terminal URL 与路径目标环境门禁
+
+- 目的：确认 URL/远端路径打开不改变已声明的依赖、构建或 SSH 安全环境。
+- 改动范围：`src/terminal.rs`、`src/app/`、`ui/`、双语契约和项目/环境记录。
+- 执行内容：执行直接 Rustfmt、locked/offline Cargo check/test、tracking validator、Markdown 相对链接与差异检查；保留本机缺失 Cargo fmt/Clippy 的事实，不安装或升级组件。
+- 验证结果：`cargo check --locked --offline` 通过；完整 `cargo test --locked --offline` 通过（库 146、应用 139、Doc tests 0）；tracker validator、Markdown 相对链接和 `git diff --check` 通过。`cargo fmt`、`cargo clippy` 因本机无子命令无法执行；直接 `rustfmt --edition 2024 --check` 通过。
+- 风险/待办：CI 或具备组件的环境补充 Cargo fmt/Clippy。真实 `Cmd/Ctrl` hover/click、默认 URL opener、host-key 确认、认证和远端目录需用户在目标平台验收。
+
+## 2026-08-11 记录 SFTP 当前路径复制按钮环境
+
+- 目的：为 SFTP 双栏目录标题提供路径复制，而不扩大 UI、worker 或 SSH transport 边界。
+- 改动范围：`ui/{components/sftp-controls,sftp-pane,workspace-shell}.slint`、双语 SFTP 契约和项目/环境记录。
+- 执行内容：复用锁定 Slint 1.17.1 和已有系统剪贴板 callback；Remote/Local 按钮只转发当前有界路径，主窗口与 detached SFTP 共用接线。未新增依赖或外部服务，也未变更 Rust edition、MSRV、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 146、应用 139、Doc tests 0）、tracker validator、Markdown 相对链接与 `git diff --check` 通过。本机 `cargo fmt`/`cargo clippy` 子命令未安装；未自行截图，目标平台布局、Tooltip、焦点和剪贴板结果留用户验收。
+- 风险/待办：CI 或具备组件的环境补充 Cargo fmt/Clippy；不对无图形环境中的系统剪贴板行为作推断。
+
+## 2026-08-12 记录 Terminal target hover 下划线环境
+
+- 目的：确认实时 URL/路径下划线只扩展现有 Rust/Slint UI 合同，不改变运行环境、依赖或 SSH/SFTP 安全边界。
+- 改动范围：`src/{terminal.rs,app/{terminal_targets,terminal_bridge}.rs}`、`ui/{app,workspace-shell,terminal-pane,components/terminal-grid}.slint` 和双语契约。
+- 执行内容：复用锁定 Slint 1.17.1、已有 `open` crate 与 SFTP companion 路由；新增的 `TerminalTargetHighlight` 只携带 active、row、半开 cell 区间。修正 Slint Apple modifier 映射，使 macOS `Cmd` 与其它平台 `Ctrl` 均使用 `control` 字段；不新增 crate、外部服务、配置字段或 CI 命令。
+- 验证结果：`cargo check --locked --offline` 和 parser 定向测试已通过；完整 Cargo test、直接 Rustfmt、tracker/Markdown/diff 门禁待执行。本机 `cargo fmt`/`cargo clippy` 子命令未安装，目标平台 GUI hover/click 待用户确认。
+
+## 2026-08-12 完成 Terminal target hover 下划线环境门禁
+
+- 变化摘要：确认实时完整目标下划线不改变 Rust 2024、MSRV、Cargo 依赖、Slint 版本、配置 schema、CI 命令、SSH trust、凭据或 worker 所有权。
+- 受影响文件：`src/terminal.rs`、`src/app/{terminal_targets,terminal_bridge}.rs`、`ui/{app,workspace-shell,terminal-pane,components/terminal-grid}.slint`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；本机以直接 Rustfmt 覆盖缺失的 Cargo fmt，Clippy 留给安装组件的 CI 或目标环境。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、6 项 parser/修饰键定向测试、1 项宽字符 cell span 测试、完整 `cargo test --locked --offline`（库 147、应用 141、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 因子命令未安装无法执行；目标平台 Cmd/Ctrl hover/click、下划线呈现和实际 opener/SFTP 认证由用户验收。
+
+## 2026-08-12 记录 Terminal 语义高亮环境
+
+- 日期：2026-08-12
+- 变化摘要：在已有 UI 独立终端渲染层增加有界语义色，不改变依赖、锁文件、Rust edition、MSRV、Slint 版本、配置 schema、工具链或 CI 命令。
+- 受影响文件：`src/app/terminal_render.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；render mapper 只读取已有有界 snapshot，默认 ASCII run 才拆分为 URL/路径、HTTP 和状态词色，不访问 Slint、worker、SSH/SFTP transport 或持久化。
+- 验证结果：直接 `rustfmt --edition 2024` 与 8 项 `terminal_render` 定向测试通过；完整 `cargo check --locked --offline`、`cargo test --locked --offline`、tracker、Markdown 和 diff 门禁待本轮收口。`cargo fmt`/`cargo clippy` 子命令仍未安装。
+
+## 2026-08-12 完成 Terminal 语义高亮环境门禁
+
+- 日期：2026-08-12
+- 变化摘要：完成可见 Terminal 默认 ASCII run 语义色的离线编译和回归门禁；环境、依赖、锁文件、配置 schema、工具链与 CI 契约仍无变化。
+- 受影响文件：`src/app/terminal_render.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 命令；本机以直接 Rustfmt 覆盖缺失的 Cargo fmt，Clippy 由具备组件的 CI 或目标环境执行。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 144、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过；`cargo fmt`/`cargo clippy` 子命令未安装，GUI 颜色/交互需用户验收。

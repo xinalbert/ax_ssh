@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260811-sftp-profile-default-directories
-- 目标：在新建和编辑 SSH 连接时配置 SFTP 远端与本地默认目录，并在新 SFTP Tab 初始化时使用它们。
-- 交付物：schema v19 兼容 profile 字段、Slint 编辑器映射、worker/state 初始化、回归测试和双语契约。
+- 目标 ID：20260812-terminal-semantic-highlights
+- 目标：参考 `ax_ashell` 的有界语义标注思路，为可见 Terminal 的明确状态词、HTTP 状态码、URL 和远端路径提供实时颜色提示，并在所有终端主题背景上保持可读。
+- 交付物：私有终端渲染层的有界语义匹配、按终端背景校正的语义色、保留 ANSI/真彩色的 run 切分、回归测试与双语契约。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config/{session,tests}.rs` 的非秘密 SSH profile 字段，`src/app/{state,view,workspace}/` 的编辑器与 SFTP Tab 映射，`src/ssh/worker{,.rs/sftp.rs}` 的初始远端目录，`ui/{app,workspace-shell,session-editor}.slint` 的 callback 契约，以及配对文档/tracker。
-- 不在本轮范围内：目录选择器、本地/远端目录持久化以外的浏览状态、上传或文件修改、凭据、SSH host-key trust、依赖/工具链升级和 `third_package/axshell`。
+- 当前范围：`src/app/terminal_render.rs` 的 UI 独立渲染映射，以及 `docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/` 的记录。
+- 不在本轮范围内：终端 target 打开语义、指针/下划线交互、终端输入、终端缓冲/回滚、设置 schema、主题持久化字段、SSH/SFTP worker、host-key trust、凭据、依赖/工具链、构建文件和 `third_package/axshell`。
 
 ## 当前状态
 
@@ -23,42 +23,33 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| SFTPPATH1 | completed | SSH profile schema v19、缺失字段回退与有界校验 | config unit tests | 远端缺失/空值回退 `~`；本地空值代表平台 home。 |
-| SFTPPATH2 | completed | 新建/编辑连接的 Slint DTO、草稿与保存 callback | Cargo check | 仅 SSH 显示两个目录字段，秘密字段与 trust 流程不变。 |
-| SFTPPATH3 | completed | 新 SFTP Tab 的 local snapshot 与 worker remote browser 初始化 | state/worker tests | 默认值仅在 Tab 创建时应用，之后导航仍是 Tab-local。 |
-| SFTPPATH4 | completed | 双语契约、项目地图与完整离线门禁 | fmt/check/clippy/test/tracker/diff | 真实目录可达性和 GUI 布局留目标平台验收。 |
+| TSEM1 | completed | 有界的状态词、HTTP、URL 和远端路径语义分类及按终端背景校正的颜色 | `terminal_render` unit tests | 仅处理可见 render line，不读取 worker/文件系统；不匹配任意子串。 |
+| TSEM2 | completed | 语义 span 切分进终端 render run，保留 ANSI/真彩色、背景、属性和宽字符列 | `terminal_render` unit tests、Cargo check | 仅默认前景/背景的字符可被覆盖，不改变终端已有样式。 |
+| TSEM3 | completed | 双语契约、项目/环境记录与完整门禁 | Rustfmt/check/test/tracker/diff | GUI 色彩与不同主题由用户在目标平台验收。 |
 
 ## 已完成
 
-- 新增 SSH profile `sftp_remote_path` 与 `sftp_local_path`；两者均为非秘密数据，限制控制字符和长度，schema 升至 v19。
-- 新建/编辑 SSH 连接显示 **SFTP directories**，保存路径会在下一次新建 SFTP Tab 时使用。
-- SFTP worker 收到 profile 的远端初始路径；`AppState` 以 profile 本地路径建立本地浏览器 snapshot。旧 profile 保持 `~`/平台 home 回退。
+- 已完成施工前环境预检：根目录、`Cargo.toml`、`Cargo.lock`、`.github/workflows/ci.yml` 与已有环境记忆一致；本机 Rust 1.96.1/Cargo 1.96.1 可用，`cargo fmt` 与 `cargo clippy` 子命令未安装。
+- 已检查 `ax_ashell` 的高亮策略：使用有界、边界感知的可见行匹配，并保持独立于终端 transport；本轮只采用该思路，不复制其代码或引入依赖。
+- 已确认 `src/app/terminal_render.rs` 是唯一适合持有渲染期语义色和 run 切分的 owner，既有最小对比度逻辑可对每个终端背景执行校正。
+- 已实现 URL/路径、HTTP `2xx-5xx` 及常见成功、警告、错误状态词的边界感知语义色；仅默认 ASCII run 会被切分，ANSI/真彩色、非默认背景、inverse、dim 和非 ASCII run 保留原样。
+- 已完成 8 项 `terminal_render` 定向测试，覆盖目标/状态词、词边界、ANSI 保留、所有内置终端色表和浅色自定义背景的 4.5:1 语义色对比度。
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 145、应用 134、Doc tests 0）、18 个 Markdown 相对链接目标和 `git diff --check`。
-- 进行中：无。
-- 未完成：目标平台确认新建/编辑 SSH 连接的字段布局，以及可访问远端/本地目录在首次打开 SFTP Tab 时显示正确内容。
+- 已完成：项目地图、AxSSH Rust/Slint 规范和环境记忆预检；直接 `rustfmt --edition 2024 --check`、8 项 `terminal_render` 定向测试、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 144、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 均通过。
+- 未完成：本机未安装的 `cargo fmt`/`cargo clippy` 子命令，以及目标平台 GUI 验收。
 
 ## 风险与阻塞
 
-- 路径绝不进入凭据、日志或 host-key 信任数据；新路径不会改变已有 Tab、SSH transport 或凭据生命周期。
-- 保存时只作有界文本校验，不探测目录可达性；失败仍由既有 SFTP 或本地目录浏览错误处理显示。
-- tracker validator 仍报告月度历史中 7 条既有缺失/无效时间或状态转换格式；本轮记录未新增该类错误。
+- 不能覆盖已有 ANSI/真彩色、非默认背景、inverse 或其他显式终端样式，否则会破坏远端程序自身的语义色。
+- 语义标注只能扫描有界可见行；不得记录终端文本、创建无界缓存或让渲染循环访问 UI/worker。
+- 本机缺少 `cargo fmt` 与 `cargo clippy` 子命令；CI 或具备组件的环境仍需补充两项门禁。
 
 ## 下一步
 
-- 请用户在目标平台验证新建/编辑 SSH 连接的 SFTP 目录字段，以及新 SFTP Tab 的实际初始目录。
-
-## 2026-08-11 本地文件打开 TOCTOU 修复
-
-- 时间：2026-08-11 16:28 +0800
-- 触发原因：用户要求修复 SFTP 本地栏在路径验证与 detached opener 之间的文件替换竞态。
-- 执行内容：列目录时保存 Unix dev/inode 或 Windows volume/file index；打开时核对只读 handle identity，并从该 handle 复制到现有 512 MiB 上限、私有权限、quota 与原子发布的 SFTP-open cache，平台 opener 只接收已发布快照路径。
-- 影响文件：`src/app/{local_files,sftp_bridge}.rs`、`src/sftp{,/transfer,/transfer/cache}.rs`、双语架构/使用/开发文档和项目跟踪记录。
-- 安全边界：不改变 SSH host-key、凭据或 transport；不按验证后的源路径重开，路径后续被替换也不能重定向实际打开内容。
-- 验证结果：本地 identity/替换拒绝 6 项与 SFTP transfer/cache 18 项定向测试通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、沙箱外完整离线测试（库 143、应用 133、Doc tests 0）和 `git diff --check` 通过。当前环境没有 `rustup`/Windows target，Windows identity 分支留给三平台 CI 类型检查；真实默认程序打开由用户验收。
+- 由用户在目标平台确认各终端主题下的颜色层次、ANSI 输出保留、Cmd/Ctrl target 下划线与文本选择；CI 或具备组件的环境补充 Cargo fmt/Clippy。
 
 ## 最后更新时间
 
-- 2026-08-11 18:00 +0800
+- 2026-08-12 01:25 CST

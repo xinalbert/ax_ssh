@@ -106,6 +106,8 @@ SFTP Tab 随后只打开 `sftp` subsystem，绝不申请 PTY 或终端 shell。�
 Tab 获得焦点，并接受对应方向键、Home 和 End；Enter 或 Space 执行其双击动作。当前应用运行期间切换
 Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独拖动文件表格列宽。
 
+两个目录标题栏中的复制图标可将对应远端或本地栏当前路径写入系统剪贴板。
+
 远端输入绝对路径、相对当前目录的路径或 `~` 后选择 **Open**；双击
 文件夹可进入该目录。远端栏首次打开 profile 中设置的默认目录。本地栏首次打开设置的目录；为空时使用
 平台 home 目录，且只读取有界文件元数据。
@@ -160,9 +162,11 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
 
-终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标：左侧为纵向分屏，在右侧新建 pane；
-右侧为横向分屏，在下方新建 pane。它们始终作用于当前活动的终端 pane。分屏不会新增顶部 Tab：
-一个可见 Terminal Tab 管理整套 pane 布局。也可在终端中使用
+终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标；macOS 的独立 Terminal 窗口会将同一组图标
+放在原生标题栏、紧邻返回图标左侧，客户区保持全高 pane：左侧为纵向分屏，在右侧新建 pane；右侧为横向
+分屏，在下方新建 pane。
+它们始终作用于当前活动的终端 pane。分屏不会新增顶部 Tab：一个可见 Terminal Tab 管理整套 pane 布局。
+也可在终端中使用
 `Alt+H`、`Alt+J`、`Alt+K`、`Alt+L` 聚焦左、下、上、右 pane；
 使用 `Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 在对应方向创建独立终端会话。
 每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
@@ -190,6 +194,17 @@ Settings 中修改；Select All 固定为 macOS `Cmd+A`、其它平台 `Ctrl+Shi
 Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。detached Terminal
 虽然没有客户区菜单，仍可使用相同键盘快捷键。普通非秘密文本字段继续使用原生编辑快捷键和
 右键菜单，秘密字段仍不可复制。
+在 macOS 按住 `Cmd`，或在 Windows/Linux 按住 `Ctrl`，再点击可见终端目标即可打开。
+按住时，完整识别出的 URL 或路径会显示下划线；松开修饰键或开始文本选择时提示消失。AxSSH 识别
+`http://` 和 `https://` URL，并交给本机默认程序；不会自行请求这些 URL。
+它也识别以 `/`、`./` 或 `../` 开头的 Unix 远端路径，包括
+`/srv/app/main.rs:42:7` 这类诊断位置。路径会激活对应 SSH Tab 的 SFTP companion 并导航到该位置。
+没有 companion 时，AxSSH 会以该位置作为初始目录新建独立 SFTP Tab，仍执行常规 SSH host-key 与
+认证流程。已有 companion 时，相对路径相对于当前 SFTP 目录解释；如果 companion 仍在主机密钥确认、
+认证或 browser 启动阶段，路径只保留在该运行时 Tab，正常流程就绪后再处理。
+默认样式的终端输出还会获得克制的语义色：URL 和路径、HTTP 响应类别，以及常见成功、警告和错误状态词
+使用不同颜色。颜色跟随所选 Terminal 色表，并保持与终端背景可区分；已经指定 ANSI 或真彩色样式的输出
+保持原样。
 **Settings > Terminal** 的 **Copy selection on select** 默认关闭。开启后，完成鼠标选区和
 **Select All** 会立即复制，直接右击始终粘贴。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。

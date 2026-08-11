@@ -157,6 +157,9 @@ performs the divider's double-click action. The layout remains while switching
 Tabs in the current application run and returns to its defaults after restart.
 The individual file-table columns are not resizable in this phase.
 
+Use the copy icon in either directory header to place that pane's current
+remote or local path on the system clipboard.
+
 Enter an absolute path, a path relative to the
 current directory, or `~` in the remote browser, then use **Open**; double-click
 a folder to enter it. The remote browser starts at the SSH profile's configured
@@ -241,11 +244,13 @@ window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
 
-The terminal Tab toolbar has two controls beside the saved-connection button:
-the left control splits vertically and opens a new pane to the right, while the
-right control splits horizontally and opens a new pane below. They always act
-on the active terminal pane. Splitting does not add another top-level Tab: one
-visible Terminal Tab owns the complete pane layout. Use `Alt+H`, `Alt+J`,
+The terminal Tab toolbar has two controls beside the saved-connection button.
+On macOS, a detached Terminal window places the same pair in its native title
+bar immediately before the Return icon, leaving its client area for full-height
+panes. The left control splits vertically and opens a new pane to the right,
+while the right control splits horizontally and opens a new pane below.
+They always act on the active terminal pane. Splitting does not add another
+top-level Tab: one visible Terminal Tab owns the complete pane layout. Use `Alt+H`, `Alt+J`,
 `Alt+K`, and `Alt+L` in a terminal to focus the left, down, up, and right
 pane. Use `Alt+Shift+H`, `Alt+Shift+J`, `Alt+Shift+K`, and
 `Alt+Shift+L` to create an independent terminal session on that side. Each
@@ -286,6 +291,25 @@ Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
 The same keyboard shortcuts work in a detached Terminal window even though it
 has no client-area menu. Non-secret text fields retain their native editing
 shortcuts and context menus; secret fields remain non-copyable.
+Hold `Cmd` on macOS, or `Ctrl` on Windows/Linux, and click a visible terminal
+target to open it. While that modifier is held, the complete recognized URL or
+path is underlined; the indicator clears when the modifier is released or text
+selection begins. AxSSH recognizes `http://` and `https://` URLs and opens them
+with the local default application; it does not fetch them itself. It also
+recognizes remote Unix paths beginning with `/`, `./`, or `../`, including
+diagnostic locations such as `/srv/app/main.rs:42:7`. A path activates its SSH
+Tab's SFTP companion and navigates to that location. If no companion exists,
+AxSSH opens a separate SFTP Tab at that initial location through the ordinary
+SSH host-key and authentication flow. Relative paths use the current SFTP
+directory when an already-open companion is available. If the companion is
+still completing host-key confirmation, authentication, or browser startup,
+the path is held only on that runtime Tab and applied when the normal flow is
+ready.
+Plain terminal output also receives restrained semantic color: URLs and paths,
+HTTP response classes, and familiar success, warning, and error words use
+separate colors. The colors follow the selected terminal palette and stay
+readable against its background. Output that already specifies ANSI or
+true-color styling keeps that styling unchanged.
 In **Settings > Terminal**, **Copy selection on select** is disabled by default.
 When enabled, completed pointer selections and **Select All** copy immediately,
 and a direct right-click always pastes.

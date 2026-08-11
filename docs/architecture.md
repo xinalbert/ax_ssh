@@ -147,6 +147,34 @@ Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
 retains the focus, IME input, selection draft, and resize lifecycle.
+Terminal target activation follows the same boundary. While the platform primary
+modifier is held (`Cmd` on macOS and `Ctrl` elsewhere), a pointer move or primary
+modifier press asks the application bridge about the current visible row and
+cell. The private parser returns the complete bounded target character range,
+which `TerminalModel` maps back to a half-open cell range; `TerminalPane` holds
+only that short-lived `TerminalTargetHighlight`, and `TerminalGrid` draws its
+accent underline and pointer cursor across the complete target. The highlight is
+cleared on modifier release, pointer exit, text selection, or scrolling. A
+primary-modifier click revalidates the pane UUID and reads that single row from
+the terminal model before parsing it. The private parser accepts only
+`http://`/`https://` URLs and Unix-style remote paths beginning with `/`, `./`,
+or `../`, removes terminal punctuation and `:line[:column]` diagnostics, and
+rejects controls and overlong text. URLs are handed to the local default opener
+on a blocking worker, never fetched by AxSSH. A remote path stays within
+the existing SSH/SFTP companion route: an available companion is activated and
+navigated, while a companion still in trust, authentication, or SFTP-browser
+startup keeps the bounded path on that runtime Tab until its normal flow is
+ready. A new SFTP Tab carries the path as tab-local initial state until its
+normal, independent SSH authentication starts. Neither target text nor that
+initial path is persisted, logged, or sent through Slint as a terminal buffer.
+The private terminal render mapper also adds bounded semantic color to plain
+visible cells only: URLs and actionable Unix paths use the link color; HTTP
+`2xx`/`3xx`/`4xx`/`5xx` and common success, warning, and error tokens use their
+corresponding semantic colors. It derives those colors from the selected
+terminal palette and corrects each one to at least 4.5:1 against the resolved
+terminal background. Explicit ANSI 16/256/true-color foregrounds, non-default
+backgrounds, inverse cells, dim text, and non-ASCII cell runs retain the
+program-provided rendering unchanged.
 Its `key-pressed` handler sends only special keys and terminal control chords to
 Rust; printable keys, Shift text, and committed IME text remain in the native
 `TextInput.edited` path.
@@ -563,8 +591,11 @@ The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.
 They emit the active pane UUID with `split-right` or `split-down` through
 the same `pane-command` callback as the keyboard route; Slint does not create a
-worker, mutate the layout, or add another top-level Tab. Detached Terminal windows have no Tab toolbar and
-continue to use the keyboard route. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
+worker, mutate the layout, or add another top-level Tab. On macOS, a detached
+Terminal places the same image-only pair in its native title bar immediately
+before the Return icon, while its client area remains a full-height pane
+surface. Each native action captures only a weak `AppWindow` and invokes the
+same callback, so `WindowRouter` continues to validate the focused pane. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
 neighbor and `Alt+Shift+H/J/K/L` to create a fresh terminal session on that
 side. A split of a local shell creates a new PTY; a split of SSH, Telnet, or
 Serial repeats the normal profile connection flow. A split SSH child repeats
@@ -742,6 +773,9 @@ the directory splitter restores equal widths; double-clicking the transfer
 splitter collapses or expands the queue. No splitter state enters Rust, the
 configuration schema, or the SFTP transport, and the Name/Size/Modified columns
 remain fixed responsive columns in this phase.
+Each directory header also emits only its current, already-bounded path through
+the existing clipboard callback; the copy button does not read a directory or
+access an SFTP worker.
 
 The remote side remains the bounded SFTP browser, while
 `src/app/local_files.rs` reads local directory metadata only on a Tokio blocking
@@ -1010,8 +1044,11 @@ fields, preventing the two editors from drifting structurally.
 `src/app/view.rs` maps the current settings theme into the Slint global and
 re-renders only the active terminal snapshot when its resolved colors change. Terminal rendering
 uses the resolved default foreground, background, and selection colors while
-retaining ANSI 16/256/true-color semantics. The configured minimum contrast ratio
-is evaluated per cell against the resolved cell background; only a foreground below
+retaining ANSI 16/256/true-color semantics. Its bounded semantic overlay only
+changes eligible plain visible cells and derives distinct link, success, warning,
+and error colors from the active terminal palette; each is corrected to at least
+4.5:1 against the terminal background. The configured minimum contrast ratio is
+evaluated per cell against the resolved cell background; only a foreground below
 the target is moved toward black or white, while backgrounds and already-readable
 colors remain unchanged. A ratio of 1.0 disables correction, and dim text uses half
 the target ratio to preserve its intentional hierarchy. A theme refresh never

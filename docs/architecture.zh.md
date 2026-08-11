@@ -120,6 +120,22 @@ identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
+终端目标激活遵循相同边界。按住平台主修饰键时（macOS 为 `Cmd`，其它平台为 `Ctrl`），指针移动或
+按下主修饰键都会让 application bridge 检查当前可见行和单元格。私有 parser 返回完整、有界目标的
+字符区间，`TerminalModel` 再将其映射回半开 cell 区间；`TerminalPane` 只短暂保存
+`TerminalTargetHighlight`，`TerminalGrid` 在完整目标下绘制 accent 下划线并切换鼠标指针。松开
+修饰键、指针离开、开始文本选择或滚动时会清除提示。主修饰键点击仍会再次校验 pane UUID，并从
+终端模型读取这一行后解析。私有 parser 只接受 `http://`/`https://` URL，以及以 `/`、`./` 或
+`../` 开头的 Unix 风格远端路径；会移除终端常见尾随标点和 `:line[:column]` 诊断后缀，并拒绝
+控制字符和过长文本。URL 只在 blocking worker 中交给本机默认程序，AxSSH 不会请求该 URL。
+远端路径始终复用现有 SSH/SFTP companion 路由：可用 companion 会被激活并导航；仍在主机信任、认证或
+SFTP browser 启动阶段的 companion 会把有界路径保留在该运行时 Tab，待正常流程就绪后处理；没有
+companion 时，新 SFTP Tab 只在运行期保存初始路径，随后仍执行独立且正常的 SSH 认证。目标文本和该
+初始路径都不会持久化、写日志，或作为完整终端缓冲传给 Slint。
+私有终端渲染映射还只对可见、默认样式的普通 cell 添加有界语义色：URL 和可操作的 Unix 路径使用链接色；
+HTTP `2xx`/`3xx`/`4xx`/`5xx` 及常见的成功、警告和错误状态词使用对应语义色。颜色从当前 Terminal
+色表派生，并针对解析后的终端背景校正到至少 4.5:1。显式 ANSI 16/256/真彩色前景、非默认背景、反色、
+dim 文本和非 ASCII cell run 都保留远端程序提供的原始渲染。
 它的 `key-pressed` 只把特殊键和终端控制组合键发送给 Rust；可打印字符、Shift 文字和已提交的
 IME 文本继续通过原生 `TextInput.edited` 路径。
 `AppWindow.log-keyboard-event` 在排除快捷键录制和安全提示后，只上报已处理的临时控件按键。
@@ -373,8 +389,9 @@ divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；
-Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。独立 Terminal 窗口没有 Tab 管理栏，
-继续使用键盘快捷键。
+Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。macOS 的独立 Terminal 将同一组仅图标控件
+放在原生标题栏、紧邻返回图标左侧，客户区保持为全高 pane 表面。每个原生动作只捕获 weak `AppWindow`
+并调用同一 callback，仍由 `WindowRouter` 校验当前 focused pane。
 终端 pane 还可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用
 `Alt+Shift+H/J/K/L` 在对应方向创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和
 Serial 会重新走对应 profile 的常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或
@@ -491,6 +508,8 @@ available 的远端 snapshot，application bridge 也会独立拒绝来自未连
 `SftpPane` 则按响应式最小尺寸限制两侧。splitter 提供 resize 光标、键盘焦点与方向键调整，以及 slider
 可访问操作；双击目录 splitter 恢复等宽，双击 Transfers splitter 折叠或展开队列。分栏状态不进入
 Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列在本阶段仍是固定的响应式列。
+两个目录标题栏还只会通过既有 clipboard callback 发出当前已受限路径；复制按钮不读取目录，也不会接触
+SFTP worker。
 
 远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
 本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为 250 条、每个名称
@@ -662,7 +681,8 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 `ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将当前内存设置的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端
 快照。终端渲染使用解析后的默认前景、背景和选区色，同时保留 ANSI 16/256/真彩色语义。
-最小对比度按每个单元格的实际背景计算；只有低于目标的前景会向黑或白修正，背景和已经可读的颜色保持不变。
+有界语义覆盖层只改变符合条件的可见默认样式 cell，并从当前终端色表派生出不同的链接、成功、警告和错误色；
+每一色均会针对终端背景校正至至少 4.5:1。最小对比度按每个单元格的实际背景计算；只有低于目标的前景会向黑或白修正，背景和已经可读的颜色保持不变。
 设置为 1.0:1 可关闭修正，dim 文本使用一半目标对比度以保留层级。
 主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。运行时终端
 几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。

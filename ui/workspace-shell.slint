@@ -274,8 +274,8 @@ component TerminalPaneGroup inherits Rectangle {
     }
 }
 
-// The detached rendering path contains only the transferable Terminal/SFTP
-// surface. Its title and return control belong to the native window chrome.
+// The detached rendering path contains the transferable Terminal/SFTP surface.
+// Its title and return control belong to the native window chrome.
 component DetachedWorkspaceContent inherits Rectangle {
     in property <WorkspaceViewState> view;
     in property <string> terminal-edit-command;
