@@ -1,6 +1,6 @@
 import { CheckBox, ListView } from "std-widgets.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
-import { SftpActionButton } from "components/sftp-controls.slint";
+import { SftpActionButton, SftpCopyPathButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
 
 export struct SftpEntryRow {
@@ -446,6 +446,7 @@ component SftpDirectoryPane inherits Rectangle {
     callback open-file(string);
     callback toggle-selection(string, bool);
     callback select-all(bool);
+    callback copy-path(string);
 
     private property <string> current-path: root.path;
     private property <string> path-draft: root.current-path;
@@ -460,6 +461,9 @@ component SftpDirectoryPane inherits Rectangle {
         root.control-height + 2 * Theme.sftp-path-row-padding-y;
     private property <length> status-height:
         root.control-height + 2 * Theme.sftp-status-row-padding-y;
+    private property <length> title-actions-width:
+        Theme.sftp-nav-icon-button-width + (root.allow-hidden
+            ? Theme.space-sm + Theme.sftp-hidden-control-width : 0px);
 
     changed current-path => { root.path-draft = root.current-path; }
 
@@ -484,7 +488,10 @@ component SftpDirectoryPane inherits Rectangle {
 
             Text {
                 x: Theme.sftp-column-padding;
-                width: parent.width - 2 * Theme.sftp-column-padding;
+                width: max(
+                    0px,
+                    parent.width - 2 * Theme.sftp-column-padding - root.title-actions-width,
+                );
                 height: parent.height;
                 text: root.title;
                 color: Theme.accent;
@@ -494,12 +501,25 @@ component SftpDirectoryPane inherits Rectangle {
                 vertical-alignment: center;
             }
             if root.allow-hidden : CheckBox {
-                x: max(Theme.sftp-column-padding, parent.width - self.width - Theme.sftp-column-padding);
+                x: max(
+                    Theme.sftp-column-padding,
+                    copy-path-button.x - self.width - Theme.space-sm,
+                );
                 width: Theme.sftp-hidden-control-width;
                 height: parent.height;
                 text: "Hidden";
                 checked <=> root.show-hidden;
                 enabled: root.interactive;
+            }
+            copy-path-button := SftpCopyPathButton {
+                x: max(
+                    Theme.sftp-column-padding,
+                    parent.width - self.width - Theme.sftp-column-padding,
+                );
+                y: (parent.height - self.height) / 2;
+                accessible-name: "Copy current path";
+                enabled: !root.path.is-empty;
+                clicked => { root.copy-path(root.path); }
             }
             Rectangle {
                 y: parent.height - Theme.hairline;
@@ -900,6 +920,7 @@ export component SftpPane inherits Rectangle {
     callback open-local-file(string);
     callback cancel-transfer(string);
     callback close();
+    callback write-clipboard(string);
 
     min-width: root.standalone ? 0px : Theme.sftp-panel-min-width;
     preferred-width: root.standalone ? 0px : Theme.sftp-panel-width;
@@ -1005,6 +1026,7 @@ export component SftpPane inherits Rectangle {
                     root.toggle-remote-selection(path, selected);
                 }
                 select-all(selected) => { root.select-all-remote(selected); }
+                copy-path(path) => { root.write-clipboard(path); }
             }
 
             directory-splitter := SftpSplitHandle {
@@ -1051,6 +1073,7 @@ export component SftpPane inherits Rectangle {
                     root.toggle-local-selection(path, selected);
                 }
                 select-all(selected) => { root.select-all-local(selected); }
+                copy-path(path) => { root.write-clipboard(path); }
             }
         }
 

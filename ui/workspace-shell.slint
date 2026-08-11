@@ -386,6 +386,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             open-local-file(path) => { root.open-local-sftp-file(path); }
             cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
             close => { root.close-tab(root.view.active_tab_id); }
+            write-clipboard(path) => { root.write-clipboard(path); }
         }
     }
 }
@@ -709,6 +710,7 @@ export component WorkspaceShell inherits Rectangle {
                         open-local-file(path) => { root.open-local-sftp-file(path); }
                         cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
                         close => { root.close-tab(root.view.active_tab_id); }
+                        write-clipboard(path) => { root.write-clipboard(path); }
                     }
 
                     settings-pane := SettingsPane {

@@ -63,3 +63,87 @@ export component SftpActionButton inherits FocusScope {
         }
     }
 }
+
+component SftpCopyPathGlyph inherits Rectangle {
+    in property <color> glyph-color: Theme.muted;
+
+    width: 14px;
+    height: 14px;
+    background: transparent;
+
+    Rectangle {
+        x: Theme.hairline;
+        y: Theme.hairline;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color.with-alpha(0.7);
+        border-radius: Theme.radius-small;
+    }
+    Rectangle {
+        x: 3px;
+        y: 3px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+    }
+}
+
+export component SftpCopyPathButton inherits FocusScope {
+    in property <string> accessible-name: "Copy current path";
+    in property <string> tooltip-text: root.accessible-name;
+    callback clicked();
+
+    width: Theme.sftp-nav-icon-button-width;
+    height: Theme.sftp-control-min-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.clicked();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: copy-touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        border-width: root.has-focus ? Theme.hairline : 0px;
+        border-color: Theme.focus;
+        border-radius: Theme.radius-small;
+
+        SftpCopyPathGlyph {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            glyph-color: copy-touch.has-hover || root.has-focus ? Theme.text : Theme.muted;
+        }
+
+        copy-touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+
+        if !root.tooltip-text.is-empty : Tooltip {
+            Text {
+                text: root.tooltip-text;
+                color: Theme.text;
+                font-family: Theme.application-font-family;
+                font-size: Theme.font-caption;
+            }
+        }
+    }
+}
