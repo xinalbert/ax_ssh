@@ -642,6 +642,7 @@ fn wire_window_actions(
         let log_directory_for_show = log_directory.clone();
         slint::Timer::single_shot(Duration::from_millis(0), move || {
             let detached_id = Uuid::new_v4();
+            let show_terminal_titlebar_actions = pane_tree.is_some();
             let detached_ui = match AppWindow::new()
                 .context("failed to create detached Slint window")
                 .and_then(|detached_ui| {
@@ -703,7 +704,7 @@ fn wire_window_actions(
                 return;
             }
             #[cfg(target_os = "macos")]
-            schedule_macos_detached_return_button(&detached_ui);
+            schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_titlebar_actions);
             windows_for_show
                 .borrow_mut()
                 .insert(detached_id, detached_ui);
@@ -776,20 +777,40 @@ fn wire_window_actions(
 }
 
 #[cfg(target_os = "macos")]
-fn schedule_macos_detached_return_button(ui: &AppWindow) {
-    let ui_for_button = ui.as_weak();
+fn schedule_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_actions: bool) {
+    let ui_for_titlebar = ui.as_weak();
     slint::Timer::single_shot(Duration::from_millis(100), move || {
-        let Some(ui) = ui_for_button.upgrade() else {
+        let Some(ui) = ui_for_titlebar.upgrade() else {
             return;
         };
+        let ui_for_split_right = ui.as_weak();
+        let ui_for_split_down = ui.as_weak();
         let ui_for_return = ui.as_weak();
-        if let Err(error) = macos_window::configure_detached_return_button(ui.window(), move || {
-            log_ui_action("workspace.return-window");
-            if let Some(ui) = ui_for_return.upgrade() {
-                ui.invoke_return_workspace(ui.get_active_tab_id());
-            }
-        }) {
-            warn!(%error, "failed to configure the detached macOS return button");
+        if let Err(error) = macos_window::configure_detached_titlebar_buttons(
+            ui.window(),
+            show_terminal_actions,
+            move || {
+                if let Some(ui) = ui_for_split_right.upgrade() {
+                    let _ = ui.invoke_terminal_pane_command(
+                        ui.get_active_pane_id(),
+                        "split-right".into(),
+                    );
+                }
+            },
+            move || {
+                if let Some(ui) = ui_for_split_down.upgrade() {
+                    let _ = ui
+                        .invoke_terminal_pane_command(ui.get_active_pane_id(), "split-down".into());
+                }
+            },
+            move || {
+                log_ui_action("workspace.return-window");
+                if let Some(ui) = ui_for_return.upgrade() {
+                    ui.invoke_return_workspace(ui.get_active_tab_id());
+                }
+            },
+        ) {
+            warn!(%error, "failed to configure detached macOS title-bar buttons");
         }
     });
 }

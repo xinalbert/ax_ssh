@@ -14,6 +14,50 @@ export struct ConnectableSessionRow {
     endpoint: string,
 }
 
+component WindowFrameGlyph inherits Rectangle {
+    in property <color> glyph-color: Theme.text;
+
+    background: transparent;
+
+    Rectangle {
+        x: Theme.hairline;
+        y: Theme.hairline;
+        width: parent.width - 2 * Theme.hairline;
+        height: parent.height - 2 * Theme.hairline;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+    }
+}
+
+component WorkspaceTransferGlyph inherits Rectangle {
+    in property <bool> returning;
+    in property <color> glyph-color: Theme.text;
+
+    private property <length> frame-offset: 3 * Theme.hairline;
+    private property <length> frame-size: root.width - root.frame-offset - Theme.hairline;
+
+    width: Theme.workspace-transfer-glyph-size;
+    height: Theme.workspace-transfer-glyph-size;
+    background: transparent;
+
+    WindowFrameGlyph {
+        x: root.returning ? root.frame-offset : Theme.hairline;
+        y: root.returning ? Theme.hairline : root.frame-offset;
+        width: root.frame-size;
+        height: root.frame-size;
+        glyph-color: root.glyph-color.with-alpha(0.52);
+    }
+    WindowFrameGlyph {
+        x: root.returning ? Theme.hairline : root.frame-offset;
+        y: root.returning ? root.frame-offset : Theme.hairline;
+        width: root.frame-size;
+        height: root.frame-size;
+        glyph-color: root.glyph-color;
+    }
+}
+
 component WorkspaceTabContent inherits HorizontalLayout {
     in property <string> title;
     in property <string> kind;
@@ -78,14 +122,11 @@ component WorkspaceTabContent inherits HorizontalLayout {
         height: root.close-button-size;
         border-radius: Theme.radius;
         background: window-action-touch.has-hover ? Theme.hover : transparent;
-        window-action-label := Text {
-            width: parent.width;
-            height: parent.height;
-            text: root.detached-window ? "↩" : "↗";
-            color: Theme.muted;
-            font-size: Theme.tab-close-font-size;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        WorkspaceTransferGlyph {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            returning: root.detached-window;
+            glyph-color: window-action-touch.has-hover ? Theme.text : Theme.muted;
         }
         window-action-touch := TouchArea {
             mouse-cursor: pointer;
@@ -283,24 +324,19 @@ export component ConnectionPicker inherits FocusScope {
 
 component TerminalSplitGlyph inherits Rectangle {
     in property <bool> vertical;
-    in property <brush> glyph-color: Theme.text;
+    in property <color> glyph-color: Theme.text;
 
     width: Theme.terminal-split-glyph-size;
     height: Theme.terminal-split-glyph-size;
     background: transparent;
 
-    Rectangle {
-        x: Theme.hairline;
-        y: Theme.hairline;
-        width: parent.width - 2 * Theme.hairline;
-        height: parent.height - 2 * Theme.hairline;
-        background: transparent;
-        border-width: Theme.hairline;
-        border-color: root.glyph-color;
-        border-radius: Theme.radius-small;
+    WindowFrameGlyph {
+        width: parent.width;
+        height: parent.height;
+        glyph-color: root.glyph-color;
     }
     if root.vertical : Rectangle {
-        x: (parent.width - Theme.hairline) / 2;
+        x: parent.width / 2 - Theme.hairline;
         y: 2 * Theme.hairline;
         width: Theme.hairline;
         height: parent.height - 4 * Theme.hairline;
@@ -308,14 +344,14 @@ component TerminalSplitGlyph inherits Rectangle {
     }
     if !root.vertical : Rectangle {
         x: 2 * Theme.hairline;
-        y: (parent.height - Theme.hairline) / 2;
+        y: parent.height / 2 - Theme.hairline;
         width: parent.width - 4 * Theme.hairline;
         height: Theme.hairline;
         background: root.glyph-color;
     }
 }
 
-component TerminalSplitButton inherits FocusScope {
+export component TerminalSplitButton inherits FocusScope {
     in property <bool> vertical;
     in property <string> accessible-name;
     in property <string> tooltip-text;

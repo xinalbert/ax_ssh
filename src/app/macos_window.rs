@@ -66,45 +66,46 @@ impl NativeMenuTarget {
     }
 }
 
-const RETURN_BUTTON_WIDTH: f64 = 28.0;
-const RETURN_BUTTON_HEIGHT: f64 = 20.0;
-const RETURN_BUTTON_TRAILING_MARGIN: f64 = 12.0;
+const TITLE_BAR_BUTTON_WIDTH: f64 = 28.0;
+const TITLE_BAR_BUTTON_HEIGHT: f64 = 20.0;
+const TITLE_BAR_BUTTON_SPACING: f64 = 2.0;
+const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
 
-struct NativeReturnButtonIvars {
-    return_workspace: Box<dyn Fn()>,
+struct NativeTitleBarButtonIvars {
+    activate: Box<dyn Fn()>,
 }
 
 define_class!(
     // SAFETY: NSButton has no subclassing requirements. The callback is
     // main-thread-only and the title-bar view retains this button for its life.
     #[unsafe(super(NSButton))]
-    #[name = "AxSSHNativeReturnButton"]
+    #[name = "AxSSHNativeTitleBarButton"]
     #[thread_kind = MainThreadOnly]
-    #[ivars = NativeReturnButtonIvars]
-    struct NativeReturnButton;
+    #[ivars = NativeTitleBarButtonIvars]
+    struct NativeTitleBarButton;
 
     // SAFETY: NSObjectProtocol has no additional implementation requirements.
-    unsafe impl NSObjectProtocol for NativeReturnButton {}
+    unsafe impl NSObjectProtocol for NativeTitleBarButton {}
 
-    impl NativeReturnButton {
-        #[unsafe(method(returnWorkspace:))]
-        fn return_workspace(&self, _sender: Option<&AnyObject>) {
-            (self.ivars().return_workspace)();
+    impl NativeTitleBarButton {
+        #[unsafe(method(activate:))]
+        fn activate(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().activate)();
         }
     }
 );
 
-impl NativeReturnButton {
-    fn new(mtm: MainThreadMarker, return_workspace: impl Fn() + 'static) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(NativeReturnButtonIvars {
-            return_workspace: Box::new(return_workspace),
+impl NativeTitleBarButton {
+    fn new(mtm: MainThreadMarker, activate: impl Fn() + 'static) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(NativeTitleBarButtonIvars {
+            activate: Box::new(activate),
         });
-        // SAFETY: `this` is an allocated NativeReturnButton and NSButton's
+        // SAFETY: `this` is an allocated NativeTitleBarButton and NSButton's
         // initializer has the selector signature used here.
         unsafe {
             msg_send![super(this), initWithFrame: NSRect::new(
                 NSPoint::new(0.0, 0.0),
-                NSSize::new(RETURN_BUTTON_WIDTH, RETURN_BUTTON_HEIGHT),
+                NSSize::new(TITLE_BAR_BUTTON_WIDTH, TITLE_BAR_BUTTON_HEIGHT),
             )]
         }
     }
@@ -117,37 +118,49 @@ pub(super) fn configure(window: &slint::Window) -> Result<()> {
     })
 }
 
-pub(super) fn configure_detached_return_button(
+pub(super) fn configure_detached_titlebar_buttons(
     window: &slint::Window,
+    show_terminal_actions: bool,
+    split_right: impl Fn() + 'static,
+    split_down: impl Fn() + 'static,
     return_workspace: impl Fn() + 'static,
 ) -> Result<()> {
     let mtm =
         MainThreadMarker::new().context("macOS title-bar setup must run on the main thread")?;
-    let button = NativeReturnButton::new(mtm, return_workspace);
-    let accessibility_description = NSString::from_str("Return workspace to main window");
-    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
-        &NSString::from_str("arrow.uturn.backward"),
-        Some(&accessibility_description),
-    )
-    .or_else(|| {
-        // SAFETY: AppKit exports this process-lifetime NSImageName constant on
-        // every supported macOS version; this code only reads its shared value.
-        let fallback_name = unsafe { NSImageNameGoBackTemplate };
-        let image = NSImage::imageNamed(fallback_name)?;
-        image.setAccessibilityDescription(Some(&accessibility_description));
-        Some(image)
-    })
-    .context("AppKit could not load the detached workspace return icon")?;
-    button.setTitle(&NSString::new());
-    button.setImage(Some(&image));
-    button.setImagePosition(NSCellImagePosition::ImageOnly);
-    button.setToolTip(Some(&accessibility_description));
-    // SAFETY: `returnWorkspace:` is implemented by NativeReturnButton. NSControl
-    // keeps targets weakly, while the title-bar view retains the button itself.
-    unsafe {
-        button.setTarget(Some(&button));
-        button.setAction(Some(sel!(returnWorkspace:)));
+    let mut buttons = Vec::with_capacity(if show_terminal_actions { 3 } else { 1 });
+    if show_terminal_actions {
+        if let Some(button) = configure_titlebar_button(
+            mtm,
+            "rectangle.split.2x1",
+            "Split active terminal vertically",
+            None,
+            split_right,
+        ) {
+            buttons.push(button);
+        }
+        if let Some(button) = configure_titlebar_button(
+            mtm,
+            "rectangle.split.1x2",
+            "Split active terminal horizontally",
+            None,
+            split_down,
+        ) {
+            buttons.push(button);
+        }
     }
+    // SAFETY: AppKit exports this process-lifetime NSImageName constant on
+    // every supported macOS version; this code only reads its shared value.
+    let fallback_name = unsafe { NSImageNameGoBackTemplate };
+    let return_button = configure_titlebar_button(
+        mtm,
+        "arrow.uturn.backward",
+        "Return workspace to main window",
+        NSImage::imageNamed(fallback_name),
+        return_workspace,
+    )
+    .context("AppKit could not load the detached workspace return icon")?;
+    buttons.push(return_button);
+
     with_native_window(window, |native_window| {
         let zoom_button = native_window
             .standardWindowButton(NSWindowButton::ZoomButton)
@@ -157,17 +170,51 @@ pub(super) fn configure_detached_return_button(
         let title_bar = unsafe { zoom_button.superview() }
             .context("AppKit standard zoom button has no title-bar view")?;
         let bounds = title_bar.bounds();
+        let control_width = TITLE_BAR_BUTTON_WIDTH * buttons.len() as f64
+            + TITLE_BAR_BUTTON_SPACING * buttons.len().saturating_sub(1) as f64;
         let origin_x =
-            (bounds.size.width - RETURN_BUTTON_WIDTH - RETURN_BUTTON_TRAILING_MARGIN).max(0.0);
-        let origin_y = ((bounds.size.height - RETURN_BUTTON_HEIGHT) / 2.0).max(0.0);
-        button.setFrame(NSRect::new(
-            NSPoint::new(origin_x, origin_y),
-            NSSize::new(RETURN_BUTTON_WIDTH, RETURN_BUTTON_HEIGHT),
-        ));
-        button.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
-        title_bar.addSubview(&button);
+            (bounds.size.width - control_width - TITLE_BAR_BUTTON_TRAILING_MARGIN).max(0.0);
+        let origin_y = ((bounds.size.height - TITLE_BAR_BUTTON_HEIGHT) / 2.0).max(0.0);
+        for (index, button) in buttons.into_iter().enumerate() {
+            let origin_x =
+                origin_x + index as f64 * (TITLE_BAR_BUTTON_WIDTH + TITLE_BAR_BUTTON_SPACING);
+            button.setFrame(NSRect::new(
+                NSPoint::new(origin_x, origin_y),
+                NSSize::new(TITLE_BAR_BUTTON_WIDTH, TITLE_BAR_BUTTON_HEIGHT),
+            ));
+            button.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            title_bar.addSubview(&button);
+        }
         Ok(())
     })
+}
+
+fn configure_titlebar_button(
+    mtm: MainThreadMarker,
+    system_symbol_name: &str,
+    accessibility_description: &str,
+    fallback_image: Option<Retained<NSImage>>,
+    activate: impl Fn() + 'static,
+) -> Option<Retained<NativeTitleBarButton>> {
+    let button = NativeTitleBarButton::new(mtm, activate);
+    let accessibility_description = NSString::from_str(accessibility_description);
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(system_symbol_name),
+        Some(&accessibility_description),
+    )
+    .or(fallback_image)?;
+    image.setAccessibilityDescription(Some(&accessibility_description));
+    button.setTitle(&NSString::new());
+    button.setImage(Some(&image));
+    button.setImagePosition(NSCellImagePosition::ImageOnly);
+    button.setToolTip(Some(&accessibility_description));
+    // SAFETY: `activate:` is implemented by NativeTitleBarButton. NSControl
+    // keeps targets weakly, while the title-bar view retains the button itself.
+    unsafe {
+        button.setTarget(Some(&button));
+        button.setAction(Some(sel!(activate:)));
+    }
+    Some(button)
 }
 
 pub(super) fn configure_application_icon() -> Result<()> {
