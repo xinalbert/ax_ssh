@@ -133,6 +133,7 @@ pub(in crate::app) fn wire_connection_request(
                     target,
                     Some(companion_tab_id),
                     None,
+                    None,
                     {
                         let router = router_for_active_sftp.clone();
                         move |new_tab_id, app| {
@@ -163,6 +164,7 @@ where
         target,
         companion_tab_id,
         None,
+        None,
         register_tab,
     )
 }
@@ -172,6 +174,7 @@ pub(in crate::app) fn request_profile_connection<F>(
     profile_id: Uuid,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
+    sftp_initial_path: Option<String>,
     one_time_password: Option<zeroize::Zeroizing<String>>,
     register_tab: F,
 ) -> Option<Uuid>
@@ -219,7 +222,11 @@ where
             ConnectionTarget::Terminal => {
                 app.open_terminal_tab_with_companion(&profile, companion_tab_id)
             }
-            ConnectionTarget::Sftp => app.open_sftp_tab_with_companion(&profile, companion_tab_id),
+            ConnectionTarget::Sftp => app.open_sftp_tab_with_companion_at_path(
+                &profile,
+                companion_tab_id,
+                sftp_initial_path,
+            ),
         };
         if let Some(password) = one_time_password
             && profile.ssh().is_some()

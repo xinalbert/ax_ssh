@@ -227,6 +227,81 @@ impl TerminalModel {
         }
         contents
     }
+
+    /// Returns a bounded visible row and the text position at a terminal cell.
+    ///
+    /// Terminal columns differ from Unicode character positions when a row
+    /// contains a wide character. The returned index preserves that mapping
+    /// for short-lived pointer intents without exposing the terminal grid.
+    pub fn visible_row_text_at_cell(&self, row: usize, column: usize) -> Option<(String, usize)> {
+        let grid = self.term.grid();
+        if row >= grid.screen_lines() || column >= grid.columns() {
+            return None;
+        }
+        let line = Line(row as i32 - grid.display_offset() as i32);
+        let last_column = occupied_end_column(grid, line, grid.columns().saturating_sub(1))?;
+        if column > last_column {
+            return None;
+        }
+        let mut contents = String::new();
+        let mut target_character = None;
+        for cell_column in 0..=last_column {
+            let cell = &grid[line][Column(cell_column)];
+            if is_wide_continuation(cell) {
+                if cell_column == column {
+                    return None;
+                }
+                continue;
+            }
+            if cell_column == column {
+                target_character = Some(contents.chars().count());
+            }
+            contents.push_str(&cell_text(cell));
+        }
+        target_character.map(|target_character| (contents, target_character))
+    }
+
+    /// Converts a bounded character range in a visible row back to terminal cells.
+    pub fn visible_row_cell_span_for_characters(
+        &self,
+        row: usize,
+        start: usize,
+        end: usize,
+    ) -> Option<(usize, usize)> {
+        if start >= end {
+            return None;
+        }
+        let grid = self.term.grid();
+        if row >= grid.screen_lines() {
+            return None;
+        }
+        let line = Line(row as i32 - grid.display_offset() as i32);
+        let last_column = occupied_end_column(grid, line, grid.columns().saturating_sub(1))?;
+        let mut character = 0usize;
+        let mut start_column = None;
+        let mut end_column = None;
+        for cell_column in 0..=last_column {
+            let cell = &grid[line][Column(cell_column)];
+            if is_wide_continuation(cell) {
+                continue;
+            }
+            let cell_characters = cell_text(cell).chars().count();
+            let next_character = character.saturating_add(cell_characters);
+            if start_column.is_none() && start >= character && start < next_character {
+                start_column = Some(cell_column);
+            }
+            if end > character && end <= next_character {
+                end_column = Some(
+                    cell_column
+                        .saturating_add(1)
+                        .saturating_add(usize::from(cell.flags.contains(Flags::WIDE_CHAR))),
+                );
+                break;
+            }
+            character = next_character;
+        }
+        Some((start_column?, end_column?))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -480,6 +555,29 @@ mod tests {
         assert_eq!(snapshot.lines[0].runs[1].cells, 2);
         assert_eq!(snapshot.lines[0].runs[2].column, 3);
         assert_eq!(snapshot.cursor_column, 4);
+    }
+
+    #[test]
+    fn visible_row_target_text_preserves_cell_columns_after_wide_characters() {
+        let mut terminal = TerminalModel::new(80, 3, 10);
+        terminal.process("\u{4e2d} https://example.test".as_bytes());
+
+        assert_eq!(
+            terminal.visible_row_text_at_cell(0, 3),
+            Some(("\u{4e2d} https://example.test".to_owned(), 2))
+        );
+        assert_eq!(terminal.visible_row_text_at_cell(0, 1), None);
+    }
+
+    #[test]
+    fn visible_row_cell_span_maps_target_characters_after_a_wide_prefix() {
+        let mut terminal = TerminalModel::new(80, 3, 10);
+        terminal.process("中 https://example.test".as_bytes());
+
+        assert_eq!(
+            terminal.visible_row_cell_span_for_characters(0, 2, 22),
+            Some((3, 23))
+        );
     }
 
     #[test]

@@ -43,6 +43,13 @@ export struct TerminalSelectionView {
     last_column: int,
 }
 
+export struct TerminalTargetHighlight {
+    active: bool,
+    row: int,
+    start_column: int,
+    end_column: int,
+}
+
 export component TerminalGrid inherits Rectangle {
     in property <TerminalGridView> view;
     in property <TerminalSelectionView> selection;
@@ -53,9 +60,11 @@ export component TerminalGrid inherits Rectangle {
     in property <bool> cursor-blink;
     in property <string> preedit-text;
     in property <bool> right-click-pastes;
+    in property <TerminalTargetHighlight> target-highlight;
 
-    callback pointer-down(int, int, bool, bool);
-    callback pointer-moved(int, int);
+    callback pointer-down(int, int, bool, bool, bool, bool);
+    callback pointer-moved(int, int, bool, bool);
+    callback pointer-hovered(bool);
     callback pointer-up();
     callback scrolled(int);
     callback copy-request();
@@ -130,6 +139,18 @@ export component TerminalGrid inherits Rectangle {
             }
         }
 
+        if root.target-highlight.active
+            && line-index == root.target-highlight.row : Rectangle {
+            x: max(0, root.target-highlight.start_column) * root.cell-width;
+            width: max(
+                1,
+                root.target-highlight.end_column - root.target-highlight.start_column,
+            ) * root.cell-width;
+            y: parent.height - Theme.terminal-underline-offset;
+            height: Theme.hairline;
+            background: Theme.accent;
+        }
+
         if root.view.connected && root.view.cursor_visible && root.cursor-blink
             && line-index == root.view.cursor_row : Rectangle {
             x: root.view.cursor_column * root.cell-width;
@@ -184,7 +205,8 @@ export component TerminalGrid inherits Rectangle {
     }
 
     body-touch := TouchArea {
-        mouse-cursor: text;
+        mouse-cursor: root.target-highlight.active ? pointer : text;
+        changed has-hover => { root.pointer-hovered(self.has-hover); }
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 root.pointer-down(
@@ -194,19 +216,22 @@ export component TerminalGrid inherits Rectangle {
                         floor(self.mouse-x / root.cell-width))),
                     event.button == PointerEventButton.left,
                     event.button == PointerEventButton.right,
+                    event.modifiers.control,
+                    event.modifiers.meta,
                 );
             } else if event.kind == PointerEventKind.up
                 && event.button == PointerEventButton.left {
                 root.pointer-up();
+            } else if event.kind == PointerEventKind.move {
+                root.pointer-moved(
+                    max(0, min(root.view.render_lines.length - 1,
+                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
+                    max(0, min(root.view.content_columns - 1,
+                        floor(self.mouse-x / root.cell-width))),
+                    event.modifiers.control,
+                    event.modifiers.meta,
+                );
             }
-        }
-        moved => {
-            root.pointer-moved(
-                max(0, min(root.view.render_lines.length - 1,
-                    floor((self.mouse-y - root.top-offset) / root.cell-height))),
-                max(0, min(root.view.content_columns - 1,
-                    floor(self.mouse-x / root.cell-width))),
-            );
         }
         scroll-event(event) => {
             root.scrolled(event.delta-y > 0 ? 3 : -3);

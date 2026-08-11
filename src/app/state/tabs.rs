@@ -147,6 +147,7 @@ impl AppState {
                 connected: false,
                 worker_running: false,
                 sftp: SftpBrowserState::default(),
+                sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
                 pending_auth_secret: None,
             })),
@@ -165,10 +166,20 @@ impl AppState {
         self.open_sftp_tab_with_companion(profile, None)
     }
 
+    #[cfg(test)]
     pub(in crate::app) fn open_sftp_tab_with_companion(
         &mut self,
         profile: &SessionProfile,
         companion_tab_id: Option<Uuid>,
+    ) -> Uuid {
+        self.open_sftp_tab_with_companion_at_path(profile, companion_tab_id, None)
+    }
+
+    pub(in crate::app) fn open_sftp_tab_with_companion_at_path(
+        &mut self,
+        profile: &SessionProfile,
+        companion_tab_id: Option<Uuid>,
+        initial_path: Option<String>,
     ) -> Uuid {
         let id = Uuid::new_v4();
         let local_path = profile
@@ -189,6 +200,7 @@ impl AppState {
                 connected: false,
                 worker_running: false,
                 sftp: SftpBrowserState::for_standalone_tab(local_path),
+                sftp_initial_path: initial_path,
                 ssh_phase: SshConnectionPhase::Idle,
                 pending_auth_secret: None,
             })),
@@ -216,6 +228,7 @@ impl AppState {
                 connected: false,
                 worker_running: true,
                 sftp: SftpBrowserState::default(),
+                sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
                 pending_auth_secret: None,
             })),
@@ -654,6 +667,17 @@ impl AppState {
             .companion_tab_id?;
         self.terminal(companion_id)
             .is_some_and(|terminal| !terminal.is_sftp())
+            .then_some(companion_id)
+    }
+
+    pub(in crate::app) fn sftp_companion_id(&self, tab_id: Uuid) -> Option<Uuid> {
+        let companion_id = self
+            .tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)?
+            .companion_tab_id?;
+        self.terminal(companion_id)
+            .is_some_and(TerminalTabState::is_sftp)
             .then_some(companion_id)
     }
 

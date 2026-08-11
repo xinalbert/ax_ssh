@@ -113,6 +113,7 @@ pub(super) struct TerminalTabState {
     pub(super) connected: bool,
     pub(super) worker_running: bool,
     pub(super) sftp: SftpBrowserState,
+    pub(super) sftp_initial_path: Option<String>,
     pub(super) ssh_phase: SshConnectionPhase,
     pending_auth_secret: Option<zeroize::Zeroizing<String>>,
 }

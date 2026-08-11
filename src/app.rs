@@ -84,6 +84,7 @@ mod sftp_bridge;
 mod state;
 mod terminal_bridge;
 mod terminal_render;
+mod terminal_targets;
 mod view;
 mod window_router;
 mod workspace;

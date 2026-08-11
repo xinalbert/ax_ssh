@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
 import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
-import { TerminalRenderLine } from "components/terminal-grid.slint";
+import { TerminalRenderLine, TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
 import {
@@ -398,6 +398,8 @@ export component AppWindow inherits Window {
     callback resize-terminal(string, int, int);
     callback scroll-terminal(string, int);
     callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
+    callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
     callback resize-terminal-divider(int, float) -> bool;
@@ -717,6 +719,12 @@ export component AppWindow inherits Window {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,
                 );
+            }
+            terminal-target-at-cell(id, row, column, control, meta) => {
+                return root.terminal-target-at-cell(id, row, column, control, meta);
+            }
+            activate-terminal-target(id, row, column, control, meta) => {
+                return root.activate-terminal-target(id, row, column, control, meta);
             }
             terminal-pane-focus(id) => { root.terminal-pane-focus(id); }
             terminal-pane-command(id, command) => { return root.terminal-pane-command(id, command); }

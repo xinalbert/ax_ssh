@@ -3,6 +3,7 @@ import {
     TerminalGrid,
     TerminalGridView,
     TerminalRenderLine,
+    TerminalTargetHighlight,
     TerminalSelectionView,
 } from "components/terminal-grid.slint";
 
@@ -128,6 +129,8 @@ export component TerminalPane inherits Rectangle {
     callback resized(int, int);
     callback scrolled(int);
     callback selection-text(int, int, int, int) -> string;
+    callback terminal-target-at-cell(int, int, bool, bool) -> TerminalTargetHighlight;
+    callback activate-terminal-target(int, int, bool, bool) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -158,6 +161,12 @@ export component TerminalPane inherits Rectangle {
     private property <int> selection-anchor-column: 0;
     private property <int> selection-focus-row: 0;
     private property <int> selection-focus-column: 0;
+    private property <int> target-pointer-row: 0;
+    private property <int> target-pointer-column: 0;
+    private property <bool> target-pointer-in-grid: false;
+    private property <TerminalTargetHighlight> terminal-target-highlight: {
+        active: false, row: 0, start_column: 0, end_column: 0,
+    };
     private property <bool> selection-active:
         root.selection-anchor-row != root.selection-focus-row
         || root.selection-anchor-column != root.selection-focus-column;
@@ -214,8 +223,15 @@ export component TerminalPane inherits Rectangle {
     // Queue the existing coalesced resize after Slint has resolved its geometry.
     init => { root.schedule-terminal-size-update(); }
 
+    function clear-terminal-target-highlight() {
+        root.terminal-target-highlight = {
+            active: false, row: 0, start_column: 0, end_column: 0,
+        };
+    }
+
     function clear-selection() {
         root.selecting = false;
+        root.clear-terminal-target-highlight();
         root.selection-focus-row = root.selection-anchor-row;
         root.selection-focus-column = root.selection-anchor-column;
     }
@@ -351,6 +367,16 @@ export component TerminalPane inherits Rectangle {
             }
         }
         key-pressed(event) => {
+            if root.target-pointer-in-grid
+                && !root.selecting
+                && (event.modifiers.control || event.modifiers.meta) {
+                root.terminal-target-highlight = root.terminal-target-at-cell(
+                    root.target-pointer-row,
+                    root.target-pointer-column,
+                    event.modifiers.control,
+                    event.modifiers.meta,
+                );
+            }
             if event.modifiers.alt && !event.modifiers.control && !event.modifiers.meta {
                 let pane-command =
                     (event.text == "h" || event.text == "H")
@@ -413,6 +439,12 @@ export component TerminalPane inherits Rectangle {
             }
             return EventResult.reject;
         }
+        key-released(event) => {
+            if !event.modifiers.control {
+                root.clear-terminal-target-highlight();
+            }
+            return EventResult.reject;
+        }
         edited => {
             if !root.connected {
                 self.text = "";
@@ -459,14 +491,21 @@ export component TerminalPane inherits Rectangle {
                 preedit-text: ime-input.preedit-text;
                 right-click-pastes:
                     root.right-click-copy-or-paste || root.copy-selection-on-select;
-                pointer-down(row, column, left, right) => {
+                target-highlight: root.terminal-target-highlight;
+                pointer-down(row, column, left, right, control, meta) => {
+                    root.target-pointer-row = row;
+                    root.target-pointer-column = column;
+                    root.target-pointer-in-grid = true;
                     root.focus-terminal();
-                    if left {
+                    if left && root.activate-terminal-target(row, column, control, meta) {
+                        root.clear-selection();
+                    } else if left {
                         root.selection-anchor-row = row;
                         root.selection-anchor-column = column;
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
                         root.selecting = true;
+                        root.clear-terminal-target-highlight();
                     } else if right
                         && (root.right-click-copy-or-paste || root.copy-selection-on-select) {
                         if root.copy-selection-on-select && root.connected {
@@ -479,10 +518,24 @@ export component TerminalPane inherits Rectangle {
                         }
                     }
                 }
-                pointer-moved(row, column) => {
+                pointer-moved(row, column, control, meta) => {
+                    root.target-pointer-row = row;
+                    root.target-pointer-column = column;
+                    root.target-pointer-in-grid = true;
                     if root.selecting {
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
+                        root.clear-terminal-target-highlight();
+                    } else {
+                        root.terminal-target-highlight = root.terminal-target-at-cell(
+                            row, column, control, meta,
+                        );
+                    }
+                }
+                pointer-hovered(hovered) => {
+                    if !hovered {
+                        root.target-pointer-in-grid = false;
+                        root.clear-terminal-target-highlight();
                     }
                 }
                 pointer-up => {

@@ -34,13 +34,23 @@ pub(super) fn start_session_worker(
         }) {
             anyhow::bail!("terminal tab is not awaiting authentication");
         }
-        let profile = app
+        let mut profile = app
             .sessions
             .sessions
             .iter()
             .find(|profile| profile.id == profile_id)
             .cloned()
             .context("session not found")?;
+        if target == ConnectionTarget::Sftp {
+            let initial_path = app
+                .terminal_mut(tab_id)
+                .and_then(|terminal| terminal.sftp_initial_path.take());
+            if let Some(initial_path) = initial_path
+                && let Some(ssh) = profile.ssh_mut()
+            {
+                ssh.sftp_remote_path = initial_path;
+            }
+        }
         if profile
             .ssh()
             .context("SSH worker requires an SSH profile")?

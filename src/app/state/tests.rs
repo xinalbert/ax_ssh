@@ -1047,6 +1047,31 @@ fn ssh_sftp_shortcut_activates_existing_companion_in_both_directions() {
 }
 
 #[test]
+fn targeted_sftp_companion_path_stays_on_the_runtime_tab() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    let terminal = state.open_terminal_tab(&profile);
+    let sftp = state.open_sftp_tab_with_companion_at_path(
+        &profile,
+        Some(terminal),
+        Some("/srv/releases".to_owned()),
+    );
+
+    assert_eq!(state.sftp_companion_id(terminal), Some(sftp));
+    assert_eq!(
+        state
+            .terminal(sftp)
+            .and_then(|terminal| terminal.sftp_initial_path.as_deref()),
+        Some("/srv/releases")
+    );
+    assert!(
+        state
+            .terminal(terminal)
+            .is_some_and(|terminal| terminal.sftp_initial_path.is_none())
+    );
+}
+
+#[test]
 fn standalone_sftp_shortcut_plans_an_adjacent_terminal_companion() {
     let mut state = test_state();
     let profile = SessionProfile::new("server", "server.example", "alice");

@@ -266,6 +266,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                         profile_id,
                         ConnectionTarget::Terminal,
                         None,
+                        None,
                         connection_password,
                         move |tab_id, app| router.activate_tab(window_id, tab_id, app),
                     );

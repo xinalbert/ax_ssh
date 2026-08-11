@@ -1,5 +1,8 @@
 use super::*;
 use crate::app::state::PaneSessionSource;
+use crate::app::terminal_targets::{
+    TerminalTarget, terminal_target_at_cell, terminal_target_span_at_cell,
+};
 
 pub(super) fn start_local_shell(
     runtime: &Handle,
@@ -244,6 +247,74 @@ pub(super) fn wire_terminal(
         },
     );
 
+    let ui_for_target_hover = ui.as_weak();
+    let state_for_target_hover = state.clone();
+    let router_for_target_hover = window_router.clone();
+    ui.on_terminal_target_at_cell(move |tab_id, row, column, control, meta| {
+        if !terminal_target_modifier_held(control, meta) {
+            return TerminalTargetHighlight::default();
+        }
+        let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_target_hover) else {
+            return TerminalTargetHighlight::default();
+        };
+        terminal_target_highlight_for_pane(
+            &state_for_target_hover,
+            &router_for_target_hover,
+            window_id,
+            tab_id,
+            row,
+            column,
+        )
+        .unwrap_or_default()
+    });
+
+    let ui_for_target_open = ui.as_weak();
+    let state_for_target_open = state.clone();
+    let runtime_for_target_open = runtime.clone();
+    let font_registry_for_target_open = font_registry.clone();
+    let terminal_font_started_for_target_open = terminal_font_started.clone();
+    let router_for_target_open = window_router.clone();
+    ui.on_activate_terminal_target(move |tab_id, row, column, control, meta| {
+        if !terminal_target_modifier_held(control, meta) {
+            return false;
+        }
+        let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_target_open) else {
+            return false;
+        };
+        let Some(target) = terminal_target_for_pane(
+            &state_for_target_open,
+            &router_for_target_open,
+            window_id,
+            tab_id,
+            row,
+            column,
+        ) else {
+            return false;
+        };
+
+        log_ui_action("terminal.open-target");
+        match target {
+            TerminalTarget::Url(url) => {
+                open_terminal_url(&runtime_for_target_open, ui_for_target_open.clone(), url);
+                log_ui_action_outcome("terminal.open-target", "url");
+            }
+            TerminalTarget::RemotePath(path) => {
+                open_terminal_remote_path(
+                    &state_for_target_open,
+                    &router_for_target_open,
+                    window_id,
+                    tab_id,
+                    path,
+                    &ui_for_target_open,
+                    &runtime_for_target_open,
+                    &font_registry_for_target_open,
+                    &terminal_font_started_for_target_open,
+                );
+            }
+        }
+        true
+    });
+
     let ui_for_focus = ui.as_weak();
     let state_for_focus = state.clone();
     let router_for_focus = window_router.clone();
@@ -387,6 +458,7 @@ pub(super) fn wire_terminal(
                             ConnectionTarget::Terminal,
                             None,
                             None,
+                            None,
                             {
                                 let router = router_for_command.clone();
                                 move |new_tab_id, app| {
@@ -403,6 +475,196 @@ pub(super) fn wire_terminal(
                 };
                 true
             }
+        }
+    });
+}
+
+fn terminal_target_modifier_held(control: bool, _meta: bool) -> bool {
+    // Slint normalizes the platform primary shortcut modifier into `control`:
+    // Cmd on macOS and Ctrl elsewhere.
+    control
+}
+
+fn terminal_target_for_pane(
+    state: &Arc<Mutex<AppState>>,
+    window_router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    row: i32,
+    column: i32,
+) -> Option<TerminalTarget> {
+    let row = usize::try_from(row).ok()?;
+    let column = usize::try_from(column).ok()?;
+    let app = state.lock().ok()?;
+    if !window_router.owns_terminal_pane(window_id, tab_id, &app) {
+        return None;
+    }
+    let terminal = app.terminal(tab_id)?;
+    if !terminal.connected {
+        return None;
+    }
+    let (text, text_column) = terminal
+        .terminal
+        .as_ref()?
+        .visible_row_text_at_cell(row, column)?;
+    terminal_target_at_cell(&text, text_column)
+}
+
+fn terminal_target_highlight_for_pane(
+    state: &Arc<Mutex<AppState>>,
+    window_router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    row: i32,
+    column: i32,
+) -> Option<TerminalTargetHighlight> {
+    let row = usize::try_from(row).ok()?;
+    let column = usize::try_from(column).ok()?;
+    let app = state.lock().ok()?;
+    if !window_router.owns_terminal_pane(window_id, tab_id, &app) {
+        return None;
+    }
+    let terminal = app.terminal(tab_id)?;
+    if !terminal.connected {
+        return None;
+    }
+    let terminal = terminal.terminal.as_ref()?;
+    let (text, text_column) = terminal.visible_row_text_at_cell(row, column)?;
+    let span = terminal_target_span_at_cell(&text, text_column)?;
+    let (start_column, end_column) =
+        terminal.visible_row_cell_span_for_characters(row, span.start, span.end)?;
+    Some(TerminalTargetHighlight {
+        active: true,
+        row: i32::try_from(row).ok()?,
+        start_column: i32::try_from(start_column).ok()?,
+        end_column: i32::try_from(end_column).ok()?,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn open_terminal_remote_path(
+    state: &Arc<Mutex<AppState>>,
+    window_router: &WindowRouter,
+    window_id: Uuid,
+    terminal_tab_id: Uuid,
+    path: String,
+    ui: &slint::Weak<AppWindow>,
+    runtime: &Handle,
+    font_registry: &Arc<Mutex<FontRegistry>>,
+    terminal_font_started: &Arc<std::sync::atomic::AtomicBool>,
+) {
+    enum PathRoute {
+        ExistingSftp(Uuid),
+        NewSftp(Uuid),
+    }
+
+    let route = (|| -> Result<PathRoute> {
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        if !window_router.owns_terminal_pane(window_id, terminal_tab_id, &app) {
+            anyhow::bail!("terminal pane is no longer visible in this window");
+        }
+        let profile_id = {
+            let terminal = app
+                .terminal(terminal_tab_id)
+                .context("terminal tab is no longer available")?;
+            if !terminal.connected {
+                anyhow::bail!("terminal session is not connected");
+            }
+            terminal
+                .ssh_route()
+                .map(|(profile_id, _)| profile_id)
+                .context("remote paths require an SSH terminal")?
+        };
+        if let Some(sftp_tab_id) = app.sftp_companion_id(terminal_tab_id) {
+            if !window_router
+                .tab_ids(window_id, &app)
+                .contains(&sftp_tab_id)
+            {
+                anyhow::bail!("SFTP companion is not in this window");
+            }
+            if !app.activate_tab(sftp_tab_id) {
+                anyhow::bail!("SFTP companion is no longer available");
+            }
+            Ok(PathRoute::ExistingSftp(sftp_tab_id))
+        } else {
+            Ok(PathRoute::NewSftp(profile_id))
+        }
+    })();
+
+    match route {
+        Ok(PathRoute::ExistingSftp(sftp_tab_id)) => {
+            window_router.set_active(window_id, sftp_tab_id);
+            match navigate_sftp_tab_to_path(state, sftp_tab_id, path) {
+                Ok(()) => {
+                    log_ui_action_outcome("terminal.open-target", "sftp-existing");
+                    refresh_workspace(ui, state);
+                }
+                Err(error) => {
+                    log_ui_action_outcome("terminal.open-target", "sftp-unavailable");
+                    set_status(ui, &format!("Cannot open SFTP location: {error}"));
+                    refresh_workspace(ui, state);
+                }
+            }
+        }
+        Ok(PathRoute::NewSftp(profile_id)) => {
+            let connection = ConnectionContext::new(
+                ui.clone(),
+                state.clone(),
+                runtime.clone(),
+                font_registry.clone(),
+                terminal_font_started.clone(),
+            );
+            let _ = request_profile_connection(
+                &connection,
+                profile_id,
+                ConnectionTarget::Sftp,
+                Some(terminal_tab_id),
+                Some(path),
+                None,
+                {
+                    let router = window_router.clone();
+                    move |new_tab_id, app| {
+                        router.include_tab(window_id, new_tab_id)
+                            && router.activate_tab(window_id, new_tab_id, app)
+                    }
+                },
+            );
+            log_ui_action_outcome("terminal.open-target", "sftp-new");
+        }
+        Err(error) => {
+            log_ui_action_outcome("terminal.open-target", "sftp-rejected");
+            set_status(ui, &format!("Cannot open SFTP location: {error}"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_target_uses_slint_primary_shortcut_modifier() {
+        assert!(terminal_target_modifier_held(true, false));
+        assert!(!terminal_target_modifier_held(false, true));
+    }
+}
+
+fn open_terminal_url(runtime: &Handle, ui: slint::Weak<AppWindow>, url: String) {
+    runtime.spawn(async move {
+        let opened = tokio::time::timeout(
+            Duration::from_secs(5),
+            tokio::task::spawn_blocking(move || open::that_detached(url)),
+        )
+        .await;
+        if !matches!(opened, Ok(Ok(Ok(())))) {
+            tracing::warn!(
+                target: "ax_ssh::diagnostics",
+                operation = "open-terminal-url",
+                "failed to open terminal URL"
+            );
+            set_status(&ui, "Cannot open URL");
         }
     });
 }

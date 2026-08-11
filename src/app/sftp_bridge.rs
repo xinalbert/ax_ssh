@@ -564,19 +564,51 @@ fn queue_remote_navigation(
     path: Option<String>,
 ) -> Result<()> {
     with_active_sftp_terminal(state, |terminal| {
-        let worker = terminal
-            .worker
-            .as_ref()
-            .context("active SSH terminal has no worker")?;
-        let request_path = terminal.sftp.begin_navigation(kind, path)?;
-        let result = worker.request_list_sftp(request_path);
-        if let Err(error) = result {
-            terminal.sftp.cancel_navigation();
-            terminal.sftp.status = "SFTP directory request was rejected".to_owned();
-            return Err(error);
-        }
-        Ok(())
+        queue_remote_navigation_for_terminal(terminal, kind, path)
     })
+}
+
+pub(super) fn navigate_sftp_tab_to_path(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    path: String,
+) -> Result<()> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let terminal = app
+        .terminal_mut(tab_id)
+        .context("SFTP companion is missing")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("SFTP companion has the wrong session type");
+    }
+    if !terminal.connected {
+        if terminal.worker_running || !matches!(terminal.ssh_phase, SshConnectionPhase::Idle) {
+            terminal.sftp_initial_path = Some(path);
+            return Ok(());
+        }
+        anyhow::bail!("SFTP companion is not connected");
+    }
+    queue_remote_navigation_for_terminal(terminal, SftpNavigation::Direct, Some(path))
+}
+
+fn queue_remote_navigation_for_terminal(
+    terminal: &mut TerminalTabState,
+    kind: SftpNavigation,
+    path: Option<String>,
+) -> Result<()> {
+    let worker = terminal
+        .worker
+        .as_ref()
+        .context("active SSH terminal has no worker")?;
+    let request_path = terminal.sftp.begin_navigation(kind, path)?;
+    let result = worker.request_list_sftp(request_path);
+    if let Err(error) = result {
+        terminal.sftp.cancel_navigation();
+        terminal.sftp.status = "SFTP directory request was rejected".to_owned();
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn load_local_directory(
