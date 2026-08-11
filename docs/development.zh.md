@@ -60,7 +60,11 @@ git diff --check
 - SFTP 本地文件栏是只读 application bridge 快照。目录读取必须放在有界 blocking task 中，且只返回
   名称、路径、类型、大小和修改时间元数据；Slint 不得访问文件系统。结果回到 UI 前按 Tab 和请求 identity
   丢弃过期项，并保留条目、名称和路径上限。本地打开意图必须命中当前活动 Tab 快照，并在 blocking
-  worker 上重验非 symlink 目录与 regular file 的归属，最后才调用 detached 平台 opener。
+  worker 上打开非 symlink regular file handle，将其平台 identity 与列目录快照核对，再从该 handle
+  复制到有界私有缓存后调用 detached 平台 opener；调度时不得重新打开已验证的源路径。
+- SSH profile 的 `sftp_remote_path` 与 `sftp_local_path` 只是非敏感初始化输入，不得进入凭据、日志或运行中
+  Tab 的 mutation；持久化前校验有界文本，远端值交给 worker-owned browser，本地值只用于初始化
+  application snapshot。旧 profile 的空值必须继续使用 `~`/平台 home 默认值。
 - 文件图标平台 API、主题检测、文件读取和图片解码都必须留在 `src/app/file_icons.rs` 的 blocking
   工作中；Slint 只能接收进程内缓存里的有界自有 RGBA 图片。远端名称只作为扩展名/类型提示，绝不
   当成本机路径；每个平台 resolver 都必须保留内建 fallback 并确定性释放 native handle。
@@ -130,6 +134,11 @@ About 从进程边界接收已经创建的目录，并通过 bridge 打开；Sli
 ```bash
 RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
 ```
+
+`terminal-input` 除 UI 到 worker 总耗时外，还记录 `state_lock_us` 和 `worker_request_us`。
+多窗口 `workspace-refresh` 记录 `coalesced_refreshes`、`views_built_us`、`ui_queue_us`、
+`ui_apply_us` 及可选的 output-to-UI 时间。这些字段均不包含按键文字、终端内容、主机、路径、
+profile 标签或凭据。
 
 diagnostics 只使用固定的 `event`、`key`、`route`、`action` 和 `outcome` 字段。F5、
 ArrowUp 等特殊键使用稳定名称；所有可打印文字、IME、密码和粘贴值都只记录为 `Text`，

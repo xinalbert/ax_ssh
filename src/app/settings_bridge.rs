@@ -44,6 +44,7 @@ pub(super) fn wire_settings(
               theme_dark_terminal_background,
               theme_dark_terminal_selection,
               right_click_copy_or_paste,
+              copy_selection_on_select,
               option_as_meta,
               x11_server_provider,
               x11_server_app_path,
@@ -110,35 +111,38 @@ pub(super) fn wire_settings(
                     return;
                 }
             };
-            let settings = AppSettings::normalized(
-                application_font_family.as_str(),
-                terminal_font_family.as_str(),
-                font_size,
-                line_height_percent,
-                terminal_color_scheme_for_theme(theme_mode.as_str(), theme_palette.as_str()),
-                minimum_contrast_ratio,
-                bright_bold_text,
-                right_click_copy_or_paste,
-                scrollback_lines,
-                default_columns,
-                default_rows,
-                local_shell.as_str(),
-                &known_shells,
-                option_as_meta,
-                sidebar_width,
-                tab_width,
-                session_mask_character.as_str(),
-                collapsed_group_label_chars,
-                &shortcuts.open_settings,
-                &shortcuts.new_session,
-                &shortcuts.import_sessions,
-                &shortcuts.export_selected,
-                &shortcuts.toggle_sidebar,
-                &shortcuts.copy_selection,
-                &shortcuts.paste,
-                &shortcuts.open_sftp,
-                credential_storage.as_str(),
-            );
+            let settings = AppSettings::normalized(AppSettingsInput {
+                appearance: AppearanceSettingsInput {
+                    application_font_family: application_font_family.as_str(),
+                    terminal_font_family: terminal_font_family.as_str(),
+                    terminal_font_size: font_size,
+                    terminal_line_height_percent: line_height_percent,
+                    color_scheme: terminal_color_scheme_for_theme(
+                        theme_mode.as_str(),
+                        theme_palette.as_str(),
+                    ),
+                    minimum_contrast_ratio,
+                    bright_bold_text,
+                    right_click_copy_or_paste,
+                    copy_selection_on_select,
+                },
+                terminal: TerminalSettingsInput {
+                    scrollback_lines,
+                    default_columns,
+                    default_rows,
+                    local_shell: local_shell.as_str(),
+                    known_shells: &known_shells,
+                    option_as_meta,
+                },
+                workspace: WorkspaceSettingsInput {
+                    sidebar_width,
+                    tab_width,
+                    session_mask_character: session_mask_character.as_str(),
+                    collapsed_group_label_chars,
+                },
+                shortcuts,
+                credential_storage: credential_storage.as_str(),
+            });
             let mut settings = settings;
             settings.x11 = X11Settings::normalized(
                 x11_server_provider.as_str(),

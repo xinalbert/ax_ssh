@@ -48,6 +48,17 @@ struct TerminalSize {
     rows: u32,
 }
 
+struct LocalShellTask {
+    shell: String,
+    initial_size: TerminalSize,
+    command_rx: Receiver<LocalShellCommand>,
+    pending_resize: Arc<Mutex<Option<TerminalSize>>>,
+    shutdown_requested: Arc<AtomicBool>,
+    child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
+    process_group: Arc<AtomicI32>,
+    event_tx: mpsc::Sender<LocalShellEvent>,
+}
+
 /// UI-adjacent controller for one worker-owned local PTY process.
 pub struct LocalShellHandle {
     command_tx: SyncSender<LocalShellCommand>,
@@ -74,27 +85,24 @@ impl LocalShellHandle {
         let shutdown_requested = Arc::new(AtomicBool::new(false));
         let child_killer = Arc::new(Mutex::new(None));
         let process_group = Arc::new(AtomicI32::new(0));
-        let worker_resize = pending_resize.clone();
-        let worker_shutdown = shutdown_requested.clone();
+        let task = LocalShellTask {
+            shell,
+            initial_size,
+            command_rx,
+            pending_resize: pending_resize.clone(),
+            shutdown_requested: shutdown_requested.clone(),
+            child_killer: child_killer.clone(),
+            process_group: process_group.clone(),
+            event_tx: event_tx.clone(),
+        };
         let failure_shutdown = shutdown_requested.clone();
-        let worker_child_killer = child_killer.clone();
-        let worker_process_group = process_group.clone();
-        let worker_event_tx = event_tx.clone();
+        let failure_event_tx = event_tx.clone();
         let thread = thread::Builder::new()
             .name("axssh-local-pty".to_owned())
             .spawn(move || {
-                if let Err(error) = run_local_shell(
-                    &shell,
-                    initial_size,
-                    command_rx,
-                    worker_resize,
-                    worker_shutdown,
-                    worker_child_killer,
-                    worker_process_group,
-                    &worker_event_tx,
-                ) {
+                if let Err(error) = run_local_shell(task) {
                     let _ = send_event_with_cancellation(
-                        &worker_event_tx,
+                        &failure_event_tx,
                         LocalShellEvent::Failed(bounded_error(&error)),
                         &failure_shutdown,
                     );
@@ -298,7 +306,7 @@ pub fn resolve_shell(selection: &str) -> Result<PathBuf> {
             }
         }
         return default_shell_fallback()
-            .and_then(|shell| find_executable(shell))
+            .and_then(find_executable)
             .context("no platform default shell is available");
     }
     if selection.chars().count() > 256 || selection.chars().any(char::is_control) {
@@ -308,17 +316,18 @@ pub fn resolve_shell(selection: &str) -> Result<PathBuf> {
         .with_context(|| format!("configured local shell `{selection}` is not available"))
 }
 
-fn run_local_shell(
-    shell: &str,
-    initial_size: TerminalSize,
-    command_rx: Receiver<LocalShellCommand>,
-    pending_resize: Arc<Mutex<Option<TerminalSize>>>,
-    shutdown_requested: Arc<AtomicBool>,
-    child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
-    process_group: Arc<AtomicI32>,
-    event_tx: &mpsc::Sender<LocalShellEvent>,
-) -> Result<()> {
-    let shell_path = resolve_shell(shell)?;
+fn run_local_shell(task: LocalShellTask) -> Result<()> {
+    let LocalShellTask {
+        shell,
+        initial_size,
+        command_rx,
+        pending_resize,
+        shutdown_requested,
+        child_killer,
+        process_group,
+        event_tx,
+    } = task;
+    let shell_path = resolve_shell(&shell)?;
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(pty_size(initial_size))
@@ -376,7 +385,7 @@ fn run_local_shell(
         &command_rx,
         &pending_resize,
         &shutdown_requested,
-        event_tx,
+        &event_tx,
     );
     if !matches!(outcome, Ok(Some(_))) {
         let _ = terminate_child(child.as_mut(), process_group.load(Ordering::Acquire));
@@ -390,7 +399,7 @@ fn run_local_shell(
     process_group.store(0, Ordering::Release);
     if let Some(status) = outcome? {
         let _ = send_event_with_cancellation(
-            event_tx,
+            &event_tx,
             LocalShellEvent::Exited { status },
             &shutdown_requested,
         );
@@ -449,9 +458,8 @@ fn drive_local_shell(
     .context("local shell event receiver closed during startup")?;
     while !shutdown_requested.load(Ordering::Acquire) {
         apply_pending_resize(master, pending_resize, shutdown_requested, event_tx)?;
-        match child.try_wait().context("failed to poll local shell")? {
-            Some(status) => return Ok(Some(status.to_string())),
-            None => {}
+        if let Some(status) = child.try_wait().context("failed to poll local shell")? {
+            return Ok(Some(status.to_string()));
         }
         match command_rx.recv_timeout(COMMAND_POLL_INTERVAL) {
             Ok(LocalShellCommand::Send(data)) => {

@@ -6,6 +6,7 @@ use super::*;
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub(super) fn wire_sftp(
     ui: &AppWindow,
@@ -439,8 +440,8 @@ fn open_local_file(
             tokio::task::spawn_blocking(move || validate_local_file_for_open(&directory, &entry)),
         )
         .await;
-        let target = match validated {
-            Ok(Ok(Ok(target))) => target,
+        let validated = match validated {
+            Ok(Ok(Ok(validated))) => validated,
             Ok(Ok(Err(error))) => {
                 finish_local_file_open(
                     &state,
@@ -469,6 +470,39 @@ fn open_local_file(
         if !local_open_snapshot_is_current(&state, &request) {
             return;
         }
+        let snapshot = tokio::time::timeout(
+            LOCAL_SNAPSHOT_TIMEOUT,
+            tokio::task::spawn_blocking(move || {
+                ax_ssh::sftp::snapshot_local_file_for_open(validated.file, &validated.name)
+            }),
+        )
+        .await;
+        let target = match snapshot {
+            Ok(Ok(Ok(target))) => target,
+            Ok(Ok(Err(error))) => {
+                finish_local_file_open(
+                    &state,
+                    &request,
+                    format!("Cannot snapshot {}: {error}", request.entry.name),
+                );
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+            Ok(Err(error)) => {
+                finish_local_file_open(
+                    &state,
+                    &request,
+                    format!("Local snapshot task failed: {error}"),
+                );
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+            Err(_) => {
+                finish_local_file_open(&state, &request, "Local snapshot timed out".to_owned());
+                dispatch_active_snapshot(&ui, &state);
+                return;
+            }
+        };
         let opened = tokio::time::timeout(
             LOCAL_OPEN_TIMEOUT,
             tokio::task::spawn_blocking(move || open::that_detached(target)),

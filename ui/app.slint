@@ -43,6 +43,8 @@ export component AppWindow inherits Window {
     in property <string> editor-username;
     in property <string> editor-auth-method: "Password";
     in property <string> editor-private-key-path;
+    in property <string> editor-sftp-remote-path: "~";
+    in property <string> editor-sftp-local-path;
     in property <string> editor-credential-storage;
     in property <string> editor-default-credential-storage: "system-keyring";
     in property <bool> editor-x11-forwarding: false;
@@ -118,6 +120,7 @@ export component AppWindow inherits Window {
     in property <float> terminal-minimum-contrast-ratio: 4.5;
     in property <bool> bright-bold-text: true;
     in property <bool> right-click-copy-or-paste: false;
+    in property <bool> copy-selection-on-select: false;
     in property <bool> option-as-meta: false;
     in property <[string]> x11-server-provider-options;
     in property <[string]> x11-server-installations;
@@ -227,12 +230,14 @@ export component AppWindow inherits Window {
         terminal: {
             terminal_id: root.active-pane-id, connected: root.connected,
             render_lines: root.terminal-render-lines, content_columns: root.terminal-content-columns,
+            cursor_state: [],
             cursor_row: root.terminal-cursor-row, cursor_column: root.terminal-cursor-column,
             cursor_visible: root.terminal-cursor-visible, cursor_text: root.terminal-cursor-text,
             font_family: root.terminal-font-family, font_size: root.terminal-font-size * 1px,
             line_height_percent: root.terminal-line-height-percent, foreground: root.terminal-foreground,
             background: root.terminal-background, selection_background: root.terminal-selection-background,
             right_click_copy_or_paste: root.right-click-copy-or-paste,
+            copy_selection_on_select: root.copy-selection-on-select,
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
             select_all_shortcut: root.select-all-shortcut,
@@ -280,7 +285,8 @@ export component AppWindow inherits Window {
             theme_dark_terminal_foreground: root.theme-dark-terminal-foreground,
             theme_dark_terminal_background: root.theme-dark-terminal-background,
             theme_dark_terminal_selection: root.theme-dark-terminal-selection,
-            right_click_copy_or_paste: root.right-click-copy-or-paste, option_as_meta: root.option-as-meta,
+            right_click_copy_or_paste: root.right-click-copy-or-paste,
+            copy_selection_on_select: root.copy-selection-on-select, option_as_meta: root.option-as-meta,
             x11_server_provider_options: root.x11-server-provider-options,
             x11_server_installations: root.x11-server-installations,
             x11_server_provider: root.x11-server-provider,
@@ -316,7 +322,9 @@ export component AppWindow inherits Window {
             group_name: root.editor-group-name, protocol: root.editor-protocol,
             host: root.editor-host, port: root.editor-port,
             username: root.editor-username, auth_method: root.editor-auth-method,
-            private_key_path: root.editor-private-key-path, x11_forwarding: root.editor-x11-forwarding,
+            private_key_path: root.editor-private-key-path,
+            sftp_remote_path: root.editor-sftp-remote-path, sftp_local_path: root.editor-sftp-local-path,
+            x11_forwarding: root.editor-x11-forwarding,
             credential_storage: root.editor-credential-storage,
             default_credential_storage: root.editor-default-credential-storage,
             serial_port: root.editor-serial-port,
@@ -353,14 +361,14 @@ export component AppWindow inherits Window {
         string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, bool, string, string, bool, string, string, string, string, string, string, bool,
+        string, string, string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -643,7 +651,7 @@ export component AppWindow inherits Window {
                           theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                           theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                           theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                          theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                          theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
                           x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
@@ -656,7 +664,7 @@ export component AppWindow inherits Window {
                     theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                     theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                     theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                    theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                    theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
                     x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key,
@@ -664,11 +672,11 @@ export component AppWindow inherits Window {
             }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
-            save-session(name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+            save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                          serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                          connect-after-save) => {
                 root.save-session(
-                    name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+                    name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                     connect-after-save,
                 );

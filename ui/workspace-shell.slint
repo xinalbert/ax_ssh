@@ -18,6 +18,7 @@ export struct TerminalPaneView {
     width: float,
     height: float,
     focused: bool,
+    closable: bool,
 }
 
 export struct TerminalPaneDividerView {
@@ -179,6 +180,8 @@ component TerminalPaneGroup inherits Rectangle {
     in property <int> terminal-edit-command-revision: 0;
     private property <int> focus-request-revision: 0;
 
+    clip: true;
+
     function restore-terminal-input-focus() {
         root.focus-request-revision = root.focus-request-revision == 2147483647
             ? 1
@@ -204,6 +207,7 @@ component TerminalPaneGroup inherits Rectangle {
         height: pane.height * parent.height;
         view: pane.terminal;
         focused: pane.focused;
+        closable: pane.closable;
         edit-command: root.terminal-edit-command;
         edit-command-revision: root.terminal-edit-command-revision;
         focus-request-revision: root.focus-request-revision;
@@ -397,14 +401,14 @@ export component WorkspaceShell inherits Rectangle {
         string, string, int, int, float, bool, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, bool, string, string, bool, string, string, string, string, string, string, bool,
+        string, string, string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -688,7 +692,7 @@ export component WorkspaceShell inherits Rectangle {
                              theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                              theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                              theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                             theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                             theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
                              x11-provider, x11-app-path, x11-launch, x11-no-auth, shell,
                              scrollback, columns, rows, sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key,
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
@@ -702,7 +706,7 @@ export component WorkspaceShell inherits Rectangle {
                                 theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                                 theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                                 theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                                theme-dark-terminal-selection, right-click-copy, option-as-meta,
+                                theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
                                 x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                                 sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                                 toggle-sidebar-key, copy-key,
@@ -722,11 +726,11 @@ export component WorkspaceShell inherits Rectangle {
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
-                        save(name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+                        save(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                              serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                              connect-after-save) => {
                             root.save-session(
-                                name, group, protocol, host, port, username, auth, key-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+                                name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
                                 serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                                 connect-after-save,
                             );

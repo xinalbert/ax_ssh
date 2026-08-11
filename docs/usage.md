@@ -23,14 +23,17 @@ cargo run --locked
    transport warning. Serial accepts a port name, baud rate, data bits, stop
    bits, parity, and flow control. AxSSH lists detected ports when the editor
    enters Serial mode; use **Refresh** after a device is attached, or enter a
-   path/name manually.
+   path/name manually. In the SSH-only **SFTP directories** section, set the
+   remote and local directories that new SFTP Tabs should open first; `~` and
+   the platform home directory are the defaults.
 3. Save the session, then select it in the session navigator. For a new SSH
    profile, **Save & connect** saves the profile and immediately starts the
-   normal host-key flow. A password entered in the session editor is one-time by
-   default and is used for that connection without requiring a vault password.
-   Select **Remember password** to persist it, then choose the credential
-   backend; the vault-password field appears only for **Encrypted application
-   vault**. Opening the same saved session more than once creates
+   normal host-key flow. The editor password is optional: leave it empty to
+   save the profile without a password, or use a non-empty value once for that
+   connection. Select **Save password (optional)** to persist it. A save with
+   no vault password uses the system credential store, even when encrypted vault
+   was selected; provide a vault password to create an encrypted-vault record.
+   Opening the same saved session more than once creates
    independent terminal tabs with separate connections and output. Each SSH Tab
    can independently wait for host-key confirmation or authentication; the
    security prompt always belongs to the active Tab, and switching Tabs
@@ -43,10 +46,11 @@ cargo run --locked
    private-key passphrase is never persisted. To remember an SSH password,
    first choose **System credential store** or **Encrypted application vault**
    in **Settings > General**. The password prompt starts with that choice, and
-   its **Credential storage** menu can override the backend for this prompt.
-   Select **Remember password** to save after successful authentication. The
-   encrypted vault also asks for a vault password; later uses ask only for that
-   vault password to unlock the saved SSH password.
+   its **Save password in** menu can override the backend for this prompt.
+   Select **Save password (optional)** to save after successful authentication.
+   Leaving a requested vault password empty saves to the system credential
+   store instead; a non-empty vault password creates an encrypted-vault record.
+   Later use of an existing vault record still asks for that vault password.
    Password, vault-password, and passphrase fields cannot be copied, cut, or
    selected, and are cleared after a submitted secret is accepted or the prompt
    is cancelled.
@@ -123,8 +127,9 @@ clears the confirmed host-key fingerprint, so the new endpoint must be trusted
 explicitly on its next connection. Switching an SSH profile to Telnet or Serial
 removes its remembered SSH credential reference. The session editor never shows
 a saved password; leaving the field blank preserves it. A newly entered password
-can be used once by **Save & connect**, or persisted by selecting **Remember
-password** and a backend. Changing the default in **Settings > General** only
+can be used once by **Save & connect**, or persisted by selecting **Save
+password (optional)** and a backend. With an empty vault password, that save
+uses the system credential store. Changing the default in **Settings > General** only
 initializes future storage selections and does not migrate the backend referenced
 by an existing SSH profile.
 
@@ -154,17 +159,20 @@ The individual file-table columns are not resizable in this phase.
 
 Enter an absolute path, a path relative to the
 current directory, or `~` in the remote browser, then use **Open**; double-click
-a folder to enter it. The local browser starts at the platform home directory,
-accepts an explicit local directory path, and reads only bounded file metadata.
+a folder to enter it. The remote browser starts at the SSH profile's configured
+default directory. The local browser starts at its configured directory (or the
+platform home directory when that value is empty), and reads only bounded file
+metadata.
 Use **Hidden** and **More** to include dot files or request the next bounded
 remote page. Rows use the target platform's file-type icon when one is available
 and a built-in folder, link, or generic-file icon otherwise.
 
 Double-click a regular file in the local pane to open the current snapshot entry
 with the platform's default application. Directories continue to navigate and
-symbolic links are not opened. AxSSH rechecks the directory, file type, and
-resolved parent outside the UI thread before asking the operating system to open
-the file.
+symbolic links are not opened. AxSSH verifies the opened file's platform identity
+outside the UI thread, copies that exact handle into its private bounded cache,
+and opens the completed read-only snapshot. Replacing the original path after
+validation cannot redirect the open request.
 
 Double-click a regular file in the remote pane to download a read-only copy into
 AxSSH's private cache and open that completed copy with the default application.
@@ -244,7 +252,12 @@ pane. Use `Alt+Shift+H`, `Alt+Shift+J`, `Alt+Shift+K`, and
 pane has its own local PTY or profile connection; SSH panes repeat normal trust
 and authentication, including any required password or passphrase prompt. SFTP
 cannot be split into a terminal pane and remains an independent visible Tab.
-Closing the visible Terminal Tab closes every terminal pane in that layout.
+Each non-root pane has a small close control in its upper-right corner. Closing
+it removes only that pane and its session, then collapses the remaining layout;
+the root pane has no independent close control. A normal `exit` from a child
+local shell, or a normal child SSH/Telnet disconnect, performs the same close.
+Connection and authentication failures remain visible for diagnosis. Closing
+the visible Terminal Tab still closes every terminal pane in that layout.
 
 Each split has a visible divider. Drag a vertical divider to change pane widths
 or a horizontal divider to change pane heights; double-click it to restore an
@@ -252,6 +265,11 @@ equal split. Dividers participate in Tab focus and accept the matching arrow
 keys, Home, End, and Enter or Space for reset. Each side remains between 10%
 and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
+Terminal rows, the cursor, preedit text, and the native input proxy remain
+clipped to their pane even when nested splits make one side unusually small;
+the active bottom row stays aligned with the pane while older top rows clip first.
+This clipping and bottom alignment are established on the pane's initial layout,
+not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
 connected terminal pane; keyboard and accessibility divider actions retain
 divider focus.
@@ -268,6 +286,9 @@ Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
 The same keyboard shortcuts work in a detached Terminal window even though it
 has no client-area menu. Non-secret text fields retain their native editing
 shortcuts and context menus; secret fields remain non-copyable.
+In **Settings > Terminal**, **Copy selection on select** is disabled by default.
+When enabled, completed pointer selections and **Select All** copy immediately,
+and a direct right-click always pastes.
 The default **New Server** shortcut is `Cmd+N` on macOS and `Ctrl+N` elsewhere.
 The default File-menu transfer shortcuts are `Cmd/Ctrl+Shift+I` for import and
 `Cmd/Ctrl+Shift+E` for export of the selected group or server. Menu commands

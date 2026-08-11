@@ -3,7 +3,9 @@
 mod transfer;
 
 pub(crate) use transfer::{SFTP_TRANSFER_EVENT_CAPACITY, SftpDownloadHandle, SftpDownloadRequest};
-pub use transfer::{SftpTransferEvent, cleanup_stale_sftp_open_cache};
+pub use transfer::{
+    SftpTransferEvent, cleanup_stale_sftp_open_cache, snapshot_local_file_for_open,
+};
 
 use std::collections::VecDeque;
 use std::io;

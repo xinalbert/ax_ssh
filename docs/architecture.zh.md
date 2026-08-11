@@ -43,10 +43,11 @@ Slint UI（.slint）
 | 区域 | 负责 | 不得负责 |
 | --- | --- | --- |
 | `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
-| `src/app.rs` | 生成 Slint 类型的声明、进程级 UI 启动和顶层 callback 编排 | 功能实现、SSH 协议细节或 JSON schema 细节 |
+| `src/app.rs` 与 `src/app/window_router.rs` | 生成 Slint 类型的声明、进程级 UI 启动和 callback 编排；私有多窗口路由、detached transfer 与 pane tree 所有权 | 功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` 与 `src/app/connection/` | 私有 application bridge 功能接线，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图和 detached opener 调度 | 生成类型声明、传输实现或持久化 schema |
-| `src/app/file_icons.rs` | 有界的进程内文件图标 key/cache、平台 resolver 和自有 RGBA fallback | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
+| `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
+| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
+| `src/app/file_icons.rs` 与 `src/app/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
 | `src/app/local_files.rs` | SFTP 本地栏的有界目录元数据发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
@@ -59,8 +60,8 @@ Slint UI（.slint）
 | `src/ssh.rs` | russh handler、主机密钥决策、密码/私钥/运行时 agent 认证、shell 与服务端发起的 X11 channel 边界 | 窗口更新、持久化会话修改、UI 格式化、agent identity 管理 |
 | `src/ssh/private_keys.rs` | 本机 `.ssh` 私钥发现和阻塞式密钥加载 | passphrase 持久化、UI 状态、主机信任决策 |
 | `src/ssh/x11.rs` | 本机 DISPLAY 解析、精确 xauth cookie 查询、X11 setup 校验/替换、本机端点连接和 relay | UI 状态、profile 修改、cookie 持久化、启动 X server 或修改访问控制 |
-| `src/ssh/worker.rs` | 有界 shell/X11/SFTP 命令、合并式 resize 状态、批量事件、下载 task 所有权、取消和关闭 | UI 状态或 profile 持久化 |
-| `src/sftp.rs` 与 `src/sftp/transfer.rs` | 有界 SFTP v3 packet 适配、目录浏览、只读分块下载、私有缓存发布/清理和 transfer task 生命周期 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
+| `src/ssh/worker.rs` 与 `src/ssh/worker/` | 有界 session 启动/命令，以及私有 shell/X11 和 SFTP-only 生命周期模块；合并式 resize、批量事件、取消和关闭 | UI 状态或 profile 持久化 |
+| `src/sftp.rs`、`src/sftp/transfer.rs` 与 `src/sftp/transfer/cache.rs` | 有界 SFTP v3 packet 适配、目录浏览、只读分块下载和 transfer 编排；私有缓存发布/清理 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
 | `src/telnet.rs` | 明文 TCP 生命周期、RFC 854 选项过滤、NAWS、有界输入输出、取消和关闭 | 凭据、SSH 信任、UI 状态或终端渲染 |
 | `src/serial.rs` | 不打开设备的端口发现、稳定 USB 身份匹配、串口参数映射和单设备有界 worker | 自动打开/探测设备、UI 状态或持久化 profile 修改 |
 | `src/logging.rs` | 全局 tracing subscriber、日志目录、按日滚动、保留和 flush guard | 凭据、功能状态、UI 或 SSH handle |
@@ -102,6 +103,20 @@ divider 手势只携带稳定的前序 divider ID 和标准化比例；`WindowRo
 重验，比例及重新发布的叶节点/divider 几何都由该树拥有。当 pane UUID、divider identity 和行数
 仍匹配时，bridge 会原地更新既有 Slint model 行，保留 divider 的 repeater 实例和 pointer capture；
 不匹配时才回退到常规全量 snapshot 刷新。
+pane 焦点 callback 也使用同一套 identity 重验的原地布局更新，因此点击分屏 pane 后不会在下一次
+按键前替换其 repeater 或透明 IME proxy；模型过期或结构变化时才回退到全量 snapshot 刷新。
+worker 驱动的多窗口刷新共用有界 `AppState` pending gate：一次 UI 事件读取最新路由视图，原地更新
+identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多补排一次刷新。终端输出因此不会
+堆积无界 Slint event queue，也不会反复替换 focused IME proxy。
+对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
+这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
+因此可见 `TerminalGrid` 会在远端输出到达时立即收到 model 通知，不需要等待下一次焦点变化。
+光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
+行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
+只有 `PaneTree` 的非根叶节点可以单独关闭。关闭意图会按所属窗口路由重新校验，随后折叠该叶节点、
+只移除对应运行时 Tab、取消 pending probe，并异步 shutdown 仍存在的 worker。子 pane 中 local shell
+正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态
+继续可见；关闭可见 Terminal Tab 仍负责关闭整棵树。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
@@ -120,8 +135,10 @@ diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签
 draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
 同一局部草稿的嵌套编辑控件；显示文案、dialog 文本和视觉状态都用绑定计算，不重复保存。
 密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
-source snapshot。Remember password 与凭据后端只是明确的保存意图；未勾选记住密码时后端选择
-不参与处理。
+source snapshot。保存 profile 时密码可以留空；保存密码开关和凭据后端只是明确的保存意图，
+未启用保存时后端选择不参与处理。
+编辑器还包含 SSH-only、非敏感的 `sftp_remote_path` 和 `sftp_local_path` 字段。
+它们只是本地草稿：修改时不会打开任一目录，保存时也不会改变已经运行的 Tab。
 
 `OverlayHost` 拥有 Group/Profile 管理弹层的开关和草稿，并从单个 action 派生标题、消息和
 按钮表现；只有确认后才向上发送管理命令。它也组合 SSH 主机密钥与认证弹层，但二者是刻意
@@ -148,15 +165,18 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 3. 用户明确确认后，控制器才原子持久化精确指纹。密码 profile 通过 Tokio blocking
    边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
    保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
-   **Remember password** 时才会在 profile 保存前更新所选后端。私钥 profile 在 UI 线程外加载
+   **Save password (optional)** 时才会在 profile 保存前更新所选后端。若请求加密保险库但未提供
+   保险库口令，会降级为系统凭据库并记录实际后端；既有保险库记录仍是保险库记录，解锁时仍需要
+   其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
    Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
-   普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Remember password**
+   普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
-   **Remember password** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
-   勾选后才把密码与 profile 事务性写入所选后端，且只有选择应用加密保险库时才要求保险库口令；
+   **Save password (optional)** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
+   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会有意改用系统凭据库，
+   而不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
    保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。profile 保存和删除
    共享一个异步凭据闸门，并为每个 profile 分配最新 mutation token；在修改凭据前和替换
@@ -177,7 +197,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    终端输入，同时 Ctrl+Alt 的可打印文字可保留为 AltGr 文本。普通 `Ctrl+C` 保留为 PTY
    输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
    使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为
-   有界 shell 输入发送；可选右键行为根据是否存在选区选择复制或粘贴。
+   有界 shell 输入发送；默认的可选右键行为根据是否存在选区选择复制或粘贴。启用
+   `copy_selection_on_select` 后，完成鼠标选区和 Select All 都在本地复制，直接右击始终粘贴；
+   此模式覆盖独立的右键偏好，选区和剪贴板文字仍不会离开 Slint。
    活动终端报告 connected 前，原生文字/IME 和应用终端按键路由都不可交互；Rust bridge 会再次
    检查连接状态，因此焦点变化或迟到 callback 也不能在建连期间排入终端输入。
    键盘路由和主要 application callback 使用专用 `ax_ssh::diagnostics` debug target。特殊键
@@ -217,8 +239,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    网格下限，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
    现有侧栏收起动作优先为终端让出列数。
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
-   下一次 UI 轮转后，再请求一次最终 PTY 尺寸。因此 Settings 修改字体后返回已连接终端时，
-   与窗口缩放会走同一条当前网格更新路径。完整字符行在测得网格区域内向下对齐：行数向下
+   下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
+   pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
+   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。完整字符行在测得网格
+   区域内向下对齐：行数向下
    取整后剩余的零散高度放在第一行上方，而非最后一行下方。同一局部偏移同时用于字符格、
    光标/IME 预编辑和指针行映射，不会改变计算出的行数或任何 PTY 请求。
    `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
@@ -365,8 +389,9 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 输入，不进入 `SessionStore`。密码 profile 只包含以稳定 UUID 为键的可选
 `credential_storage` 后端引用，绝不包含密码或保险库口令。编辑器中的密码和保险库口令每次
 打开都为空，提交后立即清空；非空密码默认只由对应 Tab 短期持有，主机密钥确认完成并由 SSH worker
-接管后即清除。只有勾选 **Remember password** 才会额外通过所选后端写入，profile 持久化失败时回滚，
-且只有加密保险库要求保险库口令。Settings > General 初始化以后勾选 **Remember password** 时使用的
+接管后即清除。只有勾选 **Save password (optional)** 才会额外通过所选后端写入，profile 持久化失败时回滚。
+若选择加密保险库但未提供保险库口令，会有意改用系统凭据库并持久化实际引用，不会创建空口令
+保险库记录；既有保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
 后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
 后端使用按 profile 分隔的应用记录。保险库对每条记录用 Argon2id 派生密钥、用
 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，保险库口令始终是短期输入。私钥
@@ -457,6 +482,10 @@ russh handle 或 worker。
 只有 SFTP Tab 报告 connected 后，远端导航和选择控件才可交互。此前 `AppState` 不发布
 available 的远端 snapshot，application bridge 也会独立拒绝来自未连接或非 SFTP Tab 的操作。
 
+创建新的 SFTP Tab 时，SSH profile 会把初始远端目录交给 worker 所有的浏览器，把初始本地目录
+交给 application-owned 的本地 snapshot。旧 profile 缺少远端值时使用 `~`，本地值为空时解析为
+平台 home 目录。这些默认值只在 Tab 初始化时使用，之后的导航仍属于各自 Tab。
+
 第一阶段提供双栏目录浏览。Slint 拥有两个受约束的 splitter：一个调整远端/本地宽度，另一个调整
 文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，
 `SftpPane` 则按响应式最小尺寸限制两侧。splitter 提供 resize 光标、键盘焦点与方向键调整，以及 slider
@@ -484,8 +513,10 @@ AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
 双击本地 regular file 行只产生只读打开意图。bridge 先要求该精确路径仍位于活动 SFTP Tab 的
 当前本地快照；blocking worker 再使用不跟随链接的元数据重验目录和条目，拒绝目录与符号链接，
-canonicalize 两者并要求文件父目录仍是已列出的目录，最后才通过 `open::that_detached` 调用平台
-默认程序。过期 Tab、目录 request、路径或已替换条目都会在调度前被拒绝。
+打开只读 handle，并要求其平台文件 identity 与列目录时记录的 identity 完全一致。AxSSH 从这个
+已验证 handle 复制到有界私有 open cache，原子发布快照后才通过 `open::that_detached` 调用平台
+默认程序；不会再次打开已验证的源路径。过期 Tab、目录 request、路径或已替换条目都会在调度前
+被拒绝，验证后的路径替换也无法把 opener 重定向到另一个文件 identity。
 
 双击当前远端快照中的 regular file 会排入只读下载后打开。每个 SFTP Tab 最多允许两个活动
 transfer，仍在打开的 subsystem 也计入上限；每个 transfer 独占单独的 SFTP subsystem stream。
@@ -543,8 +574,10 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。Slint 测量配置字体，并用测得的字符格
 宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；不能组成完整字符格的
-剩余高度绘制在向下对齐网格的上方，IME 和指针坐标使用同一原点；终端只会在这些度量和布局稳定
-后合并发送 resize。
+剩余高度绘制在向下对齐网格的上方，IME 和指针坐标使用同一原点。pane group 会把每个终端 surface
+裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、预编辑覆盖层和透明 IME proxy，确保尺寸过小的
+嵌套分屏不能绘制到相邻 pane 或工作区之外。pane 高度不足终端保底三行时，网格仍把当前底行贴住 pane
+底边，并优先裁剪较旧的顶部行；终端只会在这些度量和布局稳定后合并发送 resize。
 
 首次打开 Settings 时才会在 blocking worker 中发现本地 shell、系统等宽字体和已知 X server
 安装位置；再次激活现有单例 Tab 不会重复扫描。关闭 Settings 会释放发现出的系统字体与 X server
@@ -553,13 +586,18 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 引用后继续持有自身缓存，因此不能预期进程 RSS 立即下降。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
-`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、最小对比度、粗体亮色和右键行为、
+`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、最小对比度、粗体亮色和鼠标复制/粘贴偏好、
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
     非秘密的 X11 provider/path/启动/兼容设置、SSH 认证方式（可选择 agent，但不包含 agent 端点或
-    identity），以及记住密码的默认后端。schema 版本 17 将原有
+    identity），以及记住密码的默认后端。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值
+    默认为 `~`，本地值为空表示平台 home 目录。schema 版本 18 增加默认关闭的
+    `copy_selection_on_select` 偏好；旧配置保持既有右键行为。schema 版本 17 将原有
     `terminal_brightness_percent` 重映射替换为定点保存的
     `terminal_minimum_contrast_ratio_tenths`，范围为 1.0:1 至 21.0:1，默认 4.5:1。
+    应用调用方通过 `AppSettingsInput` 提交原始值，并按 Appearance、Terminal、Workspace 和
+    Shortcuts 所有权域分组。这些输入类型不包含 Slint 值，规范化后仍写入同一个持久化
+    `AppSettings`，不会给 JSON schema 增加字段或改变其结构。
     schema 版本 16 及更早文件会丢弃旧亮度值并迁移到该默认值，因为两种设置不存在安全的一一数值映射。
     schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，

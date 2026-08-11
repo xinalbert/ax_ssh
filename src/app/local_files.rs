@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -18,6 +18,29 @@ pub(super) struct LocalDirectoryEntry {
     pub(super) is_symlink: bool,
     pub(super) size: u64,
     pub(super) modified: Option<SystemTime>,
+    identity: LocalFileIdentity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LocalFileIdentity {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(windows)]
+    volume_serial: Option<u32>,
+    #[cfg(windows)]
+    file_index: Option<u64>,
+    #[cfg(not(any(unix, windows)))]
+    length: u64,
+    #[cfg(not(any(unix, windows)))]
+    modified: Option<SystemTime>,
+}
+
+#[derive(Debug)]
+pub(super) struct ValidatedLocalFile {
+    pub(super) file: File,
+    pub(super) name: String,
 }
 
 pub(super) struct LocalDirectoryListing {
@@ -88,15 +111,22 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
                 continue;
             }
         };
-        let metadata = item.metadata().ok();
+        let metadata = match item.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                truncated = true;
+                continue;
+            }
+        };
         name_budget = name_budget.saturating_add(name_len);
         listed.push(LocalDirectoryEntry {
             name,
             path,
             is_dir: file_type.is_dir(),
             is_symlink: file_type.is_symlink(),
-            size: metadata.as_ref().map_or(0, fs::Metadata::len),
-            modified: metadata.and_then(|metadata| metadata.modified().ok()),
+            size: metadata.len(),
+            modified: metadata.modified().ok(),
+            identity: local_file_identity(&metadata),
         });
     }
 
@@ -116,7 +146,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
 pub(super) fn validate_local_file_for_open(
     directory: &str,
     entry: &LocalDirectoryEntry,
-) -> Result<PathBuf> {
+) -> Result<ValidatedLocalFile> {
     if entry.is_dir {
         bail!("local entry is a directory");
     }
@@ -146,12 +176,50 @@ pub(super) fn validate_local_file_for_open(
         bail!("local entry is no longer a regular file");
     }
 
+    let file =
+        File::open(entry_path).with_context(|| format!("cannot open local file {}", entry.path))?;
+    let opened_metadata = file
+        .metadata()
+        .with_context(|| format!("cannot inspect opened local file {}", entry.path))?;
+    if !opened_metadata.is_file() || local_file_identity(&opened_metadata) != entry.identity {
+        bail!("local file changed after it was listed");
+    }
+
     let canonical_entry = fs::canonicalize(entry_path)
         .with_context(|| format!("cannot resolve local file {}", entry.path))?;
     if canonical_entry.parent() != Some(canonical_directory.as_path()) {
         bail!("local file resolved outside the current directory snapshot");
     }
-    Ok(canonical_entry)
+    Ok(ValidatedLocalFile {
+        file,
+        name: entry.name.clone(),
+    })
+}
+
+fn local_file_identity(metadata: &fs::Metadata) -> LocalFileIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        LocalFileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        LocalFileIdentity {
+            volume_serial: metadata.volume_serial_number(),
+            file_index: metadata.file_index(),
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        LocalFileIdentity {
+            length: metadata.len(),
+            modified: metadata.modified().ok(),
+        }
+    }
 }
 
 fn is_safe_display_text(value: &str) -> bool {
@@ -160,7 +228,22 @@ fn is_safe_display_text(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use super::*;
+
+    fn fixture_entry(path: &Path, name: &str) -> LocalDirectoryEntry {
+        let metadata = fs::metadata(path).expect("fixture metadata should be readable");
+        LocalDirectoryEntry {
+            name: name.to_owned(),
+            path: path.display().to_string(),
+            is_dir: false,
+            is_symlink: false,
+            size: metadata.len(),
+            modified: metadata.modified().ok(),
+            identity: local_file_identity(&metadata),
+        }
+    }
 
     #[test]
     fn local_directory_listing_is_sorted_and_keeps_metadata() {
@@ -197,18 +280,17 @@ mod tests {
         fs::create_dir(&directory).expect("test directory should be created");
         let file_path = directory.join("notes.txt");
         fs::write(&file_path, b"notes").expect("test file should be written");
-        let entry = LocalDirectoryEntry {
-            name: "notes.txt".to_owned(),
-            path: file_path.display().to_string(),
-            is_dir: false,
-            is_symlink: false,
-            size: 5,
-            modified: None,
-        };
+        let entry = fixture_entry(&file_path, "notes.txt");
 
-        let validated = validate_local_file_for_open(&directory.display().to_string(), &entry)
+        let mut validated = validate_local_file_for_open(&directory.display().to_string(), &entry)
             .expect("snapshot regular file should be accepted");
-        assert_eq!(validated, fs::canonicalize(&file_path).expect("file path"));
+        let mut contents = String::new();
+        validated
+            .file
+            .read_to_string(&mut contents)
+            .expect("validated file should remain readable");
+        assert_eq!(validated.name, "notes.txt");
+        assert_eq!(contents, "notes");
 
         fs::remove_dir_all(&directory).expect("test directory should be removed");
     }
@@ -220,14 +302,7 @@ mod tests {
         let outside = root.join("outside.txt");
         fs::create_dir_all(&directory).expect("test directory should be created");
         fs::write(&outside, b"outside").expect("outside file should be written");
-        let entry = LocalDirectoryEntry {
-            name: "outside.txt".to_owned(),
-            path: outside.display().to_string(),
-            is_dir: false,
-            is_symlink: false,
-            size: 7,
-            modified: None,
-        };
+        let entry = fixture_entry(&outside, "outside.txt");
 
         let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
             .expect_err("outside file should be rejected");
@@ -248,19 +323,30 @@ mod tests {
         fs::create_dir_all(&directory).expect("test directory should be created");
         fs::write(&target, b"target").expect("target file should be written");
         symlink(&target, &link).expect("test symlink should be created");
-        let entry = LocalDirectoryEntry {
-            name: "notes.txt".to_owned(),
-            path: link.display().to_string(),
-            is_dir: false,
-            is_symlink: false,
-            size: 6,
-            modified: None,
-        };
+        let entry = fixture_entry(&link, "notes.txt");
 
         let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
             .expect_err("replacement symlink should be rejected");
         assert!(error.to_string().contains("became a symbolic link"));
 
         fs::remove_dir_all(&root).expect("test directory should be removed");
+    }
+
+    #[test]
+    fn local_open_validation_rejects_a_replaced_regular_file() {
+        let directory =
+            std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).expect("test directory should be created");
+        let file_path = directory.join("notes.txt");
+        fs::write(&file_path, b"trusted").expect("test file should be written");
+        let entry = fixture_entry(&file_path, "notes.txt");
+        fs::remove_file(&file_path).expect("listed fixture should be removed");
+        fs::write(&file_path, b"replaced").expect("replacement fixture should be written");
+
+        let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
+            .expect_err("replacement with a different file identity should be rejected");
+        assert!(error.to_string().contains("changed after it was listed"));
+
+        fs::remove_dir_all(&directory).expect("test directory should be removed");
     }
 }

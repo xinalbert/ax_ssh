@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::credential_tasks::credential_storage_for_save;
 
 pub(super) fn begin_authentication(
     runtime: &Handle,
@@ -334,7 +335,12 @@ pub(in crate::app) fn wire_authentication(
             return false;
         }
         let credential_to_store = if password_auth {
-            selected_storage_for_remember(remember_password, storage.as_str()).map(|storage| {
+            selected_storage_for_remember(
+                remember_password,
+                storage.as_str(),
+                vault_password.as_str(),
+            )
+            .map(|storage| {
                 PendingCredentialStore {
                     storage,
                     previous_storage,
@@ -346,13 +352,6 @@ pub(in crate::app) fn wire_authentication(
         } else {
             None
         };
-        if credential_to_store.as_ref().is_some_and(|store| {
-            store.storage == CredentialStorage::EncryptedVault
-                && store.vault_password.as_deref().is_none_or(String::is_empty)
-        }) {
-            set_status(&ui_for_auth, "Enter a vault password before remembering this SSH password");
-            return false;
-        }
         match start_session_worker(
             &runtime_for_auth,
             state_for_auth.clone(),
@@ -444,8 +443,14 @@ pub(in crate::app) fn wire_authentication(
 fn selected_storage_for_remember(
     remember_password: bool,
     setting: &str,
+    vault_password: &str,
 ) -> Option<CredentialStorage> {
-    remember_password.then(|| CredentialStorage::from_setting(setting))
+    remember_password.then(|| {
+        credential_storage_for_save(
+            CredentialStorage::from_setting(setting),
+            !vault_password.is_empty(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -455,15 +460,19 @@ mod tests {
     #[test]
     fn prompt_storage_uses_explicit_selection_only_when_remembering() {
         assert_eq!(
-            selected_storage_for_remember(false, "encrypted-vault"),
+            selected_storage_for_remember(false, "encrypted-vault", ""),
             None
         );
         assert_eq!(
-            selected_storage_for_remember(true, "encrypted-vault"),
+            selected_storage_for_remember(true, "encrypted-vault", ""),
+            Some(CredentialStorage::SystemKeyring)
+        );
+        assert_eq!(
+            selected_storage_for_remember(true, "encrypted-vault", "vault-password"),
             Some(CredentialStorage::EncryptedVault)
         );
         assert_eq!(
-            selected_storage_for_remember(true, "system-keyring"),
+            selected_storage_for_remember(true, "system-keyring", ""),
             Some(CredentialStorage::SystemKeyring)
         );
     }

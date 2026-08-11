@@ -166,43 +166,29 @@ pub struct ThemePalette {
 }
 
 impl ThemePalette {
-    pub fn normalized(
-        background: &str,
-        panel: &str,
-        panel_alt: &str,
-        border: &str,
-        text: &str,
-        muted: &str,
-        accent: &str,
-        success: &str,
-        danger: &str,
-        overlay: &str,
-        terminal_foreground: &str,
-        terminal_background: &str,
-        terminal_selection: &str,
-    ) -> Self {
+    pub fn normalized(input: Self) -> Self {
         let defaults = Self::default();
         Self {
-            background: normalize_theme_color(background, &defaults.background),
-            panel: normalize_theme_color(panel, &defaults.panel),
-            panel_alt: normalize_theme_color(panel_alt, &defaults.panel_alt),
-            border: normalize_theme_color(border, &defaults.border),
-            text: normalize_theme_color(text, &defaults.text),
-            muted: normalize_theme_color(muted, &defaults.muted),
-            accent: normalize_theme_color(accent, &defaults.accent),
-            success: normalize_theme_color(success, &defaults.success),
-            danger: normalize_theme_color(danger, &defaults.danger),
-            overlay: normalize_theme_color(overlay, &defaults.overlay),
+            background: normalize_theme_color(&input.background, &defaults.background),
+            panel: normalize_theme_color(&input.panel, &defaults.panel),
+            panel_alt: normalize_theme_color(&input.panel_alt, &defaults.panel_alt),
+            border: normalize_theme_color(&input.border, &defaults.border),
+            text: normalize_theme_color(&input.text, &defaults.text),
+            muted: normalize_theme_color(&input.muted, &defaults.muted),
+            accent: normalize_theme_color(&input.accent, &defaults.accent),
+            success: normalize_theme_color(&input.success, &defaults.success),
+            danger: normalize_theme_color(&input.danger, &defaults.danger),
+            overlay: normalize_theme_color(&input.overlay, &defaults.overlay),
             terminal_foreground: normalize_theme_color(
-                terminal_foreground,
+                &input.terminal_foreground,
                 &defaults.terminal_foreground,
             ),
             terminal_background: normalize_theme_color(
-                terminal_background,
+                &input.terminal_background,
                 &defaults.terminal_background,
             ),
             terminal_selection: normalize_theme_color(
-                terminal_selection,
+                &input.terminal_selection,
                 &defaults.terminal_selection,
             ),
         }

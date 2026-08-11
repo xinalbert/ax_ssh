@@ -16,6 +16,20 @@ use super::{
     ThemeSettings,
 };
 
+/// Raw appearance values supplied by an application settings surface.
+#[derive(Clone, Copy, Debug)]
+pub struct AppearanceSettingsInput<'a> {
+    pub application_font_family: &'a str,
+    pub terminal_font_family: &'a str,
+    pub terminal_font_size: i32,
+    pub terminal_line_height_percent: i32,
+    pub color_scheme: &'a str,
+    pub minimum_contrast_ratio: f32,
+    pub bright_bold_text: bool,
+    pub right_click_copy_or_paste: bool,
+    pub copy_selection_on_select: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppearanceSettings {
     #[serde(default = "default_application_font_family")]
@@ -36,68 +50,44 @@ pub struct AppearanceSettings {
     pub bright_bold_text: bool,
     #[serde(default, alias = "right_click_copies_selection")]
     pub right_click_copy_or_paste: bool,
+    /// Whether a completed terminal selection is copied to the clipboard.
+    #[serde(default)]
+    pub copy_selection_on_select: bool,
 }
 
 impl AppearanceSettings {
-    pub fn normalized(
-        application_font_family: &str,
-        terminal_font_family: &str,
-        terminal_font_size: i32,
-        terminal_line_height_percent: i32,
-        color_scheme: &str,
-        minimum_contrast_ratio: f32,
-        bright_bold_text: bool,
-        right_click_copy_or_paste: bool,
-    ) -> Self {
-        let terminal_color_scheme = TerminalColorScheme::from_setting(color_scheme);
-        Self::normalized_with_theme(
-            application_font_family,
-            terminal_font_family,
-            terminal_font_size,
-            terminal_line_height_percent,
-            terminal_color_scheme,
-            minimum_contrast_ratio,
-            bright_bold_text,
-            right_click_copy_or_paste,
-            ThemeSettings::from_terminal_color_scheme(terminal_color_scheme),
-        )
+    pub fn normalized(input: AppearanceSettingsInput<'_>) -> Self {
+        let terminal_color_scheme = TerminalColorScheme::from_setting(input.color_scheme);
+        let theme = ThemeSettings::from_terminal_color_scheme(terminal_color_scheme);
+        Self::normalized_with_theme(input, theme)
     }
 
-    fn normalized_with_theme(
-        application_font_family: &str,
-        terminal_font_family: &str,
-        terminal_font_size: i32,
-        terminal_line_height_percent: i32,
-        terminal_color_scheme: TerminalColorScheme,
-        minimum_contrast_ratio: f32,
-        bright_bold_text: bool,
-        right_click_copy_or_paste: bool,
-        theme: ThemeSettings,
-    ) -> Self {
+    fn normalized_with_theme(input: AppearanceSettingsInput<'_>, theme: ThemeSettings) -> Self {
         Self {
             application_font_family: normalize_font_family(
-                application_font_family,
+                input.application_font_family,
                 default_application_font_family,
             ),
             terminal_font_family: normalize_font_family(
-                terminal_font_family,
+                input.terminal_font_family,
                 default_terminal_font_family,
             ),
-            terminal_font_size: terminal_font_size.clamp(
+            terminal_font_size: input.terminal_font_size.clamp(
                 i32::from(MIN_TERMINAL_FONT_SIZE),
                 i32::from(MAX_TERMINAL_FONT_SIZE),
             ) as u16,
-            terminal_line_height_percent: terminal_line_height_percent.clamp(
+            terminal_line_height_percent: input.terminal_line_height_percent.clamp(
                 i32::from(MIN_TERMINAL_LINE_HEIGHT),
                 i32::from(MAX_TERMINAL_LINE_HEIGHT),
             ) as u16,
-            terminal_color_scheme,
+            terminal_color_scheme: theme.terminal_color_scheme(),
             theme,
             terminal_minimum_contrast_ratio_tenths: normalize_terminal_minimum_contrast_ratio(
-                minimum_contrast_ratio,
+                input.minimum_contrast_ratio,
             ),
-            bright_bold_text,
-            right_click_copy_or_paste,
+            bright_bold_text: input.bright_bold_text,
+            right_click_copy_or_paste: input.right_click_copy_or_paste,
+            copy_selection_on_select: input.copy_selection_on_select,
         }
     }
 
@@ -108,17 +98,18 @@ impl AppearanceSettings {
             self.theme.custom_light.clone(),
             self.theme.custom_dark.clone(),
         );
-        *self = Self::normalized_with_theme(
-            &self.application_font_family,
-            &self.terminal_font_family,
-            i32::from(self.terminal_font_size),
-            i32::from(self.terminal_line_height_percent),
-            theme.terminal_color_scheme(),
-            f32::from(self.terminal_minimum_contrast_ratio_tenths) / 10.0,
-            self.bright_bold_text,
-            self.right_click_copy_or_paste,
-            theme,
-        );
+        let input = AppearanceSettingsInput {
+            application_font_family: &self.application_font_family,
+            terminal_font_family: &self.terminal_font_family,
+            terminal_font_size: i32::from(self.terminal_font_size),
+            terminal_line_height_percent: i32::from(self.terminal_line_height_percent),
+            color_scheme: self.terminal_color_scheme.as_setting(),
+            minimum_contrast_ratio: f32::from(self.terminal_minimum_contrast_ratio_tenths) / 10.0,
+            bright_bold_text: self.bright_bold_text,
+            right_click_copy_or_paste: self.right_click_copy_or_paste,
+            copy_selection_on_select: self.copy_selection_on_select,
+        };
+        *self = Self::normalized_with_theme(input, theme);
     }
 }
 
@@ -135,6 +126,7 @@ impl Default for AppearanceSettings {
             ),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
+            copy_selection_on_select: false,
         }
     }
 }
@@ -243,40 +235,49 @@ pub struct TerminalSettings {
     pub option_as_meta: bool,
 }
 
+/// Raw terminal values supplied by an application settings surface.
+#[derive(Clone, Copy, Debug)]
+pub struct TerminalSettingsInput<'a> {
+    pub scrollback_lines: i32,
+    pub default_columns: i32,
+    pub default_rows: i32,
+    pub local_shell: &'a str,
+    pub known_shells: &'a [String],
+    pub option_as_meta: bool,
+}
+
 impl TerminalSettings {
-    pub fn normalized(
-        scrollback_lines: i32,
-        default_columns: i32,
-        default_rows: i32,
-        local_shell: &str,
-        known_shells: &[String],
-        option_as_meta: bool,
-    ) -> Self {
-        let (local_shell, known_shells) = normalize_shell_settings(local_shell, known_shells);
+    pub fn normalized(input: TerminalSettingsInput<'_>) -> Self {
+        let (local_shell, known_shells) =
+            normalize_shell_settings(input.local_shell, input.known_shells);
         Self {
-            scrollback_lines: scrollback_lines
+            scrollback_lines: input
+                .scrollback_lines
                 .clamp(MIN_SCROLLBACK_LINES as i32, MAX_SCROLLBACK_LINES as i32)
                 as u32,
-            default_columns: default_columns
+            default_columns: input
+                .default_columns
                 .clamp(MIN_TERMINAL_COLUMNS.into(), MAX_TERMINAL_COLUMNS.into())
                 as u16,
-            default_rows: default_rows.clamp(MIN_TERMINAL_ROWS.into(), MAX_TERMINAL_ROWS.into())
+            default_rows: input
+                .default_rows
+                .clamp(MIN_TERMINAL_ROWS.into(), MAX_TERMINAL_ROWS.into())
                 as u16,
             local_shell,
             known_shells,
-            option_as_meta,
+            option_as_meta: input.option_as_meta,
         }
     }
 
     fn normalize_in_place(&mut self) {
-        *self = Self::normalized(
-            i32::try_from(self.scrollback_lines).unwrap_or(i32::MAX),
-            i32::from(self.default_columns),
-            i32::from(self.default_rows),
-            &self.local_shell,
-            &self.known_shells,
-            self.option_as_meta,
-        );
+        *self = Self::normalized(TerminalSettingsInput {
+            scrollback_lines: i32::try_from(self.scrollback_lines).unwrap_or(i32::MAX),
+            default_columns: i32::from(self.default_columns),
+            default_rows: i32::from(self.default_rows),
+            local_shell: &self.local_shell,
+            known_shells: &self.known_shells,
+            option_as_meta: self.option_as_meta,
+        });
     }
 
     pub fn merge_known_shells(&mut self, discovered: impl IntoIterator<Item = String>) -> bool {
@@ -354,19 +355,27 @@ pub struct WorkspaceSettings {
     pub collapsed_group_label_chars: u8,
 }
 
+/// Raw workspace values supplied by an application settings surface.
+#[derive(Clone, Copy, Debug)]
+pub struct WorkspaceSettingsInput<'a> {
+    pub sidebar_width: i32,
+    pub tab_width: i32,
+    pub session_mask_character: &'a str,
+    pub collapsed_group_label_chars: i32,
+}
+
 impl WorkspaceSettings {
-    pub fn normalized(
-        sidebar_width: i32,
-        tab_width: i32,
-        session_mask_character: &str,
-        collapsed_group_label_chars: i32,
-    ) -> Self {
+    pub fn normalized(input: WorkspaceSettingsInput<'_>) -> Self {
         Self {
-            sidebar_width: sidebar_width.clamp(MIN_SIDEBAR_WIDTH.into(), MAX_SIDEBAR_WIDTH.into())
+            sidebar_width: input
+                .sidebar_width
+                .clamp(MIN_SIDEBAR_WIDTH.into(), MAX_SIDEBAR_WIDTH.into())
                 as u16,
-            tab_width: tab_width.clamp(MIN_TAB_WIDTH.into(), MAX_TAB_WIDTH.into()) as u16,
-            session_mask_character: normalize_session_mask_character(session_mask_character),
-            collapsed_group_label_chars: collapsed_group_label_chars.clamp(
+            tab_width: input
+                .tab_width
+                .clamp(MIN_TAB_WIDTH.into(), MAX_TAB_WIDTH.into()) as u16,
+            session_mask_character: normalize_session_mask_character(input.session_mask_character),
+            collapsed_group_label_chars: input.collapsed_group_label_chars.clamp(
                 i32::from(MIN_COLLAPSED_GROUP_LABEL_CHARS),
                 i32::from(MAX_COLLAPSED_GROUP_LABEL_CHARS),
             ) as u8,
@@ -374,12 +383,12 @@ impl WorkspaceSettings {
     }
 
     fn normalize_in_place(&mut self) {
-        *self = Self::normalized(
-            i32::from(self.sidebar_width),
-            i32::from(self.tab_width),
-            &self.session_mask_character,
-            i32::from(self.collapsed_group_label_chars),
-        );
+        *self = Self::normalized(WorkspaceSettingsInput {
+            sidebar_width: i32::from(self.sidebar_width),
+            tab_width: i32::from(self.tab_width),
+            session_mask_character: &self.session_mask_character,
+            collapsed_group_label_chars: i32::from(self.collapsed_group_label_chars),
+        });
     }
 }
 
@@ -415,25 +424,16 @@ pub struct ShortcutSettings {
 }
 
 impl ShortcutSettings {
-    pub fn normalized(
-        open_settings: &str,
-        new_session: &str,
-        import_sessions: &str,
-        export_selected: &str,
-        toggle_sidebar: &str,
-        copy_selection: &str,
-        paste: &str,
-        open_sftp: &str,
-    ) -> Self {
+    pub fn normalized(input: Self) -> Self {
         let candidate = Self {
-            open_settings: open_settings.trim().to_owned(),
-            new_session: new_session.trim().to_owned(),
-            import_sessions: import_sessions.trim().to_owned(),
-            export_selected: export_selected.trim().to_owned(),
-            toggle_sidebar: toggle_sidebar.trim().to_owned(),
-            copy_selection: copy_selection.trim().to_owned(),
-            paste: paste.trim().to_owned(),
-            open_sftp: open_sftp.trim().to_owned(),
+            open_settings: input.open_settings.trim().to_owned(),
+            new_session: input.new_session.trim().to_owned(),
+            import_sessions: input.import_sessions.trim().to_owned(),
+            export_selected: input.export_selected.trim().to_owned(),
+            toggle_sidebar: input.toggle_sidebar.trim().to_owned(),
+            copy_selection: input.copy_selection.trim().to_owned(),
+            paste: input.paste.trim().to_owned(),
+            open_sftp: input.open_sftp.trim().to_owned(),
         };
         if candidate.validate().is_ok() {
             candidate
@@ -510,6 +510,16 @@ fn validate_shortcut(label: &str, shortcut: &str) -> Result<()> {
     Ok(())
 }
 
+/// Raw application settings grouped by their persistent ownership domains.
+#[derive(Clone, Debug)]
+pub struct AppSettingsInput<'a> {
+    pub appearance: AppearanceSettingsInput<'a>,
+    pub terminal: TerminalSettingsInput<'a>,
+    pub workspace: WorkspaceSettingsInput<'a>,
+    pub shortcuts: ShortcutSettings,
+    pub credential_storage: &'a str,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppSettings {
     #[serde(default)]
@@ -528,72 +538,14 @@ pub struct AppSettings {
 }
 
 impl AppSettings {
-    pub fn normalized(
-        application_font_family: &str,
-        terminal_font_family: &str,
-        font_size: i32,
-        line_height_percent: i32,
-        color_scheme: &str,
-        minimum_contrast_ratio: f32,
-        bright_bold_text: bool,
-        right_click_copy_or_paste: bool,
-        scrollback_lines: i32,
-        default_columns: i32,
-        default_rows: i32,
-        local_shell: &str,
-        known_shells: &[String],
-        option_as_meta: bool,
-        sidebar_width: i32,
-        tab_width: i32,
-        session_mask_character: &str,
-        collapsed_group_label_chars: i32,
-        open_settings_shortcut: &str,
-        new_session_shortcut: &str,
-        import_sessions_shortcut: &str,
-        export_selected_shortcut: &str,
-        toggle_sidebar_shortcut: &str,
-        copy_selection_shortcut: &str,
-        paste_shortcut: &str,
-        open_sftp_shortcut: &str,
-        credential_storage: &str,
-    ) -> Self {
+    pub fn normalized(input: AppSettingsInput<'_>) -> Self {
         Self {
-            appearance: AppearanceSettings::normalized(
-                application_font_family,
-                terminal_font_family,
-                font_size,
-                line_height_percent,
-                color_scheme,
-                minimum_contrast_ratio,
-                bright_bold_text,
-                right_click_copy_or_paste,
-            ),
-            terminal: TerminalSettings::normalized(
-                scrollback_lines,
-                default_columns,
-                default_rows,
-                local_shell,
-                known_shells,
-                option_as_meta,
-            ),
-            workspace: WorkspaceSettings::normalized(
-                sidebar_width,
-                tab_width,
-                session_mask_character,
-                collapsed_group_label_chars,
-            ),
-            shortcuts: ShortcutSettings::normalized(
-                open_settings_shortcut,
-                new_session_shortcut,
-                import_sessions_shortcut,
-                export_selected_shortcut,
-                toggle_sidebar_shortcut,
-                copy_selection_shortcut,
-                paste_shortcut,
-                open_sftp_shortcut,
-            ),
+            appearance: AppearanceSettings::normalized(input.appearance),
+            terminal: TerminalSettings::normalized(input.terminal),
+            workspace: WorkspaceSettings::normalized(input.workspace),
+            shortcuts: ShortcutSettings::normalized(input.shortcuts),
             x11: X11Settings::default(),
-            credential_storage: CredentialStorage::from_setting(credential_storage),
+            credential_storage: CredentialStorage::from_setting(input.credential_storage),
         }
     }
 
@@ -612,16 +564,7 @@ impl AppSettings {
         self.appearance.normalize_in_place();
         self.terminal.normalize_in_place();
         self.workspace.normalize_in_place();
-        self.shortcuts = ShortcutSettings::normalized(
-            &self.shortcuts.open_settings,
-            &self.shortcuts.new_session,
-            &self.shortcuts.import_sessions,
-            &self.shortcuts.export_selected,
-            &self.shortcuts.toggle_sidebar,
-            &self.shortcuts.copy_selection,
-            &self.shortcuts.paste,
-            &self.shortcuts.open_sftp,
-        );
+        self.shortcuts = ShortcutSettings::normalized(self.shortcuts.clone());
         self.x11.normalize_in_place();
         self.credential_storage =
             CredentialStorage::from_setting(self.credential_storage.as_setting());

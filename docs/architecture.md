@@ -45,10 +45,11 @@ Process startup (src/main.rs)
 | Area | Owns | Must not own |
 | --- | --- | --- |
 | `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
-| `src/app.rs` | Generated Slint type declaration, process-level UI startup, and top-level callback composition | Feature implementations, SSH protocol details, or JSON schema details |
+| `src/app.rs` and `src/app/window_router.rs` | Generated Slint type declaration, process-level UI startup and callback composition; private multi-window route, detached-transfer and pane-tree ownership | Feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
-| `src/app/{workspace,connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs` and `src/app/connection/` | Private application-bridge feature wiring, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, and detached opener dispatch | Generated type declaration, transport implementation, or persistence schema |
-| `src/app/file_icons.rs` | Bounded process-local file-icon keys/cache, platform resolvers, and owned RGBA fallbacks | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
+| `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
+| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
+| `src/app/file_icons.rs` and `src/app/file_icons/platform/` | Bounded process-local file-icon keys/cache and owned RGBA fallbacks; cfg-scoped platform resolvers | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
 | `src/app/local_files.rs` | Bounded local directory metadata discovery and regular-file revalidation for the SFTP local pane | Slint types, file mutation, persistence, or SSH handles |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
@@ -61,8 +62,8 @@ Process startup (src/main.rs)
 | `src/ssh.rs` | russh handler, host-key decision, password/private-key/runtime-agent authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting, agent identity management |
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
-| `src/ssh/worker.rs` | Bounded shell/X11/SFTP commands, coalesced resize state, batched events, download task ownership, cancellation, and shutdown | UI state or profile persistence |
-| `src/sftp.rs` and `src/sftp/transfer.rs` | Bounded SFTP v3 packet adapter, directory browser, read-only chunked download, private cache publication/cleanup, and transfer task lifetime | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
+| `src/ssh/worker.rs` and `src/ssh/worker/` | Bounded session startup/commands, plus private shell/X11 and SFTP-only lifecycle modules; coalesced resize, batched events, cancellation and shutdown | UI state or profile persistence |
+| `src/sftp.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, read-only chunked download and transfer orchestration; private cache publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
 | `src/telnet.rs` | Plaintext TCP lifetime, RFC 854 option filtering, NAWS, bounded input/output, cancellation and shutdown | Credentials, SSH trust, UI state or terminal rendering |
 | `src/serial.rs` | Non-opening port discovery, stable USB identity matching, serial parameter mapping, and one bounded device worker | Automatic device opening/probing, UI state or persisted profile mutation |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
@@ -117,6 +118,31 @@ the pane UUIDs, divider identities, and row counts still match, the bridge
 updates those existing Slint model rows in place, preserving the divider's
 repeater instance and pointer capture; a mismatch falls back to the normal
 full snapshot refresh.
+Pane focus callbacks use the same identity-checked in-place layout update, so
+clicking a split pane does not replace its repeater or transparent IME proxy
+before the next key event. A stale or structurally changed model falls back to
+the full snapshot refresh path.
+Worker-driven multi-window refreshes share the bounded `AppState` pending gate.
+One UI event resolves the latest routed views, updates identity-matched pane and
+divider model rows in place, and schedules at most one follow-up when requests
+arrived during that application. This prevents terminal output from building an
+unbounded Slint event queue or repeatedly replacing the focused IME proxy.
+For a matching pane, the bridge also retains the existing render-line and run
+`VecModel` identities. It writes new rows through those subscribed models, or
+resets the same model when its row count changes, before updating the outer pane
+row. The visible `TerminalGrid` therefore receives an immediate model
+notification for remote output without waiting for a later focus change.
+The cursor uses a retained, bounded one-row model for the same reason. Each
+snapshot updates its row, column, visibility, and displayed cell through that
+model before publishing terminal rows, so cursor movement does not depend on a
+focus-triggered outer DTO refresh.
+Only non-root leaves of a `PaneTree` are independently closable. Their close
+intent is revalidated against the owning window route, collapses that leaf in
+the tree, removes exactly that runtime Tab, cancels a pending probe, and shuts
+down any surviving worker asynchronously. A normal local-shell exit or SSH or
+Telnet disconnect uses the same path for a child pane. The workspace root and
+connection, authentication, or transport failures remain visible; closing the
+visible Terminal Tab still owns whole-tree shutdown.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
@@ -145,9 +171,12 @@ two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
 Password and vault-password fields are local secret drafts: they are blank on
 every editor open, are cleared after submit, and never enter the read-only
-source snapshot. The remember-password and credential-storage drafts are
-explicit intent only; the storage choice is ignored until remembering is
-enabled.
+source snapshot. A password may be left empty when saving a profile, and the
+save-password toggle is explicit intent only; the storage choice is ignored
+until saving is enabled.
+The editor also carries SSH-only, non-secret `sftp_remote_path` and
+`sftp_local_path` fields. They are ordinary local drafts: changing them does
+not open either directory, and saving them does not mutate a running Tab.
 
 `OverlayHost` owns the local group/profile-management dialog open state and
 draft, deriving its title, message, and button presentation from one action
@@ -188,7 +217,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
    submit a new password inline; a blank value preserves the existing backend
    reference. A non-empty value is available to **Save & connect** as a
    Tab-scoped one-time secret, and it updates the selected backend before the
-   profile save only when **Remember password** is checked. Private-key profiles
+   profile save only when **Save password (optional)** is checked. A requested
+   encrypted-vault save without a vault password falls back to the system
+   credential store and records that effective backend; existing vault records
+   remain vault records and still require their vault password to unlock.
+   Private-key profiles
    load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
    without one. SSH-agent profiles bypass credential storage and the secret
@@ -200,12 +233,14 @@ must not locally hide either dialog before the Rust state transition accepts it.
    password: the platform credential store or the encrypted application vault.
    Each ordinary password prompt initializes its backend selector from that
    setting and may override it for that prompt; the selector is ignored unless
-   **Remember password** is checked. The session editor uses the profile's
+   **Save password (optional)** is checked. The session editor uses the profile's
    existing backend or the Settings default only to initialize its selector.
-   Without **Remember password**, an inline password is used once by **Save &
-   connect** and a save-only action discards it. With remembering enabled, the
-   selected backend is updated transactionally with the profile, and the vault
-   password is required only for the encrypted application vault. The secret is
+   Without **Save password (optional)**, an inline password is used once by **Save &
+   connect** and a save-only action discards it. With **Save password (optional)**
+   enabled, the
+   selected backend is updated transactionally with the profile. A missing
+   vault password deliberately selects the system credential store instead of
+   creating an unusable vault record. The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
@@ -240,8 +275,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
    the terminal is focused; `Ctrl+C` remains PTY input. Clipboard actions keep
    `Cmd+C/V` on macOS and `Ctrl+Shift+C/V` elsewhere. Workspace commands use the
    platform modifier. Selection copy remains local while paste becomes bounded
-   shell input; the optional right-click action chooses between them based on
-   selection state.
+   shell input. The default optional right-click action chooses between them
+   based on selection state. When `copy_selection_on_select` is enabled, a
+   completed pointer selection and Select All copy locally, and direct
+   right-click always pastes; this mode supersedes the separate right-click
+   preference without promoting selection or clipboard text outside Slint.
    Native text/IME and application terminal-key routing are disabled until the
    active terminal reports connected. This UI guard is repeated at the Rust
    bridge, so focus or a stale callback cannot enqueue terminal input during
@@ -306,9 +344,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
    columns on narrow displays.
    `TerminalPane` coalesces changes to its measured grid, configured font
    metrics, terminal-tab identity, and connection state until the next
-   UI turn, then requests one final PTY size. This keeps a Settings font
-   change and a later return to a connected terminal on the same current-grid
-   path as a window resize. Complete character rows are bottom-aligned inside
+   UI turn, then requests one final PTY size. Its initialization also schedules
+   that same coalesced update, so an already-connected pane reaches its settled
+   initial grid without waiting for a later window or divider resize. This keeps
+   a Settings font change and a later return to a connected terminal on the
+   same current-grid path as a window resize. Complete character rows are
+   bottom-aligned inside
    the measured grid region: the fractional height left after floor-based row
    calculation is placed above the first row, not below the last row. The same
    local offset is applied to grid cells, cursor/IME preedit, and pointer row
@@ -546,10 +587,13 @@ password or a vault password. The session editor keeps its masked password and
 vault-password fields blank on every open and clears them after submission. A
 non-empty editor password stays transient by default and is carried only by the
 corresponding Tab until host-key confirmation completes and the SSH worker takes
-ownership. Checking **Remember password** additionally writes it through the
-selected backend, with rollback if profile persistence fails; the vault password
-is requested only for the encrypted backend. Settings > General initializes the
-backend for a future checked **Remember password** action: macOS Keychain, Windows Credential
+ownership. Checking **Save password (optional)** additionally writes it through
+the selected backend, with rollback if profile persistence fails. If an
+encrypted-vault save has no vault password, it deliberately uses the system
+credential store and persists that effective reference; it never creates an
+empty-password vault record. Existing vault records still require their vault
+password to unlock. Settings > General initializes the backend for a future
+checked save-password action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. The vault derives a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
@@ -682,6 +726,12 @@ Tab reports connected. `AppState` publishes no available remote snapshot before
 then, and the application bridge independently rejects operations from a
 disconnected or non-SFTP Tab.
 
+When a new SFTP Tab is created, its SSH profile supplies the initial remote
+directory to the worker-owned browser and the initial local directory to the
+application-owned local snapshot. Missing legacy remote values use `~`; an
+empty local value resolves to the platform home directory. These defaults are
+used only at Tab initialization, while later navigation remains Tab-local.
+
 The first phase provides a dual-pane directory browser. Slint owns two bounded
 splitters: one changes the remote/local widths and one changes the files/transfer
 heights. `WorkspaceShell` retains their ratios and the collapsed transfer state
@@ -728,10 +778,14 @@ fixed fallback icons remain available.
 Double-clicking a local regular-file row is a read-only open intent. The bridge
 first requires that exact path in the active SFTP Tab's current local snapshot,
 then a blocking worker rechecks the directory and entry with non-following
-metadata, rejects directories and symbolic links, canonicalizes both, and
-requires the file's parent to remain the listed directory before calling the
-platform default application through `open::that_detached`. A stale Tab,
-directory request, path, or replaced entry is rejected before dispatch.
+metadata, rejects directories and symbolic links, and opens a read-only handle.
+The handle's platform file identity must match the identity captured during
+listing. AxSSH copies from that validated handle into the bounded private open
+cache and atomically publishes the snapshot before calling the platform default
+application through `open::that_detached`; it never reopens the validated source
+path. A stale Tab, directory request, path, or replaced entry is rejected before
+dispatch, and a later path replacement cannot redirect the opener to a different
+file identity.
 
 Double-clicking a visible remote regular file queues a read-only download and
 open operation. Each SFTP Tab permits at most two active transfers, counting a
@@ -818,8 +872,13 @@ resource path. Slint measures the configured font and uses the measured cell
 width plus the configured line-height percentage for rendering, selection,
 cursor, and floor-based PTY dimensions. Any remaining partial cell height is
 rendered above the bottom-aligned grid, while IME and pointer coordinates use
-that same origin; the terminal batches the resulting resize only after those
-metrics and its layout have settled.
+that same origin. The pane group clips every terminal surface to its assigned
+split rectangle, and each pane also clips its grid, cursor, preedit overlay,
+and transparent IME proxy so an undersized nested split cannot paint into a
+neighbor or outside the workspace. When a pane is shorter than the three-row
+terminal floor, its grid keeps the active bottom row aligned to the pane and
+clips older top rows first. The terminal batches the resulting resize only
+after those metrics and its layout have settled.
 
 The first Settings opening discovers local shells, system monospace families,
 and known X-server installations on blocking workers. Reactivating the existing
@@ -833,13 +892,21 @@ its references, so process RSS is not expected to fall immediately.
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
-minimum contrast ratio, bold-color and right-click behavior, scrollback, default PTY
+minimum contrast ratio, bold-color and mouse copy/paste preferences, scrollback, default PTY
     dimensions, local-shell choice and bounded discovered-shell cache, the macOS
     Option-as-Meta preference, sidebar/tab widths, session mask character,
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
     non-secret X11 provider/path/launch/compatibility settings, SSH authentication
     method (including agent selection but no agent endpoint or identity), and the default
-    remembered-password backend. Schema version 17 replaces the former
+    remembered-password backend. Application callers submit raw values through
+    `AppSettingsInput`, grouped into appearance, terminal, workspace, and shortcut
+    ownership domains. These inputs contain no Slint values and normalize into the
+    same persisted `AppSettings`; they do not leak Slint values into the JSON
+    schema. Schema version 19 adds the SSH SFTP default-directory fields;
+    missing remote values default to `~` and an empty local value means the
+    platform home directory. Schema version 18 adds the default-disabled
+    `copy_selection_on_select` preference; older files preserve their existing
+    right-click behavior. Schema version 17 replaces the former
     `terminal_brightness_percent` remapping with a fixed-point
     `terminal_minimum_contrast_ratio_tenths` setting. The value is stored in
     tenths from 1.0:1 to 21.0:1 and defaults to 4.5:1; schema versions through

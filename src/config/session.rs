@@ -22,6 +22,8 @@ const MAX_GROUP_NAME_CHARS: usize = 64;
 const MAX_HOST_KEY_FINGERPRINT_CHARS: usize = 256;
 const MAX_SERIAL_PORT_CHARS: usize = 512;
 const MAX_USB_SERIAL_CHARS: usize = 256;
+const MAX_SFTP_REMOTE_PATH_CHARS: usize = 4_096;
+const MAX_SFTP_LOCAL_PATH_BYTES: usize = 4_096;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -48,17 +50,14 @@ impl CredentialStorage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub enum AuthMethod {
+    #[default]
     Password,
-    PrivateKey { path: PathBuf },
+    PrivateKey {
+        path: PathBuf,
+    },
     SshAgent,
-}
-
-impl Default for AuthMethod {
-    fn default() -> Self {
-        Self::Password
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -98,6 +97,13 @@ pub struct SshConfig {
     /// Authentication cookies remain worker-local and are never persisted.
     #[serde(default = "default_true")]
     pub x11_forwarding: bool,
+    /// Initial remote directory for a dedicated SFTP tab.
+    #[serde(default = "default_sftp_remote_path")]
+    pub sftp_remote_path: String,
+    /// Initial local directory for a dedicated SFTP tab. An empty value uses
+    /// the current platform user's home directory.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sftp_local_path: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -337,6 +343,8 @@ impl<'de> Deserialize<'de> for SessionProfile {
                 credential_storage,
                 host_key_fingerprint: wire.host_key_fingerprint,
                 x11_forwarding: wire.x11_forwarding.unwrap_or(true),
+                sftp_remote_path: default_sftp_remote_path(),
+                sftp_local_path: String::new(),
             })
         };
         let profile = Self {
@@ -368,6 +376,8 @@ impl SessionProfile {
                 credential_storage: None,
                 host_key_fingerprint: None,
                 x11_forwarding: true,
+                sftp_remote_path: default_sftp_remote_path(),
+                sftp_local_path: String::new(),
             }),
         }
     }
@@ -444,6 +454,10 @@ const fn default_true() -> bool {
     true
 }
 
+fn default_sftp_remote_path() -> String {
+    "~".to_owned()
+}
+
 fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()> {
     match connection {
         ConnectionProfile::Ssh(config) => {
@@ -464,6 +478,18 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
                     .to_str()
                     .context("private key path must be valid UTF-8")?;
                 validate_required_text("private key path", path, MAX_PRIVATE_KEY_PATH_CHARS)?;
+            }
+            validate_optional_text(
+                "SFTP remote path",
+                &config.sftp_remote_path,
+                MAX_SFTP_REMOTE_PATH_CHARS,
+            )?;
+            if config.sftp_local_path.len() > MAX_SFTP_LOCAL_PATH_BYTES
+                || config.sftp_local_path.chars().any(char::is_control)
+            {
+                anyhow::bail!(
+                    "SFTP local path cannot exceed {MAX_SFTP_LOCAL_PATH_BYTES} bytes or contain control characters"
+                );
             }
         }
         ConnectionProfile::Telnet(config) => validate_host_and_port(&config.host, config.port)?,
@@ -596,14 +622,13 @@ impl<'de> Deserialize<'de> for SessionStore {
         {
             settings.appearance = appearance;
         }
-        if wire.version < PLATFORM_SHORTCUT_SCHEMA_VERSION {
-            if settings
+        if wire.version < PLATFORM_SHORTCUT_SCHEMA_VERSION
+            && settings
                 .shortcuts
                 .toggle_sidebar
                 .eq_ignore_ascii_case(&previous_toggle_sidebar_shortcut())
-            {
-                settings.shortcuts.toggle_sidebar = default_toggle_sidebar_shortcut();
-            }
+        {
+            settings.shortcuts.toggle_sidebar = default_toggle_sidebar_shortcut();
         }
         if wire.version < WORKSPACE_DENSITY_SCHEMA_VERSION
             && settings.workspace.sidebar_width == PREVIOUS_DEFAULT_SIDEBAR_WIDTH

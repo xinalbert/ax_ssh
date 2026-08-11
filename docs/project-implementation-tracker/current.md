@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260810-terminal-divider-drag-focus-fix
-- 目标：修复 Terminal 分屏 divider 无法持续拖动，以及操作 divider 后 terminal 输入焦点未恢复的问题。
-- 交付物：保持 Slint repeater 实例的 pane/divider 几何更新、拖动结束的 focused pane 输入恢复、定向测试、双语文档和独立提交。
+- 目标 ID：20260811-sftp-profile-default-directories
+- 目标：在新建和编辑 SSH 连接时配置 SFTP 远端与本地默认目录，并在新 SFTP Tab 初始化时使用它们。
+- 交付物：schema v19 兼容 profile 字段、Slint 编辑器映射、worker/state 初始化、回归测试和双语契约。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/{workspace-shell,terminal-pane}.slint`、`src/app.rs`、`src/app/{terminal_bridge,view}.rs`、相关测试、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
-- 不在本轮范围内：PaneTree 持久化、分屏方向/数量规则、SFTP splitter、通用 TextInput 焦点桥、终端 buffer/worker/PTY/SSH 生命周期、SSH trust/credential 规则、依赖或工具链升级，以及 `third_package/axshell`。
+- 当前范围：`src/config/{session,tests}.rs` 的非秘密 SSH profile 字段，`src/app/{state,view,workspace}/` 的编辑器与 SFTP Tab 映射，`src/ssh/worker{,.rs/sftp.rs}` 的初始远端目录，`ui/{app,workspace-shell,session-editor}.slint` 的 callback 契约，以及配对文档/tracker。
+- 不在本轮范围内：目录选择器、本地/远端目录持久化以外的浏览状态、上传或文件修改、凭据、SSH host-key trust、依赖/工具链升级和 `third_package/axshell`。
 
 ## 当前状态
 
@@ -23,36 +23,42 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| TDRAG1 | completed | 对齐 Terminal、SFTP splitter 与 Slint repeater 更新生命周期 | 静态路由与锁定 Slint 1.17.1 model API 复核 | 已确认全量替换 divider model 会让 pressed 组件失去稳定实例。 |
-| TDRAG2 | completed | 用原 model 行更新发布 PaneTree 几何，并在 pointer release/cancel 后恢复 focused terminal 输入 | Cargo check、model 定向测试 | 键盘/无障碍 divider 焦点继续保留；只恢复鼠标拖动后的 terminal 输入。 |
-| TDRAG3 | completed | 同步双语行为契约、项目地图和环境记录 | tracker/Markdown validator | 不改变持久化 schema、依赖或 SSH 安全边界。 |
-| TDRAG4 | completed | 执行完整门禁、审阅并创建独立提交 | fmt/check/clippy/test/diff/staged review | 真实鼠标拖动与输入由用户在目标平台验收。 |
+| SFTPPATH1 | completed | SSH profile schema v19、缺失字段回退与有界校验 | config unit tests | 远端缺失/空值回退 `~`；本地空值代表平台 home。 |
+| SFTPPATH2 | completed | 新建/编辑连接的 Slint DTO、草稿与保存 callback | Cargo check | 仅 SSH 显示两个目录字段，秘密字段与 trust 流程不变。 |
+| SFTPPATH3 | completed | 新 SFTP Tab 的 local snapshot 与 worker remote browser 初始化 | state/worker tests | 默认值仅在 Tab 创建时应用，之后导航仍是 Tab-local。 |
+| SFTPPATH4 | completed | 双语契约、项目地图与完整离线门禁 | fmt/check/clippy/test/tracker/diff | 真实目录可达性和 GUI 布局留目标平台验收。 |
 
 ## 已完成
 
-- 已读取工程规则、AxSSH Rust/Slint skill/references、项目地图、环境记忆和现有 Terminal/SFTP splitter、pane focus 与 model 发布实现。
-- 环境预检确认 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo locked/offline 和 141/125 测试基线未漂移；本机仍缺 Cargo fmt/Clippy 子命令。
-- 已修复拖动根因：`WindowRouter::resize_terminal_divider` 返回同一 `PaneTree` 的 `PaneLayout`；bridge 只在 pane UUID、divider ID/方向和 model 行数均一致时调用 `set_row_data` 原地发布几何，保留 pressed divider 的 repeater 实例，否则回退 `refresh_workspace`。
-- 已修复输入根因：divider 在 pointer release/cancel 后仅递增 Slint-local 有界 revision；当前 focused、connected `TerminalPane` 因而重新聚焦透明 IME `TextInput`。键盘和无障碍 divider 操作不会触发此恢复。
-- 已核对 Slint 1.17.1 `ModelRc::set_row_data` 与 repeater `row_changed`：更新现有行会调用组件 `update` 而不替换实例，适合在同一 PaneTree shape 内发布拖动几何；`cargo check --locked --offline` 已重新编译整个 Slint 图，新增 2 项 model identity 定向测试和完整 141/127 Cargo 测试通过。
-- 本轮保持 `PaneTree` 为比例和几何唯一 owner；UI 只增加一次有界 focus request revision，不保存比例副本，不跨模块传递 worker、buffer、锁或秘密。
+- 新增 SSH profile `sftp_remote_path` 与 `sftp_local_path`；两者均为非秘密数据，限制控制字符和长度，schema 升至 v19。
+- 新建/编辑 SSH 连接显示 **SFTP directories**，保存路径会在下一次新建 SFTP Tab 时使用。
+- SFTP worker 收到 profile 的远端初始路径；`AppState` 以 profile 本地路径建立本地浏览器 snapshot。旧 profile 保持 `~`/平台 home 回退。
 
 ## 验证
 
-- 已完成：项目边界/环境审计、drag/focus 生命周期和 Slint model API 复核、实现、`cargo check --locked --offline`、2 项 model 定向测试、完整 `cargo test --locked --offline`（库 141、应用 127、Doc tests 0）、直接 Rustfmt、tracker validator、44 个 Markdown 相对链接目标和 `git diff --check`；提交前 staged 审阅完成。
-- 未完成：目标平台主窗口/独立 Terminal 的连续拖动、宽高调整、拖动后直接键入、键盘/无障碍 divider 和真实 PTY resize 人工验收；`cargo fmt`、`cargo clippy` 需由安装组件的 CI/目标环境执行。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 145、应用 134、Doc tests 0）、18 个 Markdown 相对链接目标和 `git diff --check`。
+- 进行中：无。
+- 未完成：目标平台确认新建/编辑 SSH 连接的字段布局，以及可访问远端/本地目录在首次打开 SFTP Tab 时显示正确内容。
 
 ## 风险与阻塞
 
-- 已保持：拖动更新先验证 pane UUID、divider ID/方向和 model 行数全部匹配才原地写行，避免 stale callback 局部更新错误 Tab。
-- 已保持：鼠标 release/cancel 后只请求当前 `focused`、connected pane 的 IME 输入焦点；Tab 键、方向键和无障碍 action 操作 divider 时不能强制跳回 terminal。
-- 本轮不改变 SSH 安全边界、秘密输入、配置 schema、worker 生命周期或依赖。
-- 本机没有 `cargo fmt` 与 `cargo clippy` 子命令；直接 Rustfmt 已通过，完整格式和 lint 仍由安装组件的 CI/目标环境补充。
+- 路径绝不进入凭据、日志或 host-key 信任数据；新路径不会改变已有 Tab、SSH transport 或凭据生命周期。
+- 保存时只作有界文本校验，不探测目录可达性；失败仍由既有 SFTP 或本地目录浏览错误处理显示。
+- tracker validator 仍报告月度历史中 7 条既有缺失/无效时间或状态转换格式；本轮记录未新增该类错误。
 
 ## 下一步
 
-- 请用户在主窗口和 detached Terminal 验收连续拖动、宽高调整及拖动后直接键入；CI/目标环境补跑 Cargo fmt 与 Clippy。
+- 请用户在目标平台验证新建/编辑 SSH 连接的 SFTP 目录字段，以及新 SFTP Tab 的实际初始目录。
+
+## 2026-08-11 本地文件打开 TOCTOU 修复
+
+- 时间：2026-08-11 16:28 +0800
+- 触发原因：用户要求修复 SFTP 本地栏在路径验证与 detached opener 之间的文件替换竞态。
+- 执行内容：列目录时保存 Unix dev/inode 或 Windows volume/file index；打开时核对只读 handle identity，并从该 handle 复制到现有 512 MiB 上限、私有权限、quota 与原子发布的 SFTP-open cache，平台 opener 只接收已发布快照路径。
+- 影响文件：`src/app/{local_files,sftp_bridge}.rs`、`src/sftp{,/transfer,/transfer/cache}.rs`、双语架构/使用/开发文档和项目跟踪记录。
+- 安全边界：不改变 SSH host-key、凭据或 transport；不按验证后的源路径重开，路径后续被替换也不能重定向实际打开内容。
+- 验证结果：本地 identity/替换拒绝 6 项与 SFTP transfer/cache 18 项定向测试通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、沙箱外完整离线测试（库 143、应用 133、Doc tests 0）和 `git diff --check` 通过。当前环境没有 `rustup`/Windows target，Windows identity 分支留给三平台 CI 类型检查；真实默认程序打开由用户验收。
 
 ## 最后更新时间
 
-- 2026-08-11 CST
+- 2026-08-11 18:00 +0800

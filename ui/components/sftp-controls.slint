@@ -1,0 +1,65 @@
+import { Theme } from "../theme.slint";
+
+export component SftpActionButton inherits FocusScope {
+    in property <string> text;
+    in property <string> accessible-name: root.text;
+    in property <length> font-size: Theme.sftp-control-font-size;
+    in property <int> font-weight: Theme.sftp-control-font-weight;
+    callback clicked();
+
+    private property <length> text-height:
+        label.font-metrics.ascent - label.font-metrics.descent;
+    out property <length> control-height: max(
+        Theme.sftp-control-min-height,
+        root.text-height + 2 * Theme.sftp-control-padding-y,
+    );
+
+    height: root.control-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.clicked();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        border-width: Theme.hairline;
+        border-color: root.has-focus ? Theme.focus : Theme.control-border;
+        border-radius: Theme.radius-small;
+        background: !root.enabled
+            ? Theme.hover
+            : (touch.has-hover || root.has-focus ? Theme.hover : Theme.panel-alt);
+        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+
+        label := Text {
+            x: Theme.space-md;
+            width: parent.width - 2 * Theme.space-md;
+            height: parent.height;
+            text: root.text;
+            color: Theme.text;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+}

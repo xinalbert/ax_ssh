@@ -294,7 +294,7 @@ fn terminal_key_is_direct_for_platform(
     }
 
     let direct_modifier = if apple_platform {
-        modifiers.control || modifiers.meta || (option_as_meta && modifiers.alt && !modifiers.meta)
+        modifiers.control || modifiers.meta || option_as_meta && modifiers.alt
     } else {
         modifiers.control || modifiers.alt || modifiers.meta
     };
@@ -312,9 +312,10 @@ fn terminal_key_is_direct_for_platform(
     }
 
     // Ctrl+Alt printable text is commonly AltGr and must stay on TextInput.
-    (modifiers.control && !(modifiers.alt && !text.is_empty()))
-        || (modifiers.alt && !modifiers.control)
-        || modifiers.meta
+    if modifiers.control && modifiers.alt {
+        return text.is_empty() || modifiers.meta;
+    }
+    modifiers.control || modifiers.alt || modifiers.meta
 }
 
 fn is_slint_modifier_key(text: &str) -> bool {

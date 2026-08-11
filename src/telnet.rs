@@ -303,16 +303,16 @@ async fn run_telnet_session(
                     break;
                 }
                 let size = *resize_rx.borrow_and_update();
-                if naws_enabled {
-                    if let Err(error) = send_window_size(&mut parser, &mut writer, size).await {
-                        send_event(
-                            &event_tx,
-                            TelnetSessionEvent::Failed(bounded_error(&error)),
-                            session_id,
-                        ).await;
-                        failed = true;
-                        break;
-                    }
+                if naws_enabled
+                    && let Err(error) = send_window_size(&mut parser, &mut writer, size).await
+                {
+                    send_event(
+                        &event_tx,
+                        TelnetSessionEvent::Failed(bounded_error(&error)),
+                        session_id,
+                    ).await;
+                    failed = true;
+                    break;
                 }
             }
             read = reader.read(&mut read_buffer) => {

@@ -57,23 +57,24 @@ pub(super) fn wire_terminal(
             let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_key) else {
                 return true;
             };
-            let belongs_to_pane = state_for_key
-                .lock()
-                .is_ok_and(|app| router_for_key.owns_terminal_pane(window_id, tab_id, &app));
-            if !belongs_to_pane {
-                return true;
-            }
             let input_started_at = std::time::Instant::now();
+            let mut state_lock_elapsed = None;
+            let mut worker_request_elapsed = None;
             // Committed TextInput and pasted text are not physical key events, so
             // they must not inherit a still-held shortcut modifier such as Cmd+V.
             let mut modifiers =
                 terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
             let key = terminal_key_from_slint(text.as_str(), modifiers);
             log_terminal_input(&key, modifiers, physical_key_event);
+            let state_lock_started_at = std::time::Instant::now();
             let result = state_for_key
                 .lock()
                 .map_err(|_| anyhow::anyhow!("state lock poisoned"))
                 .and_then(|mut app| {
+                    state_lock_elapsed = Some(state_lock_started_at.elapsed());
+                    if !router_for_key.owns_terminal_pane(window_id, tab_id, &app) {
+                        return Ok((true, false));
+                    }
                     if cfg!(target_os = "macos") && !app.sessions.settings.terminal.option_as_meta {
                         modifiers.alt = false;
                     }
@@ -98,18 +99,26 @@ pub(super) fn wire_terminal(
                             .as_mut()
                             .context("active tab has no terminal model")?
                             .scroll_to_bottom();
-                        terminal
+                        let worker_request_started_at = std::time::Instant::now();
+                        let request_result = terminal
                             .worker
                             .as_ref()
                             .context("active terminal has no worker")?
-                            .request_send(data)?;
+                            .request_send(data);
+                        worker_request_elapsed = Some(worker_request_started_at.elapsed());
+                        request_result?;
                         viewport_changed
                     };
                     Ok((true, viewport_changed))
                 });
             match result {
                 Ok((handled, true)) => {
-                    log_terminal_input_latency("handled-and-scrolled", input_started_at.elapsed());
+                    log_terminal_input_latency(
+                        "handled-and-scrolled",
+                        input_started_at.elapsed(),
+                        state_lock_elapsed,
+                        worker_request_elapsed,
+                    );
                     log_ui_action_outcome("terminal.send-input", "handled-and-scrolled");
                     dispatch_active_snapshot(&ui_for_key, &state_for_key);
                     handled
@@ -118,6 +127,8 @@ pub(super) fn wire_terminal(
                     log_terminal_input_latency(
                         if handled { "handled" } else { "ignored" },
                         input_started_at.elapsed(),
+                        state_lock_elapsed,
+                        worker_request_elapsed,
                     );
                     log_ui_action_outcome(
                         "terminal.send-input",
@@ -126,7 +137,12 @@ pub(super) fn wire_terminal(
                     handled
                 }
                 Err(error) => {
-                    log_terminal_input_latency("error", input_started_at.elapsed());
+                    log_terminal_input_latency(
+                        "error",
+                        input_started_at.elapsed(),
+                        state_lock_elapsed,
+                        worker_request_elapsed,
+                    );
                     log_ui_action_outcome("terminal.send-input", "error");
                     debug!(%error, "terminal input failed");
                     set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
@@ -235,11 +251,17 @@ pub(super) fn wire_terminal(
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_focus) else {
             return;
         };
-        let focused = state_for_focus
+        let layout = state_for_focus
             .lock()
-            .is_ok_and(|mut app| router_for_focus.focus_terminal_pane(window_id, tab_id, &mut app));
-        if focused {
-            refresh_workspace(&ui_for_focus, &state_for_focus);
+            .ok()
+            .and_then(|mut app| router_for_focus.focus_terminal_pane(window_id, tab_id, &mut app));
+        if let Some(layout) = layout {
+            let applied_in_place = ui_for_focus
+                .upgrade()
+                .is_some_and(|ui| apply_terminal_pane_layout(&ui, layout));
+            if !applied_in_place {
+                refresh_workspace(&ui_for_focus, &state_for_focus);
+            }
         }
     });
 
@@ -270,19 +292,38 @@ pub(super) fn wire_terminal(
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_command) else {
             return false;
         };
+        if command.as_str() == "close" {
+            return close_terminal_child_pane(
+                &router_for_command,
+                Some(window_id),
+                tab_id,
+                &state_for_command,
+                &ui_for_command,
+                &runtime_for_command,
+            );
+        }
         let Some((direction, action)) = PaneDirection::from_command(command.as_str()) else {
             return false;
         };
         match action {
             PaneCommand::Focus => {
-                let focused = state_for_command.lock().is_ok_and(|mut app| {
-                    router_for_command.focus_terminal_pane(window_id, tab_id, &mut app)
-                        && router_for_command.focus_pane_direction(window_id, direction, &mut app)
+                let layout = state_for_command.lock().ok().and_then(|mut app| {
+                    router_for_command
+                        .focus_terminal_pane(window_id, tab_id, &mut app)
+                        .and_then(|_| {
+                            router_for_command.focus_pane_direction(window_id, direction, &mut app)
+                        })
                 });
-                if focused {
+                let Some(layout) = layout else {
+                    return false;
+                };
+                let applied_in_place = ui_for_command
+                    .upgrade()
+                    .is_some_and(|ui| apply_terminal_pane_layout(&ui, layout));
+                if !applied_in_place {
                     refresh_workspace(&ui_for_command, &state_for_command);
                 }
-                focused
+                true
             }
             PaneCommand::Split => {
                 let source = match state_for_command.lock() {
@@ -332,25 +373,30 @@ pub(super) fn wire_terminal(
                             }
                         }
                     }
-                    PaneSessionSource::ProfileConnection(profile_id) => request_profile_connection(
-                        &ui_for_command,
-                        &state_for_command,
-                        &runtime_for_command,
-                        font_registry_for_command.clone(),
-                        terminal_font_started_for_command.clone(),
-                        profile_id,
-                        ConnectionTarget::Terminal,
-                        None,
-                        None,
-                        {
-                            let router = router_for_command.clone();
-                            move |new_tab_id, app| {
-                                router.complete_pane_split(
-                                    window_id, tab_id, direction, new_tab_id, app,
-                                )
-                            }
-                        },
-                    ),
+                    PaneSessionSource::ProfileConnection(profile_id) => {
+                        let connection = ConnectionContext::new(
+                            ui_for_command.clone(),
+                            state_for_command.clone(),
+                            runtime_for_command.clone(),
+                            font_registry_for_command.clone(),
+                            terminal_font_started_for_command.clone(),
+                        );
+                        request_profile_connection(
+                            &connection,
+                            profile_id,
+                            ConnectionTarget::Terminal,
+                            None,
+                            None,
+                            {
+                                let router = router_for_command.clone();
+                                move |new_tab_id, app| {
+                                    router.complete_pane_split(
+                                        window_id, tab_id, direction, new_tab_id, app,
+                                    )
+                                }
+                            },
+                        )
+                    }
                 };
                 let Some(_) = new_tab_id else {
                     return false;
@@ -368,6 +414,7 @@ pub(super) fn spawn_local_shell_monitor(
     tab_id: Uuid,
     mut events: mpsc::Receiver<LocalShellEvent>,
 ) {
+    let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
         while let Some(event) = events.recv().await {
@@ -404,7 +451,16 @@ pub(super) fn spawn_local_shell_monitor(
                         &state,
                         tab_id,
                         &format!("Local shell exited: {status}"),
-                    ) {
+                    ) && !global_window_router().is_some_and(|router| {
+                        close_terminal_child_pane(
+                            &router,
+                            None,
+                            tab_id,
+                            &state,
+                            &ui,
+                            &runtime_for_monitor,
+                        )
+                    }) {
                         refresh_workspace(&ui, &state);
                     }
                 }

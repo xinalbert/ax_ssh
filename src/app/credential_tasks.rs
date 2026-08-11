@@ -10,6 +10,17 @@ use ax_ssh::credentials::{CredentialBackup, CredentialStore};
 
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(20);
 
+pub(in crate::app) fn credential_storage_for_save(
+    requested: CredentialStorage,
+    vault_password_supplied: bool,
+) -> CredentialStorage {
+    if requested == CredentialStorage::EncryptedVault && !vault_password_supplied {
+        CredentialStorage::SystemKeyring
+    } else {
+        requested
+    }
+}
+
 pub(super) async fn load_system_password(session_id: Uuid) -> Result<Option<Zeroizing<String>>> {
     run(move || CredentialStore::platform()?.load_system_password(session_id))
         .await

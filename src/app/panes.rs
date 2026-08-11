@@ -163,7 +163,6 @@ impl PaneTree {
         ids
     }
 
-    #[cfg(test)]
     pub(super) fn root_tab_id(&self) -> Uuid {
         first_tab_id(&self.root)
     }
@@ -246,7 +245,6 @@ impl PaneTree {
         Some(next.tab_id)
     }
 
-    #[cfg(test)]
     pub(super) fn remove(&mut self, tab_id: Uuid) -> Option<Uuid> {
         if !self.contains(tab_id) {
             return Some(self.focused_tab_id);
@@ -270,7 +268,6 @@ fn collect_tab_ids(node: &PaneNode, ids: &mut Vec<Uuid>) {
     }
 }
 
-#[cfg(test)]
 fn first_tab_id(node: &PaneNode) -> Uuid {
     match node {
         PaneNode::Leaf(tab_id) => *tab_id,
@@ -414,7 +411,6 @@ fn replace_leaf_with_split(
     }
 }
 
-#[cfg(test)]
 fn remove_leaf(node: PaneNode, tab_id: Uuid) -> Option<PaneNode> {
     match node {
         PaneNode::Leaf(candidate) => (candidate != tab_id).then_some(PaneNode::Leaf(candidate)),

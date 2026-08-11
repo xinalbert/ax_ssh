@@ -13,6 +13,7 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <bool> draft-bright-bold-text;
     in-out property <int> draft-scrollback-lines;
     in-out property <bool> draft-right-click-copy-or-paste;
+    in-out property <bool> draft-copy-selection-on-select;
     in property <bool> apple-platform: false;
     in-out property <bool> draft-option-as-meta;
 
@@ -158,6 +159,11 @@ export component TerminalSettingsPage inherits Rectangle {
                     label: "Right-click copy or paste";
                     description: "Copy a selection; otherwise paste";
                     checked <=> root.draft-right-click-copy-or-paste;
+                }
+                SettingsToggleRow {
+                    label: "Copy selection on select";
+                    description: "Right-click always pastes";
+                    checked <=> root.draft-copy-selection-on-select;
                     show-divider: false;
                 }
 

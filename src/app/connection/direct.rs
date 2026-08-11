@@ -186,6 +186,7 @@ fn spawn_telnet_monitor(
     attempt_id: Uuid,
     mut events: mpsc::Receiver<TelnetSessionEvent>,
 ) {
+    let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
         while let Some(event) = events.recv().await {
@@ -236,7 +237,16 @@ fn spawn_telnet_monitor(
                         attempt_id,
                         DirectProtocol::Telnet,
                         "Disconnected",
-                    ) {
+                    ) && !global_window_router().is_some_and(|router| {
+                        close_terminal_child_pane(
+                            &router,
+                            None,
+                            tab_id,
+                            &state,
+                            &ui,
+                            &runtime_for_monitor,
+                        )
+                    }) {
                         refresh_workspace(&ui, &state);
                     }
                 }

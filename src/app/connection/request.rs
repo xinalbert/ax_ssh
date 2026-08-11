@@ -12,6 +12,33 @@ enum ConnectionRequest {
     },
 }
 
+#[derive(Clone)]
+pub(in crate::app) struct ConnectionContext {
+    ui: slint::Weak<AppWindow>,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl ConnectionContext {
+    pub(in crate::app) fn new(
+        ui: slint::Weak<AppWindow>,
+        state: Arc<Mutex<AppState>>,
+        runtime: Handle,
+        font_registry: Arc<Mutex<FontRegistry>>,
+        terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        Self {
+            ui,
+            state,
+            runtime,
+            font_registry,
+            terminal_font_started,
+        }
+    }
+}
+
 pub(in crate::app) fn wire_connection_request(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -21,20 +48,19 @@ pub(in crate::app) fn wire_connection_request(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
-    let ui_for_connect = ui.as_weak();
-    let state_for_connect = state.clone();
-    let runtime_for_connect = runtime.clone();
-    let font_registry_for_connect = font_registry.clone();
-    let terminal_font_started_for_connect = terminal_font_started.clone();
+    let context = ConnectionContext::new(
+        ui.as_weak(),
+        state,
+        runtime,
+        font_registry,
+        terminal_font_started,
+    );
+    let context_for_connect = context.clone();
     let router_for_connect = window_router.clone();
     ui.on_connect_session(move |id| {
         log_ui_action("connection.open-terminal");
         let Some(_) = request_connection(
-            &ui_for_connect,
-            &state_for_connect,
-            &runtime_for_connect,
-            font_registry_for_connect.clone(),
-            terminal_font_started_for_connect.clone(),
+            &context_for_connect,
             id.as_str(),
             ConnectionTarget::Terminal,
             None,
@@ -47,20 +73,12 @@ pub(in crate::app) fn wire_connection_request(
         };
     });
 
-    let ui_for_sftp = ui.as_weak();
-    let state_for_sftp = state.clone();
-    let runtime_for_sftp = runtime.clone();
-    let font_registry_for_sftp = font_registry.clone();
-    let terminal_font_started_for_sftp = terminal_font_started.clone();
+    let context_for_sftp = context.clone();
     let router_for_sftp = window_router.clone();
     ui.on_open_sftp_session(move |id| {
         log_ui_action("connection.open-sftp-session");
         let Some(_) = request_connection(
-            &ui_for_sftp,
-            &state_for_sftp,
-            &runtime_for_sftp,
-            font_registry_for_sftp.clone(),
-            terminal_font_started_for_sftp.clone(),
+            &context_for_sftp,
             id.as_str(),
             ConnectionTarget::Sftp,
             None,
@@ -73,29 +91,36 @@ pub(in crate::app) fn wire_connection_request(
         };
     });
 
-    let ui_for_active_sftp = ui.as_weak();
-    let state_for_active_sftp = state;
-    let font_registry_for_active_sftp = font_registry;
-    let terminal_font_started_for_active_sftp = terminal_font_started;
+    let context_for_active_sftp = context;
     let router_for_active_sftp = window_router;
     ui.on_open_sftp(move || {
         log_ui_action("connection.switch-ssh-sftp");
-        sync_window_active(&router_for_active_sftp, window_id, &state_for_active_sftp);
-        let navigation = match state_for_active_sftp.lock() {
+        sync_window_active(
+            &router_for_active_sftp,
+            window_id,
+            &context_for_active_sftp.state,
+        );
+        let navigation = match context_for_active_sftp.state.lock() {
             Ok(mut app) => app.switch_ssh_sftp_tab(),
             Err(_) => {
-                set_status(&ui_for_active_sftp, "Cannot read active SSH session");
+                set_status(
+                    &context_for_active_sftp.ui,
+                    "Cannot read active SSH session",
+                );
                 return;
             }
         };
         let Some(navigation) = navigation else {
-            set_status(&ui_for_active_sftp, "Select an SSH or SFTP tab first");
+            set_status(
+                &context_for_active_sftp.ui,
+                "Select an SSH or SFTP tab first",
+            );
             return;
         };
         match navigation {
             SshSftpNavigation::Activated(tab_id) => {
                 router_for_active_sftp.set_active(window_id, tab_id);
-                refresh_workspace(&ui_for_active_sftp, &state_for_active_sftp);
+                refresh_workspace(&context_for_active_sftp.ui, &context_for_active_sftp.state);
             }
             SshSftpNavigation::Connect {
                 profile_id,
@@ -103,11 +128,7 @@ pub(in crate::app) fn wire_connection_request(
                 companion_tab_id,
             } => {
                 let _ = request_profile_connection(
-                    &ui_for_active_sftp,
-                    &state_for_active_sftp,
-                    &runtime,
-                    font_registry_for_active_sftp.clone(),
-                    terminal_font_started_for_active_sftp.clone(),
+                    &context_for_active_sftp,
                     profile_id,
                     target,
                     Some(companion_tab_id),
@@ -126,11 +147,7 @@ pub(in crate::app) fn wire_connection_request(
 }
 
 fn request_connection<F>(
-    ui: &slint::Weak<AppWindow>,
-    state: &Arc<Mutex<AppState>>,
-    runtime: &Handle,
-    font_registry: Arc<Mutex<FontRegistry>>,
-    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    context: &ConnectionContext,
     id: &str,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
@@ -139,16 +156,9 @@ fn request_connection<F>(
 where
     F: FnOnce(Uuid, &mut AppState) -> bool,
 {
-    let profile_id = match parse_uuid(id, "session", ui) {
-        Some(id) => id,
-        None => return None,
-    };
+    let profile_id = parse_uuid(id, "session", &context.ui)?;
     request_profile_connection(
-        ui,
-        state,
-        runtime,
-        font_registry,
-        terminal_font_started,
+        context,
         profile_id,
         target,
         companion_tab_id,
@@ -158,11 +168,7 @@ where
 }
 
 pub(in crate::app) fn request_profile_connection<F>(
-    ui: &slint::Weak<AppWindow>,
-    state: &Arc<Mutex<AppState>>,
-    runtime: &Handle,
-    font_registry: Arc<Mutex<FontRegistry>>,
-    terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
+    context: &ConnectionContext,
     profile_id: Uuid,
     target: ConnectionTarget,
     companion_tab_id: Option<Uuid>,
@@ -172,8 +178,20 @@ pub(in crate::app) fn request_profile_connection<F>(
 where
     F: FnOnce(Uuid, &mut AppState) -> bool,
 {
+    let ConnectionContext {
+        ui,
+        state,
+        runtime,
+        font_registry,
+        terminal_font_started,
+    } = context;
     if target == ConnectionTarget::Terminal {
-        load_terminal_font_on_demand(runtime, ui.clone(), font_registry, terminal_font_started);
+        load_terminal_font_on_demand(
+            runtime,
+            ui.clone(),
+            font_registry.clone(),
+            terminal_font_started.clone(),
+        );
     }
     let start = {
         let mut app = match state.lock() {

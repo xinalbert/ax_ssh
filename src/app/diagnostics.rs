@@ -55,13 +55,20 @@ pub(super) fn log_terminal_input(
     );
 }
 
-pub(super) fn log_terminal_input_latency(outcome: &'static str, elapsed: Duration) {
+pub(super) fn log_terminal_input_latency(
+    outcome: &'static str,
+    elapsed: Duration,
+    state_lock_elapsed: Option<Duration>,
+    worker_request_elapsed: Option<Duration>,
+) {
     tracing::debug!(
         target: LATENCY_TARGET,
         event = "terminal-input",
         stage = "ui-to-worker-request",
         outcome,
         elapsed_us = duration_micros(elapsed),
+        state_lock_us = state_lock_elapsed.map(duration_micros),
+        worker_request_us = worker_request_elapsed.map(duration_micros),
         "terminal input request completed"
     );
 }

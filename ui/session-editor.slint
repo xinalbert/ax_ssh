@@ -19,6 +19,8 @@ export struct SessionEditorViewState {
     username: string,
     auth_method: string,
     private_key_path: string,
+    sftp_remote_path: string,
+    sftp_local_path: string,
     credential_storage: string,
     default_credential_storage: string,
     x11_forwarding: bool,
@@ -38,7 +40,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, bool, string, string, bool, string, string, string, string, string, string, bool,
+        string, string, string, bool, string, string, bool, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -58,6 +60,8 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> username-draft;
     private property <string> auth-method: "Password";
     private property <string> private-key-draft;
+    private property <string> sftp-remote-path-draft: "~";
+    private property <string> sftp-local-path-draft;
     private property <string> password-draft;
     private property <bool> remember-password-draft: false;
     private property <string> credential-storage-draft: "system-keyring";
@@ -84,6 +88,8 @@ export component SessionEditorPane inherits Rectangle {
             root.username-draft,
             root.auth-method,
             root.private-key-draft,
+            root.sftp-remote-path-draft,
+            root.sftp-local-path-draft,
             root.password-draft,
             root.remember-password-draft,
             root.credential-storage-draft,
@@ -110,6 +116,8 @@ export component SessionEditorPane inherits Rectangle {
         root.username-draft = root.source.username;
         root.auth-method = root.source.auth_method;
         root.private-key-draft = root.source.private_key_path;
+        root.sftp-remote-path-draft = root.source.sftp_remote_path;
+        root.sftp-local-path-draft = root.source.sftp_local_path;
         // Passwords are intentionally never part of the source snapshot.
         root.password-draft = "";
         root.remember-password-draft = false;
@@ -429,6 +437,42 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
+                        label: "SFTP directories";
+                        description: "Choose the remote and local directories opened by new SFTP tabs.";
+                    }
+                    HorizontalLayout {
+                        height: self.preferred-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Remote default directory";
+                            FlatTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.sftp-remote-path-draft;
+                                placeholder-text: "~";
+                                accessible-label: "SFTP remote default directory";
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: "Local default directory";
+                            FlatTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.sftp-local-path-draft;
+                                placeholder-text: "Platform home directory";
+                                accessible-label: "SFTP local default directory";
+                            }
+                        }
+                    }
+                }
+
+                if root.protocol == "SSH" : VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
                         label: "Authentication";
                         description: "Credentials used for this SSH connection.";
                     }
@@ -453,15 +497,15 @@ export component SessionEditorPane inherits Rectangle {
                                 text <=> root.password-draft;
                                 placeholder-text: root.editing && !root.source.credential_storage.is-empty
                                     ? "Leave blank to keep saved password"
-                                    : "Enter password for Save & connect";
+                                    : "Optional; enter only when connecting or saving";
                                 accessible-label: "SSH password";
                             }
                         }
                         CheckBox {
-                            text: "Remember password";
+                            text: "Save password (optional)";
                             enabled: !root.password-draft.is-empty;
                             checked <=> root.remember-password-draft;
-                            accessible-label: "Remember SSH password";
+                            accessible-label: "Save SSH password for future connections";
                         }
                         if root.remember-password-draft : SessionEditorField {
                             label: "Credential storage";
@@ -485,7 +529,7 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.vault-password-draft;
-                                placeholder-text: "Required to save the SSH password";
+                                placeholder-text: "Optional; empty saves in system credential store";
                                 accessible-label: "Credential vault password";
                             }
                         }

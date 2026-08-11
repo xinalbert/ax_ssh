@@ -871,8 +871,10 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
 
 #[test]
 fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
-    let mut sftp = SftpBrowserState::default();
-    sftp.path = "/home/alice".to_owned();
+    let mut sftp = SftpBrowserState {
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
 
     assert_eq!(
         sftp.begin_navigation(SftpNavigation::Direct, Some("/var".to_owned()))
@@ -904,25 +906,27 @@ fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
 
 #[test]
 fn sftp_selection_tracks_rows_and_select_all() {
-    let mut sftp = SftpBrowserState::default();
-    sftp.entries = vec![
-        SftpEntry {
-            name: "one.txt".to_owned(),
-            path: "/home/alice/one.txt".to_owned(),
-            is_dir: false,
-            is_symlink: false,
-            size: 1,
-            modified: None,
-        },
-        SftpEntry {
-            name: "two.txt".to_owned(),
-            path: "/home/alice/two.txt".to_owned(),
-            is_dir: false,
-            is_symlink: false,
-            size: 2,
-            modified: None,
-        },
-    ];
+    let mut sftp = SftpBrowserState {
+        entries: vec![
+            SftpEntry {
+                name: "one.txt".to_owned(),
+                path: "/home/alice/one.txt".to_owned(),
+                is_dir: false,
+                is_symlink: false,
+                size: 1,
+                modified: None,
+            },
+            SftpEntry {
+                name: "two.txt".to_owned(),
+                path: "/home/alice/two.txt".to_owned(),
+                is_dir: false,
+                is_symlink: false,
+                size: 2,
+                modified: None,
+            },
+        ],
+        ..SftpBrowserState::default()
+    };
 
     assert!(sftp.toggle_selection("/home/alice/one.txt", true));
     assert_eq!(sftp.selected_count(), 1);
@@ -937,7 +941,11 @@ fn sftp_selection_tracks_rows_and_select_all() {
 #[test]
 fn sftp_tab_is_a_separate_ssh_target() {
     let mut state = test_state();
-    let profile = SessionProfile::new("server", "server.example", "alice");
+    let mut profile = SessionProfile::new("server", "server.example", "alice");
+    profile
+        .ssh_mut()
+        .expect("profile should use SSH")
+        .sftp_local_path = "/tmp/axssh-sftp-default".into();
 
     let terminal = state.open_terminal_tab(&profile);
     let sftp = state.open_sftp_tab(&profile);
@@ -976,7 +984,7 @@ fn sftp_tab_is_a_separate_ssh_target() {
     );
 
     let snapshot = state.active_snapshot().sftp;
-    assert!(!snapshot.local.path.is_empty());
+    assert_eq!(snapshot.local.path, "/tmp/axssh-sftp-default");
     assert!(!snapshot.local.loading);
     assert!(snapshot.local.entries.is_empty());
 }

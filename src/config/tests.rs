@@ -13,6 +13,18 @@ fn ssh_mut(profile: &mut SessionProfile) -> &mut SshConfig {
     profile.ssh_mut().expect("test profile should use SSH")
 }
 
+fn normalized_workspace(
+    session_mask_character: &str,
+    collapsed_group_label_chars: i32,
+) -> WorkspaceSettings {
+    WorkspaceSettings::normalized(WorkspaceSettingsInput {
+        sidebar_width: 220,
+        tab_width: 172,
+        session_mask_character,
+        collapsed_group_label_chars,
+    })
+}
+
 #[test]
 fn profile_validation_rejects_missing_host() {
     let profile = SessionProfile::new("demo", "", "alice");
@@ -41,6 +53,14 @@ fn profile_validation_enforces_shared_text_limits() {
         path: PathBuf::from("x".repeat(MAX_PRIVATE_KEY_PATH_CHARS + 1)),
     };
     assert!(profile.validate().is_err());
+
+    ssh_mut(&mut profile).auth = AuthMethod::Password;
+    ssh_mut(&mut profile).sftp_remote_path = "bad\npath".to_owned();
+    assert!(profile.validate().is_err());
+
+    ssh_mut(&mut profile).sftp_remote_path = "~".to_owned();
+    ssh_mut(&mut profile).sftp_local_path = "x".repeat(4_097);
+    assert!(profile.validate().is_err());
 }
 
 #[test]
@@ -53,20 +73,24 @@ fn profile_deserialization_rejects_invalid_normal_fields() {
 
 #[test]
 fn store_validation_enforces_group_and_profile_count_limits() {
-    let mut groups = SessionStore::default();
-    groups.groups = (0..=MAX_GROUPS)
-        .map(|index| format!("group-{index}"))
-        .collect();
+    let groups = SessionStore {
+        groups: (0..=MAX_GROUPS)
+            .map(|index| format!("group-{index}"))
+            .collect(),
+        ..SessionStore::default()
+    };
     assert!(groups.validate().is_err());
 
     let template = SessionProfile::new("demo", "host.example", "alice");
-    let mut profiles = SessionStore::default();
-    profiles.sessions = (0..=MAX_SESSION_PROFILES)
-        .map(|_| SessionProfile {
-            id: Uuid::new_v4(),
-            ..template.clone()
-        })
-        .collect();
+    let profiles = SessionStore {
+        sessions: (0..=MAX_SESSION_PROFILES)
+            .map(|_| SessionProfile {
+                id: Uuid::new_v4(),
+                ..template.clone()
+            })
+            .collect(),
+        ..SessionStore::default()
+    };
     assert!(profiles.validate().is_err());
 }
 
@@ -166,16 +190,17 @@ fn global_default_does_not_change_an_existing_credential_reference() {
 #[test]
 fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
-        AppearanceSettings::normalized(
-            "  JetBrains Mono  ",
-            "  Menlo  ",
-            18,
-            135,
-            "light",
-            11.5,
-            false,
-            true,
-        ),
+        AppearanceSettings::normalized(AppearanceSettingsInput {
+            application_font_family: "  JetBrains Mono  ",
+            terminal_font_family: "  Menlo  ",
+            terminal_font_size: 18,
+            terminal_line_height_percent: 135,
+            color_scheme: "light",
+            minimum_contrast_ratio: 11.5,
+            bright_bold_text: false,
+            right_click_copy_or_paste: true,
+            copy_selection_on_select: true,
+        }),
         AppearanceSettings {
             application_font_family: "JetBrains Mono".into(),
             terminal_font_family: "Menlo".into(),
@@ -191,10 +216,21 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_minimum_contrast_ratio_tenths: 115,
             bright_bold_text: false,
             right_click_copy_or_paste: true,
+            copy_selection_on_select: true,
         }
     );
     assert_eq!(
-        AppearanceSettings::normalized("", "", 100, 1_000, "unknown", 1_000.0, true, false,),
+        AppearanceSettings::normalized(AppearanceSettingsInput {
+            application_font_family: "",
+            terminal_font_family: "",
+            terminal_font_size: 100,
+            terminal_line_height_percent: 1_000,
+            color_scheme: "unknown",
+            minimum_contrast_ratio: 1_000.0,
+            bright_bold_text: true,
+            right_click_copy_or_paste: false,
+            copy_selection_on_select: false,
+        }),
         AppearanceSettings {
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
@@ -205,6 +241,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_minimum_contrast_ratio_tenths: MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
             bright_bold_text: true,
             right_click_copy_or_paste: false,
+            copy_selection_on_select: false,
         }
     );
 }
@@ -245,6 +282,7 @@ fn legacy_appearance_migrates_into_versioned_settings() {
     );
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
+    assert!(!store.settings.appearance.copy_selection_on_select);
     assert_eq!(store.settings.terminal, TerminalSettings::default());
     assert_eq!(store.settings.shortcuts, ShortcutSettings::default());
     let serialized = serde_json::to_value(store).expect("settings should serialize");
@@ -359,21 +397,21 @@ fn persisted_theme_mode_accepts_system_aliases() {
 
 #[test]
 fn custom_palette_normalizes_each_hex_value_independently() {
-    let palette = ThemePalette::normalized(
-        " #abc ",
-        "#abcd",
-        "#1a2b3c",
-        "not-a-color",
-        "#12345678",
-        "#0A0B0C",
-        "#112233",
-        "#445566",
-        "#778899",
-        "#AABBCCDD",
-        "#010203",
-        "#040506",
-        "#070809",
-    );
+    let palette = ThemePalette::normalized(ThemePalette {
+        background: " #abc ".into(),
+        panel: "#abcd".into(),
+        panel_alt: "#1a2b3c".into(),
+        border: "not-a-color".into(),
+        text: "#12345678".into(),
+        muted: "#0A0B0C".into(),
+        accent: "#112233".into(),
+        success: "#445566".into(),
+        danger: "#778899".into(),
+        overlay: "#AABBCCDD".into(),
+        terminal_foreground: "#010203".into(),
+        terminal_background: "#040506".into(),
+        terminal_selection: "#070809".into(),
+    });
 
     assert_eq!(palette.background, "#AABBCC");
     assert_eq!(palette.panel, "#AABBCCDD");
@@ -417,21 +455,21 @@ fn version_eleven_custom_theme_round_trips_without_secrets() {
         "dark",
         "custom",
         ThemePalette::axssh_light(),
-        ThemePalette::normalized(
-            "#102030",
-            "#203040",
-            "#304050",
-            "#405060",
-            "#506070",
-            "#607080",
-            "#708090",
-            "#8090A0",
-            "#90A0B0",
-            "#00000080",
-            "#A0B0C0",
-            "#0A0B0C",
-            "#102938",
-        ),
+        ThemePalette::normalized(ThemePalette {
+            background: "#102030".into(),
+            panel: "#203040".into(),
+            panel_alt: "#304050".into(),
+            border: "#405060".into(),
+            text: "#506070".into(),
+            muted: "#607080".into(),
+            accent: "#708090".into(),
+            success: "#8090A0".into(),
+            danger: "#90A0B0".into(),
+            overlay: "#00000080".into(),
+            terminal_foreground: "#A0B0C0".into(),
+            terminal_background: "#0A0B0C".into(),
+            terminal_selection: "#102938".into(),
+        }),
     ));
     let store = SessionStore {
         version: CURRENT_SCHEMA_VERSION,
@@ -581,36 +619,64 @@ fn legacy_right_click_setting_uses_the_copy_or_paste_parameter() {
 }
 
 #[test]
+fn copy_selection_on_select_defaults_disabled_and_round_trips() {
+    let legacy: SessionStore = serde_json::from_str(
+        r#"{"version":17,"settings":{"appearance":{"right_click_copy_or_paste":true}}}"#,
+    )
+    .expect("previous settings should deserialize");
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert!(legacy.settings.appearance.right_click_copy_or_paste);
+    assert!(!legacy.settings.appearance.copy_selection_on_select);
+
+    let mut current = SessionStore::default();
+    current.settings.appearance.copy_selection_on_select = true;
+    let encoded = serde_json::to_string(&current).expect("settings should serialize");
+    let decoded: SessionStore =
+        serde_json::from_str(&encoded).expect("settings should deserialize");
+    assert!(decoded.settings.appearance.copy_selection_on_select);
+}
+
+#[test]
 fn app_settings_clamp_all_persisted_dimensions() {
-    let settings = AppSettings::normalized(
-        "Maple Mono NF CN",
-        "",
-        100,
-        -1,
-        "solarized-dark",
-        -1.0,
-        false,
-        true,
-        -1,
-        1,
-        1_000,
-        "zsh",
-        &[SYSTEM_DEFAULT_SHELL.into(), "zsh".into()],
-        true,
-        20,
-        9_000,
-        "  #  ",
-        9,
-        "Ctrl+,",
-        "Ctrl+N",
-        "Ctrl+Shift+I",
-        "Ctrl+Shift+E",
-        "Ctrl+Shift+B",
-        "Ctrl+Shift+C",
-        "Ctrl+Shift+V",
-        "Ctrl+Shift+F",
-        "encrypted-vault",
-    );
+    let known_shells = [SYSTEM_DEFAULT_SHELL.into(), "zsh".into()];
+    let settings = AppSettings::normalized(AppSettingsInput {
+        appearance: AppearanceSettingsInput {
+            application_font_family: "Maple Mono NF CN",
+            terminal_font_family: "",
+            terminal_font_size: 100,
+            terminal_line_height_percent: -1,
+            color_scheme: "solarized-dark",
+            minimum_contrast_ratio: -1.0,
+            bright_bold_text: false,
+            right_click_copy_or_paste: true,
+            copy_selection_on_select: true,
+        },
+        terminal: TerminalSettingsInput {
+            scrollback_lines: -1,
+            default_columns: 1,
+            default_rows: 1_000,
+            local_shell: "zsh",
+            known_shells: &known_shells,
+            option_as_meta: true,
+        },
+        workspace: WorkspaceSettingsInput {
+            sidebar_width: 20,
+            tab_width: 9_000,
+            session_mask_character: "  #  ",
+            collapsed_group_label_chars: 9,
+        },
+        shortcuts: ShortcutSettings {
+            open_settings: "Ctrl+,".into(),
+            new_session: "Ctrl+N".into(),
+            import_sessions: "Ctrl+Shift+I".into(),
+            export_selected: "Ctrl+Shift+E".into(),
+            toggle_sidebar: "Ctrl+Shift+B".into(),
+            copy_selection: "Ctrl+Shift+C".into(),
+            paste: "Ctrl+Shift+V".into(),
+            open_sftp: "Ctrl+Shift+F".into(),
+        },
+        credential_storage: "encrypted-vault",
+    });
 
     assert_eq!(
         settings.appearance.application_font_family,
@@ -638,6 +704,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     );
     assert!(!settings.appearance.bright_bold_text);
     assert!(settings.appearance.right_click_copy_or_paste);
+    assert!(settings.appearance.copy_selection_on_select);
     assert_eq!(settings.terminal.scrollback_lines, MIN_SCROLLBACK_LINES);
     assert_eq!(settings.terminal.default_columns, MIN_TERMINAL_COLUMNS);
     assert_eq!(settings.terminal.default_rows, MAX_TERMINAL_ROWS);
@@ -686,36 +753,24 @@ fn legacy_terminal_option_meta_defaults_disabled_and_round_trips() {
 
 #[test]
 fn workspace_mask_character_is_one_visible_character() {
+    assert_eq!(normalized_workspace("#", 2).session_mask_character, "#");
+    assert_eq!(normalized_workspace("  $  ", 2).session_mask_character, "$");
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "#", 2).session_mask_character,
-        "#"
-    );
-    assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "  $  ", 2).session_mask_character,
-        "$"
-    );
-    assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "", 2).session_mask_character,
+        normalized_workspace("", 2).session_mask_character,
         DEFAULT_SESSION_MASK_CHARACTER
     );
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "**", 2).session_mask_character,
+        normalized_workspace("**", 2).session_mask_character,
         DEFAULT_SESSION_MASK_CHARACTER
     );
 }
 
 #[test]
 fn collapsed_group_label_chars_support_full_or_clamped_compact_labels() {
+    assert_eq!(normalized_workspace("*", 0).collapsed_group_label_chars, 0);
+    assert_eq!(normalized_workspace("*", 2).collapsed_group_label_chars, 2);
     assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "*", 0).collapsed_group_label_chars,
-        0
-    );
-    assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "*", 2).collapsed_group_label_chars,
-        2
-    );
-    assert_eq!(
-        WorkspaceSettings::normalized(220, 172, "*", 9).collapsed_group_label_chars,
+        normalized_workspace("*", 9).collapsed_group_label_chars,
         MAX_COLLAPSED_GROUP_LABEL_CHARS
     );
 }
@@ -786,16 +841,16 @@ fn shortcut_settings_validate_modifiers_and_conflicts() {
     assert!(conflicting.validate().is_err());
 
     assert_eq!(
-        ShortcutSettings::normalized(
-            "B",
-            "Ctrl+N",
-            "Ctrl+Shift+I",
-            "Ctrl+Shift+E",
-            "Ctrl+Shift+B",
-            "Ctrl+Shift+C",
-            "Ctrl+Shift+V",
-            "Ctrl+Shift+F",
-        ),
+        ShortcutSettings::normalized(ShortcutSettings {
+            open_settings: "B".into(),
+            new_session: "Ctrl+N".into(),
+            import_sessions: "Ctrl+Shift+I".into(),
+            export_selected: "Ctrl+Shift+E".into(),
+            toggle_sidebar: "Ctrl+Shift+B".into(),
+            copy_selection: "Ctrl+Shift+C".into(),
+            paste: "Ctrl+Shift+V".into(),
+            open_sftp: "Ctrl+Shift+F".into(),
+        }),
         ShortcutSettings::default()
     );
 }
@@ -860,14 +915,15 @@ fn previous_workspace_width_migrates_without_overwriting_custom_values() {
 
 #[test]
 fn terminal_shell_cache_is_normalized_and_only_adds_discoveries() {
-    let mut settings = TerminalSettings::normalized(
-        2_000,
-        120,
-        36,
-        " zsh ",
-        &["zsh".into(), "ZSH".into(), "bad\nshell".into()],
-        true,
-    );
+    let known_shells = ["zsh".into(), "ZSH".into(), "bad\nshell".into()];
+    let mut settings = TerminalSettings::normalized(TerminalSettingsInput {
+        scrollback_lines: 2_000,
+        default_columns: 120,
+        default_rows: 36,
+        local_shell: " zsh ",
+        known_shells: &known_shells,
+        option_as_meta: true,
+    });
     assert_eq!(settings.local_shell, "zsh");
     assert_eq!(settings.known_shells, [SYSTEM_DEFAULT_SHELL, "zsh"]);
     assert!(settings.option_as_meta);
@@ -1007,9 +1063,27 @@ fn legacy_ssh_profile_migrates_to_explicit_protocol_config() {
 
     assert_eq!(profile.protocol(), SessionProtocol::Ssh);
     assert!(ssh(&profile).x11_forwarding);
+    assert_eq!(ssh(&profile).sftp_remote_path, "~");
+    assert!(ssh(&profile).sftp_local_path.is_empty());
     let serialized = serde_json::to_value(profile).expect("profile should serialize");
     assert_eq!(serialized["connection"]["protocol"], "ssh");
     assert!(serialized.get("host").is_none());
+}
+
+#[test]
+fn sftp_default_paths_round_trip_without_secrets() {
+    let mut profile = SessionProfile::new("files", "host.example", "alice");
+    ssh_mut(&mut profile).sftp_remote_path = "/srv/releases".into();
+    ssh_mut(&mut profile).sftp_local_path = "/Users/alice/Downloads".into();
+
+    profile.validate().expect("SFTP paths should be valid");
+    let encoded = serde_json::to_string(&profile).expect("profile should serialize");
+    assert!(encoded.contains("sftp_remote_path"));
+    assert!(encoded.contains("sftp_local_path"));
+    assert!(!encoded.contains("password"));
+    let decoded: SessionProfile =
+        serde_json::from_str(&encoded).expect("profile should deserialize");
+    assert_eq!(decoded, profile);
 }
 
 #[test]

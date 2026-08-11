@@ -19,11 +19,12 @@ cargo run --locked
    username 和密码、私钥或 **SSH agent** 认证；**Forward X11 applications** 只适用于 SSH，新 profile
    默认开启；Telnet 使用 host、port，并显示未加密警告；Serial 使用
    端口名、baud rate、data bits、stop bits、parity 和 flow control。会话编辑器进入 Serial
-   模式时才列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。
+   模式时才列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。SSH-only 的
+   **SFTP directories** 区域可以设置新 SFTP Tab 首次打开的远端和本地目录；默认分别是 `~` 与平台 home 目录。
 3. 保存会话并在会话导航中选择它。新建 SSH profile 时，也可以点击 **Save & connect**，
-   保存成功后立即进入正常的主机密钥流程。会话编辑器中输入的密码默认只供本次连接使用，
-   不需要保险库口令；只有主动勾选 **Remember password** 后才会保存，并可选择凭据后端，
-   **Vault password** 只在选择 **Encrypted application vault** 时显示。重复打开同一个已保存会话会创建彼此独立的终端
+   保存成功后立即进入正常的主机密钥流程。编辑器密码是可选项：留空可只保存 profile，不保存密码；
+   非空值可只供本次连接使用。勾选 **Save password (optional)** 才保存密码。未提供保险库口令时，
+   即使选择了加密保险库，也会保存到系统凭据库；提供保险库口令才创建加密保险库记录。重复打开同一个已保存会话会创建彼此独立的终端
    Tab，每个 Tab 都有自己的连接与输出。每个 SSH Tab 都可以独立等待主机密钥确认或认证；
    安全提示始终对应活动 Tab，切换 Tab 后其它等待提示仍会保留。
 4. 使用 SSH 首次连接时，先通过可信来源核对界面显示的 SHA-256 主机密钥指纹，再确认信任。
@@ -31,8 +32,9 @@ cargo run --locked
 5. 使用 SSH 密码或私钥认证时，根据提示输入临时密码或私钥 passphrase；私钥 passphrase 永远不会持久化。若要记住
    SSH 密码，先在 **Settings > General** 选择 **System credential store** 或
    **Encrypted application vault**。密码弹窗会以该设置为初始值，也可以在 **Credential
-   storage** 菜单中只为本次提示改选后端，再勾选 **Remember password**。只有认证成功后才会
-   保存密码；选择加密保险库时还要输入保险库口令，之后连接只需输入该口令来解锁已保存的 SSH 密码。
+   storage** 菜单中只为本次提示改选后端，再勾选 **Save password (optional)**。只有认证成功后才会
+   保存密码；请求加密保险库但保险库口令留空时会改存系统凭据库，提供非空保险库口令才会创建
+   加密保险库记录。之后使用既有保险库记录仍需输入其保险库口令解锁已保存的 SSH 密码。
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
    关闭正在探测或等待认证的 Tab，只会取消或丢弃该 Tab 自己的连接流程。
@@ -84,7 +86,8 @@ vendor/product/serial-number 元数据跟踪被操作系统改名的设备；找
 修改 SSH host 或 port 会清除
 已确认的主机密钥指纹，下次连接必须重新明确确认；把 SSH profile 切换为 Telnet 或 Serial
 会移除其已记住的 SSH 凭据引用。会话编辑器不会显示已保存密码，密码留空会保留原凭据；
-新输入的密码可以由 **Save & connect** 使用一次，也可以勾选 **Remember password** 并选择后端后保存。
+新输入的密码可以由 **Save & connect** 使用一次，也可以勾选 **Save password (optional)** 并选择后端后保存；
+保险库口令留空时会改存系统凭据库。
 修改 **Settings > General** 的默认后端只用于初始化之后的保存选择，不会迁移或破坏既有 SSH profile
 所引用的后端。
 
@@ -104,12 +107,14 @@ Tab 获得焦点，并接受对应方向键、Home 和 End；Enter 或 Space 执
 Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独拖动文件表格列宽。
 
 远端输入绝对路径、相对当前目录的路径或 `~` 后选择 **Open**；双击
-文件夹可进入该目录。本地栏默认打开平台 home 目录，可输入其它本地目录，且只读取有界文件元数据。
+文件夹可进入该目录。远端栏首次打开 profile 中设置的默认目录。本地栏首次打开设置的目录；为空时使用
+平台 home 目录，且只读取有界文件元数据。
 **Hidden** 显示点文件，**More** 请求下一页远端目录。文件行优先显示目标平台提供的文件类型图标；
 平台无法解析时使用内建的目录、链接或通用文件图标。
 
-双击本地栏中的 regular file 会使用平台默认程序打开当前快照条目。目录仍用于导航，符号链接不会打开。
-AxSSH 会在 UI 线程外重新检查目录、文件类型和解析后的父目录，再请求操作系统打开文件。
+双击本地栏中的 regular file 会使用平台默认程序打开当前快照条目的只读副本。目录仍用于导航，符号
+链接不会打开。AxSSH 会在 UI 线程外核对已打开文件的平台 identity，从该精确 handle 复制到私有有界
+缓存，完整发布后再请求操作系统打开；验证后替换原路径不能重定向这次打开请求。
 
 双击远端栏中的 regular file 会把只读副本下载到 AxSSH 私有缓存，完整发布后再使用默认程序打开。
 目录和符号链接会被拒绝；单个文件最多 512 MiB，每个 SFTP Tab 同时最多运行两个下载。Transfers 区域
@@ -162,12 +167,18 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 使用 `Alt+Shift+H`、`Alt+Shift+J`、`Alt+Shift+K`、`Alt+Shift+L` 在对应方向创建独立终端会话。
 每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
 包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane，并继续作为独立可见 Tab。
-关闭这个可见 Terminal Tab 会关闭其布局中的全部 terminal pane。
+每个非根 pane 的右上角都有一个小型关闭控件；点击后只关闭该 pane 及其会话，并自动折叠剩余布局，
+根 pane 不提供独立关闭控件。在子 pane 的 local shell 中正常执行 `exit`，或子 SSH/Telnet 正常断开，
+也会执行相同的关闭。连接和认证失败会继续保留在界面上便于排查。关闭可见 Terminal Tab 仍会关闭
+其布局中的全部 terminal pane。
 
 每个 split 都有可见分隔线。拖动竖线可调整 pane 宽度，拖动横线可调整 pane 高度；双击会恢复
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
 两侧分别限制在该 split 的 10%-90%。比例在当前运行期的 Tab 切换和 detached 窗口往返中保留，
-应用重启后恢复等分。鼠标拖动 release 或 cancel 后，输入焦点会返回当前 focused、connected terminal pane；
+应用重启后恢复等分。即使嵌套分屏让某一侧异常狭小，终端行、光标、预编辑文本和原生输入代理也会
+裁剪在各自 pane 内；当前底行仍贴住 pane 底边，较旧的顶部行会先被裁剪。
+这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
+输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
@@ -179,6 +190,8 @@ Settings 中修改；Select All 固定为 macOS `Cmd+A`、其它平台 `Ctrl+Shi
 Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。detached Terminal
 虽然没有客户区菜单，仍可使用相同键盘快捷键。普通非秘密文本字段继续使用原生编辑快捷键和
 右键菜单，秘密字段仍不可复制。
+**Settings > Terminal** 的 **Copy selection on select** 默认关闭。开启后，完成鼠标选区和
+**Select All** 会立即复制，直接右击始终粘贴。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。
 File 菜单导入默认使用 `Cmd/Ctrl+Shift+I`，导出所选 Group 或服务器默认使用
 `Cmd/Ctrl+Shift+E`。菜单命令会把当前配置显示为原生 accelerator；录制快捷键或处理安全

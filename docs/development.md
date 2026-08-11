@@ -79,8 +79,16 @@ registry.
   and modification metadata; Slint must not access the filesystem. Reject stale
   results by Tab and request identity, and preserve entry, name, and path limits
   before data reaches the UI. A local open intent must match the current active
-  Tab snapshot and revalidate non-symlink directory/regular-file ownership on a
-  blocking worker before invoking the detached platform opener.
+  Tab snapshot, open a non-symlink regular-file handle on a blocking worker,
+  compare its platform identity with the listing snapshot, and copy from that
+  handle into the bounded private cache before invoking the detached platform
+  opener. Never reopen the validated source path for dispatch.
+- SSH profile `sftp_remote_path` and `sftp_local_path` values are non-secret
+  initialization inputs only. Keep them out of credentials, logs, and running
+  Tab mutation; validate their bounded text before persistence, pass the remote
+  value into the worker-owned browser, and use the local value only to seed the
+  application snapshot. Empty legacy values must retain the `~`/platform-home
+  defaults.
 - Keep file-icon platform APIs, theme detection, file reads, and image decoding
   in `src/app/file_icons.rs` blocking work. Slint may consume only bounded owned
   RGBA images from the process-local cache. Remote names are extension/type
@@ -173,6 +181,12 @@ Enable redacted keyboard/UI diagnostics and SSH latency stages for one run with:
 ```bash
 RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
 ```
+
+`terminal-input` reports total UI-to-worker time plus `state_lock_us` and
+`worker_request_us`. Multi-window `workspace-refresh` reports
+`coalesced_refreshes`, `views_built_us`, `ui_queue_us`, `ui_apply_us`, and the
+optional output-to-UI time. These fields contain no key text, terminal content,
+host, path, profile label, or credential.
 
 Diagnostic records use fixed `event`, `key`, `route`, `action`, and `outcome`
 fields. Special keys have stable names such as `F5` or `ArrowUp`; every

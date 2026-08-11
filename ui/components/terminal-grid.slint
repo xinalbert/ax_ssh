@@ -52,7 +52,7 @@ export component TerminalGrid inherits Rectangle {
     in property <length> top-offset;
     in property <bool> cursor-blink;
     in property <string> preedit-text;
-    in property <bool> right-click-copy-or-paste;
+    in property <bool> right-click-pastes;
 
     callback pointer-down(int, int, bool, bool);
     callback pointer-moved(int, int);
@@ -217,7 +217,7 @@ export component TerminalGrid inherits Rectangle {
     ContextMenuArea {
         width: parent.width;
         height: parent.height;
-        enabled: !root.right-click-copy-or-paste;
+        enabled: !root.right-click-pastes;
         Menu {
             MenuItem {
                 title: "Copy";

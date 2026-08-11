@@ -157,14 +157,14 @@ export component AuthenticationDialog inherits Rectangle {
                 height: self.visible ? Theme.editor-input-row-height : 0px;
                 placeholder-text: root.vault-unlock-only
                     ? "Vault password"
-                    : "Vault password (only needed when remembering)";
+                    : "Optional; empty saves in system credential store";
                 accessible-label: "Vault password";
                 accepted => { root.submit(); }
             }
             remember-password := CheckBox {
                 visible: !root.private-key && !root.vault-unlock-only;
                 height: self.visible ? Theme.editor-check-row-height : 0px;
-                text: "Remember password";
+                text: "Save password (optional)";
                 checked: false;
             }
             if !root.private-key && !root.vault-unlock-only : HorizontalLayout {
@@ -172,7 +172,7 @@ export component AuthenticationDialog inherits Rectangle {
                 spacing: Theme.space-md;
                 Text {
                     width: 132px;
-                    text: "Credential storage";
+                    text: "Save password in";
                     color: Theme.muted;
                     font-size: Theme.font-small;
                     vertical-alignment: center;

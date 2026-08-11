@@ -1,0 +1,557 @@
+use super::*;
+
+pub(in crate::app) fn set_tab_status(
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    message: &str,
+) {
+    let active = match state.lock() {
+        Ok(mut app) => {
+            let Some(terminal) = app.terminal_mut(tab_id) else {
+                return;
+            };
+            terminal.status = message.to_owned();
+            app.active_tab_id() == Some(tab_id)
+        }
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if active || global_window_router().is_some() {
+        dispatch_active_snapshot(ui, state);
+    }
+}
+
+pub(in crate::app) fn dispatch_active_snapshot(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+) {
+    if let Some(router) = global_window_router() {
+        refresh_workspace_multi_window(ui, state, &router, None);
+        return;
+    }
+    let should_schedule = match state.lock() {
+        Ok(app) => app.try_schedule_ui_refresh(),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if !should_schedule {
+        return;
+    }
+    let state = Arc::clone(state);
+    let state_for_ui = Arc::clone(&state);
+    if !dispatch_ui_result(ui, move |ui| {
+        // Worker output and resize events can queue faster than the UI event loop runs.
+        // Resolve the snapshot here so an older queued event cannot restore stale dimensions.
+        let snapshot = match state_for_ui.lock() {
+            Ok(app) => {
+                app.clear_ui_refresh_pending();
+                app.active_snapshot()
+            }
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
+        apply_active_snapshot(ui, snapshot, None);
+    }) && let Ok(app) = state.lock()
+    {
+        app.clear_ui_refresh_pending();
+    }
+}
+
+pub(in crate::app) fn dispatch_terminal_output_snapshot(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    output_received_at: std::time::Instant,
+) {
+    if let Some(router) = global_window_router() {
+        refresh_workspace_multi_window(ui, state, &router, Some(output_received_at));
+        return;
+    }
+    let should_schedule = match state.lock() {
+        Ok(app) => app.try_schedule_ui_refresh(),
+        Err(_) => {
+            set_status(ui, "State lock poisoned");
+            return;
+        }
+    };
+    if !should_schedule {
+        return;
+    }
+    let state = Arc::clone(state);
+    let state_for_ui = Arc::clone(&state);
+    let dispatch_requested_at = std::time::Instant::now();
+    if !dispatch_ui_result(ui, move |ui| {
+        let ui_started_at = std::time::Instant::now();
+        let snapshot = match state_for_ui.lock() {
+            Ok(app) => {
+                app.clear_ui_refresh_pending();
+                app.active_snapshot()
+            }
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
+        apply_active_snapshot(ui, snapshot, None);
+        tracing::debug!(
+            target: "ax_ssh::latency",
+            event = "ssh-output",
+            stage = "ui-applied",
+            output_to_dispatch_us = duration_micros(
+                dispatch_requested_at.saturating_duration_since(output_received_at),
+            ),
+            ui_queue_us = duration_micros(
+                ui_started_at.saturating_duration_since(dispatch_requested_at),
+            ),
+            ui_apply_us = duration_micros(ui_started_at.elapsed()),
+            output_to_ui_us = duration_micros(output_received_at.elapsed()),
+            "SSH terminal output applied to UI"
+        );
+    }) && let Ok(app) = state.lock()
+    {
+        app.clear_ui_refresh_pending();
+    }
+}
+
+pub(super) fn duration_micros(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
+}
+
+pub(in crate::app) fn apply_active_snapshot(
+    ui: &AppWindow,
+    snapshot: ActiveTabSnapshot,
+    workspace_tab_id: Option<Uuid>,
+) {
+    let active_pane_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
+    let active_tab_id = workspace_tab_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| active_pane_id.clone());
+    ui.set_active_tab_id(active_tab_id.into());
+    ui.set_active_pane_id(active_pane_id.into());
+    ui.set_active_tab_kind(snapshot.kind.into());
+    ui.set_active_tab_title(snapshot.title.into());
+    ui.set_active_tab_status(snapshot.status.into());
+    if let Some(editor) = snapshot.editor {
+        ui.set_editor_credential_storage(editor.credential_storage.clone().into());
+        ui.set_editor_default_credential_storage(editor.default_credential_storage.clone().into());
+        let draft_id = editor.draft_id.to_string();
+        if ui.get_editor_draft_id().as_str() != draft_id {
+            ui.set_editor_profile_id(
+                editor
+                    .profile_id
+                    .map(|profile_id| profile_id.to_string())
+                    .unwrap_or_default()
+                    .into(),
+            );
+            ui.set_editor_name(editor.name.into());
+            ui.set_editor_group_name(editor.group_name.into());
+            ui.set_editor_protocol(editor.protocol.into());
+            ui.set_editor_host(editor.host.into());
+            ui.set_editor_port(editor.port.into());
+            ui.set_editor_username(editor.username.into());
+            ui.set_editor_auth_method(editor.auth_method.into());
+            ui.set_editor_private_key_path(editor.private_key_path.into());
+            ui.set_editor_sftp_remote_path(editor.sftp_remote_path.into());
+            ui.set_editor_sftp_local_path(editor.sftp_local_path.into());
+            ui.set_editor_x11_forwarding(editor.x11_forwarding);
+            ui.set_editor_serial_port(editor.serial_port.into());
+            ui.set_editor_serial_baud_rate(editor.serial_baud_rate.into());
+            ui.set_editor_serial_data_bits(editor.serial_data_bits.into());
+            ui.set_editor_serial_stop_bits(editor.serial_stop_bits.into());
+            ui.set_editor_serial_parity(editor.serial_parity.into());
+            ui.set_editor_serial_flow_control(editor.serial_flow_control.into());
+            // The Slint editor resets its local fields when this identity changes.
+            // Publish it last so all source values form one coherent draft.
+            ui.set_editor_draft_id(draft_id.into());
+        }
+    }
+    let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
+    let rendered = render_terminal(
+        terminal,
+        TerminalRenderSettings {
+            color_scheme: TerminalColorScheme::from_setting(
+                ui.get_terminal_color_scheme().as_str(),
+            ),
+            default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
+            default_background: to_rgb_color(ui.get_theme_terminal_background()),
+            selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
+            minimum_contrast_ratio: f64::from(
+                ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
+            ),
+            bright_bold_text: ui.get_bright_bold_text(),
+        },
+    );
+    apply_rendered_terminal(ui, rendered);
+    ui.set_connected(snapshot.connected);
+    ui.set_worker_running(snapshot.worker_running);
+    apply_sftp_snapshot(ui, snapshot.sftp);
+    apply_security_prompt(ui, snapshot.security_prompt);
+}
+
+pub(super) fn apply_terminal_panes(
+    ui: &AppWindow,
+    panes: Vec<WindowTerminalPane>,
+    dividers: Vec<PaneDividerPlacement>,
+) {
+    let settings = TerminalRenderSettings {
+        color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
+        default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
+        default_background: to_rgb_color(ui.get_theme_terminal_background()),
+        selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
+        minimum_contrast_ratio: f64::from(
+            ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
+        ),
+        bright_bold_text: ui.get_bright_bold_text(),
+    };
+    let panes = panes
+        .into_iter()
+        .map(|pane| {
+            let terminal = pane
+                .snapshot
+                .terminal
+                .unwrap_or_else(empty_terminal_snapshot);
+            let rendered = render_terminal(terminal, settings);
+            TerminalPaneView {
+                terminal: terminal_view_from_rendered(
+                    pane.placement.tab_id,
+                    pane.snapshot.connected,
+                    rendered,
+                    ui,
+                ),
+                x: pane.placement.x,
+                y: pane.placement.y,
+                width: pane.placement.width,
+                height: pane.placement.height,
+                focused: pane.placement.focused,
+                closable: pane.closable,
+            }
+        })
+        .collect::<Vec<_>>();
+    let dividers = dividers
+        .into_iter()
+        .map(|divider| TerminalPaneDividerView {
+            id: divider.id,
+            x: divider.x,
+            y: divider.y,
+            width: divider.width,
+            height: divider.height,
+            ratio: divider.ratio,
+            vertical: divider.vertical,
+        })
+        .collect::<Vec<_>>();
+    if update_terminal_pane_snapshot_models(
+        &ui.get_terminal_panes(),
+        &ui.get_terminal_dividers(),
+        &panes,
+        &dividers,
+    ) {
+        return;
+    }
+    ui.set_terminal_panes(ModelRc::new(VecModel::from(panes)));
+    ui.set_terminal_dividers(ModelRc::new(VecModel::from(dividers)));
+}
+
+pub(super) fn update_terminal_pane_snapshot_models(
+    current_panes: &ModelRc<TerminalPaneView>,
+    current_dividers: &ModelRc<TerminalPaneDividerView>,
+    panes: &[TerminalPaneView],
+    dividers: &[TerminalPaneDividerView],
+) -> bool {
+    if current_panes.row_count() != panes.len() || current_dividers.row_count() != dividers.len() {
+        return false;
+    }
+    let panes_match = panes.iter().enumerate().all(|(index, pane)| {
+        current_panes
+            .row_data(index)
+            .is_some_and(|current| current.terminal.terminal_id == pane.terminal.terminal_id)
+    });
+    let dividers_match = dividers.iter().enumerate().all(|(index, divider)| {
+        current_dividers
+            .row_data(index)
+            .is_some_and(|current| current.id == divider.id && current.vertical == divider.vertical)
+    });
+    if !panes_match || !dividers_match {
+        return false;
+    }
+    for (index, mut pane) in panes.iter().cloned().enumerate() {
+        if let Some(current) = current_panes.row_data(index) {
+            reuse_terminal_render_models(&current.terminal, &mut pane.terminal);
+        }
+        current_panes.set_row_data(index, pane);
+    }
+    for (index, divider) in dividers.iter().cloned().enumerate() {
+        current_dividers.set_row_data(index, divider);
+    }
+    true
+}
+
+pub(super) fn reuse_terminal_render_models(
+    current: &TerminalViewState,
+    updated: &mut TerminalViewState,
+) {
+    // TerminalGrid already observes these nested models. Reuse them so output
+    // emits a direct row notification without replacing the focused pane.
+    if current
+        .render_lines
+        .as_any()
+        .downcast_ref::<VecModel<TerminalRenderLine>>()
+        .is_none()
+    {
+        return;
+    }
+
+    let updated_cursor = updated.cursor_state.iter().collect::<Vec<_>>();
+    if replace_vec_model_rows(&current.cursor_state, updated_cursor) {
+        updated.cursor_state = current.cursor_state.clone();
+    }
+
+    let mut updated_lines = updated.render_lines.iter().collect::<Vec<_>>();
+    for (index, updated_line) in updated_lines.iter_mut().enumerate() {
+        let Some(current_line) = current.render_lines.row_data(index) else {
+            continue;
+        };
+        let updated_runs = updated_line.runs.iter().collect::<Vec<_>>();
+        if replace_vec_model_rows(&current_line.runs, updated_runs) {
+            updated_line.runs = current_line.runs;
+        }
+    }
+    if replace_vec_model_rows(&current.render_lines, updated_lines) {
+        updated.render_lines = current.render_lines.clone();
+    }
+}
+
+pub(super) fn replace_vec_model_rows<T: Clone + 'static>(model: &ModelRc<T>, rows: Vec<T>) -> bool {
+    let Some(vec_model) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        return false;
+    };
+    if model.row_count() == rows.len() {
+        for (index, row) in rows.into_iter().enumerate() {
+            model.set_row_data(index, row);
+        }
+    } else {
+        vec_model.set_vec(rows);
+    }
+    true
+}
+
+pub(in crate::app) fn apply_terminal_pane_layout(ui: &AppWindow, layout: PaneLayout) -> bool {
+    update_terminal_pane_layout_models(
+        &ui.get_terminal_panes(),
+        &ui.get_terminal_dividers(),
+        layout,
+    )
+}
+
+pub(super) fn update_terminal_pane_layout_models(
+    panes: &ModelRc<TerminalPaneView>,
+    dividers: &ModelRc<TerminalPaneDividerView>,
+    layout: PaneLayout,
+) -> bool {
+    if panes.row_count() != layout.panes.len() || dividers.row_count() != layout.dividers.len() {
+        return false;
+    }
+
+    let pane_updates = layout
+        .panes
+        .into_iter()
+        .enumerate()
+        .map(|(index, placement)| {
+            let mut pane = panes.row_data(index)?;
+            if pane.terminal.terminal_id.as_str() != placement.tab_id.to_string() {
+                return None;
+            }
+            pane.x = placement.x;
+            pane.y = placement.y;
+            pane.width = placement.width;
+            pane.height = placement.height;
+            pane.focused = placement.focused;
+            Some((index, pane))
+        })
+        .collect::<Option<Vec<_>>>();
+    let divider_updates = layout
+        .dividers
+        .into_iter()
+        .enumerate()
+        .map(|(index, placement)| {
+            let divider = dividers.row_data(index)?;
+            if divider.id != placement.id || divider.vertical != placement.vertical {
+                return None;
+            }
+            Some((
+                index,
+                TerminalPaneDividerView {
+                    id: placement.id,
+                    x: placement.x,
+                    y: placement.y,
+                    width: placement.width,
+                    height: placement.height,
+                    ratio: placement.ratio,
+                    vertical: placement.vertical,
+                },
+            ))
+        })
+        .collect::<Option<Vec<_>>>();
+    let (Some(pane_updates), Some(divider_updates)) = (pane_updates, divider_updates) else {
+        return false;
+    };
+
+    for (index, pane) in pane_updates {
+        panes.set_row_data(index, pane);
+    }
+    for (index, divider) in divider_updates {
+        dividers.set_row_data(index, divider);
+    }
+    true
+}
+
+pub(super) fn terminal_view_from_rendered(
+    tab_id: Uuid,
+    connected: bool,
+    rendered: terminal_render::RenderedTerminal,
+    ui: &AppWindow,
+) -> TerminalViewState {
+    let lines = rendered
+        .lines
+        .into_iter()
+        .map(terminal_render_line)
+        .collect::<Vec<_>>();
+    let cursor_text: SharedString = rendered.cursor_text.into();
+    let cursor_row = rendered.cursor_row.min(i32::MAX as usize) as i32;
+    let cursor_column = rendered.cursor_column.min(i32::MAX as usize) as i32;
+    let cursor_state = TerminalCursorState {
+        row: cursor_row,
+        column: cursor_column,
+        visible: rendered.cursor_visible,
+        text: cursor_text.clone(),
+    };
+    TerminalViewState {
+        terminal_id: tab_id.to_string().into(),
+        connected,
+        render_lines: ModelRc::new(VecModel::from(lines)),
+        cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),
+        content_columns: rendered.max_columns.min(i32::MAX as usize) as i32,
+        cursor_row,
+        cursor_column,
+        cursor_visible: rendered.cursor_visible,
+        cursor_text,
+        font_family: ui.get_terminal_font_family(),
+        font_size: ui.get_terminal_font_size() as f32,
+        line_height_percent: ui.get_terminal_line_height_percent(),
+        foreground: to_slint_color(rendered.foreground),
+        background: to_slint_color(rendered.background),
+        selection_background: to_slint_color(rendered.selection_background),
+        right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
+        copy_selection_on_select: ui.get_copy_selection_on_select(),
+        option_as_meta: ui.get_option_as_meta(),
+        copy_selection_shortcut: ui.get_copy_selection_shortcut(),
+        paste_shortcut: ui.get_paste_shortcut(),
+        select_all_shortcut: ui.get_select_all_shortcut(),
+    }
+}
+
+pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot) {
+    let transfer_active_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase.cancellable())
+        .count() as i32;
+    let transfer_failed_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase == SftpTransferPhase::Failed)
+        .count() as i32;
+    let transfer_completed_count = snapshot
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase == SftpTransferPhase::Completed)
+        .count() as i32;
+    ui.set_sftp_available(snapshot.available);
+    ui.set_sftp_open(snapshot.open);
+    ui.set_sftp_loading(snapshot.loading);
+    ui.set_sftp_home(snapshot.home.into());
+    ui.set_sftp_path(snapshot.path.into());
+    ui.set_sftp_entries(ModelRc::new(VecModel::from(sftp_entry_rows(
+        snapshot.entries,
+        &snapshot.selected,
+    ))));
+    ui.set_sftp_has_more(snapshot.has_more);
+    ui.set_sftp_truncated(snapshot.truncated);
+    ui.set_sftp_status(snapshot.status.into());
+    ui.set_sftp_can_go_back(snapshot.can_go_back);
+    ui.set_sftp_can_go_forward(snapshot.can_go_forward);
+    ui.set_sftp_selected_count(snapshot.selected_count as i32);
+    ui.set_sftp_all_selected(snapshot.all_selected);
+    ui.set_local_sftp_loading(snapshot.local.loading);
+    ui.set_local_sftp_path(snapshot.local.path.into());
+    ui.set_local_sftp_entries(ModelRc::new(VecModel::from(local_entry_rows(
+        snapshot.local.entries,
+        &snapshot.local.selected,
+    ))));
+    ui.set_local_sftp_truncated(snapshot.local.truncated);
+    ui.set_local_sftp_status(snapshot.local.status.into());
+    ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);
+    ui.set_local_sftp_all_selected(snapshot.local.all_selected);
+    ui.set_sftp_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(
+        snapshot.transfers,
+    ))));
+    ui.set_sftp_transfer_active_count(transfer_active_count);
+    ui.set_sftp_transfer_failed_count(transfer_failed_count);
+    ui.set_sftp_transfer_completed_count(transfer_completed_count);
+}
+
+pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
+    match prompt {
+        ActiveSecurityPrompt::None => {
+            ui.set_host_key_dialog_open(false);
+            ui.set_password_dialog_open(false);
+            ui.set_password_dialog_tab_id("".into());
+        }
+        ActiveSecurityPrompt::HostKey(prompt) => {
+            ui.set_host_key_endpoint(format!("{}:{}", prompt.host, prompt.port).into());
+            ui.set_host_key_fingerprint(prompt.fingerprint.into());
+            ui.set_host_key_changed(prompt.changed);
+            ui.set_password_dialog_open(false);
+            ui.set_password_dialog_tab_id("".into());
+            ui.set_host_key_dialog_open(true);
+        }
+        ActiveSecurityPrompt::Authentication {
+            tab_id,
+            profile,
+            vault_unlock_only,
+        } => {
+            let Some(ssh) = profile.ssh() else {
+                ui.set_host_key_dialog_open(false);
+                ui.set_password_dialog_open(false);
+                ui.set_password_dialog_tab_id("".into());
+                return;
+            };
+            let (private_key, key_path) = match &ssh.auth {
+                AuthMethod::Password => (false, String::new()),
+                AuthMethod::PrivateKey { path } => (true, path.display().to_string()),
+                AuthMethod::SshAgent => {
+                    ui.set_host_key_dialog_open(false);
+                    ui.set_password_dialog_open(false);
+                    ui.set_password_dialog_tab_id("".into());
+                    return;
+                }
+            };
+            let vault_storage = vault_unlock_only
+                && !private_key
+                && ssh.credential_storage == Some(CredentialStorage::EncryptedVault);
+            ui.set_host_key_dialog_open(false);
+            ui.set_password_endpoint(profile_endpoint(&profile).into());
+            ui.set_password_private_key(private_key);
+            ui.set_password_vault_storage(vault_storage);
+            ui.set_password_vault_unlock_only(vault_unlock_only);
+            ui.set_password_key_path(key_path.into());
+            ui.set_password_dialog_tab_id(tab_id.to_string().into());
+            ui.set_password_dialog_open(true);
+        }
+    }
+}

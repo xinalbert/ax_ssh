@@ -225,8 +225,20 @@ pub(super) fn spawn_session_monitor(
                         |terminal| terminal.sftp.reset(),
                     );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
-                        set_tab_status(&state, &ui, tab_id, "Disconnected");
-                        refresh_workspace(&ui, &state);
+                        let closed = global_window_router().is_some_and(|router| {
+                            close_terminal_child_pane(
+                                &router,
+                                None,
+                                tab_id,
+                                &state,
+                                &ui,
+                                &runtime_for_monitor,
+                            )
+                        });
+                        if !closed {
+                            set_tab_status(&state, &ui, tab_id, "Disconnected");
+                            refresh_workspace(&ui, &state);
+                        }
                     }
                 }
                 SshSessionEvent::HostKeyRejected { expected, actual } => {
