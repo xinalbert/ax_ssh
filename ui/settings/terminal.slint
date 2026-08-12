@@ -1,5 +1,6 @@
 import { ScrollView, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
@@ -11,6 +12,11 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <int> draft-line-height-percent;
     in-out property <float> draft-minimum-contrast-ratio;
     in-out property <bool> draft-bright-bold-text;
+    in-out property <string> draft-semantic-link-color;
+    in-out property <string> draft-semantic-success-color;
+    in-out property <string> draft-semantic-info-color;
+    in-out property <string> draft-semantic-warning-color;
+    in-out property <string> draft-semantic-error-color;
     in-out property <int> draft-scrollback-lines;
     in-out property <bool> draft-right-click-copy-or-paste;
     in-out property <bool> draft-copy-selection-on-select;
@@ -129,6 +135,69 @@ export component TerminalSettingsPage inherits Rectangle {
                     description: "Use the bright ANSI palette for bold text";
                     checked <=> root.draft-bright-bold-text;
                     show-divider: false;
+                }
+
+                SettingsSectionHeading { label: "SEMANTIC HIGHLIGHTING"; }
+                SettingsRow {
+                    label: "Link and path";
+                    description: "URL and remote path targets";
+                    SettingsField {
+                        FlatTextInput {
+                            text <=> root.draft-semantic-link-color;
+                            height: Theme.settings-control-height;
+                            placeholder-text: "Theme default";
+                            accessible-label: "Terminal link and path highlight color";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Success";
+                    description: "Successful status words and HTTP 2xx";
+                    SettingsField {
+                        FlatTextInput {
+                            text <=> root.draft-semantic-success-color;
+                            height: Theme.settings-control-height;
+                            placeholder-text: "Theme default";
+                            accessible-label: "Terminal success highlight color";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Information";
+                    description: "Informational status words";
+                    SettingsField {
+                        FlatTextInput {
+                            text <=> root.draft-semantic-info-color;
+                            height: Theme.settings-control-height;
+                            placeholder-text: "Theme default";
+                            accessible-label: "Terminal information highlight color";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Warning";
+                    description: "Warnings and HTTP 4xx";
+                    SettingsField {
+                        FlatTextInput {
+                            text <=> root.draft-semantic-warning-color;
+                            height: Theme.settings-control-height;
+                            placeholder-text: "Theme default";
+                            accessible-label: "Terminal warning highlight color";
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: "Error";
+                    description: "Errors and HTTP 5xx";
+                    show-divider: false;
+                    SettingsField {
+                        FlatTextInput {
+                            text <=> root.draft-semantic-error-color;
+                            height: Theme.settings-control-height;
+                            placeholder-text: "Theme default";
+                            accessible-label: "Terminal error highlight color";
+                        }
+                    }
                 }
 
                 SettingsSectionHeading { label: "BUFFER"; }

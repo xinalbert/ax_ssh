@@ -20,6 +20,46 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         f32::from(settings.appearance.terminal_minimum_contrast_ratio_tenths) / 10.0,
     );
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
+    ui.set_terminal_semantic_link_color(
+        settings
+            .appearance
+            .terminal_semantic_colors
+            .link
+            .clone()
+            .into(),
+    );
+    ui.set_terminal_semantic_success_color(
+        settings
+            .appearance
+            .terminal_semantic_colors
+            .success
+            .clone()
+            .into(),
+    );
+    ui.set_terminal_semantic_info_color(
+        settings
+            .appearance
+            .terminal_semantic_colors
+            .info
+            .clone()
+            .into(),
+    );
+    ui.set_terminal_semantic_warning_color(
+        settings
+            .appearance
+            .terminal_semantic_colors
+            .warning
+            .clone()
+            .into(),
+    );
+    ui.set_terminal_semantic_error_color(
+        settings
+            .appearance
+            .terminal_semantic_colors
+            .error
+            .clone()
+            .into(),
+    );
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
     ui.set_copy_selection_on_select(settings.appearance.copy_selection_on_select);
     ui.set_option_as_meta(settings.terminal.option_as_meta);

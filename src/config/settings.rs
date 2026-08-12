@@ -25,9 +25,51 @@ pub struct AppearanceSettingsInput<'a> {
     pub terminal_line_height_percent: i32,
     pub color_scheme: &'a str,
     pub minimum_contrast_ratio: f32,
+    pub terminal_semantic_colors: TerminalSemanticColorsInput<'a>,
     pub bright_bold_text: bool,
     pub right_click_copy_or_paste: bool,
     pub copy_selection_on_select: bool,
+}
+
+/// Raw Terminal semantic highlight colors supplied by an application settings surface.
+#[derive(Clone, Copy, Debug)]
+pub struct TerminalSemanticColorsInput<'a> {
+    pub link: &'a str,
+    pub success: &'a str,
+    pub info: &'a str,
+    pub warning: &'a str,
+    pub error: &'a str,
+}
+
+/// Optional user colors for Terminal semantic highlights.
+///
+/// Empty values preserve the active terminal theme's ANSI-derived color. Any
+/// non-empty persisted value is canonical, opaque `#RRGGBB` text so this
+/// configuration boundary remains independent from Slint's `Color` type.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct TerminalSemanticColors {
+    #[serde(default)]
+    pub link: String,
+    #[serde(default)]
+    pub success: String,
+    #[serde(default)]
+    pub info: String,
+    #[serde(default)]
+    pub warning: String,
+    #[serde(default)]
+    pub error: String,
+}
+
+impl TerminalSemanticColors {
+    pub fn normalized(input: TerminalSemanticColorsInput<'_>) -> Self {
+        Self {
+            link: normalize_terminal_semantic_color(input.link),
+            success: normalize_terminal_semantic_color(input.success),
+            info: normalize_terminal_semantic_color(input.info),
+            warning: normalize_terminal_semantic_color(input.warning),
+            error: normalize_terminal_semantic_color(input.error),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -46,6 +88,8 @@ pub struct AppearanceSettings {
     pub theme: ThemeSettings,
     #[serde(default = "default_terminal_minimum_contrast_ratio_tenths")]
     pub terminal_minimum_contrast_ratio_tenths: u16,
+    #[serde(default)]
+    pub terminal_semantic_colors: TerminalSemanticColors,
     #[serde(default = "default_true")]
     pub bright_bold_text: bool,
     #[serde(default, alias = "right_click_copies_selection")]
@@ -85,6 +129,9 @@ impl AppearanceSettings {
             terminal_minimum_contrast_ratio_tenths: normalize_terminal_minimum_contrast_ratio(
                 input.minimum_contrast_ratio,
             ),
+            terminal_semantic_colors: TerminalSemanticColors::normalized(
+                input.terminal_semantic_colors,
+            ),
             bright_bold_text: input.bright_bold_text,
             right_click_copy_or_paste: input.right_click_copy_or_paste,
             copy_selection_on_select: input.copy_selection_on_select,
@@ -105,6 +152,13 @@ impl AppearanceSettings {
             terminal_line_height_percent: i32::from(self.terminal_line_height_percent),
             color_scheme: self.terminal_color_scheme.as_setting(),
             minimum_contrast_ratio: f32::from(self.terminal_minimum_contrast_ratio_tenths) / 10.0,
+            terminal_semantic_colors: TerminalSemanticColorsInput {
+                link: &self.terminal_semantic_colors.link,
+                success: &self.terminal_semantic_colors.success,
+                info: &self.terminal_semantic_colors.info,
+                warning: &self.terminal_semantic_colors.warning,
+                error: &self.terminal_semantic_colors.error,
+            },
             bright_bold_text: self.bright_bold_text,
             right_click_copy_or_paste: self.right_click_copy_or_paste,
             copy_selection_on_select: self.copy_selection_on_select,
@@ -124,6 +178,7 @@ impl Default for AppearanceSettings {
             theme: ThemeSettings::default(),
             terminal_minimum_contrast_ratio_tenths: default_terminal_minimum_contrast_ratio_tenths(
             ),
+            terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
@@ -624,6 +679,17 @@ fn normalize_terminal_minimum_contrast_ratio(value: f32) -> u16 {
         i32::from(MIN_TERMINAL_CONTRAST_RATIO_TENTHS),
         i32::from(MAX_TERMINAL_CONTRAST_RATIO_TENTHS),
     ) as u16
+}
+
+fn normalize_terminal_semantic_color(value: &str) -> String {
+    let value = value.trim();
+    let Some(value) = value.strip_prefix('#') else {
+        return String::new();
+    };
+    if value.len() != 6 || !value.bytes().all(|digit| digit.is_ascii_hexdigit()) {
+        return String::new();
+    }
+    format!("#{}", value.to_ascii_uppercase())
 }
 
 const fn default_true() -> bool {

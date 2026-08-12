@@ -1,5 +1,13 @@
 # 项目环境变化记录
 
+## 2026-08-12 完成 Terminal 语义高亮色设置环境门禁
+
+- 日期：2026-08-12
+- 变化摘要：新增 schema v20 的五项可选 Terminal 语义色配置，并经既有 Settings 即时预览和 UI 独立 renderer 传递；空值/无效值保留主题 ANSI 默认色，最终色仍按真实终端背景执行 4.5:1 对比度保护。
+- 受影响文件：`src/config{,.rs/{settings,tests}}`、`src/app{,.rs/{settings_bridge,terminal_render,view/{settings,terminal}}.rs`、`ui/{app,settings,settings/terminal,workspace-shell}.slint`、`docs/{architecture,architecture.zh,usage,usage.zh,project-env-audit,project-implementation-tracker}/`。
+- 更新后的命令或环境：继续使用锁定 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 Cargo locked/offline 门禁；没有新增 crate、`Cargo.lock`、工具链、CI、worker、SSH trust 或凭据契约变化。
+- 验证结果：`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）、直接 `rustfmt --edition 2024 --check` 和 `git diff --check` 通过；`cargo fmt` 与 `cargo clippy` 因本机缺少子命令无法执行，GUI 视觉与交互留目标平台用户验收。
+
 ## 2026-08-10 复核单 Tab pane group 实施环境
 
 - 日期：2026-08-10
@@ -299,3 +307,11 @@
 - 受影响文件：`src/app/terminal_render.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 命令；本机以直接 Rustfmt 覆盖缺失的 Cargo fmt，Clippy 由具备组件的 CI 或目标环境执行。
 - 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 144、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过；`cargo fmt`/`cargo clippy` 子命令未安装，GUI 颜色/交互需用户验收。
+
+## 2026-08-12 Terminal 语义高亮可见性修复环境门禁
+
+- 日期：2026-08-12
+- 变化摘要：以真实 `TerminalModel` snapshot 验证默认 cell 至 Slint render run 的语义色传递，并将有界默认 ASCII run 扩展为链接、成功、信息、警告和错误五类；不改变显式 ANSI/真彩色、非默认背景、inverse、dim 或非 ASCII 输出。
+- 受影响文件：`src/app/terminal_render.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；没有新增依赖、工具链、配置 schema、worker、SSH trust 或凭据合同。
+- 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 145、Doc tests 0）通过。`cargo fmt`/`cargo clippy` 因子命令未安装无法执行；目标平台主题下的颜色层次和 ANSI/真彩色保留由用户验收。

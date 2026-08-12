@@ -25,8 +25,8 @@ use ax_ssh::config::{
     ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
     MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialDataBits, SerialFlowControl, SerialParity,
     SerialStopBits, SessionProfile, SessionStore, ShortcutSettings, TerminalColorScheme,
-    TerminalSettingsInput, ThemePalette, ThemeSettings, WorkspaceSettingsInput, X11Settings,
-    normalize_group_name,
+    TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings,
+    WorkspaceSettingsInput, X11Settings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::serial::{
@@ -63,7 +63,8 @@ use self::state::{
     set_credential_storage_while_loading,
 };
 use self::terminal_render::{
-    RenderedTerminalLine, RenderedTerminalRun, RgbColor, TerminalRenderSettings, render_terminal,
+    RenderedTerminalLine, RenderedTerminalRun, RgbColor, SemanticColorOverrides,
+    TerminalRenderSettings, render_terminal,
 };
 
 mod connection;

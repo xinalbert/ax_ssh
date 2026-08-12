@@ -197,6 +197,13 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_line_height_percent: 135,
             color_scheme: "light",
             minimum_contrast_ratio: 11.5,
+            terminal_semantic_colors: TerminalSemanticColorsInput {
+                link: "#17a8cd",
+                success: " #21cd8b ",
+                info: "#3b8eea",
+                warning: "#f5f543",
+                error: "#f14c4c",
+            },
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
@@ -214,6 +221,13 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
                 custom_dark: ThemePalette::axssh_dark(),
             },
             terminal_minimum_contrast_ratio_tenths: 115,
+            terminal_semantic_colors: TerminalSemanticColors {
+                link: "#17A8CD".into(),
+                success: "#21CD8B".into(),
+                info: "#3B8EEA".into(),
+                warning: "#F5F543".into(),
+                error: "#F14C4C".into(),
+            },
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
@@ -227,6 +241,13 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_line_height_percent: 1_000,
             color_scheme: "unknown",
             minimum_contrast_ratio: 1_000.0,
+            terminal_semantic_colors: TerminalSemanticColorsInput {
+                link: "blue",
+                success: "#FFF",
+                info: "#12345678",
+                warning: "#12XZ56",
+                error: "",
+            },
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
@@ -239,6 +260,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_color_scheme: TerminalColorScheme::Dark,
             theme: ThemeSettings::default(),
             terminal_minimum_contrast_ratio_tenths: MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
+            terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
@@ -283,6 +305,10 @@ fn legacy_appearance_migrates_into_versioned_settings() {
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
     assert!(!store.settings.appearance.copy_selection_on_select);
+    assert_eq!(
+        store.settings.appearance.terminal_semantic_colors,
+        TerminalSemanticColors::default()
+    );
     assert_eq!(store.settings.terminal, TerminalSettings::default());
     assert_eq!(store.settings.shortcuts, ShortcutSettings::default());
     let serialized = serde_json::to_value(store).expect("settings should serialize");
@@ -326,6 +352,43 @@ fn version_sixteen_brightness_migrates_to_default_contrast_ratio() {
         DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
     );
     assert!(appearance.get("terminal_brightness_percent").is_none());
+}
+
+#[test]
+fn terminal_semantic_colors_round_trip_and_reject_invalid_values() {
+    let json = r##"{
+        "version": 19,
+        "settings": {
+            "appearance": {
+                "terminal_semantic_colors": {
+                    "link": "#17a8cd",
+                    "success": "#21cd8b",
+                    "info": "#12345678",
+                    "warning": "#F5F543",
+                    "error": "red"
+                }
+            }
+        }
+    }"##;
+
+    let store: SessionStore = serde_json::from_str(json).expect("settings should deserialize");
+
+    assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(
+        store.settings.appearance.terminal_semantic_colors,
+        TerminalSemanticColors {
+            link: "#17A8CD".into(),
+            success: "#21CD8B".into(),
+            info: String::new(),
+            warning: "#F5F543".into(),
+            error: String::new(),
+        }
+    );
+    let encoded = serde_json::to_value(store).expect("settings should serialize");
+    assert_eq!(
+        encoded["settings"]["appearance"]["terminal_semantic_colors"]["link"],
+        "#17A8CD"
+    );
 }
 
 #[test]
@@ -647,6 +710,13 @@ fn app_settings_clamp_all_persisted_dimensions() {
             terminal_line_height_percent: -1,
             color_scheme: "solarized-dark",
             minimum_contrast_ratio: -1.0,
+            terminal_semantic_colors: TerminalSemanticColorsInput {
+                link: "#17A8CD",
+                success: "#21CD8B",
+                info: "#3B8EEA",
+                warning: "#F5F543",
+                error: "#F14C4C",
+            },
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
@@ -705,6 +775,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     assert!(!settings.appearance.bright_bold_text);
     assert!(settings.appearance.right_click_copy_or_paste);
     assert!(settings.appearance.copy_selection_on_select);
+    assert_eq!(settings.appearance.terminal_semantic_colors.link, "#17A8CD");
     assert_eq!(settings.terminal.scrollback_lines, MIN_SCROLLBACK_LINES);
     assert_eq!(settings.terminal.default_columns, MIN_TERMINAL_COLUMNS);
     assert_eq!(settings.terminal.default_rows, MAX_TERMINAL_ROWS);

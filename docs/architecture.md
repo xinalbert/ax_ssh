@@ -169,10 +169,11 @@ normal, independent SSH authentication starts. Neither target text nor that
 initial path is persisted, logged, or sent through Slint as a terminal buffer.
 The private terminal render mapper also adds bounded semantic color to plain
 visible cells only: URLs and actionable Unix paths use the link color; HTTP
-`2xx`/`3xx`/`4xx`/`5xx` and common success, warning, and error tokens use their
-corresponding semantic colors. It derives those colors from the selected
-terminal palette and corrects each one to at least 4.5:1 against the resolved
-terminal background. Explicit ANSI 16/256/true-color foregrounds, non-default
+`2xx`/`3xx`/`4xx`/`5xx` and common success, informational, warning, and error
+tokens use their corresponding semantic colors. Each category uses the selected
+terminal palette by default; an optional normalized `#RRGGBB` Settings override
+can replace it. The renderer corrects every resulting color to at least 4.5:1
+against the resolved terminal background. Explicit ANSI 16/256/true-color foregrounds, non-default
 backgrounds, inverse cells, dim text, and non-ASCII cell runs retain the
 program-provided rendering unchanged.
 Its `key-pressed` handler sends only special keys and terminal control chords to
@@ -894,7 +895,7 @@ preview first selects them. All reads remain on Tokio blocking tasks. The UI
 applies the candidate immediately, then reapplies the current in-memory settings
 after registration so a delayed font read cannot restore stale choices. Appearance
 owns the application font, display mode, and palette; Terminal owns its font, size, line height,
-minimum contrast ratio, bold-color behavior, and terminal interactions. Both font lists
+minimum contrast ratio, bold-color behavior, five optional semantic highlight colors, and terminal interactions. Both font lists
 place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
@@ -926,7 +927,7 @@ its references, so process RSS is not expected to fall immediately.
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
-minimum contrast ratio, bold-color and mouse copy/paste preferences, scrollback, default PTY
+minimum contrast ratio, bold-color, optional semantic highlight colors, and mouse copy/paste preferences, scrollback, default PTY
     dimensions, local-shell choice and bounded discovered-shell cache, the macOS
     Option-as-Meta preference, sidebar/tab widths, session mask character,
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
@@ -938,7 +939,9 @@ minimum contrast ratio, bold-color and mouse copy/paste preferences, scrollback,
     same persisted `AppSettings`; they do not leak Slint values into the JSON
     schema. Schema version 19 adds the SSH SFTP default-directory fields;
     missing remote values default to `~` and an empty local value means the
-    platform home directory. Schema version 18 adds the default-disabled
+    platform home directory. Schema version 20 adds five optional Terminal semantic
+    color overrides. Empty or invalid values follow the active ANSI palette; non-empty
+    values normalize to opaque `#RRGGBB`. Schema version 18 adds the default-disabled
     `copy_selection_on_select` preference; older files preserve their existing
     right-click behavior. Schema version 17 replaces the former
     `terminal_brightness_percent` remapping with a fixed-point
@@ -1045,9 +1048,10 @@ fields, preventing the two editors from drifting structurally.
 re-renders only the active terminal snapshot when its resolved colors change. Terminal rendering
 uses the resolved default foreground, background, and selection colors while
 retaining ANSI 16/256/true-color semantics. Its bounded semantic overlay only
-changes eligible plain visible cells and derives distinct link, success, warning,
-and error colors from the active terminal palette; each is corrected to at least
-4.5:1 against the terminal background. The configured minimum contrast ratio is
+changes eligible plain visible cells and derives distinct link, success, information,
+warning, and error colors from the active terminal palette unless a normalized Settings
+override is present; each is corrected to at least 4.5:1 against the terminal background.
+The configured minimum contrast ratio is
 evaluated per cell against the resolved cell background; only a foreground below
 the target is moved toward black or white, while backgrounds and already-readable
 colors remain unchanged. A ratio of 1.0 disables correction, and dim text uses half

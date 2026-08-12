@@ -27,6 +27,11 @@ export struct SettingsViewState {
     terminal_line_height_percent: int,
     terminal_minimum_contrast_ratio: float,
     bright_bold_text: bool,
+    terminal_semantic_link_color: string,
+    terminal_semantic_success_color: string,
+    terminal_semantic_info_color: string,
+    terminal_semantic_warning_color: string,
+    terminal_semantic_error_color: string,
     theme_mode: string,
     theme_palette: string,
     theme_light_background: string,
@@ -112,6 +117,11 @@ export component SettingsPane inherits Rectangle {
     private property <int> terminal-line-height-percent: root.source.terminal_line_height_percent;
     private property <float> terminal-minimum-contrast-ratio: root.source.terminal_minimum_contrast_ratio;
     private property <bool> bright-bold-text: root.source.bright_bold_text;
+    private property <string> terminal-semantic-link-color: root.source.terminal_semantic_link_color;
+    private property <string> terminal-semantic-success-color: root.source.terminal_semantic_success_color;
+    private property <string> terminal-semantic-info-color: root.source.terminal_semantic_info_color;
+    private property <string> terminal-semantic-warning-color: root.source.terminal_semantic_warning_color;
+    private property <string> terminal-semantic-error-color: root.source.terminal_semantic_error_color;
     private property <string> theme-mode: root.source.theme_mode;
     private property <string> theme-palette: root.source.theme_palette;
     private property <string> theme-light-background: root.source.theme_light_background;
@@ -180,7 +190,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> app-version: root.source.app_version;
 
     callback save(
-        string, string, int, int, float, bool, string, string,
+        string, string, int, int, float, bool, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -208,6 +218,11 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-line-height-percent: root.terminal-line-height-percent;
     private property <float> draft-minimum-contrast-ratio: root.terminal-minimum-contrast-ratio;
     private property <bool> draft-bright-bold-text: root.bright-bold-text;
+    private property <string> draft-semantic-link-color: root.terminal-semantic-link-color;
+    private property <string> draft-semantic-success-color: root.terminal-semantic-success-color;
+    private property <string> draft-semantic-info-color: root.terminal-semantic-info-color;
+    private property <string> draft-semantic-warning-color: root.terminal-semantic-warning-color;
+    private property <string> draft-semantic-error-color: root.terminal-semantic-error-color;
     private property <string> draft-theme-mode: root.theme-mode;
     private property <string> draft-theme-palette: root.theme-palette;
     private property <string> draft-theme-light-background: root.theme-light-background;
@@ -290,6 +305,11 @@ export component SettingsPane inherits Rectangle {
             root.draft-line-height-percent,
             root.draft-minimum-contrast-ratio,
             root.draft-bright-bold-text,
+            root.draft-semantic-link-color,
+            root.draft-semantic-success-color,
+            root.draft-semantic-info-color,
+            root.draft-semantic-warning-color,
+            root.draft-semantic-error-color,
             root.draft-theme-mode,
             root.draft-theme-palette,
             root.draft-theme-light-background,
@@ -356,6 +376,11 @@ export component SettingsPane inherits Rectangle {
             root.draft-line-height-percent,
             root.draft-minimum-contrast-ratio,
             root.draft-bright-bold-text,
+            root.draft-semantic-link-color,
+            root.draft-semantic-success-color,
+            root.draft-semantic-info-color,
+            root.draft-semantic-warning-color,
+            root.draft-semantic-error-color,
             root.draft-theme-mode,
             root.draft-theme-palette,
             root.draft-theme-light-background,
@@ -419,6 +444,11 @@ export component SettingsPane inherits Rectangle {
     changed draft-line-height-percent => { root.schedule-preview(); }
     changed draft-minimum-contrast-ratio => { root.schedule-preview(); }
     changed draft-bright-bold-text => { root.schedule-preview(); }
+    changed draft-semantic-link-color => { root.schedule-preview(); }
+    changed draft-semantic-success-color => { root.schedule-preview(); }
+    changed draft-semantic-info-color => { root.schedule-preview(); }
+    changed draft-semantic-warning-color => { root.schedule-preview(); }
+    changed draft-semantic-error-color => { root.schedule-preview(); }
     changed draft-theme-mode => { root.schedule-preview(); }
     changed draft-theme-palette => { root.schedule-preview(); }
     changed draft-theme-light-background => { root.schedule-preview(); }
@@ -633,6 +663,11 @@ export component SettingsPane inherits Rectangle {
                         draft-line-height-percent <=> root.draft-line-height-percent;
                         draft-minimum-contrast-ratio <=> root.draft-minimum-contrast-ratio;
                         draft-bright-bold-text <=> root.draft-bright-bold-text;
+                        draft-semantic-link-color <=> root.draft-semantic-link-color;
+                        draft-semantic-success-color <=> root.draft-semantic-success-color;
+                        draft-semantic-info-color <=> root.draft-semantic-info-color;
+                        draft-semantic-warning-color <=> root.draft-semantic-warning-color;
+                        draft-semantic-error-color <=> root.draft-semantic-error-color;
                         draft-scrollback-lines <=> root.draft-scrollback-lines;
                         draft-right-click-copy-or-paste <=> root.draft-right-click-copy-or-paste;
                         draft-copy-selection-on-select <=> root.draft-copy-selection-on-select;

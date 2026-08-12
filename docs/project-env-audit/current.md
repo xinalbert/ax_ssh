@@ -43,7 +43,7 @@ git diff --check
 - 真实 SFTP 服务兼容性与 GUI 文件面板需要目标环境手工验证。
 - X11 forwarding 依赖目标平台可用的本机 X server。普通 SSH shell 创建只发送 forwarding request，不读取本机 `DISPLAY`、不运行 `xauth`、不探测端点且不启动 provider；远端实际打开 X11 channel 后才进行本机准备。AxSSH 从 Settings 显示 macOS bundle identifier 或 Windows `PATH`/Program Files 检测到的只读已知位置，且仅在 Custom 时接受用户提供的 executable 路径。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
 - 自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包，不经 Slint import 嵌入可执行文件。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
-- 最近一次完整 locked/offline 测试门禁通过：库测试 147 项、应用测试 141 项和 Doc tests 0 项均无失败；SFTP 当前路径复制按钮及 Terminal target 实时下划线均已通过完整 Slint 编译图。本轮没有新增 crate、版本升级、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 契约变化。Cargo fmt/Clippy 子命令仍缺失，直接 `rustfmt` 是本机格式回退；目标平台 GUI、剪贴板和真实连接行为仍需人工确认。
+- 最近一次完整 locked/offline 测试门禁通过：库测试 148 项、应用测试 147 项和 Doc tests 0 项均无失败；schema v20 新增五项可选 Terminal 语义高亮色，真实 `TerminalModel` snapshot 覆盖默认 cell 到 Slint render run 的颜色传递。未新增 crate、版本升级、`Cargo.toml`、`Cargo.lock`、工具链或 CI 契约变化。Cargo fmt/Clippy 子命令仍缺失，直接 `rustfmt` 是本机格式回退；目标平台 GUI、剪贴板和真实连接行为仍需人工确认。
 
 ## 证据文件
 
@@ -58,7 +58,7 @@ git diff --check
 - 2026-08-11 Terminal URL/路径目标打开继续使用锁定的 Rust 2024、MSRV 1.92.0、Slint 1.17.1、已有 `open` crate 与 Cargo locked/offline 门禁；未新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变化。直接 `rustfmt`、4 项 parser、宽字符 cell 坐标和 runtime SFTP companion 定向测试、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 146、应用 139、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 子命令仍缺失；目标平台 `Cmd/Ctrl` hover/click、实际默认 opener 和 SFTP 认证由用户验收。
 - 2026-08-11 SFTP 当前路径复制按钮继续使用锁定的 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和既有系统剪贴板 callback；未新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变化。复制只转发已发布的有界路径，不读取文件系统或接触 SSH/SFTP worker。直接 `rustfmt`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 146、应用 139、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过。`cargo fmt`/`cargo clippy` 子命令仍缺失；目标平台标题栏布局、Tooltip、焦点和剪贴板结果由用户验收。
 - 2026-08-12 Terminal target hover 下划线继续使用锁定的 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和已有 URL/SFTP 依赖；未新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变化。短暂 DTO 只转发 active、row 和半开 cell 区间，完整行、目标文本、worker 和 transport 不跨 UI 边界。直接 Rustfmt、`cargo check --locked --offline`、6 项 parser/修饰键定向测试、宽字符 cell span 测试、完整 `cargo test --locked --offline`（库 147、应用 141、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 已通过；`cargo fmt`/`cargo clippy` 子命令仍缺失，目标平台 Cmd/Ctrl hover/click 由用户验收。
-- 2026-08-12 Terminal 语义高亮继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和既有终端 ANSI 色表；未新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变化。仅私有渲染映射对有界可见默认 ASCII run 着色，结果不跨 Slint/worker 边界；直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 144、Doc tests 0）、tracker、Markdown 和 diff 门禁均已通过。
+- 2026-08-12 Terminal 语义高亮可见性修复继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和既有终端 ANSI 色表；未新增 crate、版本、`Cargo.toml`、`Cargo.lock`、配置 schema、工具链或 CI 变化。仅私有渲染映射对有界可见默认 ASCII run 着色，真实 `TerminalModel` snapshot 回归覆盖到 Slint render run 的五类语义色；直接 Rustfmt、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 145、Doc tests 0）通过。Cargo fmt/Clippy 子命令仍缺失，GUI 颜色与 ANSI/真彩色保留由用户验收。
 
 - `Cargo.toml`
 - `Cargo.lock`
@@ -66,6 +66,23 @@ git diff --check
 - `docs/development.md`
 - `AGENTS.md`
 
+## 本轮施工预检
+
+- 项目边界：独立 Rust 桌面应用；本轮范围为 `src/config/`、`src/app/`、`ui/` 中的 Terminal 语义高亮配置链路。
+- 环境记忆状态：已读取并与 `Cargo.toml`、`Cargo.lock`、`.github/workflows/ci.yml`、`AGENTS.md` 及当前源码路由复核。
+- 运行环境：Rust 2024、MSRV 1.92.0、Slint 1.17.1；Cargo 及锁文件是唯一包管理与可复现构建来源。
+- 测试环境：`cargo check --locked --offline`、`cargo test --locked --offline`、`cargo fmt --all -- --check`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`git diff --check`。
+- 环境变化检查：否；本轮不变更依赖、工具链、CI、Cargo 文件、SSH trust 或凭据边界。
+- 开工判定：允许开工；颜色仅作为受限持久化值经 AppWindow properties 传到 UI 独立 renderer。
+
+## 本轮实施结果
+
+- 目的：让 Terminal 的五类语义高亮色可由 Settings 配置，同时在所有主题背景上保持可读。
+- 改动范围：`src/config/` 中的 schema v20 颜色值，`src/app/` 的 Settings/renderer bridge，以及 `ui/` 的 Terminal Settings 与 callback 中转。
+- 执行内容：添加五项可选 `#RRGGBB` 颜色覆盖；空值或无效值跟随主题 ANSI 默认色；每项输出色仍按真实背景修正到至少 4.5:1。没有新增依赖、工具链、CI、worker、SSH trust 或凭据改动。
+- 验证结果：`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）、直接 `rustfmt --edition 2024 --check` 和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 子命令未安装，无法在本机执行。
+- 风险/待办：Settings 输入、主题切换和实际终端颜色层次需用户在目标图形平台确认；显式 ANSI/256/真彩、反色、dim、非默认背景和非 ASCII 文本仍由远端程序控制。
+
 ## 最后确认时间
 
-- 2026-08-12 01:25 CST
+- 2026-08-12 09:00 CST

@@ -172,21 +172,7 @@ pub(in crate::app) fn apply_active_snapshot(
         }
     }
     let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
-    let rendered = render_terminal(
-        terminal,
-        TerminalRenderSettings {
-            color_scheme: TerminalColorScheme::from_setting(
-                ui.get_terminal_color_scheme().as_str(),
-            ),
-            default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
-            default_background: to_rgb_color(ui.get_theme_terminal_background()),
-            selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
-            minimum_contrast_ratio: f64::from(
-                ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
-            ),
-            bright_bold_text: ui.get_bright_bold_text(),
-        },
-    );
+    let rendered = render_terminal(terminal, terminal_render_settings(ui));
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
@@ -199,16 +185,8 @@ pub(super) fn apply_terminal_panes(
     panes: Vec<WindowTerminalPane>,
     dividers: Vec<PaneDividerPlacement>,
 ) {
-    let settings = TerminalRenderSettings {
-        color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
-        default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
-        default_background: to_rgb_color(ui.get_theme_terminal_background()),
-        selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
-        minimum_contrast_ratio: f64::from(
-            ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
-        ),
-        bright_bold_text: ui.get_bright_bold_text(),
-    };
+    let settings = terminal_render_settings(ui);
+
     let panes = panes
         .into_iter()
         .map(|pane| {
@@ -255,6 +233,68 @@ pub(super) fn apply_terminal_panes(
     }
     ui.set_terminal_panes(ModelRc::new(VecModel::from(panes)));
     ui.set_terminal_dividers(ModelRc::new(VecModel::from(dividers)));
+}
+
+fn terminal_render_settings(ui: &AppWindow) -> TerminalRenderSettings {
+    TerminalRenderSettings {
+        color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
+        default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
+        default_background: to_rgb_color(ui.get_theme_terminal_background()),
+        selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
+        minimum_contrast_ratio: f64::from(
+            ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
+        ),
+        bright_bold_text: ui.get_bright_bold_text(),
+        semantic_colors: SemanticColorOverrides {
+            link: semantic_color_override(ui.get_terminal_semantic_link_color().as_str()),
+            success: semantic_color_override(ui.get_terminal_semantic_success_color().as_str()),
+            info: semantic_color_override(ui.get_terminal_semantic_info_color().as_str()),
+            warning: semantic_color_override(ui.get_terminal_semantic_warning_color().as_str()),
+            error: semantic_color_override(ui.get_terminal_semantic_error_color().as_str()),
+        },
+    }
+}
+
+fn semantic_color_override(value: &str) -> Option<RgbColor> {
+    let value = value.trim().strip_prefix('#')?;
+    let bytes = value.as_bytes();
+    let [red_a, red_b, green_a, green_b, blue_a, blue_b] = bytes else {
+        return None;
+    };
+    Some(RgbColor::new(
+        semantic_hex_byte(*red_a, *red_b)?,
+        semantic_hex_byte(*green_a, *green_b)?,
+        semantic_hex_byte(*blue_a, *blue_b)?,
+    ))
+}
+
+fn semantic_hex_byte(high: u8, low: u8) -> Option<u8> {
+    Some(semantic_hex_digit(high)? * 16 + semantic_hex_digit(low)?)
+}
+
+fn semantic_hex_digit(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_color_override_accepts_canonical_hex_only() {
+        assert_eq!(
+            semantic_color_override(" #17A8CD "),
+            Some(RgbColor::new(23, 168, 205))
+        );
+        for value in ["", "17A8CD", "#FFF", "#17A8CD00", "#17A8CZ"] {
+            assert_eq!(semantic_color_override(value), None, "{value:?}");
+        }
+    }
 }
 
 pub(super) fn update_terminal_pane_snapshot_models(

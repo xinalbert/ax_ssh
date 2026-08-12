@@ -306,9 +306,9 @@ still completing host-key confirmation, authentication, or browser startup,
 the path is held only on that runtime Tab and applied when the normal flow is
 ready.
 Plain terminal output also receives restrained semantic color: URLs and paths,
-HTTP response classes, and familiar success, warning, and error words use
-separate colors. The colors follow the selected terminal palette and stay
-readable against its background. Output that already specifies ANSI or
+HTTP response classes, and familiar success, informational, warning, and error
+words use separate colors. The colors follow the selected terminal palette by default and stay
+readable against its background; Settings can override each category. Output that already specifies ANSI or
 true-color styling keeps that styling unchanged.
 In **Settings > Terminal**, **Copy selection on select** is disabled by default.
 When enabled, completed pointer selections and **Select All** copy immediately,
@@ -357,8 +357,10 @@ essential borders, focus/status states, or terminal text are replaced with
 readable defaults for that side.
 
 **Settings > Terminal** independently controls the Terminal font, font size,
-line height, minimum contrast ratio, bright ANSI colors for bold text, scrollback,
-mouse behavior, and the platform-specific Option-as-Meta preference. The contrast
+line height, minimum contrast ratio, bright ANSI colors for bold text, five semantic highlight
+colors, scrollback, mouse behavior, and the platform-specific Option-as-Meta preference. Enter
+an opaque `#RRGGBB` for Link and path, Success, Information, Warning, or Error; leave a field
+empty to follow the active terminal palette. The contrast
 ratio ranges from 1.0:1 to 21.0:1 and defaults to 4.5:1; 1.0:1 keeps the original
 ANSI/256/true-color foregrounds. Rendering checks each cell's actual background
 and changes only a foreground that is below the target, leaving backgrounds and

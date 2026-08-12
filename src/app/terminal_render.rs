@@ -27,6 +27,7 @@ impl RgbColor {
 enum SemanticHighlight {
     Link,
     Success,
+    Info,
     Warning,
     Error,
 }
@@ -34,17 +35,43 @@ enum SemanticHighlight {
 struct SemanticPalette {
     link: RgbColor,
     success: RgbColor,
+    info: RgbColor,
     warning: RgbColor,
     error: RgbColor,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct SemanticColorOverrides {
+    pub(super) link: Option<RgbColor>,
+    pub(super) success: Option<RgbColor>,
+    pub(super) info: Option<RgbColor>,
+    pub(super) warning: Option<RgbColor>,
+    pub(super) error: Option<RgbColor>,
+}
+
 impl SemanticPalette {
-    fn for_terminal(palette: &TerminalPalette) -> Self {
+    fn for_terminal(palette: &TerminalPalette, overrides: SemanticColorOverrides) -> Self {
         Self {
-            link: semantic_color(palette.ansi[14], palette.background),
-            success: semantic_color(palette.ansi[10], palette.background),
-            warning: semantic_color(palette.ansi[11], palette.background),
-            error: semantic_color(palette.ansi[9], palette.background),
+            link: semantic_color(
+                overrides.link.unwrap_or(palette.ansi[14]),
+                palette.background,
+            ),
+            success: semantic_color(
+                overrides.success.unwrap_or(palette.ansi[10]),
+                palette.background,
+            ),
+            info: semantic_color(
+                overrides.info.unwrap_or(palette.ansi[12]),
+                palette.background,
+            ),
+            warning: semantic_color(
+                overrides.warning.unwrap_or(palette.ansi[11]),
+                palette.background,
+            ),
+            error: semantic_color(
+                overrides.error.unwrap_or(palette.ansi[9]),
+                palette.background,
+            ),
         }
     }
 
@@ -52,6 +79,7 @@ impl SemanticPalette {
         match highlight {
             SemanticHighlight::Link => self.link,
             SemanticHighlight::Success => self.success,
+            SemanticHighlight::Info => self.info,
             SemanticHighlight::Warning => self.warning,
             SemanticHighlight::Error => self.error,
         }
@@ -66,6 +94,7 @@ pub(super) struct TerminalRenderSettings {
     pub(super) selection_background: RgbColor,
     pub(super) minimum_contrast_ratio: f64,
     pub(super) bright_bold_text: bool,
+    pub(super) semantic_colors: SemanticColorOverrides,
 }
 
 pub(super) struct RenderedTerminal {
@@ -132,7 +161,7 @@ fn render_line(
     palette: &TerminalPalette,
     settings: &TerminalRenderSettings,
 ) -> RenderedTerminalLine {
-    let semantic_palette = SemanticPalette::for_terminal(palette);
+    let semantic_palette = SemanticPalette::for_terminal(palette, settings.semantic_colors);
     let runs = line
         .runs
         .into_iter()
@@ -204,12 +233,15 @@ fn semantic_highlights(
             "err",
             "fatal",
             "panic",
+            "fail",
             "failed",
             "failure",
             "exception",
             "traceback",
             "critical",
+            "crash",
             "crashed",
+            "sigsegv",
         ],
     );
     highlight_keywords(
@@ -229,6 +261,9 @@ fn semantic_highlights(
             "rejected",
             "unreachable",
             "offline",
+            "pending",
+            "waiting",
+            "processing",
         ],
     );
     highlight_keywords(
@@ -245,7 +280,39 @@ fn semantic_highlights(
             "ready",
             "connected",
             "online",
+            "up",
             "running",
+            "deployed",
+            "authenticated",
+            "authorized",
+        ],
+    );
+    highlight_keywords(
+        text,
+        &mut highlights,
+        SemanticHighlight::Info,
+        &[
+            "info",
+            "notice",
+            "debug",
+            "trace",
+            "dbg",
+            "ssh",
+            "ssl",
+            "tls",
+            "certificate",
+            "auth",
+            "login",
+            "start",
+            "started",
+            "starting",
+            "boot",
+            "restart",
+            "restarting",
+            "deploy",
+            "deploying",
+            "active",
+            "executing",
         ],
     );
     highlights.iter().any(Option::is_some).then_some(highlights)
@@ -725,6 +792,7 @@ mod tests {
             selection_background: RgbColor::new(38, 79, 120),
             minimum_contrast_ratio: 4.5,
             bright_bold_text: true,
+            semantic_colors: SemanticColorOverrides::default(),
         }
     }
 
@@ -752,7 +820,7 @@ mod tests {
 
     #[test]
     fn semantic_highlights_cover_targets_statuses_and_bounded_keywords() {
-        let text = "200 OK https://example.test 404 WARN 503 ERROR /srv/log";
+        let text = "INFO 200 OK https://example.test 404 WARN 503 ERROR /srv/log";
         let rendered = render_terminal(snapshot_line(vec![plain_run(text, 0)]), settings());
         let runs = &rendered.lines[0].runs;
         let run_for = |text: &str| {
@@ -760,17 +828,49 @@ mod tests {
                 .find(|run| run.text == text)
                 .unwrap_or_else(|| panic!("missing semantic run {text:?}"))
         };
-        let palette =
-            SemanticPalette::for_terminal(&TerminalPalette::for_scheme(TerminalColorScheme::Dark));
+        let palette = SemanticPalette::for_terminal(
+            &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
+            SemanticColorOverrides::default(),
+        );
 
         assert_eq!(run_for("https://example.test").foreground, palette.link);
         assert_eq!(run_for("/srv/log").foreground, palette.link);
+        assert_eq!(run_for("INFO").foreground, palette.info);
         assert_eq!(run_for("200").foreground, palette.success);
         assert_eq!(run_for("OK").foreground, palette.success);
         assert_eq!(run_for("404").foreground, palette.warning);
         assert_eq!(run_for("WARN").foreground, palette.warning);
         assert_eq!(run_for("503").foreground, palette.error);
         assert_eq!(run_for("ERROR").foreground, palette.error);
+    }
+
+    #[test]
+    fn semantic_highlights_apply_to_real_default_terminal_cells() {
+        let mut terminal = ax_ssh::terminal::TerminalModel::new(128, 3, 10);
+        terminal.process(b"INFO 200 OK ERROR https://example.test /srv/log");
+        let snapshot = terminal.snapshot();
+        let source_runs = &snapshot.lines[0].runs;
+        assert_eq!(source_runs.len(), 1);
+        assert_eq!(source_runs[0].style, TerminalStyle::default());
+
+        let rendered = render_terminal(snapshot, settings());
+        let runs = &rendered.lines[0].runs;
+        let run_for = |text: &str| {
+            runs.iter()
+                .find(|run| run.text == text)
+                .unwrap_or_else(|| panic!("missing rendered run {text:?}"))
+        };
+        let palette = SemanticPalette::for_terminal(
+            &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
+            SemanticColorOverrides::default(),
+        );
+
+        assert_eq!(run_for("INFO").foreground, palette.info);
+        assert_eq!(run_for("200").foreground, palette.success);
+        assert_eq!(run_for("OK").foreground, palette.success);
+        assert_eq!(run_for("ERROR").foreground, palette.error);
+        assert_eq!(run_for("https://example.test").foreground, palette.link);
+        assert_eq!(run_for("/srv/log").foreground, palette.link);
     }
 
     #[test]
@@ -804,14 +904,20 @@ mod tests {
         assert_eq!(terror.foreground, settings().default_foreground);
         assert_eq!(
             error.foreground,
-            SemanticPalette::for_terminal(&TerminalPalette::for_scheme(TerminalColorScheme::Dark,))
-                .error
+            SemanticPalette::for_terminal(
+                &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
+                SemanticColorOverrides::default(),
+            )
+            .error
         );
         assert_eq!(number.foreground, settings().default_foreground);
         assert_eq!(
             status.foreground,
-            SemanticPalette::for_terminal(&TerminalPalette::for_scheme(TerminalColorScheme::Dark,))
-                .success
+            SemanticPalette::for_terminal(
+                &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
+                SemanticColorOverrides::default(),
+            )
+            .success
         );
         assert_eq!(
             ansi.foreground,
@@ -837,10 +943,12 @@ mod tests {
         ];
         for scheme in schemes {
             let palette = TerminalPalette::for_scheme(scheme);
-            let semantic = SemanticPalette::for_terminal(&palette);
+            let semantic =
+                SemanticPalette::for_terminal(&palette, SemanticColorOverrides::default());
             for color in [
                 semantic.link,
                 semantic.success,
+                semantic.info,
                 semantic.warning,
                 semantic.error,
             ] {
@@ -850,14 +958,72 @@ mod tests {
 
         let mut palette = TerminalPalette::for_scheme(TerminalColorScheme::Dark);
         palette.background = RgbColor::new(245, 242, 235);
-        let semantic = SemanticPalette::for_terminal(&palette);
+        let semantic = SemanticPalette::for_terminal(&palette, SemanticColorOverrides::default());
         for color in [
             semantic.link,
             semantic.success,
+            semantic.info,
             semantic.warning,
             semantic.error,
         ] {
             assert!(contrast_ratio(color, palette.background) >= 4.5);
+        }
+    }
+
+    #[test]
+    fn configured_semantic_colors_override_theme_defaults_and_keep_contrast() {
+        let overrides = SemanticColorOverrides {
+            link: Some(RgbColor::new(28, 202, 238)),
+            success: Some(RgbColor::new(37, 211, 139)),
+            info: Some(RgbColor::new(116, 177, 255)),
+            warning: Some(RgbColor::new(255, 210, 77)),
+            error: Some(RgbColor::new(255, 114, 114)),
+        };
+        let rendered = render_terminal(
+            snapshot_line(vec![plain_run(
+                "INFO 200 OK https://example.test 404 WARN 503 ERROR",
+                0,
+            )]),
+            TerminalRenderSettings {
+                semantic_colors: overrides,
+                ..settings()
+            },
+        );
+        let runs = &rendered.lines[0].runs;
+        let run_for = |text: &str| {
+            runs.iter()
+                .find(|run| run.text == text)
+                .unwrap_or_else(|| panic!("missing semantic run {text:?}"))
+        };
+
+        assert_eq!(
+            run_for("https://example.test").foreground,
+            overrides.link.unwrap()
+        );
+        assert_eq!(run_for("INFO").foreground, overrides.info.unwrap());
+        assert_eq!(run_for("200").foreground, overrides.success.unwrap());
+        assert_eq!(run_for("WARN").foreground, overrides.warning.unwrap());
+        assert_eq!(run_for("ERROR").foreground, overrides.error.unwrap());
+
+        let mut light_palette = TerminalPalette::for_scheme(TerminalColorScheme::Light);
+        light_palette.background = RgbColor::new(245, 242, 235);
+        let low_contrast = SemanticColorOverrides {
+            link: Some(RgbColor::new(250, 250, 250)),
+            success: Some(RgbColor::new(250, 250, 250)),
+            info: Some(RgbColor::new(250, 250, 250)),
+            warning: Some(RgbColor::new(250, 250, 250)),
+            error: Some(RgbColor::new(250, 250, 250)),
+        };
+        let corrected = SemanticPalette::for_terminal(&light_palette, low_contrast);
+        for color in [
+            corrected.link,
+            corrected.success,
+            corrected.info,
+            corrected.warning,
+            corrected.error,
+        ] {
+            assert_ne!(color, low_contrast.link.unwrap());
+            assert!(contrast_ratio(color, light_palette.background) >= 4.5);
         }
     }
 

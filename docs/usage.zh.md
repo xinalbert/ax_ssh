@@ -202,8 +202,8 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 没有 companion 时，AxSSH 会以该位置作为初始目录新建独立 SFTP Tab，仍执行常规 SSH host-key 与
 认证流程。已有 companion 时，相对路径相对于当前 SFTP 目录解释；如果 companion 仍在主机密钥确认、
 认证或 browser 启动阶段，路径只保留在该运行时 Tab，正常流程就绪后再处理。
-默认样式的终端输出还会获得克制的语义色：URL 和路径、HTTP 响应类别，以及常见成功、警告和错误状态词
-使用不同颜色。颜色跟随所选 Terminal 色表，并保持与终端背景可区分；已经指定 ANSI 或真彩色样式的输出
+默认样式的终端输出还会获得克制的语义色：URL 和路径、HTTP 响应类别，以及常见成功、信息、警告和错误状态词
+使用不同颜色。默认颜色跟随所选 Terminal 色表，并保持与终端背景可区分；Settings 可分别覆盖每一类；已经指定 ANSI 或真彩色样式的输出
 保持原样。
 **Settings > Terminal** 的 **Copy selection on select** 默认关闭。开启后，完成鼠标选区和
 **Select All** 会立即复制，直接右击始终粘贴。
@@ -237,8 +237,8 @@ Light 模式保留可读的浅色 ANSI 色表。Custom 会展开 Light/Dark 两�
 无效十六进制值或会让文字、必要边框、焦点/状态及终端文字看不清的颜色，会回退到对应明暗侧的
 可读默认。
 
-**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、最小对比度、粗体亮 ANSI 色、
-scrollback、鼠标行为以及平台相关的 Option-as-Meta。最小对比度范围为 1.0:1 至 21.0:1，
+**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、最小对比度、粗体亮 ANSI 色、五项语义高亮色、
+scrollback、鼠标行为以及平台相关的 Option-as-Meta。Link and path、Success、Information、Warning 与 Error 都可填入不透明 `#RRGGBB`；留空时跟随当前 Terminal 色表。最小对比度范围为 1.0:1 至 21.0:1，
 默认 4.5:1；设置为 1.0:1 会保留原始 ANSI/256/真彩色前景。渲染会按每个单元格的实际背景检查，
 只修正低于目标的前景，背景和已经可读的颜色保持不变。两个字体列表都先显示软件自带字体，
 再显示自动发现的系统等宽字体。
