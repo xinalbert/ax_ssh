@@ -281,22 +281,6 @@ fn semantic_hex_digit(value: u8) -> Option<u8> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn semantic_color_override_accepts_canonical_hex_only() {
-        assert_eq!(
-            semantic_color_override(" #17A8CD "),
-            Some(RgbColor::new(23, 168, 205))
-        );
-        for value in ["", "17A8CD", "#FFF", "#17A8CD00", "#17A8CZ"] {
-            assert_eq!(semantic_color_override(value), None, "{value:?}");
-        }
-    }
-}
-
 pub(super) fn update_terminal_pane_snapshot_models(
     current_panes: &ModelRc<TerminalPaneView>,
     current_dividers: &ModelRc<TerminalPaneDividerView>,
@@ -592,6 +576,22 @@ pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt
             ui.set_password_key_path(key_path.into());
             ui.set_password_dialog_tab_id(tab_id.to_string().into());
             ui.set_password_dialog_open(true);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_color_override_accepts_canonical_hex_only() {
+        assert_eq!(
+            semantic_color_override(" #17A8CD "),
+            Some(RgbColor::new(23, 168, 205))
+        );
+        for value in ["", "17A8CD", "#FFF", "#17A8CD00", "#17A8CZ"] {
+            assert_eq!(semantic_color_override(value), None, "{value:?}");
         }
     }
 }

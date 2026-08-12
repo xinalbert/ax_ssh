@@ -640,17 +640,6 @@ fn open_terminal_remote_path(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn terminal_target_uses_slint_primary_shortcut_modifier() {
-        assert!(terminal_target_modifier_held(true, false));
-        assert!(!terminal_target_modifier_held(false, true));
-    }
-}
-
 fn open_terminal_url(runtime: &Handle, ui: slint::Weak<AppWindow>, url: String) {
     runtime.spawn(async move {
         let opened = tokio::time::timeout(
@@ -774,5 +763,16 @@ pub(super) fn finish_local_terminal(
             true
         }
         Ok(_) | Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_target_uses_slint_primary_shortcut_modifier() {
+        assert!(terminal_target_modifier_held(true, false));
+        assert!(!terminal_target_modifier_held(false, true));
     }
 }

@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn setup_cookie_is_rewritten_for_both_byte_orders() {
-        for byte_order in [b'l', b'B'] {
+        for byte_order in *b"lB" {
             let mut packet = Zeroizing::new(setup_packet(byte_order, &FAKE_COOKIE));
             let real_auth = LocalX11Auth::Cookie(Zeroizing::new(REAL_COOKIE.to_vec()));
             rewrite_setup_packet(&mut packet, &FAKE_COOKIE, &real_auth)
@@ -764,7 +764,7 @@ mod tests {
 
     #[test]
     fn explicit_no_auth_rewrite_strips_local_authorization_fields() {
-        for byte_order in [b'l', b'B'] {
+        for byte_order in *b"lB" {
             let mut packet = Zeroizing::new(setup_packet(byte_order, &FAKE_COOKIE));
             rewrite_setup_packet(&mut packet, &FAKE_COOKIE, &LocalX11Auth::None)
                 .expect("explicit compatibility mode should strip local auth");
