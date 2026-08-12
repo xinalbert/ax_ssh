@@ -18,7 +18,7 @@ pub(super) struct LocalDirectoryEntry {
     pub(super) is_symlink: bool,
     pub(super) size: u64,
     pub(super) modified: Option<SystemTime>,
-    identity: LocalFileIdentity,
+    identity: Option<LocalFileIdentity>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,9 +28,9 @@ struct LocalFileIdentity {
     #[cfg(unix)]
     inode: u64,
     #[cfg(windows)]
-    volume_serial: Option<u32>,
+    volume_serial: u32,
     #[cfg(windows)]
-    file_index: Option<u64>,
+    file_index: u64,
     #[cfg(not(any(unix, windows)))]
     length: u64,
     #[cfg(not(any(unix, windows)))]
@@ -118,6 +118,25 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
                 continue;
             }
         };
+        let identity = if file_type.is_file() {
+            let file = match File::open(&path) {
+                Ok(file) => file,
+                Err(_) => {
+                    truncated = true;
+                    continue;
+                }
+            };
+            match local_file_identity(&file) {
+                Ok(identity) => Some(identity),
+                Err(_) => {
+                    truncated = true;
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+
         name_budget = name_budget.saturating_add(name_len);
         listed.push(LocalDirectoryEntry {
             name,
@@ -126,7 +145,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             is_symlink: file_type.is_symlink(),
             size: metadata.len(),
             modified: metadata.modified().ok(),
-            identity: local_file_identity(&metadata),
+            identity,
         });
     }
 
@@ -181,7 +200,10 @@ pub(super) fn validate_local_file_for_open(
     let opened_metadata = file
         .metadata()
         .with_context(|| format!("cannot inspect opened local file {}", entry.path))?;
-    if !opened_metadata.is_file() || local_file_identity(&opened_metadata) != entry.identity {
+    let expected_identity = entry
+        .identity
+        .context("local file identity was unavailable in the directory snapshot")?;
+    if !opened_metadata.is_file() || local_file_identity(&file)? != expected_identity {
         bail!("local file changed after it was listed");
     }
 
@@ -196,29 +218,49 @@ pub(super) fn validate_local_file_for_open(
     })
 }
 
-fn local_file_identity(metadata: &fs::Metadata) -> LocalFileIdentity {
+fn local_file_identity(file: &File) -> Result<LocalFileIdentity> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        LocalFileIdentity {
+        let metadata = file
+            .metadata()
+            .context("cannot inspect local file identity")?;
+        Ok(LocalFileIdentity {
             device: metadata.dev(),
             inode: metadata.ino(),
-        }
+        })
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
-        LocalFileIdentity {
-            volume_serial: metadata.volume_serial_number(),
-            file_index: metadata.file_index(),
+        use std::os::windows::io::AsRawHandle as _;
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+        };
+
+        let mut information = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: `file` owns a valid Windows file handle for this call, and
+        // `information` is initialized writable storage of the documented type.
+        let succeeded =
+            unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut information) != 0 };
+        if !succeeded {
+            return Err(std::io::Error::last_os_error())
+                .context("cannot inspect Windows local file identity");
         }
+        Ok(LocalFileIdentity {
+            volume_serial: information.dwVolumeSerialNumber,
+            file_index: (u64::from(information.nFileIndexHigh) << 32)
+                | u64::from(information.nFileIndexLow),
+        })
     }
     #[cfg(not(any(unix, windows)))]
     {
-        LocalFileIdentity {
+        let metadata = file
+            .metadata()
+            .context("cannot inspect local file identity")?;
+        Ok(LocalFileIdentity {
             length: metadata.len(),
             modified: metadata.modified().ok(),
-        }
+        })
     }
 }
 
@@ -234,6 +276,7 @@ mod tests {
 
     fn fixture_entry(path: &Path, name: &str) -> LocalDirectoryEntry {
         let metadata = fs::metadata(path).expect("fixture metadata should be readable");
+        let file = File::open(path).expect("fixture file should be openable");
         LocalDirectoryEntry {
             name: name.to_owned(),
             path: path.display().to_string(),
@@ -241,7 +284,9 @@ mod tests {
             is_symlink: false,
             size: metadata.len(),
             modified: metadata.modified().ok(),
-            identity: local_file_identity(&metadata),
+            identity: Some(
+                local_file_identity(&file).expect("fixture identity should be readable"),
+            ),
         }
     }
 

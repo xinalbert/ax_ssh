@@ -57,8 +57,12 @@ type LocalX11Stream = Box<dyn AsyncReadWrite>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum X11Endpoint {
+    #[cfg(unix)]
     Unix(PathBuf),
-    Tcp { host: &'static str, port: u16 },
+    Tcp {
+        host: &'static str,
+        port: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,11 +100,17 @@ impl DisplayTarget {
             .context("DISPLAY number is too large")?;
 
         let normalized_host = host.strip_prefix("tcp/").unwrap_or(host);
-        let unix_display = normalized_host.is_empty() || normalized_host == "unix";
+        let local_display = normalized_host.is_empty() || normalized_host == "unix";
+        #[cfg(unix)]
         let launchd_socket = normalized_host.starts_with('/');
         let loopback_display =
             matches!(normalized_host, "localhost" | "127.0.0.1" | "::1" | "[::1]");
-        if !unix_display && !launchd_socket && !loopback_display {
+        #[cfg(unix)]
+        if !local_display && !launchd_socket && !loopback_display {
+            anyhow::bail!("DISPLAY must identify a local X server");
+        }
+        #[cfg(not(unix))]
+        if !local_display && !loopback_display {
             anyhow::bail!("DISPLAY must identify a local X server");
         }
 
@@ -110,7 +120,7 @@ impl DisplayTarget {
             if launchd_socket {
                 endpoints.push(X11Endpoint::Unix(PathBuf::from(normalized_host)));
             }
-            if unix_display || launchd_socket {
+            if local_display || launchd_socket {
                 endpoints.push(X11Endpoint::Unix(PathBuf::from(format!(
                     "/tmp/.X11-unix/X{display_number}"
                 ))));
@@ -389,14 +399,18 @@ async fn load_xauth_cookie(display: &str) -> Result<Vec<u8>> {
     anyhow::bail!("no exact MIT-MAGIC-COOKIE-1 authorization is available")
 }
 
+#[cfg(target_os = "macos")]
 fn xauth_candidates() -> Vec<PathBuf> {
-    let mut candidates = vec![PathBuf::from("xauth")];
-    #[cfg(target_os = "macos")]
-    {
-        candidates.push(PathBuf::from("/opt/X11/bin/xauth"));
-        candidates.push(PathBuf::from("/usr/X11/bin/xauth"));
-    }
-    candidates
+    vec![
+        PathBuf::from("xauth"),
+        PathBuf::from("/opt/X11/bin/xauth"),
+        PathBuf::from("/usr/X11/bin/xauth"),
+    ]
+}
+
+#[cfg(not(target_os = "macos"))]
+fn xauth_candidates() -> Vec<PathBuf> {
+    vec![PathBuf::from("xauth")]
 }
 
 async fn run_xauth(executable: &PathBuf, display: &str) -> Result<Vec<u8>> {
@@ -511,17 +525,10 @@ async fn probe_endpoints(endpoints: &[X11Endpoint]) -> Result<X11Endpoint> {
 async fn connect_endpoint(endpoint: &X11Endpoint) -> Result<LocalX11Stream> {
     timeout(ENDPOINT_CONNECT_TIMEOUT, async {
         match endpoint {
+            #[cfg(unix)]
             X11Endpoint::Unix(path) => {
-                #[cfg(unix)]
-                {
-                    let stream = UnixStream::connect(path).await?;
-                    Ok::<LocalX11Stream, anyhow::Error>(Box::new(stream))
-                }
-                #[cfg(not(unix))]
-                {
-                    let _ = path;
-                    anyhow::bail!("Unix X11 sockets are unavailable on this platform")
-                }
+                let stream = UnixStream::connect(path).await?;
+                Ok::<LocalX11Stream, anyhow::Error>(Box::new(stream))
             }
             X11Endpoint::Tcp { host, port } => {
                 let stream = TcpStream::connect((*host, *port)).await?;

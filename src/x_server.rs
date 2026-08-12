@@ -431,6 +431,7 @@ fn detached_command(program: &Path) -> Command {
     command
 }
 
+#[cfg(target_os = "macos")]
 async fn run_short_command(mut command: Command, operation: &'static str) -> Result<()> {
     command
         .stdin(Stdio::null())
