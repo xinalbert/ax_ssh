@@ -18,11 +18,14 @@ pub(super) struct LocalDirectoryEntry {
     pub(super) is_symlink: bool,
     pub(super) size: u64,
     pub(super) modified: Option<SystemTime>,
-    identity: Option<LocalFileIdentity>,
+    fingerprint: Option<LocalFileFingerprint>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct LocalFileIdentity {
+struct LocalFileFingerprint {
+    length: u64,
+    modified: Option<SystemTime>,
+    created: Option<SystemTime>,
     #[cfg(unix)]
     device: u64,
     #[cfg(unix)]
@@ -31,10 +34,6 @@ struct LocalFileIdentity {
     volume_serial: u32,
     #[cfg(windows)]
     file_index: u64,
-    #[cfg(not(any(unix, windows)))]
-    length: u64,
-    #[cfg(not(any(unix, windows)))]
-    modified: Option<SystemTime>,
 }
 
 #[derive(Debug)]
@@ -118,7 +117,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
                 continue;
             }
         };
-        let identity = if file_type.is_file() {
+        let fingerprint = if file_type.is_file() {
             let file = match File::open(&path) {
                 Ok(file) => file,
                 Err(_) => {
@@ -126,8 +125,8 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
                     continue;
                 }
             };
-            match local_file_identity(&file) {
-                Ok(identity) => Some(identity),
+            match local_file_fingerprint(&file) {
+                Ok(fingerprint) => Some(fingerprint),
                 Err(_) => {
                     truncated = true;
                     continue;
@@ -145,7 +144,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             is_symlink: file_type.is_symlink(),
             size: metadata.len(),
             modified: metadata.modified().ok(),
-            identity,
+            fingerprint,
         });
     }
 
@@ -200,10 +199,10 @@ pub(super) fn validate_local_file_for_open(
     let opened_metadata = file
         .metadata()
         .with_context(|| format!("cannot inspect opened local file {}", entry.path))?;
-    let expected_identity = entry
-        .identity
-        .context("local file identity was unavailable in the directory snapshot")?;
-    if !opened_metadata.is_file() || local_file_identity(&file)? != expected_identity {
+    let expected_fingerprint = entry
+        .fingerprint
+        .context("local file fingerprint was unavailable in the directory snapshot")?;
+    if !opened_metadata.is_file() || local_file_fingerprint(&file)? != expected_fingerprint {
         bail!("local file changed after it was listed");
     }
 
@@ -218,14 +217,18 @@ pub(super) fn validate_local_file_for_open(
     })
 }
 
-fn local_file_identity(file: &File) -> Result<LocalFileIdentity> {
+fn local_file_fingerprint(file: &File) -> Result<LocalFileFingerprint> {
+    let metadata = file
+        .metadata()
+        .context("cannot inspect local file metadata")?;
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let metadata = file
-            .metadata()
-            .context("cannot inspect local file identity")?;
-        Ok(LocalFileIdentity {
+        Ok(LocalFileFingerprint {
+            length: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
             device: metadata.dev(),
             inode: metadata.ino(),
         })
@@ -246,7 +249,10 @@ fn local_file_identity(file: &File) -> Result<LocalFileIdentity> {
             return Err(std::io::Error::last_os_error())
                 .context("cannot inspect Windows local file identity");
         }
-        Ok(LocalFileIdentity {
+        Ok(LocalFileFingerprint {
+            length: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
             volume_serial: information.dwVolumeSerialNumber,
             file_index: (u64::from(information.nFileIndexHigh) << 32)
                 | u64::from(information.nFileIndexLow),
@@ -254,12 +260,10 @@ fn local_file_identity(file: &File) -> Result<LocalFileIdentity> {
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let metadata = file
-            .metadata()
-            .context("cannot inspect local file identity")?;
-        Ok(LocalFileIdentity {
+        Ok(LocalFileFingerprint {
             length: metadata.len(),
             modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
         })
     }
 }
@@ -284,8 +288,8 @@ mod tests {
             is_symlink: false,
             size: metadata.len(),
             modified: metadata.modified().ok(),
-            identity: Some(
-                local_file_identity(&file).expect("fixture identity should be readable"),
+            fingerprint: Some(
+                local_file_fingerprint(&file).expect("fixture fingerprint should be readable"),
             ),
         }
     }
@@ -390,6 +394,23 @@ mod tests {
 
         let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
             .expect_err("replacement with a different file identity should be rejected");
+        assert!(error.to_string().contains("changed after it was listed"));
+
+        fs::remove_dir_all(&directory).expect("test directory should be removed");
+    }
+
+    #[test]
+    fn local_open_validation_rejects_an_in_place_content_change() {
+        let directory =
+            std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).expect("test directory should be created");
+        let file_path = directory.join("notes.txt");
+        fs::write(&file_path, b"trusted").expect("test file should be written");
+        let entry = fixture_entry(&file_path, "notes.txt");
+        fs::write(&file_path, b"changed").expect("fixture should be changed in place");
+
+        let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
+            .expect_err("an in-place change should invalidate the listing fingerprint");
         assert!(error.to_string().contains("changed after it was listed"));
 
         fs::remove_dir_all(&directory).expect("test directory should be removed");

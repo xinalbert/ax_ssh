@@ -370,3 +370,10 @@
 - 更新后的命令或环境：locked/offline Cargo 可从现有缓存解析全部依赖；翻译目录使用 Python 3 生成/覆盖/占位符检查，并可用 GNU gettext `msgfmt` 验证 PO 格式。
 - 验证结果：定向配置/Settings/迟到语言请求测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 150、应用 152、Doc tests 0）、386 条翻译覆盖、占位符、`msgfmt`、Python 编译、46 项 Markdown 相对链接和差异空白检查通过；tracker validator 只剩 16 条旧月度记录时间字段错误。
 - 风险/待办：系统 locale 与 GUI 即时切换由 Windows/macOS/Linux 目标平台验收；运行时技术错误详情保持原文，不通过字符串替换伪本地化。
+## 2026-08-12 本地 SFTP 文件指纹环境更新
+
+- 目的：记录本地只读打开的身份验证从单一平台 identity 强化为 identity 加元数据指纹后的环境影响。
+- 改动范围：`src/app/local_files.rs`、`docs/{architecture,architecture.zh,development,development.zh}.md` 与环境/实施跟踪记录。
+- 执行内容：目录读取与打开后 handle 重验继续完全在 blocking worker 中进行；指纹包含平台文件 identity、长度、修改时间与创建时间。未新增 crate、修改 `Cargo.toml`/`Cargo.lock`、工具链、CI、SFTP 协议、SSH trust 或凭据。
+- 验证结果：`app::local_files` 7 项定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 150、应用 153、Doc tests 0）、tracker、Markdown 链接和差异检查通过。
+- 风险/待办：外部文件系统可在验证后的 handle 复制期间继续修改内容，但路径替换不能重定向 opener；复制保持从已验证 handle 读取，Windows/Linux 真实文件系统替换场景仍待 CI/平台验证。
