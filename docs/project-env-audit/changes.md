@@ -377,3 +377,19 @@
 - 执行内容：目录读取与打开后 handle 重验继续完全在 blocking worker 中进行；指纹包含平台文件 identity、长度、修改时间与创建时间。未新增 crate、修改 `Cargo.toml`/`Cargo.lock`、工具链、CI、SFTP 协议、SSH trust 或凭据。
 - 验证结果：`app::local_files` 7 项定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 150、应用 153、Doc tests 0）、tracker、Markdown 链接和差异检查通过。
 - 风险/待办：外部文件系统可在验证后的 handle 复制期间继续修改内容，但路径替换不能重定向 opener；复制保持从已验证 handle 读取，Windows/Linux 真实文件系统替换场景仍待 CI/平台验证。
+
+## 2026-08-12 本地 SFTP fingerprint 回归环境修正
+
+- 日期：2026-08-12
+- 变化摘要：Linux x86_64/aarch64 和 Windows CI 表明快速同长度写入可保留相同的可查询时间字段；本地文件回归改为断言跨平台可观察的长度变化。
+- 受影响文件：`src/app/local_files.rs`、`docs/{architecture.md,architecture.zh.md,development.md,development.zh.md,project-env-audit/{current.md,changes.md},project-implementation-tracker/}`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；未改依赖、锁文件、工具链、CI、SFTP 协议、SSH trust 或凭据。
+- 验证结果：`cargo test --bin ax_ssh app::local_files::tests --locked --offline` 通过 7 项应用二进制本地文件回归。完整 Cargo 与文档门禁待当前步骤完成。
+
+## 2026-08-12 本地 SFTP fingerprint 回归门禁完成
+
+- 日期：2026-08-12
+- 变化摘要：跨平台确定性的本地打开回归与收紧后的 fingerprint 契约已通过完整本地门禁；环境事实和 CI 矩阵均未改变。
+- 受影响文件：`src/app/local_files.rs`、`docs/{architecture.md,architecture.zh.md,development.md,development.zh.md,project-env-audit/{current.md,changes.md},project-implementation-tracker/}`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 locked/offline Cargo；不新增依赖、不改变锁文件、工具链、CI、SFTP 协议、SSH trust 或凭据。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline`（库 150、应用 153、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过；目标 Linux/Windows CI 仍需本次提交触发后确认。

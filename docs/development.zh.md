@@ -60,9 +60,10 @@ git diff --check
 - SFTP 本地文件栏是只读 application bridge 快照。目录读取必须放在有界 blocking task 中，且只返回
   名称、路径、类型、大小和修改时间元数据；Slint 不得访问文件系统。结果回到 UI 前按 Tab 和请求 identity
   丢弃过期项，并保留条目、名称和路径上限。本地打开意图必须命中当前活动 Tab 快照，并在 blocking
-  worker 上打开非 symlink regular file handle，将其平台 identity 加长度、修改时间和创建时间指纹与
-  列目录快照核对，再从该 handle 复制到有界私有缓存后调用 detached 平台 opener；调度时不得重新打开
-  已验证的源路径。
+  worker 上打开非 symlink regular file handle，将其平台 identity 和长度、修改时间、创建时间
+  fingerprint 与列目录快照核对，再从该 handle 复制到有界私有缓存后调用 detached 平台 opener。该
+  fingerprint 只能检测当前平台可观察到的变化，不能作为内容完整性保证；调度时不得重新打开已验证的
+  源路径。
 - SSH profile 的 `sftp_remote_path` 与 `sftp_local_path` 只是非敏感初始化输入，不得进入凭据、日志或运行中
   Tab 的 mutation；持久化前校验有界文本，远端值交给 worker-owned browser，本地值只用于初始化
   application snapshot。旧 profile 的空值必须继续使用 `~`/平台 home 默认值。

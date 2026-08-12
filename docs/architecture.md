@@ -832,14 +832,14 @@ Double-clicking a local regular-file row is a read-only open intent. The bridge
 first requires that exact path in the active SFTP Tab's current local snapshot,
 then a blocking worker rechecks the directory and entry with non-following
 metadata, rejects directories and symbolic links, and opens a read-only handle.
-The handle's platform file identity plus length, modification time, and creation
-time fingerprint must match the fingerprint captured during listing. AxSSH copies
-from that validated handle into the bounded private open cache and atomically
+The handle's platform file identity and length, modification-time, and creation-time
+fingerprint must match the fingerprint captured during listing. This fingerprint can
+detect only changes observable on the current platform; it is not a content-integrity
+guarantee. AxSSH copies from that validated handle into the bounded private open cache and atomically
 publishes the snapshot before calling the platform default application through
 `open::that_detached`; it never reopens the validated source path. A stale Tab,
-directory request, path, in-place change, or replaced entry is rejected before
-dispatch, and a later path replacement cannot redirect the opener to a different
-file identity.
+directory request, path, or identity/fingerprint mismatch is rejected before dispatch,
+and a later path replacement cannot redirect the opener to a different file identity.
 
 Double-clicking a visible remote regular file queues a read-only download and
 open operation. Each SFTP Tab permits at most two active transfers, counting a

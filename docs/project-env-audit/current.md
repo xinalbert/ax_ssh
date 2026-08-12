@@ -98,7 +98,7 @@ git diff --check
 
 - 2026-08-12 09:00 CST
 - 2026-08-12 21:13 +0800：复核 release helper 扩展仍只使用 Python 标准库和 Git；CI 额外运行 Git-backed Highlights 回归，Rust 依赖、工具链、构建矩阵、日期 tag、CI 门禁和发行包内容未改变。
-- 2026-08-12 22:20 +0800：本地 SFTP 只读打开的目录快照/打开重验从平台文件 identity 强化为 identity 加长度、修改时间和创建时间指纹；未改 Rust 依赖、工具链、CI、SSH trust 或凭据，目标是拒绝快速 ID 复用和原地修改。
+- 2026-08-12 22:20 +0800：本地 SFTP 只读打开的目录快照/打开重验从平台文件 identity 强化为 identity 加长度、修改时间和创建时间 fingerprint；未改 Rust 依赖、工具链、CI、SSH trust 或凭据。Linux 和 Windows CI 证明快速同长度写入可保留相同可查询时间字段，因此 fingerprint 只能拒绝可观察到的变化，不能作为原地内容完整性证明。
 
 ## 2026-08-12 界面语言环境记录
 

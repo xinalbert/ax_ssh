@@ -539,10 +539,12 @@ AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
 双击本地 regular file 行只产生只读打开意图。bridge 先要求该精确路径仍位于活动 SFTP Tab 的
 当前本地快照；blocking worker 再使用不跟随链接的元数据重验目录和条目，拒绝目录与符号链接，
-打开只读 handle，并要求其平台文件 identity 加上长度、修改时间和创建时间指纹与列目录时记录的
-指纹完全一致。AxSSH 从这个已验证 handle 复制到有界私有 open cache，原子发布快照后才通过
+打开只读 handle，并要求其平台文件 identity 和列目录时记录的长度、修改时间、创建时间 fingerprint
+完全一致。该 metadata fingerprint 只能发现当前平台可观察到的变化，不能作为内容完整性保证。AxSSH
+从这个已验证 handle 复制到有界私有 open cache，原子发布快照后才通过
 `open::that_detached` 调用平台默认程序；不会再次打开已验证的源路径。过期 Tab、目录 request、路径、
-原地修改或已替换条目都会在调度前被拒绝，验证后的路径替换也无法把 opener 重定向到另一个文件 identity。
+identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证后的路径替换也无法把 opener 重定向到另一个
+文件 identity。
 
 双击当前远端快照中的 regular file 会排入只读下载后打开。每个 SFTP Tab 最多允许两个活动
 transfer，仍在打开的 subsystem 也计入上限；每个 transfer 独占单独的 SFTP subsystem stream。

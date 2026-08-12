@@ -80,10 +80,11 @@ registry.
   results by Tab and request identity, and preserve entry, name, and path limits
   before data reaches the UI. A local open intent must match the current active
   Tab snapshot, open a non-symlink regular-file handle on a blocking worker,
-  compare its platform identity plus length, modification time, and creation
-  time fingerprint with the listing snapshot, and copy from that handle into the
-  bounded private cache before invoking the detached platform opener. Never
-  reopen the validated source path for dispatch.
+  compare its platform identity and length, modification-time, and creation-time
+  fingerprint with the listing snapshot, and copy from that handle into the
+  bounded private cache before invoking the detached platform opener. That
+  fingerprint detects only platform-observable changes and is not a content
+  integrity guarantee. Never reopen the validated source path for dispatch.
 - SSH profile `sftp_remote_path` and `sftp_local_path` values are non-secret
   initialization inputs only. Keep them out of credentials, logs, and running
   Tab mutation; validate their bounded text before persistence, pass the remote

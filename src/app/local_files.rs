@@ -400,17 +400,17 @@ mod tests {
     }
 
     #[test]
-    fn local_open_validation_rejects_an_in_place_content_change() {
+    fn local_open_validation_rejects_an_in_place_length_change() {
         let directory =
             std::env::temp_dir().join(format!("ax-ssh-local-open-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&directory).expect("test directory should be created");
         let file_path = directory.join("notes.txt");
         fs::write(&file_path, b"trusted").expect("test file should be written");
         let entry = fixture_entry(&file_path, "notes.txt");
-        fs::write(&file_path, b"changed").expect("fixture should be changed in place");
+        fs::write(&file_path, b"changed-content").expect("fixture should be changed in place");
 
         let error = validate_local_file_for_open(&directory.display().to_string(), &entry)
-            .expect_err("an in-place change should invalidate the listing fingerprint");
+            .expect_err("an in-place length change should invalidate the listing fingerprint");
         assert!(error.to_string().contains("changed after it was listed"));
 
         fs::remove_dir_all(&directory).expect("test directory should be removed");
