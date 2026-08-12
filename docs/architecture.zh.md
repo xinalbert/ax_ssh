@@ -628,6 +628,9 @@ macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标
 日期 tag 成功后写入按 target 隔离的共享 Cargo cache，失败 job 不会写入；发布 job 也会独立验证所选
 tag 的 CI 成功后才恢复该缓存，并重新构建锁定的 release 二进制。构建前会校验
 所有版本表示一致，且不会读取或打包 `third_package/axshell`。
+发布前，workflow 只向 `scripts/generate_release_highlights.py` 提供已检出的 tag 历史和仓库 URL；
+该脚本只返回 Markdown，不拥有应用状态或发行资产。其去重的分类提交摘要作为 Release 正文前缀，
+GitHub 自动生成的 notes 继续保留完整提交列表。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
 `settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、最小对比度、粗体亮色、可选语义高亮色和鼠标复制/粘贴偏好、

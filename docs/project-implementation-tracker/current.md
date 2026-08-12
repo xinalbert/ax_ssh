@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260812-ui-language-selection
-- 目标：在 Settings > General 提供可即时应用并持久化的界面语言下拉框，支持 Follow system、English 与简体中文。
-- 交付物：稳定语言配置类型与 schema 迁移、Slint 运行时语言切换和内嵌翻译资源、Settings 草稿/保存链路、双语架构与使用说明、离线门禁。
+- 目标 ID：20260812-release-highlights
+- 目标：让按日期发布的 GitHub Release 自动展示可读的分类 Highlights，并继续附带 GitHub 的完整自动 release notes。
+- 交付物：可定向测试的 Highlights 生成器、`publish` workflow 接线、双语发布说明与实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config/` 语言设置、`src/app/` Settings 映射与 locale 切换、`ui/` 用户可见文案和 General 语言选择器、`translations/` 简体中文资源、构建入口及对应文档记录。
-- 不在本轮范围内：未完成翻译的语言、远端 Terminal 内容、用户自定义 profile/path、日志内部文本、SSH trust/认证/worker、依赖升级、CI/发行工作流和参考工程源码。
+- 当前范围：`.github/workflows/release.yml` 的发布正文、`scripts/` 的纯标准库生成和测试、`README{,.zh}.md`、`docs/development{,.zh}.md` 与发布/环境跟踪记录。
+- 不在本轮范围内：日期 tag 规则、Cargo/lockfile/包元数据、CI 成功门禁和缓存、三平台打包内容、应用运行时、Slint、SSH trust/认证/worker、依赖升级和参考工程源码。
 
 ## 当前状态
 
@@ -23,38 +23,35 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| LANG1 | completed | 增加稳定语言领域类型、schema v21 默认迁移和配置回归 | config 定向测试 | 默认 Follow system；持久化稳定代码，不依赖 Slint。 |
-| LANG2 | completed | 接入 Slint bundled translations、General 下拉和即时 locale 切换 | Cargo 编译与 386 条 UI 文案覆盖审计 | 下拉显示 Follow system、English 与简体中文。 |
-| LANG3 | completed | 同步双语契约、项目地图并完成完整门禁 | fmt/check/clippy/test/tracker/Markdown/diff | 自动化已完成；目标平台视觉和交互由用户验收。 |
-| LANG4 | completed | 防止快速连续语言选择的迟到保存覆盖最新请求 | 代次回归与完整离线门禁 | blocking 保存和 UI 分发均重验最新请求代次。 |
+| RELH1 | completed | 生成、分类和去重 release Highlights 的标准库脚本及定向测试 | `python -m unittest` 与临时 Git tag range 回归 | 只消费已签出的 Git 历史；不使用外部服务。 |
+| RELH2 | completed | 现有 `publish` job 的 Highlights 正文与自动 release notes 接线 | YAML 解析、Shell 静态检查和工作流输入审阅 | 日期 tag 验证、CI 门禁、缓存与发布资产未变。 |
+| RELH3 | completed | 双语发布说明、环境/实施记录和收口检查 | 文档链接、tracker validator、Cargo check 与 `git diff --check` | GitHub 实际页面渲染仍须在下一次 tag 发布后确认。 |
 
 ## 已完成
 
-- 已核实项目当前没有 locale/i18n 配置，用户可见文案主要为 Slint 硬编码英文，动态状态和错误由 Rust 应用桥产生。
-- 已核实锁定的 Slint 1.17.1 支持 `@tr(...)`、构建时内嵌 PO 资源以及创建首个组件后通过 `select_bundled_translation` 即时刷新所有翻译绑定。
-- 状态所有权确定为 `AppSettings` 保存稳定语言代码；Slint 只维护设置草稿、显示名称和选择意图，文件保存继续使用既有应用配置边界。
-- 已增加默认 Follow system、English 与简体中文三种稳定选择；中文系统 locale 解析为 `zh-CN`，其它系统 locale 回退 English。
-- 已完成 386 条静态 Slint 文案的简体中文目录、生成器、空翻译/陈旧项/编号占位符检查，并把语言选择接入独立持久化事务和所有存活窗口。
-- 已为独立语言保存增加有界请求代次；旧 blocking 任务取得状态锁后若已过期则不写盘，迟到 UI completion 也不会覆盖最新语言或状态提示。
+- 已完成施工前预检：项目为独立 Rust 2024/Cargo 应用；本轮仅改变 CI 发布元数据和 Python 标准库辅助脚本，不改 Rust 依赖或运行时边界。
+- 已确认项目地图覆盖 `.github/workflows/`、`scripts/` 与发布文档，不需要结构性刷新；未联网、未使用多 agent。
+- 已确认现有 Release 已使用 `generate_release_notes: true`，但没有 `body_path` 或自定义 Highlights 生成步骤。
+- 已新增 `scripts/generate_release_highlights.py`：只读当前 tag 与可达日期 tag 的 Git 历史，输出比较链接、每类最多 8 条的去重条目和不可变 commit 链接；跟踪类提交不进入 Highlights。
+- 已将生成器接入 `publish` job 的 `body_path`，同时保留 `generate_release_notes: true`；CI 现在运行 release-version 与 Highlights 两组 Python 回归。
+- 已同步根 README、开发和架构的中英文发布契约，并刷新环境当前态和项目地图。
 
 ## 验证
 
-- 已完成：根规则、AxSSH Rust/Slint skill、tracker 规则、配置/Settings/应用映射、Slint 1.17.1 bundled translation API、config/Settings 定向测试、迟到语言保存回归、完整 Cargo/翻译/Markdown/diff 门禁和提交前边界审计。
-- 未完成：目标平台 UI 验收。tracker validator 基线仍有 16 条本目标之前的旧月度记录缺失或使用非法时间字段，本轮记录字段合法。
+- 已完成：根规则、AxSSH Rust/Slint 与 Python 代码规范、环境当前态、项目地图、Python 定向回归/编译、YAML/Shell、Markdown、tracker、Cargo 离线和差异检查。
+- 未完成：GitHub 远端发布页面的实际拼接渲染，以及三平台构建/资产发布，须在下一次日期 tag 发布时确认。
 
 ## 风险与阻塞
 
-- 仅翻译设置页面会制造无效语言选项，因此简体中文必须覆盖应用拥有的用户可见 UI 文案；远端 Terminal 内容和用户数据不翻译。
-- Rust 动态状态不能直接使用 Slint `@tr`；本轮不进行脆弱的运行时字符串替换，技术错误详情保持原文。后续全量本地化应先把应用状态重构为稳定消息 ID 和参数。
-- 工作树包含此前 Settings、发布、终端、窗口和 Tooltip 改动；本轮在其上增量修改，不回退或覆盖无关工作。
+- Highlights 依据提交主题关键字分类，属于可解释的启发式摘要；未匹配提交仍由 GitHub 自动 release notes 覆盖。
+- `body_path` 与 `generate_release_notes` 的最终拼接由 GitHub Release 服务在真实 tag 发布时呈现；本地仅能验证生成正文和 workflow 输入。
+- 工作树有用户已有未提交改动；本轮只增量触及发布相关文件和所需记录，不回退其他改动。
 
 ## 下一步
 
-- 提交当前 UI/i18n 结果后，由用户验收目标平台焦点、滚动、hover、标题栏、边界和语言切换。
+- 在下一次日期 tag 发布后检查 Highlights、GitHub 自动说明和 compare 链接的线上呈现。
 
 ## 最后更新时间
 
-- 2026-08-12 17:31 +0800：完成 schema v21、Follow system/English/简体中文选择、386 条静态 UI 中文目录和独立保存/多窗口切换链路，进入完整门禁。
-- 2026-08-12 17:44 +0800：fmt/check/严格 Clippy、完整 301 项 Rust 测试、翻译目录、46 项 Markdown 链接与差异门禁通过；LANG1-LANG3 完成。
-- 2026-08-12 17:47 +0800：新增 LANG4 语言请求代次，防止快速连续选择时迟到的 blocking 保存或 UI completion 覆盖最后一次选择，进入完整离线门禁。
-- 2026-08-12 17:53 +0800：完整 302 项 Rust 测试、严格 Clippy、386 条翻译和提交前边界审计通过；LANG4 完成，目标仅剩用户视觉与交互验收。
+- 2026-08-12 18:02 +0800：切换至日期化 GitHub Release Highlights 目标；完成环境与工作流基线审阅，RELH1 开始实施。
+- 2026-08-12 21:13 +0800：完成 Git-backed Highlights 生成器、workflow 接线、双语发布契约与全部本地门禁；RELH1-RELH3 完成，保留远端发布页面验收。

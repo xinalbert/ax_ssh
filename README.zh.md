@@ -29,7 +29,8 @@ GitHub Releases 会提供 Windows x86_64、Linux x86_64/aarch64，以及 macOS �
 在默认分支手动运行 **Create Dated Release** workflow，会按上海时区当天日期发布版本：
 例如自动创建 `2026-08-12` tag、同步 Cargo 和 macOS 元数据，并启动 CI；CI 成功后才启动
 多平台构建 workflow。
-发布 tag 必须严格使用 `YYYY-MM-DD` 格式。
+发布 tag 必须严格使用 `YYYY-MM-DD` 格式。每个已发布的 Release 会按高信号提交生成简短的
+Highlights 分类和完整变更链接，并保留 GitHub 自动生成的 release notes 作为完整变更列表。
 
 ## 文档
 

@@ -969,7 +969,11 @@ target-specific Cargo cache only after a successful default-branch or date-tag
 run; failed jobs cannot save it, and release jobs independently require that tagged
 CI success before restoring it to build new locked release binaries. The workflow verifies all version
 representations before building and does not read or package
-`third_package/axshell`.
+`third_package/axshell`. Before publication, the workflow gives
+`scripts/generate_release_highlights.py` only the checked-out tag history and
+repository URL; the script returns Markdown, not application state or release
+assets. Its curated, de-duplicated commit categories are passed as the Release
+body prefix while GitHub-generated notes retain the full commit list.
 
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains

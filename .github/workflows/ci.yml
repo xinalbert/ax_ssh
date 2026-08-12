@@ -67,5 +67,5 @@ jobs:
       - name: Test
         if: matrix.run_tests
         run: cargo test --locked
-      - name: Test release metadata helper
-        run: python -m unittest scripts/test_release_version.py -v
+      - name: Test release helper scripts
+        run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v

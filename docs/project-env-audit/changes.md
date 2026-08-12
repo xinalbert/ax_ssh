@@ -339,6 +339,22 @@
 - 受影响文件：`.github/workflows/{ci,create-dated-release,release}.yml`、`scripts/{release_version,test_release_version}.py`、`Cargo.{toml,lock}`、`packaging/macos/{Info.plist,build-app.sh}`、发布文档和项目/环境记录。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、现有 `Cargo.lock` 和 Python 3 标准库。远端 CI 使用 Windows x86_64、Linux x86_64/aarch64 与 macOS arm64/x86_64 runner；Linux 额外安装 `pkg-config`、fontconfig 和 xkbcommon 开发包。
 - 验证结果：Python release-version 3 项回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）、macOS plist/shell 和 YAML 静态检查通过。严格 Clippy 因当前工作区现有的 `src/ssh/x11.rs` 两项 byte-slice lint，以及 `src/app/{terminal_bridge,view/terminal}.rs` 两项测试模块顺序 lint 失败；真实 GitHub Actions、cache hit、GitHub Release 与 macOS Gatekeeper 验证待远端执行。
+
+## 2026-08-12 GitHub Release Highlights 施工前预检
+
+- 目的：在为日期化 GitHub Release 增加自定义 Highlights 正文前，确认项目环境、发布边界和验证命令。
+- 改动范围：`.github/workflows/release.yml`、`scripts/`、`README{,.zh}.md`、`docs/development{,.zh}.md` 与发布相关跟踪记录。
+- 执行内容：复核 `Cargo.toml`、`Cargo.lock`、发布版本脚本、三个 GitHub Actions workflow 和现有环境当前态；确认项目继续使用 Rust 2024、Cargo、锁定依赖、Python 标准库脚本和 `unittest`，本轮不变更工具链、依赖、CI 构建矩阵、tag/CI 门禁或发行包内容。
+- 验证结果：预检通过；现有 release job 已使用 `generate_release_notes: true`，但尚未生成或传入自定义 `body_path`。后续将验证 Python 定向测试、YAML/Shell、Markdown、tracker、`cargo check --locked --offline` 和 `git diff --check`；真实 GitHub Release 页面拼接需在远端 tag 发布时确认。
+- 风险/待办：提交主题关键词归类是启发式的，未归类或文档类提交仍由 GitHub 自动 release notes 保留完整记录。
+
+## 2026-08-12 GitHub Release Highlights 环境更新
+
+- 目的：记录自定义 Release Highlights 对 CI 与测试环境的实际影响。
+- 改动范围：`.github/workflows/{ci,release}.yml`、`scripts/{generate_release_highlights,test_generate_release_highlights}.py` 与发布文档/跟踪记录。
+- 执行内容：CI 的 Python 测试步骤扩展为 release-version 和 Git-backed Highlights 两组 `unittest`；新增脚本只用 Python 标准库、`Path` 和已检出的 Git 历史生成 Markdown，不改 Rust 依赖、工具链、Cargo 锁文件、构建矩阵、日期 tag、CI 成功门禁、cache 策略或发行包内容。
+- 验证结果：Python 9 项定向回归与编译、YAML/Shell、11 个相关 Markdown 链接、tracker、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 150、应用 152、Doc tests 0）和差异检查通过；远端 GitHub Release 正文拼接、三平台构建和资产发布仍需下一次日期 tag 验证。
+- 风险/待办：分类依赖提交主题关键词；未分类提交仍由 GitHub 自动 release notes 保留，workflow 只在已检出的严格日期 tag 上执行。
 ## 2026-08-12 分屏即时 IME 焦点环境记录
 
 - 日期：2026-08-12

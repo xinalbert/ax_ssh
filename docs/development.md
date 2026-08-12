@@ -195,6 +195,15 @@ To re-run a completed release, manually dispatch **Release** with an exact
 `YYYY-MM-DD` tag. The local `packaging/macos/build-app.sh` script consumes the
 checked-in version and does not mutate release metadata.
 
+Before creating the GitHub Release, `scripts/generate_release_highlights.py`
+reads the checked-out tag history and writes a short, categorized **Highlights**
+prefix with immutable commit links and a full-changelog comparison link. It
+excludes implementation-tracking commit subjects and lists each selected commit
+once, with at most eight recent commits per category. `softprops/action-gh-release` receives that file through `body_path` while
+`generate_release_notes: true` remains enabled, so GitHub provides the complete
+automatic change list below the curated prefix. The helper and its Git-backed
+range behavior are covered by `scripts/test_generate_release_highlights.py` in CI.
+
 ## Runtime logs
 
 `src/main.rs` initializes one global tracing subscriber through

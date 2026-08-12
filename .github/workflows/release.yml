@@ -285,11 +285,22 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Generate release highlights
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/generate_release_highlights.py \
+            --tag "$RELEASE_TAG" \
+            --repository-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --output release/body.md
+          cat release/body.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag }}
           name: AxSSH ${{ env.RELEASE_PUBLIC_VERSION }}
           files: dist/**/*
+          body_path: release/body.md
           generate_release_notes: true
           fail_on_unmatched_files: true

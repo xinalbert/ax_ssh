@@ -143,6 +143,12 @@ macOS bundle 元数据一致。已有日期 tag 不会被覆盖。
 需要重跑已完成发布时，手动运行 **Release** 并输入严格的 `YYYY-MM-DD` tag。本地
 `packaging/macos/build-app.sh` 只使用已提交的版本，不会修改发布元数据。
 
+创建 GitHub Release 前，`scripts/generate_release_highlights.py` 会读取已检出的 tag 历史，生成带
+不可变 commit 链接和完整变更对比链接的分类 **Highlights** 前缀。它会排除实施跟踪类提交主题，并且每条
+选中的提交只出现一次，每个分类最多保留最近 8 条。`softprops/action-gh-release` 通过 `body_path` 读取该文件，同时仍启用
+`generate_release_notes: true`，因此 GitHub 会在该前缀下提供完整的自动变更列表。CI 通过
+`scripts/test_generate_release_highlights.py` 覆盖该辅助脚本及其 Git tag range 行为。
+
 ## 运行日志
 
 `src/main.rs` 通过 `src/logging.rs` 初始化唯一的全局 tracing subscriber。文件

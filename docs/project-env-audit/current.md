@@ -16,7 +16,7 @@
 ## 测试环境
 
 - 单元与集成测试：Cargo 原生测试，包括 config、terminal、应用状态、本地 PTY、loopback SSH/Telnet、内存 SSH agent protocol + 外部 signer、SFTP packet/path/state 边界和 Serial descriptor 匹配。
-- CI：GitHub Actions 在 Ubuntu、macOS、Windows 上运行 format、check、test 和发布元数据测试；tag 发布 workflow 在 GitHub-hosted Windows、Ubuntu x86_64/ARM64 与 macOS runner 上构建发行包。
+- CI：GitHub Actions 在 Ubuntu、macOS、Windows 上运行 format、check、test、发布元数据和 Git-backed Release Highlights 测试；tag 发布 workflow 在 GitHub-hosted Windows、Ubuntu x86_64/ARM64 与 macOS runner 上构建发行包。
 - 本机已安装 `cargo fmt` 与 `cargo clippy` 子命令；CI 仍是目标平台构建与 GitHub Release 的执行位置。
 - Terminal IME 焦点策略：复用 `TerminalPane` 组件的 terminal identity/focused/connected/visible/divider-release 转换同步聚焦既有透明 `TextInput` proxy；仅新建 pane 在首次布局后执行一次可见、focused、connected 重验，避免重建实例在未布局时取得无效原生焦点。
 
@@ -44,7 +44,7 @@ git diff --check
 - 真实 SFTP 服务兼容性与 GUI 文件面板需要目标环境手工验证。
 - X11 forwarding 依赖目标平台可用的本机 X server。普通 SSH shell 创建只发送 forwarding request，不读取本机 `DISPLAY`、不运行 `xauth`、不探测端点且不启动 provider；远端实际打开 X11 channel 后才进行本机准备。AxSSH 从 Settings 显示 macOS bundle identifier 或 Windows `PATH`/Program Files 检测到的只读已知位置，且仅在 Custom 时接受用户提供的 executable 路径。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
 - 自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包，不经 Slint import 嵌入可执行文件。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
-- 当前发布基线为 Cargo `2026.8.12`、公开 tag `2026-08-12`。`scripts/release_version.py` 只依赖 Python 标准库，日期 workflow 使用 `Asia/Shanghai` 生成并验证 Cargo/lockfile/macOS plist 版本。日期 workflow 显式 dispatch tag CI；CI 在成功 default-branch 或已验证日期-tag run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache 并重新构建 `--release --locked` binary。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
+- 当前发布基线为 Cargo `2026.8.12`、公开 tag `2026-08-12`。`scripts/release_version.py` 与 `scripts/generate_release_highlights.py` 只依赖 Python 标准库；后者在已检出的 tag 历史上生成分类 Markdown，定向测试用临时 Git 仓库覆盖 tag range、去重、跟踪提交排除和失败路径。日期 workflow 使用 `Asia/Shanghai` 生成并验证 Cargo/lockfile/macOS plist 版本。日期 workflow 显式 dispatch tag CI；CI 在成功 default-branch 或已验证日期-tag run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache 并重新构建 `--release --locked` binary。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
 
 ## 证据文件
 
@@ -97,6 +97,7 @@ git diff --check
 ## 最后确认时间
 
 - 2026-08-12 09:00 CST
+- 2026-08-12 21:13 +0800：复核 release helper 扩展仍只使用 Python 标准库和 Git；CI 额外运行 Git-backed Highlights 回归，Rust 依赖、工具链、构建矩阵、日期 tag、CI 门禁和发行包内容未改变。
 
 ## 2026-08-12 界面语言环境记录
 
