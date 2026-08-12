@@ -16,6 +16,71 @@ use super::{
     ThemeSettings,
 };
 
+/// The language-selection policy for AxSSH's fully translated UI locales.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum UiLanguage {
+    #[default]
+    System,
+    English,
+    SimplifiedChinese,
+}
+
+impl UiLanguage {
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::English => "english",
+            Self::SimplifiedChinese => "simplified-chinese",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "english" | "en" => Self::English,
+            "simplified-chinese" | "zh" | "zh-cn" | "zh-hans" => Self::SimplifiedChinese,
+            _ => Self::System,
+        }
+    }
+
+    /// Keeps the selector independent from labels that change after locale selection.
+    pub const fn from_selector_index(index: i32) -> Self {
+        match index {
+            1 => Self::English,
+            2 => Self::SimplifiedChinese,
+            _ => Self::System,
+        }
+    }
+
+    pub const fn selector_index(self) -> i32 {
+        match self {
+            Self::System => 0,
+            Self::English => 1,
+            Self::SimplifiedChinese => 2,
+        }
+    }
+
+    pub fn resolved_locale(self, system_locale: Option<&str>) -> &'static str {
+        match self {
+            Self::System => system_locale
+                .and_then(|locale| locale.split(['-', '_', '@']).next())
+                .filter(|base| base.eq_ignore_ascii_case("zh"))
+                .map_or("en", |_| "zh-CN"),
+            Self::English => "en",
+            Self::SimplifiedChinese => "zh-CN",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for UiLanguage {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::from_setting(&String::deserialize(deserializer)?))
+    }
+}
+
 /// Raw appearance values supplied by an application settings surface.
 #[derive(Clone, Copy, Debug)]
 pub struct AppearanceSettingsInput<'a> {
@@ -573,10 +638,13 @@ pub struct AppSettingsInput<'a> {
     pub workspace: WorkspaceSettingsInput<'a>,
     pub shortcuts: ShortcutSettings,
     pub credential_storage: &'a str,
+    pub ui_language: &'a str,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppSettings {
+    #[serde(default)]
+    pub ui_language: UiLanguage,
     #[serde(default)]
     pub appearance: AppearanceSettings,
     #[serde(default)]
@@ -595,6 +663,7 @@ pub struct AppSettings {
 impl AppSettings {
     pub fn normalized(input: AppSettingsInput<'_>) -> Self {
         Self {
+            ui_language: UiLanguage::from_setting(input.ui_language),
             appearance: AppearanceSettings::normalized(input.appearance),
             terminal: TerminalSettings::normalized(input.terminal),
             workspace: WorkspaceSettings::normalized(input.workspace),
@@ -616,6 +685,7 @@ impl AppSettings {
     }
 
     pub(super) fn normalize_in_place(&mut self) {
+        self.ui_language = UiLanguage::from_setting(self.ui_language.as_setting());
         self.appearance.normalize_in_place();
         self.terminal.normalize_in_place();
         self.workspace.normalize_in_place();

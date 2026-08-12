@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ElidedLabel } from "elided-controls.slint";
 
 export struct WorkspaceTabRow {
     id: string,
@@ -106,16 +107,14 @@ component WorkspaceTabContent inherits HorizontalLayout {
         horizontal-alignment: right;
         vertical-alignment: center;
     }
-    Text {
+    ElidedLabel {
         horizontal-stretch: 1;
         text: root.title;
-        color: Theme.text;
+        text-color: Theme.text;
         font-size: Theme.tab-title-font-size;
         font-weight: root.active
             ? Theme.tab-title-active-font-weight
             : Theme.tab-title-inactive-font-weight;
-        overflow: elide;
-        vertical-alignment: center;
     }
     if root.window-action-enabled : Rectangle {
         width: root.close-button-size;
@@ -132,8 +131,8 @@ component WorkspaceTabContent inherits HorizontalLayout {
             mouse-cursor: pointer;
             accessible-role: button;
             accessible-label: root.detached-window
-                ? "Return workspace to main window"
-                : "Move workspace to new window";
+                ? @tr("Return workspace to main window")
+                : @tr("Move workspace to new window");
             clicked => { root.window-action(); }
             scroll-event(event) => {
                 root.scroll-tabs(event.delta-x, event.delta-y);
@@ -149,7 +148,7 @@ component WorkspaceTabContent inherits HorizontalLayout {
         close-label := Text {
             width: parent.width;
             height: parent.height;
-            text: "x";
+            text: @tr("x");
             color: Theme.muted;
             font-size: Theme.tab-close-font-size;
             horizontal-alignment: center;
@@ -159,7 +158,7 @@ component WorkspaceTabContent inherits HorizontalLayout {
             enabled: root.close-enabled;
             mouse-cursor: pointer;
             accessible-role: button;
-            accessible-label: "Close tab";
+            accessible-label: @tr("Close tab");
             clicked => { root.close(); }
             scroll-event(event) => {
                 root.scroll-tabs(event.delta-x, event.delta-y);
@@ -175,10 +174,8 @@ component ConnectionPickerRow inherits FocusScope {
     in property <string> endpoint;
     callback connect-session(string);
 
-    private property <length> name-line-height:
-        name-label.font-metrics.ascent - name-label.font-metrics.descent;
-    private property <length> endpoint-line-height:
-        endpoint-label.font-metrics.ascent - endpoint-label.font-metrics.descent;
+    private property <length> name-line-height: name-label.line-height;
+    private property <length> endpoint-line-height: endpoint-label.line-height;
     private property <length> row-height: max(
         Theme.titlebar-connection-picker-row-min-height,
         root.name-line-height
@@ -212,23 +209,19 @@ component ConnectionPickerRow inherits FocusScope {
             padding-bottom: Theme.titlebar-connection-picker-row-padding-y;
             spacing: Theme.titlebar-connection-picker-row-spacing;
 
-            name-label := Text {
+            name-label := ElidedLabel {
                 height: root.name-line-height;
                 text: root.name;
-                color: Theme.text;
+                text-color: Theme.text;
                 font-size: Theme.font-body;
                 font-weight: 700;
-                overflow: elide;
-                vertical-alignment: center;
             }
-            endpoint-label := Text {
+            endpoint-label := ElidedLabel {
                 height: root.endpoint-line-height;
                 text: root.endpoint;
-                color: Theme.muted;
+                text-color: Theme.muted;
                 font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
-                overflow: elide;
-                vertical-alignment: center;
             }
         }
 
@@ -267,7 +260,7 @@ export component ConnectionPicker inherits FocusScope {
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: list;
-    accessible-label: "Saved connections";
+    accessible-label: @tr("Saved connections");
 
     key-pressed(event) => {
         if event.text == Key.Escape {
@@ -279,13 +272,13 @@ export component ConnectionPicker inherits FocusScope {
 
     name-probe := Text {
         visible: false;
-        text: "Name";
+        text: @tr("Name");
         font-size: Theme.font-body;
         font-weight: 700;
     }
     endpoint-probe := Text {
         visible: false;
-        text: "Endpoint";
+        text: @tr("Endpoint");
         font-family: Theme.application-font-family;
         font-size: Theme.font-caption;
     }
@@ -302,7 +295,7 @@ export component ConnectionPicker inherits FocusScope {
             spacing: 0px;
 
             if root.sessions.length == 0 : Text {
-                text: "No saved connections";
+                text: @tr("No saved connections");
                 color: Theme.muted;
                 font-size: Theme.font-small;
                 horizontal-alignment: center;
@@ -501,7 +494,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     tab-height-probe := WorkspaceTabContent {
         visible: false;
         width: 0px;
-        title: "Tab";
+        title: @tr("Tab");
         kind: "terminal";
         connected: true;
         active: true;
@@ -510,7 +503,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     }
     add-glyph-height-probe := Text {
         visible: false;
-        text: "+";
+        text: @tr("+");
         font-size: Theme.tab-add-font-size;
     }
 
@@ -695,14 +688,14 @@ export component WorkspaceTitlebar inherits Rectangle {
 
                 TerminalSplitButton {
                     vertical: true;
-                    accessible-name: "Split active terminal vertically";
-                    tooltip-text: "Split vertically (Alt+Shift+L)";
+                    accessible-name: @tr("Split active terminal vertically");
+                    tooltip-text: @tr("Split vertically (Alt+Shift+L)");
                     activated => { root.terminal-pane-command("split-right"); }
                 }
                 TerminalSplitButton {
                     vertical: false;
-                    accessible-name: "Split active terminal horizontally";
-                    tooltip-text: "Split horizontally (Alt+Shift+J)";
+                    accessible-name: @tr("Split active terminal horizontally");
+                    tooltip-text: @tr("Split horizontally (Alt+Shift+J)");
                     activated => { root.terminal-pane-command("split-down"); }
                 }
             }
@@ -721,7 +714,7 @@ export component WorkspaceTitlebar inherits Rectangle {
             add-label := Text {
                 width: parent.width;
                 height: parent.height;
-                text: "+";
+                text: @tr("+");
                 color: Theme.text;
                 font-size: Theme.tab-add-font-size;
                 horizontal-alignment: center;
@@ -730,7 +723,7 @@ export component WorkspaceTitlebar inherits Rectangle {
             add-touch := TouchArea {
                 mouse-cursor: pointer;
                 accessible-role: button;
-                accessible-label: "Open saved connection";
+                accessible-label: @tr("Open saved connection");
                 clicked => { root.toggle-connection-picker(); }
             }
         }

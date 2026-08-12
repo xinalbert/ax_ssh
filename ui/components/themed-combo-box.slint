@@ -23,7 +23,7 @@ export component ThemedComboBox inherits FocusScope {
         && root.current-index < root.model.length
         ? root.model[root.current-index]
         : "";
-    callback selected(string);
+    callback selected(string, int);
 
     private property <bool> popup-open: false;
     private property <length> popup-scroll-y: 0px;
@@ -49,7 +49,7 @@ export component ThemedComboBox inherits FocusScope {
             return;
         }
         root.current-index = index;
-        root.selected(root.model[index]);
+        root.selected(root.model[index], index);
     }
 
     function move-selection(delta: int) {

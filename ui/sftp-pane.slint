@@ -203,7 +203,7 @@ component SftpDirectoryHeader inherits Rectangle {
             visible: root.selection-checked;
             width: parent.width;
             height: parent.height;
-            text: "x";
+            text: @tr("x");
             color: Theme.background;
             font-size: Theme.font-caption;
             font-weight: 700;
@@ -218,7 +218,7 @@ component SftpDirectoryHeader inherits Rectangle {
         enabled: root.selection-enabled;
         mouse-cursor: pointer;
         accessible-role: checkbox;
-        accessible-label: "Select all files";
+        accessible-label: @tr("Select all files");
         accessible-checked: root.selection-checked;
         accessible-enabled: root.selection-enabled;
         accessible-action-default => { root.select-all(!root.selection-checked); }
@@ -228,7 +228,7 @@ component SftpDirectoryHeader inherits Rectangle {
         x: root.name-x;
         width: max(0px, root.name-right - self.x);
         height: parent.height;
-        text: "Name";
+        text: @tr("Name");
         color: Theme.muted;
         font-size: Theme.font-caption;
         font-weight: 700;
@@ -240,7 +240,7 @@ component SftpDirectoryHeader inherits Rectangle {
         width: Theme.sftp-size-width;
         height: parent.height;
         visible: root.show-size;
-        text: "Size";
+        text: @tr("Size");
         color: Theme.muted;
         font-size: Theme.font-caption;
         font-weight: 700;
@@ -252,7 +252,7 @@ component SftpDirectoryHeader inherits Rectangle {
         width: Theme.sftp-time-width;
         height: parent.height;
         visible: root.show-modified;
-        text: "Modified";
+        text: @tr("Modified");
         color: Theme.muted;
         font-size: Theme.font-caption;
         font-weight: 700;
@@ -311,7 +311,7 @@ component SftpEntry inherits Rectangle {
             visible: root.entry.selected;
             width: parent.width;
             height: parent.height;
-            text: "x";
+            text: @tr("x");
             color: Theme.background;
             font-size: Theme.font-caption;
             font-weight: 700;
@@ -412,7 +412,7 @@ component SftpEntry inherits Rectangle {
         enabled: root.shown && root.interactive;
         mouse-cursor: pointer;
         accessible-role: checkbox;
-        accessible-label: "Select " + root.entry.name;
+        accessible-label: @tr("Select {0}", root.entry.name);
         accessible-checked: root.entry.selected;
         accessible-enabled: root.shown && root.interactive;
         accessible-action-default => {
@@ -474,7 +474,7 @@ component SftpDirectoryPane inherits Rectangle {
 
     control-text-probe := Text {
         visible: false;
-        text: "Open";
+        text: @tr("Open");
         font-size: Theme.sftp-control-font-size;
         font-weight: Theme.sftp-control-font-weight;
     }
@@ -507,7 +507,7 @@ component SftpDirectoryPane inherits Rectangle {
                 );
                 width: Theme.sftp-hidden-control-width;
                 height: parent.height;
-                text: "Hidden";
+                text: @tr("Hidden");
                 checked <=> root.show-hidden;
                 enabled: root.interactive;
             }
@@ -517,7 +517,7 @@ component SftpDirectoryPane inherits Rectangle {
                     parent.width - self.width - Theme.sftp-column-padding,
                 );
                 y: (parent.height - self.height) / 2;
-                accessible-name: "Copy current path";
+                accessible-name: @tr("Copy current path");
                 enabled: !root.path.is-empty;
                 clicked => { root.copy-path(root.path); }
             }
@@ -543,23 +543,23 @@ component SftpDirectoryPane inherits Rectangle {
                 if root.allow-navigation : SftpActionButton {
                     width: Theme.sftp-nav-icon-button-width;
                     height: root.control-height;
-                    text: "<";
-                    accessible-name: "Back";
+                    text: @tr("<");
+                    accessible-name: @tr("Back");
                     enabled: root.interactive && !root.loading && root.can-go-back;
                     clicked => { root.navigate-back(); }
                 }
                 if root.allow-navigation : SftpActionButton {
                     width: Theme.sftp-nav-icon-button-width;
                     height: root.control-height;
-                    text: ">";
-                    accessible-name: "Forward";
+                    text: @tr(">");
+                    accessible-name: @tr("Forward");
                     enabled: root.interactive && !root.loading && root.can-go-forward;
                     clicked => { root.navigate-forward(); }
                 }
 
                 FlatTextInput {
                     text <=> root.path-draft;
-                    placeholder-text: "Path";
+                    placeholder-text: @tr("Path");
                     height: root.control-height;
                     control-min-height: root.control-height;
                     font-size: Theme.sftp-control-font-size;
@@ -570,14 +570,14 @@ component SftpDirectoryPane inherits Rectangle {
                 SftpActionButton {
                     width: Theme.sftp-path-action-width;
                     height: root.control-height;
-                    text: "Open";
+                    text: @tr("Open");
                     enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
                 }
                 if root.allow-refresh && root.width >= 340px : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: root.control-height;
-                    text: "Refresh";
+                    text: @tr("Refresh");
                     enabled: root.interactive && !root.loading && !root.current-path.is-empty;
                     clicked => { root.refresh(); }
                 }
@@ -625,7 +625,7 @@ component SftpDirectoryPane inherits Rectangle {
         if root.entries.length == 0 : Rectangle {
             vertical-stretch: 1;
             Text {
-                text: root.loading ? "Loading..." : "No files";
+                text: root.loading ? @tr("Loading...") : @tr("No files");
                 color: Theme.muted;
                 font-size: Theme.font-body;
                 horizontal-alignment: center;
@@ -653,7 +653,7 @@ component SftpDirectoryPane inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 width: Theme.sftp-more-button-width;
                 height: root.control-height;
-                text: root.loading ? "Loading" : "More";
+                text: root.loading ? @tr("Loading") : @tr("More");
                 enabled: root.interactive && !root.loading;
                 clicked => { root.load-more(); }
             }
@@ -755,8 +755,8 @@ component SftpTransferEntry inherits Rectangle {
         y: (parent.height - self.height) / 2;
         width: Theme.sftp-nav-icon-button-width;
         height: parent.height;
-        text: "x";
-        accessible-name: "Cancel transfer " + root.transfer.name;
+        text: @tr("x");
+        accessible-name: @tr("Cancel transfer {0}", root.transfer.name);
         font-size: Theme.font-small;
         enabled: root.transfer.cancellable;
         clicked => { root.cancel(root.transfer.id); }
@@ -790,8 +790,10 @@ component SftpTransferQueue inherits Rectangle {
                 x: Theme.sftp-column-padding;
                 width: parent.width - 2 * Theme.sftp-column-padding;
                 height: parent.height;
-                text: "Transfers   Active (" + root.active-count + ")   Failed ("
-                    + root.failed-count + ")   Completed (" + root.completed-count + ")";
+                text: @tr(
+                    "Transfers   Active ({0})   Failed ({1})   Completed ({2})",
+                    root.active-count, root.failed-count, root.completed-count
+                );
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -818,7 +820,7 @@ component SftpTransferQueue inherits Rectangle {
                 x: Theme.sftp-column-padding;
                 width: max(0px, parent.content-width * 0.48 - Theme.sftp-column-gap - self.x);
                 height: parent.height;
-                text: "Name";
+                text: @tr("Name");
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -829,7 +831,7 @@ component SftpTransferQueue inherits Rectangle {
                 x: parent.content-width * 0.48;
                 width: max(0px, parent.content-width * 0.24 - Theme.sftp-column-gap);
                 height: parent.height;
-                text: "Status";
+                text: @tr("Status");
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -840,7 +842,7 @@ component SftpTransferQueue inherits Rectangle {
                 x: parent.content-width * 0.72;
                 width: max(0px, parent.content-width * 0.14 - Theme.sftp-column-gap);
                 height: parent.height;
-                text: "Size";
+                text: @tr("Size");
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -855,7 +857,7 @@ component SftpTransferQueue inherits Rectangle {
                     parent.width - parent.action-slot-width - Theme.sftp-column-gap - self.x,
                 );
                 height: parent.height;
-                text: "Speed";
+                text: @tr("Speed");
                 color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
@@ -874,7 +876,7 @@ component SftpTransferQueue inherits Rectangle {
             vertical-stretch: 1;
             min-height: 0px;
             accessible-role: list;
-            accessible-label: "File transfers";
+            accessible-label: @tr("File transfers");
 
             for transfer in root.transfers : Rectangle {
                 width: parent.width;
@@ -891,7 +893,7 @@ component SftpTransferQueue inherits Rectangle {
         if !root.collapsed && root.transfers.length == 0 : Rectangle {
             vertical-stretch: 1;
             Text {
-                text: "No transfers yet";
+                text: @tr("No transfers yet");
                 color: Theme.muted;
                 font-size: Theme.font-body;
                 horizontal-alignment: center;
@@ -928,7 +930,7 @@ export component SftpPane inherits Rectangle {
     min-height: 0px;
     background: Theme.background;
     accessible-role: list;
-    accessible-label: "SFTP files";
+    accessible-label: @tr("SFTP files");
 
     private property <length> directory-splitter-size: min(
         Theme.sftp-splitter-size,
@@ -1002,7 +1004,7 @@ export component SftpPane inherits Rectangle {
                 x: 0px;
                 width: root.remote-pane-width;
                 height: parent.height;
-                title: "Remote files";
+                title: @tr("Remote files");
                 interactive: root.view.available;
                 entries: root.view.entries;
                 loading: root.view.loading;
@@ -1034,7 +1036,7 @@ export component SftpPane inherits Rectangle {
                 width: root.directory-splitter-size;
                 height: parent.height;
                 orientation: Orientation.horizontal;
-                accessible-name: "Remote and local file pane sizes";
+                accessible-name: @tr("Remote and local file pane sizes");
                 value: root.clamped-directory-split-ratio;
                 minimum: root.directory-ratio-min;
                 maximum: root.directory-ratio-max;
@@ -1058,7 +1060,7 @@ export component SftpPane inherits Rectangle {
                 x: directory-splitter.x + directory-splitter.width;
                 width: max(0px, parent.width - self.x);
                 height: parent.height;
-                title: "Local files";
+                title: @tr("Local files");
                 allow-hidden: false;
                 entries: root.view.local_entries;
                 loading: root.view.local_loading;
@@ -1081,7 +1083,7 @@ export component SftpPane inherits Rectangle {
             width: parent.width;
             height: root.transfer-splitter-size;
             orientation: Orientation.vertical;
-            accessible-name: "Files and transfers area sizes";
+            accessible-name: @tr("Files and transfers area sizes");
             value: root.clamped-files-split-ratio;
             minimum: root.files-ratio-min;
             maximum: root.files-ratio-max;

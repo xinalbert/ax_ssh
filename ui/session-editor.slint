@@ -1,6 +1,7 @@
-import { Button, CheckBox, ScrollView } from "std-widgets.slint";
+import { CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
+import { ElidedButton } from "components/elided-controls.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
 import { SecretTextInput } from "components/secret-text-input.slint";
 import { SessionEditorField, SessionEditorSectionHeading } from "components/session-editor-controls.slint";
@@ -67,8 +68,8 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> credential-storage-draft: "system-keyring";
     private property <string> vault-password-draft;
     private property <[string]> credential-storage-options: [
-        "System credential store",
-        "Encrypted application vault",
+        @tr("System credential store"),
+        @tr("Encrypted application vault"),
     ];
     private property <bool> x11-forwarding-draft: false;
     private property <string> serial-port-draft;
@@ -206,20 +207,20 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "Protocol";
-                        description: "Select the transport used by this saved connection.";
+                        label: @tr("Protocol");
+                        description: @tr("Select the transport used by this saved connection.");
                     }
                     AuthenticationMethodSelector {
                         options: [
-                            { label: "SSH", value: "SSH" },
-                            { label: "Telnet", value: "Telnet" },
-                            { label: "Serial", value: "Serial" },
+                            { label: @tr("SSH"), value: "SSH" },
+                            { label: @tr("Telnet"), value: "Telnet" },
+                            { label: @tr("Serial"), value: "Serial" },
                         ];
                         selected-method <=> root.protocol;
-                        accessible-name: "Connection protocol";
+                        accessible-name: @tr("Connection protocol");
                     }
                     if root.protocol == "Telnet" : Text {
-                        text: "Telnet sends terminal traffic without encryption or host identity verification.";
+                        text: @tr("Telnet sends terminal traffic without encryption or host identity verification.");
                         color: Theme.danger;
                         font-size: Theme.font-small;
                         wrap: word-wrap;
@@ -230,8 +231,8 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "Identity";
-                        description: "Choose how this connection appears in the workspace.";
+                        label: @tr("Identity");
+                        description: @tr("Choose how this connection appears in the workspace.");
                     }
                     HorizontalLayout {
                         height: self.preferred-height;
@@ -239,34 +240,34 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-xl;
                         SessionEditorField {
                             horizontal-stretch: 3;
-                            label: "Name";
+                            label: @tr("Name");
                             name-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
-                                placeholder-text: "Production server";
+                                placeholder-text: @tr("Production server");
                                 text <=> root.name-draft;
-                                accessible-label: "Session name";
+                                accessible-label: @tr("Session name");
                             }
                         }
                         SessionEditorField {
                             horizontal-stretch: 2;
-                            label: "Group";
+                            label: @tr("Group");
                             HorizontalLayout {
                                 height: Theme.editor-input-row-height;
                                 spacing: Theme.space-md;
                                 group-edit := FlatTextInput {
                                     horizontal-stretch: 1;
                                     height: Theme.editor-input-row-height;
-                                    placeholder-text: "Optional";
+                                    placeholder-text: @tr("Optional");
                                     text <=> root.group-draft;
-                                    accessible-label: "Session group";
+                                    accessible-label: @tr("Session group");
                                 }
                                 if root.group-options.length > 0 : ThemedComboBox {
                                     width: Theme.editor-secondary-picker-width;
                                     height: Theme.editor-input-row-height;
                                     model: root.group-options;
-                                    accessible-label: "Existing session groups";
-                                    selected(value) => {
+                                    accessible-label: @tr("Existing session groups");
+                                    selected(value, _index) => {
                                         group-edit.text = value == "Ungrouped" ? "" : value;
                                     }
                                 }
@@ -279,10 +280,10 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "Endpoint";
+                        label: @tr("Endpoint");
                         description: root.protocol == "SSH"
-                            ? "Enter the host address and SSH account."
-                            : "Enter the Telnet server address.";
+                            ? @tr("Enter the host address and SSH account.")
+                            : @tr("Enter the Telnet server address.");
                     }
                     HorizontalLayout {
                         height: self.preferred-height;
@@ -290,11 +291,11 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-xl;
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Host";
+                            label: @tr("Host");
                             host-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
-                                placeholder-text: "server.example.com";
+                                placeholder-text: @tr("server.example.com");
                                 text <=> root.host-draft;
                                 accessible-label: root.protocol + " host";
                             }
@@ -302,24 +303,24 @@ export component SessionEditorPane inherits Rectangle {
                         SessionEditorField {
                             width: Theme.editor-port-width;
                             horizontal-stretch: 0;
-                            label: "Port";
+                            label: @tr("Port");
                             port-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.port-draft;
-                                placeholder-text: "22";
+                                placeholder-text: @tr("22");
                                 accessible-label: root.protocol + " port";
                             }
                         }
                     }
                     if root.protocol == "SSH" : SessionEditorField {
-                        label: "Username";
+                        label: @tr("Username");
                         user-edit := FlatTextInput {
                             width: parent.width;
                             height: Theme.editor-input-row-height;
-                            placeholder-text: "root";
+                            placeholder-text: @tr("root");
                             text <=> root.username-draft;
-                            accessible-label: "SSH username";
+                            accessible-label: @tr("SSH username");
                         }
                     }
                 }
@@ -328,11 +329,11 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "Serial port";
-                        description: "Select a detected device or enter its port name manually.";
+                        label: @tr("Serial port");
+                        description: @tr("Select a detected device or enter its port name manually.");
                     }
                     SessionEditorField {
-                        label: "Port";
+                        label: @tr("Port");
                         HorizontalLayout {
                             height: Theme.editor-input-row-height;
                             spacing: Theme.space-md;
@@ -340,20 +341,20 @@ export component SessionEditorPane inherits Rectangle {
                                 horizontal-stretch: 1;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.serial-port-draft;
-                                placeholder-text: "/dev/cu.usbserial or COM3";
-                                accessible-label: "Serial port name";
+                                placeholder-text: @tr("/dev/cu.usbserial or COM3");
+                                accessible-label: @tr("Serial port name");
                             }
                             if root.source.serial_port_options.length > 0 : ThemedComboBox {
                                 width: Theme.editor-detected-key-width;
                                 height: Theme.editor-input-row-height;
                                 model: root.source.serial_port_options;
-                                accessible-label: "Detected serial ports";
-                                selected(value) => { root.serial-port-draft = value; }
+                                accessible-label: @tr("Detected serial ports");
+                                selected(value, _index) => { root.serial-port-draft = value; }
                             }
-                            Button {
+                            ElidedButton {
                                 height: Theme.editor-input-row-height;
-                                text: "Refresh";
-                                accessible-label: "Refresh serial ports";
+                                text: @tr("Refresh");
+                                accessible-name: @tr("Refresh serial ports");
                                 clicked => { root.refresh-serial-ports(); }
                             }
                         }
@@ -364,18 +365,18 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-xl;
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Baud rate";
+                            label: @tr("Baud rate");
                             FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.serial-baud-rate;
-                                placeholder-text: "115200";
-                                accessible-label: "Serial baud rate";
+                                placeholder-text: @tr("115200");
+                                accessible-label: @tr("Serial baud rate");
                             }
                         }
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Data bits";
+                            label: @tr("Data bits");
                             ThemedComboBox {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
@@ -383,20 +384,20 @@ export component SessionEditorPane inherits Rectangle {
                                 current-index: root.serial-data-bits == "8" ? 0
                                     : (root.serial-data-bits == "7" ? 1
                                     : (root.serial-data-bits == "6" ? 2 : 3));
-                                accessible-label: "Serial data bits";
-                                selected(value) => { root.serial-data-bits = value; }
+                                accessible-label: @tr("Serial data bits");
+                                selected(value, _index) => { root.serial-data-bits = value; }
                             }
                         }
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Stop bits";
+                            label: @tr("Stop bits");
                             ThemedComboBox {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 model: ["1", "2"];
                                 current-index: root.serial-stop-bits == "2" ? 1 : 0;
-                                accessible-label: "Serial stop bits";
-                                selected(value) => { root.serial-stop-bits = value; }
+                                accessible-label: @tr("Serial stop bits");
+                                selected(value, _index) => { root.serial-stop-bits = value; }
                             }
                         }
                     }
@@ -406,28 +407,28 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-xl;
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Parity";
+                            label: @tr("Parity");
                             ThemedComboBox {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 model: ["none", "odd", "even"];
                                 current-index: root.serial-parity == "odd" ? 1
                                     : (root.serial-parity == "even" ? 2 : 0);
-                                accessible-label: "Serial parity";
-                                selected(value) => { root.serial-parity = value; }
+                                accessible-label: @tr("Serial parity");
+                                selected(value, _index) => { root.serial-parity = value; }
                             }
                         }
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Flow control";
+                            label: @tr("Flow control");
                             ThemedComboBox {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 model: ["none", "software", "hardware"];
                                 current-index: root.serial-flow-control == "software" ? 1
                                     : (root.serial-flow-control == "hardware" ? 2 : 0);
-                                accessible-label: "Serial flow control";
-                                selected(value) => { root.serial-flow-control = value; }
+                                accessible-label: @tr("Serial flow control");
+                                selected(value, _index) => { root.serial-flow-control = value; }
                             }
                         }
                     }
@@ -437,8 +438,8 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "SFTP directories";
-                        description: "Choose the remote and local directories opened by new SFTP tabs.";
+                        label: @tr("SFTP directories");
+                        description: @tr("Choose the remote and local directories opened by new SFTP tabs.");
                     }
                     HorizontalLayout {
                         height: self.preferred-height;
@@ -446,24 +447,24 @@ export component SessionEditorPane inherits Rectangle {
                         spacing: Theme.space-xl;
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Remote default directory";
+                            label: @tr("Remote default directory");
                             FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.sftp-remote-path-draft;
-                                placeholder-text: "~";
-                                accessible-label: "SFTP remote default directory";
+                                placeholder-text: @tr("~");
+                                accessible-label: @tr("SFTP remote default directory");
                             }
                         }
                         SessionEditorField {
                             horizontal-stretch: 1;
-                            label: "Local default directory";
+                            label: @tr("Local default directory");
                             FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.sftp-local-path-draft;
-                                placeholder-text: "Platform home directory";
-                                accessible-label: "SFTP local default directory";
+                                placeholder-text: @tr("Platform home directory");
+                                accessible-label: @tr("SFTP local default directory");
                             }
                         }
                     }
@@ -473,50 +474,50 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
-                        label: "Authentication";
-                        description: "Credentials used for this SSH connection.";
+                        label: @tr("Authentication");
+                        description: @tr("Credentials used for this SSH connection.");
                     }
                     AuthenticationMethodSelector {
                         options: [
-                            { label: "Password", value: "Password" },
-                            { label: "Private key", value: "Private key" },
-                            { label: "SSH agent", value: "SSH agent" },
+                            { label: @tr("Password"), value: "Password" },
+                            { label: @tr("Private key"), value: "Private key" },
+                            { label: @tr("SSH agent"), value: "SSH agent" },
                         ];
                         selected-method <=> root.auth-method;
-                        accessible-name: "SSH authentication method";
+                        accessible-name: @tr("SSH authentication method");
                     }
 
                     if root.auth-method == "Password" : VerticalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.space-md;
                         SessionEditorField {
-                            label: "Password";
+                            label: @tr("Password");
                             password-edit := SecretTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.password-draft;
                                 placeholder-text: root.editing && !root.source.credential_storage.is-empty
-                                    ? "Leave blank to keep saved password"
-                                    : "Optional; enter only when connecting or saving";
-                                accessible-label: "SSH password";
+                                    ? @tr("Leave blank to keep saved password")
+                                    : @tr("Optional; enter only when connecting or saving");
+                                accessible-label: @tr("SSH password");
                             }
                         }
                         CheckBox {
-                            text: "Save password (optional)";
+                            text: @tr("Save password (optional)");
                             enabled: !root.password-draft.is-empty;
                             checked <=> root.remember-password-draft;
-                            accessible-label: "Save SSH password for future connections";
+                            accessible-label: @tr("Save SSH password for future connections");
                         }
                         if root.remember-password-draft : SessionEditorField {
-                            label: "Credential storage";
+                            label: @tr("Credential storage");
                             ThemedComboBox {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 model: root.credential-storage-options;
                                 current-index: root.credential-storage-draft == "encrypted-vault" ? 1 : 0;
-                                accessible-label: "Credential storage";
-                                selected(value) => {
-                                    root.credential-storage-draft = value == "Encrypted application vault"
+                                accessible-label: @tr("Credential storage");
+                                selected(_value, index) => {
+                                    root.credential-storage-draft = index == 1
                                         ? "encrypted-vault"
                                         : "system-keyring";
                                 }
@@ -524,44 +525,44 @@ export component SessionEditorPane inherits Rectangle {
                         }
                         if root.remember-password-draft
                                 && root.credential-storage-draft == "encrypted-vault" : SessionEditorField {
-                            label: "Vault password";
+                            label: @tr("Vault password");
                             vault-password-edit := SecretTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.vault-password-draft;
-                                placeholder-text: "Optional; empty saves in system credential store";
-                                accessible-label: "Credential vault password";
+                                placeholder-text: @tr("Optional; empty saves in system credential store");
+                                accessible-label: @tr("Credential vault password");
                             }
                         }
                     }
 
                     CheckBox {
-                        text: "Forward X11 applications";
+                        text: @tr("Forward X11 applications");
                         checked <=> root.x11-forwarding-draft;
-                        accessible-label: "Enable SSH X11 forwarding";
+                        accessible-label: @tr("Enable SSH X11 forwarding");
                     }
 
                     if root.auth-method == "Private key" : VerticalLayout {
                         vertical-stretch: 0;
                         spacing: Theme.space-md;
                         SessionEditorField {
-                            label: "Private key path";
+                            label: @tr("Private key path");
                             key-edit := FlatTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.private-key-draft;
-                                placeholder-text: "~/.ssh/id_ed25519";
-                                accessible-label: "Private key path";
+                                placeholder-text: @tr("~/.ssh/id_ed25519");
+                                accessible-label: @tr("Private key path");
                             }
                         }
                         if root.private-key-options.length > 0 : SessionEditorField {
-                            label: "Detected key";
+                            label: @tr("Detected key");
                             ThemedComboBox {
                                 width: min(parent.width, Theme.editor-detected-key-width);
                                 height: Theme.editor-input-row-height;
                                 model: root.private-key-options;
-                                accessible-label: "Detected private keys";
-                                selected(value) => { root.private-key-draft = value; }
+                                accessible-label: @tr("Detected private keys");
+                                selected(value, _index) => { root.private-key-draft = value; }
                             }
                         }
                     }
@@ -582,19 +583,19 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     alignment: end;
                     spacing: Theme.space-md;
-                    Button {
+                    ElidedButton {
                         height: Theme.editor-input-row-height;
-                        text: "Cancel";
+                        text: @tr("Cancel");
                         clicked => { root.cancel(); }
                     }
-                    if !root.editing && root.protocol == "SSH" : Button {
+                    if !root.editing && root.protocol == "SSH" : ElidedButton {
                         height: Theme.editor-input-row-height;
-                        text: "Save & connect";
+                        text: @tr("Save & connect");
                         clicked => { root.submit(true); }
                     }
-                    Button {
+                    ElidedButton {
                         height: Theme.editor-input-row-height;
-                        text: root.editing ? "Update session" : "Save session";
+                        text: root.editing ? @tr("Update session") : @tr("Save session");
                         clicked => { root.submit(false); }
                     }
                 }

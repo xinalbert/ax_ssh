@@ -1,5 +1,6 @@
-import { AboutSlint, Button, ScrollView } from "std-widgets.slint";
+import { AboutSlint, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ElidedButton } from "../components/elided-controls.slint";
 import {
     SettingsField,
     SettingsInfoRow,
@@ -8,6 +9,7 @@ import {
 } from "../components/settings-controls.slint";
 
 export component AboutSettingsPage inherits Rectangle {
+    in property <int> scroll-revision: 0;
     in property <string> app-version;
     callback report-bug();
     callback open-log-directory();
@@ -17,8 +19,13 @@ export component AboutSettingsPage inherits Rectangle {
     about-scroll := ScrollView {
         width: parent.width;
         height: parent.height;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-width: self.visible-width;
+        viewport-height: max(
+            self.visible-height,
+            about-content.preferred-height + 2 * Theme.space-xl,
+        );
 
         about-page := Rectangle {
             width: about-scroll.visible-width;
@@ -51,7 +58,7 @@ export component AboutSettingsPage inherits Rectangle {
                         Text {
                             width: parent.width;
                             height: parent.height;
-                            text: ">_";
+                            text: @tr(">_");
                             color: Theme.accent;
                             font-family: Theme.application-font-family;
                             font-size: Theme.font-section;
@@ -63,21 +70,21 @@ export component AboutSettingsPage inherits Rectangle {
                     VerticalLayout {
                         spacing: Theme.space-xxs;
                         Text {
-                            text: "AxSSH";
+                            text: @tr("AxSSH");
                             color: Theme.text;
                             font-size: Theme.font-title;
                             font-weight: 700;
                             vertical-alignment: bottom;
                         }
                         Text {
-                            text: "Version \{root.app-version}";
+                            text: @tr("Version {0}", root.app-version);
                             color: Theme.muted;
                             font-size: Theme.font-small;
                             vertical-alignment: center;
                         }
                         Text {
                             height: Theme.settings-about-description-height;
-                            text: "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions.";
+                            text: @tr("A focused terminal workspace for SSH, Telnet, serial, and local shell sessions.");
                             color: Theme.muted;
                             font-size: Theme.font-small;
                             wrap: word-wrap;
@@ -85,53 +92,53 @@ export component AboutSettingsPage inherits Rectangle {
                         }
                     }
                 }
-                SettingsSectionHeading { label: "APPLICATION"; }
-                SettingsInfoRow { label: "Interface"; value: "Slint"; }
-                SettingsInfoRow { label: "SSH transport"; value: "russh"; }
-                SettingsInfoRow { label: "Telnet protocol"; value: "libmudtelnet-rs"; }
-                SettingsInfoRow { label: "Serial transport"; value: "tokio-serial"; }
-                SettingsInfoRow { label: "Async runtime"; value: "Tokio"; }
+                SettingsSectionHeading { label: @tr("APPLICATION"); }
+                SettingsInfoRow { label: @tr("Interface"); value: "Slint"; }
+                SettingsInfoRow { label: @tr("SSH transport"); value: "russh"; }
+                SettingsInfoRow { label: @tr("Telnet protocol"); value: "libmudtelnet-rs"; }
+                SettingsInfoRow { label: @tr("Serial transport"); value: "tokio-serial"; }
+                SettingsInfoRow { label: @tr("Async runtime"); value: "Tokio"; }
                 SettingsInfoRow {
-                    label: "License";
+                    label: @tr("License");
                     value: "GPL-3.0-only";
                     show-divider: false;
                 }
-                SettingsSectionHeading { label: "SUPPORT"; }
+                SettingsSectionHeading { label: @tr("SUPPORT"); }
                 SettingsRow {
-                    label: "Bug reports";
-                    description: "Open the AxSSH issue tracker";
+                    label: @tr("Bug reports");
+                    description: @tr("Open the AxSSH issue tracker");
                     SettingsField {
-                        Button {
-                            text: "Report a bug";
+                        ElidedButton {
+                            text: @tr("Report a bug");
                             clicked => { root.report-bug(); }
-                            accessible-label: "Report a bug";
+                            accessible-name: @tr("Report a bug");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Runtime logs";
-                    description: "Review before sharing";
+                    label: @tr("Runtime logs");
+                    description: @tr("Review before sharing");
                     SettingsField {
-                        Button {
-                            text: "Open log folder";
+                        ElidedButton {
+                            text: @tr("Open log folder");
                             clicked => { root.open-log-directory(); }
-                            accessible-label: "Open log folder";
+                            accessible-name: @tr("Open log folder");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Diagnostics";
-                    description: "Copy version and build information without connection data";
+                    label: @tr("Diagnostics");
+                    description: @tr("Copy version and build information without connection data");
                     show-divider: false;
                     SettingsField {
-                        Button {
-                            text: "Copy diagnostics";
+                        ElidedButton {
+                            text: @tr("Copy diagnostics");
                             clicked => { root.copy-diagnostic-info(); }
-                            accessible-label: "Copy diagnostics";
+                            accessible-name: @tr("Copy diagnostics");
                         }
                     }
                 }
-                SettingsSectionHeading { label: "SLINT"; }
+                SettingsSectionHeading { label: @tr("SLINT"); }
                 AboutSlint {
                     width: parent.width;
                     height: Theme.settings-about-slint-height;
@@ -139,4 +146,6 @@ export component AboutSettingsPage inherits Rectangle {
             }
         }
     }
+
+    changed scroll-revision => { about-scroll.viewport-y = 0px; }
 }

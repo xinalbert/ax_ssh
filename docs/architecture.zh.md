@@ -94,7 +94,8 @@ Rust
 激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
 `TerminalPane` placement 与内部 split divider 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有 worker、终端缓冲区或连接状态。
-终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
+Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
+只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
@@ -146,6 +147,9 @@ diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签
 `SettingsPane` 接收只读 `SettingsViewState`，复制到私有可编辑草稿，并把每轮修改合并为
 即时内存预览。预览只更新当前应用、Theme、终端和布局，不读取字体文件或写入配置；关闭意图才
 携带稳定的 Settings Tab ID，Rust 在异步资源注册和持久化成功后关闭该 Tab，失败时保留草稿与当前预览。
+每个分类详情区都可独立滚动，Settings 导航和搜索标题保持固定。未持久化的全局搜索对分类名、
+设置标题和说明执行大小写无关匹配；选择结果会清空查询、打开对应分类并回到该分类顶部。查询和
+结果模型只属于 UI，不会进入 `AppSettings`、持久化、diagnostics、worker 或 transport。
 菜单或原生平台只提供只读的目标 section；用户在设置页导航时的当前 section 由组件自身持有。
 `SessionEditorPane` 对 `SessionEditorViewState` 使用同样模式：只有传入的
 draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
@@ -355,14 +359,17 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
-Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 还在同一行标题栏提供只显示
-系统返回符号的图标按钮，并在系统符号不可用时回退到 AppKit 模板图标。按钮通过 Tooltip 和
-无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
+Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 将原生标题栏设为透明并使用当前
+客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。其同一行的仅图标返回按钮使用系统重叠窗口符号，系统符号不可用时
+回退到对应的 AppKit 多文档模板图标。按钮通过 Tooltip 和无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
 或 `SftpPane`，不包含 Tab 条、
 会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
 终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
 Tokio receiver、终端缓冲区或秘密。
+主题预览和保存会把既有 `AppSettings` 值同步到每个仍存活的 detached UI，再从该 UI 已解析的
+客户区表面色更新其 AppKit 标题栏背景。此纯外观路径保持各窗口本地 Slint theme 一致，
+不会把 AppKit 状态写入 `AppState`。
 独立 Terminal 虽然不增加客户区菜单，仍保留相同的 Copy/Paste/Select All 直接键盘处理。
 
 `WindowRouter` 按转移后的 Tab UUID 映射当前窗口的 weak UI handle。刷新时每个路由
@@ -604,12 +611,30 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 没有可靠卸载 API，会保持进程级可用；平台字体/应用/图标数据库和 allocator 也可能在 AxSSH 丢弃
 引用后继续持有自身缓存，因此不能预期进程 RSS 立即下降。
 
+`UiLanguage` 是 config 拥有的策略，持久化值稳定为 `system`、`english` 和
+`simplified-chinese`。schema 版本 21 将旧配置或未知值默认迁移为跟随系统；中文系统 locale
+解析为内嵌的 `zh-CN` 目录，其它 locale 解析为英文。`build.rs` 内嵌经过审阅的 PO 目录；翻译
+检查器要求每个静态 Slint `@tr` 文案都有非空翻译，并保持相同的编号占位符。Slint 只提交稳定的
+选择索引；应用 bridge 在 blocking 事务成功持久化语言后，才在 UI 线程切换进程级内嵌 locale，
+并同步所有存活的主窗口与独立窗口。普通 Settings 预览/保存始终保留最后提交的语言，避免并发预览
+覆盖语言选择。远端 Terminal 内容、用户值、日志和运行时技术错误详情不作为翻译键，也不会被翻译。
+
+发行自动化只拥有发行元数据，不拥有应用运行时状态。手动启动的 `Create Dated Release` workflow
+按 `Asia/Shanghai` 计算日期，把公开的 `YYYY-MM-DD` 映射为 Cargo 兼容的 `YYYY.M.D` package
+版本，更新锁文件和 macOS bundle 元数据，再创建 annotated `YYYY-MM-DD` tag，显式为该 tag dispatch
+CI，并且只在 CI 成功后 dispatch 发布 workflow。发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，
+以及 arm64/x86_64 macOS 二进制；随后合并
+macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 只在默认分支或
+日期 tag 成功后写入按 target 隔离的共享 Cargo cache，失败 job 不会写入；发布 job 也会独立验证所选
+tag 的 CI 成功后才恢复该缓存，并重新构建锁定的 release 二进制。构建前会校验
+所有版本表示一致，且不会读取或打包 `third_package/axshell`。
+
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
 `settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、最小对比度、粗体亮色、可选语义高亮色和鼠标复制/粘贴偏好、
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
     非秘密的 X11 provider/path/启动/兼容设置、SSH 认证方式（可选择 agent，但不包含 agent 端点或
-    identity），以及记住密码的默认后端。schema 版本 20 增加五项可选 Terminal 语义色覆盖；空值或无效值跟随活动 ANSI 色表，非空值规范化为不透明 `#RRGGBB`。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值
+    identity），以及记住密码的默认后端和界面语言策略。schema 版本 21 新增跟随系统的界面语言策略；缺失或无效值默认跟随系统。schema 版本 20 增加五项可选 Terminal 语义色覆盖；空值或无效值跟随活动 ANSI 色表，非空值规范化为不透明 `#RRGGBB`。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值
     默认为 `~`，本地值为空表示平台 home 目录。schema 版本 18 增加默认关闭的
     `copy_selection_on_select` 偏好；旧配置保持既有右键行为。schema 版本 17 将原有
     `terminal_brightness_percent` 重映射替换为定点保存的
@@ -666,6 +691,13 @@ control border、focus、hover 和 selected 状态 token，避免共享组件各
 使用 Slint 标准控件 palette。组件保留有界字符串 model、current-index、selected callback、
 键盘导航、点击外部关闭和 combobox 可访问性契约。其它标准控件继续使用已同步的 Slint
 `Palette`，原生 `ContextMenuArea` 菜单仍由平台拥有。
+`ui/components/elided-controls.slint` 统一拥有单行文本按钮的呈现契约。`ElidedLabel` 将配置
+字体的自然宽度测量与可见省略标签分开，并输出 `natural-width`、`line-height` 和
+`overflowed`；仅在标签真实溢出时创建有最大宽度且可换行的全文 tooltip。`ElidedButton`
+继续让 Slint 标准 `Button` 拥有焦点、键盘、enabled、pressed、可访问性和点击语义，只在其上
+覆盖共享标签。调用方显式传入显示 `text`、可选 `tooltip-text`、独立的
+`accessible-name`、`enabled` 和 `clicked()`；纯图标按钮保留自身的用途 tooltip。这些 UI
+局部值不会进入 Rust、持久化、diagnostics、worker 或 transport。
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、
 IME、键盘焦点、可访问性和标准文本编辑右键菜单。
@@ -674,9 +706,12 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 实现范围与增减语义。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
-列，标准控件统一使用 Theme 配置的高度。`ui/settings.slint` 在只读
-`SettingsViewState` 边界后持有统一草稿，并将编辑合并为即时内存预览；关闭 Tab 时才启动独立的
-关闭即保存事务。各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的局部草稿属性和 callback。
+列，标准控件统一使用 Theme 配置的高度；设置搜索框和结果行也复用这里的基础控件。
+`SettingsPage` 提供统一的详情滚动容器，较长的 Appearance、Terminal 和 About 页面保留等价的
+页面内滚动容器。`ui/settings.slint` 在只读 `SettingsViewState` 边界后持有统一草稿、未持久化的
+分类选择和搜索查询，并接收 application bridge 生成的有界结果列表；编辑继续合并为即时内存预览，
+关闭 Tab 时才启动独立的关闭即保存事务。各分类布局拆到 `ui/settings/*.slint`，只接收本分类需要的
+局部草稿属性和 callback。
 `ui/settings/appearance.slint` 将 Display mode 与 Color palette 分开，并用一个共享
 `ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将当前内存设置的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端

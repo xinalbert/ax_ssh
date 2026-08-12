@@ -1,4 +1,461 @@
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
+    (
+        "General",
+        "Language",
+        "Language used by the AxSSH interface",
+    ),
+    (
+        "General",
+        "Local shell",
+        "Executable used for new local terminal tabs",
+    ),
+    (
+        "General",
+        "Remembered password storage",
+        "Used for remembered passwords and new passwords entered in the session editor",
+    ),
+    (
+        "General",
+        "Default terminal size",
+        "20-300 columns, 5-100 rows",
+    ),
+    ("Appearance", "Font family", "Application interface font"),
+    (
+        "Appearance",
+        "Display mode",
+        "Choose system, light, or dark appearance",
+    ),
+    (
+        "Appearance",
+        "Color palette",
+        "Apply one color family to both display modes",
+    ),
+    (
+        "Appearance",
+        "Custom light palette",
+        "Configure custom light application and terminal colors",
+    ),
+    (
+        "Appearance",
+        "Custom dark palette",
+        "Configure custom dark application and terminal colors",
+    ),
+    ("Terminal", "Font family", "Terminal character-cell font"),
+    ("Terminal", "Font size", "9-32 px"),
+    ("Terminal", "Line height", "100-200 percent"),
+    ("Terminal", "Minimum contrast ratio", "1.0-21.0"),
+    (
+        "Terminal",
+        "Bright colors for bold text",
+        "Use the bright ANSI palette for bold text",
+    ),
+    (
+        "Terminal",
+        "Semantic highlighting",
+        "Link and path, success, information, warning, and error colors",
+    ),
+    (
+        "Terminal",
+        "Scrollback",
+        "Number of terminal history lines retained in memory",
+    ),
+    (
+        "Terminal",
+        "Right-click copy or paste",
+        "Choose copy or paste behavior for terminal right click",
+    ),
+    (
+        "Terminal",
+        "Copy selection on select",
+        "Copy completed terminal selections immediately",
+    ),
+    (
+        "Terminal",
+        "Option acts as Meta",
+        "Use Option as terminal Meta on macOS",
+    ),
+    (
+        "X11",
+        "Provider",
+        "X server used by forwarded graphical applications",
+    ),
+    (
+        "X11",
+        "Detected locations",
+        "Known local X server installations",
+    ),
+    (
+        "X11",
+        "Custom executable",
+        "Launch a custom X server executable",
+    ),
+    (
+        "X11",
+        "Start for first X11 application",
+        "Launch the selected X server only when needed",
+    ),
+    (
+        "X11",
+        "Allow local connections without X authority",
+        "Loopback-only compatibility mode",
+    ),
+    (
+        "Workspace",
+        "Session sidebar width",
+        "180-420 px when sessions are available",
+    ),
+    ("Workspace", "Workspace tab width", "120-260 px"),
+    (
+        "Workspace",
+        "Session mask character",
+        "Masks usernames and IPv4 addresses in the session sidebar",
+    ),
+    (
+        "Workspace",
+        "Collapsed group label",
+        "Choose 1-4 characters or show the full group name",
+    ),
+    ("Shortcuts", "Open Settings", "Application command shortcut"),
+    ("Shortcuts", "New Server", "Workspace command shortcut"),
+    (
+        "Shortcuts",
+        "Import from Clipboard",
+        "Session transfer command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Export Selected",
+        "Session transfer command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Toggle Session Sidebar",
+        "Workspace command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Switch SSH/SFTP Tab",
+        "Workspace command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Copy Terminal Selection",
+        "Terminal command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Paste Into Terminal",
+        "Terminal command shortcut",
+    ),
+    (
+        "About",
+        "Application",
+        "AxSSH version, license, interface, transport, and runtime details",
+    ),
+    (
+        "About",
+        "Support",
+        "Bug reports, runtime logs, and diagnostics",
+    ),
+];
+
+fn settings_search_matches(query: &str, section: &str, title: &str, description: &str) -> bool {
+    let query = query.trim();
+    let query = query.to_lowercase();
+    !query.is_empty()
+        && [section, title, description]
+            .into_iter()
+            .any(|value| value.to_lowercase().contains(&query))
+}
+
+fn settings_search_results(query: &str, language: &str) -> Vec<SettingsSearchEntry> {
+    let chinese = UiLanguage::from_setting(language)
+        .resolved_locale(sys_locale::get_locale().as_deref())
+        == "zh-CN";
+    SETTINGS_SEARCH_CATALOG
+        .iter()
+        .filter_map(|(section, title, description)| {
+            let (display_section, display_title, display_description) =
+                localized_settings_search_entry(section, title, description, chinese);
+            settings_search_matches(query, section, title, description)
+                .then_some(())
+                .or_else(|| {
+                    settings_search_matches(
+                        query,
+                        display_section,
+                        display_title,
+                        display_description,
+                    )
+                    .then_some(())
+                })?;
+            Some(SettingsSearchEntry {
+                section: (*section).into(),
+                title: display_title.into(),
+                description: display_description.into(),
+            })
+        })
+        .collect()
+}
+
+fn localized_settings_search_entry<'a>(
+    section: &'a str,
+    title: &'a str,
+    description: &'a str,
+    chinese: bool,
+) -> (&'a str, &'a str, &'a str) {
+    if !chinese {
+        return (section, title, description);
+    }
+    SETTINGS_SEARCH_CATALOG_ZH_CN
+        .iter()
+        .find(|(source_title, source_description, _, _)| {
+            source_title == &title && source_description == &description
+        })
+        .map(|(_, _, translated_title, translated_description)| {
+            (
+                localized_settings_section(section),
+                *translated_title,
+                *translated_description,
+            )
+        })
+        .unwrap_or((localized_settings_section(section), title, description))
+}
+
+fn localized_settings_section(section: &str) -> &str {
+    match section {
+        "General" => "通用",
+        "Appearance" => "外观",
+        "Terminal" => "终端",
+        "Workspace" => "工作区",
+        "Shortcuts" => "快捷键",
+        "About" => "关于",
+        _ => section,
+    }
+}
+
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
+    (
+        "Language",
+        "Language used by the AxSSH interface",
+        "语言",
+        "AxSSH 界面使用的语言",
+    ),
+    (
+        "Local shell",
+        "Executable used for new local terminal tabs",
+        "本地 Shell",
+        "新建本地终端标签页使用的可执行程序",
+    ),
+    (
+        "Remembered password storage",
+        "Used for remembered passwords and new passwords entered in the session editor",
+        "已记住密码的存储方式",
+        "保存已记住密码所用的安全存储",
+    ),
+    (
+        "Default terminal size",
+        "20-300 columns, 5-100 rows",
+        "默认终端大小",
+        "20-300 列，5-100 行",
+    ),
+    (
+        "Font family",
+        "Application interface font",
+        "字体系列",
+        "应用界面字体",
+    ),
+    (
+        "Display mode",
+        "Choose system, light, or dark appearance",
+        "显示模式",
+        "跟随系统、浅色或深色外观",
+    ),
+    (
+        "Color palette",
+        "Apply one color family to both display modes",
+        "配色方案",
+        "为两种显示模式应用同一配色系列",
+    ),
+    (
+        "Custom light palette",
+        "Configure custom light application and terminal colors",
+        "自定义浅色配色",
+        "配置应用和终端的浅色颜色",
+    ),
+    (
+        "Custom dark palette",
+        "Configure custom dark application and terminal colors",
+        "自定义深色配色",
+        "配置应用和终端的深色颜色",
+    ),
+    (
+        "Font family",
+        "Terminal character-cell font",
+        "字体系列",
+        "终端字符单元格字体",
+    ),
+    ("Font size", "9-32 px", "字体大小", "9-32 px"),
+    ("Line height", "100-200 percent", "行高", "100-200%"),
+    (
+        "Minimum contrast ratio",
+        "1.0-21.0",
+        "最低对比度",
+        "1.0-21.0",
+    ),
+    (
+        "Bright colors for bold text",
+        "Use the bright ANSI palette for bold text",
+        "粗体使用亮色",
+        "为粗体使用明亮 ANSI 调色板",
+    ),
+    (
+        "Semantic highlighting",
+        "Link and path, success, information, warning, and error colors",
+        "语义高亮",
+        "链接、成功、信息、警告和错误颜色",
+    ),
+    (
+        "Scrollback",
+        "Number of terminal history lines retained in memory",
+        "回滚行数",
+        "内存中保留的终端历史行数",
+    ),
+    (
+        "Right-click copy or paste",
+        "Choose copy or paste behavior for terminal right click",
+        "右键复制或粘贴",
+        "选择终端右键行为",
+    ),
+    (
+        "Copy selection on select",
+        "Copy completed terminal selections immediately",
+        "选中后复制",
+        "完成终端选择后立即复制",
+    ),
+    (
+        "Option acts as Meta",
+        "Use Option as terminal Meta on macOS",
+        "Option 作为 Meta",
+        "在 macOS 终端中把 Option 用作 Meta",
+    ),
+    (
+        "Provider",
+        "X server used by forwarded graphical applications",
+        "提供程序",
+        "转发图形应用使用的 X server",
+    ),
+    (
+        "Detected locations",
+        "Known local X server installations",
+        "检测到的位置",
+        "已知本地 X server 安装",
+    ),
+    (
+        "Custom executable",
+        "Launch a custom X server executable",
+        "自定义可执行文件",
+        "启动自定义 X server 程序",
+    ),
+    (
+        "Start for first X11 application",
+        "Launch the selected X server only when needed",
+        "首个 X11 应用时启动",
+        "仅在需要时启动所选 X server",
+    ),
+    (
+        "Allow local connections without X authority",
+        "Loopback-only compatibility mode",
+        "允许无 X authority 的本地连接",
+        "仅限回环地址的兼容模式",
+    ),
+    (
+        "Session sidebar width",
+        "180-420 px when sessions are available",
+        "会话侧栏宽度",
+        "有会话时为 180-420 px",
+    ),
+    (
+        "Workspace tab width",
+        "120-260 px",
+        "工作区标签宽度",
+        "120-260 px",
+    ),
+    (
+        "Session mask character",
+        "Masks usernames and IPv4 addresses in the session sidebar",
+        "会话掩码字符",
+        "遮盖侧栏中的用户名和 IPv4 地址",
+    ),
+    (
+        "Collapsed group label",
+        "Choose 1-4 characters or show the full group name",
+        "折叠组标签",
+        "显示 1-4 个字符或完整组名",
+    ),
+    (
+        "Open Settings",
+        "Application command shortcut",
+        "打开设置",
+        "应用命令快捷键",
+    ),
+    (
+        "New Server",
+        "Workspace command shortcut",
+        "新建服务器",
+        "工作区命令快捷键",
+    ),
+    (
+        "Import from Clipboard",
+        "Session transfer command shortcut",
+        "从剪贴板导入",
+        "会话传输命令快捷键",
+    ),
+    (
+        "Export Selected",
+        "Session transfer command shortcut",
+        "导出所选项",
+        "会话传输命令快捷键",
+    ),
+    (
+        "Toggle Session Sidebar",
+        "Workspace command shortcut",
+        "切换会话侧栏",
+        "工作区命令快捷键",
+    ),
+    (
+        "Switch SSH/SFTP Tab",
+        "Workspace command shortcut",
+        "切换 SSH/SFTP 标签页",
+        "工作区命令快捷键",
+    ),
+    (
+        "Copy Terminal Selection",
+        "Terminal command shortcut",
+        "复制终端选择",
+        "终端命令快捷键",
+    ),
+    (
+        "Paste Into Terminal",
+        "Terminal command shortcut",
+        "粘贴到终端",
+        "终端命令快捷键",
+    ),
+    (
+        "Application",
+        "AxSSH version, license, interface, transport, and runtime details",
+        "应用",
+        "AxSSH 版本、许可证、界面、传输和运行时信息",
+    ),
+    (
+        "Support",
+        "Bug reports, runtime logs, and diagnostics",
+        "支持",
+        "错误报告、运行日志和诊断",
+    ),
+];
 
 pub(super) fn wire_settings(
     ui: &AppWindow,
@@ -6,6 +463,58 @@ pub(super) fn wire_settings(
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
 ) {
+    ui.on_settings_search_results(|query, language| {
+        ModelRc::new(VecModel::from(settings_search_results(
+            query.as_str(),
+            language.as_str(),
+        )))
+    });
+
+    let ui_for_language = ui.as_weak();
+    let state_for_language = state.clone();
+    let runtime_for_language = runtime.clone();
+    let language_revision = Arc::new(AtomicU64::new(0));
+    ui.on_save_ui_language(move |index| {
+        log_ui_action("settings.language.save");
+        let language = UiLanguage::from_selector_index(index);
+        let revision = language_revision
+            .fetch_add(1, Ordering::AcqRel)
+            .wrapping_add(1);
+        let language_revision = language_revision.clone();
+        let state = state_for_language.clone();
+        let ui = ui_for_language.clone();
+        runtime_for_language.spawn(async move {
+            let revision_for_save = language_revision.clone();
+            let save_result = tokio::task::spawn_blocking(move || {
+                save_ui_language(&state, language, revision, &revision_for_save)
+            })
+            .await;
+            dispatch_ui(&ui, move |ui| {
+                if language_revision.load(Ordering::Acquire) != revision {
+                    return;
+                }
+                match save_result {
+                    Ok(Ok(true)) => {
+                        if let Err(error) = apply_ui_language_to_open_windows(ui, language) {
+                            ui.set_status(
+                                format!("Cannot apply interface language: {error}").into(),
+                            );
+                        } else {
+                            ui.set_status("".into());
+                        }
+                    }
+                    Ok(Ok(false)) => {}
+                    Ok(Err(error)) => {
+                        ui.set_status(format!("Cannot save interface language: {error}").into())
+                    }
+                    Err(error) => {
+                        ui.set_status(format!("Interface language task failed: {error}").into())
+                    }
+                }
+            });
+        });
+    });
+
     let ui_for_save = ui.as_weak();
     let font_registry_for_save = font_registry;
     ui.on_save_settings(
@@ -109,8 +618,11 @@ pub(super) fn wire_settings(
                 }
                 return;
             }
-            let known_shells = match state.lock() {
-                Ok(app) => app.sessions.settings.terminal.known_shells.clone(),
+            let (known_shells, ui_language) = match state.lock() {
+                Ok(app) => (
+                    app.sessions.settings.terminal.known_shells.clone(),
+                    app.sessions.settings.ui_language,
+                ),
                 Err(_) => {
                     set_status(&ui_for_save, "Cannot read local shell settings");
                     return;
@@ -154,6 +666,7 @@ pub(super) fn wire_settings(
                 },
                 shortcuts,
                 credential_storage: credential_storage.as_str(),
+                ui_language: ui_language.as_setting(),
             });
             let mut settings = settings;
             settings.x11 = X11Settings::normalized(
@@ -208,7 +721,7 @@ pub(super) fn wire_settings(
                     }
                 };
                 if let Some(ui) = ui_for_save.upgrade() {
-                    apply_settings_to_component(&ui, &settings);
+                    apply_settings_to_open_windows(&ui, &settings);
                 }
                 refresh_session_models(&ui_for_save, &state);
                 load_preview_bundled_fonts(
@@ -268,7 +781,6 @@ pub(super) fn wire_settings(
                     let state_for_save = state.clone();
                     let state_for_refresh = state.clone();
                     let settings_for_save = settings.clone();
-                    let settings_for_apply = settings.clone();
                     let ui_for_result = ui.as_weak();
                     let ui_for_refresh = ui_for_result.clone();
                     let ui_for_close = ui_for_result.clone();
@@ -279,8 +791,8 @@ pub(super) fn wire_settings(
                         })
                         .await;
                         match save_result {
-                            Ok(Ok(())) => dispatch_ui(&ui_for_result, move |ui| {
-                                apply_settings_to_component(ui, &settings_for_apply);
+                            Ok(Ok(saved_settings)) => dispatch_ui(&ui_for_result, move |ui| {
+                                apply_settings_to_open_windows(ui, &saved_settings);
                                 refresh_session_models(&ui_for_refresh, &state_for_refresh);
                                 ui.set_status("".into());
                                 if let Some(tab_id) = close_tab_id {
@@ -311,25 +823,49 @@ pub(super) fn wire_settings(
     );
 }
 
-fn save_workspace_settings(state: &Arc<Mutex<AppState>>, settings: AppSettings) -> Result<()> {
+fn save_workspace_settings(
+    state: &Arc<Mutex<AppState>>,
+    mut settings: AppSettings,
+) -> Result<AppSettings> {
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    settings.ui_language = app.sessions.settings.ui_language;
     let mut candidate = app.sessions.clone();
-    candidate.settings = settings;
+    candidate.settings = settings.clone();
     app.config.save(&candidate)?;
     app.sessions = candidate;
     app.apply_scrollback_setting();
-    Ok(())
+    Ok(settings)
+}
+
+fn save_ui_language(
+    state: &Arc<Mutex<AppState>>,
+    language: UiLanguage,
+    revision: u64,
+    latest_revision: &AtomicU64,
+) -> Result<bool> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if latest_revision.load(Ordering::Acquire) != revision {
+        return Ok(false);
+    }
+    let mut candidate = app.config.load()?;
+    candidate.settings.ui_language = language;
+    app.config.save(&candidate)?;
+    app.sessions.settings.ui_language = language;
+    Ok(true)
 }
 
 fn apply_preview_settings(
     state: &Arc<Mutex<AppState>>,
-    settings: AppSettings,
+    mut settings: AppSettings,
 ) -> Result<Vec<String>> {
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    settings.ui_language = app.sessions.settings.ui_language;
     let font_families = changed_font_families(&app.sessions.settings, &settings);
     app.sessions.settings = settings;
     app.apply_scrollback_setting();
@@ -412,7 +948,7 @@ fn load_preview_bundled_fonts(
                     return;
                 }
             };
-            apply_settings_to_component(ui, &settings);
+            apply_settings_to_open_windows(ui, &settings);
         });
     });
 }
@@ -463,11 +999,112 @@ mod tests {
         )));
         let mut settings = AppSettings::default();
         settings.terminal.scrollback_lines = 321;
+        settings.ui_language = UiLanguage::SimplifiedChinese;
+
+        let expected_language = state.lock().unwrap().sessions.settings.ui_language;
 
         let loaded = apply_preview_settings(&state, settings.clone()).unwrap();
 
         assert!(loaded.is_empty());
+        assert_eq!(
+            state.lock().unwrap().sessions.settings.ui_language,
+            expected_language
+        );
+        settings.ui_language = expected_language;
         assert_eq!(state.lock().unwrap().sessions.settings, settings);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn language_save_persists_only_after_success() {
+        let path = std::env::temp_dir()
+            .join(format!("axssh-language-save-{}", Uuid::new_v4()))
+            .join("sessions.json");
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(path.clone()),
+            SessionStore::default(),
+        )));
+
+        let revision = AtomicU64::new(1);
+        assert!(save_ui_language(&state, UiLanguage::SimplifiedChinese, 1, &revision).unwrap());
+
+        assert_eq!(
+            state.lock().unwrap().sessions.settings.ui_language,
+            UiLanguage::SimplifiedChinese
+        );
+        let persisted = ConfigStore::new(path).load().unwrap();
+        assert_eq!(
+            persisted.settings.ui_language,
+            UiLanguage::SimplifiedChinese
+        );
+    }
+
+    #[test]
+    fn stale_language_save_cannot_overwrite_latest_request() {
+        let path = std::env::temp_dir()
+            .join(format!("axssh-language-revision-{}", Uuid::new_v4()))
+            .join("sessions.json");
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(path.clone()),
+            SessionStore::default(),
+        )));
+        let latest_revision = AtomicU64::new(2);
+
+        assert!(
+            save_ui_language(&state, UiLanguage::SimplifiedChinese, 2, &latest_revision,).unwrap()
+        );
+        assert!(!save_ui_language(&state, UiLanguage::English, 1, &latest_revision).unwrap());
+
+        assert_eq!(
+            state.lock().unwrap().sessions.settings.ui_language,
+            UiLanguage::SimplifiedChinese
+        );
+        let persisted = ConfigStore::new(path).load().unwrap();
+        assert_eq!(
+            persisted.settings.ui_language,
+            UiLanguage::SimplifiedChinese
+        );
+    }
+
+    #[test]
+    fn settings_search_matches_titles_descriptions_and_sections_case_insensitively() {
+        let title_matches = settings_search_results("FONT", "english");
+        assert!(
+            title_matches
+                .iter()
+                .any(|entry| { entry.section == "Appearance" && entry.title == "Font family" })
+        );
+        assert!(
+            title_matches
+                .iter()
+                .any(|entry| { entry.section == "Terminal" && entry.title == "Font family" })
+        );
+
+        let description_matches = settings_search_results("forwarded graphical", "english");
+        assert_eq!(description_matches.len(), 1);
+        assert_eq!(description_matches[0].section, "X11");
+        assert_eq!(description_matches[0].title, "Provider");
+
+        let section_matches = settings_search_results("workspace", "english");
+        assert!(section_matches.iter().any(|entry| {
+            entry.section == "Workspace" && entry.title == "Session sidebar width"
+        }));
+    }
+
+    #[test]
+    fn settings_search_ignores_empty_and_unknown_queries() {
+        assert!(settings_search_results("   ", "english").is_empty());
+        assert!(settings_search_results("not-a-setting", "english").is_empty());
+    }
+
+    #[test]
+    fn settings_search_matches_chinese_without_changing_route_ids() {
+        let matches = settings_search_results("界面字体", "simplified-chinese");
+
+        assert!(matches.iter().any(|entry| {
+            entry.section == "Appearance"
+                && entry.title == "字体系列"
+                && entry.description == "应用界面字体"
+        }));
     }
 }

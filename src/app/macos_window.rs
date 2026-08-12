@@ -6,9 +6,9 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSDeleteFunctionKey,
-    NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags, NSF1FunctionKey,
-    NSHomeFunctionKey, NSImage, NSImageNameGoBackTemplate, NSInsertFunctionKey,
+    NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSColor,
+    NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags,
+    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageNameMultipleDocuments, NSInsertFunctionKey,
     NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
     NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
 };
@@ -120,6 +120,7 @@ pub(super) fn configure(window: &slint::Window) -> Result<()> {
 
 pub(super) fn configure_detached_titlebar_buttons(
     window: &slint::Window,
+    terminal_background: slint::Color,
     show_terminal_actions: bool,
     split_right: impl Fn() + 'static,
     split_down: impl Fn() + 'static,
@@ -150,10 +151,10 @@ pub(super) fn configure_detached_titlebar_buttons(
     }
     // SAFETY: AppKit exports this process-lifetime NSImageName constant on
     // every supported macOS version; this code only reads its shared value.
-    let fallback_name = unsafe { NSImageNameGoBackTemplate };
+    let fallback_name = unsafe { NSImageNameMultipleDocuments };
     let return_button = configure_titlebar_button(
         mtm,
-        "arrow.uturn.backward",
+        "rectangle.on.rectangle",
         "Return workspace to main window",
         NSImage::imageNamed(fallback_name),
         return_workspace,
@@ -162,6 +163,7 @@ pub(super) fn configure_detached_titlebar_buttons(
     buttons.push(return_button);
 
     with_native_window(window, |native_window| {
+        configure_detached_titlebar_appearance(native_window, terminal_background);
         let zoom_button = native_window
             .standardWindowButton(NSWindowButton::ZoomButton)
             .context("AppKit window has no standard zoom button")?;
@@ -187,6 +189,34 @@ pub(super) fn configure_detached_titlebar_buttons(
         }
         Ok(())
     })
+}
+
+pub(super) fn update_detached_titlebar_background(
+    window: &slint::Window,
+    terminal_background: slint::Color,
+) -> Result<()> {
+    with_native_window(window, |native_window| {
+        configure_detached_titlebar_appearance(native_window, terminal_background);
+        Ok(())
+    })
+}
+
+fn configure_detached_titlebar_appearance(
+    native_window: &NSWindow,
+    terminal_background: slint::Color,
+) {
+    let titlebar_background = ns_color(terminal_background);
+    native_window.setTitlebarAppearsTransparent(true);
+    native_window.setBackgroundColor(Some(&titlebar_background));
+}
+
+fn ns_color(color: slint::Color) -> Retained<NSColor> {
+    NSColor::colorWithSRGBRed_green_blue_alpha(
+        f64::from(color.red()) / 255.0,
+        f64::from(color.green()) / 255.0,
+        f64::from(color.blue()) / 255.0,
+        f64::from(color.alpha()) / 255.0,
+    )
 }
 
 fn configure_titlebar_button(

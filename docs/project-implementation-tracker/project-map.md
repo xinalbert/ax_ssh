@@ -8,7 +8,7 @@
 ## 索引范围
 
 - 根目录：`<repo-root>`
-- 覆盖：`AGENTS.md`、`.agents/`、`LICENSE`、`THIRD_PARTY_NOTICES.md`、`Cargo.toml`、`Cargo.lock`、`vendor/`、`build.rs`、`src/`、`ui/`、`assets/`、`packaging/`、`docs/`、`.github/workflows/ci.yml`、根 README 和 `.gitmodules`。
+- 覆盖：`AGENTS.md`、`.agents/`、`LICENSE`、`THIRD_PARTY_NOTICES.md`、`Cargo.toml`、`Cargo.lock`、`vendor/`、`build.rs`、`src/`、`ui/`、`translations/`、`assets/`、`packaging/`、`scripts/`、`docs/`、`.github/workflows/`、根 README 和 `.gitmodules`。
 - 排除：`.git/`、`target/`、`third_package/axshell` 内部文件和本机 Cargo 缓存。
 
 ## 目录地图
@@ -18,12 +18,14 @@
 | `LICENSE`、`THIRD_PARTY_NOTICES.md` | AxSSH GPL 主许可证与独立第三方许可边界 | 修改授权、分发或打包声明时 | 原创软件使用 GPL-3.0-only；Slint/OFL 字体/MIT vendor/平台文件图标依赖保留各自声明 |
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
+| `translations/` | 构建时内嵌的 Slint 界面翻译目录 | 增加或修改静态用户可见文案、locale 或语言选择时 | 当前完整目录为 `zh-CN`；远端内容、用户值、日志与运行时技术错误详情不进入翻译键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | TTF 只由 AxSSH 在运行时从资源路径读取；不经 Slint import 嵌入，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `vendor/vt100/` | 历史终端网格补丁的保留副本 | 审计旧差异或移除遗留依赖时 | 当前迁移不修改其源码；不得再作为新的终端功能实现点 |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |
-| `.github/workflows/` | 三平台 CI | 修改工具链、依赖或验证门禁时 | 不 checkout 参考子模块 |
+| `.github/workflows/` | 三平台 CI、按上海日期升版和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | CI 成功后按 target 写入共享 Cargo cache；Release 再确认 tag CI 成功后只恢复对应 cache 并重新构建发行二进制，不 checkout 或打包参考子模块 |
+| `scripts/` | 发布日期解析、Cargo/lock/plist 同步与回归 | 调整 tag 格式、发布日期或发行元数据时 | 公开 tag 严格为 `YYYY-MM-DD`；Cargo/Debian/macOS short version 为 `YYYY.M.D`，macOS build version 为 `YYYYMMDD` |
 | `third_package/axshell` | 仅供产品/行为参考的 Git 子模块 | 需要核对参考行为时 | 不进入 Cargo workspace 或 build graph |
 
 ## 关键文件
@@ -35,6 +37,7 @@
 | `LICENSE` | AxSSH 主许可证正文 | GNU GPL version 3 | 发布源码或二进制、核对 GPL 条款时 |
 | `THIRD_PARTY_NOTICES.md` | 第三方许可入口 | Slint、OFL 字体、MIT vt100、平台文件图标 API/依赖、Cargo 依赖 | 修改依赖、字体、vendor 或发行声明时 |
 | `Cargo.toml` | 根包、许可证、依赖和 Linux package 定义 | `[package]`、`license`、Slint/russh/终端模拟器、`package.metadata.deb` | 工具链、版本、授权和构建/打包范围 |
+| `.github/workflows/{create-dated-release,release}.yml` | 日期 tag 创建、跨平台发行与 GitHub Release | `workflow_dispatch`、CI dispatch/wait、release matrix | 默认分支创建 tag 后先 dispatch CI；只有 CI 成功才 dispatch 构建 Windows x86_64、Linux x86_64/aarch64 和 macOS universal 资产 |
 | `assets/ion/terminal_icon.svg` | AxSSH Terminal 图标的 canonical 矢量源副本 | 更换或重新生成各平台位图/容器时 | `terminal_icon_all_formats/terminal_icon.svg` 保留同一源副本；所有 PNG、ICO、ICNS 从此 SVG 生成，保持 RGBA 透明背景 |
 | `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
 | `src/main.rs` | 进程入口 | `LoggingGuard`、`app::run` | 启动、退出和进程级生命周期 |
@@ -85,8 +88,9 @@
 | `src/sftp/transfer.rs` 与 `src/sftp/transfer/cache.rs` | 远端 regular file 只读下载与私有 cache | `SftpDownloadRequest`、`SftpDownloadHandle`、`cleanup_stale_sftp_open_cache` | 根模块保留协议下载、metadata 重验、bounded writer/progress、取消/超时；cache 子模块负责私有 namespace、权限、quota、stale cleanup、`.part` fsync/atomic rename 和首次下载前 4096 项维护 |
 | `src/telnet.rs` | Telnet transport 与 worker | `TelnetFrameBuffer`、`TelnetSessionHandle`、`TelnetSessionEvent` | 明文 TCP、64 KiB 完整帧组装、IAC 过滤、选项拒绝、NAWS、有界队列、取消和分片/loopback 回归 |
 | `src/serial.rs` | Serial 发现、身份解析与 worker | `discover_serial_ports`、`resolve_serial_port`、`SerialSessionHandle` | 只读枚举、稳定 USB 匹配、歧义拒绝、串口参数、设备 I/O 和有界关闭；发现不得自动打开 |
-| `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar` | Rust property/callback 接口、共享 event loop 的多窗口标记、Terminal 语义色、detached 原生标题、仅主窗口的 File/Edit/Window 菜单、Terminal Edit accelerator、平台修饰键的 terminal target hover/activate、直接 Tab UUID 的 Move/Return/terminal/divider callbacks、DTO 组装、主题刷新和安全 phase 输入；不在此保存选区或局部草稿 |
+| `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar` | Rust property/callback 接口、共享 event loop 的多窗口标记、唯一的客户区窗口框线、Terminal 语义色、detached 原生标题、仅主窗口的 File/Edit/Window 菜单、Terminal Edit accelerator、平台修饰键的 terminal target hover/activate、直接 Tab UUID 的 Move/Return/terminal/divider callbacks、DTO 组装、主题刷新和安全 phase 输入；不在此保存选区或局部草稿 |
 | `ui/components/sftp-controls.slint` | 可复用 SFTP 操作与路径复制按钮 | `SftpActionButton`、`SftpCopyPathButton` | 有界高度、键盘/无障碍 button 语义、Tooltip 与 SFTP 视觉 token；不保存 SFTP 状态或执行 I/O |
+| `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 显式接收显示文本、tooltip 覆盖、无障碍名称和 enabled，转发标准 Button 的 focus/pressed/click；仅真实溢出时显示有界全文 Tooltip，不保存业务状态 |
 | `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；detached Terminal 的客户区只保留全高 pane surface，分屏入口归 macOS 原生标题栏；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、UUID 定向 terminal callback 转发、SFTP 运行时分栏比例/Transfers 折叠、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/components/workspace-titlebar.slint` | 工作区标题栏与统一窗口/分屏 glyph | `WorkspaceTitlebar`、`WorkspaceTabContent`、`WindowFrameGlyph`、`WorkspaceTransferGlyph`、`TerminalSplitButton`、`WorkspaceTabRow`、`ConnectableSessionRow`、`ConnectionPicker` | 左起 Tab strip、跟随指针的拖拽副本/源槽/目标槽、位置序号、SSH/SFTP inline Move/Return 动作、主窗口保存连接选择器、统一窗口轮廓与 split 图标、滚动和关闭 |
 | `ui/components/flat-action-menu.slint` | 通用扁平动作菜单 | `ActionMenuItem`、`FlatActionMenu`、`show-at` | 用同一 action model 承载原生右键菜单与按钮主动触发的下拉菜单 |
@@ -98,13 +102,13 @@
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
 | `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalTargetHighlight`、`TerminalRenderLine` | 绘制底部对齐的 Rust 可见字符格、选区/光标/preedit/完整 target 下划线覆盖，并携带 control/meta 的指针、滚动、复制/粘贴/全选和 target intent；不持有终端数据、worker 状态、焦点或 IME 输入 |
-| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`terminal-target-highlight`、`pane-command` | 只读终端 snapshot、局部焦点/选择/光标/尺寸和短生命周期 target 范围；按住平台主修饰键时更新完整 target 下划线，开始选择、滚动、离开或释放按键时清除；其余 IME/快捷键/resize 职责不变 |
+| `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalViewState`、`grid-top-offset`、`initial-input-focus-pending`、`terminal-target-highlight`、`pane-command` | 只读终端 snapshot、无框线的局部焦点/选择/光标/尺寸和短生命周期 target 范围；仅新建 pane 在首轮布局后重验并聚焦透明 IME proxy，复用组件的 terminal identity、分屏 focused、连接、可见性和 divider release 会同步聚焦；按住平台主修饰键时更新完整 target 下划线，开始选择、滚动、离开或释放按键时清除；其余 IME/快捷键/resize 职责不变 |
 | `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpEntryRow`、`SftpTransferRow`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 固定图标槽、regular file 双击 intent、进度/取消列表、splitter、选中/过滤/分页；不执行文件系统、opener、网络或传输 |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、terminal split/divider、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
-| `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsField`、`SettingsRow` | 统一 Settings 矢量图标、导航、标题、紧凑字段和行布局；标题不再承载 Save/Close 状态操作 |
-| `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsViewState`、统一草稿、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
-| `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | Appearance 拥有应用字体/主题；Terminal 拥有终端设置和五项语义色草稿；X11 拥有本机 provider/path/启动/兼容选择；About 展示 GPL、标准 `AboutSlint` 和问题/日志/诊断操作 |
+| `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsSearchResult`、`SettingsPage`、`SettingsField`、`SettingsRow` | 统一 Settings 矢量图标、导航、固定搜索标题、结果行、详情滚动容器、紧凑字段和行布局；标题不再承载 Save/Close 状态操作 |
+| `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsSearchEntry`、`SettingsViewState`、统一草稿、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿/搜索查询；有界、无持久化的结果目录仅搜索分类名、标题和说明；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
+| `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | 所有分类详情区各自可滚动；Appearance 拥有应用字体/主题；Terminal 拥有终端设置和五项语义色草稿；X11 拥有本机 provider/path/启动/兼容选择；About 展示 GPL、标准 `AboutSlint` 和问题/日志/诊断操作 |
 | `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`private-key-mode-changed`、`serial-mode-changed`、`submit` | 组件私有 profile 草稿、按模式发现/释放意图、Password/Private key/SSH agent 选择、SSH-only X11、内嵌遮蔽密码/保险库口令、预选 Group 和私钥路径；agent 模式不显示秘密输入，新建 SSH 可 Save & connect |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
@@ -124,7 +128,9 @@
 - 修改平台顶部菜单：业务菜单和 `MenuItem.shortcut` 在 `ui/app.slint`，配置字符串到 `slint::Keys` 的唯一转换在 `src/app/input.rs`，macOS 标准应用菜单 action/key equivalent 在 `src/app/macos_window.rs`；File Import/Export 和 Terminal Edit command 通过 `WorkspaceShell` 公开函数进入局部 owner，菜单不能越过根组件访问内部实例。Terminal Edit 只在 Terminal Tab 启用并由 focused `TerminalPane` 执行；Settings/About 和运行时解析的 close/switch 动作不要绑定不必要的活动 Tab 状态。快捷键、安全状态或工作区 Tab model 重建后必须扫描当前 AppKit menu tree 并幂等重绑 Settings/About，必要时短暂重试。
 - 修改会话管理：`src/config.rs` 持久化 Group/profile，`src/app/workspace.rs` 执行 CRUD、Duplicate、脱敏 clipboard JSON 复制/导入与凭据事务，`src/app/state.rs` 只持有编辑 draft identity，`src/app/view.rs::session_group_rows` 生成嵌套的 Group/遮蔽服务器 model；Group 展开与当前 Group/Server 选择身份留在 `ui/components/session-navigation.slint`，不持久化或发送 transport。Slint 入口在 `ui/workspace-shell.slint`、`ui/components/{flat-action-menu,flat-text-input,session-navigation,session-management-dialog,overlay-host}.slint` 和 `ui/session-editor.slint`。导入上限、UUID 重分配和凭据/主机指纹清除不得下放到 Slint。
 - 修改主题：先改 `src/config.rs` 的领域/迁移/对比度保护，再同步 `src/app/{settings_bridge,view,terminal_bridge}.rs`、`ui/{app,settings,theme}.slint` 和 Appearance 的共享 `ThemePaletteEditor`；系统跟随只能留在 Slint，不能把平台配色写进配置。需要精确弹层配色的选择控件统一使用 `ui/components/themed-combo-box.slint`，边框/分隔线/焦点/hover/selected 使用 `Theme` 状态 token。
+- 修改界面语言：先改 `src/config/settings.rs` 的稳定 `UiLanguage` 与迁移，再同步 `src/app/{settings_bridge,view/settings}.rs`、`ui/` 的 `@tr`/稳定 selector index、`translations/zh-CN/` 和 `scripts/{build_zh_catalog,check_translations}.py`；语言必须先持久化再在 UI 线程切换，普通 Settings preview/save 不得覆盖已提交语言。
 - 修改应用图标资源：先检查 `assets/ion/terminal_icon.svg`，再从该源生成 `assets/ion/terminal_icon_all_formats/` 中的 PNG、ICO 和 ICNS；窗口入口在 `ui/app.slint`，Windows resource 在 `packaging/windows/axssh.rc`，macOS Dock/Bundle 在 `src/app/macos_window.rs` 与 `packaging/macos/`，Linux desktop/deb 安装表在 `packaging/linux/axssh.desktop` 与 `Cargo.toml`。
+- 修改 GitHub 发布或版本：先检查 `Cargo.{toml,lock}`、`packaging/macos/Info.plist`、`scripts/release_version.py` 和 `.github/workflows/{ci,create-dated-release,release}.yml`；公开 tag 必须为 `YYYY-MM-DD` 并在 build 前和三种包元数据一致。保持 CI 成功后按 target 写 cache、Release 仅读对应 cache 的边界，发布 job 始终重新执行 `cargo build --release --locked`，并保留字体、图标和独立许可证声明。不得把 `third_package/axshell` 加入 checkout、缓存、构建或发行物。
 - 修改许可证或发行声明：先检查 `LICENSE`、`THIRD_PARTY_NOTICES.md` 和 `Cargo.toml` 的 SPDX/安装表，再同步 `ui/settings/about.slint`、根 README、`docs/{architecture,development}*.md` 与平台打包脚本；不得用根 GPL 覆盖 OFL 字体或 MIT vendor 的独立声明。
 - 修改 Rust/Slint 工程规则：先读根 `AGENTS.md`，再由项目 skill 选择 Rust 或 Slint reference。
 - 修改工程边界：同步根 README、`docs/architecture*.md` 和本项目地图。
@@ -138,17 +144,22 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-08-12 macOS detached 窗口保留原生标题栏但将其设为透明并染为当前客户区表面色，Terminal 使用 `terminal-background`、SFTP 使用 `Theme.background`，消除标题栏断层；Return 使用系统 `rectangle.on.rectangle` 和 AppKit 多文档 fallback，与 Tab 的窗口转移语义一致。Settings preview/save 将既有 `AppSettings` 同步到 live detached UI，再仅以其解析后的 `Color` 刷新 AppKit 标题栏。该外观桥接不持有主题、window router、worker、terminal buffer、SSH trust 或凭据。
+- 最近依据：2026-08-12 `TerminalPane` 取消自身 focused 边框；复用组件的 terminal identity、分屏 focused、连接、可见性和 divider release 直接聚焦既有透明 IME proxy，仅新建 pane 在首轮布局后执行一次状态重验和聚焦。`AppWindow` 以 `Theme.frame-border` 绘制唯一的客户区窗口框线；分屏 pane、worker、终端缓冲区、SSH trust 和凭据边界不变。
 - 最近依据：2026-08-11 SFTP 双栏标题栏新增 `SftpCopyPathButton`；Remote/Local 仅将当前已发布的有界路径经既有 `write-clipboard` callback 交给系统剪贴板，主窗口和 detached `SftpPane` 共用接线，不读取目录、不接触 worker/transport，也不改变配置或持久化状态。
 - 最近依据：2026-08-11 新增 schema v18 的默认关闭 `copy_selection_on_select`；Settings > Terminal 经窗口/Terminal DTO 把它传入 Slint-local pane，完成鼠标选区和 Select All 才复用有界 clipboard callback，直接右击固定粘贴。选区/clipboard 文字不进入配置、日志、AppState 或 transport，且新模式优先于既有右键复制或粘贴偏好。Terminal divider、pane focus 和输出 snapshot 在 UUID、identity 和行数一致时原地更新 Slint model 行，避免替换 pressed/focused repeater 与透明 IME 实例；输出 snapshot 同时复用 render-line/run `VecModel` 和有界单行 cursor model 并直接发布行通知，避免内容或光标等待焦点变化才重绘。非根 pane 由 `PaneTree` collapse、`AppState` Tab close 和异步 worker cleanup 的统一路径负责显式关闭或正常结束自动关闭；根 pane 与失败状态继续保留。多窗口 worker refresh 复用 `AppState` pending gate 并在应用期间有更新时最多补排一次，防止 event-loop backlog。输入 latency 额外记录 state lock/worker request，workspace refresh 记录 build/queue/apply/coalesced 阶段。比例仍只属于 `PaneTree`，不进入配置、worker 或 transport。
 - 最近依据：2026-08-10 为 `PaneTree` 内部 split 增加 0.1-0.9 volatile ratio 和稳定 divider 快照，主/独立窗口共用可见 hairline、拖拽、方向键、Home/End、双击复位与 slider 无障碍操作；比例随 Tab 切换及 detached/Return 保留，不进入配置或 worker；同日将 macOS detached 标题栏 Return 文字按钮改为紧凑系统返回图标，并将 Terminal 分屏收紧为“一棵 PaneTree 属于一个可见 Terminal Tab”。
 - 最近依据：2026-08-11 主窗口 Tab 管理栏保留可访问的纵向/横向分屏图标；macOS detached Terminal 在原生标题栏、Return 左侧放置 image-only 分屏图标，客户区保持全高。两者均通过既有 `pane-command` 发出 `split-right` 或 `split-down`，定向当前 active pane UUID；SFTP detached view、worker、SSH trust 和会话所有权不变。
 - 最近依据：2026-08-11 `WindowFrameGlyph` 统一 Terminal split 与 Tab Move/Return 的窗口轮廓；split divider 对齐整像素，Move/Return 以明暗前后 frame 表示方向。改动仅在 Slint 绘图与 theme token，Tooltip、无障碍名称、callback、窗口路由和原生 macOS Return 不变。
 - 最近依据：2026-08-11 Terminal target parser 仅检查有界可见行；Slint 只携带 pointer cell、control/meta 与 Tab UUID，`TerminalModel` 保留宽字符 cell 映射。URL 在本机 blocking opener 打开且不请求网络；Unix 路径以对应 runtime SFTP Tab 路由，新的 SFTP Tab 重新走独立 host-key/认证，连接中的既有 companion 只保存一项临时路径。
+- 最近依据：2026-08-12 新增按上海日期的 GitHub 发布：`Create Dated Release` 仅从默认分支创建 `YYYY-MM-DD`、同步 `Cargo.toml`/`Cargo.lock`/macOS plist 并 dispatch CI；Release 只在该 CI 成功后构建 Windows x86_64、Linux x86_64/aarch64 和 macOS universal 资产，并在入口再次验证该 CI 结果。CI 成功写入同 Rust target 与 lockfile 隔离的共享 Cargo cache；Release 只恢复对应 cache 且重新构建 release 二进制。发行物包含 AxSSH 自有字体、平台图标和独立许可证，完全不包含参考子模块。
 - 最近依据：2026-08-12 Terminal target hover 以短生命周期 `TerminalTargetHighlight` 返回 active、row 和完整目标的半开 cell 区间；`TerminalPane` 在 Cmd/Ctrl hover、按键和 pointer 事件中本地管理提示，`TerminalGrid` 仅绘制下划线与鼠标指针。修饰键、选择、滚动或离开会清除它，不发布完整行、目标文本、worker 或终端 buffer。
 - 最近依据：2026-08-12 Terminal render mapper 对每个有界可见行的默认 ASCII run 做边界感知语义标注；真实 `TerminalModel` snapshot 回归覆盖其到 Slint render run 的颜色传递。URL/路径、HTTP 2xx-5xx 和常见成功/信息/警告/错误词分别使用当前 ANSI 色表的 link/success/info/warning/error 色，并对当前终端背景校正至至少 4.5:1。显式 ANSI/真彩色、非默认背景、inverse、dim 与非 ASCII run 不改变；不向 Slint、worker 或持久化层传递额外终端内容。
+- 最近依据：2026-08-12 `ElidedLabel` 统一测量自然宽度、绘制单行省略和仅溢出时的有界全文 Tooltip；`ElidedButton` 保留标准 Button 的 focus/keyboard/enabled/pressed/accessibility/click 所有权，并显式接收 text、tooltip 覆盖和无障碍名称。SFTP、Settings、Sidebar、认证、会话、工作区 Tab/连接行共用该呈现能力；纯图标和已有富详情 Tooltip 不重复包装。
+- 最近依据：2026-08-12 schema v21 增加 Follow system/English/简体中文界面语言策略；构建内嵌完整 `zh-CN` 静态 Slint 目录，独立保存成功后同步进程 locale 和全部窗口。生成/检查器覆盖 386 条非空翻译、陈旧项和编号占位符；技术错误详情保持原文。
 - 最近依据：2026-08-10 用 Slint-local command + bounded revision 增加 Terminal-only Edit Copy/Paste/Select All；主/独立窗口共用 `TerminalPaneGroup`，只有 focused pane 执行，Copy/Paste 复用配置快捷键，Select All 使用不占用 Windows/Linux `Ctrl+A` 的固定 accelerator。
 - 最近依据：2026-08-09 完成多窗口 `WorkspaceTransfer`/`WindowRouter`、SSH/SFTP companion 成组 detached/merge、共享 Slint event loop、窗口内 Tab 路由和 Tab inline Move/Return 动作；其后将 detached 客户区收紧为仅当前 Terminal/SFTP，移除 Tab 条、sidebar、连接选择器、Settings、会话编辑器和客户区菜单，并让 Move/Return 直接携带 Tab UUID；macOS detached Return 随后从会额外占行的 titlebar accessory 改为标准标题栏父视图内的同一行原生按钮；同日完成窗口级、最多八叶的 `PaneTree` 和 UUID 定向 `TerminalPaneGroup`，支持主窗口及 detached Terminal 的独立会话拆分、方向焦点和布局恢复，SFTP 保持不可分屏的独立 surface；同日完成 `SshAgent` profile、无密码应用路由、russh 运行时外部 signer、5 identity/30 秒边界与内存 agent loopback 回归；2026-08-08 完成启动资源懒加载、Private key/Serial 模式级发现与代际清理、SFTP-only 终端模型省略和文件图标 cache 回收；2026-08-06 已完成的 SFTP 平台文件图标、snapshot 重验本地打开、独立 subsystem 分块下载后打开、进度/取消、私有缓存清理、取消/预热/GDI 静态竞态修复及 P1-P9 验证记录；2026-08-05 的工作区 Tab 固定跨平台前后循环 accelerator；2026-08-04 的 SSH 认证前命令隔离、connected-only terminal/SFTP 操作、profile mutation token 与凭据回滚、私有唯一临时文件、配置统一上限和 owned PTY shutdown；同日的会话编辑器可选密码保存、逐 Tab 一次性认证秘密，以及 Terminal 最小对比度设置、schema v17 迁移和按实际单元格背景的 WCAG 前景修正；2026-08-03 的运行时 SSH/SFTP companion UUID、双向 Tab 切换、独立 transport 和 Settings 单例快捷键激活，以及 X11 首个远端 channel 按需本机准备、X server 已知安装位置快照和 Custom executable 设置入口；2026-08-02 的跨平台 X server provider/启动设置、默认开启的 SSH X11 forwarding、显式 loopback no-auth 兼容；2026-08-01 的独立双栏 SFTP Tab、脱敏 diagnostics、终端主屏 reflow、运行时字体资源和双字体设置分离。
 
 ## 最后更新时间
 
-- 2026-08-12 08:15 CST：刷新 Settings、config、terminal renderer 和 Slint route 条目，覆盖可配置 Terminal 语义高亮色。
+- 2026-08-12 17:31 +0800：补充界面语言配置、内嵌简体中文目录、独立保存/多窗口 locale 切换及翻译校验路由。

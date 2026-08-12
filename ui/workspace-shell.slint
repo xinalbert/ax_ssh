@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
-import { SettingsPane, SettingsViewState } from "settings.slint";
+import { SettingsPane, SettingsSearchEntry, SettingsViewState } from "settings.slint";
 import { TerminalPane, TerminalViewState } from "terminal-pane.slint";
 import { SftpPane, SftpViewState } from "sftp-pane.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
@@ -73,7 +73,7 @@ component TerminalPaneDivider inherits FocusScope {
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: slider;
-    accessible-label: root.vertical ? "Terminal pane widths" : "Terminal pane heights";
+    accessible-label: root.vertical ? @tr("Terminal pane widths") : @tr("Terminal pane heights");
     accessible-enabled: root.enabled;
     accessible-orientation: root.vertical ? Orientation.horizontal : Orientation.vertical;
     accessible-value: root.ratio;
@@ -426,6 +426,7 @@ export component WorkspaceShell inherits Rectangle {
         bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
+    callback save-ui-language(int);
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
@@ -466,6 +467,7 @@ export component WorkspaceShell inherits Rectangle {
     callback report-bug();
     callback open-log-directory();
     callback copy-diagnostic-info();
+    pure callback settings-search-results(string, string) -> [SettingsSearchEntry];
 
     public function toggle-sidebar() {
         root.sidebar-collapsed = !root.sidebar-collapsed;
@@ -754,6 +756,7 @@ export component WorkspaceShell inherits Rectangle {
                                 paste-key, open-sftp-key, credential-storage, settings-tab-id, close-after-save,
                             );
                         }
+                        save-ui-language(index) => { root.save-ui-language(index); }
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }
@@ -763,6 +766,9 @@ export component WorkspaceShell inherits Rectangle {
                         report-bug => { root.report-bug(); }
                         open-log-directory => { root.open-log-directory(); }
                         copy-diagnostic-info => { root.copy-diagnostic-info(); }
+                        settings-search-results(query, language) => {
+                            return root.settings-search-results(query, language);
+                        }
                     }
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
@@ -786,13 +792,13 @@ export component WorkspaceShell inherits Rectangle {
                         padding: Theme.empty-page-padding;
                         spacing: Theme.space-lg;
                         Text {
-                            text: "Workspace";
+                            text: @tr("Workspace");
                             color: Theme.text;
                             font-size: Theme.font-page-title;
                             font-weight: 700;
                         }
                         Text {
-                            text: "Open a saved session or create a new tab.";
+                            text: @tr("Open a saved session or create a new tab.");
                             color: Theme.muted;
                             font-size: Theme.font-body;
                         }

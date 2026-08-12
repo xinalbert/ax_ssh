@@ -23,79 +23,80 @@ component ThemePaletteEditor inherits VerticalLayout {
     spacing: 0px;
 
     SettingsSectionHeading { label: root.title; }
-    SettingsSectionHeading { label: "SURFACES"; }
+    SettingsSectionHeading { label: @tr("SURFACES"); }
     SettingsRow {
-        label: "Background";
-        description: "Primary workspace surface";
-        SettingsField { FlatTextInput { text <=> root.background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} background color"; } }
+        label: @tr("Background");
+        description: @tr("Primary workspace surface");
+        SettingsField { FlatTextInput { text <=> root.background-color; height: Theme.settings-control-height; accessible-label: @tr("{0} background color", root.title); } }
     }
     SettingsRow {
-        label: "Panel";
-        description: "Navigation and title surfaces";
-        SettingsField { FlatTextInput { text <=> root.panel-color; height: Theme.settings-control-height; accessible-label: "\{root.title} panel color"; } }
+        label: @tr("Panel");
+        description: @tr("Navigation and title surfaces");
+        SettingsField { FlatTextInput { text <=> root.panel-color; height: Theme.settings-control-height; accessible-label: @tr("{0} panel color", root.title); } }
     }
     SettingsRow {
-        label: "Panel alternative";
-        description: "Hover and secondary surfaces";
-        SettingsField { FlatTextInput { text <=> root.panel-alt-color; height: Theme.settings-control-height; accessible-label: "\{root.title} secondary panel color"; } }
+        label: @tr("Panel alternative");
+        description: @tr("Hover and secondary surfaces");
+        SettingsField { FlatTextInput { text <=> root.panel-alt-color; height: Theme.settings-control-height; accessible-label: @tr("{0} secondary panel color", root.title); } }
     }
     SettingsRow {
-        label: "Border";
-        description: "Dividers and control outlines";
-        SettingsField { FlatTextInput { text <=> root.border-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} border color"; } }
-    }
-
-    SettingsSectionHeading { label: "CONTENT AND STATES"; }
-    SettingsRow {
-        label: "Text";
-        description: "Primary readable text";
-        SettingsField { FlatTextInput { text <=> root.text-color-value; height: Theme.settings-control-height; accessible-label: "\{root.title} text color"; } }
-    }
-    SettingsRow {
-        label: "Muted text";
-        description: "Secondary labels and metadata";
-        SettingsField { FlatTextInput { text <=> root.muted-color; height: Theme.settings-control-height; accessible-label: "\{root.title} muted text color"; } }
-    }
-    SettingsRow {
-        label: "Accent / focus";
-        description: "Focus rings, selection, and active indicators";
-        SettingsField { FlatTextInput { text <=> root.accent-color; height: Theme.settings-control-height; accessible-label: "\{root.title} accent color"; } }
-    }
-    SettingsRow {
-        label: "Success";
-        description: "Positive status indicators";
-        SettingsField { FlatTextInput { text <=> root.success-color; height: Theme.settings-control-height; accessible-label: "\{root.title} success color"; } }
-    }
-    SettingsRow {
-        label: "Danger";
-        description: "Error and destructive indicators";
-        SettingsField { FlatTextInput { text <=> root.danger-color; height: Theme.settings-control-height; accessible-label: "\{root.title} danger color"; } }
-    }
-    SettingsRow {
-        label: "Overlay";
-        description: "Dialog and transient overlay tint";
-        SettingsField { FlatTextInput { text <=> root.overlay-color; height: Theme.settings-control-height; accessible-label: "\{root.title} overlay color"; } }
+        label: @tr("Border");
+        description: @tr("Dividers and control outlines");
+        SettingsField { FlatTextInput { text <=> root.border-color-value; height: Theme.settings-control-height; accessible-label: @tr("{0} border color", root.title); } }
     }
 
-    SettingsSectionHeading { label: "TERMINAL DEFAULTS"; }
+    SettingsSectionHeading { label: @tr("CONTENT AND STATES"); }
     SettingsRow {
-        label: "Foreground";
-        description: "Default terminal text color";
-        SettingsField { FlatTextInput { text <=> root.terminal-foreground-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal foreground color"; } }
+        label: @tr("Text");
+        description: @tr("Primary readable text");
+        SettingsField { FlatTextInput { text <=> root.text-color-value; height: Theme.settings-control-height; accessible-label: @tr("{0} text color", root.title); } }
     }
     SettingsRow {
-        label: "Background";
-        description: "Default terminal background color";
-        SettingsField { FlatTextInput { text <=> root.terminal-background-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal background color"; } }
+        label: @tr("Muted text");
+        description: @tr("Secondary labels and metadata");
+        SettingsField { FlatTextInput { text <=> root.muted-color; height: Theme.settings-control-height; accessible-label: @tr("{0} muted text color", root.title); } }
     }
     SettingsRow {
-        label: "Selection";
-        description: "Terminal text selection background";
-        SettingsField { FlatTextInput { text <=> root.terminal-selection-color; height: Theme.settings-control-height; accessible-label: "\{root.title} terminal selection color"; } }
+        label: @tr("Accent / focus");
+        description: @tr("Focus rings, selection, and active indicators");
+        SettingsField { FlatTextInput { text <=> root.accent-color; height: Theme.settings-control-height; accessible-label: @tr("{0} accent color", root.title); } }
+    }
+    SettingsRow {
+        label: @tr("Success");
+        description: @tr("Positive status indicators");
+        SettingsField { FlatTextInput { text <=> root.success-color; height: Theme.settings-control-height; accessible-label: @tr("{0} success color", root.title); } }
+    }
+    SettingsRow {
+        label: @tr("Danger");
+        description: @tr("Error and destructive indicators");
+        SettingsField { FlatTextInput { text <=> root.danger-color; height: Theme.settings-control-height; accessible-label: @tr("{0} danger color", root.title); } }
+    }
+    SettingsRow {
+        label: @tr("Overlay");
+        description: @tr("Dialog and transient overlay tint");
+        SettingsField { FlatTextInput { text <=> root.overlay-color; height: Theme.settings-control-height; accessible-label: @tr("{0} overlay color", root.title); } }
+    }
+
+    SettingsSectionHeading { label: @tr("TERMINAL DEFAULTS"); }
+    SettingsRow {
+        label: @tr("Foreground");
+        description: @tr("Default terminal text color");
+        SettingsField { FlatTextInput { text <=> root.terminal-foreground-color; height: Theme.settings-control-height; accessible-label: @tr("{0} terminal foreground color", root.title); } }
+    }
+    SettingsRow {
+        label: @tr("Background");
+        description: @tr("Default terminal background color");
+        SettingsField { FlatTextInput { text <=> root.terminal-background-color; height: Theme.settings-control-height; accessible-label: @tr("{0} terminal background color", root.title); } }
+    }
+    SettingsRow {
+        label: @tr("Selection");
+        description: @tr("Terminal text selection background");
+        SettingsField { FlatTextInput { text <=> root.terminal-selection-color; height: Theme.settings-control-height; accessible-label: @tr("{0} terminal selection color", root.title); } }
     }
 }
 
 export component AppearanceSettingsPage inherits Rectangle {
+    in property <int> scroll-revision: 0;
     in property <[string]> application-font-options;
     in-out property <string> draft-application-font-family;
     in-out property <int> draft-application-font-index;
@@ -133,8 +134,13 @@ export component AppearanceSettingsPage inherits Rectangle {
     appearance-scroll := ScrollView {
         width: parent.width;
         height: parent.height;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-width: self.visible-width;
+        viewport-height: max(
+            self.visible-height,
+            appearance-content.preferred-height + 2 * Theme.space-xl,
+        );
 
         appearance-page := Rectangle {
             width: appearance-scroll.visible-width;
@@ -154,63 +160,63 @@ export component AppearanceSettingsPage inherits Rectangle {
                 height: self.preferred-height;
                 spacing: 0px;
 
-                SettingsSectionHeading { label: "APPLICATION TYPOGRAPHY"; }
+                SettingsSectionHeading { label: @tr("APPLICATION TYPOGRAPHY"); }
                 SettingsRow {
-                    label: "Font family";
-                    description: "Application interface font";
+                    label: @tr("Font family");
+                    description: @tr("Application interface font");
                     SettingsField {
                         ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
                             model: root.application-font-options;
                             current-index <=> root.draft-application-font-index;
-                            accessible-label: "Application font family";
-                            selected(value) => { root.draft-application-font-family = value; }
+                            accessible-label: @tr("Application font family");
+                            selected(value, _index) => { root.draft-application-font-family = value; }
                         }
                     }
                 }
 
-                SettingsSectionHeading { label: "APPLICATION THEME"; }
+                SettingsSectionHeading { label: @tr("APPLICATION THEME"); }
                 SettingsRow {
-                    label: "Display mode";
-                    description: "Choose system, light, or dark appearance";
+                    label: @tr("Display mode");
+                    description: @tr("Choose system, light, or dark appearance");
                     SettingsField {
                         ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
-                            model: ["Follow system", "Light", "Dark"];
+                            model: [@tr("Follow system"), @tr("Light"), @tr("Dark")];
                             current-index: root.draft-theme-mode == "system" ? 0
                                 : (root.draft-theme-mode == "light" ? 1 : 2);
-                            accessible-label: "Application display mode";
-                            selected(value) => {
-                                root.draft-theme-mode = value == "Follow system" ? "system"
-                                    : (value == "Light" ? "light" : "dark");
+                            accessible-label: @tr("Application display mode");
+                            selected(_value, index) => {
+                                root.draft-theme-mode = index == 0 ? "system"
+                                    : (index == 1 ? "light" : "dark");
                             }
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Color palette";
-                    description: "Apply one color family to both display modes";
+                    label: @tr("Color palette");
+                    description: @tr("Apply one color family to both display modes");
                     SettingsField {
-                        ThemedComboBox {
+                        palette-picker := ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
-                            model: ["AxSSH", "Solarized", "Arctic", "Tokyo", "Ember", "Forest", "Custom"];
+                            model: ["AxSSH", "Solarized", "Arctic", "Tokyo", "Ember", "Forest", @tr("Custom")];
                             current-index: root.draft-theme-palette == "solarized" ? 1
                                 : (root.draft-theme-palette == "arctic" ? 2
                                 : (root.draft-theme-palette == "tokyo" ? 3
                                 : (root.draft-theme-palette == "ember" ? 4
                                 : (root.draft-theme-palette == "forest" ? 5
                                 : (root.draft-theme-palette == "custom" ? 6 : 0)))));
-                            accessible-label: "Application color palette";
-                            selected(value) => {
-                                root.draft-theme-palette = value == "Solarized" ? "solarized"
-                                    : (value == "Arctic" ? "arctic"
-                                    : (value == "Tokyo" ? "tokyo"
-                                    : (value == "Ember" ? "ember"
-                                    : (value == "Forest" ? "forest"
-                                    : (value == "Custom" ? "custom" : "axssh")))));
+                            accessible-label: @tr("Application color palette");
+                            selected(_value, index) => {
+                                root.draft-theme-palette = index == 1 ? "solarized"
+                                    : (index == 2 ? "arctic"
+                                    : (index == 3 ? "tokyo"
+                                    : (index == 4 ? "ember"
+                                    : (index == 5 ? "forest"
+                                    : (index == 6 ? "custom" : "axssh")))));
                             }
                         }
                     }
@@ -222,13 +228,13 @@ export component AppearanceSettingsPage inherits Rectangle {
                         self.font-metrics.ascent - self.font-metrics.descent
                             + 2 * Theme.settings-section-padding-y,
                     );
-                    text: "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved.";
+                    text: @tr("Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved.");
                     color: Theme.muted;
                     font-size: Theme.font-caption;
                     vertical-alignment: center;
                 }
                 if root.draft-theme-palette == "custom" : ThemePaletteEditor {
-                    title: "CUSTOM LIGHT PALETTE";
+                    title: @tr("CUSTOM LIGHT PALETTE");
                     background-color <=> root.draft-theme-light-background;
                     panel-color <=> root.draft-theme-light-panel;
                     panel-alt-color <=> root.draft-theme-light-panel-alt;
@@ -244,7 +250,7 @@ export component AppearanceSettingsPage inherits Rectangle {
                     terminal-selection-color <=> root.draft-theme-light-terminal-selection;
                 }
                 if root.draft-theme-palette == "custom" : ThemePaletteEditor {
-                    title: "CUSTOM DARK PALETTE";
+                    title: @tr("CUSTOM DARK PALETTE");
                     background-color <=> root.draft-theme-dark-background;
                     panel-color <=> root.draft-theme-dark-panel;
                     panel-alt-color <=> root.draft-theme-dark-panel-alt;
@@ -263,4 +269,6 @@ export component AppearanceSettingsPage inherits Rectangle {
             }
         }
     }
+
+    changed scroll-revision => { appearance-scroll.viewport-y = 0px; }
 }

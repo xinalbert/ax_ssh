@@ -1,0 +1,1169 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH 2026.8.12\n"
+"Language: zh_CN\n"
+"PO-Revision-Date: 2026-08-12 17:31+0800\n"
+"Last-Translator: AxSSH maintainers\n"
+"Language-Team: Simplified Chinese\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial or COM3"
+
+msgid "1 character"
+msgstr "1 个字符"
+
+msgid "1.0-21.0"
+msgstr "1.0-21.0"
+
+msgid "100-200 percent"
+msgstr "100%-200%"
+
+msgid "100-50,000 retained lines"
+msgstr "保留 100-50,000 行"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 像素"
+
+msgid "180-420 px when sessions are available"
+msgstr "存在会话时为 180-420 像素"
+
+msgid "2 characters"
+msgstr "2 个字符"
+
+msgid "20-300 columns, 5-100 rows"
+msgstr "20-300 列，5-100 行"
+
+msgid "22"
+msgstr "22"
+
+msgid "3 characters"
+msgstr "3 个字符"
+
+msgid "4 characters"
+msgstr "4 个字符"
+
+msgid "9-32 px"
+msgstr "9-32 像素"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "专注于 SSH、Telnet、串口和本地 Shell 会话的终端工作区。"
+
+msgid "APPLICATION"
+msgstr "应用"
+
+msgid "APPLICATION THEME"
+msgstr "应用主题"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "应用字体"
+
+msgid "About"
+msgstr "关于"
+
+msgid "About AxSSH"
+msgstr "关于 AxSSH"
+
+msgid "Accent / focus"
+msgstr "强调色 / 焦点"
+
+msgid "Allow local connections without X authority"
+msgstr "允许无 X authority 的本地连接"
+
+msgid "Appearance"
+msgstr "外观"
+
+msgid "Application color palette"
+msgstr "应用配色方案"
+
+msgid "Application command"
+msgstr "应用命令"
+
+msgid "Application display mode"
+msgstr "应用显示模式"
+
+msgid "Application font family"
+msgstr "应用字体系列"
+
+msgid "Application interface font"
+msgstr "应用界面字体"
+
+msgid "Apply one color family to both display modes"
+msgstr "为两种显示模式应用同一配色系列"
+
+msgid "Async runtime"
+msgstr "异步运行时"
+
+msgid "Authentication"
+msgstr "身份验证"
+
+msgid "Authentication method"
+msgstr "身份验证方式"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "缓冲区"
+
+msgid "Back"
+msgstr "后退"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Baud rate"
+msgstr "波特率"
+
+msgid "Border"
+msgstr "边框"
+
+msgid "Bright colors for bold text"
+msgstr "粗体文字使用亮色"
+
+msgid "Bug reports"
+msgstr "问题报告"
+
+msgid "COMPATIBILITY"
+msgstr "兼容性"
+
+msgid "CONTENT AND STATES"
+msgstr "内容和状态"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "自定义深色配色"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "自定义浅色配色"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Cancel transfer {0}"
+msgstr "取消传输 {0}"
+
+msgid "Choose 1-4 characters or show the full group name"
+msgstr "选择 1-4 个字符或显示完整组名"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "选择“自定义”以直接启动此路径，不经过命令 Shell"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "选择此连接在工作区中的显示方式。"
+
+msgid "Choose system, light, or dark appearance"
+msgstr "选择跟随系统、浅色或深色外观"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "选择新建 SFTP 标签页打开的远端和本地目录。"
+
+msgid "Clear"
+msgstr "清除"
+
+msgid "Clear settings search"
+msgstr "清除设置搜索"
+
+msgid "Close Current Tab"
+msgstr "关闭当前标签页"
+
+msgid "Close tab"
+msgstr "关闭标签页"
+
+msgid "Close terminal pane"
+msgstr "关闭终端窗格"
+
+msgid "Collapse session sidebar"
+msgstr "收起会话侧栏"
+
+msgid "Collapse {0} group"
+msgstr "收起 {0} 组"
+
+msgid "Collapsed group label"
+msgstr "折叠组标签"
+
+msgid "Collapsed group label length"
+msgstr "折叠组标签长度"
+
+msgid "Color palette"
+msgstr "配色方案"
+
+msgid "Connect"
+msgstr "连接"
+
+msgid "Connect to {0}"
+msgstr "连接到 {0}"
+
+msgid "Connection protocol"
+msgstr "连接协议"
+
+msgid "Copy"
+msgstr "复制"
+
+msgid "Copy Terminal Selection"
+msgstr "复制终端选区"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "复制终端选区快捷键"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "有选区时复制，否则粘贴"
+
+msgid "Copy current path"
+msgstr "复制当前路径"
+
+msgid "Copy diagnostics"
+msgstr "复制诊断信息"
+
+msgid "Copy selection on select"
+msgstr "选中后复制"
+
+msgid "Copy version and build information without connection data"
+msgstr "复制不含连接数据的版本和构建信息"
+
+msgid "Credential storage"
+msgstr "凭据存储"
+
+msgid "Credential vault password"
+msgstr "凭据保险库密码"
+
+msgid "Credentials used for this SSH connection."
+msgstr "此 SSH 连接使用的凭据。"
+
+msgid "Custom"
+msgstr "自定义"
+
+msgid "Custom executable"
+msgstr "自定义可执行文件"
+
+msgid "Cut"
+msgstr "剪切"
+
+msgid "DEFAULTS"
+msgstr "默认值"
+
+msgid "DISPLAY"
+msgstr "显示"
+
+msgid "Danger"
+msgstr "危险"
+
+msgid "Dark"
+msgstr "深色"
+
+msgid "Data bits"
+msgstr "数据位"
+
+msgid "Default terminal background color"
+msgstr "默认终端背景色"
+
+msgid "Default terminal columns"
+msgstr "默认终端列数"
+
+msgid "Default terminal rows"
+msgstr "默认终端行数"
+
+msgid "Default terminal size"
+msgstr "默认终端尺寸"
+
+msgid "Default terminal text color"
+msgstr "默认终端文字颜色"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Delete group"
+msgstr "删除组"
+
+msgid "Delete server"
+msgstr "删除服务器"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "删除 {0} 及其已保存的凭据？"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "删除 {0}？该组中的服务器将移至“未分组”。"
+
+msgid "Detected key"
+msgstr "检测到的密钥"
+
+msgid "Detected locations"
+msgstr "检测到的位置"
+
+msgid "Detected private keys"
+msgstr "检测到的私钥"
+
+msgid "Detected serial ports"
+msgstr "检测到的串口"
+
+msgid "Diagnostics"
+msgstr "诊断信息"
+
+msgid "Dialog and transient overlay tint"
+msgstr "对话框和临时遮罩色"
+
+msgid "Display mode"
+msgstr "显示模式"
+
+msgid "Dividers and control outlines"
+msgstr "分隔线和控件轮廓"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "Enable SSH X11 forwarding"
+msgstr "启用 SSH X11 转发"
+
+msgid "Encrypted application vault"
+msgstr "应用加密保险库"
+
+msgid "Endpoint"
+msgstr "端点"
+
+msgid "English"
+msgstr "English"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "输入 #RRGGBB 或 #RRGGBBAA。保存时，对比度不足的颜色会回退为可读颜色。"
+
+msgid "Enter the Telnet server address."
+msgstr "输入 Telnet 服务器地址。"
+
+msgid "Enter the host address and SSH account."
+msgstr "输入主机地址和 SSH 账户。"
+
+msgid "Error"
+msgstr "错误"
+
+msgid "Error and destructive indicators"
+msgstr "错误和破坏性操作指示"
+
+msgid "Errors and HTTP 5xx"
+msgstr "错误和 HTTP 5xx"
+
+msgid "Executable path"
+msgstr "可执行文件路径"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "新建本地终端标签页使用的可执行文件"
+
+msgid "Existing session groups"
+msgstr "现有会话组"
+
+msgid "Expand session sidebar"
+msgstr "展开会话侧栏"
+
+msgid "Expand {0} group"
+msgstr "展开 {0} 组"
+
+msgid "Export Selected"
+msgstr "导出所选项"
+
+msgid "Export Selected shortcut"
+msgstr "导出所选项快捷键"
+
+msgid "Export Selected to Clipboard"
+msgstr "将所选项导出到剪贴板"
+
+msgid "File"
+msgstr "文件"
+
+msgid "File transfers"
+msgstr "文件传输"
+
+msgid "Files and transfers area sizes"
+msgstr "文件和传输区域大小"
+
+msgid "Flow control"
+msgstr "流控制"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "焦点环、选择和活动状态指示"
+
+msgid "Follow system"
+msgstr "跟随系统"
+
+msgid "Font family"
+msgstr "字体系列"
+
+msgid "Font size"
+msgstr "字体大小"
+
+msgid "Foreground"
+msgstr "前景"
+
+msgid "Forward"
+msgstr "前进"
+
+msgid "Forward X11 applications"
+msgstr "转发 X11 应用"
+
+msgid "Full name"
+msgstr "完整名称"
+
+msgid "General"
+msgstr "通用"
+
+msgid "Group"
+msgstr "组"
+
+msgid "Group name"
+msgstr "组名"
+
+msgid "Help"
+msgstr "帮助"
+
+msgid "Hidden"
+msgstr "隐藏"
+
+msgid "Host"
+msgstr "主机"
+
+msgid "Hover and secondary surfaces"
+msgstr "悬停和次级表面"
+
+msgid "INTERFACE"
+msgstr "界面"
+
+msgid "Identity"
+msgstr "标识"
+
+msgid "Import from Clipboard"
+msgstr "从剪贴板导入"
+
+msgid "Import from Clipboard shortcut"
+msgstr "从剪贴板导入快捷键"
+
+msgid "Information"
+msgstr "信息"
+
+msgid "Informational status words"
+msgstr "信息状态词"
+
+msgid "Interface"
+msgstr "界面"
+
+msgid "Interface language"
+msgstr "界面语言"
+
+msgid "KEYBOARD"
+msgstr "键盘"
+
+msgid "Keyboard Shortcuts"
+msgstr "键盘快捷键"
+
+msgid "LAYOUT"
+msgstr "布局"
+
+msgid "LOCAL X SERVER"
+msgstr "本地 X SERVER"
+
+msgid "Language"
+msgstr "语言"
+
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 界面使用的语言"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "仅在转发的图形应用打开时启动所选 X server"
+
+msgid "Leave blank to keep saved password"
+msgstr "留空以保留已保存的密码"
+
+msgid "License"
+msgstr "许可证"
+
+msgid "Light"
+msgstr "浅色"
+
+msgid "Line height"
+msgstr "行高"
+
+msgid "Link and path"
+msgstr "链接和路径"
+
+msgid "Loading"
+msgstr "正在加载"
+
+msgid "Loading..."
+msgstr "正在加载..."
+
+msgid "Local Shell"
+msgstr "本地 Shell"
+
+msgid "Local X server application path"
+msgstr "本地 X server 应用路径"
+
+msgid "Local X server provider"
+msgstr "本地 X server 提供程序"
+
+msgid "Local default directory"
+msgstr "本地默认目录"
+
+msgid "Local files"
+msgstr "本地文件"
+
+msgid "Local shell"
+msgstr "本地 Shell"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
+
+msgid "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+msgstr "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+
+msgid "MOUSE"
+msgstr "鼠标"
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "在会话侧栏中遮盖用户名和 IPv4 地址的中间字段"
+
+msgid "Minimum contrast ratio"
+msgstr "最低对比度"
+
+msgid "Modified"
+msgstr "修改时间"
+
+msgid "More"
+msgstr "更多"
+
+msgid "Move Current Workspace to New Window"
+msgstr "将当前工作区移至新窗口"
+
+msgid "Move workspace to new window"
+msgstr "将工作区移至新窗口"
+
+msgid "Muted text"
+msgstr "弱化文字"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Navigation and title surfaces"
+msgstr "导航和标题表面"
+
+msgid "New Local Shell"
+msgstr "新建本地 Shell"
+
+msgid "New Server"
+msgstr "新建服务器"
+
+msgid "New Server shortcut"
+msgstr "新建服务器快捷键"
+
+msgid "New group"
+msgstr "新建组"
+
+msgid "Next Tab"
+msgstr "下一个标签页"
+
+msgid "No files"
+msgstr "没有文件"
+
+msgid "No known local X server was found"
+msgstr "未找到已知的本地 X server"
+
+msgid "No saved connections"
+msgstr "没有已保存的连接"
+
+msgid "No saved servers"
+msgstr "没有已保存的服务器"
+
+msgid "No settings match this search."
+msgstr "没有与此搜索匹配的设置。"
+
+msgid "No transfers yet"
+msgstr "暂无传输"
+
+msgid "Open"
+msgstr "打开"
+
+msgid "Open Settings"
+msgstr "打开设置"
+
+msgid "Open Settings shortcut"
+msgstr "打开设置快捷键"
+
+msgid "Open a new local shell tab"
+msgstr "打开新的本地 Shell 标签页"
+
+msgid "Open a saved session or create a new tab."
+msgstr "打开已保存的会话或新建标签页。"
+
+msgid "Open local shell"
+msgstr "打开本地 Shell"
+
+msgid "Open log folder"
+msgstr "打开日志文件夹"
+
+msgid "Open saved connection"
+msgstr "打开已保存的连接"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "打开 AxSSH 问题跟踪器"
+
+msgid "Option acts as Meta"
+msgstr "Option 作为 Meta"
+
+msgid "Optional"
+msgstr "可选"
+
+msgid "Optional; empty saves in system credential store"
+msgstr "可选；留空时保存到系统凭据存储"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "可选；仅在连接或保存时输入"
+
+msgid "Overlay"
+msgstr "遮罩"
+
+msgid "Pane"
+msgstr "窗格"
+
+msgid "Panel"
+msgstr "面板"
+
+msgid "Panel alternative"
+msgstr "次级面板"
+
+msgid "Parity"
+msgstr "校验位"
+
+msgid "Password"
+msgstr "密码"
+
+msgid "Password authentication"
+msgstr "密码验证"
+
+msgid "Paste"
+msgstr "粘贴"
+
+msgid "Paste Into Terminal"
+msgstr "粘贴到终端"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "粘贴到终端快捷键"
+
+msgid "Path"
+msgstr "路径"
+
+msgid "Platform home directory"
+msgstr "平台主目录"
+
+msgid "Port"
+msgstr "端口"
+
+msgid "Positive status indicators"
+msgstr "成功状态指示"
+
+msgid "Previous Tab"
+msgstr "上一个标签页"
+
+msgid "Primary readable text"
+msgstr "主要可读文字"
+
+msgid "Primary workspace surface"
+msgstr "主要工作区表面"
+
+msgid "Private key"
+msgstr "私钥"
+
+msgid "Private key authentication"
+msgstr "私钥验证"
+
+msgid "Private key passphrase"
+msgstr "私钥口令"
+
+msgid "Private key passphrase (optional)"
+msgstr "私钥口令（可选）"
+
+msgid "Private key path"
+msgstr "私钥路径"
+
+msgid "Production server"
+msgstr "生产服务器"
+
+msgid "Protocol"
+msgstr "协议"
+
+msgid "Provider"
+msgstr "提供程序"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "Refresh serial ports"
+msgstr "刷新串口"
+
+msgid "Remembered password storage"
+msgstr "已记住密码的存储位置"
+
+msgid "Remote and local file pane sizes"
+msgstr "远端和本地文件窗格大小"
+
+msgid "Remote default directory"
+msgstr "远端默认目录"
+
+msgid "Remote files"
+msgstr "远端文件"
+
+msgid "Rename group"
+msgstr "重命名组"
+
+msgid "Report a bug"
+msgstr "报告问题"
+
+msgid "Reset defaults"
+msgstr "恢复默认值"
+
+msgid "Return Workspace to Main Window"
+msgstr "将工作区返回主窗口"
+
+msgid "Return workspace to main window"
+msgstr "将工作区返回主窗口"
+
+msgid "Review before sharing"
+msgstr "分享前请检查内容"
+
+msgid "Right-click always pastes"
+msgstr "右键始终粘贴"
+
+msgid "Right-click copy or paste"
+msgstr "右键复制或粘贴"
+
+msgid "Runtime logs"
+msgstr "运行日志"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "语义高亮"
+
+msgid "SFTP directories"
+msgstr "SFTP 目录"
+
+msgid "SFTP files"
+msgstr "SFTP 文件"
+
+msgid "SFTP local default directory"
+msgstr "SFTP 本地默认目录"
+
+msgid "SFTP remote default directory"
+msgstr "SFTP 远端默认目录"
+
+msgid "SHA-256 fingerprint"
+msgstr "SHA-256 指纹"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH agent"
+msgstr "SSH agent"
+
+msgid "SSH authentication method"
+msgstr "SSH 身份验证方式"
+
+msgid "SSH host key changed"
+msgstr "SSH 主机密钥已更改"
+
+msgid "SSH password"
+msgstr "SSH 密码"
+
+msgid "SSH transport"
+msgstr "SSH 传输"
+
+msgid "SSH username"
+msgstr "SSH 用户名"
+
+msgid "SUPPORT"
+msgstr "支持"
+
+msgid "SURFACES"
+msgstr "表面"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Save & connect"
+msgstr "保存并连接"
+
+msgid "Save SSH password for future connections"
+msgstr "保存 SSH 密码供以后连接使用"
+
+msgid "Save password (optional)"
+msgstr "保存密码（可选）"
+
+msgid "Save password in"
+msgstr "密码保存位置"
+
+msgid "Save session"
+msgstr "保存会话"
+
+msgid "Saved connections"
+msgstr "已保存的连接"
+
+msgid "Scrollback"
+msgstr "回滚行数"
+
+msgid "Search all settings"
+msgstr "搜索所有设置"
+
+msgid "Search results"
+msgstr "搜索结果"
+
+msgid "Search settings"
+msgstr "搜索设置"
+
+msgid "Secondary labels and metadata"
+msgstr "次级标签和元数据"
+
+msgid "Select All"
+msgstr "全选"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "选择检测到的设备，或手动输入端口名称。"
+
+msgid "Select all files"
+msgstr "选择所有文件"
+
+msgid "Select the transport used by this saved connection."
+msgstr "选择此已保存连接使用的传输方式。"
+
+msgid "Select {0}"
+msgstr "选择 {0}"
+
+msgid "Selection"
+msgstr "选择"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "将 Option+按键作为带 Escape 前缀的 Meta 键发送"
+
+msgid "Serial"
+msgstr "串口"
+
+msgid "Serial baud rate"
+msgstr "串口波特率"
+
+msgid "Serial data bits"
+msgstr "串口数据位"
+
+msgid "Serial flow control"
+msgstr "串口流控制"
+
+msgid "Serial parity"
+msgstr "串口校验位"
+
+msgid "Serial port"
+msgstr "串口"
+
+msgid "Serial port name"
+msgstr "串口名称"
+
+msgid "Serial stop bits"
+msgstr "串口停止位"
+
+msgid "Serial transport"
+msgstr "串口传输"
+
+msgid "Session group"
+msgstr "会话组"
+
+msgid "Session mask character"
+msgstr "会话掩码字符"
+
+msgid "Session name"
+msgstr "会话名称"
+
+msgid "Session sidebar width"
+msgstr "会话侧栏宽度"
+
+msgid "Session transfer command"
+msgstr "会话传输命令"
+
+msgid "Sessions"
+msgstr "会话"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "Settings..."
+msgstr "设置..."
+
+msgid "Shortcuts"
+msgstr "快捷键"
+
+msgid "Simplified Chinese"
+msgstr "Simplified Chinese"
+
+msgid "Size"
+msgstr "大小"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "Split active terminal horizontally"
+msgstr "水平拆分当前终端"
+
+msgid "Split active terminal vertically"
+msgstr "垂直拆分当前终端"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "水平拆分（Alt+Shift+J）"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "垂直拆分（Alt+Shift+L）"
+
+msgid "Start for first X11 application"
+msgstr "首个 X11 应用打开时启动"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Stop bits"
+msgstr "停止位"
+
+msgid "Success"
+msgstr "成功"
+
+msgid "Successful status words and HTTP 2xx"
+msgstr "成功状态词和 HTTP 2xx"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "切换 SSH/SFTP 标签页"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "切换 SSH/SFTP 标签页快捷键"
+
+msgid "System credential store"
+msgstr "系统凭据存储"
+
+msgid "TERMINAL"
+msgstr "终端"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "终端默认设置"
+
+msgid "TYPOGRAPHY"
+msgstr "字体"
+
+msgid "Tab"
+msgstr "标签页"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Telnet 协议"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet 传输终端流量时不加密，也不验证主机身份。"
+
+msgid "Terminal"
+msgstr "终端"
+
+msgid "Terminal character-cell font"
+msgstr "终端字符单元格字体"
+
+msgid "Terminal command"
+msgstr "终端命令"
+
+msgid "Terminal error highlight color"
+msgstr "终端错误高亮颜色"
+
+msgid "Terminal font family"
+msgstr "终端字体系列"
+
+msgid "Terminal font size"
+msgstr "终端字体大小"
+
+msgid "Terminal information highlight color"
+msgstr "终端信息高亮颜色"
+
+msgid "Terminal line height percentage"
+msgstr "终端行高百分比"
+
+msgid "Terminal link and path highlight color"
+msgstr "终端链接和路径高亮颜色"
+
+msgid "Terminal minimum contrast ratio"
+msgstr "终端最低对比度"
+
+msgid "Terminal pane heights"
+msgstr "终端窗格高度"
+
+msgid "Terminal pane widths"
+msgstr "终端窗格宽度"
+
+msgid "Terminal scrollback lines"
+msgstr "终端回滚行数"
+
+msgid "Terminal success highlight color"
+msgstr "终端成功高亮颜色"
+
+msgid "Terminal text selection background"
+msgstr "终端文字选择背景"
+
+msgid "Terminal warning highlight color"
+msgstr "终端警告高亮颜色"
+
+msgid "Text"
+msgstr "文字"
+
+msgid "Theme default"
+msgstr "主题默认值"
+
+msgid "Toggle Session Sidebar"
+msgstr "切换会话侧栏"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "切换会话侧栏快捷键"
+
+msgid "Transfers   Active ({0})   Failed ({1})   Completed ({2})"
+msgstr "传输   活动 ({0})   失败 ({1})   已完成 ({2})"
+
+msgid "Trust and continue"
+msgstr "信任并继续"
+
+msgid "Trust new key"
+msgstr "信任新密钥"
+
+msgid "URL and remote path targets"
+msgstr "URL 和远端路径目标"
+
+msgid "Unknown SSH host key"
+msgstr "未知 SSH 主机密钥"
+
+msgid "Unlock encrypted credentials"
+msgstr "解锁加密凭据"
+
+msgid "Update session"
+msgstr "更新会话"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "为粗体文字使用明亮 ANSI 调色板"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "用于已记住的密码和在会话编辑器中新输入的密码"
+
+msgid "Username"
+msgstr "用户名"
+
+msgid "Vault password"
+msgstr "保险库密码"
+
+msgid "Version {0}"
+msgstr "版本 {0}"
+
+msgid "View"
+msgstr "视图"
+
+msgid "WORKSPACE"
+msgstr "工作区"
+
+msgid "Warning"
+msgstr "警告"
+
+msgid "Warnings and HTTP 4xx"
+msgstr "警告和 HTTP 4xx"
+
+msgid "Window"
+msgstr "窗口"
+
+msgid "Workspace"
+msgstr "工作区"
+
+msgid "Workspace command"
+msgstr "工作区命令"
+
+msgid "Workspace tab width"
+msgstr "工作区标签页宽度"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "转发图形应用使用的 X server"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "lines"
+msgstr "行"
+
+msgid "px"
+msgstr "像素"
+
+msgid "root"
+msgstr "root"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "{0} 强调色"
+
+msgid "{0} background color"
+msgstr "{0} 背景色"
+
+msgid "{0} border color"
+msgstr "{0} 边框色"
+
+msgid "{0} danger color"
+msgstr "{0} 危险色"
+
+msgid "{0} muted text color"
+msgstr "{0} 弱化文字颜色"
+
+msgid "{0} overlay color"
+msgstr "{0} 遮罩色"
+
+msgid "{0} panel color"
+msgstr "{0} 面板颜色"
+
+msgid "{0} secondary panel color"
+msgstr "{0} 次级面板颜色"
+
+msgid "{0} success color"
+msgstr "{0} 成功色"
+
+msgid "{0} terminal background color"
+msgstr "{0} 终端背景色"
+
+msgid "{0} terminal foreground color"
+msgstr "{0} 终端前景色"
+
+msgid "{0} terminal selection color"
+msgstr "{0} 终端选择颜色"
+
+msgid "{0} text color"
+msgstr "{0} 文字颜色"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"

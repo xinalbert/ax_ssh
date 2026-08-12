@@ -48,7 +48,7 @@ component TerminalPaneCloseButton inherits FocusScope {
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
-    accessible-label: "Close terminal pane";
+    accessible-label: @tr("Close terminal pane");
     accessible-action-default => { root.activated(); }
 
     key-pressed(event) => {
@@ -68,7 +68,7 @@ component TerminalPaneCloseButton inherits FocusScope {
         Text {
             width: parent.width;
             height: parent.height;
-            text: "x";
+            text: @tr("x");
             color: close-touch.has-hover || root.has-focus ? Theme.text : Theme.muted;
             font-size: Theme.tab-close-font-size;
             horizontal-alignment: center;
@@ -83,7 +83,7 @@ component TerminalPaneCloseButton inherits FocusScope {
 
         Tooltip {
             Text {
-                text: "Close terminal pane";
+                text: @tr("Close terminal pane");
                 color: Theme.text;
                 font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
@@ -155,6 +155,9 @@ export component TerminalPane inherits Rectangle {
     private property <length> grid-top-offset:
         grid-clip.height - root.terminal-rows * root.cell-height;
     private property <bool> terminal-resize-pending: false;
+    // A newly created pane cannot own native focus until Slint has completed
+    // the current layout pass. Existing split panes focus directly.
+    private property <bool> initial-input-focus-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
     private property <int> selection-anchor-row: 0;
@@ -221,7 +224,10 @@ export component TerminalPane inherits Rectangle {
     // A pane may be created with both its final view and connected state already
     // set, which does not fire a property-change handler for the first layout.
     // Queue the existing coalesced resize after Slint has resolved its geometry.
-    init => { root.schedule-terminal-size-update(); }
+    init => {
+        root.schedule-terminal-size-update();
+        root.initial-input-focus-pending = true;
+    }
 
     function clear-terminal-target-highlight() {
         root.terminal-target-highlight = {
@@ -272,7 +278,12 @@ export component TerminalPane inherits Rectangle {
     changed terminal-font-family => { root.schedule-terminal-size-update(); }
     changed terminal-font-size => { root.schedule-terminal-size-update(); }
     changed terminal-line-height-percent => { root.schedule-terminal-size-update(); }
-    changed terminal-id => { root.schedule-terminal-size-update(); }
+    changed terminal-id => {
+        root.schedule-terminal-size-update();
+        if root.focused && root.connected {
+            root.focus-input();
+        }
+    }
     changed connected => {
         root.schedule-terminal-size-update();
         if root.connected && root.focused {
@@ -301,25 +312,23 @@ export component TerminalPane inherits Rectangle {
         }
     }
     changed visible => {
-        if self.visible && root.focused && root.connected {
+        if root.visible && root.focused && root.connected {
             root.focus-input();
         }
     }
 
     background: root.terminal-background;
-    border-width: root.focused ? Theme.hairline : 0px;
-    border-color: Theme.accent;
     clip: true;
     forward-focus: ime-input;
     accessible-role: text;
-    accessible-label: "Terminal";
+    accessible-label: @tr("Terminal");
 
     cell-probe := Text {
         x: -1000px;
         y: -1000px;
         width: 0px;
         height: 0px;
-        text: "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+        text: @tr("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM");
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         font-weight: 400;
@@ -340,6 +349,17 @@ export component TerminalPane inherits Rectangle {
         triggered => {
             root.terminal-resize-pending = false;
             root.update-terminal-size();
+        }
+    }
+
+    Timer {
+        running: root.initial-input-focus-pending;
+        interval: 1ms;
+        triggered => {
+            root.initial-input-focus-pending = false;
+            if root.visible && root.focused && root.connected {
+                root.focus-input();
+            }
         }
     }
 

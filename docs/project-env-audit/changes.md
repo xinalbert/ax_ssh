@@ -1,5 +1,13 @@
 # 项目环境变化记录
 
+## 2026-08-12 macOS detached 标题栏连续性环境记录
+
+- 日期：2026-08-12
+- 变化摘要：detached 原生标题栏改为透明并采用已解析的 Terminal theme background；Return 使用系统 `rectangle.on.rectangle` 和 AppKit 多文档 template fallback。Settings preview/save/字体预览会沿既有 weak UI route 同步外观到 live detached UI，并只刷新对应原生标题栏背景。
+- 受影响文件：`Cargo.toml`、`src/app.rs`、`src/app/{macos_window,window_router,settings_bridge}.rs`、`src/app/view{,.rs/settings.rs}`、`docs/{architecture,architecture.zh,usage,usage.zh,project-env-audit,project-implementation-tracker}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、`objc2-app-kit 0.3.2` 与 locked/offline Cargo 门禁；仅启用锁定 crate 的 `NSColor` feature，不新增 crate、版本、lockfile 解析、配置 schema、worker、SSH trust、凭据或 CI 契约。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo test --locked --offline`（库 148、应用 149、Doc tests 0）、本轮 Markdown 相对链接审阅和 `git diff --check` 通过。严格 Clippy 仅被范围外既有 4 项 lint 阻断，tracker validator 仅被既有月度历史的 14 条时间字段阻断；用户目标 macOS 视觉验收仍待完成。
+
 ## 2026-08-12 完成 Terminal 语义高亮色设置环境门禁
 
 - 日期：2026-08-12
@@ -315,3 +323,34 @@
 - 受影响文件：`src/app/terminal_render.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；没有新增依赖、工具链、配置 schema、worker、SSH trust 或凭据合同。
 - 验证结果：直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 147、应用 145、Doc tests 0）通过。`cargo fmt`/`cargo clippy` 因子命令未安装无法执行；目标平台主题下的颜色层次和 ANSI/真彩色保留由用户验收。
+
+## 2026-08-12 Terminal Tab 焦点与窗口框线环境记录
+
+- 日期：2026-08-12
+- 变化摘要：在 Slint UI 层将 Terminal pane 的 focused 边框移除，改由 `AppWindow` 绘制唯一客户区框线；Tab/pane identity、visible、connected 或 focused 变化后的透明 IME proxy 聚焦延迟到下一次 UI tick，并再次验证状态。
+- 受影响文件：`ui/{app,terminal-pane}.slint`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-implementation-tracker/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；不新增依赖、配置 schema、工具链、CI、Rust callback、worker、SSH trust 或凭据边界。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）和 `git diff --check` 通过。严格 Clippy 仍被范围外既有 4 项 lint 阻断，目标平台 Tab 切换首次输入和主/独立窗口框线由用户验收。
+
+## 2026-08-12 日期化 GitHub 发布环境记录
+
+- 日期：2026-08-12
+- 变化摘要：新增按上海日期同步的 GitHub 多平台发布工作流。CI 成功后使用 `Swatinem/rust-cache` 为每个 Rust target 保存 cache；Release 在入口再次验证相同 tag 的成功 CI，只恢复同 target cache 并始终重新构建 `--release --locked`，不会发布 CI check/debug 产物或中间 macOS 架构二进制。
+- 受影响文件：`.github/workflows/{ci,create-dated-release,release}.yml`、`scripts/{release_version,test_release_version}.py`、`Cargo.{toml,lock}`、`packaging/macos/{Info.plist,build-app.sh}`、发布文档和项目/环境记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、现有 `Cargo.lock` 和 Python 3 标准库。远端 CI 使用 Windows x86_64、Linux x86_64/aarch64 与 macOS arm64/x86_64 runner；Linux 额外安装 `pkg-config`、fontconfig 和 xkbcommon 开发包。
+- 验证结果：Python release-version 3 项回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）、macOS plist/shell 和 YAML 静态检查通过。严格 Clippy 因当前工作区现有的 `src/ssh/x11.rs` 两项 byte-slice lint，以及 `src/app/{terminal_bridge,view/terminal}.rs` 两项测试模块顺序 lint 失败；真实 GitHub Actions、cache hit、GitHub Release 与 macOS Gatekeeper 验证待远端执行。
+## 2026-08-12 分屏即时 IME 焦点环境记录
+
+- 日期：2026-08-12
+- 变化摘要：将 `TerminalPane` 的通用 1ms IME 聚焦计时器收窄为仅在组件 `init` 时执行的一次首次布局重试。复用组件的 terminal identity、`focused`、连接、可见性和 divider release revision 直接聚焦已存在的透明 `TextInput` proxy，因此不会在 Tab、`Alt+H/J/K/L` 或鼠标切换分屏后人为等待下一轮 UI tick。
+- 受影响文件：`ui/terminal-pane.slint`、`docs/{architecture,architecture.zh,usage,usage.zh,project-implementation-tracker/{current,project-map,changes/2026/08}}.md`、`docs/project-env-audit/{current,changes}.md`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；没有新增依赖、配置 schema、Rust callback、worker、SSH trust 或凭据边界。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 149、Doc tests 0）、Markdown 相对链接和 `git diff --check` 通过。严格 Clippy 被范围外既有四项 lint 阻断；无窗口自动化测试不能直接断言原生 IME，主/独立窗口分屏切换、新建 pane、Tab 切换和 divider release 由目标平台验收。
+## 2026-08-12 界面语言与内嵌目录环境变化
+
+- 日期：2026-08-12
+- 变化摘要：新增 `sys-locale 0.3.2` 直接依赖和 Slint bundled `zh-CN` 翻译目录，配置 schema 从 v20 升至 v21；Rust edition、MSRV、Slint/Tokio/russh 版本和 CI 命令不变。
+- 受影响文件：`Cargo.{toml,lock}`、`build.rs`、`src/config/`、`src/app/`、`ui/`、`translations/`、`scripts/{build_zh_catalog,check_translations}.py` 及相关文档。
+- 更新后的命令或环境：locked/offline Cargo 可从现有缓存解析全部依赖；翻译目录使用 Python 3 生成/覆盖/占位符检查，并可用 GNU gettext `msgfmt` 验证 PO 格式。
+- 验证结果：定向配置/Settings/迟到语言请求测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 150、应用 152、Doc tests 0）、386 条翻译覆盖、占位符、`msgfmt`、Python 编译、46 项 Markdown 相对链接和差异空白检查通过；tracker validator 只剩 16 条旧月度记录时间字段错误。
+- 风险/待办：系统 locale 与 GUI 即时切换由 Windows/macOS/Linux 目标平台验收；运行时技术错误详情保持原文，不通过字符串替换伪本地化。

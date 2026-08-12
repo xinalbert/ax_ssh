@@ -3,37 +3,65 @@ import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
+    in property <string> ui-language;
+    private property <int> selected-ui-language-index: 0;
     in property <[string]> local-shell-options;
     in-out property <string> draft-local-shell;
     in-out property <int> draft-local-shell-index;
     in-out property <int> draft-columns;
     in-out property <int> draft-rows;
     in-out property <string> draft-credential-storage;
-    SettingsSectionHeading { label: "DEFAULTS"; }
+    callback save-ui-language(int);
+    init => { root.restore-ui-language-selection(); }
+    changed ui-language => { root.restore-ui-language-selection(); }
+    function restore-ui-language-selection() {
+        root.selected-ui-language-index = root.ui-language == "simplified-chinese"
+            ? 2
+            : (root.ui-language == "english" ? 1 : 0);
+    }
+    SettingsSectionHeading { label: @tr("INTERFACE"); }
     SettingsRow {
-        label: "Local shell";
-        description: "Executable used for new local terminal tabs";
+        label: @tr("Language");
+        description: @tr("Language used by the AxSSH interface");
+        SettingsField {
+            ComboBox {
+                height: Theme.settings-control-height;
+                model: [@tr("Follow system"), @tr("English"), @tr("Simplified Chinese")];
+                current-index <=> root.selected-ui-language-index;
+                accessible-label: @tr("Interface language");
+                selected(_value) => {
+                    let requested-index = root.selected-ui-language-index;
+                    root.restore-ui-language-selection();
+                    root.save-ui-language(requested-index);
+                }
+            }
+        }
+    }
+    SettingsSectionHeading { label: @tr("DEFAULTS"); }
+    SettingsRow {
+        label: @tr("Local shell");
+        description: @tr("Executable used for new local terminal tabs");
         SettingsField {
             ComboBox {
                 height: Theme.settings-control-height;
                 model: root.local-shell-options;
                 current-index <=> root.draft-local-shell-index;
-                accessible-label: "Local shell";
+                accessible-label: @tr("Local shell");
                 selected(value) => { root.draft-local-shell = value; }
             }
         }
     }
     SettingsRow {
-        label: "Remembered password storage";
-        description: "Used for remembered passwords and new passwords entered in the session editor";
+        label: @tr("Remembered password storage");
+        description: @tr("Used for remembered passwords and new passwords entered in the session editor");
         SettingsField {
             ComboBox {
                 height: Theme.settings-control-height;
-                model: ["System credential store", "Encrypted application vault"];
+                model: [@tr("System credential store"), @tr("Encrypted application vault")];
                 current-index: root.draft-credential-storage == "encrypted-vault" ? 1 : 0;
-                accessible-label: "Remembered password storage";
+                accessible-label: @tr("Remembered password storage");
                 selected(value) => {
-                    root.draft-credential-storage = value == "Encrypted application vault"
+                    root.draft-credential-storage = value == @tr("Encrypted application vault")
                         ? "encrypted-vault"
                         : "system-keyring";
                 }
@@ -41,8 +69,8 @@ export component GeneralSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Default terminal size";
-        description: "20-300 columns, 5-100 rows";
+        label: @tr("Default terminal size");
+        description: @tr("20-300 columns, 5-100 rows");
         show-divider: false;
         SettingsField {
             settings-columns := SpinBox {
@@ -51,7 +79,7 @@ export component GeneralSettingsPage inherits SettingsPage {
                 minimum: 20;
                 maximum: 300;
                 value <=> root.draft-columns;
-                accessible-label: "Default terminal columns";
+                accessible-label: @tr("Default terminal columns");
             }
             Text { text: "x"; color: Theme.muted; vertical-alignment: center; }
             settings-rows := SpinBox {
@@ -60,7 +88,7 @@ export component GeneralSettingsPage inherits SettingsPage {
                 minimum: 5;
                 maximum: 100;
                 value <=> root.draft-rows;
-                accessible-label: "Default terminal rows";
+                accessible-label: @tr("Default terminal rows");
             }
         }
     }

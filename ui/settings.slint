@@ -1,8 +1,10 @@
 import { Theme } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
 import {
     SettingsHeader,
     SettingsNavIcon,
     SettingsNavItem,
+    SettingsSearchResult,
 } from "components/settings-controls.slint";
 import { GeneralSettingsPage } from "settings/general.slint";
 import { AppearanceSettingsPage } from "settings/appearance.slint";
@@ -16,6 +18,7 @@ import { AboutSettingsPage } from "settings/about.slint";
 // draft, emits a coalesced in-memory preview while it changes, and commits the
 // same candidate when its Settings tab is closed.
 export struct SettingsViewState {
+    ui_language: string,
     local_shell_options: [string],
     application_font_family: string,
     application_font_options: [string],
@@ -101,12 +104,19 @@ export struct SettingsViewState {
     status: string,
 }
 
+export struct SettingsSearchEntry {
+    section: string,
+    title: string,
+    description: string,
+}
+
 export component SettingsPane inherits Rectangle {
     in property <SettingsViewState> source;
     in property <string> tab-id;
     in property <string> requested-section: "General";
     in property <int> requested-section-revision: 0;
     private property <[string]> local-shell-options: root.source.local_shell_options;
+    private property <string> ui-language: root.source.ui_language;
     private property <string> application-font-family: root.source.application_font_family;
     private property <[string]> application-font-options: root.source.application_font_options;
     private property <int> application-font-index: root.source.application_font_index;
@@ -196,20 +206,20 @@ export component SettingsPane inherits Rectangle {
         bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
+    callback save-ui-language(int);
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
     callback report-bug();
     callback open-log-directory();
     callback copy-diagnostic-info();
+    pure callback settings-search-results(string, string) -> [SettingsSearchEntry];
 
     private property <string> selected-section: root.requested-section;
-    private property <string> section-title:
-        root.selected-section == "Appearance" ? "Appearance"
-        : (root.selected-section == "Terminal" ? "Terminal"
-        : (root.selected-section == "X11" ? "X11"
-        : (root.selected-section == "Workspace" ? "Workspace"
-        : (root.selected-section == "Shortcuts" ? "Shortcuts"
-        : (root.selected-section == "About" ? "About" : "General")))));
+    private property <int> section-scroll-revision: 0;
+    private property <string> settings-search-query: "";
+    private property <[SettingsSearchEntry]> settings-search-entries:
+        root.settings-search-results(root.settings-search-query, root.ui-language);
+    private property <string> section-title: root.localized-section-title(root.selected-section);
     private property <string> draft-application-font-family: root.application-font-family;
     private property <int> draft-application-font-index: root.application-font-index;
     private property <string> draft-font-family: root.terminal-font-family;
@@ -281,13 +291,31 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-open-sftp-shortcut: root.open-sftp-shortcut;
     private property <bool> preview-pending: false;
 
-    function select-section(section: string) {
-        root.shortcut-recording-changed(false);
-        root.selected-section = section;
+    pure function localized-section-title(section: string) -> string {
+        if section == "Appearance" { return @tr("Appearance"); }
+        if section == "Terminal" { return @tr("Terminal"); }
+        if section == "X11" { return @tr("X11"); }
+        if section == "Workspace" { return @tr("Workspace"); }
+        if section == "Shortcuts" { return @tr("Shortcuts"); }
+        if section == "About" { return @tr("About"); }
+        return @tr("General");
     }
 
-    changed requested-section => { root.selected-section = root.requested-section; }
-    changed requested-section-revision => { root.selected-section = root.requested-section; }
+    function select-section(section: string) {
+        root.shortcut-recording-changed(false);
+        root.clear-settings-search();
+        root.selected-section = section;
+        root.section-scroll-revision = root.section-scroll-revision == 2147483647
+            ? 1
+            : root.section-scroll-revision + 1;
+    }
+
+    function clear-settings-search() {
+        root.settings-search-query = "";
+    }
+
+    changed requested-section => { root.select-section(root.requested-section); }
+    changed requested-section-revision => { root.select-section(root.requested-section); }
 
     public function request-close() {
         root.commit-settings(true);
@@ -536,7 +564,7 @@ export component SettingsPane inherits Rectangle {
 
                 Text {
                     height: Theme.settings-nav-title-height;
-                    text: "Settings";
+                    text: @tr("Settings");
                     color: Theme.text;
                     font-size: Theme.font-section;
                     font-weight: 700;
@@ -545,37 +573,37 @@ export component SettingsPane inherits Rectangle {
 
                 SettingsNavItem {
                     icon: SettingsNavIcon.General;
-                    label: "General";
+                    label: @tr("General");
                     selected: root.selected-section == "General";
                     activated => { root.select-section("General"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.Appearance;
-                    label: "Appearance";
+                    label: @tr("Appearance");
                     selected: root.selected-section == "Appearance";
                     activated => { root.select-section("Appearance"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.Terminal;
-                    label: "Terminal";
+                    label: @tr("Terminal");
                     selected: root.selected-section == "Terminal";
                     activated => { root.select-section("Terminal"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.X11;
-                    label: "X11";
+                    label: @tr("X11");
                     selected: root.selected-section == "X11";
                     activated => { root.select-section("X11"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.Workspace;
-                    label: "Workspace";
+                    label: @tr("Workspace");
                     selected: root.selected-section == "Workspace";
                     activated => { root.select-section("Workspace"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.Shortcuts;
-                    label: "Shortcuts";
+                    label: @tr("Shortcuts");
                     selected: root.selected-section == "Shortcuts";
                     activated => { root.select-section("Shortcuts"); }
                 }
@@ -584,7 +612,7 @@ export component SettingsPane inherits Rectangle {
                 Rectangle { height: Theme.hairline; background: Theme.divider; }
                 SettingsNavItem {
                     icon: SettingsNavIcon.About;
-                    label: "About";
+                    label: @tr("About");
                     selected: root.selected-section == "About";
                     activated => { root.select-section("About"); }
                 }
@@ -600,26 +628,89 @@ export component SettingsPane inherits Rectangle {
 
                 SettingsHeader {
                     title: root.section-title;
+                    search-query <=> root.settings-search-query;
+                    clear-search => { root.clear-settings-search(); }
                 }
 
                 Rectangle {
                     vertical-stretch: 1;
                     background: Theme.background;
 
-                    if root.selected-section == "General" : GeneralSettingsPage {
+                    if !root.settings-search-query.is-empty : ScrollView {
                         width: parent.width;
                         height: parent.height;
+                        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                        viewport-width: self.visible-width;
+                        viewport-height: max(
+                            self.visible-height,
+                            search-results.preferred-height + 2 * Theme.space-xl,
+                        );
+
+                        search-page := Rectangle {
+                            width: parent.visible-width;
+                            height: max(
+                                parent.visible-height,
+                                search-results.preferred-height + 2 * Theme.space-xl,
+                            );
+                            background: Theme.background;
+
+                            search-results := VerticalLayout {
+                                x: Theme.page-padding;
+                                y: Theme.space-xl;
+                                width: min(
+                                    Theme.settings-content-width,
+                                    parent.width - 2 * Theme.page-padding,
+                                );
+                                height: self.preferred-height;
+                                spacing: 0px;
+
+                                Text {
+                                    height: Theme.settings-section-min-height;
+                                    text: @tr("Search results");
+                                    color: Theme.muted;
+                                    font-size: Theme.font-caption;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                for entry in root.settings-search-entries : SettingsSearchResult {
+                                    section: entry.section;
+                                    title: entry.title;
+                                    description: entry.description;
+                                    activated => {
+                                        root.select-section(entry.section);
+                                    }
+                                }
+                                Text {
+                                    visible: root.settings-search-entries.length == 0;
+                                    height: Theme.settings-row-min-height;
+                                    text: @tr("No settings match this search.");
+                                    color: Theme.muted;
+                                    font-size: Theme.font-body;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.settings-search-query.is-empty && root.selected-section == "General" : GeneralSettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         local-shell-options: root.local-shell-options;
                         draft-local-shell <=> root.draft-local-shell;
                         draft-local-shell-index <=> root.draft-local-shell-index;
                         draft-columns <=> root.draft-columns;
                         draft-rows <=> root.draft-rows;
                         draft-credential-storage <=> root.draft-credential-storage;
+                        ui-language: root.ui-language;
+                        save-ui-language(index) => { root.save-ui-language(index); }
                     }
 
-                    if root.selected-section == "Appearance" : AppearanceSettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "Appearance" : AppearanceSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         application-font-options: root.application-font-options;
                         draft-application-font-family <=> root.draft-application-font-family;
                         draft-application-font-index <=> root.draft-application-font-index;
@@ -653,9 +744,10 @@ export component SettingsPane inherits Rectangle {
                         draft-theme-dark-terminal-selection <=> root.draft-theme-dark-terminal-selection;
                     }
 
-                    if root.selected-section == "Terminal" : TerminalSettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "Terminal" : TerminalSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         terminal-font-options: root.terminal-font-options;
                         draft-font-family <=> root.draft-font-family;
                         draft-font-index <=> root.draft-font-index;
@@ -675,9 +767,10 @@ export component SettingsPane inherits Rectangle {
                         draft-option-as-meta <=> root.draft-option-as-meta;
                     }
 
-                    if root.selected-section == "X11" : X11SettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "X11" : X11SettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         provider-options: root.x11-server-provider-options;
                         discovered-installations: root.x11-server-installations;
                         draft-provider <=> root.draft-x11-server-provider;
@@ -687,18 +780,20 @@ export component SettingsPane inherits Rectangle {
                         draft-allow-no-auth <=> root.draft-x11-allow-no-auth;
                     }
 
-                    if root.selected-section == "Workspace" : WorkspaceSettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "Workspace" : WorkspaceSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         draft-sidebar-width <=> root.draft-sidebar-width;
                         draft-tab-width <=> root.draft-tab-width;
                         draft-session-mask-character <=> root.draft-session-mask-character;
                         draft-collapsed-group-label-chars <=> root.draft-collapsed-group-label-chars;
                     }
 
-                    if root.selected-section == "Shortcuts" : ShortcutsSettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "Shortcuts" : ShortcutsSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         draft-open-settings-shortcut <=> root.draft-open-settings-shortcut;
                         draft-new-session-shortcut <=> root.draft-new-session-shortcut;
                         draft-import-sessions-shortcut <=> root.draft-import-sessions-shortcut;
@@ -723,9 +818,10 @@ export component SettingsPane inherits Rectangle {
                         }
                     }
 
-                    if root.selected-section == "About" : AboutSettingsPage {
+                    if root.settings-search-query.is-empty && root.selected-section == "About" : AboutSettingsPage {
                         width: parent.width;
                         height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         app-version: root.app-version;
                         report-bug => { root.report-bug(); }
                         open-log-directory => { root.open-log-directory(); }

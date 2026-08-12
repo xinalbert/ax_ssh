@@ -5,6 +5,7 @@ import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow }
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component TerminalSettingsPage inherits Rectangle {
+    in property <int> scroll-revision: 0;
     in property <[string]> terminal-font-options;
     in-out property <string> draft-font-family;
     in-out property <int> draft-font-index;
@@ -28,8 +29,13 @@ export component TerminalSettingsPage inherits Rectangle {
     terminal-scroll := ScrollView {
         width: parent.width;
         height: parent.height;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
         viewport-width: self.visible-width;
+        viewport-height: max(
+            self.visible-height,
+            terminal-content.preferred-height + 2 * Theme.space-xl,
+        );
 
         terminal-page := Rectangle {
             width: terminal-scroll.visible-width;
@@ -49,24 +55,24 @@ export component TerminalSettingsPage inherits Rectangle {
                 height: self.preferred-height;
                 spacing: 0px;
 
-                SettingsSectionHeading { label: "TYPOGRAPHY"; }
+                SettingsSectionHeading { label: @tr("TYPOGRAPHY"); }
                 SettingsRow {
-                    label: "Font family";
-                    description: "Terminal character-cell font";
+                    label: @tr("Font family");
+                    description: @tr("Terminal character-cell font");
                     SettingsField {
                         ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
                             model: root.terminal-font-options;
                             current-index <=> root.draft-font-index;
-                            accessible-label: "Terminal font family";
-                            selected(value) => { root.draft-font-family = value; }
+                            accessible-label: @tr("Terminal font family");
+                            selected(value, _index) => { root.draft-font-family = value; }
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Font size";
-                    description: "9-32 px";
+                    label: @tr("Font size");
+                    description: @tr("9-32 px");
                     SettingsField {
                         SpinBox {
                             width: Theme.settings-number-width;
@@ -74,19 +80,19 @@ export component TerminalSettingsPage inherits Rectangle {
                             minimum: 9;
                             maximum: 32;
                             value <=> root.draft-font-size;
-                            accessible-label: "Terminal font size";
+                            accessible-label: @tr("Terminal font size");
                         }
                         Text {
                             width: Theme.settings-unit-width;
-                            text: "px";
+                            text: @tr("px");
                             color: Theme.muted;
                             vertical-alignment: center;
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Line height";
-                    description: "100-200 percent";
+                    label: @tr("Line height");
+                    description: @tr("100-200 percent");
                     SettingsField {
                         SpinBox {
                             width: Theme.settings-number-width;
@@ -94,21 +100,21 @@ export component TerminalSettingsPage inherits Rectangle {
                             minimum: 100;
                             maximum: 200;
                             value <=> root.draft-line-height-percent;
-                            accessible-label: "Terminal line height percentage";
+                            accessible-label: @tr("Terminal line height percentage");
                         }
                         Text {
                             width: Theme.settings-unit-width;
-                            text: "%";
+                            text: @tr("%");
                             color: Theme.muted;
                             vertical-alignment: center;
                         }
                     }
                 }
 
-                SettingsSectionHeading { label: "DISPLAY"; }
+                SettingsSectionHeading { label: @tr("DISPLAY"); }
                 SettingsRow {
-                    label: "Minimum contrast ratio";
-                    description: "1.0-21.0";
+                    label: @tr("Minimum contrast ratio");
+                    description: @tr("1.0-21.0");
                     SettingsField {
                         Slider {
                             width: Theme.settings-slider-width;
@@ -117,7 +123,7 @@ export component TerminalSettingsPage inherits Rectangle {
                             maximum: 21;
                             step: 0.5;
                             value: root.draft-minimum-contrast-ratio;
-                            accessible-label: "Terminal minimum contrast ratio";
+                            accessible-label: @tr("Terminal minimum contrast ratio");
                             changed(value) => { root.draft-minimum-contrast-ratio = value; }
                         }
                         Text {
@@ -131,79 +137,79 @@ export component TerminalSettingsPage inherits Rectangle {
                     }
                 }
                 SettingsToggleRow {
-                    label: "Bright colors for bold text";
-                    description: "Use the bright ANSI palette for bold text";
+                    label: @tr("Bright colors for bold text");
+                    description: @tr("Use the bright ANSI palette for bold text");
                     checked <=> root.draft-bright-bold-text;
                     show-divider: false;
                 }
 
-                SettingsSectionHeading { label: "SEMANTIC HIGHLIGHTING"; }
+                SettingsSectionHeading { label: @tr("SEMANTIC HIGHLIGHTING"); }
                 SettingsRow {
-                    label: "Link and path";
-                    description: "URL and remote path targets";
+                    label: @tr("Link and path");
+                    description: @tr("URL and remote path targets");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-link-color;
                             height: Theme.settings-control-height;
-                            placeholder-text: "Theme default";
-                            accessible-label: "Terminal link and path highlight color";
+                            placeholder-text: @tr("Theme default");
+                            accessible-label: @tr("Terminal link and path highlight color");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Success";
-                    description: "Successful status words and HTTP 2xx";
+                    label: @tr("Success");
+                    description: @tr("Successful status words and HTTP 2xx");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-success-color;
                             height: Theme.settings-control-height;
-                            placeholder-text: "Theme default";
-                            accessible-label: "Terminal success highlight color";
+                            placeholder-text: @tr("Theme default");
+                            accessible-label: @tr("Terminal success highlight color");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Information";
-                    description: "Informational status words";
+                    label: @tr("Information");
+                    description: @tr("Informational status words");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-info-color;
                             height: Theme.settings-control-height;
-                            placeholder-text: "Theme default";
-                            accessible-label: "Terminal information highlight color";
+                            placeholder-text: @tr("Theme default");
+                            accessible-label: @tr("Terminal information highlight color");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Warning";
-                    description: "Warnings and HTTP 4xx";
+                    label: @tr("Warning");
+                    description: @tr("Warnings and HTTP 4xx");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-warning-color;
                             height: Theme.settings-control-height;
-                            placeholder-text: "Theme default";
-                            accessible-label: "Terminal warning highlight color";
+                            placeholder-text: @tr("Theme default");
+                            accessible-label: @tr("Terminal warning highlight color");
                         }
                     }
                 }
                 SettingsRow {
-                    label: "Error";
-                    description: "Errors and HTTP 5xx";
+                    label: @tr("Error");
+                    description: @tr("Errors and HTTP 5xx");
                     show-divider: false;
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-error-color;
                             height: Theme.settings-control-height;
-                            placeholder-text: "Theme default";
-                            accessible-label: "Terminal error highlight color";
+                            placeholder-text: @tr("Theme default");
+                            accessible-label: @tr("Terminal error highlight color");
                         }
                     }
                 }
 
-                SettingsSectionHeading { label: "BUFFER"; }
+                SettingsSectionHeading { label: @tr("BUFFER"); }
                 SettingsRow {
-                    label: "Scrollback";
-                    description: "100-50,000 retained lines";
+                    label: @tr("Scrollback");
+                    description: @tr("100-50,000 retained lines");
                     show-divider: false;
                     SettingsField {
                         SpinBox {
@@ -212,38 +218,40 @@ export component TerminalSettingsPage inherits Rectangle {
                             minimum: 100;
                             maximum: 50000;
                             value <=> root.draft-scrollback-lines;
-                            accessible-label: "Terminal scrollback lines";
+                            accessible-label: @tr("Terminal scrollback lines");
                         }
                         Text {
                             width: Theme.settings-unit-width;
-                            text: "lines";
+                            text: @tr("lines");
                             color: Theme.muted;
                             vertical-alignment: center;
                         }
                     }
                 }
 
-                SettingsSectionHeading { label: "MOUSE"; }
+                SettingsSectionHeading { label: @tr("MOUSE"); }
                 SettingsToggleRow {
-                    label: "Right-click copy or paste";
-                    description: "Copy a selection; otherwise paste";
+                    label: @tr("Right-click copy or paste");
+                    description: @tr("Copy a selection; otherwise paste");
                     checked <=> root.draft-right-click-copy-or-paste;
                 }
                 SettingsToggleRow {
-                    label: "Copy selection on select";
-                    description: "Right-click always pastes";
+                    label: @tr("Copy selection on select");
+                    description: @tr("Right-click always pastes");
                     checked <=> root.draft-copy-selection-on-select;
                     show-divider: false;
                 }
 
-                if root.apple-platform : SettingsSectionHeading { label: "KEYBOARD"; }
+                if root.apple-platform : SettingsSectionHeading { label: @tr("KEYBOARD"); }
                 if root.apple-platform : SettingsToggleRow {
-                    label: "Option acts as Meta";
-                    description: "Send Option+key as an Escape-prefixed Meta key";
+                    label: @tr("Option acts as Meta");
+                    description: @tr("Send Option+key as an Escape-prefixed Meta key");
                     checked <=> root.draft-option-as-meta;
                     show-divider: false;
                 }
             }
         }
     }
+
+    changed scroll-revision => { terminal-scroll.viewport-y = 0px; }
 }

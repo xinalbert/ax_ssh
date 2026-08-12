@@ -1,6 +1,7 @@
 use super::*;
 
 pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
+    ui.set_ui_language(settings.ui_language.as_setting().into());
     apply_theme_to_component(ui, settings);
     ui.set_application_font_family(settings.appearance.application_font_family.clone().into());
     ui.set_application_font_index(font_option_index(
@@ -145,6 +146,50 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_default_open_sftp_shortcut(defaults.open_sftp.into());
     #[cfg(target_os = "macos")]
     schedule_macos_application_menu_configuration(ui);
+}
+
+pub(in crate::app) fn select_ui_language(language: UiLanguage) -> Result<()> {
+    let locale = language.resolved_locale(sys_locale::get_locale().as_deref());
+    slint::select_bundled_translation(locale)
+        .with_context(|| format!("failed to select bundled UI locale {locale}"))
+}
+
+pub(in crate::app) fn apply_ui_language_to_open_windows(
+    ui: &AppWindow,
+    language: UiLanguage,
+) -> Result<()> {
+    select_ui_language(language)?;
+    ui.set_ui_language(language.as_setting().into());
+    if let Some(router) = global_window_router() {
+        for detached_ui in router.detached_uis() {
+            if let Some(detached_ui) = detached_ui.upgrade() {
+                detached_ui.set_ui_language(language.as_setting().into());
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    schedule_macos_application_menu_configuration(ui);
+    Ok(())
+}
+
+pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &AppSettings) {
+    apply_settings_to_component(ui, settings);
+    let Some(router) = global_window_router() else {
+        return;
+    };
+    for detached_ui in router.detached_uis() {
+        let Some(detached_ui) = detached_ui.upgrade() else {
+            continue;
+        };
+        apply_settings_to_component(&detached_ui, settings);
+        #[cfg(target_os = "macos")]
+        if let Err(error) = macos_window::update_detached_titlebar_background(
+            detached_ui.window(),
+            detached_titlebar_background(&detached_ui),
+        ) {
+            warn!(%error, "failed to update detached macOS title-bar background");
+        }
+    }
 }
 
 pub(super) fn menu_shortcut_keys(action: &'static str, setting: &str) -> slint::Keys {

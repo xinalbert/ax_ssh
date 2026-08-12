@@ -12,6 +12,7 @@ import {
     WorkspaceShell,
     WorkspaceViewState,
 } from "workspace-shell.slint";
+import { SettingsSearchEntry } from "settings.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
@@ -178,6 +179,7 @@ export component AppWindow inherits Window {
     in property <string> local-shell: "System default";
     in property <int> local-shell-index: 0;
     in property <string> credential-storage: "system-keyring";
+    in property <string> ui-language: "english";
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
     in property <string> session-mask-character: "*";
@@ -265,6 +267,7 @@ export component AppWindow inherits Window {
             transfer_completed_count: root.sftp-transfer-completed-count,
         },
         settings: {
+            ui_language: root.ui-language,
             local_shell_options: root.local-shell-options,
             application_font_family: root.application-font-family,
             application_font_options: root.application-font-options,
@@ -374,6 +377,7 @@ export component AppWindow inherits Window {
         bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
+    callback save-ui-language(int);
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
@@ -422,6 +426,7 @@ export component AppWindow inherits Window {
     callback report-bug();
     callback open-log-directory();
     callback copy-diagnostic-info();
+    pure callback settings-search-results(string, string) -> [SettingsSearchEntry];
     callback refresh-terminal-appearance();
     callback detach-workspace(string);
     callback return-workspace(string);
@@ -440,16 +445,16 @@ export component AppWindow inherits Window {
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
     if !root.detached-window : MenuBar {
         Menu {
-            title: "File";
+            title: @tr("File");
             MenuItem {
-                title: "New Server";
+                title: @tr("New Server");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.new-session-menu-shortcut;
                 activated => { root.menu-action("new-session"); root.new-session(); }
             }
             MenuSeparator { }
             MenuItem {
-                title: "Import from Clipboard";
+                title: @tr("Import from Clipboard");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.import-sessions-menu-shortcut;
                 activated => {
@@ -458,7 +463,7 @@ export component AppWindow inherits Window {
                 }
             }
             MenuItem {
-                title: "Export Selected to Clipboard";
+                title: @tr("Export Selected to Clipboard");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.export-selected-menu-shortcut;
                 activated => {
@@ -468,9 +473,9 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: "Edit";
+            title: @tr("Edit");
             MenuItem {
-                title: "Copy";
+                title: @tr("Copy");
                 enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
                 shortcut: root.copy-selection-menu-shortcut;
                 activated => {
@@ -479,7 +484,7 @@ export component AppWindow inherits Window {
                 }
             }
             MenuItem {
-                title: "Paste";
+                title: @tr("Paste");
                 enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
                 shortcut: root.paste-menu-shortcut;
                 activated => {
@@ -489,7 +494,7 @@ export component AppWindow inherits Window {
             }
             MenuSeparator { }
             MenuItem {
-                title: "Select All";
+                title: @tr("Select All");
                 enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
                 shortcut: root.select-all-menu-shortcut;
                 activated => {
@@ -499,7 +504,7 @@ export component AppWindow inherits Window {
             }
             if !root.apple-platform : MenuSeparator { }
             if !root.apple-platform : MenuItem {
-                title: "Settings...";
+                title: @tr("Settings...");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-settings-menu-shortcut;
                 activated => {
@@ -510,9 +515,9 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: "View";
+            title: @tr("View");
             MenuItem {
-                title: "Toggle Session Sidebar";
+                title: @tr("Toggle Session Sidebar");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.toggle-sidebar-menu-shortcut;
                 activated => {
@@ -522,13 +527,13 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: "Pane";
+            title: @tr("Pane");
             MenuItem {
-                title: "New Local Shell";
+                title: @tr("New Local Shell");
                 activated => { root.menu-action("new-local-shell"); root.open-local-shell(); }
             }
             MenuItem {
-                title: "Switch SSH/SFTP Tab";
+                title: @tr("Switch SSH/SFTP Tab");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-sftp-menu-shortcut;
                 activated => {
@@ -538,22 +543,22 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: "Window";
+            title: @tr("Window");
             MenuItem {
-                title: "Previous Tab";
+                title: @tr("Previous Tab");
                 enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
                 shortcut: root.previous-tab-menu-shortcut;
                 activated => { root.menu-action("previous-tab"); root.cycle-tab(false); }
             }
             MenuItem {
-                title: "Next Tab";
+                title: @tr("Next Tab");
                 enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
                 shortcut: root.next-tab-menu-shortcut;
                 activated => { root.menu-action("next-tab"); root.cycle-tab(true); }
             }
             MenuSeparator { }
             MenuItem {
-                title: "Move Current Workspace to New Window";
+                title: @tr("Move Current Workspace to New Window");
                 enabled: root.menu-shortcuts-enabled
                     && !root.detached-window
                     && !root.active-tab-id.is-empty;
@@ -563,7 +568,7 @@ export component AppWindow inherits Window {
                 }
             }
             MenuItem {
-                title: "Return Workspace to Main Window";
+                title: @tr("Return Workspace to Main Window");
                 enabled: root.menu-shortcuts-enabled && root.detached-window;
                 activated => {
                     root.menu-action("return-workspace");
@@ -572,14 +577,14 @@ export component AppWindow inherits Window {
             }
             MenuSeparator { }
             if root.apple-platform : MenuItem {
-                title: "Close Current Tab";
+                title: @tr("Close Current Tab");
                 activated => {
                     root.menu-action("close-tab");
                     workspace-shell.request-close-tab(root.active-tab-id);
                 }
             }
             if !root.apple-platform : MenuItem {
-                title: "Close Current Tab";
+                title: @tr("Close Current Tab");
                 enabled: !root.active-tab-id.is-empty;
                 activated => {
                     root.menu-action("close-tab");
@@ -588,9 +593,9 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: "Help";
+            title: @tr("Help");
             MenuItem {
-                title: "Keyboard Shortcuts";
+                title: @tr("Keyboard Shortcuts");
                 activated => {
                     root.menu-action("open-shortcuts");
                     root.request-settings-section("Shortcuts");
@@ -598,7 +603,7 @@ export component AppWindow inherits Window {
                 }
             }
             if !root.apple-platform : MenuItem {
-                title: "About AxSSH";
+                title: @tr("About AxSSH");
                 activated => {
                     root.menu-action("open-about");
                     root.request-settings-section("About");
@@ -686,6 +691,7 @@ export component AppWindow inherits Window {
                     toggle-sidebar-key, copy-key, paste-key,
                     open-sftp-key, credential-storage, settings-tab-id, close-after-save);
             }
+            save-ui-language(index) => { root.save-ui-language(index); }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
             save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
@@ -753,6 +759,9 @@ export component AppWindow inherits Window {
             report-bug => { root.report-bug(); }
             open-log-directory => { root.open-log-directory(); }
             copy-diagnostic-info => { root.copy-diagnostic-info(); }
+            settings-search-results(query, language) => {
+                return root.settings-search-results(query, language);
+            }
         }
     }
 
@@ -770,5 +779,15 @@ export component AppWindow inherits Window {
             return root.authenticate-session(secret, vault-password, remember, storage);
         }
         cancel-password-dialog => { root.cancel-password-dialog(); }
+    }
+
+    // This is the application frame. Terminal panes intentionally stay
+    // borderless so split panes share one continuous terminal surface.
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: Theme.frame-border;
     }
 }

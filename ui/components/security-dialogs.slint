@@ -1,4 +1,5 @@
-import { Button, CheckBox } from "std-widgets.slint";
+import { CheckBox } from "std-widgets.slint";
+import { ElidedButton } from "elided-controls.slint";
 import { SecretTextInput } from "secret-text-input.slint";
 import { ThemedComboBox } from "themed-combo-box.slint";
 import { Theme } from "../theme.slint";
@@ -29,13 +30,13 @@ export component HostKeyDialog inherits Rectangle {
             padding: Theme.dialog-padding;
             spacing: Theme.space-xl;
             Text {
-                text: root.changed ? "SSH host key changed" : "Unknown SSH host key";
+                text: root.changed ? @tr("SSH host key changed") : @tr("Unknown SSH host key");
                 color: root.changed ? Theme.danger : Theme.text;
                 font-size: Theme.font-title;
                 font-weight: 700;
             }
             Text { text: root.endpoint; color: Theme.muted; font-size: Theme.font-body; }
-            Text { text: "SHA-256 fingerprint"; color: Theme.muted; font-size: Theme.font-small; }
+            Text { text: @tr("SHA-256 fingerprint"); color: Theme.muted; font-size: Theme.font-small; }
             Text {
                 text: root.fingerprint;
                 color: Theme.text;
@@ -47,9 +48,9 @@ export component HostKeyDialog inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.space-md;
-                Button { text: "Cancel"; clicked => { root.cancel(); } }
-                Button {
-                    text: root.changed ? "Trust new key" : "Trust and continue";
+                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+                ElidedButton {
+                    text: root.changed ? @tr("Trust new key") : @tr("Trust and continue");
                     clicked => { root.confirm(); }
                 }
             }
@@ -70,8 +71,8 @@ export component AuthenticationDialog inherits Rectangle {
     callback cancel();
 
     private property <[string]> credential-storage-options: [
-        "System credential store",
-        "Encrypted application vault",
+        @tr("System credential store"),
+        @tr("Encrypted application vault"),
     ];
     private property <string> selected-credential-storage: root.default-credential-storage;
 
@@ -120,8 +121,8 @@ export component AuthenticationDialog inherits Rectangle {
             spacing: Theme.space-xl;
             Text {
                 text: root.private-key
-                    ? "Private key authentication"
-                    : (root.vault-unlock-only ? "Unlock encrypted credentials" : "Password authentication");
+                    ? @tr("Private key authentication")
+                    : (root.vault-unlock-only ? @tr("Unlock encrypted credentials") : @tr("Password authentication"));
                 color: Theme.text;
                 font-size: Theme.font-title;
                 font-weight: 700;
@@ -142,11 +143,11 @@ export component AuthenticationDialog inherits Rectangle {
                 visible: !root.vault-unlock-only;
                 height: self.visible ? Theme.editor-input-row-height : 0px;
                 placeholder-text: root.private-key
-                    ? "Private key passphrase (optional)"
-                    : "Password";
+                    ? @tr("Private key passphrase (optional)")
+                    : @tr("Password");
                 accessible-label: root.private-key
-                    ? "Private key passphrase"
-                    : "SSH password";
+                    ? @tr("Private key passphrase")
+                    : @tr("SSH password");
                 accepted => { root.submit(); }
             }
             vault-password-edit := SecretTextInput {
@@ -156,15 +157,15 @@ export component AuthenticationDialog inherits Rectangle {
                             && root.selected-credential-storage == "encrypted-vault"));
                 height: self.visible ? Theme.editor-input-row-height : 0px;
                 placeholder-text: root.vault-unlock-only
-                    ? "Vault password"
-                    : "Optional; empty saves in system credential store";
-                accessible-label: "Vault password";
+                    ? @tr("Vault password")
+                    : @tr("Optional; empty saves in system credential store");
+                accessible-label: @tr("Vault password");
                 accepted => { root.submit(); }
             }
             remember-password := CheckBox {
                 visible: !root.private-key && !root.vault-unlock-only;
                 height: self.visible ? Theme.editor-check-row-height : 0px;
-                text: "Save password (optional)";
+                text: @tr("Save password (optional)");
                 checked: false;
             }
             if !root.private-key && !root.vault-unlock-only : HorizontalLayout {
@@ -172,18 +173,18 @@ export component AuthenticationDialog inherits Rectangle {
                 spacing: Theme.space-md;
                 Text {
                     width: 132px;
-                    text: "Save password in";
+                    text: @tr("Save password in");
                     color: Theme.muted;
                     font-size: Theme.font-small;
                     vertical-alignment: center;
                 }
-                ThemedComboBox {
+                credential-storage-picker := ThemedComboBox {
                     enabled: remember-password.checked;
                     current-index: root.selected-credential-storage == "encrypted-vault" ? 1 : 0;
                     model: root.credential-storage-options;
-                    accessible-label: "Credential storage";
-                    selected(value) => {
-                        root.selected-credential-storage = value == "Encrypted application vault"
+                    accessible-label: @tr("Credential storage");
+                    selected(_value, index) => {
+                        root.selected-credential-storage = index == 1
                             ? "encrypted-vault"
                             : "system-keyring";
                     }
@@ -192,9 +193,9 @@ export component AuthenticationDialog inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.space-md;
-                Button { text: "Cancel"; clicked => { root.cancel-and-clear(); } }
-                Button {
-                    text: "Connect";
+                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel-and-clear(); } }
+                ElidedButton {
+                    text: @tr("Connect");
                     clicked => {
                         root.submit();
                     }

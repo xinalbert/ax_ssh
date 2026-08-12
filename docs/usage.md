@@ -215,6 +215,11 @@ feedback. Deleting a group moves its servers to Ungrouped. Deleting a profile
 also removes its remembered password but does not close terminal tabs that are
 already open.
 
+Text-bearing buttons and button-like rows stay on one line. When their label
+does not fit, AxSSH shows an ellipsis; hover the control to read the complete
+label in a bounded tooltip. Icon-only controls continue to describe their
+action with their existing tooltip and accessible name.
+
 The sidebar masks usernames and IPv4 addresses by default: a username keeps its
 first and last two characters when available, and `192.168.1.202` becomes
 `192.*.202`. Change the single mask character in **Settings > Workspace**.
@@ -230,6 +235,9 @@ the selection wraps at either end. The fixed shortcuts are `Cmd+Shift+[` /
 `Cmd+Shift+]` on macOS and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows and Linux.
 They are available when at least two Tabs are open and are temporarily disabled
 while recording a shortcut or answering a security prompt.
+Activating a connected Terminal Tab restores its native input focus after the
+Tab layout update, so the next keystroke is ready for the selected session.
+Moving between existing split panes focuses the destination immediately.
 
 To make a connected Terminal and any terminal panes in its current workspace a
 separate native window, use the external-link button on a connection Tab or
@@ -238,8 +246,9 @@ their SSH/SFTP companions move as one workspace group and keep existing terminal
 output, SFTP directory state, transfers, host-key prompts, and authentication
 phases; AxSSH does not reconnect. A detached Terminal window shows only its
 terminal panes, while a detached SFTP view shows only SFTP. In the detached
-macOS window, use the same-row return icon in the title bar to merge the same
-workspace layout back. Hovering the icon shows **Return workspace to main
+macOS window, the native title bar matches the active Terminal or SFTP surface
+and its overlapping-window return icon merges the same workspace layout back. Hovering
+the icon shows **Return workspace to main
 window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
@@ -278,6 +287,8 @@ not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
 connected terminal pane; keyboard and accessibility divider actions retain
 divider focus.
+The application uses one thin frame around the whole window client area;
+individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
@@ -329,6 +340,9 @@ On macOS, Settings and About are in the standard AxSSH application menu, and
 the Settings item follows its configured shortcut. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
 contains General, Appearance, Terminal, X11, Workspace, Shortcuts, and About pages.
+The search field above the detail area finds category names, setting titles, and
+descriptions across all pages. Select a result to open its category. Every
+category detail area scrolls independently when its content exceeds the window.
 Changes take effect immediately in the current application; they are persisted
 when the Settings tab is closed with its tab `x` control. Using the Settings
 shortcut while that tab is already open activates the existing singleton Tab.
@@ -340,8 +354,14 @@ the local rolling-log directory, and the third copies only version, build
 revision, operating system, architecture, and build profile. No diagnostic
 action uploads data.
 **Settings > General**
-also selects the default backend for a password you choose to remember on a
-future connection.
+selects **Follow system**, **English**, or **Simplified Chinese** for the AxSSH
+interface, and also selects the default backend for a password you choose to
+remember on a future connection. Language changes are persisted before they are
+applied and update the main and detached windows immediately; a failed save
+keeps the previous selection. **Follow system** uses Simplified Chinese for a
+Chinese system locale and English for every other locale. AxSSH translates its
+application-owned Slint interface; remote terminal content, user-provided
+names/paths, logs, and runtime technical error details remain unchanged.
 
 In **Settings > Appearance**, Font family changes the application interface
 without changing terminal cell metrics. Display mode selects **Follow system**,

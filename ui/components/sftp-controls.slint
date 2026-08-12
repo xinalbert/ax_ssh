@@ -1,14 +1,15 @@
 import { Theme } from "../theme.slint";
+import { ElidedLabel } from "elided-controls.slint";
 
 export component SftpActionButton inherits FocusScope {
     in property <string> text;
+    in property <string> tooltip-text;
     in property <string> accessible-name: root.text;
     in property <length> font-size: Theme.sftp-control-font-size;
     in property <int> font-weight: Theme.sftp-control-font-weight;
     callback clicked();
 
-    private property <length> text-height:
-        label.font-metrics.ascent - label.font-metrics.descent;
+    private property <length> text-height: label.line-height;
     out property <length> control-height: max(
         Theme.sftp-control-min-height,
         root.text-height + 2 * Theme.sftp-control-padding-y,
@@ -43,18 +44,16 @@ export component SftpActionButton inherits FocusScope {
             : (touch.has-hover || root.has-focus ? Theme.hover : Theme.panel-alt);
         opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
 
-        label := Text {
+        label := ElidedLabel {
             x: Theme.space-md;
             width: parent.width - 2 * Theme.space-md;
             height: parent.height;
             text: root.text;
-            color: Theme.text;
+            tooltip-text: root.tooltip-text;
+            text-color: Theme.text;
             font-size: root.font-size;
             font-weight: root.font-weight;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
-            accessible-role: none;
+            horizontal-alignment: TextHorizontalAlignment.center;
         }
         touch := TouchArea {
             enabled: root.enabled;
@@ -94,7 +93,7 @@ component SftpCopyPathGlyph inherits Rectangle {
 }
 
 export component SftpCopyPathButton inherits FocusScope {
-    in property <string> accessible-name: "Copy current path";
+    in property <string> accessible-name: @tr("Copy current path");
     in property <string> tooltip-text: root.accessible-name;
     callback clicked();
 

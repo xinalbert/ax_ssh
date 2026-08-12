@@ -34,17 +34,15 @@ export component OverlayHost inherits Rectangle {
     private property <string> session-management-subject;
     private property <string> session-management-value;
     private property <string> session-management-title:
-        root.session-management-action == "new-group" ? "New group"
-        : (root.session-management-action == "rename-group" ? "Rename group"
-        : (root.session-management-action == "delete-group" ? "Delete group"
-        : "Delete server"));
+        root.session-management-action == "new-group" ? @tr("New group")
+        : (root.session-management-action == "rename-group" ? @tr("Rename group")
+        : (root.session-management-action == "delete-group" ? @tr("Delete group")
+        : @tr("Delete server")));
     private property <string> session-management-message:
         root.session-management-action == "delete-group"
-            ? "Delete " + root.session-management-subject
-                + "? Servers in this group will move to Ungrouped."
+            ? @tr("Delete {0}? Servers in this group will move to Ungrouped.", root.session-management-subject)
             : (root.session-management-action == "delete-session"
-                ? "Delete " + root.session-management-subject
-                    + " and its saved credential?"
+                ? @tr("Delete {0} and its saved credential?", root.session-management-subject)
                 : "");
 
     public function show-session-management(action: string, target: string, subject: string) {

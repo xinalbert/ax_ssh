@@ -1,5 +1,7 @@
-import { Button, CheckBox } from "std-widgets.slint";
+import { CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ElidedButton, ElidedLabel } from "elided-controls.slint";
+import { FlatTextInput } from "flat-text-input.slint";
 
 export enum SettingsNavIcon {
     General,
@@ -245,11 +247,12 @@ export component SettingsNavGlyph inherits Rectangle {
 export component SettingsNavItem inherits FocusScope {
     in property <SettingsNavIcon> icon: SettingsNavIcon.General;
     in property <string> label;
+    in property <string> tooltip-text;
+    in property <string> accessible-name: root.label;
     in property <bool> selected;
     callback activated();
 
-    private property <length> label-line-height:
-        nav-label.font-metrics.ascent - nav-label.font-metrics.descent;
+    private property <length> label-line-height: nav-label.line-height;
 
     height: max(
         Theme.settings-nav-item-min-height,
@@ -259,7 +262,7 @@ export component SettingsNavItem inherits FocusScope {
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
-    accessible-label: root.label;
+    accessible-label: root.accessible-name;
 
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {
@@ -302,13 +305,12 @@ export component SettingsNavItem inherits FocusScope {
                     glyph-color: root.selected ? Theme.accent : Theme.muted;
                 }
             }
-            nav-label := Text {
+            nav-label := ElidedLabel {
                 horizontal-stretch: 1;
                 text: root.label;
-                color: Theme.text;
+                tooltip-text: root.tooltip-text;
+                text-color: Theme.text;
                 font-size: Theme.font-body;
-                overflow: elide;
-                vertical-alignment: center;
             }
         }
     }
@@ -316,35 +318,62 @@ export component SettingsNavItem inherits FocusScope {
 
 export component SettingsPage inherits Rectangle {
     in property <length> content-width: Theme.settings-content-width;
+    in property <int> scroll-revision: 0;
 
     background: Theme.background;
 
-    VerticalLayout {
-        x: Theme.page-padding;
-        width: min(root.content-width, parent.width - 2 * Theme.page-padding);
-        padding-top: Theme.space-xl;
-        padding-bottom: Theme.space-xl;
-        spacing: 0px;
+    settings-scroll := ScrollView {
+        width: parent.width;
+        height: parent.height;
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        viewport-width: self.visible-width;
+        viewport-height: max(
+            self.visible-height,
+            settings-content.preferred-height + 2 * Theme.space-xl,
+        );
 
-        @children
+        settings-page := Rectangle {
+            width: settings-scroll.visible-width;
+            height: max(
+                settings-scroll.visible-height,
+                settings-content.preferred-height + 2 * Theme.space-xl,
+            );
+            background: Theme.background;
+
+            settings-content := VerticalLayout {
+                x: Theme.page-padding;
+                y: Theme.space-xl;
+                width: min(root.content-width, parent.width - 2 * Theme.page-padding);
+                height: self.preferred-height;
+                spacing: 0px;
+
+                @children
+            }
+        }
     }
+
+    changed scroll-revision => { settings-scroll.viewport-y = 0px; }
 }
 
 export component SettingsHeader inherits Rectangle {
     in property <string> title;
     in property <length> content-width: Theme.settings-content-width;
+    in-out property <string> search-query;
+    callback clear-search();
 
     height: Theme.settings-header-height;
     background: Theme.background;
 
     HorizontalLayout {
         x: Theme.page-padding;
+        y: (parent.height - Theme.hairline - self.height) / 2;
         width: min(root.content-width, parent.width - 2 * Theme.page-padding);
-        height: parent.height;
+        height: Theme.settings-control-height;
         spacing: Theme.space-md;
 
         Text {
-            horizontal-stretch: 1;
+            width: Theme.settings-search-title-width;
             text: root.title;
             color: Theme.text;
             font-size: Theme.font-header;
@@ -352,12 +381,104 @@ export component SettingsHeader inherits Rectangle {
             overflow: elide;
             vertical-alignment: center;
         }
+        FlatTextInput {
+            horizontal-stretch: 1;
+            height: Theme.settings-control-height;
+            text <=> root.search-query;
+            placeholder-text: @tr("Search settings");
+            accessible-label: @tr("Search all settings");
+        }
+        if !root.search-query.is-empty : ElidedButton {
+            width: Theme.settings-search-clear-width;
+            height: Theme.settings-control-height;
+            text: @tr("Clear");
+            clicked => { root.clear-search(); }
+            accessible-name: @tr("Clear settings search");
+        }
     }
     Rectangle {
         y: parent.height - Theme.hairline;
         width: parent.width;
         height: Theme.hairline;
         background: Theme.divider;
+    }
+}
+
+export component SettingsSearchResult inherits FocusScope {
+    in property <string> section;
+    in property <string> title;
+    in property <string> description;
+    in property <string> section-tooltip-text;
+    in property <string> title-tooltip-text;
+    in property <string> description-tooltip-text;
+    in property <string> accessible-name: @tr("{0}: {1}", root.section, root.title);
+    callback activated();
+
+    height: Theme.settings-search-result-height;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    surface := Rectangle {
+        background: result-touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        border-radius: Theme.radius-small;
+
+        result-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.activated(); }
+        }
+
+        HorizontalLayout {
+            padding-left: Theme.space-lg;
+            padding-right: Theme.space-lg;
+            spacing: Theme.space-lg;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                y: (parent.height - self.height) / 2;
+                height: self.preferred-height;
+                spacing: Theme.space-xxs;
+
+                ElidedLabel {
+                    text: root.title;
+                    tooltip-text: root.title-tooltip-text;
+                    text-color: Theme.text;
+                    font-size: Theme.font-body;
+                    font-weight: 600;
+                }
+                ElidedLabel {
+                    text: root.description;
+                    tooltip-text: root.description-tooltip-text;
+                    text-color: Theme.muted;
+                    font-size: Theme.font-caption;
+                }
+            }
+
+            ElidedLabel {
+                width: Theme.settings-search-section-width;
+                text: root.section;
+                tooltip-text: root.section-tooltip-text;
+                text-color: Theme.accent;
+                font-size: Theme.font-caption;
+                horizontal-alignment: TextHorizontalAlignment.right;
+            }
+        }
+
+        Rectangle {
+            y: parent.height - Theme.hairline;
+            width: parent.width;
+            height: Theme.hairline;
+            background: Theme.divider;
+        }
     }
 }
 

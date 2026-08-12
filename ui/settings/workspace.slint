@@ -9,10 +9,10 @@ export component WorkspaceSettingsPage inherits SettingsPage {
     in-out property <int> draft-tab-width;
     in-out property <string> draft-session-mask-character;
     in-out property <int> draft-collapsed-group-label-chars;
-    SettingsSectionHeading { label: "LAYOUT"; }
+    SettingsSectionHeading { label: @tr("LAYOUT"); }
     SettingsRow {
-        label: "Session sidebar width";
-        description: "180-420 px when sessions are available";
+        label: @tr("Session sidebar width");
+        description: @tr("180-420 px when sessions are available");
         SettingsField {
             settings-sidebar-width := SpinBox {
                 width: Theme.settings-wide-number-width;
@@ -20,19 +20,19 @@ export component WorkspaceSettingsPage inherits SettingsPage {
                 minimum: 180;
                 maximum: 420;
                 value <=> root.draft-sidebar-width;
-                accessible-label: "Session sidebar width";
+                accessible-label: @tr("Session sidebar width");
             }
             Text {
                 width: Theme.settings-unit-width;
-                text: "px";
+                text: @tr("px");
                 color: Theme.muted;
                 vertical-alignment: center;
             }
         }
     }
     SettingsRow {
-        label: "Workspace tab width";
-        description: "120-260 px";
+        label: @tr("Workspace tab width");
+        description: @tr("120-260 px");
         SettingsField {
             settings-tab-width := SpinBox {
                 width: Theme.settings-wide-number-width;
@@ -40,46 +40,42 @@ export component WorkspaceSettingsPage inherits SettingsPage {
                 minimum: 120;
                 maximum: 260;
                 value <=> root.draft-tab-width;
-                accessible-label: "Workspace tab width";
+                accessible-label: @tr("Workspace tab width");
             }
             Text {
                 width: Theme.settings-unit-width;
-                text: "px";
+                text: @tr("px");
                 color: Theme.muted;
                 vertical-alignment: center;
             }
         }
     }
     SettingsRow {
-        label: "Session mask character";
-        description: "Masks usernames and the middle IPv4 octets in the session sidebar";
+        label: @tr("Session mask character");
+        description: @tr("Masks usernames and the middle IPv4 octets in the session sidebar");
         SettingsField {
             FlatTextInput {
                 width: Theme.settings-number-width;
                 height: Theme.settings-control-height;
                 text <=> root.draft-session-mask-character;
-                accessible-label: "Session mask character";
+                accessible-label: @tr("Session mask character");
             }
         }
     }
     SettingsRow {
-        label: "Collapsed group label";
-        description: "Choose 1-4 characters or show the full group name";
+        label: @tr("Collapsed group label");
+        description: @tr("Choose 1-4 characters or show the full group name");
         show-divider: false;
         SettingsField {
-            ThemedComboBox {
+            collapsed-label-picker := ThemedComboBox {
                 width: parent.width;
                 height: Theme.settings-control-height;
-                model: ["1 character", "2 characters", "3 characters", "4 characters", "Full name"];
+                model: [@tr("1 character"), @tr("2 characters"), @tr("3 characters"), @tr("4 characters"), @tr("Full name")];
                 current-index: root.draft-collapsed-group-label-chars == 0
                     ? 4 : root.draft-collapsed-group-label-chars - 1;
-                accessible-label: "Collapsed group label length";
-                selected(value) => {
-                    root.draft-collapsed-group-label-chars = value == "Full name"
-                        ? 0
-                        : (value == "1 character" ? 1
-                        : (value == "2 characters" ? 2
-                        : (value == "3 characters" ? 3 : 4)));
+                accessible-label: @tr("Collapsed group label length");
+                selected(_value, index) => {
+                    root.draft-collapsed-group-label-chars = index == 4 ? 0 : index + 1;
                 }
             }
         }

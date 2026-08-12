@@ -141,6 +141,9 @@ Activity Bar 之间切换；紧凑栏默认使用 Group 名称前 1-4 个字符�
 服务器移入 Ungrouped。最近选中的 Group 或服务器会在展开与收起侧栏中持续高亮，hover 和
 键盘焦点仍使用独立反馈。删除 profile 也会删除记住的密码，但不会关闭已经打开的终端 Tab。
 
+带文字的按钮和按钮型行保持单行；文案显示不下时使用省略号，鼠标悬浮可在有界 tooltip 中
+查看完整内容。纯图标控件继续使用已有的用途 tooltip 和无障碍名称说明操作。
+
 侧边栏默认遮蔽用户名与 IPv4 地址：用户名尽可能保留前后各两个字符，
 `192.168.1.202` 显示为 `192.*.202`。可在 **Settings > Workspace** 中修改单个遮蔽
 字符。主机名保持可见，便于快速区分目标服务器。新建会话编辑器与终端共用工作区
@@ -152,13 +155,16 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 在 macOS 上为 `Cmd+Shift+[` / `Cmd+Shift+]`，在 Windows 和 Linux 上为
 `Ctrl+Shift+[` / `Ctrl+Shift+]`。至少打开两个 Tab 时才可用；录制快捷键或处理安全提示时
 会暂时禁用。
+激活已连接的 Terminal Tab 后，应用会在 Tab 布局更新完成后恢复原生输入焦点，
+选中的会话可以直接接收下一次按键。
+在既有分屏 pane 之间切换时，目标 pane 会立即取得输入焦点。
 
 要把已连接 Terminal 及其当前工作区中的 terminal pane 作为独立原生窗口使用，可点击连接
 Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
 及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
 主机密钥提示和认证阶段；AxSSH 不会重连。detached Terminal 窗口只显示 terminal pane，detached
-SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标题栏的返回图标，可把同一份
-工作区布局合并回主窗口；悬停时会显示 **Return workspace to main window**。直接关闭 detached
+SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前 Terminal 或 SFTP 客户区表面色；点击同一行的重叠窗口
+返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
 
@@ -184,6 +190,7 @@ SFTP 视图只显示 SFTP。在 macOS 的 detached 窗口中点击同一行标�
 这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
 输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
+应用只在整个窗口客户区绘制一条细框线；单个 Terminal pane（包括分屏 pane）不再绘制自己的框线。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
@@ -220,13 +227,19 @@ Windows/Linux 继续保持 Alt 作为终端 Meta 输入；本地键盘布局的 
 macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会跟随其配置快捷键；
 Windows 和 Linux 分别在 Edit
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、
-Workspace、Shortcuts 和 About 页面；修改会立即作用于当前应用，关闭 Settings Tab 的 `x` 后才会持久化。
+Workspace、Shortcuts 和 About 页面。详情区顶部的搜索框可跨所有页面查找分类名、设置标题和说明，
+选择结果会打开对应分类；每个分类的详情内容超过窗口时都可独立滚动。修改会立即作用于当前应用，
+关闭 Settings Tab 的 `x` 后才会持久化。
 Settings Tab 已经打开时再次按其快捷键，只会激活这个单例 Tab。
 About 标明 AxSSH 使用 `GPL-3.0-only`，并包含 Slint 标准的可点击署名组件。
 About 还提供 **Report a bug**、**Open log folder** 和 **Copy diagnostics**：前者打开 AxSSH
 issue tracker，中者打开本机滚动日志目录，后者只复制版本、构建 revision、系统、架构和构建类型。
 这些操作不会上传数据。
-**Settings > General** 还负责选择以后连接时主动记住密码的默认后端。
+**Settings > General** 可为 AxSSH 界面选择 **Follow system**、**English** 或
+**Simplified Chinese**，并负责选择以后连接时主动记住密码的默认后端。语言设置先成功持久化，
+再即时同步到主窗口和独立窗口；保存失败时保持原选择。**Follow system** 在中文系统 locale 下
+使用简体中文，其它 locale 使用英文。AxSSH 会翻译应用自有的 Slint 界面；远端终端内容、用户提供的
+名称/路径、日志和运行时技术错误详情保持原文。
 
 在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；
 Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择

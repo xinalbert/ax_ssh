@@ -25,7 +25,7 @@ use ax_ssh::config::{
     ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
     MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialDataBits, SerialFlowControl, SerialParity,
     SerialStopBits, SessionProfile, SessionStore, ShortcutSettings, TerminalColorScheme,
-    TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings,
+    TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage,
     WorkspaceSettingsInput, X11Settings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
@@ -197,6 +197,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             warn!(%error, "failed to register a configured bundled font");
         }
     }
+    select_ui_language(settings.ui_language)?;
     apply_settings_to_component(&ui, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
@@ -644,6 +645,7 @@ fn wire_window_actions(
         let log_directory_for_show = log_directory.clone();
         slint::Timer::single_shot(Duration::from_millis(0), move || {
             let detached_id = Uuid::new_v4();
+            #[cfg(target_os = "macos")]
             let show_terminal_titlebar_actions = pane_tree.is_some();
             let detached_ui = match AppWindow::new()
                 .context("failed to create detached Slint window")
@@ -790,6 +792,7 @@ fn schedule_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_action
         let ui_for_return = ui.as_weak();
         if let Err(error) = macos_window::configure_detached_titlebar_buttons(
             ui.window(),
+            detached_titlebar_background(&ui),
             show_terminal_actions,
             move || {
                 if let Some(ui) = ui_for_split_right.upgrade() {
@@ -815,6 +818,15 @@ fn schedule_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_action
             warn!(%error, "failed to configure detached macOS title-bar buttons");
         }
     });
+}
+
+#[cfg(target_os = "macos")]
+fn detached_titlebar_background(ui: &AppWindow) -> Color {
+    if ui.get_active_tab_kind().as_str() == "terminal" {
+        ui.get_theme_terminal_background()
+    } else {
+        ui.global::<Theme>().get_background()
+    }
 }
 
 fn set_platform_clipboard_text(ui: &AppWindow, text: &str) {

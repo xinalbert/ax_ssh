@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ElidedLabel } from "elided-controls.slint";
 
 export struct AuthenticationMethodOptionData {
     label: string,
@@ -7,6 +8,7 @@ export struct AuthenticationMethodOptionData {
 
 component AuthenticationMethodOption inherits FocusScope {
     in property <string> label;
+    in property <string> tooltip-text;
     in property <string> accessible-name: root.label;
     in property <bool> selected;
     callback activated();
@@ -34,17 +36,16 @@ component AuthenticationMethodOption inherits FocusScope {
         border-color: Theme.focus;
         border-radius: Theme.radius-small;
 
-        Text {
+        ElidedLabel {
             x: Theme.space-lg;
             width: parent.width - 2 * Theme.space-lg;
             height: parent.height - Theme.editor-auth-indicator-height;
             text: root.label;
-            color: root.selected ? Theme.text : Theme.muted;
+            tooltip-text: root.tooltip-text;
+            text-color: root.selected ? Theme.text : Theme.muted;
             font-size: Theme.font-body;
             font-weight: root.selected ? 700 : 400;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
+            horizontal-alignment: TextHorizontalAlignment.center;
         }
 
         Rectangle {
@@ -66,7 +67,7 @@ component AuthenticationMethodOption inherits FocusScope {
 export component AuthenticationMethodSelector inherits Rectangle {
     in property <[AuthenticationMethodOptionData]> options;
     in-out property <string> selected-method: "Password";
-    in property <string> accessible-name: "Authentication method";
+    in property <string> accessible-name: @tr("Authentication method");
 
     min-height: Theme.editor-input-row-height;
     max-height: Theme.editor-input-row-height;

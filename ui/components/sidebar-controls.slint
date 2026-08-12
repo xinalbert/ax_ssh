@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { ElidedLabel } from "elided-controls.slint";
 
 export component SidebarTerminalGlyph inherits Rectangle {
     in property <brush> glyph-color: Theme.text;
@@ -20,7 +21,7 @@ export component SidebarTerminalGlyph inherits Rectangle {
         Text {
             width: parent.width;
             height: parent.height;
-            text: ">_";
+            text: @tr(">_");
             color: root.glyph-color;
             font-family: Theme.application-font-family;
             font-size: Theme.font-micro;
@@ -74,7 +75,8 @@ export component SidebarToggleGlyph inherits Rectangle {
 export component SidebarRailToggle inherits FocusScope {
     in property <bool> expanded;
     in property <bool> full-width: false;
-    in property <string> title: "Sessions";
+    in property <string> title: @tr("Sessions");
+    in property <string> tooltip-text;
     callback activated();
 
     height: Theme.sidebar-rail-toggle-row-height;
@@ -82,8 +84,8 @@ export component SidebarRailToggle inherits FocusScope {
     focus-on-tab-navigation: true;
     accessible-role: button;
     accessible-label: root.expanded
-        ? "Collapse session sidebar"
-        : "Expand session sidebar";
+        ? @tr("Collapse session sidebar")
+        : @tr("Expand session sidebar");
 
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {
@@ -93,17 +95,16 @@ export component SidebarRailToggle inherits FocusScope {
         return EventResult.reject;
     }
 
-    if root.full-width : Text {
+    if root.full-width : ElidedLabel {
         x: Theme.sidebar-card-padding;
         width: toggle-card.x - self.x - Theme.space-sm;
         height: parent.height;
         text: root.title;
-        color: Theme.muted;
+        tooltip-text: root.tooltip-text;
+        text-color: Theme.muted;
         font-family: Theme.application-font-family;
         font-size: Theme.font-caption;
         font-weight: 700;
-        overflow: elide;
-        vertical-alignment: center;
     }
 
     toggle-card := Rectangle {
@@ -132,7 +133,10 @@ export component SidebarRailToggle inherits FocusScope {
 
 export component SidebarRailItem inherits FocusScope {
     in property <string> label;
+    in property <string> tooltip-text;
+    in property <bool> tooltip-enabled: true;
     in property <string> trailing-label;
+    in property <string> trailing-tooltip-text;
     in property <string> accessible-name;
     in property <bool> group: false;
     in property <bool> local: false;
@@ -219,18 +223,18 @@ export component SidebarRailItem inherits FocusScope {
             glyph-color: Theme.text;
         }
 
-        label-text := Text {
+        label-text := ElidedLabel {
             visible: !root.expanded-label && !root.local;
             width: parent.width;
             height: parent.height;
             text: root.label;
-            color: root.selected || root.group ? Theme.accent : Theme.text;
+            tooltip-text: root.tooltip-text;
+            tooltip-enabled: root.tooltip-enabled;
+            text-color: root.selected || root.group ? Theme.accent : Theme.text;
             font-family: Theme.application-font-family;
             font-size: Theme.font-body;
             font-weight: 700;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
+            horizontal-alignment: TextHorizontalAlignment.center;
         }
 
         if root.expanded-label : HorizontalLayout {
@@ -257,10 +261,12 @@ export component SidebarRailItem inherits FocusScope {
                 stroke-line-join: round;
             }
 
-            Text {
+            ElidedLabel {
                 horizontal-stretch: 1;
                 text: root.label;
-                color: root.selected ? Theme.accent : Theme.text;
+                tooltip-text: root.tooltip-text;
+                tooltip-enabled: root.tooltip-enabled;
+                text-color: root.selected ? Theme.accent : Theme.text;
                 font-family: Theme.application-font-family;
                 font-size: root.group
                     ? Theme.sidebar-group-font-size
@@ -268,19 +274,17 @@ export component SidebarRailItem inherits FocusScope {
                 font-weight: root.group || root.local
                     ? Theme.sidebar-group-font-weight
                     : Theme.sidebar-session-font-weight;
-                overflow: elide;
-                vertical-alignment: center;
             }
 
-            if !root.trailing-label.is-empty : Text {
+            if !root.trailing-label.is-empty : ElidedLabel {
                 width: Theme.sidebar-group-count-width;
                 text: root.trailing-label;
-                color: Theme.muted;
+                tooltip-text: root.trailing-tooltip-text;
+                tooltip-enabled: root.tooltip-enabled;
+                text-color: Theme.muted;
                 font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
-                horizontal-alignment: right;
-                overflow: elide;
-                vertical-alignment: center;
+                horizontal-alignment: TextHorizontalAlignment.right;
             }
         }
 

@@ -36,7 +36,8 @@ pub(super) use self::options::{
     set_status,
 };
 pub(super) use self::settings::{
-    apply_rendered_terminal, apply_settings_to_component, empty_terminal_snapshot,
+    apply_rendered_terminal, apply_settings_to_component, apply_settings_to_open_windows,
+    apply_ui_language_to_open_windows, empty_terminal_snapshot, select_ui_language,
     terminal_render_line, to_slint_color,
 };
 pub(super) use self::sftp::{

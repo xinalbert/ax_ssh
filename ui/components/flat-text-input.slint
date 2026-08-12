@@ -67,22 +67,22 @@ export component FlatTextInput inherits FocusScope {
 
             Menu {
                 MenuItem {
-                    title: "Cut";
+                    title: @tr("Cut");
                     enabled: !root.read-only && root.enabled;
                     activated => { input.cut(); }
                 }
                 MenuItem {
-                    title: "Copy";
+                    title: @tr("Copy");
                     enabled: !root.text.is-empty;
                     activated => { input.copy(); }
                 }
                 MenuItem {
-                    title: "Paste";
+                    title: @tr("Paste");
                     enabled: !root.read-only && root.enabled;
                     activated => { input.paste(); }
                 }
                 MenuItem {
-                    title: "Select All";
+                    title: @tr("Select All");
                     enabled: !root.text.is-empty;
                     activated => { input.select-all(); }
                 }

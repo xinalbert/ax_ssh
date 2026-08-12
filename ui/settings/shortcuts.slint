@@ -1,5 +1,5 @@
-import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ElidedButton } from "../components/elided-controls.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, ShortcutRecorder } from "../components/settings-controls.slint";
 
 export component ShortcutsSettingsPage inherits SettingsPage {
@@ -26,12 +26,12 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         height: Theme.settings-nav-title-height;
         SettingsSectionHeading {
             horizontal-stretch: 1;
-            label: "WORKSPACE";
+            label: @tr("WORKSPACE");
         }
-        Button {
+        ElidedButton {
             width: Theme.settings-reset-button-width;
             height: Theme.settings-control-height;
-            text: "Reset defaults";
+            text: @tr("Reset defaults");
             clicked => {
                 root.draft-open-settings-shortcut = root.default-open-settings-shortcut;
                 root.draft-new-session-shortcut = root.default-new-session-shortcut;
@@ -45,13 +45,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Open Settings";
-        description: "Application command";
+        label: @tr("Open Settings");
+        description: @tr("Application command");
         SettingsField {
             open-settings-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-open-settings-shortcut;
-                accessible-name: "Open Settings shortcut";
+                accessible-name: @tr("Open Settings shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -62,13 +62,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "New Server";
-        description: "Workspace command";
+        label: @tr("New Server");
+        description: @tr("Workspace command");
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-new-session-shortcut;
-                accessible-name: "New Server shortcut";
+                accessible-name: @tr("New Server shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -79,13 +79,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Import from Clipboard";
-        description: "Session transfer command";
+        label: @tr("Import from Clipboard");
+        description: @tr("Session transfer command");
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-import-sessions-shortcut;
-                accessible-name: "Import from Clipboard shortcut";
+                accessible-name: @tr("Import from Clipboard shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -96,13 +96,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Export Selected";
-        description: "Session transfer command";
+        label: @tr("Export Selected");
+        description: @tr("Session transfer command");
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-export-selected-shortcut;
-                accessible-name: "Export Selected shortcut";
+                accessible-name: @tr("Export Selected shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -113,13 +113,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Toggle Session Sidebar";
-        description: "Workspace command";
+        label: @tr("Toggle Session Sidebar");
+        description: @tr("Workspace command");
         SettingsField {
             toggle-sidebar-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-toggle-sidebar-shortcut;
-                accessible-name: "Toggle Session Sidebar shortcut";
+                accessible-name: @tr("Toggle Session Sidebar shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -131,14 +131,14 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     }
 
     SettingsRow {
-        label: "Switch SSH/SFTP Tab";
-        description: "Workspace command";
+        label: @tr("Switch SSH/SFTP Tab");
+        description: @tr("Workspace command");
         show-divider: false;
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-open-sftp-shortcut;
-                accessible-name: "Switch SSH/SFTP Tab shortcut";
+                accessible-name: @tr("Switch SSH/SFTP Tab shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -148,15 +148,15 @@ export component ShortcutsSettingsPage inherits SettingsPage {
             }
         }
     }
-    SettingsSectionHeading { label: "TERMINAL"; }
+    SettingsSectionHeading { label: @tr("TERMINAL"); }
     SettingsRow {
-        label: "Copy Terminal Selection";
-        description: "Terminal command";
+        label: @tr("Copy Terminal Selection");
+        description: @tr("Terminal command");
         SettingsField {
             copy-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-copy-selection-shortcut;
-                accessible-name: "Copy Terminal Selection shortcut";
+                accessible-name: @tr("Copy Terminal Selection shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }
@@ -167,14 +167,14 @@ export component ShortcutsSettingsPage inherits SettingsPage {
         }
     }
     SettingsRow {
-        label: "Paste Into Terminal";
-        description: "Terminal command";
+        label: @tr("Paste Into Terminal");
+        description: @tr("Terminal command");
         show-divider: false;
         SettingsField {
             paste-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-paste-shortcut;
-                accessible-name: "Paste Into Terminal shortcut";
+                accessible-name: @tr("Paste Into Terminal shortcut");
                 format-shortcut(text, alt, control, meta, shift) => {
                     return root.format-shortcut(text, alt, control, meta, shift);
                 }

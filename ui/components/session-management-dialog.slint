@@ -1,4 +1,4 @@
-import { Button } from "std-widgets.slint";
+import { ElidedButton } from "elided-controls.slint";
 import { FlatTextInput } from "flat-text-input.slint";
 import { Theme } from "../theme.slint";
 
@@ -46,8 +46,8 @@ export component SessionManagementDialog inherits Rectangle {
             }
             if root.accepts-name : FlatTextInput {
                 text <=> root.value;
-                placeholder-text: "Group name";
-                accessible-label: "Group name";
+                placeholder-text: @tr("Group name");
+                accessible-label: @tr("Group name");
                 accepted(value) => {
                     if !value.is-empty {
                         root.confirm(value);
@@ -58,10 +58,10 @@ export component SessionManagementDialog inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: Theme.space-md;
-                Button { text: "Cancel"; clicked => { root.cancel(); } }
-                Button {
+                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+                ElidedButton {
                     text: root.action == "delete-group" || root.action == "delete-session"
-                        ? "Delete" : "Save";
+                        ? @tr("Delete") : @tr("Save");
                     enabled: !root.accepts-name || !root.value.is-empty;
                     clicked => { root.confirm(root.value); }
                 }

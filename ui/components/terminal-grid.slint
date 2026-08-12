@@ -245,17 +245,17 @@ export component TerminalGrid inherits Rectangle {
         enabled: !root.right-click-pastes;
         Menu {
             MenuItem {
-                title: "Copy";
+                title: @tr("Copy");
                 enabled: root.selection.active;
                 activated => { root.copy-request(); }
             }
             MenuItem {
-                title: "Paste";
+                title: @tr("Paste");
                 enabled: root.view.connected;
                 activated => { root.paste-request(); }
             }
             MenuItem {
-                title: "Select All";
+                title: @tr("Select All");
                 enabled: root.view.render_lines.length > 0;
                 activated => { root.select-all-request(); }
             }

@@ -746,7 +746,10 @@ fn app_settings_clamp_all_persisted_dimensions() {
             open_sftp: "Ctrl+Shift+F".into(),
         },
         credential_storage: "encrypted-vault",
+        ui_language: "simplified-chinese",
     });
+
+    assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
 
     assert_eq!(
         settings.appearance.application_font_family,
@@ -793,6 +796,48 @@ fn app_settings_clamp_all_persisted_dimensions() {
         MAX_COLLAPSED_GROUP_LABEL_CHARS
     );
     assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
+}
+
+#[test]
+fn ui_language_defaults_to_system_and_serializes_stable_values() {
+    let legacy: SessionStore = serde_json::from_str(r#"{"version":20,"settings":{}}"#)
+        .expect("version twenty settings should migrate");
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(legacy.settings.ui_language, UiLanguage::System);
+
+    let invalid: AppSettings = serde_json::from_str(r#"{"ui_language":"unsupported"}"#)
+        .expect("unknown language should normalize");
+    assert_eq!(invalid.ui_language, UiLanguage::System);
+
+    assert_eq!(UiLanguage::from_selector_index(0), UiLanguage::System);
+    assert_eq!(UiLanguage::from_selector_index(1), UiLanguage::English);
+    assert_eq!(
+        UiLanguage::from_selector_index(2),
+        UiLanguage::SimplifiedChinese
+    );
+    assert_eq!(UiLanguage::from_selector_index(99), UiLanguage::System);
+    assert_eq!(UiLanguage::SimplifiedChinese.selector_index(), 2);
+
+    assert_eq!(
+        serde_json::to_value(UiLanguage::System).expect("system language should serialize"),
+        "system"
+    );
+    assert_eq!(
+        serde_json::to_value(UiLanguage::SimplifiedChinese)
+            .expect("Chinese language should serialize"),
+        "simplified-chinese"
+    );
+}
+
+#[test]
+fn ui_language_resolves_only_bundled_system_locales() {
+    assert_eq!(UiLanguage::System.resolved_locale(Some("zh-CN")), "zh-CN");
+    assert_eq!(UiLanguage::System.resolved_locale(Some("zh_Hans")), "zh-CN");
+    assert_eq!(UiLanguage::System.resolved_locale(Some("en-US")), "en");
+    assert_eq!(UiLanguage::System.resolved_locale(Some("ja-JP")), "en");
+    assert_eq!(UiLanguage::System.resolved_locale(None), "en");
+    assert_eq!(UiLanguage::English.resolved_locale(Some("zh-CN")), "en");
+    assert_eq!(UiLanguage::SimplifiedChinese.resolved_locale(None), "zh-CN");
 }
 
 #[test]

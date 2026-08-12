@@ -104,7 +104,13 @@ callback. `TerminalPaneGroup` renders bounded per-window lists of normalized
 `TerminalPane` placements and internal split dividers. Each `TerminalPane` receives a read-only
 `TerminalViewState` and owns only terminal-local focus, IME proxy, selection,
 cursor blink, and measured sizing. It never owns a worker, a terminal buffer,
-or connection state. Terminal input, resize, scroll, and selection callbacks
+or connection state. Terminal panes intentionally have no visual frame;
+`AppWindow` draws the one client-area frame around the whole application window.
+Only a newly created `TerminalPane` queues one IME focus retry until its first
+layout pass completes, then rechecks visible, focused, and connected state
+before focusing the native proxy. Identity-preserving terminal identity,
+split-pane focus, connection, visibility, and divider-release requests focus the existing
+native proxy synchronously. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
@@ -189,6 +195,13 @@ length becomes a tracing field.
 
 `SettingsPane` receives a read-only `SettingsViewState`, copies it into its
 private editable draft, and emits the candidate when its Settings tab is closed.
+All category detail areas are individually scrollable, while the Settings
+navigation and search header remain fixed. Its non-persistent global search
+matches a bounded static catalog of category names, setting titles, and
+descriptions case-insensitively; selecting a result clears the query, opens the
+matching category, and returns that category to its top. The query and result
+model are UI-local and never enter `AppSettings`, persistence, diagnostics,
+workers, or transport.
 The tab close intent carries the stable Settings tab ID; Rust persists the
 candidate asynchronously and closes that tab only after persistence succeeds. A menu or native
 platform request provides a read-only requested section; the pane owns the
@@ -540,10 +553,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
 
 The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
 that workspace into a second native Slint window. A detached window uses the
-active connection title as its native title and, on macOS, provides a native
-icon-only return button on that same title-bar row. It uses the system return
-symbol with an AppKit template fallback and exposes its purpose through a
-tooltip and accessibility description. Its client content contains only the active
+active connection title as its native title and, on macOS, makes the native
+title bar transparent over the active client surface: Terminal background for a
+Terminal view and application background for SFTP. Its icon-only return button uses the system overlapping-window
+symbol, with the matching AppKit multiple-documents template fallback, and
+exposes its purpose through a tooltip and accessibility description. Its client content contains only the active
 `TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
 connection picker, Settings, session editor, or client menu. `AppState` remains
 the sole owner of the Tab
@@ -553,6 +567,10 @@ window ID, terminal-pane UUIDs with their SSH/SFTP companions, and the active
 Tab UUID; it never
 contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
 secret.
+Theme preview and save propagate the existing `AppSettings` value to each live
+detached UI, then update its AppKit title-bar background from that UI's resolved
+client surface color. This appearance-only path keeps each window's local
+Slint theme coherent without routing AppKit state through `AppState`.
 Detached Terminal panes keep the same direct Copy/Paste/Select All keyboard
 handling even though no client menu is added.
 
@@ -924,6 +942,35 @@ reliable unload API and remain process-wide; platform font/application/icon
 databases and the allocator may also retain their own caches after AxSSH drops
 its references, so process RSS is not expected to fall immediately.
 
+`UiLanguage` is a config-owned policy with stable `system`, `english`, and
+`simplified-chinese` persisted values. Schema version 21 defaults older or
+unknown values to System. System resolves Chinese locale families to the
+bundled `zh-CN` catalog and every other locale to English. `build.rs` embeds the
+reviewed PO catalog; the translation validator requires every static Slint
+`@tr` message to have a non-empty translation with the same numbered
+placeholders. Slint sends only a stable selector index. The application bridge
+persists that language in a dedicated blocking transaction before selecting the
+process-wide bundled locale on the UI thread and updating all live main and
+detached components. Ordinary Settings preview/save preserves the last committed
+language so concurrent preview work cannot overwrite it. Remote terminal
+content, user values, logs, and runtime technical error details are not
+translated or used as translation keys.
+
+Release automation owns distribution metadata, not application runtime state.
+The manually dispatched `Create Dated Release` workflow derives the date in
+`Asia/Shanghai`, maps its public `YYYY-MM-DD` value to the Cargo-compatible
+`YYYY.M.D` package version, updates the lockfile and macOS bundle metadata, then
+creates an annotated `YYYY-MM-DD` tag, explicitly dispatches CI for that tag,
+and dispatches the release workflow only after that CI succeeds. The release
+workflow builds Windows x86_64, Linux x86_64/aarch64, and arm64/x86_64 macOS binaries; it
+assembles a universal macOS bundle and retains `assets/fonts/`, icons, and the
+independent license notices in each applicable package. CI writes the shared
+target-specific Cargo cache only after a successful default-branch or date-tag
+run; failed jobs cannot save it, and release jobs independently require that tagged
+CI success before restoring it to build new locked release binaries. The workflow verifies all version
+representations before building and does not read or package
+`third_package/axshell`.
+
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
@@ -933,11 +980,12 @@ minimum contrast ratio, bold-color, optional semantic highlight colors, and mous
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
     non-secret X11 provider/path/launch/compatibility settings, SSH authentication
     method (including agent selection but no agent endpoint or identity), and the default
-    remembered-password backend. Application callers submit raw values through
+    remembered-password backend and interface-language policy. Application callers submit raw values through
     `AppSettingsInput`, grouped into appearance, terminal, workspace, and shortcut
     ownership domains. These inputs contain no Slint values and normalize into the
     same persisted `AppSettings`; they do not leak Slint values into the JSON
-    schema. Schema version 19 adds the SSH SFTP default-directory fields;
+    schema. Schema version 21 adds the system-aware interface-language policy;
+    missing or invalid values follow the system. Schema version 19 adds the SSH SFTP default-directory fields;
     missing remote values default to `~` and an empty local value means the
     platform home directory. Schema version 20 adds five optional Terminal semantic
     color overrides. Empty or invalid values follow the active ANSI palette; non-empty
@@ -1023,6 +1071,16 @@ model, current-index, selected callback, keyboard navigation, outside-click
 close behavior, and combobox accessibility contract. Other standard widgets
 continue to use the synchronized Slint `Palette`; native `ContextMenuArea`
 menus remain platform-owned.
+`ui/components/elided-controls.slint` owns the shared single-line text-button
+presentation contract. `ElidedLabel` measures the configured font separately
+from its visible elided label and exposes `natural-width`, `line-height`, and
+`overflowed`; it creates a bounded, wrapping full-text tooltip only when the
+label actually overflows. `ElidedButton` keeps the standard Slint `Button` as
+the focus, keyboard, enabled, pressed, accessibility, and click owner while
+overlaying that label. Callers pass display `text`, optional `tooltip-text`,
+independent `accessible-name`, `enabled`, and `clicked()` explicitly. Icon-only
+buttons keep their purpose-specific tooltips. These UI-local values do not
+cross into Rust, persistence, diagnostics, workers, or transports.
 `ui/components/flat-text-input.slint` owns the matching theme-native single-line
 control for non-secret Settings, session-editor, and management-dialog fields.
 It keeps native cursor placement, selection, IME, keyboard focus, accessibility,
@@ -1034,13 +1092,18 @@ standard `SpinBox` controls so their range and increment semantics are not
 reimplemented.
 `ui/components/settings-controls.slint` consumes those tokens to provide the
 shared Settings glyph, navigation, page, compact right-aligned field, row,
-toggle, shortcut, and action header primitives. Setting rows keep a stable
-title and metadata column while standard controls use one theme-configured height.
+toggle, shortcut, action header, fixed search field, and result row primitives.
+Setting rows keep a stable title and metadata column while standard controls use
+one theme-configured height. `SettingsPage` provides the common detail scroll
+container, while the longer Appearance, Terminal, and About pages retain their
+equivalent page-local scroll containers.
 `ui/settings.slint` owns the shared draft behind its read-only
-`SettingsViewState` boundary and coalesces edits into an immediate in-memory
-preview. Closing its tab starts the separate close-to-save transaction; the
-category layouts live in `ui/settings/*.slint` with only their relevant local
-draft properties and callbacks.
+`SettingsViewState` boundary, the non-persistent selected category/search
+query, and a bounded result list generated by the application bridge. It
+coalesces edits into an immediate in-memory preview. Closing its tab starts the
+separate close-to-save transaction; the category layouts live in
+`ui/settings/*.slint` with only their relevant local draft properties and
+callbacks.
 `ui/settings/appearance.slint` separates Display mode from Color palette and
 uses one shared `ThemePaletteEditor` component for the Custom Light and Dark
 fields, preventing the two editors from drifting structurally.

@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { ActionMenuItem, FlatActionMenu } from "flat-action-menu.slint";
+import { ElidedLabel } from "elided-controls.slint";
 import {
     SidebarRailItem,
     SidebarRailToggle,
@@ -215,10 +216,8 @@ component SessionNavigationRow inherits FocusScope {
     private property <length> vertical-padding: root.group
         ? Theme.sidebar-group-row-padding-y
         : Theme.sidebar-session-row-padding-y;
-    private property <length> label-line-height:
-        row-label.font-metrics.ascent - row-label.font-metrics.descent;
-    private property <length> endpoint-line-height:
-        row-endpoint.font-metrics.ascent - row-endpoint.font-metrics.descent;
+    private property <length> label-line-height: row-label.line-height;
+    private property <length> endpoint-line-height: row-endpoint.line-height;
 
     height: max(
         root.label-line-height,
@@ -230,9 +229,9 @@ component SessionNavigationRow inherits FocusScope {
     accessible-role: button;
     accessible-label: root.group
         ? (root.expanded
-            ? "Collapse " + root.name + " group"
-            : "Expand " + root.name + " group")
-        : "Connect to " + root.name;
+            ? @tr("Collapse {0} group", root.name)
+            : @tr("Expand {0} group", root.name))
+        : @tr("Connect to {0}", root.name);
     accessible-expandable: root.group;
     accessible-expanded: root.expanded;
 
@@ -302,20 +301,19 @@ component SessionNavigationRow inherits FocusScope {
                 }
             }
 
-            row-label := Text {
+            row-label := ElidedLabel {
                 horizontal-stretch: 1;
                 text: root.name;
-                color: root.selected ? Theme.accent : Theme.text;
+                tooltip-enabled: root.group || root.details.is-empty;
+                text-color: root.selected ? Theme.accent : Theme.text;
                 font-size: root.group
                     ? Theme.sidebar-group-font-size
                     : Theme.sidebar-session-font-size;
                 font-weight: root.group
                     ? Theme.sidebar-group-font-weight
                     : Theme.sidebar-session-font-weight;
-                overflow: elide;
-                vertical-alignment: center;
             }
-            row-endpoint := Text {
+            row-endpoint := ElidedLabel {
                 width: root.group
                     ? Theme.sidebar-group-count-width
                     : min(
@@ -323,12 +321,11 @@ component SessionNavigationRow inherits FocusScope {
                         parent.width * 0.58,
                     );
                 text: root.endpoint;
-                color: Theme.muted;
+                tooltip-enabled: root.group || root.details.is-empty;
+                text-color: Theme.muted;
                 font-family: Theme.application-font-family;
                 font-size: Theme.font-caption;
-                horizontal-alignment: right;
-                overflow: elide;
-                vertical-alignment: center;
+                horizontal-alignment: TextHorizontalAlignment.right;
             }
         }
 
@@ -506,11 +503,12 @@ component CompactSessionNavigationGroup inherits Rectangle {
                 expandable: true;
                 expanded: root.group-expanded;
                 expanded-label: root.full-group-label;
+                tooltip-enabled: false;
                 selected: root.selected-kind == "group"
                     && root.selected-group-name == root.source.group-name;
                 accessible-name: root.group-expanded
-                    ? "Collapse " + root.source.name + " group"
-                    : "Expand " + root.source.name + " group";
+                    ? @tr("Collapse {0} group", root.source.name)
+                    : @tr("Expand {0} group", root.source.name);
                 activated => {
                     root.select-target("group", "", root.source.group-name);
                     root.group-expanded = !root.group-expanded;
@@ -558,9 +556,10 @@ component CompactSessionNavigationGroup inherits Rectangle {
                     group: false;
                     nested: root.full-group-label;
                     expanded-label: root.full-group-label;
+                    tooltip-enabled: profile.details.is-empty;
                     selected: root.selected-kind == "server"
                         && root.selected-id == profile.id;
-                    accessible-name: "Connect to " + profile.name;
+                    accessible-name: @tr("Connect to {0}", profile.name);
                     activated => {
                         root.select-target("server", profile.id, root.source.group-name);
                         root.connect-session(profile.id);
@@ -604,9 +603,9 @@ export component SessionNavigation inherits Rectangle {
     in property <int> sidebar-width;
     in property <int> collapsed-group-label-chars: 2;
     in-out property <bool> collapsed;
-    in property <string> local-shell-title: "Local Shell";
-    in property <string> local-shell-description: "Open a new local shell tab";
-    in property <string> local-shell-accessible-name: "Open local shell";
+    in property <string> local-shell-title: @tr("Local Shell");
+    in property <string> local-shell-description: @tr("Open a new local shell tab");
+    in property <string> local-shell-accessible-name: @tr("Open local shell");
 
     callback open-local-shell();
     callback new-session();
@@ -727,7 +726,7 @@ export component SessionNavigation inherits Rectangle {
                     }
                 }
                 if root.sessions.length == 0 : Text {
-                    text: "No saved servers";
+                    text: @tr("No saved servers");
                     color: Theme.muted;
                     font-size: Theme.font-small;
                     horizontal-alignment: center;
@@ -785,20 +784,16 @@ export component SessionNavigation inherits Rectangle {
                         padding-top: Theme.space-xs;
                         padding-bottom: Theme.space-xs;
                         spacing: 0px;
-                        Text {
+                        ElidedLabel {
                             text: root.local-shell-title;
-                            color: Theme.text;
+                            text-color: Theme.text;
                             font-size: Theme.font-body;
                             font-weight: 700;
-                            overflow: elide;
-                            vertical-alignment: center;
                         }
-                        Text {
+                        ElidedLabel {
                             text: root.local-shell-description;
-                            color: Theme.muted;
+                            text-color: Theme.muted;
                             font-size: Theme.font-caption;
-                            overflow: elide;
-                            vertical-alignment: center;
                         }
                     }
 
@@ -868,7 +863,7 @@ export component SessionNavigation inherits Rectangle {
                     }
                 }
                 if root.sessions.length == 0 : Text {
-                    text: "No saved servers";
+                    text: @tr("No saved servers");
                     color: Theme.muted;
                     font-size: Theme.font-small;
                     horizontal-alignment: center;

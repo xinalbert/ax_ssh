@@ -1,0 +1,145 @@
+import { Button, Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+component ElidedTooltipContent inherits Rectangle {
+    in property <string> text;
+    private property <length> natural-width: tooltip-probe.preferred-width;
+
+    width: min(
+        max(Theme.text-tooltip-min-width, root.natural-width),
+        Theme.text-tooltip-max-width,
+    );
+    height: tooltip-label.preferred-height;
+    background: transparent;
+
+    tooltip-label := Text {
+        width: parent.width;
+        text: root.text;
+        color: Theme.text;
+        font-family: Theme.application-font-family;
+        font-size: Theme.font-caption;
+        wrap: char-wrap;
+    }
+
+    tooltip-probe := Text {
+        visible: false;
+        text: root.text;
+        font-family: Theme.application-font-family;
+        font-size: Theme.font-caption;
+    }
+}
+
+export component ElidedLabel inherits Rectangle {
+    in property <string> text;
+    in property <string> tooltip-text;
+    in property <bool> tooltip-enabled: true;
+    in property <brush> text-color: Theme.text;
+    in property <string> font-family: Theme.application-font-family;
+    in property <length> font-size: Theme.font-body;
+    in property <int> font-weight: 400;
+    in property <TextHorizontalAlignment> horizontal-alignment: TextHorizontalAlignment.left;
+    in property <TextVerticalAlignment> vertical-alignment: TextVerticalAlignment.center;
+    in property <length> content-padding-left: 0px;
+    in property <length> content-padding-right: 0px;
+    out property <length> natural-width: label-probe.preferred-width;
+    out property <length> line-height:
+        visible-label.font-metrics.ascent - visible-label.font-metrics.descent;
+    out property <bool> overflowed:
+        root.natural-width > visible-label.width + 0.5px;
+    private property <string> resolved-tooltip:
+        root.tooltip-text.is-empty ? root.text : root.tooltip-text;
+
+    min-width: 0px;
+    preferred-width: root.natural-width;
+    min-height: root.line-height;
+    preferred-height: root.line-height;
+    background: transparent;
+
+    visible-label := Text {
+        x: root.content-padding-left;
+        width: max(
+            0px,
+            parent.width - root.content-padding-left - root.content-padding-right,
+        );
+        height: parent.height;
+        text: root.text;
+        color: root.text-color;
+        font-family: root.font-family;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        horizontal-alignment: root.horizontal-alignment;
+        vertical-alignment: root.vertical-alignment;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    label-probe := Text {
+        visible: false;
+        text: root.text;
+        color: transparent;
+        font-family: root.font-family;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        accessible-role: none;
+    }
+
+    if root.tooltip-enabled && root.overflowed && !root.resolved-tooltip.is-empty : Tooltip {
+        ElidedTooltipContent {
+            text: root.resolved-tooltip;
+        }
+    }
+}
+
+export component ElidedButton inherits Rectangle {
+    in property <string> text;
+    in property <string> tooltip-text;
+    in property <string> accessible-name: root.text;
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    out property <bool> has-focus: standard-button.has-focus;
+    out property <bool> pressed: standard-button.pressed;
+    private property <string> resolved-tooltip:
+        root.tooltip-text.is-empty ? root.text : root.tooltip-text;
+    callback clicked();
+
+    min-width: 32px;
+    preferred-width: max(standard-size-probe.min-width, 32px);
+    min-height: max(standard-size-probe.min-height, 32px);
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: standard-button;
+
+    standard-size-probe := Button {
+        visible: false;
+        text: root.text;
+        primary: root.primary;
+    }
+
+    standard-button := Button {
+        width: parent.width;
+        height: parent.height;
+        text: "";
+        enabled: root.enabled;
+        primary: root.primary;
+        accessible-label: root.accessible-name;
+        clicked => { root.clicked(); }
+    }
+
+    button-label := ElidedLabel {
+        x: Theme.space-xl;
+        width: max(0px, parent.width - 2 * Theme.space-xl);
+        height: parent.height;
+        text: root.text;
+        tooltip-text: root.tooltip-text;
+        tooltip-enabled: false;
+        text-color: root.primary ? Palette.accent-foreground : Palette.control-foreground;
+        horizontal-alignment: TextHorizontalAlignment.center;
+        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+    }
+
+    if button-label.overflowed && !root.resolved-tooltip.is-empty : Tooltip {
+        ElidedTooltipContent {
+            text: root.resolved-tooltip;
+        }
+    }
+}
