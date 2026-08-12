@@ -1,0 +1,118 @@
+name: Create Dated Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: create-dated-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  create:
+    outputs:
+      release_sha: ${{ steps.release_ref.outputs.sha }}
+      release_tag: ${{ steps.release_ref.outputs.tag }}
+    if: github.ref_name == 'main' || github.ref_name == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Shanghai release date
+        shell: bash
+        run: python scripts/release_version.py env --timezone Asia/Shanghai >> "$GITHUB_ENV"
+
+      - name: Refuse an existing date tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "release tag ${RELEASE_TAG} already exists" >&2
+            exit 1
+          fi
+
+      - name: Synchronize release metadata
+        shell: bash
+        run: python scripts/release_version.py sync --date "$RELEASE_PUBLIC_VERSION" >> "$GITHUB_ENV"
+
+      - name: Commit and tag release
+        id: release_ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock packaging/macos/Info.plist
+          if ! git diff --cached --quiet; then
+            git commit -m "Release ${RELEASE_TAG}"
+          fi
+          git tag -a "$RELEASE_TAG" -m "AxSSH ${RELEASE_PUBLIC_VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "$RELEASE_TAG"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse "${RELEASE_TAG}^{}")" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch CI for the dated tag
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "ci.yml",
+              ref: process.env.RELEASE_TAG,
+            });
+
+  wait-for-ci:
+    needs: create
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for tagged CI and dispatch Release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_SHA: ${{ needs.create.outputs.release_sha }}
+          RELEASE_TAG: ${{ needs.create.outputs.release_tag }}
+        with:
+          script: |
+            const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+            const attempts = 180;
+            for (let attempt = 1; attempt <= attempts; attempt += 1) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "ci.yml",
+                per_page: 100,
+              });
+              const run = data.workflow_runs.find((candidate) =>
+                candidate.event === "workflow_dispatch"
+                  && candidate.head_branch === process.env.RELEASE_TAG
+                  && candidate.head_sha === process.env.RELEASE_SHA,
+              );
+              if (!run) {
+                await delay(15000);
+                continue;
+              }
+              if (run.status !== "completed") {
+                await delay(15000);
+                continue;
+              }
+              if (run.conclusion !== "success") {
+                throw new Error(`CI for ${process.env.RELEASE_TAG} finished with ${run.conclusion}`);
+              }
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "release.yml",
+                ref: process.env.RELEASE_TAG,
+                inputs: { tag: process.env.RELEASE_TAG },
+              });
+              return;
+            }
+            throw new Error(`timed out waiting for CI for ${process.env.RELEASE_TAG}`);

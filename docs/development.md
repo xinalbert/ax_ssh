@@ -166,6 +166,35 @@ desktop entry, executable, hicolor icon sizes, `LICENSE`, and
 executable or in its installer documentation. Platform shell caches may need
 to be refreshed before a replaced icon appears.
 
+## GitHub releases
+
+The repository uses date-based releases. The checked-in Cargo version is the
+Cargo-compatible form of the current release date (`YYYY.M.D`), while public
+release tags use `YYYY-MM-DD`. Run the **Create Dated Release** workflow on the
+default branch to derive the date in `Asia/Shanghai`, update `Cargo.toml`,
+`Cargo.lock`, and `packaging/macos/Info.plist`, commit those files, create the
+annotated tag, and dispatch CI. The release workflow starts only after that CI
+run succeeds and its cache-save step has completed. It publishes these assets:
+
+- Windows x86_64 ZIP with the executable, bundled fonts, and license notices
+- Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
+- A universal macOS `.app` ZIP assembled from arm64 and x86_64 binaries
+
+CI writes the shared Cargo cache only after successful default-branch or date-tag
+runs; failed jobs cannot save it. Release jobs independently require a successful
+CI run for the selected tag, restore that cache, but never save into it. The cache key
+includes the target triple, Rust version, and `Cargo.lock` fingerprint, so a
+changed lockfile or different architecture cannot reuse an incompatible cache.
+Releases always compile a fresh `--release --locked` binary and never publish
+CI's check or debug artifacts.
+
+The release workflow verifies that the selected tag names an annotated date tag,
+that its own tagged CI run succeeded, and that the Cargo package, lockfile, and
+macOS bundle metadata agree before compiling. An existing date tag is never replaced.
+To re-run a completed release, manually dispatch **Release** with an exact
+`YYYY-MM-DD` tag. The local `packaging/macos/build-app.sh` script consumes the
+checked-in version and does not mutate release metadata.
+
 ## Runtime logs
 
 `src/main.rs` initializes one global tracing subscriber through

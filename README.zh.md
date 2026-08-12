@@ -23,6 +23,14 @@ cargo run --locked
 首次连接某台主机时，AxSSH 会先拒绝连接；核对并明确确认服务器的 SHA-256 主机密钥
 指纹后才能继续。会话配置、终端操作、设置和数据存储说明见[使用指南](docs/usage.zh.md)。
 
+## 发布
+
+GitHub Releases 会提供 Windows x86_64、Linux x86_64/aarch64，以及 macOS 通用应用包。
+在默认分支手动运行 **Create Dated Release** workflow，会按上海时区当天日期发布版本：
+例如自动创建 `2026-08-12` tag、同步 Cargo 和 macOS 元数据，并启动 CI；CI 成功后才启动
+多平台构建 workflow。
+发布 tag 必须严格使用 `YYYY-MM-DD` 格式。
+
 ## 文档
 
 - [使用指南](docs/usage.zh.md)

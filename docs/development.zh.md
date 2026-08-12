@@ -121,6 +121,28 @@ Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Li
 `THIRD_PARTY_NOTICES.md`。macOS bundle 把两份声明放在 `Contents/Resources`；Windows 发行包
 必须把它们放在可执行文件旁或安装器文档中。替换图标后，平台 shell 可能需要刷新缓存才会显示新图标。
 
+## GitHub 发布
+
+仓库使用按日期发布。提交中的 Cargo 版本使用兼容 Cargo 的 `YYYY.M.D` 形式，公开发布 tag
+使用 `YYYY-MM-DD`。在默认分支运行 **Create Dated Release** workflow，会按
+`Asia/Shanghai` 当天日期计算版本，更新 `Cargo.toml`、`Cargo.lock` 和
+`packaging/macos/Info.plist`，提交这些文件、创建 annotated tag，并显式启动 CI。只有该 CI
+成功且 cache 保存步骤完成后，发布 workflow 才会启动并生成：
+
+- Windows x86_64 ZIP，包含可执行文件、自带字体和许可证声明
+- Linux x86_64 与 aarch64 TAR.GZ，以及对应的 `.deb`
+- 从 arm64 和 x86_64 二进制合并出的 macOS 通用 `.app` ZIP
+
+CI 只在默认分支或日期 tag 成功后写入共享 Cargo cache，失败 job 不会写入；发布 job 会再次验证
+所选 tag 的 CI 成功，只恢复而不写回该 cache。缓存键
+包含 target triple、Rust 版本和 `Cargo.lock` 指纹，所以锁文件变更或架构不同都不会复用不兼容的缓存。
+发布仍会重新执行 `--release --locked` 编译，绝不把 CI 的 check 或 debug 产物作为发行物。
+
+构建前会校验所选 tag 确实是日期 annotated tag、该 tag 的 CI 已成功，以及 Cargo package、锁文件和
+macOS bundle 元数据一致。已有日期 tag 不会被覆盖。
+需要重跑已完成发布时，手动运行 **Release** 并输入严格的 `YYYY-MM-DD` tag。本地
+`packaging/macos/build-app.sh` 只使用已提交的版本，不会修改发布元数据。
+
 ## 运行日志
 
 `src/main.rs` 通过 `src/logging.rs` 初始化唯一的全局 tracing subscriber。文件

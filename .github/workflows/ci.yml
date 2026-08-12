@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   rust:
@@ -11,7 +12,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            run_tests: true
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            run_tests: true
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            run_tests: true
+          - os: macos-14
+            target: aarch64-apple-darwin
+            run_tests: true
+          - os: macos-14
+            target: x86_64-apple-darwin
+            run_tests: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,6 +35,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+          targets: ${{ matrix.target }}
+      - name: Decide whether this CI run may refresh the release cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" = "refs/heads/main" ] || [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            echo "SAVE_RELEASE_CACHE=true" >> "$GITHUB_ENV"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            python scripts/release_version.py verify --tag "$GITHUB_REF_NAME"
+            echo "SAVE_RELEASE_CACHE=true" >> "$GITHUB_ENV"
+          else
+            echo "SAVE_RELEASE_CACHE=false" >> "$GITHUB_ENV"
+          fi
+      - name: Restore and save shared Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+          save-if: ${{ env.SAVE_RELEASE_CACHE == 'true' }}
+          cache-on-failure: false
       - name: Set build revision
         shell: bash
         run: echo "AXSSH_BUILD_REVISION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
@@ -28,6 +63,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check
-        run: cargo check --locked
+        run: cargo check --locked --target ${{ matrix.target }}
       - name: Test
+        if: matrix.run_tests
         run: cargo test --locked
+      - name: Test release metadata helper
+        run: python -m unittest scripts/test_release_version.py -v
