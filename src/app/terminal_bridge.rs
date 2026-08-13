@@ -769,6 +769,7 @@ pub(super) fn spawn_local_shell_monitor(
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
+        let mut finished_worker = None;
         while let Some(event) = events.recv().await {
             match event {
                 LocalShellEvent::Started { shell } => {
@@ -786,12 +787,16 @@ pub(super) fn spawn_local_shell_monitor(
                     refresh_workspace(&ui, &state);
                 }
                 LocalShellEvent::Output(data) => {
+                    let mut response_error = None;
                     if let Some(true) = mutate_local_terminal(&state, tab_id, |terminal| {
-                        if let Some(model) = terminal.terminal.as_mut() {
-                            model.process(&data);
+                        if let Err(error) = process_terminal_output(terminal, &data) {
+                            response_error = Some(error);
                         }
                     }) {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(error) = response_error {
+                        warn!(tab_id = %tab_id, %error, "failed to send local terminal protocol response");
                     }
                 }
                 // The UI updates its terminal snapshot as soon as this resize request is accepted.
@@ -799,40 +804,77 @@ pub(super) fn spawn_local_shell_monitor(
                 LocalShellEvent::Resized { .. } => {}
                 LocalShellEvent::Exited { status } => {
                     terminal_event = true;
-                    if finish_local_terminal(
+                    if let Some(finished) = finish_local_terminal(
                         &state,
                         tab_id,
                         &format!("Local shell exited: {status}"),
-                    ) && !global_window_router().is_some_and(|router| {
-                        close_terminal_child_pane(
-                            &router,
-                            None,
-                            tab_id,
-                            &state,
-                            &ui,
-                            &runtime_for_monitor,
-                        )
-                    }) {
-                        refresh_workspace(&ui, &state);
+                    ) {
+                        finished_worker = finished.worker;
+                        if !global_window_router().is_some_and(|router| {
+                            close_terminal_child_pane(
+                                &router,
+                                None,
+                                tab_id,
+                                &state,
+                                &ui,
+                                &runtime_for_monitor,
+                            )
+                        }) {
+                            refresh_workspace(&ui, &state);
+                        }
                     }
+                    break;
                 }
                 LocalShellEvent::Failed(message) => {
                     terminal_event = true;
-                    if finish_local_terminal(
+                    warn!(tab_id = %tab_id, error = %message, "local shell worker failed");
+                    if let Some(finished) = finish_local_terminal(
                         &state,
                         tab_id,
                         &format!("Local shell failed: {message}"),
                     ) {
+                        finished_worker = finished.worker;
                         refresh_workspace(&ui, &state);
                     }
+                    break;
                 }
             }
         }
-        if !terminal_event && finish_local_terminal(&state, tab_id, "Local shell worker stopped") {
+        if !terminal_event
+            && let Some(finished) =
+                finish_local_terminal(&state, tab_id, "Local shell worker stopped")
+        {
+            finished_worker = finished.worker;
             refresh_workspace(&ui, &state);
+        }
+        if let Some(worker) = finished_worker
+            && let Err(error) = worker.shutdown().await
+        {
+            warn!(tab_id = %tab_id, %error, "failed to reclaim stopped local shell worker");
         }
         debug!(tab_id = %tab_id, "local shell event monitor stopped");
     });
+}
+
+pub(super) fn process_terminal_output(terminal: &mut TerminalTabState, data: &[u8]) -> Result<()> {
+    let responses = terminal
+        .terminal
+        .as_mut()
+        .context("terminal tab has no terminal model")?
+        .process_with_responses(data);
+    if responses.is_empty() {
+        return Ok(());
+    }
+    let worker = terminal
+        .worker
+        .as_ref()
+        .context("terminal protocol response has no transport worker")?;
+    for response in responses {
+        worker
+            .request_send(response)
+            .context("cannot queue terminal protocol response")?;
+    }
+    Ok(())
 }
 
 pub(super) fn mutate_local_terminal(
@@ -848,22 +890,25 @@ pub(super) fn mutate_local_terminal(
     Some(true)
 }
 
-pub(super) fn finish_local_terminal(
+struct FinishedLocalTerminal {
+    worker: Option<TerminalWorker>,
+}
+
+fn finish_local_terminal(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     status: &str,
-) -> bool {
+) -> Option<FinishedLocalTerminal> {
     match state.lock() {
         Ok(mut app) if app.terminal(tab_id).is_some_and(TerminalTabState::is_local) => {
-            if let Some(terminal) = app.terminal_mut(tab_id) {
-                terminal.worker = None;
-                terminal.connected = false;
-                terminal.worker_running = false;
-                terminal.status = status.to_owned();
-            }
-            true
+            let terminal = app.terminal_mut(tab_id)?;
+            let worker = terminal.worker.take();
+            terminal.connected = false;
+            terminal.worker_running = false;
+            terminal.status = status.to_owned();
+            Some(FinishedLocalTerminal { worker })
         }
-        Ok(_) | Err(_) => false,
+        Ok(_) | Err(_) => None,
     }
 }
 
@@ -875,5 +920,49 @@ mod tests {
     fn terminal_target_uses_slint_primary_shortcut_modifier() {
         assert!(terminal_target_modifier_held(true, false));
         assert!(!terminal_target_modifier_held(false, true));
+    }
+
+    #[cfg(not(windows))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn finishing_local_terminal_returns_its_worker_for_explicit_shutdown() {
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("axssh-local-finish-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        )));
+        let (tab_id, mut events) = {
+            let mut app = state.lock().expect("state should lock");
+            let tab_id = app.open_local_shell_tab();
+            let (worker, events) =
+                LocalShellHandle::spawn(ax_ssh::local_shell::SYSTEM_SHELL.into(), 80, 24);
+            app.terminal_mut(tab_id)
+                .expect("local terminal should exist")
+                .worker = Some(TerminalWorker::Local(worker));
+            (tab_id, events)
+        };
+
+        let started = tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("local shell should report startup");
+        assert!(matches!(started, Some(LocalShellEvent::Started { .. })));
+
+        let finished = finish_local_terminal(&state, tab_id, "finished")
+            .expect("local terminal should transition to finished");
+        let worker = finished
+            .worker
+            .expect("finished transition must preserve the worker owner");
+        {
+            let app = state.lock().expect("state should lock");
+            let terminal = app.terminal(tab_id).expect("local terminal should remain");
+            assert!(terminal.worker.is_none());
+            assert!(!terminal.connected);
+            assert!(!terminal.worker_running);
+            assert_eq!(terminal.status, "finished");
+        }
+        tokio::time::timeout(Duration::from_secs(5), worker.shutdown())
+            .await
+            .expect("worker shutdown must remain bounded")
+            .expect("finished local worker should shut down cleanly");
     }
 }

@@ -57,18 +57,27 @@ pub(super) fn spawn_session_monitor(
                     }
                 }
                 SshSessionEvent::Output { data, received_at } => {
+                    let mut response_error = None;
                     if let Some(true) = mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
                         |terminal| {
-                            if let Some(model) = terminal.terminal.as_mut() {
-                                model.process(&data);
+                            if let Err(error) = process_terminal_output(terminal, &data) {
+                                response_error = Some(error);
                             }
                         },
                     ) {
                         dispatch_terminal_output_snapshot(&ui, &state, received_at);
+                    }
+                    if let Some(error) = response_error {
+                        warn!(
+                            tab_id = %tab_id,
+                            session_id = %profile.id,
+                            %error,
+                            "failed to send SSH terminal protocol response"
+                        );
                     }
                 }
                 SshSessionEvent::Sftp(event) => {

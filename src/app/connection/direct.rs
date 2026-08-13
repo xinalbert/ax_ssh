@@ -261,6 +261,7 @@ fn spawn_telnet_monitor(
                     refresh_workspace(&ui, &state);
                 }
                 TelnetSessionEvent::Output(data) => {
+                    let mut response_error = None;
                     if let Some(true) = mutate_direct_attempt(
                         &state,
                         tab_id,
@@ -268,12 +269,20 @@ fn spawn_telnet_monitor(
                         attempt_id,
                         DirectProtocol::Telnet,
                         |terminal| {
-                            if let Some(model) = terminal.terminal.as_mut() {
-                                model.process(&data);
+                            if let Err(error) = process_terminal_output(terminal, &data) {
+                                response_error = Some(error);
                             }
                         },
                     ) {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(error) = response_error {
+                        warn!(
+                            tab_id = %tab_id,
+                            session_id = %profile.id,
+                            %error,
+                            "failed to send Telnet terminal protocol response"
+                        );
                     }
                 }
                 TelnetSessionEvent::Disconnected => {
@@ -384,6 +393,7 @@ fn spawn_serial_monitor(
                     refresh_workspace(&ui, &state);
                 }
                 SerialSessionEvent::Output(data) => {
+                    let mut response_error = None;
                     if let Some(true) = mutate_direct_attempt(
                         &state,
                         tab_id,
@@ -391,12 +401,20 @@ fn spawn_serial_monitor(
                         attempt_id,
                         DirectProtocol::Serial,
                         |terminal| {
-                            if let Some(model) = terminal.terminal.as_mut() {
-                                model.process(&data);
+                            if let Err(error) = process_terminal_output(terminal, &data) {
+                                response_error = Some(error);
                             }
                         },
                     ) {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(error) = response_error {
+                        warn!(
+                            tab_id = %tab_id,
+                            session_id = %profile.id,
+                            %error,
+                            "failed to send serial terminal protocol response"
+                        );
                     }
                 }
                 SerialSessionEvent::Disconnected => {

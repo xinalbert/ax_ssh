@@ -4,7 +4,9 @@ pub use self::input::{TerminalKey, TerminalModifiers, encode_key};
 
 mod input;
 
-use alacritty_terminal::event::VoidListener;
+use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
+
+use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::{Cell, Flags};
@@ -15,6 +17,28 @@ const MIN_COLUMNS: usize = 10;
 const MAX_COLUMNS: usize = 300;
 const MIN_ROWS: usize = 3;
 const MAX_ROWS: usize = 100;
+const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
+const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
+
+#[derive(Clone)]
+struct TerminalEventListener {
+    protocol_responses: SyncSender<Vec<u8>>,
+}
+
+impl EventListener for TerminalEventListener {
+    fn send_event(&self, event: Event) {
+        let Event::PtyWrite(response) = event else {
+            return;
+        };
+        let response = response.into_bytes();
+        if response.is_empty() || response.len() > MAX_PROTOCOL_RESPONSE_BYTES {
+            return;
+        }
+        match self.protocol_responses.try_send(response) {
+            Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TerminalColor {
@@ -116,8 +140,9 @@ pub struct TerminalMouseEvent {
 }
 
 pub struct TerminalModel {
-    term: Term<VoidListener>,
+    term: Term<TerminalEventListener>,
     processor: Processor,
+    protocol_responses: Receiver<Vec<u8>>,
     scrollback_lines: usize,
 }
 
@@ -125,15 +150,29 @@ impl TerminalModel {
     pub fn new(columns: usize, rows: usize, scrollback_lines: usize) -> Self {
         let dimensions = TerminalDimensions::new(columns, rows);
         let config = terminal_config(scrollback_lines);
+        let (protocol_response_tx, protocol_responses) = sync_channel(PROTOCOL_RESPONSE_CAPACITY);
         Self {
-            term: Term::new(config, &dimensions, VoidListener),
+            term: Term::new(
+                config,
+                &dimensions,
+                TerminalEventListener {
+                    protocol_responses: protocol_response_tx,
+                },
+            ),
             processor: Processor::new(),
+            protocol_responses,
             scrollback_lines,
         }
     }
 
     pub fn process(&mut self, bytes: &[u8]) {
+        let _ = self.process_with_responses(bytes);
+    }
+
+    /// Parse live output and return bounded protocol responses for the same transport.
+    pub fn process_with_responses(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
         self.processor.advance(&mut self.term, bytes);
+        self.protocol_responses.try_iter().collect()
     }
 
     /// Rebuild a bounded text-only view from a workspace snapshot.
@@ -520,7 +559,7 @@ fn terminal_config(scrollback_lines: usize) -> TermConfig {
     }
 }
 
-fn visible_contents(term: &Term<VoidListener>) -> String {
+fn visible_contents(term: &Term<TerminalEventListener>) -> String {
     let grid = term.grid();
     let mut contents = String::new();
     for row in 0..grid.screen_lines() {
@@ -628,7 +667,11 @@ fn cell_text(cell: &Cell) -> String {
     text
 }
 
-fn styled_line(term: &Term<VoidListener>, row: usize, columns: usize) -> TerminalStyledLine {
+fn styled_line(
+    term: &Term<TerminalEventListener>,
+    row: usize,
+    columns: usize,
+) -> TerminalStyledLine {
     let grid = term.grid();
     let line = Line(row as i32 - grid.display_offset() as i32);
     let mut runs = Vec::new();
@@ -720,6 +763,25 @@ mod tests {
             }
         );
         assert!(runs[2].style.inverse);
+    }
+
+    #[test]
+    fn terminal_protocol_queries_return_bounded_transport_responses() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+
+        assert_eq!(
+            terminal.process_with_responses(b"\x1b[6n"),
+            vec![b"\x1b[1;1R".to_vec()]
+        );
+
+        let repeated_query = b"\x1b[5n".repeat(PROTOCOL_RESPONSE_CAPACITY + 4);
+        let responses = terminal.process_with_responses(&repeated_query);
+        assert_eq!(responses.len(), PROTOCOL_RESPONSE_CAPACITY);
+        assert!(responses.iter().all(|response| response == b"\x1b[0n"));
+        assert_eq!(
+            terminal.process_with_responses(b"\x1b[5n"),
+            vec![b"\x1b[0n".to_vec()]
+        );
     }
 
     #[test]
