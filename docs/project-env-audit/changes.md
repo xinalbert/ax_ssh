@@ -104,6 +104,14 @@
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0 与 locked/offline 命令；字体文件在 Tokio blocking task 读取并在 Slint UI 线程注册，发行包必须携带 `assets/fonts/`。
 - 验证结果：字体测试 4 项、应用目标测试 50 项、locked/offline check/build、直接 Rustfmt、tracker validator 和差异门禁通过；完整库测试 85 项中 3 个既有终端 resize/reflow 用例失败。本机仍缺 Cargo fmt/clippy，真实系统字体和打包资源路径待目标平台手工验收。
 
+## 2026-08-13 内嵌默认字体基线
+
+- 日期：2026-08-13
+- 变化摘要：JetBrains Mono 四个默认字重改由 Rust `include_bytes!` 编译进可执行文件，保证单独运行 Windows EXE 时应用和 Terminal 默认字体可用；Maple Mono NF CN、Iosevka Term 和 Monaspace Neon 继续作为有界运行时资源读取。
+- 受影响文件：`src/app/font_bridge.rs`、`assets/fonts/README.md`、`docs/project-env-audit/current.md`、双语架构/开发文档与实施跟踪。
+- 更新后的命令或环境：不新增依赖或工具链要求；外部字体文件仍在 Tokio blocking worker 读取，所有字体字节仍只在 Slint UI 线程注册；官方发行包继续携带完整 `assets/fonts/` 和许可证声明。
+- 验证结果：无外部资源目录加载 JetBrains Mono 的确定性回归、完整 locked/offline Cargo 门禁（库 169、应用 161、Doc tests 0）、翻译/Markdown/差异检查和 Windows MSVC release 交叉构建通过；Windows 单 EXE 仍需目标机复测。
+
 ## 2026-08-02 记录 X11 forwarding 运行环境
 
 - 日期：2026-08-02

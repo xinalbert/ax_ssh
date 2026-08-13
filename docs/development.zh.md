@@ -95,10 +95,11 @@ git diff --check
   不得把阻塞式 PTY 操作移到 UI 线程。
 - macOS 必须关闭整窗背景拖动；只有零 Tab 空白条或最右侧专用留白的鼠标左键 down
   可以调用 UI 线程原生拖动 callback，Tab、Activity Bar、侧栏和终端不得成为拖动区域。
-- 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明；它们是运行时资源，发行包必须把
-  该目录保留在可执行文件旁或 `src/app/font_bridge.rs` 解析的平台资源路径中。文件读取必须在
-  Tokio blocking task，字节只能在 Slint UI 线程注册；构建或运行时不得从 `third_package/axshell`
-  加载静态资源。
+- 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明。JetBrains Mono 四个字重会编译进
+  可执行文件，保证应用和 Terminal 默认字体始终可用；其余自带字体仍是运行时资源，发行包必须把
+  字体目录保留在可执行文件旁或 `src/app/font_bridge.rs` 解析的平台资源路径中。外部文件读取必须在
+  Tokio blocking task，所有字体字节只能在 Slint UI 线程注册；构建或运行时不得从
+  `third_package/axshell` 加载静态资源。
 - `assets/ion/terminal_icon.svg` 是应用图标的唯一源文件。PNG、ICO 和 ICNS 必须作为一组从该
   SVG 重新生成。Slint 窗口使用 256px PNG；Windows 通过
   `packaging/windows/axssh.rc` 嵌入 ICO；macOS 通过
@@ -117,6 +118,57 @@ git diff --check
 ```bash
 packaging/macos/build-app.sh
 ```
+
+### 在 macOS 上交叉编译 Windows
+
+仓库的 Windows CI 和发布目标是 `x86_64-pc-windows-msvc`。依赖
+`aws-lc-sys` 在构建 Windows 汇编时还需要 NASM。MSVC 交叉链接还需要完整的
+Homebrew LLVM 工具链：`llvm-lib` 由 LLVM 提供，`lld-link` 由独立的 `lld` formula
+提供。在 macOS 上先安装这些工具、Rust target 和 `cargo-xwin`（只需执行一次）：
+
+```bash
+brew install nasm llvm lld
+rustup target add x86_64-pc-windows-msvc
+cargo install cargo-xwin --locked
+```
+
+Homebrew 的 LLVM 和 LLD 是 keg-only，不会自动加入 PATH。构建前把它们的工具目录
+放在 PATH 前面；下面的 `brew --prefix` 写法同时适用于 Apple Silicon 和 Intel macOS：
+
+```bash
+export PATH="$(brew --prefix llvm)/bin:$(brew --prefix lld)/bin:$PATH"
+```
+
+在仓库根目录构建 Windows release 二进制：
+
+```bash
+cargo xwin build --release --locked --target x86_64-pc-windows-msvc
+```
+
+第一次执行 `cargo xwin` 可能需要下载 Windows SDK/CRT 文件，因此需要网络连接。
+如果出现 `NASM command not found`、`llvm-lib not found` 或 `lld-link not found`，先安装上面的
+工具并导出 PATH，再重新执行同一条构建命令。生成的可执行文件位于：
+
+```text
+target/x86_64-pc-windows-msvc/release/ax_ssh.exe
+```
+
+将运行时字体资源和许可证声明一起打成便携 ZIP：
+
+```bash
+stage="AxSSH-windows-x86_64"
+rm -rf "$stage" "$stage.zip"
+mkdir -p "$stage/assets/fonts"
+cp target/x86_64-pc-windows-msvc/release/ax_ssh.exe "$stage/AxSSH.exe"
+cp -R assets/fonts/. "$stage/assets/fonts/"
+cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
+ditto -c -k --sequesterRsrc --keepParent "$stage" "$stage.zip"
+```
+
+把生成的 ZIP 复制到 Windows 主机后解压为目录。保持 `assets/fonts/` 位于
+`AxSSH.exe` 旁边，才能继续选择 Maple Mono NF CN、Iosevka Term 和 Monaspace Neon；
+单独测试可执行文件时，内嵌的 JetBrains Mono 仍然可用。交叉编译的二进制仍需在
+Windows 上手工验收 ConPTY、原生窗口行为、凭据和真实 SSH 连接。
 
 Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Linux 的 `cargo deb` 会读取
 `[package.metadata.deb]`，安装 desktop entry、可执行文件、各级 hicolor 图标、`LICENSE` 和

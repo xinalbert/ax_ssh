@@ -74,7 +74,7 @@ Slint UI（.slint）
 Slint/winit 窗口图标；Windows 从 `packaging/windows/axssh.rc` 把多尺寸 ICO 编译进
 可执行文件；macOS application bridge 在 UI 线程设置运行中的 Dock 图标，`.app` bundle
 则使用 `Info.plist` 指定的 ICNS；Linux package metadata 把 desktop entry 和对应尺寸的
-PNG 安装到 hicolor 目录。所有路径都不读取参考工程，也不改变字体作为运行时资源加载的契约。
+PNG 安装到 hicolor 目录。所有路径都不读取参考工程，也不绕过字体资源加载契约。
 
 ## Slint 组件状态归属
 
@@ -156,7 +156,8 @@ diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签
 结果模型只属于 UI，不会进入 `AppSettings`、持久化、diagnostics、worker 或 transport。
 菜单或原生平台只提供只读的目标 section；用户在设置页导航时的当前 section 由组件自身持有。
 `SessionEditorPane` 对 `SessionEditorViewState` 使用同样模式：只有传入的
-draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。`in-out` 仅保留给
+draft identity 改变时才重置私有字段，用户输入不会反向修改 Rust 快照。其滚动视图根据编辑内容的
+preferred height 显式设置 viewport height，因此内容高于当前窗口时，所有字段仍可通过滚动访问。`in-out` 仅保留给
 同一局部草稿的嵌套编辑控件；显示文案、dialog 文本和视觉状态都用绑定计算，不重复保存。
 密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
 source snapshot。保存 profile 时密码可以留空；保存密码开关和凭据后端只是明确的保存意图，
@@ -251,11 +252,14 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 7. 本地终端 Tab 持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占 child、reader、
    writer、resize 状态、有界命令/事件队列、取消标记、child-killer handle 和所有线程 join。
    shutdown 会设置取消、唤醒 worker、强制终止隔离的 Unix PTY 进程组或平台 child、关闭 PTY
-   资源，并异步等待 worker 可 join；满事件队列的反压可响应取消，不会卡住 reader，也不会把
-   超时的 blocking join 脱离所有者留在后台。
+   资源，并异步等待 worker 可 join。与最后已应用行列数相同的重复尺寸会在调用平台 PTY resize
+   前丢弃；满事件队列的反压可响应取消，不会卡住 reader。worker shutdown 使用固定超时，不会
+   无限等待；controller 会保留 child-killer 兜底，直到 worker 收尾明确清除它。
 8. 每个真正渲染终端的 Tab 持有一个有界 `TerminalModel`。纯 SFTP Tab 从不渲染终端字符格，
    因此不创建该模型，只保留独立的浏览状态。`vt100` 负责行、字符格样式、光标、
-   scrollback、宽字符和 application-cursor 模式。仓库内的 `vendor/vt100` 补丁保持锁定
+   scrollback、宽字符和 application-cursor 模式。终端生成的 `PtyWrite` 协议应答（包括 Windows
+   ConPTY 启动依赖的光标位置报告）进入私有有界队列，并且只通过产生该输出的 Tab 当前 transport
+   worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 补丁保持锁定
    的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
    同时覆盖普通与备用屏幕。实时主屏的光标位于底行且改变高度时，补丁会在放大时把最近的
    scrollback 行恢复到视图顶部、缩小时把顶部行送回有界 scrollback，并将光标和最新内容
@@ -613,10 +617,11 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 ## 持久化设置与字体资源
 
 `assets/fonts/` 保存 AxSSH 自有的 Maple Mono NF CN、Iosevka Term、JetBrains Mono
-和 Monaspace Neon 文件及各自许可证/声明。它们不是 Slint import，不会嵌入可执行文件。
-启动时 Tokio blocking task 只从 AxSSH 资源路径读取已选中的自带应用字体，再由 Slint UI 线程把
-字节注册到共享 collection。选中 Terminal 或打开本地 shell 的第一个终端 Tab 时才读取 Terminal
-字体；之后在 Settings 即时预览中首次选到的自带字体也会按需读取。候选设置先立即应用，注册
+和 Monaspace Neon 文件及各自许可证/声明。它们不是 Slint import；JetBrains Mono 四个字重会编译进
+可执行文件，作为始终可用的应用和 Terminal 默认字体。Tokio blocking task 只从 AxSSH 资源路径读取
+已选中的其他自带字体，再由 Slint UI 线程统一把字节注册到共享 collection。选中 Terminal 或打开
+本地 shell 的第一个终端 Tab 时才加载 Terminal 字体；之后在 Settings 即时预览中首次选到的自带字体
+也会按需加载。候选设置先立即应用，注册
 完成后再读取当前内存设置重新应用，避免迟到字体读取恢复旧选择。Appearance 只拥有应用字体、显示模式与配色；Terminal
 拥有自己的字体、字号、行高、
 最小对比度、粗体亮色、五项可选语义高亮色和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
@@ -624,7 +629,8 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
 `TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一字体来源。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
-`assets/fonts/` 保留在可执行文件旁或平台资源路径中。Slint 测量配置字体，并用测得的字符格
+`assets/fonts/` 保留在可执行文件旁或平台资源路径中，以提供三个可选自带字体和全部字体声明。
+Slint 测量配置字体，并用测得的字符格
 宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；不能组成完整字符格的
 剩余高度绘制在向下对齐网格的上方，IME 和指针坐标使用同一原点。pane group 会把每个终端 surface
 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、预编辑覆盖层和透明 IME proxy，确保尺寸过小的

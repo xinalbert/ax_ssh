@@ -44,8 +44,8 @@ git diff --check
 - `russh-sftp 2.3.0` 未声明 MSRV，且 raw client 内部使用 unbounded packet sender；项目以 MSRV/CI、单浏览 session、串行请求、256 KiB 入站 frame、250 条分页和 2,000 条/2 MiB 目录预算约束其使用。
 - 真实 SFTP 服务兼容性与 GUI 文件面板需要目标环境手工验证。
 - X11 forwarding 依赖目标平台可用的本机 X server。普通 SSH shell 创建只发送 forwarding request，不读取本机 `DISPLAY`、不运行 `xauth`、不探测端点且不启动 provider；远端实际打开 X11 channel 后才进行本机准备。AxSSH 从 Settings 显示 macOS bundle identifier 或 Windows `PATH`/Program Files 检测到的只读已知位置，且仅在 Custom 时接受用户提供的 executable 路径。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
-- 自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包，不经 Slint import 嵌入可执行文件。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
-- 当前发布基线为 Cargo `2026.8.12`、公开 tag `2026-08-12`。`scripts/release_version.py` 与 `scripts/generate_release_highlights.py` 只依赖 Python 标准库；后者在已检出的 tag 历史上生成分类 Markdown，定向测试用临时 Git 仓库覆盖 tag range、去重、跟踪提交排除和失败路径。日期 workflow 使用 `Asia/Shanghai` 生成并验证 Cargo/lockfile/macOS plist 版本。日期 workflow 显式 dispatch tag CI；CI 在成功 default-branch 或已验证日期-tag run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache 并重新构建 `--release --locked` binary。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
+- JetBrains Mono 四个默认 TTF 由 Rust `include_bytes!` 编译进可执行文件，不经 Slint import；其余自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
+- 当前 Cargo 构建版本为 `2026.8.13`；公开 release tag 仍由日期 workflow 在远端创建和验证。`scripts/release_version.py` 与 `scripts/generate_release_highlights.py` 只依赖 Python 标准库；后者在已检出的 tag 历史上生成分类 Markdown，定向测试用临时 Git 仓库覆盖 tag range、去重、跟踪提交排除和失败路径。日期 workflow 使用 `Asia/Shanghai` 生成并验证 Cargo/lockfile/macOS plist 版本。日期 workflow 显式 dispatch tag CI；CI 在成功 default-branch 或已验证日期-tag run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache 并重新构建 `--release --locked` binary。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
 
 ## 证据文件
 

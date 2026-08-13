@@ -79,7 +79,7 @@ compiles the multi-size ICO into the executable from
 Dock icon on the UI thread, while the `.app` bundle uses the ICNS named by its
 `Info.plist`. Linux package metadata installs the desktop entry and matching
 PNG sizes in the hicolor hierarchy. None of these paths reads the reference
-checkout or changes the font resource-loading contract.
+checkout or bypasses the font resource-loading contract.
 
 ## Slint component state ownership
 
@@ -216,7 +216,9 @@ platform request provides a read-only requested section; the pane owns the
 currently selected section while navigating. `SessionEditorPane` follows the
 same pattern with `SessionEditorViewState`: it resets its private fields only
 when the incoming draft identity changes, and never mutates the Rust snapshot
-while the user types. `in-out` properties remain inside components only where
+while the user types. Its scroll view sets an explicit viewport height from the
+editor content's preferred height, so all fields remain reachable when the
+editor is taller than the current window. `in-out` properties remain inside components only where
 two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
 Password and vault-password fields are local secret drafts: they are blank on
@@ -368,14 +370,20 @@ must not locally hide either dialog before the Rust state transition accepts it.
    queues, cancellation flag, child-killer handle, and every thread join for
    the tab lifetime. Shutdown sets cancellation, wakes the worker, force-stops
    the isolated Unix PTY process group or platform child, closes PTY resources,
-   and waits asynchronously until the worker is joinable. A full event queue is
-   cancellation-aware and cannot strand the reader; no timed-out blocking join
-   is detached from its owner.
+   and waits asynchronously until the worker is joinable. Repeated requests for
+   the already applied row/column size are discarded before calling the platform
+   PTY resize operation. A full event queue is cancellation-aware and cannot
+   strand the reader. Worker shutdown has a fixed timeout and never waits forever;
+   the controller retains its child-killer fallback until worker cleanup clears it.
 8. Each tab that renders a terminal owns one bounded `TerminalModel`. An
    SFTP-only tab deliberately keeps this model absent because it never renders
    terminal cells; its browser state remains independent. `vt100` owns the
    rows, cell styles, cursor, scrollback, wide characters, and application
-   cursor mode. The checked-in `vendor/vt100` patch keeps its locked `0.16.2`
+   cursor mode. Terminal-generated `PtyWrite` protocol responses, including
+   cursor-position reports required by Windows ConPTY startup, are collected in
+   a bounded private queue and written back only through that Tab's current
+   transport worker. They do not enter Slint, persistence, or logs. The checked-in
+   `vendor/vt100` patch keeps its locked `0.16.2`
    API but clears a wide character whose continuation cell would be removed
    during a column shrink, for both normal and alternate screens. When a live
    primary screen changes height while its cursor is at the bottom, it restores
@@ -945,12 +953,13 @@ profiles are skipped while the remaining workspace is restored.
 
 `assets/fonts/` contains project-owned Maple Mono NF CN, Iosevka Term,
 JetBrains Mono, and Monaspace Neon files with their family-specific notices.
-They are not Slint imports and are not embedded in the executable. At startup,
-a Tokio blocking task reads only the selected bundled application family from
-the AxSSH resource path; the Slint UI thread registers its bytes with its shared
-collection. The selected Terminal family is read on the first Terminal or local
-shell tab, while later bundled selections are read on demand when a live Settings
-preview first selects them. All reads remain on Tokio blocking tasks. The UI
+They are not Slint imports. The four JetBrains Mono faces are compiled into the
+executable as the always-available application and Terminal default; a Tokio
+blocking task reads any selected external bundled family from the AxSSH resource
+path. The Slint UI thread registers all bytes with its shared collection. The
+selected Terminal family is loaded on the first Terminal or local shell tab,
+while later bundled selections are loaded on demand when a live Settings preview
+first selects them. All external reads remain on Tokio blocking tasks. The UI
 applies the candidate immediately, then reapplies the current in-memory settings
 after registration so a delayed font read cannot restore stale choices. Appearance
 owns the application font, display mode, and palette; Terminal owns its font, size, line height,
@@ -962,7 +971,8 @@ and explicit non-terminal monospace labels, while `TerminalViewState.font_family
 remains the only source for terminal cell measurement and rendering. No font is
 loaded from `third_package/axshell` during build or runtime;
 release packages must retain `assets/fonts/` by the executable or platform
-resource path. Slint measures the configured font and uses the measured cell
+resource path for the three optional bundled families and all font notices.
+Slint measures the configured font and uses the measured cell
 width plus the configured line-height percentage for rendering, selection,
 cursor, and floor-based PTY dimensions. Any remaining partial cell height is
 rendered above the bottom-aligned grid, while IME and pointer coordinates use
