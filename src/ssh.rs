@@ -7,7 +7,7 @@ use russh::client;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::{AgentClient, AgentStream};
 use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
-use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream};
+use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream, Pty};
 use tokio::net::TcpStream;
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
@@ -52,6 +52,8 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const KEEPALIVE_MAX: usize = 3;
 const MAX_SSH_AGENT_IDENTITIES: usize = 5;
+
+const INTERACTIVE_TERMINAL_MODES: &[(Pty, u32)] = &[(Pty::OPOST, 1), (Pty::ONLCR, 1)];
 
 type RuntimeAgentClient = AgentClient<Box<dyn AgentStream + Send + Unpin>>;
 
@@ -687,7 +689,15 @@ impl SshConnection {
     ) -> Result<(SshShell, X11RequestStatus)> {
         let channel = self.handle.channel_open_session().await?;
         channel
-            .request_pty(true, "xterm-256color", columns, rows, 0, 0, &[])
+            .request_pty(
+                true,
+                "xterm-256color",
+                columns,
+                rows,
+                0,
+                0,
+                INTERACTIVE_TERMINAL_MODES,
+            )
             .await?;
         let x11_status = match x11 {
             Some(x11) => {

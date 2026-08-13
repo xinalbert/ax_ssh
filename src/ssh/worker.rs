@@ -23,6 +23,7 @@ use crate::sftp::{
     SftpBrowserEvent, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest, SftpWriteEvent,
     SftpWriteOperation, validate_remote_path,
 };
+use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
 
 use super::x11::{X11Dispatcher, X11Forwarding};
 use super::{SshConnection, SshError};
@@ -30,8 +31,6 @@ use super::{SshConnection, SshError};
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 const OUTPUT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
-const MAX_COLUMNS: u32 = 300;
-const MAX_ROWS: u32 = 100;
 const COMMAND_CAPACITY: usize = 32;
 const EVENT_CAPACITY: usize = 32;
 const SFTP_EVENT_CAPACITY: usize = 16;
@@ -117,12 +116,6 @@ pub(crate) enum SshCommand {
     Disconnect,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TerminalSize {
-    columns: u32,
-    rows: u32,
-}
-
 struct SshSessionLaunch {
     session_id: Uuid,
     profile: SessionProfile,
@@ -191,10 +184,7 @@ impl SshSessionHandle {
                 session_id,
                 profile,
                 secret,
-                initial_size: TerminalSize {
-                    columns: columns.clamp(1, MAX_COLUMNS),
-                    rows: rows.clamp(1, MAX_ROWS),
-                },
+                initial_size: TerminalSize::backend(columns, rows),
                 mode: SshSessionMode::Terminal,
                 x11_settings,
             },
@@ -213,10 +203,7 @@ impl SshSessionHandle {
                 session_id,
                 profile,
                 secret,
-                initial_size: TerminalSize {
-                    columns: 1,
-                    rows: 1,
-                },
+                initial_size: TerminalSize::backend(1, 1),
                 mode: SshSessionMode::Sftp,
                 x11_settings: X11Settings::default(),
             },
@@ -312,7 +299,7 @@ impl SshSessionHandle {
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
         validate_terminal_size(columns, rows)?;
         self.resize_tx
-            .send(TerminalSize { columns, rows })
+            .send(TerminalSize::backend(columns, rows))
             .map_err(|_| anyhow::anyhow!("cannot update terminal size after SSH worker stopped"))
     }
 
@@ -420,13 +407,7 @@ impl SshSessionHandle {
 }
 
 fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
-    if columns == 0 || rows == 0 {
-        anyhow::bail!("terminal dimensions must be greater than zero");
-    }
-    if columns > MAX_COLUMNS || rows > MAX_ROWS {
-        anyhow::bail!("terminal dimensions cannot exceed {MAX_COLUMNS}x{MAX_ROWS}");
-    }
-    Ok(())
+    validate_backend_size(columns, rows)
 }
 
 async fn run_session(task: SshSessionTask) {
@@ -619,8 +600,20 @@ mod tests {
     fn terminal_size_is_bounded() {
         assert!(validate_terminal_size(80, 24).is_ok());
         assert!(validate_terminal_size(0, 24).is_err());
-        assert!(validate_terminal_size(MAX_COLUMNS + 1, 24).is_err());
-        assert!(validate_terminal_size(80, MAX_ROWS + 1).is_err());
+        assert!(
+            validate_terminal_size(
+                u32::from(crate::terminal_dimensions::MAX_TERMINAL_COLUMNS) + 1,
+                24
+            )
+            .is_err()
+        );
+        assert!(
+            validate_terminal_size(
+                80,
+                u32::from(crate::terminal_dimensions::MAX_TERMINAL_ROWS) + 1
+            )
+            .is_err()
+        );
     }
 
     #[test]

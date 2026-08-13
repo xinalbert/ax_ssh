@@ -9,4 +9,5 @@ pub mod sftp;
 pub mod ssh;
 pub mod telnet;
 pub mod terminal;
+pub mod terminal_dimensions;
 pub mod x_server;

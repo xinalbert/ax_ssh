@@ -1,5 +1,6 @@
 use super::*;
 use ax_ssh::config::{WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot};
+use ax_ssh::terminal_dimensions::TerminalSize;
 
 impl AppState {
     pub(in crate::app) fn new(config: ConfigStore, sessions: SessionStore) -> Self {
@@ -903,10 +904,11 @@ impl AppState {
             .terminal
             .as_mut()
             .context("terminal tab has no terminal model")?;
+        let size = TerminalSize::model(columns as usize, rows as usize);
         if let Some(worker) = terminal.worker.as_ref() {
-            worker.request_resize(columns, rows)?;
+            worker.request_resize(size.columns(), size.rows())?;
         }
-        model.resize(columns as usize, rows as usize);
+        model.resize(size.columns() as usize, size.rows() as usize);
         Ok(())
     }
 

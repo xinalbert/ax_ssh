@@ -13,6 +13,10 @@ mod workspace;
 #[cfg(test)]
 mod tests;
 
+pub use crate::terminal_dimensions::{
+    MAX_TERMINAL_COLUMNS, MAX_TERMINAL_ROWS, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_ROWS,
+};
+
 pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{
@@ -54,10 +58,6 @@ pub const MIN_TERMINAL_CONTRAST_RATIO_TENTHS: u16 = 10;
 pub const MAX_TERMINAL_CONTRAST_RATIO_TENTHS: u16 = 210;
 pub const MIN_SCROLLBACK_LINES: u32 = 100;
 pub const MAX_SCROLLBACK_LINES: u32 = 50_000;
-pub const MIN_TERMINAL_COLUMNS: u16 = 10;
-pub const MAX_TERMINAL_COLUMNS: u16 = 300;
-pub const MIN_TERMINAL_ROWS: u16 = 3;
-pub const MAX_TERMINAL_ROWS: u16 = 100;
 pub const MIN_SIDEBAR_WIDTH: u16 = 180;
 pub const MAX_SIDEBAR_WIDTH: u16 = 420;
 pub const MIN_TAB_WIDTH: u16 = 120;

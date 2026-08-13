@@ -37,8 +37,8 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let initial_size = *resize_rx.borrow_and_update();
     let (mut shell, x11_request_status) = match connection
         .open_shell(
-            initial_size.columns,
-            initial_size.rows,
+            initial_size.columns(),
+            initial_size.rows(),
             x11_forwarding.as_ref(),
         )
         .await
@@ -326,7 +326,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     break;
                 }
                 let size = *resize_rx.borrow_and_update();
-                if let Err(error) = shell.resize(size.columns, size.rows).await {
+                if let Err(error) = shell.resize(size.columns(), size.rows()).await {
                     warn!(session_id = %session_id, %error, "failed to resize remote terminal");
                     send_event(
                         &event_tx,
@@ -339,8 +339,8 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                 if !send_event(
                     &event_tx,
                     SshSessionEvent::Resized {
-                        columns: size.columns,
-                        rows: size.rows,
+                        columns: size.columns(),
+                        rows: size.rows(),
                     },
                     session_id,
                 ).await {

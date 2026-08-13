@@ -79,6 +79,14 @@ async fn probe_reports_disconnect_before_server_host_key_as_handshake_failure() 
 }
 
 #[test]
+fn interactive_pty_requests_crlf_output_mode() {
+    assert_eq!(
+        INTERACTIVE_TERMINAL_MODES,
+        &[(russh::Pty::OPOST, 1), (russh::Pty::ONLCR, 1)]
+    );
+}
+
+#[test]
 fn ssh_agent_identity_attempts_are_bounded() {
     assert_eq!(ssh_agent_attempt_count(0), 0);
     assert_eq!(ssh_agent_attempt_count(3), 3);
@@ -190,6 +198,7 @@ async fn external_agent_signer_authenticates_against_a_trusted_server() {
                 expected_public_key: Some(expected_public_key),
                 send_initial_prompt: false,
                 x11_requests: None,
+                pty_modes: None,
             },
         )
         .await
@@ -271,6 +280,7 @@ struct TestServer {
     expected_public_key: Option<PublicKey>,
     send_initial_prompt: bool,
     x11_requests: Option<mpsc::UnboundedSender<()>>,
+    pty_modes: Option<mpsc::UnboundedSender<Vec<(russh::Pty, u32)>>>,
 }
 
 impl TestServer {
@@ -279,14 +289,18 @@ impl TestServer {
             expected_public_key: None,
             send_initial_prompt: true,
             x11_requests: None,
+            pty_modes: None,
         }
     }
 
-    fn silent_password_only() -> Self {
+    fn silent_password_only_with_pty_modes(
+        pty_modes: mpsc::UnboundedSender<Vec<(russh::Pty, u32)>>,
+    ) -> Self {
         Self {
             expected_public_key: None,
             send_initial_prompt: false,
             x11_requests: None,
+            pty_modes: Some(pty_modes),
         }
     }
 }
@@ -332,9 +346,12 @@ impl server::Handler for TestServer {
         _rows: u32,
         _pixel_width: u32,
         _pixel_height: u32,
-        _modes: &[(russh::Pty, u32)],
+        modes: &[(russh::Pty, u32)],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if let Some(pty_modes) = &self.pty_modes {
+            let _ = pty_modes.send(modes.to_vec());
+        }
         session.channel_success(channel)?;
         Ok(())
     }
@@ -412,6 +429,7 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
     let address = listener
         .local_addr()
         .expect("test SSH listener should have an address");
+    let (pty_modes_tx, mut pty_modes_rx) = mpsc::unbounded_channel();
     let server_task = tokio::spawn(async move {
         let mut sessions = Vec::new();
         for _ in 0..2 {
@@ -422,7 +440,7 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
             let session = server::run_stream(
                 server_config.clone(),
                 stream,
-                TestServer::silent_password_only(),
+                TestServer::silent_password_only_with_pty_modes(pty_modes_tx.clone()),
             )
             .await
             .expect("test SSH session should start");
@@ -455,6 +473,12 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
         .await
         .expect("silent SSH worker should connect promptly");
     assert_eq!(connected, Some(SshSessionEvent::Connected));
+    let pty_modes = timeout(Duration::from_secs(2), pty_modes_rx.recv())
+        .await
+        .expect("interactive SSH shell should request PTY modes")
+        .expect("PTY mode capture channel should remain open");
+    assert!(pty_modes.contains(&(russh::Pty::OPOST, 1)));
+    assert!(pty_modes.contains(&(russh::Pty::ONLCR, 1)));
 
     // The SSH handshake needs real I/O time; only pause the post-connect idle interval.
     pause();
@@ -841,6 +865,7 @@ async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_ope
                 expected_public_key: None,
                 send_initial_prompt: true,
                 x11_requests: Some(x11_request_tx.clone()),
+                pty_modes: None,
             };
             tokio::spawn(
                 server::run_stream(server_config.clone(), stream, handler)
@@ -962,6 +987,7 @@ async fn private_key_login_opens_interactive_shell() {
                     expected_public_key: Some(expected_public_key.clone()),
                     send_initial_prompt: true,
                     x11_requests: None,
+                    pty_modes: None,
                 },
             )
             .await

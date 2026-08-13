@@ -15,14 +15,14 @@ use portable_pty::{ChildKiller, CommandBuilder, PtySize, native_pty_system};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
+use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
+
 pub const SYSTEM_SHELL: &str = "System default";
 
 const COMMAND_CAPACITY: usize = 32;
 const EVENT_CAPACITY: usize = 32;
 const MAX_INPUT_BYTES: usize = 16 * 1024;
 const MAX_OUTPUT_BATCH_BYTES: usize = 16 * 1024;
-const MAX_COLUMNS: u32 = 300;
-const MAX_ROWS: u32 = 100;
 const MAX_ERROR_CHARS: usize = 512;
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const EVENT_BACKPRESSURE_INTERVAL: Duration = Duration::from_millis(5);
@@ -40,12 +40,6 @@ pub enum LocalShellEvent {
 enum LocalShellCommand {
     Send(Vec<u8>),
     Wake,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TerminalSize {
-    columns: u32,
-    rows: u32,
 }
 
 struct LocalShellTask {
@@ -75,10 +69,7 @@ impl LocalShellHandle {
         columns: u32,
         rows: u32,
     ) -> (Self, mpsc::Receiver<LocalShellEvent>) {
-        let initial_size = TerminalSize {
-            columns: columns.clamp(1, MAX_COLUMNS),
-            rows: rows.clamp(1, MAX_ROWS),
-        };
+        let initial_size = TerminalSize::backend(columns, rows);
         let (command_tx, command_rx) = sync_channel(COMMAND_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let pending_resize = Arc::new(Mutex::new(None));
@@ -158,7 +149,7 @@ impl LocalShellHandle {
             .pending_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("local terminal resize state lock poisoned"))? =
-            Some(TerminalSize { columns, rows });
+            Some(TerminalSize::backend(columns, rows));
         wake_worker(&self.command_tx)
     }
 
@@ -515,8 +506,8 @@ fn apply_pending_resize(
     let _ = send_event_with_cancellation(
         event_tx,
         LocalShellEvent::Resized {
-            columns: size.columns,
-            rows: size.rows,
+            columns: size.columns(),
+            rows: size.rows(),
         },
         shutdown_requested,
     );
@@ -596,19 +587,13 @@ fn wake_worker(command_tx: &SyncSender<LocalShellCommand>) -> Result<()> {
 }
 
 fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
-    if columns == 0 || rows == 0 {
-        anyhow::bail!("terminal dimensions must be greater than zero");
-    }
-    if columns > MAX_COLUMNS || rows > MAX_ROWS {
-        anyhow::bail!("terminal dimensions cannot exceed {MAX_COLUMNS}x{MAX_ROWS}");
-    }
-    Ok(())
+    validate_backend_size(columns, rows)
 }
 
 fn pty_size(size: TerminalSize) -> PtySize {
     PtySize {
-        rows: size.rows as u16,
-        cols: size.columns as u16,
+        rows: size.rows() as u16,
+        cols: size.columns() as u16,
         pixel_width: 0,
         pixel_height: 0,
     }

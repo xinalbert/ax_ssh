@@ -18,6 +18,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::TelnetConfig;
+use crate::terminal_dimensions::TerminalSize;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
@@ -40,12 +41,6 @@ pub enum TelnetSessionEvent {
 enum TelnetCommand {
     Send(Vec<u8>),
     Disconnect,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TerminalSize {
-    columns: u32,
-    rows: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -456,8 +451,8 @@ async fn send_window_size(
     size: TerminalSize,
 ) -> Result<()> {
     let mut payload = Vec::with_capacity(4);
-    payload.extend_from_slice(&(size.columns as u16).to_be_bytes());
-    payload.extend_from_slice(&(size.rows as u16).to_be_bytes());
+    payload.extend_from_slice(&(size.columns() as u16).to_be_bytes());
+    payload.extend_from_slice(&(size.rows() as u16).to_be_bytes());
     let event = parser
         .subnegotiation(NAWS, payload)
         .context("Telnet server has not enabled NAWS")?;
@@ -512,10 +507,7 @@ async fn send_event(
 }
 
 fn terminal_size(columns: u32, rows: u32) -> TerminalSize {
-    TerminalSize {
-        columns: columns.clamp(1, 300),
-        rows: rows.clamp(1, 100),
-    }
+    TerminalSize::backend(columns, rows)
 }
 
 fn bounded_error(error: &impl std::fmt::Display) -> String {
