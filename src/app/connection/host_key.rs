@@ -82,10 +82,46 @@ pub(in crate::app) fn wire_host_key_confirmation(
                 );
                 return;
             }
+            if pending.revoked {
+                if let Err(error) = ax_ssh::ssh::remove_known_host(
+                    &pending.host,
+                    pending.port,
+                    &pending.fingerprint,
+                ) {
+                    set_status(&ui_for_confirm, &format!("Cannot remove revoked host key: {error}"));
+                    return;
+                }
+                if let Some(terminal) = app.terminal_mut(pending.tab_id) {
+                    terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                }
+                set_status(&ui_for_confirm, "Revoked host-key record removed; verify the replacement key before reconnecting");
+                refresh_workspace(&ui_for_confirm, &state_for_confirm);
+                return;
+            }
             ssh.host_key_fingerprint = Some(pending.fingerprint.clone());
             let profile = profile.clone();
             if let Err(error) = app.config.save(&candidate) {
                 set_status(&ui_for_confirm, &format!("Cannot trust host key: {error}"));
+                return;
+            }
+            if let Some(public_key) = pending.public_key.as_deref() {
+                let result = if pending.changed {
+                    ax_ssh::ssh::replace_confirmed_known_host(&pending.host, pending.port, public_key)
+                } else {
+                    ax_ssh::ssh::append_confirmed_known_host(&pending.host, pending.port, public_key)
+                };
+                if let Err(error) = result {
+                    if pending.changed {
+                        set_status(
+                            &ui_for_confirm,
+                            &format!("Cannot update the changed host key in known_hosts: {error}"),
+                        );
+                        return;
+                    }
+                    warn!(%error, changed = pending.changed, "failed to update confirmed SSH key in system known_hosts");
+                }
+            } else if pending.changed {
+                set_status(&ui_for_confirm, "Changed host key public data is unavailable; retry the probe");
                 return;
             }
             app.sessions = candidate;

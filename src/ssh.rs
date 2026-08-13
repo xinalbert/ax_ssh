@@ -14,9 +14,33 @@ use zeroize::Zeroizing;
 
 use crate::config::{AuthMethod, SessionProfile};
 
+pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
 pub use self::worker::{SshSessionEvent, SshSessionHandle};
 
+pub fn append_confirmed_known_host(host: &str, port: u16, public_key: &str) -> Result<()> {
+    known_hosts::Snapshot::append_confirmed_openssh(
+        known_hosts::default_path()?,
+        host,
+        port,
+        public_key,
+    )
+}
+
+pub fn replace_confirmed_known_host(host: &str, port: u16, public_key: &str) -> Result<()> {
+    known_hosts::Snapshot::replace_confirmed_openssh(
+        known_hosts::default_path()?,
+        host,
+        port,
+        public_key,
+    )
+}
+
+pub fn remove_known_host(host: &str, port: u16, fingerprint: &str) -> Result<bool> {
+    known_hosts::Snapshot::remove_key(known_hosts::default_path()?, host, port, fingerprint)
+}
+
+mod known_hosts;
 mod private_keys;
 mod worker;
 mod x11;
@@ -47,6 +71,11 @@ pub enum SshError {
     HostKeyRejected {
         expected: Option<String>,
         actual: String,
+        public_key: Option<String>,
+    },
+    HostKeyRevoked {
+        actual: String,
+        public_key: Option<String>,
     },
 }
 
@@ -64,6 +93,7 @@ impl std::fmt::Display for SshError {
             Self::HostKeyRejected {
                 expected: Some(expected),
                 actual,
+                ..
             } => write!(
                 f,
                 "SSH host key mismatch: expected {expected}, received {actual}"
@@ -71,28 +101,76 @@ impl std::fmt::Display for SshError {
             Self::HostKeyRejected {
                 expected: None,
                 actual,
+                ..
             } => write!(f, "SSH host key is not trusted: received {actual}"),
+            Self::HostKeyRevoked { actual, .. } => {
+                write!(f, "SSH host key is revoked: received {actual}")
+            }
         }
     }
 }
 
 impl std::error::Error for SshError {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostKeyObservationDecision {
+    Unknown,
+    Trusted,
+    Changed,
+    Revoked,
+}
+
 #[derive(Clone, Default)]
-struct FingerprintObservation(Arc<Mutex<Option<String>>>);
+struct FingerprintObservation {
+    fingerprint: Arc<Mutex<Option<String>>>,
+    public_key: Arc<Mutex<Option<String>>>,
+    decision: Arc<Mutex<Option<HostKeyObservationDecision>>>,
+}
 
 impl FingerprintObservation {
     fn record(&self, fingerprint: String) -> Result<()> {
         let mut observed = self
-            .0
+            .fingerprint
             .lock()
             .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))?;
         *observed = Some(fingerprint);
         Ok(())
     }
 
+    fn record_public_key(&self, key: String) -> Result<()> {
+        let mut observed = self
+            .public_key
+            .lock()
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))?;
+        *observed = Some(key);
+        Ok(())
+    }
+
+    fn get_public_key(&self) -> Result<Option<String>> {
+        self.public_key
+            .lock()
+            .map(|key| key.clone())
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))
+    }
+
+    fn record_decision(&self, decision: HostKeyObservationDecision) -> Result<()> {
+        let mut observed = self
+            .decision
+            .lock()
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))?;
+        *observed = Some(decision);
+        Ok(())
+    }
+
+    fn get_decision(&self) -> Result<Option<HostKeyObservationDecision>> {
+        self.decision
+            .lock()
+            .map(|decision| *decision)
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))
+    }
+
     fn get(&self) -> Result<Option<String>> {
-        self.0
+        self.fingerprint
             .lock()
             .map(|observed| observed.clone())
             .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))
@@ -101,6 +179,9 @@ impl FingerprintObservation {
 
 struct ClientHandler {
     expected_fingerprint: Option<String>,
+    known_hosts: known_hosts::Snapshot,
+    host: String,
+    port: u16,
     observation: FingerprintObservation,
     x11_dispatcher: Option<x11::X11Dispatcher>,
 }
@@ -108,11 +189,17 @@ struct ClientHandler {
 impl ClientHandler {
     fn new(
         expected_fingerprint: Option<String>,
+        known_hosts: known_hosts::Snapshot,
+        host: String,
+        port: u16,
         observation: FingerprintObservation,
         x11_dispatcher: Option<x11::X11Dispatcher>,
     ) -> Self {
         Self {
             expected_fingerprint,
+            known_hosts,
+            host,
+            port,
             observation,
             x11_dispatcher,
         }
@@ -130,7 +217,30 @@ impl client::Handler for ClientHandler {
             .fingerprint(russh::keys::HashAlg::Sha256)
             .to_string();
         self.observation.record(actual.clone())?;
-        let trusted = fingerprint_is_trusted(self.expected_fingerprint.as_deref(), &actual);
+        self.observation
+            .record_public_key(server_public_key.to_openssh()?)?;
+        let decision = self
+            .known_hosts
+            .decision(&self.host, self.port, server_public_key);
+        self.observation.record_decision(match decision {
+            known_hosts::TrustDecision::Unknown => HostKeyObservationDecision::Unknown,
+            known_hosts::TrustDecision::Trusted => HostKeyObservationDecision::Trusted,
+            known_hosts::TrustDecision::Changed => HostKeyObservationDecision::Changed,
+            known_hosts::TrustDecision::Revoked => HostKeyObservationDecision::Revoked,
+        })?;
+        if decision == known_hosts::TrustDecision::Revoked {
+            warn!(fingerprint = %actual, "SSH host key is revoked");
+            return Ok(false);
+        }
+        if decision == known_hosts::TrustDecision::Revoked {
+            return Ok(false);
+        }
+        let expected_matches =
+            fingerprint_is_trusted(self.expected_fingerprint.as_deref(), &actual);
+        if self.expected_fingerprint.is_some() {
+            return Ok(expected_matches && decision != known_hosts::TrustDecision::Changed);
+        }
+        let trusted = matches!(decision, known_hosts::TrustDecision::Trusted);
         if trusted {
             debug!(fingerprint = %actual, "SSH host key accepted");
         } else {
@@ -191,8 +301,18 @@ async fn connect_transport(
     let ssh = profile
         .ssh()
         .context("SSH transport requires an SSH session profile")?;
+    let known_hosts = match known_hosts::Snapshot::load_default() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            warn!(%error, "unable to read system known_hosts; retaining profile-only trust");
+            known_hosts::Snapshot::default()
+        }
+    };
     let handler = ClientHandler::new(
         expected_fingerprint.clone(),
+        known_hosts.clone(),
+        ssh.host.clone(),
+        ssh.port,
         observation.clone(),
         x11_dispatcher,
     );
@@ -212,11 +332,22 @@ async fn connect_transport(
         Ok(handle) => Ok(handle),
         Err(error) => {
             if let Some(actual) = observation.get()?
-                && !fingerprint_is_trusted(expected_fingerprint.as_deref(), &actual)
+                && !matches!(
+                    observation.get_decision()?,
+                    Some(HostKeyObservationDecision::Trusted)
+                )
             {
+                if observation.get_decision()? == Some(HostKeyObservationDecision::Revoked) {
+                    return Err(SshError::HostKeyRevoked {
+                        actual,
+                        public_key: observation.get_public_key()?,
+                    }
+                    .into());
+                }
                 return Err(SshError::HostKeyRejected {
                     expected: expected_fingerprint,
                     actual,
+                    public_key: observation.get_public_key()?,
                 }
                 .into());
             }
@@ -320,16 +451,41 @@ async fn authenticate_with_runtime_agent(
 }
 
 /// Reads a host fingerprint while still rejecting the untrusted transport.
-pub async fn probe_host_key(profile: &SessionProfile) -> Result<String> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostKeyProbe {
+    pub fingerprint: String,
+    pub decision: TrustDecision,
+    pub public_key: Option<String>,
+}
+
+pub async fn probe_host_key(profile: &SessionProfile) -> Result<HostKeyProbe> {
     profile.validate()?;
     let observation = FingerprintObservation::default();
     let result = connect_transport(profile, None, observation.clone(), None).await;
     let observed = observation.get()?;
 
     match (result, observed) {
-        (Err(_), Some(fingerprint)) => Ok(fingerprint),
+        (Err(_error), Some(fingerprint)) => {
+            let decision = match observation.get_decision()? {
+                Some(HostKeyObservationDecision::Trusted) => TrustDecision::Trusted,
+                Some(HostKeyObservationDecision::Changed) => TrustDecision::Changed,
+                Some(HostKeyObservationDecision::Revoked) => TrustDecision::Revoked,
+                _ => TrustDecision::Unknown,
+            };
+            Ok(HostKeyProbe {
+                fingerprint,
+                decision,
+                public_key: observation.get_public_key()?,
+            })
+        }
         (Err(error), None) => Err(error).context("failed before the server host key was available"),
-        (Ok(handle), _) => {
+        (Ok(handle), Some(fingerprint)) => {
+            let decision = match observation.get_decision()? {
+                Some(HostKeyObservationDecision::Trusted) => TrustDecision::Trusted,
+                Some(HostKeyObservationDecision::Changed) => TrustDecision::Changed,
+                Some(HostKeyObservationDecision::Revoked) => TrustDecision::Revoked,
+                _ => TrustDecision::Unknown,
+            };
             if let Err(error) = handle
                 .disconnect(
                     russh::Disconnect::ByApplication,
@@ -340,7 +496,21 @@ pub async fn probe_host_key(profile: &SessionProfile) -> Result<String> {
             {
                 warn!(%error, "failed to close unexpected host-key probe transport");
             }
-            anyhow::bail!("host-key probe unexpectedly accepted an untrusted server")
+            Ok(HostKeyProbe {
+                fingerprint,
+                decision,
+                public_key: observation.get_public_key()?,
+            })
+        }
+        (Ok(handle), None) => {
+            let _ = handle
+                .disconnect(
+                    russh::Disconnect::ByApplication,
+                    "AxSSH host-key probe completed",
+                    "",
+                )
+                .await;
+            anyhow::bail!("host-key probe completed without observing a server key")
         }
     }
 }

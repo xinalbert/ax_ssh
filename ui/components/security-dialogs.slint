@@ -8,6 +8,7 @@ export component HostKeyDialog inherits Rectangle {
     in property <string> endpoint;
     in property <string> fingerprint;
     in property <bool> changed;
+    in property <bool> revoked;
     in property <string> monospace-font-family;
 
     callback confirm();
@@ -30,8 +31,8 @@ export component HostKeyDialog inherits Rectangle {
             padding: Theme.dialog-padding;
             spacing: Theme.space-xl;
             Text {
-                text: root.changed ? @tr("SSH host key changed") : @tr("Unknown SSH host key");
-                color: root.changed ? Theme.danger : Theme.text;
+                text: root.revoked ? @tr("SSH host key revoked") : (root.changed ? @tr("SSH host key changed") : @tr("Unknown SSH host key"));
+                color: root.revoked || root.changed ? Theme.danger : Theme.text;
                 font-size: Theme.font-title;
                 font-weight: 700;
             }
@@ -50,7 +51,7 @@ export component HostKeyDialog inherits Rectangle {
                 spacing: Theme.space-md;
                 ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
                 ElidedButton {
-                    text: root.changed ? @tr("Trust new key") : @tr("Trust and continue");
+                    text: root.revoked ? @tr("Remove revoked record") : (root.changed ? @tr("Trust new key") : @tr("Trust and continue"));
                     clicked => { root.confirm(); }
                 }
             }

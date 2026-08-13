@@ -392,7 +392,8 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
         .host_key_fingerprint = Some(
         probe_host_key(&profile)
             .await
-            .expect("unknown host-key probe should return the rejected fingerprint"),
+            .expect("unknown host-key probe should return the rejected fingerprint")
+            .fingerprint,
     );
 
     let (worker, mut events) = SshSessionHandle::spawn(
@@ -497,7 +498,8 @@ async fn commands_queued_during_authentication_do_not_cancel_the_worker() {
         .host_key_fingerprint = Some(
         probe_host_key(&profile)
             .await
-            .expect("unknown host-key probe should return the rejected fingerprint"),
+            .expect("unknown host-key probe should return the rejected fingerprint")
+            .fingerprint,
     );
 
     let (worker, mut events) = SshSessionHandle::spawn(
@@ -567,12 +569,14 @@ fn host_key_error_distinguishes_unknown_and_changed_keys() {
     let unknown = SshError::HostKeyRejected {
         expected: None,
         actual: "SHA256:new".into(),
+        public_key: None,
     };
     assert!(unknown.to_string().contains("not trusted"));
 
     let changed = SshError::HostKeyRejected {
         expected: Some("SHA256:old".into()),
         actual: "SHA256:new".into(),
+        public_key: None,
     };
     let message = changed.to_string();
     assert!(message.contains("mismatch"));
@@ -637,7 +641,8 @@ async fn probe_then_password_login_preserves_host_key_verification() {
     profile.ssh_mut().expect("test profile should use SSH").port = address.port();
     let fingerprint = probe_host_key(&profile)
         .await
-        .expect("unknown host-key probe should return the rejected fingerprint");
+        .expect("unknown host-key probe should return the rejected fingerprint")
+        .fingerprint;
     assert_eq!(fingerprint, expected_fingerprint);
 
     profile
@@ -806,7 +811,8 @@ async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_ope
     }
     let fingerprint = probe_host_key(&profile)
         .await
-        .expect("unknown host-key probe should return the rejected fingerprint");
+        .expect("unknown host-key probe should return the rejected fingerprint")
+        .fingerprint;
     assert_eq!(fingerprint, expected_fingerprint);
     profile
         .ssh_mut()
@@ -928,7 +934,8 @@ async fn private_key_login_opens_interactive_shell() {
     }
     let fingerprint = probe_host_key(&profile)
         .await
-        .expect("unknown host-key probe should return the rejected fingerprint");
+        .expect("unknown host-key probe should return the rejected fingerprint")
+        .fingerprint;
     assert_eq!(fingerprint, expected_fingerprint);
     profile
         .ssh_mut()

@@ -8,6 +8,7 @@ export struct SecurityOverlayViewState {
     host_key_endpoint: string,
     host_key_fingerprint: string,
     host_key_changed: bool,
+    host_key_revoked: bool,
     password_open: bool,
     password_endpoint: string,
     password_private_key: bool,
@@ -73,6 +74,7 @@ export component OverlayHost inherits Rectangle {
         endpoint: root.security.host_key_endpoint;
         fingerprint: root.security.host_key_fingerprint;
         changed: root.security.host_key_changed;
+        revoked: root.security.host_key_revoked;
         monospace-font-family: root.monospace-font-family;
         confirm => { root.confirm-host-key(); }
         cancel => { root.reject-host-key(); }
