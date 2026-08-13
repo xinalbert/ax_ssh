@@ -177,21 +177,42 @@ outside the UI thread, copies that exact handle into its private bounded cache,
 and opens the completed read-only snapshot. Replacing the original path after
 validation cannot redirect the open request.
 
-Double-click a regular file in the remote pane to download a read-only copy into
-AxSSH's private cache and open that completed copy with the default application.
-Directories and symbolic links are rejected. A file may be at most 512 MiB, and
-each SFTP Tab runs at most two downloads at once. The Transfers area shows
-progress, success, cancellation, or a bounded failure message; use its cancel
-button to stop a queued or active download. Closing the SFTP Tab cancels its
-pending and active downloads before closing the browser and SSH transport.
-Partial or failed files are never opened. Completed cache copies are best-effort
-temporary files and are removed by a later startup cleanup after they become
-stale.
+Select remote files or folders and use **Download**. Each file is written into
+the current **Local files** directory; directory downloads recursively preserve
+their selected directory tree. Remote symbolic links and non-regular entries
+are skipped or rejected, existing local files are never overwritten, and a file
+may be at most 512 MiB. Recursive discovery is bounded to 4,096 scanned
+entries, 512 files, 256 directories, 16 levels, 512 KiB of path text, and 1
+GiB in total.
 
-This first file-open phase does not provide upload, Save As, delete, rename,
-drag-and-drop, modification monitoring, automatic upload, or remote edit sync.
+The Transfers area has separate **Transferring**, **Failed**, and **Success**
+pages. Select active rows with their checkboxes to pause, resume, or cancel
+them in a batch. Pause/resume preserves the downloaded prefix through the live
+worker and continues from that offset; it is available only while this
+application and SFTP worker remain running. Each SFTP Tab runs at most two
+active or opening downloads at once. Cancel removes the task's partial content,
+including a file published just before cancellation wins; failures remove the
+`.part` file, while completed local downloads remain in the chosen directory.
+Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
+active download work before closing the browser and SSH transport.
+
+The remote toolbar also supports deleting selected files (directories are
+non-recursive), renaming one selected entry, editing bounded UTF-8 text, and
+saving to an explicit remote path. While the editor is open, a worker-owned
+poll checks the remote size/mtime fingerprint; a change disables Save and
+reports a conflict. The local toolbar uploads one selected regular file, and
+dropping a local path onto Local files enters the same private-temp-file
+transfer queue. Automatic upload is opt-in, off by default, debounced by 500ms,
+and still guarded by the observed fingerprint. Cross-process edit recovery and
+three-way conflict merging remain outside the current scope.
 
 ## Workspace and terminal controls
+
+AxSSH saves the open workspace on exit in a separate private `workspace.json`.
+After restart it restores tab order, the active tab, split panes, bounded
+terminal text, and SFTP browser paths. Saved connections are recreated as new
+workers rather than persisted live connections. SSH still follows the normal
+trusted host-key and authentication flow, and missing profiles are skipped.
 
 Saved sessions are organized beneath collapsible group rows in the expanded
 navigator. Right-click blank list space to create an empty group or an
@@ -244,7 +265,9 @@ separate native window, use the external-link button on a connection Tab or
 choose **Window > Move Current Workspace to New Window**. The terminal panes and
 their SSH/SFTP companions move as one workspace group and keep existing terminal
 output, SFTP directory state, transfers, host-key prompts, and authentication
-phases; AxSSH does not reconnect. A detached Terminal window shows only its
+phases. SSH, Telnet, and Serial tabs automatically reconnect after an unexpected
+disconnect using at most five attempts with 1, 2, 4, 8, and 16 second backoff
+(capped at 30 seconds). A detached Terminal window shows only its
 terminal panes, while a detached SFTP view shows only SFTP. In the detached
 macOS window, the native title bar matches the active Terminal or SFTP surface
 and its overlapping-window return icon merges the same workspace layout back. Hovering
@@ -269,7 +292,20 @@ cannot be split into a terminal pane and remains an independent visible Tab.
 Each non-root pane has a small close control in its upper-right corner. Closing
 it removes only that pane and its session, then collapses the remaining layout;
 the root pane has no independent close control. A normal `exit` from a child
-local shell, or a normal child SSH/Telnet disconnect, performs the same close.
+local shell or an intentional Disconnect performs the same close. An unexpected
+SSH/Telnet/Serial disconnect keeps the Tab and terminal scrollback, shows the
+current retry countdown, and retries with a fresh worker. Password SSH sessions
+without a readable credential stay at an authentication prompt; encrypted-vault
+sessions require an unlock. Unknown or changed host keys always stop for the
+existing explicit confirmation flow. After the retry limit, the Tab remains open
+with a manual recovery message.
+AxSSH also reads the platform user's OpenSSH `~/.ssh/known_hosts` (or the Windows
+equivalent), including aliases, non-default ports, hashed hosts, multiple keys,
+and `@revoked`. A valid non-revoked match can proceed to authentication; changed
+keys still require confirmation, and revoked keys are always rejected. Explicit
+confirmation appends the observed key atomically without replacing unrelated
+records. Read failures and malformed lines only reduce trust, and the normal
+confirmation button cannot bypass a revoked record.
 Connection and authentication failures remain visible for diagnosis. Closing
 the visible Terminal Tab still closes every terminal pane in that layout.
 
@@ -292,6 +328,10 @@ individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
+Full-screen programs that enable xterm mouse reporting receive clicks,
+releases, wheel events, drag motion, and cell motion using their selected SGR,
+UTF-8, or legacy encoding. While reporting is active, the TUI owns those
+gestures; otherwise AxSSH keeps local selection and scroll behavior.
 Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. With a Terminal Tab
 active, **Edit > Copy**, **Paste**, and **Select All** affect only the focused
@@ -425,7 +465,7 @@ when such a connection is no longer live.
 
 ## Current limitations
 
-Shared OpenSSH-compatible known-hosts storage, host-key revocation, SFTP upload,
+In-app known-hosts administration beyond the shared parser, SFTP upload,
 explicit Save As, mutation/edit sync, reconnect, persisted
 workspace restoration, and complete full-screen terminal mouse reporting remain
 planned work. Serial availability, device permissions, and supported parameter

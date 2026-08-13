@@ -118,15 +118,27 @@ Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独�
 链接不会打开。AxSSH 会在 UI 线程外核对已打开文件的平台 identity，从该精确 handle 复制到私有有界
 缓存，完整发布后再请求操作系统打开；验证后替换原路径不能重定向这次打开请求。
 
-双击远端栏中的 regular file 会把只读副本下载到 AxSSH 私有缓存，完整发布后再使用默认程序打开。
-目录和符号链接会被拒绝；单个文件最多 512 MiB，每个 SFTP Tab 同时最多运行两个下载。Transfers 区域
-显示进度、成功、取消或有界错误，可用取消按钮停止排队中或活动下载。关闭 SFTP Tab 会先取消尚在打开
-subsystem 的请求和活动下载，再关闭浏览器与 SSH transport。part 文件或失败文件绝不会打开；已完成的
-缓存副本属于尽力清理的临时文件，在其过期后的后续启动清理中删除。
+在远端栏勾选文件或目录后选择 **Download**。每个文件会写入当前 **Local files** 目录；下载目录时会
+递归保留所选目录树。远端符号链接和非 regular 条目会被跳过或拒绝，绝不覆盖已有本地文件；单个文件最多
+512 MiB。递归发现限制为最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本和 1 GiB 总大小。
 
-首版文件打开不提供上传、另存为、删除、重命名、拖放、修改监听、自动回传或远端编辑同步。
+Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。可用勾选框选择活动行并批量暂停、
+继续或取消。暂停/继续会由仍存活的 worker 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
+仍运行期间可用。每个 SFTP Tab 最多同时运行或打开两个下载。取消会删除该任务的部分内容，包括刚发布但
+取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
+待发现、待打开 subsystem 和活动下载，再关闭浏览器和 SSH transport。
+
+远端工具栏支持删除、重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地 regular file 可通过上传按钮或
+拖放到 Local files 区进入同一个 Transfers 队列。打开编辑器期间会按远端 size/mtime fingerprint 轮询；
+发现变化会禁用保存并提示冲突。自动上传需要勾选 **Auto upload**，默认关闭，且会经过 500ms 防抖与 fingerprint
+校验。跨进程恢复和更复杂的冲突合并仍未提供。
 
 ## 工作区与终端操作
+
+AxSSH 退出时会把打开的工作区保存到独立的私有 `workspace.json`。重新启动
+后会恢复 Tab 顺序、活动 Tab、分屏结构、有界终端文本以及 SFTP 浏览路径。
+连接会作为新的 worker 重建，不会持久化活动连接；SSH 仍需经过正常的已信任
+host key 和认证流程，已删除的 profile 会跳过。
 
 展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时创建
 空 Group 或 Ungrouped 服务器。展开后的 Group 行显示名称、数量和
@@ -162,7 +174,7 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 要把已连接 Terminal 及其当前工作区中的 terminal pane 作为独立原生窗口使用，可点击连接
 Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
 及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
-主机密钥提示和认证阶段；AxSSH 不会重连。detached Terminal 窗口只显示 terminal pane，detached
+主机密钥提示和认证阶段。SSH、Telnet、Serial 在非主动断开后会自动重连，最多 5 次，退避为 1、2、4、8、16 秒并封顶 30 秒。detached Terminal 窗口只显示 terminal pane，detached
 SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前 Terminal 或 SFTP 客户区表面色；点击同一行的重叠窗口
 返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话
@@ -194,6 +206,8 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
+启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
+SGR、UTF-8 或传统格式发送。reporting 开启时这些手势交给 TUI；关闭时 AxSSH 继续使用本地选区和滚动行为。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、
 **Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
 `Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`，并可在
@@ -283,6 +297,9 @@ inactivity 策略，而不是 shell 输出计时器，来判断连接何时不�
 
 ## 当前限制
 
-共享的 OpenSSH 兼容 known-hosts 存储、主机密钥撤销、SFTP 上传、显式另存为、修改/编辑同步、
-自动重连、持久化工作区恢复和完整的全屏终端鼠标上报仍属于后续工作。
+SFTP 远端工具栏支持删除选中条目（目录不递归）、重命名单个条目、有界 UTF-8 文本在线编辑和显式远端
+Save As。保存前会比较打开时记录的文件大小，发现远端变化就拒绝覆盖。本地工具栏可上传一个选中的
+regular file：内容先写入私有远端临时文件，再通过 rename 发布，不会静默覆盖已有目标。自动上传和外部
+文件监控默认关闭；拖拽只复用有界上传/下载意图，文件读取不在 UI 线程执行。
 Serial 的端口可见性、权限和参数支持取决于目标操作系统与硬件；Telnet 不提供加密或自动登录。
+主动点击 Disconnect 或关闭 Tab 不会触发自动重连。非主动断开会保留 Tab 和终端滚动内容，显示当前倒计时并为每次尝试创建新的 worker。没有可读取凭据的密码 SSH 会停在认证输入；encrypted-vault 需要解锁；未知或变更主机密钥始终进入既有明确确认流程。达到次数上限后 Tab 保持打开并提示手动恢复。AxSSH 同时读取平台用户的 OpenSSH `~/.ssh/known_hosts`（Windows 使用对应用户路径），支持别名、非默认端口、hashed host、多个密钥和 `@revoked`。有效且未撤销的匹配可直接进入认证；变更密钥仍需确认，撤销密钥始终拒绝。明确确认后，观察到的公钥会以原子方式追加到共享文件，不替换其它记录；读取失败和坏行只会收窄信任，普通确认按钮不能绕过撤销记录。

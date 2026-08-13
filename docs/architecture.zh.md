@@ -27,7 +27,7 @@ Slint UI（.slint）
        ├──────────────► SSH 边界（src/ssh.rs）
        │                 Tokio task + russh handle/channel + X11 relay + 私钥/agent 签名
        ├──────────────► SFTP 领域（src/sftp.rs + src/sftp/）
-       │                 有界浏览 + 只读下载后打开缓存
+       │                 有界浏览 + worker 所有的下载、上传和编辑操作
        ├──────────────► Telnet 边界（src/telnet.rs）
        │                 有界 TCP worker + RFC 854 parser + NAWS
        └──────────────► Serial 边界（src/serial.rs）
@@ -61,7 +61,7 @@ Slint UI（.slint）
 | `src/ssh/private_keys.rs` | 本机 `.ssh` 私钥发现和阻塞式密钥加载 | passphrase 持久化、UI 状态、主机信任决策 |
 | `src/ssh/x11.rs` | 本机 DISPLAY 解析、精确 xauth cookie 查询、X11 setup 校验/替换、本机端点连接和 relay | UI 状态、profile 修改、cookie 持久化、启动 X server 或修改访问控制 |
 | `src/ssh/worker.rs` 与 `src/ssh/worker/` | 有界 session 启动/命令，以及私有 shell/X11 和 SFTP-only 生命周期模块；合并式 resize、批量事件、取消和关闭 | UI 状态或 profile 持久化 |
-| `src/sftp.rs`、`src/sftp/transfer.rs` 与 `src/sftp/transfer/cache.rs` | 有界 SFTP v3 packet 适配、目录浏览、只读分块下载和 transfer 编排；私有缓存发布/清理 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
+| `src/sftp.rs`、`src/sftp/transfer.rs` 与 `src/sftp/transfer/cache.rs` | 有界 SFTP v3 packet 适配、目录浏览、worker 所有的分块下载/上传、文本编辑、重命名/删除和私有临时文件发布/清理 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
 | `src/telnet.rs` | 明文 TCP 生命周期、RFC 854 选项过滤、NAWS、有界输入输出、取消和关闭 | 凭据、SSH 信任、UI 状态或终端渲染 |
 | `src/serial.rs` | 不打开设备的端口发现、稳定 USB 身份匹配、串口参数映射和单设备有界 worker | 自动打开/探测设备、UI 状态或持久化 profile 修改 |
 | `src/logging.rs` | 全局 tracing subscriber、日志目录、按日滚动、保留和 flush guard | 凭据、功能状态、UI 或 SSH handle |
@@ -97,6 +97,10 @@ Rust
 Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
+鼠标输入遵循同一所有权边界。`TerminalModel` 只暴露当前私有 mouse mode，并生成有界的 SGR、UTF-8
+或传统 X10 事件。启用 reporting 时，`TerminalGrid` 通过带 pane UUID 的 callback 转发按下/释放、滚轮、
+拖动和 motion 坐标；bridge 重验 pane 后才把字节发送给对应 worker。关闭 reporting 时，既有本地选区和
+滚动 fallback 继续生效。备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
 应用状态。
@@ -187,10 +191,14 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
    **Save password (optional)** 时才会在 profile 保存前更新所选后端。若请求加密保险库但未提供
    保险库口令，会降级为系统凭据库并记录实际后端；既有保险库记录仍是保险库记录，解锁时仍需要
-   其保险库口令。私钥 profile 在 UI 线程外加载
+其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
    Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
+   SSH transport 还会读取平台用户的有界 OpenSSH `known_hosts` 文件。未撤销的精确匹配属于共享信任；
+   profile 冲突、变更密钥、坏记录和文件不可读都不会放宽信任。精确匹配 `@revoked` 时在认证前拒绝，
+   普通确认不能绕过。未知确认追加观察到的公钥；变更确认原子替换匹配 host 的非撤销记录，同时保留
+   注释、无关主机和撤销记录。移除撤销记录是独立的显式动作。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
@@ -356,6 +364,17 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     前遮蔽用户名和 IPv4 的中间段。静态尺寸进入 `ui/theme.slint`，持久化的单字符遮蔽设置
     由 `WorkspaceSettings` 持有；收起组名字符数同样由该设置持有，`0` 表示完整名称。
 
+## 工作区快照恢复
+
+运行时工作区与 `sessions.json` 分离，保存在私有目录中的
+`workspace.json`，并通过原子替换写入。版本化快照只保存有界的 Tab 顺序和
+身份、窗口与分屏结构、活动/焦点 Tab、纯文本终端内容以及 SFTP 远程/本地
+路径。不会保存 Tokio/russh/PTY worker、活动连接句柄、密码、保险库解锁
+材料、私钥口令或临时 host key 决定。启动时，已保存的 profile Tab 会通过
+正常 host key 和认证流程创建新 worker；未知 host key 仍必须由用户确认。
+终端恢复只是有界文本回放，不会恢复远端进程或 alternate screen 状态。
+已删除的 profile 会跳过，其余工作区继续恢复。
+
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
@@ -489,7 +508,7 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
 - 窗口退出对所有剩余 worker 请求断开，在超时边界内逐个等待 join，最后再关闭 Tokio。
 
-## SFTP 浏览契约
+## SFTP 浏览与写操作契约
 
 每个 SFTP Tab 拥有一条 SSH transport，认证完成后 worker 只打开独立的 `sftp` subsystem
 channel，绝不申请 PTY 或终端 shell。SSH worker 仍是该 russh connection 的唯一所有者；应用
@@ -546,18 +565,23 @@ AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证后的路径替换也无法把 opener 重定向到另一个
 文件 identity。
 
-双击当前远端快照中的 regular file 会排入只读下载后打开。每个 SFTP Tab 最多允许两个活动
-transfer，仍在打开的 subsystem 也计入上限；每个 transfer 独占单独的 SFTP subsystem stream。
-transfer 会重验路径和 handle 元数据，拒绝目录与符号链接，将文件限制为 512 MiB，每次最多读取
-64 KiB，writer queue 只容纳两个 chunk，每个操作 15 秒超时、总时长 30 分钟，并报告有界进度与
-终态事件。文件以 UUID 前缀和安全 basename 写入 AxSSH 私有缓存；Unix 上 part 文件为 `0600`、
-namespace 为 `0700`，完成后 flush、fsync 并原子 rename，application bridge 才调用 detached
-opener。取消或失败绝不打开 part 文件；关闭 Tab 会取消并 join 尚在打开的 subsystem 与活动
-transfer。首次下载前的 quota 流程最多检查缓存目录直属的 4,096 项；不使用远端文件打开时，
-应用启动不会扫描该目录。清理会尽力删除超过 1 小时的受管 part 文件和超过 24 小时的已发布文件。
+选择远端文件或目录会向 worker 发送小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
+拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
+目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总字节，
+每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动或正在打开的 transfer，每个 transfer 独占单独的 SFTP
+subsystem stream。
 
-这只是 download-to-open，不是通用保存或受管编辑流程。上传、显式下载/另存为、删除、重命名、
-拖放、修改监听、自动回传与冲突处理仍不属于本阶段。
+每个请求都会重验远端路径和 handle 元数据，每次最多读取 64 KiB，writer queue 只容纳两个 chunk，
+每个操作 15 秒超时、总时长 30 分钟，并报告自有的队列、状态、进度和终态事件。应用状态拥有有界行，
+分为活动、失败（包括已取消）和成功快照；Slint 只渲染这些 DTO，并发送勾选/批量暂停、继续或取消 intent。
+暂停/继续是 worker 生命周期内的契约：writer 保留部分文件，流只在该 worker 存活时从当前 offset 继续。
+
+本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
+文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
+会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
+和活动 transfer。远端工具栏负责有界删除、重命名、UTF-8 编辑和 Save As；本地 regular file 通过同一 transfer queue 上传。
+编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
+拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。
 
 ## Telnet 与 Serial 传输契约
 
@@ -729,13 +753,14 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 
 ## 分阶段范围
 
-当前应用可校验并持久化 SSH、Telnet 与 Serial profile，确认逐 profile 的 SSH 主机指纹，
+当前应用可校验并持久化 SSH、Telnet 与 Serial profile，读取用户的 OpenSSH
+`~/.ssh/known_hosts` 作为有界共享信任来源，并确认逐 profile 的 SSH 主机指纹，
 使用临时密码、本机私钥或有界运行时 SSH agent 完成 SSH 认证，为已认证 SSH Tab 提供有界远端 SFTP、本地元数据目录浏览和 regular file 下载后打开，并持有多个逐 Tab 隔离的 transport 或本地 shell
 终端，相同目标也可重复打开。新建会话编辑器和单例 Settings 工作台都属于可见工作区 Tab；只有短期信任和
 secret 提示保留为覆盖层。
 以下内容仍作为独立步骤：
 
-- 共享的 OpenSSH 兼容 known_hosts 存储和主机密钥撤销；
-- SFTP 上传、显式另存为、修改和受管编辑同步；
-- 重连和工作区恢复；
+- 超出共享解析器的 known_hosts 管理（应用内撤销/替换 UI 与系统级策略编辑）；
+- 更完整的 SFTP 冲突解决与跨进程编辑恢复；
+- 跨进程重连任务持久化和工作区恢复；
 - 更完整的全屏终端兼容和鼠标上报。

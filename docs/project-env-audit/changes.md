@@ -393,3 +393,37 @@
 - 受影响文件：`src/app/local_files.rs`、`docs/{architecture.md,architecture.zh.md,development.md,development.zh.md,project-env-audit/{current.md,changes.md},project-implementation-tracker/}`。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 locked/offline Cargo；不新增依赖、不改变锁文件、工具链、CI、SFTP 协议、SSH trust 或凭据。
 - 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline`（库 150、应用 153、Doc tests 0）、tracker validator、Markdown 相对链接和 `git diff --check` 通过；目标 Linux/Windows CI 仍需本次提交触发后确认。
+## 2026-08-13 SFTP Transfers 三状态页施工前预检
+
+- 日期：2026-08-13
+- 变化摘要：复核 SFTP Downloads 的状态、worker、缓存与 Slint 路由；本机已确认 `cargo fmt` 和 `cargo clippy` 均可执行。
+- 受影响文件：`src/{sftp,ssh/worker,app}/`、`ui/`、`docs/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 `cargo fmt/check/clippy/test --locked --offline`；不变更依赖、锁文件、工具链或 CI。
+- 验证结果：已读取 `Cargo.toml`、`Cargo.lock`、`.github/workflows/`、现有环境记录和 SFTP 实现；`rustc 1.97.1`、`cargo 1.97.1`、`rustfmt 1.9.0`、`clippy 0.1.97` 本机可用。完整门禁在功能完成后执行。
+
+## 2026-08-13 SFTP Transfers 三状态页环境更新
+
+- 日期：2026-08-13
+- 变化摘要：新增 SFTP worker-lifetime 的暂停/继续、递归发现和到当前 Local files 目录的安全 `.part` 原子下载；应用状态和 Slint 只处理有界传输 DTO/意图，失败与取消由 worker 清理自身任务内容。
+- 受影响文件：`src/{app,sftp,ssh/worker}/`、`ui/`、`translations/`、`scripts/` 和双语 SFTP/跟踪文档。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、现有 Tokio/russh 和 `cargo fmt/check/clippy/test --locked --offline`；不新增 crate、锁文件、配置 schema、CI、SSH trust 或凭据契约。
+- 验证结果：施工前环境复核已通过；翻译生成、定向/完整 Cargo、tracker、Markdown 和差异门禁将在收口记录。目标平台三页布局、勾选焦点、递归下载、暂停/继续和取消清理由用户验收。
+
+## 2026-08-13 SFTP Transfers 三状态页环境收口
+
+- 日期：2026-08-13
+- 变化摘要：完成递归下载、三状态 Transfers 页面和同进程 pause/resume/cancel 的环境验证；递归发现最多扫描 4,096 个条目，本地 `.part` 在 fsync 后无覆盖原子发布，取消和失败仍清理任务创建的数据。
+- 受影响文件：`src/{app,sftp,ssh/worker}/`、`ui/`、`translations/`、`scripts/` 和 `docs/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio/russh 与 locked/offline Cargo；不新增 crate、不修改锁文件、工具链、CI、配置 schema、SSH trust 或凭据。
+- 验证结果：`python3 scripts/build_zh_catalog.py`、翻译 399 条检查、SFTP 37 项（含 Local files loopback 发布）和状态 7 项定向测试、Rustfmt、离线 check、严格 Clippy、完整 Cargo 测试（库 157、应用 153、Doc tests 0）、tracker、Markdown 相对链接及 `git diff --check` 通过。目标平台 GUI 布局、勾选焦点和真实 SFTP 交互仍由用户验收。
+## 2026-08-13 SFTP 写能力施工环境记录
+
+- 变化摘要：复用锁定 `russh-sftp 2.3.0` 的 raw `open/read/write/remove/rmdir/rename` API，新增 worker-owned 有界写命令；未新增依赖或改变工具链。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、`cargo check/test --locked --offline`、fmt/clippy/diff 门禁；文本编辑上限 4 MiB，上传上限 512 MiB，写操作复用独占 worker lifecycle。
+- 验证结果：`cargo check --locked --offline` 已通过；完整 fmt、Clippy、test、翻译、tracker 和真实 SFTP/GUI/拖拽仍待收口或目标平台验证。
+
+## 2026-08-13 SSH known_hosts 兼容环境记录
+
+- 变化摘要：新增直接锁定依赖 `hmac 0.13.0`/`sha1 0.11.0`，实现 OpenSSH known_hosts 的有界解析、shared trust、`@revoked` 拒绝和原子追加/替换/移除；不改变 Rust 2024、MSRV、Slint/Tokio/russh 版本。
+- 更新后的命令或环境：继续使用 `cargo fmt/check/clippy/test --locked --offline`、翻译、tracker 和 diff 门禁；系统文件路径与权限依赖目标平台。
+- 验证结果：known_hosts 定向 4 项、完整 Cargo 测试（库 167、应用 160、Doc tests 0）、locked check、严格 Clippy、翻译、tracker 和 diff 检查通过。真实 SSH 工具互操作、系统权限和 GUI revoked/changed 呈现仍需用户验收。

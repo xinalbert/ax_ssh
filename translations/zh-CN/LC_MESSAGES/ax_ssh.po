@@ -121,6 +121,9 @@ msgstr "身份验证"
 msgid "Authentication method"
 msgstr "身份验证方式"
 
+msgid "Auto upload"
+msgstr "自动上传"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -160,8 +163,11 @@ msgstr "自定义浅色配色"
 msgid "Cancel"
 msgstr "取消"
 
-msgid "Cancel transfer {0}"
-msgstr "取消传输 {0}"
+msgid "Cancel selected"
+msgstr "取消所选"
+
+msgid "Cancel {0}"
+msgstr "取消 {0}"
 
 msgid "Choose 1-4 characters or show the full group name"
 msgstr "选择 1-4 个字符或显示完整组名"
@@ -295,6 +301,9 @@ msgstr "删除"
 msgid "Delete group"
 msgstr "删除组"
 
+msgid "Delete selected remote files"
+msgstr "删除选中的远端文件"
+
 msgid "Delete server"
 msgstr "删除服务器"
 
@@ -328,8 +337,17 @@ msgstr "显示模式"
 msgid "Dividers and control outlines"
 msgstr "分隔线和控件轮廓"
 
+msgid "Download"
+msgstr "下载"
+
+msgid "Download selected files"
+msgstr "下载所选文件"
+
 msgid "Edit"
 msgstr "编辑"
+
+msgid "Edit selected remote file"
+msgstr "编辑选中的远端文件"
 
 msgid "Enable SSH X11 forwarding"
 msgstr "启用 SSH X11 转发"
@@ -384,6 +402,9 @@ msgstr "导出所选项快捷键"
 
 msgid "Export Selected to Clipboard"
 msgstr "将所选项导出到剪贴板"
+
+msgid "Failed ({0})"
+msgstr "失败 ({0})"
 
 msgid "File"
 msgstr "文件"
@@ -544,6 +565,9 @@ msgstr "最低对比度"
 msgid "Modified"
 msgstr "修改时间"
 
+msgid "Monitoring"
+msgstr "监控中"
+
 msgid "More"
 msgstr "更多"
 
@@ -574,8 +598,14 @@ msgstr "新建服务器快捷键"
 msgid "New group"
 msgstr "新建组"
 
+msgid "New name"
+msgstr "新名称"
+
 msgid "Next Tab"
 msgstr "下一个标签页"
+
+msgid "No failed transfers"
+msgstr "没有失败的传输"
 
 msgid "No files"
 msgstr "没有文件"
@@ -592,8 +622,11 @@ msgstr "没有已保存的服务器"
 msgid "No settings match this search."
 msgstr "没有与此搜索匹配的设置。"
 
-msgid "No transfers yet"
-msgstr "暂无传输"
+msgid "No successful transfers"
+msgstr "没有成功的传输"
+
+msgid "No transfers in progress"
+msgstr "没有正在传输的文件"
 
 msgid "Open"
 msgstr "打开"
@@ -667,6 +700,15 @@ msgstr "粘贴到终端快捷键"
 msgid "Path"
 msgstr "路径"
 
+msgid "Pause"
+msgstr "暂停"
+
+msgid "Pause selected"
+msgstr "暂停所选"
+
+msgid "Pause {0}"
+msgstr "暂停 {0}"
+
 msgid "Platform home directory"
 msgstr "平台主目录"
 
@@ -721,20 +763,44 @@ msgstr "已记住密码的存储位置"
 msgid "Remote and local file pane sizes"
 msgstr "远端和本地文件窗格大小"
 
+msgid "Remote changed"
+msgstr "远端已更改"
+
 msgid "Remote default directory"
 msgstr "远端默认目录"
 
 msgid "Remote files"
 msgstr "远端文件"
 
+msgid "Remote text editor"
+msgstr "远端文本编辑器"
+
+msgid "Remove revoked record"
+msgstr "移除已撤销记录"
+
+msgid "Rename"
+msgstr "重命名"
+
 msgid "Rename group"
 msgstr "重命名组"
+
+msgid "Rename selected remote entry"
+msgstr "重命名选中的远端条目"
 
 msgid "Report a bug"
 msgstr "报告问题"
 
 msgid "Reset defaults"
 msgstr "恢复默认值"
+
+msgid "Resume"
+msgstr "继续"
+
+msgid "Resume selected"
+msgstr "继续所选"
+
+msgid "Resume {0}"
+msgstr "继续 {0}"
 
 msgid "Return Workspace to Main Window"
 msgstr "将工作区返回主窗口"
@@ -787,6 +853,9 @@ msgstr "SSH 身份验证方式"
 msgid "SSH host key changed"
 msgstr "SSH 主机密钥已更改"
 
+msgid "SSH host key revoked"
+msgstr "SSH 主机密钥已撤销"
+
 msgid "SSH password"
 msgstr "SSH 密码"
 
@@ -807,6 +876,9 @@ msgstr "保存"
 
 msgid "Save & connect"
 msgstr "保存并连接"
+
+msgid "Save As remote path"
+msgstr "另存为远端路径"
 
 msgid "Save SSH password for future connections"
 msgstr "保存 SSH 密码供以后连接使用"
@@ -946,6 +1018,9 @@ msgstr "停止位"
 msgid "Success"
 msgstr "成功"
 
+msgid "Success ({0})"
+msgstr "成功 ({0})"
+
 msgid "Successful status words and HTTP 2xx"
 msgstr "成功状态词和 HTTP 2xx"
 
@@ -1039,8 +1114,8 @@ msgstr "切换会话侧栏"
 msgid "Toggle Session Sidebar shortcut"
 msgstr "切换会话侧栏快捷键"
 
-msgid "Transfers   Active ({0})   Failed ({1})   Completed ({2})"
-msgstr "传输   活动 ({0})   失败 ({1})   已完成 ({2})"
+msgid "Transferring ({0})"
+msgstr "传输中 ({0})"
 
 msgid "Trust and continue"
 msgstr "信任并继续"
@@ -1059,6 +1134,12 @@ msgstr "解锁加密凭据"
 
 msgid "Update session"
 msgstr "更新会话"
+
+msgid "Upload"
+msgstr "上传"
+
+msgid "Upload selected local files"
+msgstr "上传选中的本地文件"
 
 msgid "Use the bright ANSI palette for bold text"
 msgstr "为粗体文字使用明亮 ANSI 调色板"

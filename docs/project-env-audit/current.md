@@ -9,8 +9,8 @@
 
 - Rust edition：2024。
 - MSRV：Rust 1.92.0。
-- 本机工具链：`rustc 1.97.1`、`cargo 1.97.1`、`rustfmt 1.9.0`、`clippy 0.1.97`、Python 3.14.3。
-- UI/运行时：Slint 1.17.1、Tokio 1、russh 0.62.2、russh-sftp 2.3.0、libmudtelnet-rs 2.0.10、tokio-serial 5.5.0；Slint 1.17.1 的 `ComponentHandle::show/hide`、`Window::on_close_requested`、多个 `AppWindow` 实例和共享 `slint::run_event_loop()` 已在本轮本地 crate 源码核对并由 `cargo check` 编译；russh 已锁定版本内建 Unix/macOS `SSH_AUTH_SOCK` 和 Windows named-pipe agent client 及外部 signer API，不需要新增依赖；Tokio 启用 `process` 供有界 `xauth` 子进程调用，`rand 0.10` 是运行时依赖，用于生成单次 X11 fake cookie；macOS 已锁定的 `objc2-app-kit 0.3.2` 启用 `NSWorkspace`、`NSCell` 和 `NSColor`，以配置 detached 标题栏的 image-only 返回图标及与 Terminal 连续的 sRGB 背景；Slint 已启用 `unstable-fontique-010` 运行时字体注册，并直接依赖锁定的 `fontdb 0.23.0` 扫描系统等宽字体。
+- 本机工具链：`rustc 1.97.1`、`cargo 1.97.1`、`rustfmt 1.9.0`、`clippy 0.1.97`、Python 3.14.3；`cargo fmt` 与 `cargo clippy` 子命令均可用。
+- UI/运行时：Slint 1.17.1、Tokio 1、russh 0.62.2、russh-sftp 2.3.0、libmudtelnet-rs 2.0.10、tokio-serial 5.5.0；`hmac 0.13.0` 与 `sha1 0.11.0` 复用锁定依赖实现 OpenSSH hashed host 匹配；Slint 1.17.1 的 `ComponentHandle::show/hide`、`Window::on_close_requested`、多个 `AppWindow` 实例和共享 `slint::run_event_loop()` 已在本轮本地 crate 源码核对并由 `cargo check` 编译；russh 已锁定版本内建 Unix/macOS `SSH_AUTH_SOCK` 和 Windows named-pipe agent client 及外部 signer API；Tokio 启用 `process` 供有界 `xauth` 子进程调用，`rand 0.10` 是运行时依赖，用于生成单次 X11 fake cookie；macOS 已锁定的 `objc2-app-kit 0.3.2` 启用 `NSWorkspace`、`NSCell` 和 `NSColor`，以配置 detached 标题栏的 image-only 返回图标及与 Terminal 连续的 sRGB 背景；Slint 已启用 `unstable-fontique-010` 运行时字体注册，并直接依赖锁定的 `fontdb 0.23.0` 扫描系统等宽字体。
 - 依赖管理：Cargo，锁文件为 `Cargo.lock`。
 
 ## 测试环境
@@ -37,6 +37,7 @@ git diff --check
 - Linux CI 安装 `pkg-config`、`libfontconfig1-dev` 和 `libxkbcommon-dev`。
 - 系统凭据集成测试可能触发平台授权，默认 ignored。
 - SSH agent 认证在连接时读取当前运行环境：Unix/macOS 使用 `SSH_AUTH_SOCK`，Windows 使用该变量或 OpenSSH 默认 named pipe；AxSSH 最多尝试 5 个 identity，并对 agent 连接、列举、协商、签名和认证应用 30 秒总上限。自动测试使用内存 agent，不访问系统 agent；真实解锁/确认、多 identity 和失败行为需在目标平台手工验证。
+- SSH known_hosts 读取平台用户的 `~/.ssh/known_hosts`（Windows 为 `%USERPROFILE%\\.ssh\\known_hosts`），限制 4 MiB/16,384 行；有效记录共享信任，unknown/changed 继续显式确认，`@revoked` 不可绕过。显式确认后的 unknown 追加、changed 替换和 revoked 移除使用 fsync/原子 rename；真实权限、系统 SSH 互操作和 revoked 修复仍需目标平台手工验证。
 - Serial 实机测试依赖目标平台驱动、设备权限和硬件；自动测试不打开真实串口。
 - `tokio-serial 5.5.0` 声明 MSRV 1.71；`libmudtelnet-rs 2.0.10` 声明 MSRV 1.66，均低于项目 MSRV 1.92.0。
 - `libmudtelnet-rs 2.0.10` 的跨调用不完整 IAC/协商帧和转义 IAC 存在已确认边界；本项目 64 KiB 有界分帧适配由逐字节与 Telnet loopback 回归覆盖。
@@ -99,6 +100,13 @@ git diff --check
 - 2026-08-12 09:00 CST
 - 2026-08-12 21:13 +0800：复核 release helper 扩展仍只使用 Python 标准库和 Git；CI 额外运行 Git-backed Highlights 回归，Rust 依赖、工具链、构建矩阵、日期 tag、CI 门禁和发行包内容未改变。
 - 2026-08-12 22:20 +0800：本地 SFTP 只读打开的目录快照/打开重验从平台文件 identity 强化为 identity 加长度、修改时间和创建时间 fingerprint；未改 Rust 依赖、工具链、CI、SSH trust 或凭据。Linux 和 Windows CI 证明快速同长度写入可保留相同可查询时间字段，因此 fingerprint 只能拒绝可观察到的变化，不能作为原地内容完整性证明。
+- 2026-08-13：SFTP 写操作继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio/russh-sftp 与既有 locked/offline 命令；未新增依赖、锁文件、工具链、CI、配置 schema、SSH trust 或凭据。worker 限制文本 4 MiB、上传 512 MiB，上传先写私有远端临时文件再 rename；自动上传/监控默认关闭。真实权限、拖拽和 GUI 仍待目标平台验收。
+
+## 2026-08-13 SSH known_hosts 兼容环境记录
+
+- 变化摘要：新增直接锁定依赖 `hmac 0.13.0`/`sha1 0.11.0`，实现 bounded OpenSSH known_hosts 解析、shared trust、`@revoked` 拒绝和原子记录管理；不改变 Rust 2024、MSRV、Slint/Tokio/russh 版本。
+- 更新后的命令或环境：继续使用 `cargo fmt/check/clippy/test --locked --offline`、翻译、tracker 和 diff 门禁；系统文件路径与权限依赖目标平台。
+- 验证结果：known_hosts 定向 4 项、完整 Cargo 测试（库 167、应用 160、Doc tests 0）、locked check、严格 Clippy、翻译、tracker 和 diff 检查通过。真实 SSH 工具互操作、系统权限和 GUI revoked/changed 呈现仍需用户验收。
 
 ## 2026-08-12 界面语言环境记录
 

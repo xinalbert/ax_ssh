@@ -29,7 +29,7 @@ Application controller (src/app.rs)
        ├──────────────► SSH boundary (src/ssh.rs)
        │                 Tokio tasks + russh handles/channels + X11 relay + key/agent signing
        ├──────────────► SFTP domain (src/sftp.rs + src/sftp/)
-       │                 bounded browser + read-only download-to-open cache
+    │                 bounded browser + worker-owned download/upload and edit operations
        ├──────────────► Telnet boundary (src/telnet.rs)
        │                 bounded TCP worker + RFC 854 parser + NAWS
        └──────────────► Serial boundary (src/serial.rs)
@@ -63,7 +63,7 @@ Process startup (src/main.rs)
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
 | `src/ssh/worker.rs` and `src/ssh/worker/` | Bounded session startup/commands, plus private shell/X11 and SFTP-only lifecycle modules; coalesced resize, batched events, cancellation and shutdown | UI state or profile persistence |
-| `src/sftp.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, read-only chunked download and transfer orchestration; private cache publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
+| `src/sftp.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, worker-owned chunked download/upload, text edit, rename/delete and private temporary publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
 | `src/telnet.rs` | Plaintext TCP lifetime, RFC 854 option filtering, NAWS, bounded input/output, cancellation and shutdown | Credentials, SSH trust, UI state or terminal rendering |
 | `src/serial.rs` | Non-opening port discovery, stable USB identity matching, serial parameter mapping, and one bounded device worker | Automatic device opening/probing, UI state or persisted profile mutation |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
@@ -113,6 +113,14 @@ split-pane focus, connection, visibility, and divider-release requests focus the
 native proxy synchronously. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
+Mouse input follows the same ownership boundary. `TerminalModel` exposes only
+the active private mouse modes and emits bounded SGR, UTF-8, or legacy X10
+events. `TerminalGrid` forwards button press/release, wheel, drag, and motion
+coordinates through the pane UUID callback when reporting is active; the bridge
+validates the pane and sends the bytes to its worker. When reporting is off,
+the existing local selection and scroll fallback remains in control. Alternate
+screen alternate-scroll is treated as reporting only while the terminal is on
+its alternate screen.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
 revision. Every pane observes that signal, but only the focused pane invokes its
 existing local copy, paste, or select-all operation; selection coordinates and
@@ -648,6 +656,14 @@ Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. The vault derives a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
 keeps the vault password transient. Private-key profiles persist only a path.
+The SSH transport also reads the bounded platform OpenSSH `known_hosts` file.
+Non-revoked exact matches are shared trust; profile conflicts, changed keys,
+malformed records, and unreadable files never broaden trust. Exact `@revoked`
+matches are rejected before authentication and cannot be bypassed by the normal
+confirmation action. Unknown confirmation appends the observed key; changed
+confirmation atomically replaces matching non-revoked host records while
+preserving unrelated and revoked records. Revoked record removal is a separate
+explicit action.
 The key bytes and optional passphrase are loaded in one blocking task, used for
 one authentication attempt, and then dropped without entering configuration,
 tracing fields, or UI models. The separate, non-secret `.ssh` candidate-path
@@ -751,7 +767,7 @@ Authenticated connections follow this lifecycle:
 - window shutdown requests disconnect for every remaining worker, waits for
   each join with a timeout, and only then shuts down Tokio.
 
-## SFTP browsing contract
+## SFTP browsing and write contract
 
 An SFTP Tab owns one SSH transport whose worker opens only a separate `sftp`
 subsystem channel after authentication. It does not allocate a PTY or terminal
@@ -841,26 +857,39 @@ publishes the snapshot before calling the platform default application through
 directory request, path, or identity/fingerprint mismatch is rejected before dispatch,
 and a later path replacement cannot redirect the opener to a different file identity.
 
-Double-clicking a visible remote regular file queues a read-only download and
-open operation. Each SFTP Tab permits at most two active transfers, counting a
-subsystem that is still opening, and each transfer owns a separate SFTP
-subsystem stream. The transfer revalidates path and handle metadata, rejects
-directories and symbolic links, caps the file at 512 MiB, reads at most 64 KiB
-per request, uses a two-chunk writer queue, applies 15-second operation timeouts
-and a 30-minute overall timeout, and reports bounded progress/terminal events.
-It writes a UUID-prefixed, sanitized basename inside AxSSH's private cache,
-using a `0600` part file and `0700` namespace on Unix, then flushes, fsyncs, and
-atomically renames the part before the application invokes the detached opener.
-Cancelled or failed transfers never open a part file. Tab shutdown cancels and
-joins both pending subsystem openings and active transfers. The first download
-enforces the same quota and stale-file cleanup over at most 4,096 direct cache
-entries; an application that never uses remote file opening does not scan this
-directory at startup. Cleanup removes recognized stale part files after one hour
-and published files after 24 hours on a best-effort basis.
+Selecting remote files or directories sends a small download-root intent to the
+worker. Worker-owned recursive discovery opens its own SFTP subsystem, rejects
+links and unsafe/non-regular entries, and produces owned file requests rooted
+in the current Local files directory. A directory retains its relative tree.
+Discovery scans at most 4,096 entries and is bounded to 512 files, 256
+directories, depth 16, 512 KiB of path text, 1 GiB aggregate bytes, and 512
+MiB per file. Each SFTP Tab permits at
+most two active or opening transfers, and each transfer owns a separate SFTP
+subsystem stream.
 
-This is download-to-open, not a general save or managed-edit workflow. Upload,
-explicit download/save-as, deletion, renaming, drag-and-drop, change watching,
-automatic upload, and conflict resolution remain outside this phase.
+Each request revalidates remote path and handle metadata, reads at most 64 KiB
+per request, uses a two-chunk writer queue, applies 15-second operation
+timeouts and a 30-minute overall timeout, and reports owned queue, state,
+progress, and terminal events. The application state owns bounded rows split
+into active, failed (including cancelled), and successful snapshots; Slint only
+renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
+Pause/resume is a worker-lifetime contract: the writer retains its partial file
+and the stream resumes at its current offset only while that worker lives.
+
+The local writer validates every path component, rejects symlink traversal and
+existing targets, creates a task-specific `0600` `.part` file on Unix, then
+flushes, fsyncs, and atomically publishes the final name without replacing a
+concurrent local file.
+Cancellation and failures remove the partial data; a cancellation observed after
+publication removes the completed target before it can be reported successful.
+Completed local downloads are retained. Tab shutdown cancels and joins pending
+discovery, subsystem openings, and active transfers. The remote toolbar owns
+bounded delete, rename, UTF-8 edit, and Save As operations; local regular files
+can be uploaded through the same transfer queue. Editor monitoring polls a
+remote size/mtime fingerprint while the editor is open. Automatic upload is
+explicit and off by default, debounced, and still guarded by the observed
+fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
+bridge validation and transfer queue.
 
 ## Telnet and serial transport contract
 
@@ -902,6 +931,17 @@ the guard's already-created log directory as an owned path and can open it
 through the application bridge without changing the logging owner.
 
 ## Persistent settings and font resources
+
+Runtime workspace state is stored separately from `sessions.json` in a private,
+atomically replaced `workspace.json`. Its versioned snapshot contains bounded
+Tab order and identity, window/pane layout, active/focused Tabs, text-only
+terminal contents, and SFTP remote/local paths. It never stores Tokio/russh/PTY
+workers, live handles, passwords, vault unlock material, private-key
+passphrases, or temporary host-key decisions. On startup, saved profile Tabs
+create new workers through the normal host-key and authentication flow; unknown
+host keys still require explicit confirmation. Terminal restore is bounded text
+replay and does not recreate remote processes or alternate-screen state. Missing
+profiles are skipped while the remaining workspace is restored.
 
 `assets/fonts/` contains project-owned Maple Mono NF CN, Iosevka Term,
 JetBrains Mono, and Monaspace Neon files with their family-specific notices.
@@ -1131,7 +1171,8 @@ the Theme global remains a visual resolver rather than a persistence owner.
 ## Staged scope
 
 The current application validates and persists SSH, Telnet, and Serial profiles;
-confirms per-profile SSH host fingerprints; authenticates SSH with transient
+confirms per-profile SSH host fingerprints and reads the user's OpenSSH
+`~/.ssh/known_hosts` as a bounded shared trust source; authenticates SSH with transient
 passwords, local private keys, or a bounded runtime SSH agent; provides bounded remote SFTP and local metadata
 directory browsing plus regular-file download-to-open for an authenticated SSH
 Tab; and owns multiple independent transport or
@@ -1140,7 +1181,8 @@ workbench remain visible workspace tabs; only short-lived trust and secret
 prompts remain overlays. The following remain
 separate steps:
 
-- shared OpenSSH-compatible known-hosts storage and host-key revocation;
-- SFTP upload, explicit save-as, mutation, and managed edit sync;
-- reconnect and persisted workspace restoration;
+- richer known-hosts administration beyond the shared parser, including an in-app
+  revoke/replace UI and system-wide policy editing;
+- richer SFTP conflict resolution and cross-process edit recovery;
+- persisted workspace restoration beyond the bounded in-process reconnect policy;
 - richer full-screen terminal compatibility and mouse reporting.
