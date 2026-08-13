@@ -12,6 +12,12 @@ const MAX_FONT_OPTIONS: usize = 256;
 const MAX_BUNDLED_FONT_FILE_BYTES: u64 = 24 * 1024 * 1024;
 
 const BUNDLED_UI_FONT_FAMILY: &str = "JetBrains Mono";
+const EMBEDDED_UI_FONT_FILES: &[&[u8]] = &[
+    include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-Italic.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-BoldItalic.ttf"),
+];
 
 struct BundledFont {
     family: &'static str,
@@ -121,6 +127,7 @@ pub(super) fn load_terminal_font_on_demand(
     });
 }
 
+#[derive(Debug)]
 pub(super) struct LoadedBundledFont {
     family: &'static str,
     files: Vec<Vec<u8>>,
@@ -137,14 +144,20 @@ impl FontResources {
         let Some(font) = bundled_font(family) else {
             return Ok(None);
         };
-        let directory = self.find_font_directory(font).with_context(|| {
-            format!("bundled font resources are unavailable for {}", font.family)
-        })?;
-        let files = font
-            .files
-            .iter()
-            .map(|file_name| read_bundled_font_file(&directory.join(file_name)))
-            .collect::<Result<Vec<_>>>()?;
+        let files = if font.family == BUNDLED_UI_FONT_FAMILY {
+            EMBEDDED_UI_FONT_FILES
+                .iter()
+                .map(|bytes| bytes.to_vec())
+                .collect()
+        } else {
+            let directory = self.find_font_directory(font).with_context(|| {
+                format!("bundled font resources are unavailable for {}", font.family)
+            })?;
+            font.files
+                .iter()
+                .map(|file_name| read_bundled_font_file(&directory.join(file_name)))
+                .collect::<Result<Vec<_>>>()?
+        };
         Ok(Some(LoadedBundledFont {
             family: font.family,
             files,
@@ -419,5 +432,20 @@ mod tests {
 
         assert!(registry.is_registered("jetbrains mono"));
         assert!(!registry.is_registered("System Monospace"));
+    }
+
+    #[test]
+    fn default_ui_font_is_available_without_external_resources() {
+        let resources = FontResources {
+            directories: Vec::new(),
+        };
+        let loaded = resources
+            .load_bundled_font(BUNDLED_UI_FONT_FAMILY)
+            .expect("embedded UI font should load")
+            .expect("default UI font should be bundled");
+
+        assert_eq!(loaded.family, BUNDLED_UI_FONT_FAMILY);
+        assert_eq!(loaded.files.len(), EMBEDDED_UI_FONT_FILES.len());
+        assert!(loaded.files.iter().all(|bytes| !bytes.is_empty()));
     }
 }
