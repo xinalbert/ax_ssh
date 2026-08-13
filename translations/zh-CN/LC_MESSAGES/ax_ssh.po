@@ -25,6 +25,9 @@ msgstr "1 个字符"
 msgid "1.0-21.0"
 msgstr "1.0-21.0"
 
+msgid "10-300 columns, 3-100 rows"
+msgstr "10-300 列，3-100 行"
+
 msgid "100-200 percent"
 msgstr "100%-200%"
 
@@ -42,9 +45,6 @@ msgstr "存在会话时为 180-420 像素"
 
 msgid "2 characters"
 msgstr "2 个字符"
-
-msgid "20-300 columns, 5-100 rows"
-msgstr "20-300 列，5-100 行"
 
 msgid "22"
 msgstr "22"

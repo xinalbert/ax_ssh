@@ -20,7 +20,7 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
     (
         "General",
         "Default terminal size",
-        "20-300 columns, 5-100 rows",
+        "10-300 columns, 3-100 rows",
     ),
     ("Appearance", "Font family", "Application interface font"),
     (
@@ -257,9 +257,9 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
     ),
     (
         "Default terminal size",
-        "20-300 columns, 5-100 rows",
+        "10-300 columns, 3-100 rows",
         "默认终端大小",
-        "20-300 列，5-100 行",
+        "10-300 列，3-100 行",
     ),
     (
         "Font family",

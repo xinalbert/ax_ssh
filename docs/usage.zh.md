@@ -198,14 +198,16 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
 两侧分别限制在该 split 的 10%-90%。比例在当前运行期的 Tab 切换和 detached 窗口往返中保留，
 应用重启后恢复等分。即使嵌套分屏让某一侧异常狭小，终端行、光标、预编辑文本和原生输入代理也会
-裁剪在各自 pane 内；当前底行仍贴住 pane 底边，较旧的顶部行会先被裁剪。
+裁剪在各自 pane 内；正常高度时字符网格从内容区顶部开始，不能组成完整字符格的余量留在底部；
+只有 pane 高度不足三行时，当前底行才会贴住 pane 底边并优先裁剪较旧的顶部行。
 这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
 输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
 应用只在整个窗口客户区绘制一条细框线；单个 Terminal pane（包括分屏 pane）不再绘制自己的框线。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
-控制/导航序列。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
+控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
+已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。reporting 开启时这些手势交给 TUI；关闭时 AxSSH 继续使用本地选区和滚动行为。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、

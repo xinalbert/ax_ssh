@@ -1,5 +1,21 @@
 # 项目环境变化记录
 
+## 2026-08-14 终端缓冲区 resize 施工预检
+
+- 日期：2026-08-14
+- 变化摘要：开始修复普通主屏纵向放大后的顶部空带；变更只涉及锁定 `alacritty_terminal` 之上的 `TerminalModel` 后置补偿与相关回归/文档。
+- 受影响文件：`src/terminal.rs`、`docs/{architecture,architecture.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 Cargo locked/offline 门禁；不新增依赖、不修改 `Cargo.lock`、PTY worker、SSH trust 或凭据。
+- 验证结果：本机 `cargo fmt` 与 `cargo clippy` 可用，已完成锁定上游与主流终端实现对照；定向和完整 Cargo 门禁待代码完成后执行。
+
+## 2026-08-14 完成终端缓冲区 resize 环境验证
+
+- 日期：2026-08-14
+- 变化摘要：`TerminalModel` 删除上游 resize 后的下滚和 cursor-to-bottom 补偿；无 scrollback 时现有内容保持顶部、空行位于底部，有 scrollback 时仍恢复真实历史。
+- 受影响文件：`src/terminal.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与 locked/offline Cargo 门禁；不新增依赖、不修改 `Cargo.lock`、PTY worker、SSH trust 或凭据。
+- 验证结果：25 项 terminal 定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 173、应用 160、Doc tests 0）、tracker、相对 Markdown 链接和差异检查通过；目标平台视觉仍由用户验收。
+
 ## 2026-08-12 macOS detached 标题栏连续性环境记录
 
 - 日期：2026-08-12

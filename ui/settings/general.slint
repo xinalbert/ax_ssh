@@ -70,13 +70,13 @@ export component GeneralSettingsPage inherits SettingsPage {
     }
     SettingsRow {
         label: @tr("Default terminal size");
-        description: @tr("20-300 columns, 5-100 rows");
+        description: @tr("10-300 columns, 3-100 rows");
         show-divider: false;
         SettingsField {
             settings-columns := SpinBox {
                 width: Theme.settings-terminal-size-width;
                 height: Theme.settings-control-height;
-                minimum: 20;
+                minimum: 10;
                 maximum: 300;
                 value <=> root.draft-columns;
                 accessible-label: @tr("Default terminal columns");
@@ -85,7 +85,7 @@ export component GeneralSettingsPage inherits SettingsPage {
             settings-rows := SpinBox {
                 width: Theme.settings-terminal-size-width;
                 height: Theme.settings-control-height;
-                minimum: 5;
+                minimum: 3;
                 maximum: 100;
                 value <=> root.draft-rows;
                 accessible-label: @tr("Default terminal rows");

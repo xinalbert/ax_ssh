@@ -54,7 +54,7 @@ Slint UI（.slint）
 | `src/app/diagnostics.rs` | 脱敏键盘分类、固定 diagnostics route/action 字段和专用 tracing target | 原始终端/剪贴板文本、路径、profile 标签、主机、凭据或传输状态 |
 | `src/config.rs` 与 `src/config/` | 稳定的 config 入口和显式导出；session/profile 领域、设置、主题规范化、旧配置迁移、私有 JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问系统凭据库和加密保险库记录 | UI 状态、明文配置、SSH 传输 handle |
-| `src/terminal.rs` 与 `src/terminal/input.rs` | 有界 vt100 网格、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
+| `src/terminal.rs`、`src/terminal_dimensions.rs` 与 `src/terminal/input.rs` | 有界终端网格、共享尺寸契约、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
 | `src/x_server.rs` | 平台 X server provider 选项、系统应用发现与标准路径兜底、本机 display 候选和有界进程启动 | SSH channel、UI 状态、cookie、profile 修改或远端服务器配置 |
 | `src/ssh.rs` | russh handler、主机密钥决策、密码/私钥/运行时 agent 认证、shell 与服务端发起的 X11 channel 边界 | 窗口更新、持久化会话修改、UI 格式化、agent identity 管理 |
@@ -248,7 +248,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    `Disconnect` 或 controller 被释放才会取消该连接尝试，普通操作必须等到 `Connected` 后生效。
    共享 russh client config 明确启用 `TCP_NODELAY`，避免少量交互 channel data 等待 Nagle
    聚合。有界输入队列不设置 batching timer；worker 取出输入后立即发送。这能消除客户端附加
-   等待，但不能消除远端 PTY 回显必需的网络往返。
+   等待，但不能消除远端 PTY 回显必需的网络往返。交互 SSH PTY 请求同时启用 `OPOST` 和
+   `ONLCR`，使远端普通换行回到第 0 列，避免裸 line feed 在本地终端模型中逐行累积列偏移。
 7. 本地终端 Tab 持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占 child、reader、
    writer、resize 状态、有界命令/事件队列、取消标记、child-killer handle 和所有线程 join。
    shutdown 会设置取消、唤醒 worker、强制终止隔离的 Unix PTY 进程组或平台 child、关闭 PTY
@@ -261,22 +262,24 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    ConPTY 启动依赖的光标位置报告）进入私有有界队列，并且只通过产生该输出的 Tab 当前 transport
    worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 补丁保持锁定
    的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
-   同时覆盖普通与备用屏幕。实时主屏的光标位于底行且改变高度时，补丁会在放大时把最近的
-   scrollback 行恢复到视图顶部、缩小时把顶部行送回有界 scrollback，并将光标和最新内容
-   保持在新的底边；备用屏、活动滚动区域、非底行光标和用户正在查看 scrollback 时保持上游
-   resize 语义。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
+   同时覆盖普通与备用屏幕。`TerminalModel` 将高度变化交给锁定的
+   `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。
+   历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
+   空白历史来强制将光标置于新底边。缩小时、备用屏、活动滚动区域、非底行光标和用户正在查看
+   scrollback 时保持上游 resize 语义。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
-   网格下限，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
+   网格下限。Rust 的 `terminal_dimensions` 模块是模型、设置和各后端最大值的共享来源；由于
+   Slint 不能导入 Rust 常量，Theme 保留编译期镜像。PTY 和 worker 入口继续保留独立的非零
+   `1x1` 最小值，但共享 `300x100` 最大值，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
    现有侧栏收起动作优先为终端让出列数。
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
    下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
    pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
    字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。完整字符行在测得网格
-   区域内向下对齐：行数向下
-   取整后剩余的零散高度放在第一行上方，而非最后一行下方。同一局部偏移同时用于字符格、
-   光标/IME 预编辑和指针行映射，不会改变计算出的行数或任何 PTY 请求。
+   区域内从顶部开始绘制：行数向下取整后剩余的零散高度放在最后一行下方，而非第一行上方。
+   同一内容区原点同时用于字符格、光标/IME 预编辑和指针行映射，不会改变计算出的行数或任何 PTY 请求。
    `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
    对应 worker 的 resize，再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
    对端接受选项后发送 NAWS；Serial 没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口
@@ -629,13 +632,13 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
 `TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一字体来源。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
-`assets/fonts/` 保留在可执行文件旁或平台资源路径中，以提供三个可选自带字体和全部字体声明。
-Slint 测量配置字体，并用测得的字符格
-宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；不能组成完整字符格的
-剩余高度绘制在向下对齐网格的上方，IME 和指针坐标使用同一原点。pane group 会把每个终端 surface
-裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、预编辑覆盖层和透明 IME proxy，确保尺寸过小的
-嵌套分屏不能绘制到相邻 pane 或工作区之外。pane 高度不足终端保底三行时，网格仍把当前底行贴住 pane
-底边，并优先裁剪较旧的顶部行；终端只会在这些度量和布局稳定后合并发送 resize。
+`assets/fonts/` 保留在可执行文件旁或平台资源路径中，以提供三个可选自带字体和全部字体声明。Slint 测量配置字体，并用测得的字符格
+宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；`TerminalPane` 只计算一个内容区
+光标 cell y 坐标，网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的垂直溢出边界。正常高度下不能组成完整字符格的
+剩余高度保留在网格底部，避免扩大终端顶部内容边界，IME 和指针坐标使用同一原点。pane group 会把每个
+终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、预编辑覆盖层和透明 IME proxy，确保
+尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外。pane 高度不足终端保底三行时，网格才把当前底行贴住
+pane 底边，并优先裁剪较旧的顶部行；终端只会在这些度量和布局稳定后合并发送 resize。
 
 首次打开 Settings 时才会在 blocking worker 中发现本地 shell、系统等宽字体和已知 X server
 安装位置；再次激活现有单例 Tab 不会重复扫描。关闭 Settings 会释放发现出的系统字体与 X server

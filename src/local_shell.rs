@@ -749,10 +749,7 @@ mod tests {
         let master = CountingMasterPty {
             resize_calls: AtomicUsize::new(0),
         };
-        let initial_size = TerminalSize {
-            columns: 80,
-            rows: 24,
-        };
+        let initial_size = TerminalSize::backend(80, 24);
         let pending_resize = Arc::new(Mutex::new(Some(initial_size)));
         let shutdown_requested = Arc::new(AtomicBool::new(false));
         let (event_tx, mut event_rx) = mpsc::channel(1);
@@ -769,10 +766,8 @@ mod tests {
         assert_eq!(master.resize_calls.load(Ordering::SeqCst), 0);
         assert!(event_rx.try_recv().is_err());
 
-        *pending_resize.lock().expect("resize state should lock") = Some(TerminalSize {
-            columns: 100,
-            rows: 30,
-        });
+        *pending_resize.lock().expect("resize state should lock") =
+            Some(TerminalSize::backend(100, 30));
         apply_pending_resize(
             &master,
             &pending_resize,

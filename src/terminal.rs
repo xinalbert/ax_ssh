@@ -13,10 +13,8 @@ use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 
-const MIN_COLUMNS: usize = 10;
-const MAX_COLUMNS: usize = 300;
-const MIN_ROWS: usize = 3;
-const MAX_ROWS: usize = 100;
+use crate::terminal_dimensions::TerminalSize;
+
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
 
@@ -307,32 +305,8 @@ impl TerminalModel {
     }
 
     pub fn resize(&mut self, columns: usize, rows: usize) {
-        let dimensions = TerminalDimensions::new(columns, rows);
-        let old_rows = self.term.grid().screen_lines();
-        let history_size = self.term.grid().total_lines().saturating_sub(old_rows);
-        let active_primary_bottom = !self.term.mode().contains(TermMode::ALT_SCREEN)
-            && self.term.grid().display_offset() == 0
-            && self.term.grid().cursor.point.line.0 == old_rows as i32 - 1;
+        let dimensions = TerminalDimensions::from_size(TerminalSize::model(columns, rows));
         self.term.resize(dimensions);
-        if active_primary_bottom && dimensions.rows > old_rows {
-            let added_rows = dimensions.rows - old_rows;
-            let missing_history_rows = added_rows.saturating_sub(history_size);
-            let grid = self.term.grid_mut();
-            if missing_history_rows != 0 {
-                grid.scroll_down::<Color>(
-                    &(Line(0)..Line(dimensions.rows as i32)),
-                    missing_history_rows,
-                );
-                grid.cursor.point.line += missing_history_rows as i32;
-                grid.saved_cursor.point.line += missing_history_rows as i32;
-            }
-            grid.cursor.point.line = Line(dimensions.rows as i32 - 1);
-            grid.saved_cursor.point.line = grid
-                .saved_cursor
-                .point
-                .line
-                .min(Line(dimensions.rows as i32 - 1));
-        }
     }
 
     pub fn set_scrollback_lines(&mut self, scrollback_lines: usize) {
@@ -531,9 +505,13 @@ struct TerminalDimensions {
 
 impl TerminalDimensions {
     fn new(columns: usize, rows: usize) -> Self {
+        Self::from_size(TerminalSize::model(columns, rows))
+    }
+
+    fn from_size(size: TerminalSize) -> Self {
         Self {
-            columns: columns.clamp(MIN_COLUMNS, MAX_COLUMNS),
-            rows: rows.clamp(MIN_ROWS, MAX_ROWS),
+            columns: size.columns() as usize,
+            rows: size.rows() as usize,
         }
     }
 }
@@ -828,32 +806,40 @@ mod tests {
         let snapshot = terminal.snapshot();
         assert_eq!(
             (snapshot.max_columns, snapshot.lines.len()),
-            (MIN_COLUMNS, MIN_ROWS)
+            (
+                usize::from(crate::terminal_dimensions::MIN_TERMINAL_COLUMNS),
+                usize::from(crate::terminal_dimensions::MIN_TERMINAL_ROWS),
+            )
         );
 
         terminal.resize(0, 0);
         let snapshot = terminal.snapshot();
         assert_eq!(
             (snapshot.max_columns, snapshot.lines.len()),
-            (MIN_COLUMNS, MIN_ROWS)
+            (
+                usize::from(crate::terminal_dimensions::MIN_TERMINAL_COLUMNS),
+                usize::from(crate::terminal_dimensions::MIN_TERMINAL_ROWS),
+            )
         );
     }
 
     #[test]
-    fn growing_a_live_primary_terminal_keeps_the_cursor_at_the_bottom() {
+    fn growing_a_primary_terminal_without_scrollback_keeps_content_at_the_top() {
         let mut terminal = TerminalModel::new(10, 3, 10);
         terminal.process(b"one\r\ntwo\r\nthree");
         assert_eq!(terminal.snapshot().cursor_row, 2);
 
         terminal.resize(10, 5);
         let snapshot = terminal.snapshot();
-        assert_eq!(snapshot.cursor_row, 4);
-        assert_eq!(snapshot_line_text(&snapshot, 2), "one");
-        assert_eq!(snapshot_line_text(&snapshot, 3), "two");
-        assert_eq!(snapshot_line_text(&snapshot, 4), "three");
+        assert_eq!(snapshot.cursor_row, 2);
+        assert_eq!(snapshot_line_text(&snapshot, 0), "one");
+        assert_eq!(snapshot_line_text(&snapshot, 1), "two");
+        assert_eq!(snapshot_line_text(&snapshot, 2), "three");
+        assert_eq!(snapshot_line_text(&snapshot, 3), "");
+        assert_eq!(snapshot_line_text(&snapshot, 4), "");
 
         terminal.process(b"!");
-        assert_eq!(snapshot_line_text(&terminal.snapshot(), 4), "three!");
+        assert_eq!(snapshot_line_text(&terminal.snapshot(), 2), "three!");
     }
 
     #[test]
@@ -896,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn repeated_live_terminal_resizes_keep_recent_content_at_the_bottom() {
+    fn repeated_primary_terminal_resizes_do_not_create_top_blank_rows() {
         let mut terminal = TerminalModel::new(10, 3, 10);
         terminal.process(b"one\r\ntwo\r\nthree");
 
@@ -910,10 +896,12 @@ mod tests {
 
         terminal.resize(10, 5);
         let snapshot = terminal.snapshot();
-        assert_eq!(snapshot.cursor_row, 4);
-        assert_eq!(snapshot_line_text(&snapshot, 2), "one");
-        assert_eq!(snapshot_line_text(&snapshot, 3), "two");
-        assert_eq!(snapshot_line_text(&snapshot, 4), "three");
+        assert_eq!(snapshot.cursor_row, 2);
+        assert_eq!(snapshot_line_text(&snapshot, 0), "one");
+        assert_eq!(snapshot_line_text(&snapshot, 1), "two");
+        assert_eq!(snapshot_line_text(&snapshot, 2), "three");
+        assert_eq!(snapshot_line_text(&snapshot, 3), "");
+        assert_eq!(snapshot_line_text(&snapshot, 4), "");
     }
 
     #[test]
@@ -966,6 +954,25 @@ mod tests {
         terminal.resize(20, 5);
 
         assert_ne!(terminal.snapshot().text, "0123456789abcdefghij");
+    }
+
+    #[test]
+    fn repeated_resize_preserves_hard_break_columns() {
+        let mut terminal = TerminalModel::new(80, 24, 100);
+        terminal.process(
+            b"2026-08-13 21:33:54\r\n$:\r\nzhushixin@compute-0-0 :\r\n~\r\n2026-08-13 21:33:54\r\n$:\r\nzhushixin@compute-0-0 :\r\n~\r\n",
+        );
+        for (columns, rows) in [(160, 40), (200, 50), (120, 30), (180, 45), (80, 24)] {
+            terminal.resize(columns, rows);
+            let snapshot = terminal.snapshot();
+            let occupied_columns = snapshot
+                .lines
+                .iter()
+                .filter_map(|line| line.runs.first())
+                .map(|run| run.column)
+                .collect::<Vec<_>>();
+            assert_eq!(occupied_columns, vec![0; 8], "resize {columns}x{rows}");
+        }
     }
 
     fn snapshot_line_text(snapshot: &TerminalSnapshot, row: usize) -> String {

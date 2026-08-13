@@ -316,8 +316,11 @@ keys, Home, End, and Enter or Space for reset. Each side remains between 10%
 and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
 Terminal rows, the cursor, preedit text, and the native input proxy remain
-clipped to their pane even when nested splits make one side unusually small;
-the active bottom row stays aligned with the pane while older top rows clip first.
+clipped to their pane even when nested splits make one side unusually small. At
+normal heights the character grid starts at the top of the content area and
+any remainder that cannot form a complete cell stays below it; only a pane
+shorter than three rows anchors the current bottom row to the pane bottom and
+clips older top rows first.
 This clipping and bottom alignment are established on the pane's initial layout,
 not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
@@ -328,6 +331,9 @@ individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F12, and common xterm-style control and navigation sequences.
+When a normal terminal grows taller, actual scrollback may become visible above
+the current viewport. If no history is available, existing output stays at the
+top and the added blank rows remain below it.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
 UTF-8, or legacy encoding. While reporting is active, the TUI owns those

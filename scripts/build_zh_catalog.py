@@ -18,7 +18,7 @@ TRANSLATIONS = {
     "120-260 px": "120-260 像素",
     "180-420 px when sessions are available": "存在会话时为 180-420 像素",
     "2 characters": "2 个字符",
-    "20-300 columns, 5-100 rows": "20-300 列，5-100 行",
+    "10-300 columns, 3-100 rows": "10-300 列，3-100 行",
     "3 characters": "3 个字符",
     "4 characters": "4 个字符",
     "9-32 px": "9-32 像素",

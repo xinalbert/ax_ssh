@@ -1,5 +1,22 @@
 # 项目环境当前态
 
+## 2026-08-14 终端缓冲区 resize 施工预检
+
+- 项目边界：`src/terminal.rs` 与终端 resize 语义的双语/跟踪文档；不调整 `ui/`、PTY worker、SSH trust 或凭据。
+- 环境记忆状态：已复核 `Cargo.toml`、锁定的 `alacritty_terminal 0.26.0`、现有 `terminal` 单元测试和 `.github/workflows/ci.yml`；本机 `cargo fmt`/`cargo clippy` 可用。
+- 运行环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo locked/offline；不新增依赖、不改 `Cargo.lock`。
+- 测试环境：定向 `terminal` 回归后执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline` 和 `git diff --check`。
+- 环境变化检查：否；变更仅为有界终端模型的缓冲区语义，不触及 SSH trust、凭据、网络或 UI 线程。
+- 开工判定：允许开工。
+
+## 2026-08-14 终端缓冲区 resize 环境验证
+
+- 变化摘要：`TerminalModel` 现仅委托锁定 `alacritty_terminal::Term::resize`；主屏放大只恢复真实 scrollback，历史不足时保留内容顶部并在底部补空行。
+- 受影响文件：`src/terminal.rs`、`docs/{architecture,architecture.zh,usage,usage.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 环境变化：无。未新增依赖、未修改 `Cargo.lock`、工具链、CI、Slint、PTY worker、SSH trust 或凭据边界。
+- 验证结果：`cargo test --lib terminal::tests --locked --offline`（25 项）、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 173、应用 160、Doc tests 0）、tracker、相对 Markdown 链接和 `git diff --check` 均通过。
+- 人工验收：不自动截图；用户仍需在目标平台确认无 scrollback 的普通 shell 纵向放大后输出位于顶部、有 scrollback 时仅显示真实历史，以及极小 pane 的裁剪和 IME 坐标。
+
 ## 项目类型
 
 - 独立 Rust 2024 桌面应用，根 Cargo 包为 `ax_ssh`。
@@ -72,20 +89,34 @@ git diff --check
 
 ## 本轮施工预检
 
-- 项目边界：独立 Rust 桌面应用；本轮范围为 `src/config/`、`src/app/`、`ui/` 中的 Terminal 语义高亮配置链路。
-- 环境记忆状态：已读取并与 `Cargo.toml`、`Cargo.lock`、`.github/workflows/ci.yml`、`AGENTS.md` 及当前源码路由复核。
+- 项目边界：独立 Rust 桌面应用；本轮范围为终端尺寸共享契约（`src/terminal_dimensions.rs` 及其配置、模型、worker 消费者）和 `ui/terminal-pane.slint`、`ui/components/terminal-grid.slint` 边界。
+- 环境记忆状态：已读取并与 `Cargo.toml`、`Cargo.lock`、`.github/workflows/ci.yml`、`AGENTS.md` 及当前终端源码路由复核。
 - 运行环境：Rust 2024、MSRV 1.92.0、Slint 1.17.1；Cargo 及锁文件是唯一包管理与可复现构建来源。
 - 测试环境：`cargo check --locked --offline`、`cargo test --locked --offline`、`cargo fmt --all -- --check`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`git diff --check`。
-- 环境变化检查：否；本轮不变更依赖、工具链、CI、Cargo 文件、SSH trust 或凭据边界。
-- 开工判定：允许开工；颜色仅作为受限持久化值经 AppWindow properties 传到 UI 独立 renderer。
+- 环境变化检查：否；本轮不变更依赖、工具链、CI、Cargo.lock、TerminalModel/PTY 协议语义、SSH trust 或凭据边界。
+- 开工判定：允许开工；新增的是仓库内 Rust 共享常量模块和 Slint 几何消费，不引入运行时依赖。
 
 ## 本轮实施结果
 
-- 目的：让 Terminal 的五类语义高亮色可由 Settings 配置，同时在所有主题背景上保持可读。
-- 改动范围：`src/config/` 中的 schema v20 颜色值，`src/app/` 的 Settings/renderer bridge，以及 `ui/` 的 Terminal Settings 与 callback 中转。
-- 执行内容：添加五项可选 `#RRGGBB` 颜色覆盖；空值或无效值跟随主题 ANSI 默认色；每项输出色仍按真实背景修正到至少 4.5:1。没有新增依赖、工具链、CI、worker、SSH trust 或凭据改动。
-- 验证结果：`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）、直接 `rustfmt --edition 2024 --check` 和 `git diff --check` 通过。`cargo fmt` 与 `cargo clippy` 子命令未安装，无法在本机执行。
-- 风险/待办：Settings 输入、主题切换和实际终端颜色层次需用户在目标图形平台确认；显式 ANSI/256/真彩、反色、dim、非默认背景和非 ASCII 文本仍由远端程序控制。
+- 目的：消除 TerminalPane/TerminalGrid 首帧、分屏和窗口变化时的顶部异常空带，并统一重复的终端尺寸上下限和垂直光标边界。
+- 改动范围：`src/terminal_dimensions.rs`、终端配置/模型/PTY worker、`ui/terminal-pane.slint`、`ui/components/terminal-grid.slint`、设置控件/翻译与双语契约。
+- 执行内容：Rust 统一 `10x3..300x100` 模型/设置契约和 `300x100` 后端最大值；保留 PTY/worker 的 `1x1` 最小入口。普通高度网格从内容区顶部开始，非完整字符格余量留在底部；低于三行保底时才使用负偏移裁剪旧顶部行；网格、预编辑层和 IME proxy 共用 pane 的单一 `cursor-cell-y`。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、focused tests、完整 Cargo 测试、翻译检查、tracker 校验和 `git diff --check` 均已通过。
+- 风险/待办：用户需要完全退出旧 AxSSH 进程并运行新构建确认正常终端顶部无异常空带、连续 resize 不再逐行右移、极小 pane 仍保留底行、鼠标/IME 坐标一致；当前未自动截图。
+
+## 2026-08-13 连续 resize 与 SSH PTY 环境记录
+
+- 变化摘要：共享 `TerminalSize` 现在由 Rust 模块统一模型、AppState、设置和 local/SSH/Telnet backend 的尺寸边界；`AppState::resize_terminal` 先规范化尺寸，再将同一尺寸发送给 worker 并应用本地模型。SSH 交互 PTY 请求明确启用 `OPOST`/`ONLCR`，避免远端裸 LF 造成逐行右移。
+- 受影响文件：`src/terminal_dimensions.rs`、`src/terminal.rs`、`src/app/state/tabs.rs`、`src/local_shell.rs`、`src/telnet.rs`、`src/ssh.rs`、`src/ssh/tests.rs`、`src/ssh/worker.rs`、`src/ssh/worker/shell.rs`、双语架构与跟踪记录。
+- 更新后的命令或环境：仍为 Rust 2024、MSRV 1.92.0、Slint 1.17.1；未新增依赖、未修改 `Cargo.lock`、SSH trust、凭据或 worker 生命周期。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 Cargo 测试（库 173、应用 160、Doc tests 0）、连续 resize/尺寸/SSH PTY focused tests、413 条翻译检查、tracker validator 和 `git diff --check` 均已通过。
+- 人工验收：不自动截图；仍需用户在目标 macOS 上完全退出旧进程后确认窗口连续拖动、分屏极小尺寸、鼠标和 IME 坐标。
+
+## 2026-08-13 Terminal 内容区边界环境记录
+
+- 变化摘要：修复 `TerminalPane`/`TerminalGrid` 正常高度下的顶部异常空带；普通网格从内容区顶部绘制，非完整字符格余量留在底部，根 pane 移除额外顶部轨道，低于三行保底时才使用负偏移锚定底行。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 `cargo fmt/check/clippy/test --locked --offline`；不新增依赖、不修改 `Cargo.lock`、TerminalModel、PTY、worker、SSH trust 或凭据边界。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 168、应用 160、Doc tests 0）和 `git diff --check` 通过。正常窗口、分屏极小尺寸、鼠标/IME 视觉与坐标仍需目标平台用户验收；本轮未自动截图。
 
 ## 2026-08-12 Terminal Tab 焦点与窗口框线环境门禁
 

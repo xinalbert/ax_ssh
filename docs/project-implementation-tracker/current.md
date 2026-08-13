@@ -2,21 +2,21 @@
 
 ## 当前目标
 
-- 目标 ID：20260813-windows-local-shell-lifecycle
-- 目标：修复 Windows 本地 Shell 无输出、`conhost.exe` 持续占用 CPU 和 AxSSH 退出卡住，同时确保 New Session 编辑器内容可滚动访问。
-- 交付物：有界终端协议应答回路；本地 PTY resize 去重与明确 worker/child 回收；有超时的退出路径；New Session viewport 高度；确定性回归、双语契约和 Windows release 产物。
+- 目标 ID：20260814-terminal-vertical-resize
+- 目标：修复普通终端在纵向放大后将无内容空行错误置于顶部、使既有输出贴近底部的缓冲区 resize 行为。
+- 交付物：采用锁定 `alacritty_terminal` 的主屏 resize 语义；覆盖无 scrollback 顶部对齐、存在 scrollback 时历史恢复，以及重复 resize 的回归；同步双语架构与实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal.rs`、`src/local_shell.rs`、`src/app/{terminal_bridge,connection_monitor,connection/direct}.rs`、`ui/session-editor.slint`、双语架构与实施跟踪。
-- 不在本轮范围内：SSH trust/凭据策略变化、配置 schema 或依赖升级、其他页面布局，以及对参考工程的源码复制或构建耦合。
+- 当前范围：`src/terminal.rs`、`docs/architecture.md`、`docs/architecture.zh.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 不在本轮范围内：`ui/` 布局、Slint 坐标、PTY resize 传输、SSH host-key trust、凭据、worker 生命周期、配置 schema、依赖或工具链，以及参考工程源码。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
@@ -54,6 +54,19 @@
 | WL2 | completed | 本地 PTY resize 去重、自动退出 owner 提取和有超时 shutdown | local shell/bridge focused tests | Drop 保留 child killer 兜底；无无限 join。 |
 | WL3 | completed | New Session 显式 scroll viewport 高度 | Cargo/Slint check | GUI 滚动仍需用户验收。 |
 | WL4 | completed | 双语契约、完整仓库门禁与 Windows release 交叉构建 | fmt/check/clippy/test/tracker/diff/xwin | Windows ConPTY/CPU/进程退出需目标机验收。 |
+| TB1 | completed | 统一 TerminalPane/TerminalGrid 内容区原点和小 pane 裁剪边界 | `cargo check --locked --offline` + Slint mapping/tests | 正常高度顶部无额外轨道；低于三行时保留底行锚定。 |
+| TB2 | completed | 更新双语契约、环境记忆和实施记录 | tracker/Markdown/diff checks | 不改变终端模型、PTY、worker 或 SSH 安全边界。 |
+| TB3 | completed | Rust 侧统一终端尺寸上下限，并兼容现有配置常量路径 | focused dimension tests + `cargo check --locked --offline` | UI 三行保底与 worker/protocol 1x1 下限保持分层语义。 |
+| TB4 | completed | 统一网格、预编辑层和 IME 的光标纵坐标来源 | Slint compile + terminal geometry tests | 所有视觉层使用同一 content-origin 计算，父级负责裁剪。 |
+| TB5 | completed | 收口双语契约、tracker 与完整仓库门禁 | fmt/check/clippy/test/translations/tracker/diff | GUI 视觉仍需用户在目标平台验收。 |
+| TB6 | completed | 固定连续 resize、尺寸变化与输出交错的根因 | terminal/state/view focused regressions | 根因覆盖 SSH PTY 裸 LF 与 resize 后快照边界。 |
+| TB7 | completed | 统一 resize 事务与最终尺寸快照，移除重复边界修正 | terminal/state/SSH tests | 共享尺寸先规范化；本地模型和 worker 使用同一最终尺寸。 |
+| TB8 | completed | 同步双语契约、项目地图和环境记忆 | tracker/Markdown/diff checks | 记录本地快照先行、worker `Resized` 仅为传输确认。 |
+| TB9 | completed | 完成全量构建、测试和静态门禁 | fmt/check/clippy/test/translations/tracker/diff | 目标平台视觉和真实窗口拖动仍需用户验收。 |
+| RB1 | completed | 锁定终端核心与主流终端的纵向扩容语义对照 | 上游源码与现有模型路径审阅 | 有历史时恢复历史；无历史时底部补空行。 |
+| RB2 | completed | 移除 `TerminalModel` 的后置底部锚定补偿 | 25 项 `terminal` 定向回归 | 仅终端缓冲区层改变，不修改 Slint 或 PTY。 |
+| RB3 | completed | 更新双语架构、项目地图、环境与实施记录 | tracker/environment 校验 | 记录外部对照及不变的安全边界。 |
+| RB4 | completed | 完成完整离线 Rust/Slint 门禁 | fmt/check/clippy/test/tracker/diff | GUI 视觉由用户在目标平台验收。 |
 
 ## 已完成
 
@@ -67,23 +80,35 @@
 - 已完成 Windows/跨平台连接诊断收紧：SSH 将 TCP 建连与 russh banner/KEX 分开并保留完整错误链，仍维持未知/变更 host key 默认拒绝；本地 ConPTY/PTY reader 错误不再静默丢弃，而是通过有界失败事件结束 worker。JetBrains Mono 四个默认字重改为编译期内嵌，单独运行 Windows EXE 不再依赖旁置字体资源；其余字体仍使用既有有界运行时资源路径。
 - 已确认 Windows 本地 Shell 无输出的直接协议缺口：锁定的 `portable-pty` 以 inherit-cursor 模式创建 ConPTY，而既有 `TerminalModel` 使用 `VoidListener` 丢弃光标位置等 `PtyWrite` 应答。当前实现以有界私有队列收集应答并写回当前 Tab worker；同时保留自动退出 worker owner、去重相同 PTY 尺寸，并移除 shutdown 超时后的无限等待。
 - New Session 的 `ScrollView` 现在由编辑内容 preferred height 显式驱动 viewport height，被窗口遮盖的字段可滚动访问。
+- 已确认截图中的顶部空带来自 `TerminalModel::resize` 在上游 resize 后再次 `scroll_down` 并强制将 cursor 设为新底行，不是 Slint 布局偏移。
+- 已完成外部语义对照：Alacritty、xterm.js、WezTerm 与 kitty 的增长路径都只使用真实 scrollback 填充新增区域；无历史时保留内容顶部并在底部补空行。
+- 已完成 RB2：删除 `Term::resize` 后的二次网格滚动和 cursor-to-bottom 修正；25 项 `terminal` 定向回归通过。
+- 已完成 RB3：同步中英文架构/使用说明、项目地图、环境预检、外部来源和实施记录。
 
 ## 验证
 
-- 已完成：默认字体无外部目录回归、SSH banner 后提前断开回归、既有 probe/password loopback 回归、开发机 OpenSSH/AxSSH 对同一目标的只读 host-key 互操作诊断；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 172、应用 162、Doc tests 0）、413 条翻译、46 个 Markdown 相对链接、差异检查及独立 target 的 Windows MSVC release 交叉构建通过。新产物为 `target/xwin-windows-local-shell/x86_64-pc-windows-msvc/release/ax_ssh.exe`，类型为 PE32+ GUI x86-64，SHA-256 为 `7cef8594ecedc2531da7b518e14327f35bd5f6d6281763abcdecde4ee5c06ce4`。
-- 未完成：Windows 新 EXE 的字体注册、ConPTY、UI 和真实 SSH 连接由目标机手工复测；tracker validator 仍只报告月度历史中缺少可信时刻的既有条目，本轮 current/新历史记录符合契约。
+- 已完成：默认字体无外部目录回归、SSH banner 后提前断开回归、既有 probe/password loopback 回归、开发机 OpenSSH/AxSSH 对同一目标的只读 host-key 互操作诊断；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 172、应用 162、Doc tests 0）、413 条翻译、46 个 Markdown 相对链接、差异检查及独立 target 的 Windows MSVC release 交叉构建通过。
+- 已完成：TerminalPane/TerminalGrid 内容区边界修复；既有 TB1/TB2 的 Cargo、Clippy、格式、测试和差异门禁。
+- 已完成：新增 Rust 共享尺寸模块；配置常量保持兼容 re-export；模型、设置控件、local/SSH/Telnet 后端复用最大值；网格、预编辑层和 IME proxy 复用 pane 的 `cursor-cell-y`；设置文案与中文目录已同步。
+- 已完成：连续 resize 硬换行列回归、AppState 41 项状态回归、真实 loopback SSH PTY modes 回归、`cargo check`、严格 Clippy、完整 Cargo 测试、翻译检查、tracker 校验和差异检查。
+- 已完成：RB4 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 173、应用 160、Doc tests 0）、tracker/Markdown 链接与 `git diff --check`。
+- 未完成：Windows 新 EXE 的字体注册、ConPTY、UI、真实 SSH 连接、正常 shell 的连续纵向拖动、分屏极小尺寸和鼠标/IME 坐标均需目标平台人工验收。
 
 ## 风险与阻塞
 
 - 自动重连只在当前进程内有效，最多 5 次；跨进程重连、密码明文缓存和未知/变更 host key 自动接受均明确不支持。
 - SFTP v3 没有持久化任务恢复协议；本轮的断点继续限定为同一运行期的暂停后继续，partial 文件只属于仍存活的 worker-owned 传输。
 - 递归目录下载必须限制深度、文件数、路径文本和总字节，且跳过符号链接；超限或不可读项将以有界失败行呈现。
+- 主屏高度增长且存在 scrollback 时，当前提示符下移、顶部露出历史行是预期行为；修复只禁止伪造空白历史行。
 
 ## 下一步
 
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
+- 在相同构建中连续纵向缩放普通 shell；无 scrollback 时确认已有输出留在顶部、空行只出现在底部，并确认有 scrollback 时顶部显示真实历史行。
 
 ## 最后更新时间
+
+- 2026-08-13：完成 TB6-TB9；定位 SSH 交互 PTY 未声明 `ONLCR` 与 resize 边界重复实现，统一尺寸事务、补充硬换行/真实 PTY mode 回归并完成全量自动化门禁；不联网、未使用 multi-agent。
 
 - 2026-08-13：完成 MP1-MP3 全屏终端 mouse reporting 实施；不联网、不使用多 agent。工作区恢复、SFTP WR1-WR5 和 RE1-RE4 保持完成。真实 TUI 交互仍需用户验收。
 - 2026-08-13：启动 KH1-KH4 known_hosts 兼容实施；复用锁定的 `russh`/`ssh-key`，不联网、不使用多 agent。
@@ -94,3 +119,10 @@
 - 2026-08-13 16:56 +0800：完成 WD3；完整 Cargo/Slint、翻译、Markdown、差异和 Windows MSVC release 交叉构建通过。tracker validator 仅保留既有旧历史时间错误；目标 Windows 运行时验收待用户执行。
 - 2026-08-13 17:53 +0800：启动 WL1-WL4；只读参考同级 `ax_shell` 的 owner/协议应答行为，不引入依赖、源码复制或文档链接；未使用多 agent。
 - 2026-08-13 18:07 +0800：完成 WL4；完整 Cargo/Slint 门禁和独立 target 的 Windows MSVC release 交叉构建通过，新 PE32+ GUI x86-64 产物 SHA-256 为 `7cef8594ecedc2531da7b518e14327f35bd5f6d6281763abcdecde4ee5c06ce4`。真实 ConPTY、CPU、退出与滚动行为留目标 Windows 手工验收。
+- 2026-08-13：完成 TB1；普通终端网格从内容区顶部绘制，去除根 pane 额外顶部轨道，低于三行保底时才使用负偏移保持底行边界。
+- 2026-08-13：完成 TB2；双语架构/使用说明、项目地图和环境记忆同步终端内容区边界语义，完整 Cargo、Clippy、格式和差异门禁通过；未联网、未使用多 agent。
+- 2026-08-13：启动 TB3-TB5；按用户确认继续统一边界实现，新增 Rust 终端尺寸共享契约和 Slint 光标纵坐标单一来源；未联网、未使用多 agent。
+- 2026-08-13：完成 TB3-TB4；终端尺寸上限、设置 `10x3` 下限和 UI 光标纵坐标已统一，设置翻译、架构说明和项目地图同步；进入 TB5 验证阶段，未联网、未使用多 agent。
+- 2026-08-13：完成 TB5；focused 尺寸/几何测试、完整 Cargo 测试（库 170、应用 160、Doc tests 0）、严格 Clippy、翻译 413 条、tracker validator、格式和 `git diff --check` 全部通过；未联网、未使用多 agent。目标平台 GUI 视觉仍需用户验收。
+- 2026-08-14 07:31 CST：针对用户提供的 resize 截图重开终端缓冲区语义修复；已完成外部实现对照，不使用多 agent。
+- 2026-08-14 07:31 CST：完成 RB1-RB4；移除模型层伪造顶部空白的底部锚定补偿，25 项终端定向回归及完整离线门禁通过；不使用多 agent。

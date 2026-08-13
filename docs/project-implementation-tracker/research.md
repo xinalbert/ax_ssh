@@ -1,5 +1,14 @@
 # 项目研究记录
 
+## 2026-08-14 终端纵向扩容与 scrollback 语义
+
+- 检索问题：普通 shell 终端在纵向放大、光标位于原底行且没有可恢复历史时，新增的空行应位于顶部还是底部？
+- 检索原因：用户截图显示 AxSSH 将普通输出下推至窗口底部并在顶部留下大面积空白，需要判定这是否符合主流终端行为后再修改缓冲区层。
+- 来源列表：Alacritty `Grid::grow_lines` <https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/grid/resize.rs>；xterm.js `Buffer.resize` <https://github.com/xtermjs/xterm.js/blob/master/src/common/buffer/Buffer.ts>；WezTerm `Screen::resize` <https://github.com/wezterm/wezterm/blob/main/term/src/screen.rs>；kitty `screen_resize` <https://github.com/kovidgoyal/kitty/blob/master/kitty/screen.c>。
+- 关键结论：高度增长可从 scrollback 恢复真实历史行，届时提示符可相对下移；历史不足时，各实现都在底部补空行并保留现有可见输出的顶部位置。Alacritty 的注释明确区分这两种情况。将已有内容下移来制造顶部空行不是普通 shell 的 resize 语义。
+- 对实施计划的影响：删除 AxSSH 在 `Term::resize` 后的 `scroll_down` 与强制 cursor-to-bottom 补偿，直接交给锁定的 `alacritty_terminal` 处理主/备用屏与 reflow；回归按“无历史顶部对齐”和“有历史恢复历史”分别断言。
+- 未解决问题：目标 macOS 的连续窗口拖动、极小 pane 裁剪和 IME 坐标仍需用户视觉验收；它们属于 UI 几何，不能用缓冲区补偿掩盖。
+
 ## 2026-08-04 VS Code Terminal 最小对比度语义
 
 - 时间：2026-08-04 11:52 +0800

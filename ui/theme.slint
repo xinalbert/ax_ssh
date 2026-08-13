@@ -294,7 +294,8 @@ export global Theme {
     out property <length> sftp-directory-pane-min-width: 240px;
     out property <length> sftp-files-area-min-height: 220px;
     out property <length> sftp-transfer-area-min-height: 120px;
-    // Keep these non-zero floors aligned with config.rs and terminal.rs.
+    // Compile-time UI mirror of src/terminal_dimensions.rs. Keep these values
+    // aligned with the Rust terminal dimensions contract.
     out property <int> terminal-grid-min-columns: 10;
     out property <int> terminal-grid-max-columns: 300;
     out property <int> terminal-grid-min-rows: 3;

@@ -58,6 +58,7 @@ export component TerminalGrid inherits Rectangle {
     in property <length> cell-height;
     in property <length> font-cell-height;
     in property <length> top-offset;
+    in property <length> cursor-y;
     in property <bool> cursor-blink;
     in property <string> preedit-text;
     in property <bool> right-click-pastes;
@@ -177,8 +178,7 @@ export component TerminalGrid inherits Rectangle {
     if root.view.connected && root.view.cursor_visible && root.preedit-text != "" : preedit-overlay := Rectangle {
         x: max(0px, min(parent.width - root.cell-width,
             root.view.cursor_column * root.cell-width));
-        y: max(0px, min(parent.height - root.cell-height,
-            root.top-offset + root.view.cursor_row * root.cell-height));
+        y: root.cursor-y;
         width: min(parent.width - self.x,
             max(root.cell-width, preedit-value.preferred-width));
         height: root.cell-height;

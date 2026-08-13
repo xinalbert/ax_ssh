@@ -56,7 +56,7 @@ Process startup (src/main.rs)
 | `src/app/diagnostics.rs` | Redacted keyboard classification, fixed diagnostic route/action fields, and the dedicated tracing target | Raw terminal/clipboard text, paths, profile labels, hosts, credentials, or transport state |
 | `src/config.rs` and `src/config/` | Stable config entry and explicit exports; session/profile domain, settings, theme normalization, legacy migration, private JSON persistence and atomic replacement | Slint types, network connections, plaintext password storage |
 | `src/credentials.rs` | Profile-scoped system-keyring and encrypted-vault records | UI state, plaintext configuration, SSH transport handles |
-| `src/terminal.rs` and `src/terminal/input.rs` | Bounded vt100 grid, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
+| `src/terminal.rs`, `src/terminal_dimensions.rs`, and `src/terminal/input.rs` | Bounded terminal grid, shared dimension contract, cell styles, cursor/scrollback state, selection extraction, and terminal key encoding | Slint types, network handles, credentials |
 | `src/local_shell.rs` | Cross-platform shell discovery and one bounded worker-owned local PTY process per tab | Slint state, SSH trust, persisted terminal contents |
 | `src/x_server.rs` | Platform X-server provider options, system application discovery with standard-path fallback, local display candidates, and bounded process startup | SSH channels, UI state, cookies, profile mutation, or remote server configuration |
 | `src/ssh.rs` | russh handler, host-key decision, password/private-key/runtime-agent authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting, agent identity management |
@@ -364,7 +364,10 @@ must not locally hide either dialog before the Rust state transition accepts it.
    interactive channel-data writes are not held for Nagle aggregation. The
    bounded input queue adds no batching timer: the worker sends dequeued input
    immediately. This removes client-side waiting but cannot remove the network
-   round trip required for a remote PTY to echo input.
+   round trip required for a remote PTY to echo input. Interactive SSH PTY
+   requests also enable `OPOST` and `ONLCR`, so ordinary remote line feeds
+   return to column zero instead of accumulating a column offset in the local
+   terminal model.
 7. A local terminal tab instead owns one `portable-pty` worker thread. That
    worker owns its child, reader, writer, resize state, bounded command/event
    queues, cancellation flag, child-killer handle, and every thread join for
@@ -385,19 +388,25 @@ must not locally hide either dialog before the Rust state transition accepts it.
    transport worker. They do not enter Slint, persistence, or logs. The checked-in
    `vendor/vt100` patch keeps its locked `0.16.2`
    API but clears a wide character whose continuation cell would be removed
-   during a column shrink, for both normal and alternate screens. When a live
-   primary screen changes height while its cursor is at the bottom, it restores
-   rows above the viewport while growing and returns top rows to bounded
-   scrollback while shrinking, keeping the cursor and newest content at the new
-   bottom edge. Alternate screens, an active scroll region, a non-bottom cursor,
-   and a user viewing scrollback retain upstream resize semantics. Output for inactive
+   during a column shrink, for both normal and alternate screens. `TerminalModel`
+   delegates height changes to the locked `alacritty_terminal::Term::resize`:
+   growth restores only actual scrollback rows above the viewport. When history
+   is exhausted, existing primary-screen content remains top-aligned and newly
+   exposed blank rows stay below it; the model must not scroll content down or
+   synthesize blank history to force the cursor to the new bottom edge. Shrinks,
+   alternate screens, an active scroll region, a non-bottom cursor, and a user
+   viewing scrollback retain upstream resize semantics. Output for inactive
    tabs stays in Rust state; each visible pane contributes only its bounded cell
    snapshot across the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
    keep a window alive.
    The small-screen window floor is `520x360`; terminal layout, persisted
-   default sizes, and the model use the same non-zero `10x3` grid floor. This
-   permits a compact window without ever issuing an invalid PTY resize. Users
+   default sizes, and the model use the same non-zero `10x3` grid floor. The
+   Rust `terminal_dimensions` module is the source for the model, settings,
+   and backend maximums; Slint keeps a compile-time mirror for layout because
+   it cannot import Rust constants. PTY and worker entry points retain their
+   separate non-zero `1x1` minimum while sharing the same `300x100` maximum.
+   This permits a compact window without ever issuing an invalid PTY resize. Users
    can collapse the existing session sidebar to reserve additional terminal
    columns on narrow displays.
    `TerminalPane` coalesces changes to its measured grid, configured font
@@ -407,11 +416,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
    initial grid without waiting for a later window or divider resize. This keeps
    a Settings font change and a later return to a connected terminal on the
    same current-grid path as a window resize. Complete character rows are
-   bottom-aligned inside
-   the measured grid region: the fractional height left after floor-based row
-   calculation is placed above the first row, not below the last row. The same
-   local offset is applied to grid cells, cursor/IME preedit, and pointer row
-   mapping; it does not alter the calculated row count or any PTY request.
+   top-aligned inside the measured grid region: the fractional height left after
+   floor-based row calculation is placed below the last row, not above the first
+   row. The same local origin is applied to grid cells, cursor/IME preedit, and
+   pointer row mapping; it does not alter the calculated row count or any PTY
+   request.
    `AppState::resize_terminal(tab_id, ...)` is the single application entry for
    a UI grid change: it requests the specified visible pane's existing worker
    resize first and then immediately resizes that Tab's local `TerminalModel`.
@@ -974,14 +983,18 @@ release packages must retain `assets/fonts/` by the executable or platform
 resource path for the three optional bundled families and all font notices.
 Slint measures the configured font and uses the measured cell
 width plus the configured line-height percentage for rendering, selection,
-cursor, and floor-based PTY dimensions. Any remaining partial cell height is
-rendered above the bottom-aligned grid, while IME and pointer coordinates use
-that same origin. The pane group clips every terminal surface to its assigned
-split rectangle, and each pane also clips its grid, cursor, preedit overlay,
-and transparent IME proxy so an undersized nested split cannot paint into a
+cursor, and floor-based PTY dimensions. `TerminalPane` computes one
+content-space cursor-cell y position; the grid, pre-edit overlay, and native
+IME proxy all consume it, while the pane clip is the only vertical overflow
+boundary. At normal heights, any remaining
+partial cell height stays below the top-aligned grid so it cannot expand the
+terminal's top content boundary; IME and pointer coordinates use that same
+origin. The pane group clips every terminal surface to its assigned split
+rectangle, and each pane also clips its grid, cursor, preedit overlay, and
+transparent IME proxy so an undersized nested split cannot paint into a
 neighbor or outside the workspace. When a pane is shorter than the three-row
-terminal floor, its grid keeps the active bottom row aligned to the pane and
-clips older top rows first. The terminal batches the resulting resize only
+terminal floor, its grid alone keeps the active bottom row aligned to the pane
+and clips older top rows first. The terminal batches the resulting resize only
 after those metrics and its layout have settled.
 
 The first Settings opening discovers local shells, system monospace families,

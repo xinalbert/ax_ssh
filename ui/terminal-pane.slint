@@ -152,10 +152,15 @@ export component TerminalPane inherits Rectangle {
     private property <int> terminal-rows:
         max(Theme.terminal-grid-min-rows,
             min(Theme.terminal-grid-max-rows, floor(grid-clip.height / root.cell-height)));
-    // If a nested split is shorter than the minimum grid, clip old top rows
-    // first so the active bottom row remains aligned with the pane boundary.
+    // Keep normal grids flush with the content top. If a nested split is
+    // shorter than the minimum grid, clip old top rows first so the active
+    // bottom row remains aligned with the pane boundary.
     private property <length> grid-top-offset:
-        grid-clip.height - root.terminal-rows * root.cell-height;
+        min(0px, grid-clip.height - root.terminal-rows * root.cell-height);
+    // The grid, pre-edit overlay, and native IME proxy share this one
+    // content-space cursor position. The clipping parent handles negatives.
+    private property <length> cursor-cell-y:
+        root.grid-top-offset + root.cursor-row * root.cell-height;
     private property <bool> terminal-resize-pending: false;
     // A newly created pane cannot own native focus until Slint has completed
     // the current layout pass. Existing split panes focus directly.
@@ -370,8 +375,7 @@ export component TerminalPane inherits Rectangle {
     ime-input := TextInput {
         x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
             root.cursor-column * root.cell-width));
-        y: grid-clip.y + max(0px, min(grid-clip.height - root.cell-height,
-            root.grid-top-offset + root.cursor-row * root.cell-height));
+        y: grid-clip.y + root.cursor-cell-y;
         width: Theme.hairline;
         height: root.cell-height;
         opacity: 0;
@@ -488,7 +492,7 @@ export component TerminalPane inherits Rectangle {
         padding-bottom: 0px;
 
         Rectangle {
-            height: root.closable ? Theme.terminal-pane-header-height : Theme.space-md;
+            height: root.closable ? Theme.terminal-pane-header-height : 0px;
 
             if root.closable : TerminalPaneCloseButton {
                 x: parent.width - self.width;
@@ -511,6 +515,7 @@ export component TerminalPane inherits Rectangle {
                 cell-height: root.cell-height;
                 font-cell-height: root.font-cell-height;
                 top-offset: root.grid-top-offset;
+                cursor-y: root.cursor-cell-y;
                 cursor-blink: root.cursor-blink;
                 preedit-text: ime-input.preedit-text;
                 right-click-pastes:
