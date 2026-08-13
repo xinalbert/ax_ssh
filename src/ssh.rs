@@ -8,6 +8,7 @@ use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::{AgentClient, AgentStream};
 use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
 use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream};
+use tokio::net::TcpStream;
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
 use zeroize::Zeroizing;
@@ -125,6 +126,7 @@ struct FingerprintObservation {
     fingerprint: Arc<Mutex<Option<String>>>,
     public_key: Arc<Mutex<Option<String>>>,
     decision: Arc<Mutex<Option<HostKeyObservationDecision>>>,
+    accepted: Arc<Mutex<Option<bool>>>,
 }
 
 impl FingerprintObservation {
@@ -166,6 +168,22 @@ impl FingerprintObservation {
         self.decision
             .lock()
             .map(|decision| *decision)
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))
+    }
+
+    fn record_accepted(&self, accepted: bool) -> Result<()> {
+        let mut observed = self
+            .accepted
+            .lock()
+            .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))?;
+        *observed = Some(accepted);
+        Ok(())
+    }
+
+    fn was_accepted(&self) -> Result<Option<bool>> {
+        self.accepted
+            .lock()
+            .map(|accepted| *accepted)
             .map_err(|_| anyhow::anyhow!("host-key observation lock poisoned"))
     }
 
@@ -229,15 +247,19 @@ impl client::Handler for ClientHandler {
             known_hosts::TrustDecision::Revoked => HostKeyObservationDecision::Revoked,
         })?;
         if decision == known_hosts::TrustDecision::Revoked {
+            self.observation.record_accepted(false)?;
             warn!(fingerprint = %actual, "SSH host key is revoked");
             return Ok(false);
         }
         let expected_matches =
             fingerprint_is_trusted(self.expected_fingerprint.as_deref(), &actual);
         if self.expected_fingerprint.is_some() {
-            return Ok(expected_matches && decision != known_hosts::TrustDecision::Changed);
+            let accepted = expected_matches && decision != known_hosts::TrustDecision::Changed;
+            self.observation.record_accepted(accepted)?;
+            return Ok(accepted);
         }
         let trusted = matches!(decision, known_hosts::TrustDecision::Trusted);
+        self.observation.record_accepted(trusted)?;
         if trusted {
             debug!(fingerprint = %actual, "SSH host key accepted");
         } else {
@@ -313,14 +335,28 @@ async fn connect_transport(
         observation.clone(),
         x11_dispatcher,
     );
+    // Keep TCP setup separate from russh's banner/KEX handshake.  Apart from
+    // making Windows failures actionable, this prevents a refused or filtered
+    // socket from being reported as if the server had rejected its host key.
+    let socket = timeout(
+        CONNECT_TIMEOUT,
+        TcpStream::connect((ssh.host.as_str(), ssh.port)),
+    )
+    .await
+    .with_context(|| format!("timed out connecting to {}:{}", ssh.host, ssh.port))?
+    .with_context(|| format!("failed to connect to {}:{}", ssh.host, ssh.port))?;
+    let config = client_config();
+    if config.nodelay && socket.set_nodelay(true).is_err() {
+        debug!(host = %ssh.host, port = ssh.port, "failed to enable TCP_NODELAY for SSH socket");
+    }
     let result = timeout(
         CONNECT_TIMEOUT,
-        client::connect(client_config(), (ssh.host.as_str(), ssh.port), handler),
+        client::connect_stream(config, socket, handler),
     )
     .await
     .with_context(|| {
         format!(
-            "timed out connecting to {}:{} during SSH key exchange",
+            "timed out during SSH banner or key exchange with {}:{}",
             ssh.host, ssh.port
         )
     })?;
@@ -328,11 +364,17 @@ async fn connect_transport(
     match result {
         Ok(handle) => Ok(handle),
         Err(error) => {
+            debug!(
+                host = %ssh.host,
+                port = ssh.port,
+                observed_fingerprint = ?observation.get()?,
+                observed_decision = ?observation.get_decision()?,
+                host_key_accepted = ?observation.was_accepted()?,
+                error = ?error,
+                "SSH transport handshake failed"
+            );
             if let Some(actual) = observation.get()?
-                && !matches!(
-                    observation.get_decision()?,
-                    Some(HostKeyObservationDecision::Trusted)
-                )
+                && matches!(observation.was_accepted()?, Some(false))
             {
                 if observation.get_decision()? == Some(HostKeyObservationDecision::Revoked) {
                     return Err(SshError::HostKeyRevoked {
@@ -348,7 +390,17 @@ async fn connect_transport(
                 }
                 .into());
             }
-            Err(error).with_context(|| format!("failed to connect to {}:{}", ssh.host, ssh.port))
+            let phase = if observation.get()?.is_some() {
+                "after the server host-key check"
+            } else {
+                "before the server presented a host key"
+            };
+            Err(error).with_context(|| {
+                format!(
+                    "SSH banner or key exchange with {}:{} ended {phase}",
+                    ssh.host, ssh.port
+                )
+            })
         }
     }
 }
@@ -462,20 +514,31 @@ pub async fn probe_host_key(profile: &SessionProfile) -> Result<HostKeyProbe> {
     let observed = observation.get()?;
 
     match (result, observed) {
-        (Err(_error), Some(fingerprint)) => {
+        (Err(error), Some(fingerprint)) => {
             let decision = match observation.get_decision()? {
                 Some(HostKeyObservationDecision::Trusted) => TrustDecision::Trusted,
                 Some(HostKeyObservationDecision::Changed) => TrustDecision::Changed,
                 Some(HostKeyObservationDecision::Revoked) => TrustDecision::Revoked,
                 _ => TrustDecision::Unknown,
             };
+            match observation.was_accepted()? {
+                Some(false) => {}
+                Some(true) => {
+                    return Err(error)
+                        .context("SSH handshake failed after the server host key was accepted");
+                }
+                None => {
+                    return Err(error)
+                        .context("SSH host-key decision failed after observing the server key");
+                }
+            }
             Ok(HostKeyProbe {
                 fingerprint,
                 decision,
                 public_key: observation.get_public_key()?,
             })
         }
-        (Err(error), None) => Err(error).context("failed before the server host key was available"),
+        (Err(error), None) => Err(error),
         (Ok(handle), Some(fingerprint)) => {
             let decision = match observation.get_decision()? {
                 Some(HostKeyObservationDecision::Trusted) => TrustDecision::Trusted,

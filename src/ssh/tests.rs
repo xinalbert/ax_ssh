@@ -31,6 +31,53 @@ fn interactive_client_config_disables_nagle() {
     assert!(client_config().nodelay);
 }
 
+#[tokio::test]
+async fn probe_reports_disconnect_before_server_host_key_as_handshake_failure() {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test SSH listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("test SSH listener should have an address");
+    let server_task = tokio::spawn(async move {
+        let (mut stream, _) = listener
+            .accept()
+            .await
+            .expect("test SSH connection should be accepted");
+        let mut client_identification = Vec::new();
+        while client_identification.len() < 256 {
+            let byte = stream
+                .read_u8()
+                .await
+                .expect("client identification should be readable");
+            client_identification.push(byte);
+            if byte == b'\n' {
+                break;
+            }
+        }
+        assert!(client_identification.starts_with(b"SSH-2.0-"));
+        assert_eq!(client_identification.last(), Some(&b'\n'));
+        stream
+            .write_all(b"SSH-2.0-AxSSH-test\r\n")
+            .await
+            .expect("server identification should be writable");
+        stream
+            .shutdown()
+            .await
+            .expect("test SSH stream should close");
+    });
+    let mut profile = test_profile("early-disconnect", address.ip().to_string());
+    profile.ssh_mut().expect("test profile should use SSH").port = address.port();
+
+    let error = probe_host_key(&profile)
+        .await
+        .expect_err("probe should fail before observing a server host key");
+    let message = format!("{error:#}");
+    assert!(message.contains("SSH banner or key exchange"));
+    assert!(message.contains("before the server presented a host key"));
+    server_task.await.expect("test SSH server should join");
+}
+
 #[test]
 fn ssh_agent_identity_attempts_are_bounded() {
     assert_eq!(ssh_agent_attempt_count(0), 0);

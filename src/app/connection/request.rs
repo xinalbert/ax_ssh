@@ -356,7 +356,9 @@ where
                 let Some(terminal) = app.terminal_mut(tab_id) else {
                     return;
                 };
-                let current = terminal.ssh_route().is_some_and(|route| route.0 == profile.id)
+                let current = terminal
+                    .ssh_route()
+                    .is_some_and(|route| route.0 == profile.id)
                     && terminal.connection_target() == target
                     && matches!(
                         terminal.ssh_phase(),
@@ -367,7 +369,9 @@ where
                     None
                 } else {
                     match result {
-                        Some(Ok(probe)) if probe.decision == ax_ssh::ssh::TrustDecision::Trusted => {
+                        Some(Ok(probe))
+                            if probe.decision == ax_ssh::ssh::TrustDecision::Trusted =>
+                        {
                             terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
                                 vault_unlock_only: false,
                             });
@@ -410,16 +414,26 @@ where
                 );
             }
             Some(Ok(false)) => {
-                set_tab_status(&state_for_probe, &ui_for_probe, tab_id, "Verify the SSH host key before connecting");
-                refresh_workspace(&ui_for_probe, &state_for_probe);
-            }
-            Some(Err(error)) => {
-                warn!(tab_id = %tab_id, session_id = %profile.id, %error, "SSH host-key probe failed");
                 set_tab_status(
                     &state_for_probe,
                     &ui_for_probe,
                     tab_id,
-                    &format!("Host-key check failed: {error}"),
+                    "Verify the SSH host key before connecting",
+                );
+                refresh_workspace(&ui_for_probe, &state_for_probe);
+            }
+            Some(Err(error)) => {
+                warn!(
+                    tab_id = %tab_id,
+                    session_id = %profile.id,
+                    error = ?error,
+                    "SSH host-key probe failed"
+                );
+                set_tab_status(
+                    &state_for_probe,
+                    &ui_for_probe,
+                    tab_id,
+                    &format!("Host-key check failed: {error:#}"),
                 );
             }
             None => debug!(tab_id = %tab_id, "cancelled or stale host-key probe result ignored"),
@@ -609,7 +623,7 @@ fn probe_existing_connection(
                 &state,
                 &ui,
                 tab_id,
-                &format!("Host-key check failed: {error}"),
+                &format!("Host-key check failed: {error:#}"),
             ),
             None => {}
         }
