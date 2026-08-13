@@ -68,6 +68,7 @@ export component AppWindow inherits Window {
     in property <string> host-key-endpoint: "";
     in property <string> host-key-fingerprint: "";
     in property <bool> host-key-changed: false;
+    in property <bool> host-key-revoked: false;
     in property <bool> password-dialog-open: false;
     in property <string> password-endpoint: "";
     in property <bool> password-private-key: false;
@@ -97,10 +98,21 @@ export component AppWindow inherits Window {
     in property <string> local-sftp-status: "";
     in property <int> local-sftp-selected-count: 0;
     in property <bool> local-sftp-all-selected: false;
-    in property <[SftpTransferRow]> sftp-transfers;
+    in property <[SftpTransferRow]> sftp-active-transfers;
+    in property <[SftpTransferRow]> sftp-failed-transfers;
+    in property <[SftpTransferRow]> sftp-completed-transfers;
     in property <int> sftp-transfer-active-count: 0;
     in property <int> sftp-transfer-failed-count: 0;
     in property <int> sftp-transfer-completed-count: 0;
+    in property <int> sftp-transfer-selected-active-count: 0;
+    in property <int> sftp-transfer-selected-pausable-count: 0;
+    in property <int> sftp-transfer-selected-resumable-count: 0;
+    in property <string> sftp-editor-path: "";
+    in property <string> sftp-editor-text: "";
+    in property <string> sftp-rename-name: "";
+    in property <bool> sftp-editor-remote-changed: false;
+    in property <bool> sftp-editor-auto-upload: false;
+    in property <int> sftp-editor-revision: 0;
     in property <[TerminalRenderLine]> terminal-render-lines;
     in property <[TerminalPaneView]> terminal-panes;
     in property <[TerminalPaneDividerView]> terminal-dividers;
@@ -109,6 +121,7 @@ export component AppWindow inherits Window {
     in property <int> terminal-cursor-column: 0;
     in property <bool> terminal-cursor-visible: false;
     in property <string> terminal-cursor-text: " ";
+    in property <bool> terminal-mouse-reporting: false;
     in property <string> application-font-family: "JetBrains Mono";
     in property <[string]> application-font-options;
     in property <int> application-font-index: 0;
@@ -248,6 +261,7 @@ export component AppWindow inherits Window {
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
             select_all_shortcut: root.select-all-shortcut,
+            mouse_reporting: root.terminal-mouse-reporting,
         },
         terminal_panes: root.terminal-panes,
         terminal_dividers: root.terminal-dividers,
@@ -261,10 +275,21 @@ export component AppWindow inherits Window {
             local_entries: root.local-sftp-entries, local_truncated: root.local-sftp-truncated,
             local_status: root.local-sftp-status, local_selected_count: root.local-sftp-selected-count,
             local_all_selected: root.local-sftp-all-selected,
-            transfers: root.sftp-transfers,
+            active_transfers: root.sftp-active-transfers,
+            failed_transfers: root.sftp-failed-transfers,
+            completed_transfers: root.sftp-completed-transfers,
             transfer_active_count: root.sftp-transfer-active-count,
             transfer_failed_count: root.sftp-transfer-failed-count,
             transfer_completed_count: root.sftp-transfer-completed-count,
+            transfer_selected_active_count: root.sftp-transfer-selected-active-count,
+            transfer_selected_pausable_count: root.sftp-transfer-selected-pausable-count,
+            transfer_selected_resumable_count: root.sftp-transfer-selected-resumable-count,
+            editor_path: root.sftp-editor-path,
+            editor_text: root.sftp-editor-text,
+            rename_name: root.sftp-rename-name,
+            editor_remote_changed: root.sftp-editor-remote-changed,
+            editor_auto_upload: root.sftp-editor-auto-upload,
+            editor_revision: root.sftp-editor-revision,
         },
         settings: {
             ui_language: root.ui-language,
@@ -351,6 +376,7 @@ export component AppWindow inherits Window {
     private property <SecurityOverlayViewState> security-overlay: {
         host_key_open: root.host-key-dialog-open, host_key_endpoint: root.host-key-endpoint,
         host_key_fingerprint: root.host-key-fingerprint, host_key_changed: root.host-key-changed,
+        host_key_revoked: root.host-key-revoked,
         password_open: root.password-dialog-open, password_endpoint: root.password-endpoint,
         password_private_key: root.password-private-key, password_vault_storage: root.password-vault-storage,
         password_vault_unlock_only: root.password-vault-unlock-only, password_key_path: root.password-key-path,
@@ -404,13 +430,31 @@ export component AppWindow inherits Window {
     callback toggle-local-sftp-selection(string, bool);
     callback select-all-local-sftp(bool);
     callback open-remote-sftp-file(string);
+    callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback toggle-sftp-transfer-selection(string, bool);
+    callback pause-sftp-transfer(string);
+    callback resume-sftp-transfer(string);
     callback cancel-sftp-transfer(string);
+    callback pause-selected-sftp-transfers();
+    callback resume-selected-sftp-transfers();
+    callback cancel-selected-sftp-transfers();
+    callback remove-selected-remote-sftp();
+    callback load-remote-sftp-file(string);
+    callback save-remote-sftp-file(string, string);
+    callback editor-text-changed-sftp(string);
+    callback toggle-editor-auto-upload-sftp(bool);
+    callback dropped-local-files-sftp(data-transfer);
+    pure callback drag-local-file-sftp(string) -> data-transfer;
+    callback upload-selected-local-sftp();
+    callback rename-remote-sftp(string);
+    callback edit-remote-sftp();
     callback close-sftp();
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
     callback scroll-terminal(string, int);
+    callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
@@ -722,8 +766,27 @@ export component AppWindow inherits Window {
             }
             select-all-local-sftp(selected) => { root.select-all-local-sftp(selected); }
             open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
+            download-selected-remote-sftp => { root.download-selected-remote-sftp(); }
             open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
+            toggle-sftp-transfer-selection(id, selected) => {
+                root.toggle-sftp-transfer-selection(id, selected);
+            }
+            pause-sftp-transfer(id) => { root.pause-sftp-transfer(id); }
+            resume-sftp-transfer(id) => { root.resume-sftp-transfer(id); }
             cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
+            pause-selected-sftp-transfers => { root.pause-selected-sftp-transfers(); }
+            resume-selected-sftp-transfers => { root.resume-selected-sftp-transfers(); }
+            cancel-selected-sftp-transfers => { root.cancel-selected-sftp-transfers(); }
+            remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
+            load-remote-sftp-file(path) => { root.load-remote-sftp-file(path); }
+            save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
+            editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
+            toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
+            dropped-local-files-sftp(data) => { root.dropped-local-files-sftp(data); }
+            drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
+            upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
+            rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
+            edit-remote-sftp => { root.edit-remote-sftp(); }
             close-sftp => { root.close-sftp(); }
             terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
                 return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
@@ -733,8 +796,11 @@ export component AppWindow inherits Window {
                     text, alt, control, meta, shift, option-as-meta, preedit-active,
                 );
             }
-            resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
-            scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+        resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+        scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+        mouse-event(id, row, column, button, kind, shift, alt, control) => {
+                root.mouse-event(id, row, column, button, kind, shift, alt, control);
+        }
             terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,

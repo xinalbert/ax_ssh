@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 use super::*;
+use ax_ssh::config::{PaneNodeSnapshot, WorkspaceSnapshot, WorkspaceWindowSnapshot};
 
 #[derive(Clone)]
 pub(super) struct WindowRouter {
@@ -57,6 +58,80 @@ impl WindowRouter {
         Self {
             inner: Arc::new(Mutex::new(WindowRouterState { routes })),
         }
+    }
+
+    pub(super) fn apply_snapshot(&self, snapshot: &WorkspaceSnapshot, app: &mut AppState) {
+        let Ok(mut router) = self.inner.lock() else {
+            return;
+        };
+        let app_tab_ids = app
+            .tab_summaries()
+            .into_iter()
+            .map(|tab| tab.id)
+            .collect::<HashSet<_>>();
+        let Some(main) = router.routes.get_mut(&MAIN_WINDOW_ID) else {
+            return;
+        };
+        main.pane_trees.clear();
+        main.active_tab_id = snapshot.active_tab_id;
+        for window in &snapshot.windows {
+            if window.id == MAIN_WINDOW_ID {
+                continue;
+            }
+            // Detached native windows are intentionally rebuilt later; their IDs
+            // are layout labels and never reused as native handles.
+        }
+        for window in &snapshot.windows {
+            if window.id != MAIN_WINDOW_ID {
+                continue;
+            }
+            main.active_tab_id = window.active_tab_id.or(snapshot.active_tab_id);
+            for pane in &window.panes {
+                let Some(workspace_tab_id) = pane_tab_root(pane) else {
+                    continue;
+                };
+                let focused = window.focused_tab_id.unwrap_or(workspace_tab_id);
+                if let Some(tree) = PaneTree::from_snapshot(workspace_tab_id, pane.clone(), focused)
+                    && tree.tab_ids().iter().all(|id| app_tab_ids.contains(id))
+                {
+                    main.pane_trees.insert(workspace_tab_id, tree);
+                }
+            }
+        }
+        drop(router);
+        app.set_active_tab_from_snapshot(snapshot.active_tab_id);
+    }
+
+    pub(super) fn snapshot(&self, app: &AppState) -> WorkspaceSnapshot {
+        let mut snapshot = app.workspace_snapshot();
+        let Ok(router) = self.inner.lock() else {
+            return snapshot;
+        };
+        let mut windows = Vec::new();
+        for (id, route) in &router.routes {
+            let tab_ids = route
+                .transfer
+                .as_ref()
+                .map(|transfer| transfer.tab_ids.clone())
+                .unwrap_or_else(|| app.tab_summaries().into_iter().map(|tab| tab.id).collect());
+            let panes = route
+                .pane_trees
+                .values()
+                .map(PaneTree::snapshot)
+                .collect::<Vec<PaneNodeSnapshot>>();
+            let focused_tab_id = route
+                .active_tab_id
+                .and_then(|active| route.pane_trees.get(&active).map(PaneTree::focused_tab_id));
+            windows.push(WorkspaceWindowSnapshot {
+                id: *id,
+                tab_ids,
+                active_tab_id: route.active_tab_id,
+                focused_tab_id,
+                panes,
+            });
+        }
+        snapshot.windows = windows;
+        snapshot
     }
 
     pub(super) fn register_detached(
@@ -629,6 +704,13 @@ impl WindowRouter {
                 }
             })
             .collect()
+    }
+}
+
+fn pane_tab_root(snapshot: &PaneNodeSnapshot) -> Option<Uuid> {
+    match snapshot {
+        PaneNodeSnapshot::Leaf(id) => Some(*id),
+        PaneNodeSnapshot::Split { first, .. } => pane_tab_root(first),
     }
 }
 

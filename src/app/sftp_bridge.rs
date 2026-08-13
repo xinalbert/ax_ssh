@@ -3,10 +3,168 @@ use super::local_files::{
     validate_local_file_for_open,
 };
 use super::*;
+use std::fs::File as LocalFile;
+use std::io::Read;
+use std::path::PathBuf;
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const MAX_REMOTE_NAME_CHARS: usize = 512;
+
+type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
+
+fn local_file_drag_data(path: &str) -> SlintDataTransfer {
+    let mut data = SlintDataTransfer::default();
+    if path.len() <= LOCAL_DIRECTORY_PATH_LIMIT
+        && !path.is_empty()
+        && !path.chars().any(char::is_control)
+    {
+        data.set_plain_text(path.to_owned().into());
+    }
+    data
+}
+
+fn parse_dropped_local_path(text: &str) -> Result<PathBuf> {
+    let raw = text
+        .split(['\n', '\r'])
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .context("dropped data did not contain a local file path")?;
+    if raw.len() > LOCAL_DIRECTORY_PATH_LIMIT || raw.chars().any(char::is_control) {
+        anyhow::bail!("dropped local file path is invalid or too long");
+    }
+    let path = if let Some(uri) = raw.strip_prefix("file://") {
+        let (authority, encoded_path) = uri.split_once('/').unwrap_or((uri, ""));
+        if !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost") {
+            anyhow::bail!("remote file URI hosts are not accepted");
+        }
+        let decoded = percent_decode_path(&format!("/{encoded_path}"))?;
+        #[cfg(windows)]
+        let decoded = decoded
+            .strip_prefix('/')
+            .filter(|value| value.as_bytes().get(1) == Some(&b':'))
+            .unwrap_or(&decoded)
+            .to_owned();
+        PathBuf::from(decoded)
+    } else {
+        PathBuf::from(raw)
+    };
+    if path.as_os_str().is_empty() {
+        anyhow::bail!("dropped local file path is empty");
+    }
+    Ok(path)
+}
+
+fn percent_decode_path(value: &str) -> Result<String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                anyhow::bail!("invalid file URI escape");
+            }
+            let high = (bytes[index + 1] as char)
+                .to_digit(16)
+                .context("invalid file URI escape")?;
+            let low = (bytes[index + 2] as char)
+                .to_digit(16)
+                .context("invalid file URI escape")?;
+            decoded.push(((high << 4) | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).context("file URI is not valid UTF-8")
+}
+
+fn queue_sftp_write(
+    state: &Arc<Mutex<AppState>>,
+    operation: ax_ssh::sftp::SftpWriteOperation,
+) -> Result<()> {
+    with_active_sftp_terminal(state, |terminal| {
+        let id = Uuid::new_v4();
+        terminal
+            .worker
+            .as_ref()
+            .context("active SFTP tab has no worker")?
+            .request_sftp_write(id, operation)
+    })
+}
+
+fn queue_local_upload_path(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    local_path: PathBuf,
+) {
+    let state_for_task = state.clone();
+    runtime.spawn(async move {
+        let read = tokio::task::spawn_blocking({
+            let local_path = local_path.clone();
+            move || {
+                let metadata = std::fs::symlink_metadata(&local_path)
+                    .with_context(|| format!("cannot inspect dropped local file {local_path:?}"))?;
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    anyhow::bail!("dropped path is not a regular local file");
+                }
+                if metadata.len() > ax_ssh::sftp::MAX_UPLOAD_BYTES {
+                    anyhow::bail!("local file exceeds the upload size limit");
+                }
+                let mut file = LocalFile::open(&local_path)
+                    .with_context(|| format!("cannot open dropped local file {local_path:?}"))?;
+                let mut data = Vec::with_capacity(metadata.len() as usize);
+                file.read_to_end(&mut data)
+                    .context("cannot read dropped local upload file")?;
+                if data.len() as u64 != metadata.len() {
+                    anyhow::bail!("local file changed while preparing upload");
+                }
+                let name = local_path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .filter(|value| !value.is_empty())
+                    .context("dropped local file has no valid name")?
+                    .to_owned();
+                Ok::<_, anyhow::Error>((name, data))
+            }
+        })
+        .await;
+        let (name, data) = match read {
+            Ok(Ok(value)) => value,
+            Ok(Err(error)) => {
+                set_status(&ui, &format!("Cannot prepare dropped upload: {error}"));
+                return;
+            }
+            Err(error) => {
+                set_status(&ui, &format!("Dropped upload task failed: {error}"));
+                return;
+            }
+        };
+        let queued = with_active_sftp_terminal(&state_for_task, |terminal| {
+            let remote_path = if terminal.sftp.path == "/" {
+                format!("/{name}")
+            } else {
+                format!("{}/{}", terminal.sftp.path.trim_end_matches('/'), name)
+            };
+            let transfer_id = Uuid::new_v4();
+            terminal
+                .sftp
+                .queue_transfer(transfer_id, name, data.len() as u64)?;
+            terminal
+                .worker
+                .as_ref()
+                .context("active SFTP tab has no worker")?
+                .request_open_sftp_upload(transfer_id, remote_path, data)
+        });
+        match queued {
+            Ok(()) => dispatch_active_snapshot(&ui, &state_for_task),
+            Err(error) => set_status(&ui, &format!("Cannot queue dropped upload: {error}")),
+        }
+    });
+}
 
 pub(super) fn wire_sftp(
     ui: &AppWindow,
@@ -179,29 +337,7 @@ pub(super) fn wire_sftp(
                 .find(|entry| entry.path == path.as_str())
                 .cloned()
                 .context("remote entry is no longer visible")?;
-            if entry.is_dir {
-                anyhow::bail!("directories must be opened by navigation");
-            }
-            if entry.is_symlink {
-                anyhow::bail!("symbolic links cannot be downloaded in this version");
-            }
-            let transfer_id = uuid::Uuid::new_v4();
-            terminal
-                .sftp
-                .queue_transfer(transfer_id, entry.name, entry.size)?;
-            let request = terminal
-                .worker
-                .as_ref()
-                .context("active SFTP tab has no worker")?
-                .request_open_sftp_file(transfer_id, entry.path);
-            if let Err(error) = request {
-                terminal.sftp.finish_transfer(
-                    transfer_id,
-                    SftpTransferPhase::Failed,
-                    "Download request was rejected".to_owned(),
-                );
-                return Err(error);
-            }
+            queue_remote_downloads(terminal, vec![entry])?;
             Ok(())
         });
         match result {
@@ -216,6 +352,526 @@ pub(super) fn wire_sftp(
         }
     });
 
+    let ui_for_selected_remote_download = ui.as_weak();
+    let state_for_selected_remote_download = state.clone();
+    let router_for_selected_remote_download = window_router.clone();
+    ui.on_download_selected_remote_sftp(move || {
+        log_ui_action("sftp.download-selected-remote");
+        sync_window_active(
+            &router_for_selected_remote_download,
+            window_id,
+            &state_for_selected_remote_download,
+        );
+        let result = with_active_sftp_terminal(&state_for_selected_remote_download, |terminal| {
+            let selected = terminal
+                .sftp
+                .entries
+                .iter()
+                .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+                .cloned()
+                .collect::<Vec<_>>();
+            queue_remote_downloads(terminal, selected)
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(
+                &ui_for_selected_remote_download,
+                &state_for_selected_remote_download,
+            ),
+            Err(error) => {
+                set_status(
+                    &ui_for_selected_remote_download,
+                    &format!("Cannot download selected SFTP entries: {error}"),
+                );
+                dispatch_active_snapshot(
+                    &ui_for_selected_remote_download,
+                    &state_for_selected_remote_download,
+                );
+            }
+        }
+    });
+
+    let ui_for_remove = ui.as_weak();
+    let state_for_remove = state.clone();
+    let router_for_remove = window_router.clone();
+    ui.on_remove_selected_remote_sftp(move || {
+        log_ui_action("sftp.remove-selected-remote");
+        sync_window_active(&router_for_remove, window_id, &state_for_remove);
+        let result = with_active_sftp_terminal(&state_for_remove, |terminal| {
+            let selected = terminal
+                .sftp
+                .entries
+                .iter()
+                .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+                .cloned()
+                .collect::<Vec<_>>();
+            if selected.is_empty() {
+                anyhow::bail!("no remote entries are selected");
+            }
+            let worker = terminal
+                .worker
+                .as_ref()
+                .context("active SSH terminal has no worker")?;
+            for entry in selected {
+                worker.request_sftp_write(
+                    Uuid::new_v4(),
+                    ax_ssh::sftp::SftpWriteOperation::Remove {
+                        path: entry.path,
+                        directory: entry.is_dir,
+                    },
+                )?;
+            }
+            terminal.sftp.selected.clear();
+            Ok(())
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_remove, &state_for_remove),
+            Err(error) => set_status(
+                &ui_for_remove,
+                &format!("Cannot delete remote entries: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_load = ui.as_weak();
+    let state_for_load = state.clone();
+    let router_for_load = window_router.clone();
+    ui.on_load_remote_sftp_file(move |path| {
+        log_ui_action("sftp.load-remote-file");
+        sync_window_active(&router_for_load, window_id, &state_for_load);
+        let result = queue_sftp_write(
+            &state_for_load,
+            ax_ssh::sftp::SftpWriteOperation::ReadText {
+                path: path.to_string(),
+            },
+        );
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_load, &state_for_load),
+            Err(error) => set_status(&ui_for_load, &format!("Cannot load remote file: {error}")),
+        }
+    });
+
+    let ui_for_save = ui.as_weak();
+    let state_for_save = state.clone();
+    let router_for_save = window_router.clone();
+    ui.on_save_remote_sftp_file(move |path, text| {
+        log_ui_action("sftp.save-remote-file");
+        sync_window_active(&router_for_save, window_id, &state_for_save);
+        let result = with_active_sftp_terminal(&state_for_save, |terminal| {
+            let is_current_editor_path =
+                terminal.sftp.editor_path.as_deref() == Some(path.as_str());
+            let expected_size = is_current_editor_path
+                .then(|| {
+                    terminal.sftp.editor_expected_size.or_else(|| {
+                        terminal
+                            .sftp
+                            .entries
+                            .iter()
+                            .find(|entry| entry.path == path.as_str())
+                            .map(|entry| entry.size)
+                    })
+                })
+                .flatten();
+            let expected_modified = is_current_editor_path
+                .then_some(terminal.sftp.editor_expected_modified)
+                .flatten();
+            terminal
+                .worker
+                .as_ref()
+                .context("active SFTP tab has no worker")?
+                .request_sftp_write(
+                    Uuid::new_v4(),
+                    ax_ssh::sftp::SftpWriteOperation::WriteText {
+                        path: path.to_string(),
+                        data: text.as_bytes().to_vec(),
+                        expected_size,
+                        expected_modified,
+                    },
+                )
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_save, &state_for_save),
+            Err(error) => set_status(&ui_for_save, &format!("Cannot save remote file: {error}")),
+        }
+    });
+
+    let ui_for_editor_text = ui.as_weak();
+    let state_for_editor_text = state.clone();
+    let router_for_editor_text = window_router.clone();
+    let runtime_for_editor_text = runtime.clone();
+    ui.on_editor_text_changed_sftp(move |text| {
+        log_ui_action("sftp.editor-text-changed");
+        sync_window_active(&router_for_editor_text, window_id, &state_for_editor_text);
+        let result = with_active_sftp_terminal(&state_for_editor_text, |terminal| {
+            Ok(terminal.sftp.set_editor_text(text.to_string()))
+        });
+        let changed = match result {
+            Ok(changed) => changed,
+            Err(error) => {
+                set_status(
+                    &ui_for_editor_text,
+                    &format!("Cannot update editor state: {error}"),
+                );
+                return;
+            }
+        };
+        dispatch_active_snapshot(&ui_for_editor_text, &state_for_editor_text);
+        let Some((path, revision)) = changed else {
+            return;
+        };
+        let should_upload = state_for_editor_text
+            .lock()
+            .ok()
+            .and_then(|app| {
+                app.active_terminal()
+                    .map(|terminal| terminal.sftp.editor_auto_upload)
+            })
+            .unwrap_or(false);
+        if !should_upload {
+            return;
+        }
+        let state_for_task = state_for_editor_text.clone();
+        let ui_for_task = ui_for_editor_text.clone();
+        runtime_for_editor_text.spawn(async move {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let queued = with_active_sftp_terminal(&state_for_task, |terminal| {
+                if !terminal.sftp.editor_is_current(&path, revision)
+                    || terminal.sftp.editor_remote_changed
+                {
+                    anyhow::bail!("remote file changed; automatic upload was skipped");
+                }
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("active SFTP tab has no worker")?
+                    .request_sftp_write(
+                        Uuid::new_v4(),
+                        ax_ssh::sftp::SftpWriteOperation::WriteText {
+                            path: path.clone(),
+                            data: terminal.sftp.editor_text.as_bytes().to_vec(),
+                            expected_size: terminal.sftp.editor_expected_size,
+                            expected_modified: terminal.sftp.editor_expected_modified,
+                        },
+                    )
+            });
+            if let Err(error) = queued {
+                set_status(&ui_for_task, &format!("Automatic upload skipped: {error}"));
+            }
+        });
+    });
+
+    let ui_for_auto = ui.as_weak();
+    let state_for_auto = state.clone();
+    let router_for_auto = window_router.clone();
+    ui.on_toggle_editor_auto_upload_sftp(move |enabled| {
+        log_ui_action("sftp.toggle-editor-auto-upload");
+        sync_window_active(&router_for_auto, window_id, &state_for_auto);
+        match with_active_sftp_terminal(&state_for_auto, |terminal| {
+            terminal.sftp.set_editor_auto_upload(enabled);
+            Ok(())
+        }) {
+            Ok(()) => dispatch_active_snapshot(&ui_for_auto, &state_for_auto),
+            Err(error) => set_status(&ui_for_auto, &format!("Cannot change auto upload: {error}")),
+        }
+    });
+
+    let ui_for_drop = ui.as_weak();
+    let state_for_drop = state.clone();
+    let router_for_drop = window_router.clone();
+    let runtime_for_drop = runtime.clone();
+    ui.on_dropped_local_files_sftp(move |data| {
+        log_ui_action("sftp.drop-local-files");
+        sync_window_active(&router_for_drop, window_id, &state_for_drop);
+        let text = match data.plain_text() {
+            Ok(text) => text.to_string(),
+            Err(error) => {
+                set_status(
+                    &ui_for_drop,
+                    &format!("Dropped data is not a readable path: {error}"),
+                );
+                return;
+            }
+        };
+        let path = match parse_dropped_local_path(text.as_str()) {
+            Ok(path) => path,
+            Err(error) => {
+                set_status(&ui_for_drop, &format!("Cannot use dropped path: {error}"));
+                return;
+            }
+        };
+        queue_local_upload_path(
+            &runtime_for_drop,
+            state_for_drop.clone(),
+            ui_for_drop.clone(),
+            path,
+        );
+    });
+
+    ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
+
+    let ui_for_upload = ui.as_weak();
+    let state_for_upload = state.clone();
+    let runtime_for_upload = runtime.clone();
+    let router_for_upload = window_router.clone();
+    ui.on_upload_selected_local_sftp(move || {
+        log_ui_action("sftp.upload-selected-local");
+        sync_window_active(&router_for_upload, window_id, &state_for_upload);
+        let prepared = with_active_sftp_terminal(&state_for_upload, |terminal| {
+            let selected = terminal
+                .sftp
+                .local
+                .entries
+                .iter()
+                .filter(|entry| terminal.sftp.local.selected.contains(&entry.path))
+                .filter(|entry| !entry.is_dir && !entry.is_symlink)
+                .cloned()
+                .collect::<Vec<_>>();
+            if selected.len() != 1 {
+                anyhow::bail!("select exactly one regular local file to upload");
+            }
+            let entry = &selected[0];
+            if entry.size > ax_ssh::sftp::MAX_UPLOAD_BYTES {
+                anyhow::bail!("local file exceeds the upload size limit");
+            }
+            let name = entry.name.clone();
+            let remote_path = if terminal.sftp.path == "/" {
+                format!("/{name}")
+            } else {
+                format!("{}/{}", terminal.sftp.path.trim_end_matches('/'), name)
+            };
+            Ok((entry.path.clone(), entry.size, remote_path))
+        });
+        let (local_path, expected_size, remote_path) = match prepared {
+            Ok(value) => value,
+            Err(error) => {
+                set_status(
+                    &ui_for_upload,
+                    &format!("Cannot upload local file: {error}"),
+                );
+                return;
+            }
+        };
+        let state_for_upload_task = state_for_upload.clone();
+        let ui_for_upload_task = ui_for_upload.clone();
+        runtime_for_upload.spawn(async move {
+            let read = tokio::task::spawn_blocking(move || {
+                let mut file = LocalFile::open(&local_path)
+                    .with_context(|| format!("cannot open local file {local_path:?}"))?;
+                let mut data = Vec::with_capacity(expected_size as usize);
+                file.read_to_end(&mut data)
+                    .context("cannot read local upload file")?;
+                if data.len() as u64 != expected_size {
+                    anyhow::bail!("local file changed while preparing upload");
+                }
+                Ok::<_, anyhow::Error>(data)
+            })
+            .await;
+            let data = match read {
+                Ok(Ok(data)) => data,
+                Ok(Err(error)) => {
+                    set_status(
+                        &ui_for_upload_task,
+                        &format!("Cannot read local upload file: {error}"),
+                    );
+                    return;
+                }
+                Err(error) => {
+                    set_status(
+                        &ui_for_upload_task,
+                        &format!("Local upload task failed: {error}"),
+                    );
+                    return;
+                }
+            };
+            let queued = with_active_sftp_terminal(&state_for_upload_task, |terminal| {
+                let transfer_id = Uuid::new_v4();
+                terminal.sftp.queue_transfer(
+                    transfer_id,
+                    remote_path
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned(),
+                    data.len() as u64,
+                )?;
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("active SFTP tab has no worker")?
+                    .request_open_sftp_upload(transfer_id, remote_path, data)
+            });
+            if let Err(error) = queued {
+                set_status(
+                    &ui_for_upload_task,
+                    &format!("Cannot queue local upload: {error}"),
+                );
+            } else {
+                dispatch_active_snapshot(&ui_for_upload_task, &state_for_upload_task);
+            }
+        });
+    });
+
+    let ui_for_rename = ui.as_weak();
+    let state_for_rename = state.clone();
+    let router_for_rename = window_router.clone();
+    ui.on_rename_remote_sftp(move |new_name| {
+        log_ui_action("sftp.rename-remote");
+        sync_window_active(&router_for_rename, window_id, &state_for_rename);
+        let result = with_active_sftp_terminal(&state_for_rename, |terminal| {
+            let entry = terminal
+                .sftp
+                .entries
+                .iter()
+                .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+                .cloned()
+                .collect::<Vec<_>>();
+            if entry.len() != 1 {
+                anyhow::bail!("select exactly one remote entry to rename");
+            }
+            let entry = entry
+                .into_iter()
+                .next()
+                .context("remote entry is no longer visible")?;
+            let new_name = new_name.trim().to_owned();
+            if new_name.is_empty()
+                || new_name == "."
+                || new_name == ".."
+                || new_name.chars().count() > MAX_REMOTE_NAME_CHARS
+                || new_name.contains(['/', '\\'])
+                || new_name.chars().any(char::is_control)
+            {
+                anyhow::bail!("remote name is invalid");
+            }
+            let parent = entry
+                .path
+                .rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or("");
+            let new_path = format!("{parent}/{new_name}");
+            terminal
+                .worker
+                .as_ref()
+                .context("active SFTP tab has no worker")?
+                .request_sftp_write(
+                    Uuid::new_v4(),
+                    ax_ssh::sftp::SftpWriteOperation::Rename {
+                        old_path: entry.path,
+                        new_path,
+                    },
+                )
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_rename, &state_for_rename),
+            Err(error) => set_status(
+                &ui_for_rename,
+                &format!("Cannot rename remote entry: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_edit = ui.as_weak();
+    let state_for_edit = state.clone();
+    let router_for_edit = window_router.clone();
+    ui.on_edit_remote_sftp(move || {
+        log_ui_action("sftp.edit-remote");
+        sync_window_active(&router_for_edit, window_id, &state_for_edit);
+        let result = with_active_sftp_terminal(&state_for_edit, |terminal| {
+            let entry = terminal
+                .sftp
+                .entries
+                .iter()
+                .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+                .cloned()
+                .collect::<Vec<_>>();
+            if entry.len() != 1 || entry[0].is_dir || entry[0].is_symlink {
+                anyhow::bail!("select exactly one regular remote file to edit");
+            }
+            terminal
+                .worker
+                .as_ref()
+                .context("active SFTP tab has no worker")?
+                .request_sftp_write(
+                    Uuid::new_v4(),
+                    ax_ssh::sftp::SftpWriteOperation::ReadText {
+                        path: entry[0].path.clone(),
+                    },
+                )
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_edit, &state_for_edit),
+            Err(error) => set_status(&ui_for_edit, &format!("Cannot edit remote file: {error}")),
+        }
+    });
+
+    let ui_for_transfer_pause = ui.as_weak();
+    let state_for_transfer_pause = state.clone();
+    let router_for_transfer_pause = window_router.clone();
+    ui.on_pause_sftp_transfer(move |id| {
+        log_ui_action("sftp.pause-transfer");
+        sync_window_active(
+            &router_for_transfer_pause,
+            window_id,
+            &state_for_transfer_pause,
+        );
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_transfer_pause, |terminal| {
+                if !terminal.sftp.transfer_is_pausable(transfer_id) {
+                    anyhow::bail!("SFTP transfer is no longer pausable");
+                }
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("active SFTP tab has no worker")?
+                    .request_pause_sftp_transfer(transfer_id)?;
+                if !terminal.sftp.request_transfer_pause(transfer_id) {
+                    anyhow::bail!("SFTP transfer changed before pause was recorded");
+                }
+                Ok(())
+            })
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_transfer_pause, &state_for_transfer_pause),
+            Err(error) => set_status(
+                &ui_for_transfer_pause,
+                &format!("Cannot pause SFTP transfer: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_transfer_resume = ui.as_weak();
+    let state_for_transfer_resume = state.clone();
+    let router_for_transfer_resume = window_router.clone();
+    ui.on_resume_sftp_transfer(move |id| {
+        log_ui_action("sftp.resume-transfer");
+        sync_window_active(
+            &router_for_transfer_resume,
+            window_id,
+            &state_for_transfer_resume,
+        );
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_transfer_resume, |terminal| {
+                if !terminal.sftp.transfer_is_resumable(transfer_id) {
+                    anyhow::bail!("SFTP transfer is no longer resumable");
+                }
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("active SFTP tab has no worker")?
+                    .request_resume_sftp_transfer(transfer_id)?;
+                if !terminal.sftp.request_transfer_resume(transfer_id) {
+                    anyhow::bail!("SFTP transfer changed before resume was recorded");
+                }
+                Ok(())
+            })
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_transfer_resume, &state_for_transfer_resume),
+            Err(error) => set_status(
+                &ui_for_transfer_resume,
+                &format!("Cannot resume SFTP transfer: {error}"),
+            ),
+        }
+    });
+
     let ui_for_transfer_cancel = ui.as_weak();
     let state_for_transfer_cancel = state.clone();
     let router_for_transfer_cancel = window_router.clone();
@@ -226,26 +882,22 @@ pub(super) fn wire_sftp(
             window_id,
             &state_for_transfer_cancel,
         );
-        let result = id
-            .as_str()
-            .parse::<uuid::Uuid>()
-            .context("invalid SFTP transfer id")
-            .and_then(|transfer_id| {
-                with_active_sftp_terminal(&state_for_transfer_cancel, |terminal| {
-                    if !terminal.sftp.transfer_is_cancellable(transfer_id) {
-                        anyhow::bail!("SFTP transfer is no longer cancellable");
-                    }
-                    terminal
-                        .worker
-                        .as_ref()
-                        .context("active SFTP tab has no worker")?
-                        .request_cancel_sftp_transfer(transfer_id)?;
-                    if !terminal.sftp.request_transfer_cancel(transfer_id) {
-                        anyhow::bail!("SFTP transfer changed before cancellation was recorded");
-                    }
-                    Ok(())
-                })
-            });
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_transfer_cancel, |terminal| {
+                if !terminal.sftp.transfer_is_cancellable(transfer_id) {
+                    anyhow::bail!("SFTP transfer is no longer cancellable");
+                }
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("active SFTP tab has no worker")?
+                    .request_cancel_sftp_transfer(transfer_id)?;
+                if !terminal.sftp.request_transfer_cancel(transfer_id) {
+                    anyhow::bail!("SFTP transfer changed before cancellation was recorded");
+                }
+                Ok(())
+            })
+        });
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_transfer_cancel, &state_for_transfer_cancel),
             Err(error) => set_status(
@@ -254,6 +906,40 @@ pub(super) fn wire_sftp(
             ),
         }
     });
+
+    let ui_for_transfer_selection = ui.as_weak();
+    let state_for_transfer_selection = state.clone();
+    let router_for_transfer_selection = window_router.clone();
+    ui.on_toggle_sftp_transfer_selection(move |id, selected| {
+        log_ui_action("sftp.toggle-transfer-selection");
+        sync_window_active(
+            &router_for_transfer_selection,
+            window_id,
+            &state_for_transfer_selection,
+        );
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_transfer_selection, |terminal| {
+                if !terminal
+                    .sftp
+                    .toggle_transfer_selection(transfer_id, selected)
+                {
+                    anyhow::bail!("SFTP transfer is no longer available");
+                }
+                Ok(())
+            })
+        });
+        match result {
+            Ok(()) => {
+                dispatch_active_snapshot(&ui_for_transfer_selection, &state_for_transfer_selection)
+            }
+            Err(error) => set_status(
+                &ui_for_transfer_selection,
+                &format!("Cannot update SFTP transfer selection: {error}"),
+            ),
+        }
+    });
+
+    wire_selected_transfer_actions(ui, state.clone(), window_router.clone(), window_id);
 
     let ui_for_local_selection = ui.as_weak();
     let state_for_local_selection = state.clone();
@@ -382,6 +1068,179 @@ pub(super) fn wire_sftp(
             path,
         );
     });
+}
+
+fn wire_selected_transfer_actions(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    window_router: WindowRouter,
+    window_id: Uuid,
+) {
+    let ui_for_pause = ui.as_weak();
+    let state_for_pause = state.clone();
+    let router_for_pause = window_router.clone();
+    ui.on_pause_selected_sftp_transfers(move || {
+        log_ui_action("sftp.pause-selected-transfers");
+        sync_window_active(&router_for_pause, window_id, &state_for_pause);
+        let result = with_active_sftp_terminal(&state_for_pause, |terminal| {
+            let transfer_ids = terminal
+                .sftp
+                .selected_transfer_ids_for_active_page()
+                .into_iter()
+                .filter(|id| terminal.sftp.transfer_is_pausable(*id))
+                .collect::<Vec<_>>();
+            request_selected_transfer_actions(terminal, transfer_ids, SelectedTransferAction::Pause)
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_pause, &state_for_pause),
+            Err(error) => set_status(
+                &ui_for_pause,
+                &format!("Cannot pause selected SFTP transfers: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_resume = ui.as_weak();
+    let state_for_resume = state.clone();
+    let router_for_resume = window_router.clone();
+    ui.on_resume_selected_sftp_transfers(move || {
+        log_ui_action("sftp.resume-selected-transfers");
+        sync_window_active(&router_for_resume, window_id, &state_for_resume);
+        let result = with_active_sftp_terminal(&state_for_resume, |terminal| {
+            let transfer_ids = terminal
+                .sftp
+                .selected_transfer_ids_for_active_page()
+                .into_iter()
+                .filter(|id| terminal.sftp.transfer_is_resumable(*id))
+                .collect::<Vec<_>>();
+            request_selected_transfer_actions(
+                terminal,
+                transfer_ids,
+                SelectedTransferAction::Resume,
+            )
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_resume, &state_for_resume),
+            Err(error) => set_status(
+                &ui_for_resume,
+                &format!("Cannot resume selected SFTP transfers: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_cancel = ui.as_weak();
+    let state_for_cancel = state;
+    let router_for_cancel = window_router;
+    ui.on_cancel_selected_sftp_transfers(move || {
+        log_ui_action("sftp.cancel-selected-transfers");
+        sync_window_active(&router_for_cancel, window_id, &state_for_cancel);
+        let result = with_active_sftp_terminal(&state_for_cancel, |terminal| {
+            let transfer_ids = terminal.sftp.selected_transfer_ids_for_active_page();
+            request_selected_transfer_actions(
+                terminal,
+                transfer_ids,
+                SelectedTransferAction::Cancel,
+            )
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_cancel, &state_for_cancel),
+            Err(error) => set_status(
+                &ui_for_cancel,
+                &format!("Cannot cancel selected SFTP transfers: {error}"),
+            ),
+        }
+    });
+}
+
+#[derive(Clone, Copy)]
+enum SelectedTransferAction {
+    Pause,
+    Resume,
+    Cancel,
+}
+
+fn request_selected_transfer_actions(
+    terminal: &mut TerminalTabState,
+    transfer_ids: Vec<uuid::Uuid>,
+    action: SelectedTransferAction,
+) -> Result<()> {
+    if transfer_ids.is_empty() {
+        anyhow::bail!("no selected transfers support this action");
+    }
+    let worker = terminal
+        .worker
+        .as_ref()
+        .context("active SFTP tab has no worker")?;
+    for transfer_id in &transfer_ids {
+        match action {
+            SelectedTransferAction::Pause => worker.request_pause_sftp_transfer(*transfer_id)?,
+            SelectedTransferAction::Resume => worker.request_resume_sftp_transfer(*transfer_id)?,
+            SelectedTransferAction::Cancel => worker.request_cancel_sftp_transfer(*transfer_id)?,
+        }
+    }
+    for transfer_id in transfer_ids {
+        match action {
+            SelectedTransferAction::Pause => {
+                let _ = terminal.sftp.request_transfer_pause(transfer_id);
+            }
+            SelectedTransferAction::Resume => {
+                let _ = terminal.sftp.request_transfer_resume(transfer_id);
+            }
+            SelectedTransferAction::Cancel => {
+                let _ = terminal.sftp.request_transfer_cancel(transfer_id);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn queue_remote_downloads(terminal: &mut TerminalTabState, entries: Vec<SftpEntry>) -> Result<()> {
+    if entries.is_empty() {
+        anyhow::bail!("no remote files or folders are selected");
+    }
+    let local_directory = std::path::PathBuf::from(&terminal.sftp.local.path);
+    let worker = terminal
+        .worker
+        .as_ref()
+        .context("active SFTP tab has no worker")?;
+    let mut accepted = 0_usize;
+    for entry in entries {
+        let transfer_id = uuid::Uuid::new_v4();
+        if entry.is_symlink {
+            terminal
+                .sftp
+                .queue_transfer(transfer_id, entry.name.clone(), entry.size)?;
+            terminal.sftp.finish_transfer(
+                transfer_id,
+                SftpTransferPhase::Failed,
+                "Symbolic links cannot be downloaded".to_owned(),
+            );
+            continue;
+        }
+        if !entry.is_dir {
+            terminal
+                .sftp
+                .queue_transfer(transfer_id, entry.name.clone(), entry.size)?;
+        }
+        match worker.request_open_sftp_file(transfer_id, entry.path, local_directory.clone()) {
+            Ok(()) => accepted += 1,
+            Err(error) => {
+                let _ = terminal
+                    .sftp
+                    .queue_transfer(transfer_id, entry.name.clone(), entry.size);
+                terminal.sftp.finish_transfer(
+                    transfer_id,
+                    SftpTransferPhase::Failed,
+                    "Download request was rejected".to_owned(),
+                );
+                tracing::debug!(%error, "SFTP download request was rejected before the worker accepted it");
+            }
+        }
+    }
+    if accepted == 0 {
+        anyhow::bail!("no selected entries could be queued for download");
+    }
+    Ok(())
 }
 
 struct LocalOpenRequest {
@@ -702,10 +1561,10 @@ fn apply_local_directory_failure(
     active
 }
 
-fn with_active_sftp_terminal(
+fn with_active_sftp_terminal<T>(
     state: &Arc<Mutex<AppState>>,
-    action: impl FnOnce(&mut TerminalTabState) -> Result<()>,
-) -> Result<()> {
+    action: impl FnOnce(&mut TerminalTabState) -> Result<T>,
+) -> Result<T> {
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
@@ -717,4 +1576,33 @@ fn with_active_sftp_terminal(
         anyhow::bail!("SFTP session is not connected");
     }
     action(terminal)
+}
+
+fn parse_transfer_id(value: &str) -> Result<uuid::Uuid> {
+    value
+        .parse::<uuid::Uuid>()
+        .context("invalid SFTP transfer id")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dropped_local_path_accepts_file_uri_and_rejects_remote_hosts() {
+        assert_eq!(
+            parse_dropped_local_path("file:///tmp/hello%20world.txt").unwrap(),
+            PathBuf::from("/tmp/hello world.txt")
+        );
+        assert!(parse_dropped_local_path("file://other-host/tmp/file.txt").is_err());
+        assert!(parse_dropped_local_path("file:///tmp/bad%2").is_err());
+    }
+
+    #[test]
+    fn dropped_local_path_uses_only_the_first_non_empty_line() {
+        assert_eq!(
+            parse_dropped_local_path("\n /tmp/first.txt\n/tmp/second.txt").unwrap(),
+            PathBuf::from("/tmp/first.txt")
+        );
+    }
 }

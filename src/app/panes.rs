@@ -1,3 +1,4 @@
+use ax_ssh::config::PaneNodeSnapshot;
 use uuid::Uuid;
 
 pub(super) const MAX_TERMINAL_PANES: usize = 8;
@@ -116,7 +117,7 @@ enum PaneNode {
 }
 
 /// A bounded, per-window terminal layout. It carries only terminal Tab UUIDs
-/// and intentionally has no persistence, UI handle, worker, or credential state.
+/// and intentionally has no UI handle, worker, or credential state.
 #[derive(Clone, Debug)]
 pub(super) struct PaneTree {
     workspace_tab_id: Uuid,
@@ -255,6 +256,76 @@ impl PaneTree {
             self.focused_tab_id = self.root_tab_id();
         }
         Some(self.focused_tab_id)
+    }
+
+    pub(super) fn snapshot(&self) -> PaneNodeSnapshot {
+        snapshot_node(&self.root)
+    }
+
+    pub(super) fn from_snapshot(
+        workspace_tab_id: Uuid,
+        snapshot: PaneNodeSnapshot,
+        focused_tab_id: Uuid,
+    ) -> Option<Self> {
+        let root = restore_node(snapshot)?;
+        let tree = Self {
+            workspace_tab_id,
+            root,
+            focused_tab_id,
+        };
+        (tree.contains(workspace_tab_id)
+            && tree.contains(focused_tab_id)
+            && tree.pane_count() <= MAX_TERMINAL_PANES)
+            .then_some(tree)
+    }
+}
+
+fn snapshot_node(node: &PaneNode) -> PaneNodeSnapshot {
+    match node {
+        PaneNode::Leaf(id) => PaneNodeSnapshot::Leaf(*id),
+        PaneNode::Split {
+            axis,
+            ratio,
+            first,
+            second,
+        } => PaneNodeSnapshot::Split {
+            axis: match axis {
+                SplitAxis::Columns => "columns",
+                SplitAxis::Rows => "rows",
+            }
+            .to_owned(),
+            ratio_milli: (ratio * 1000.0).round() as u16,
+            first: Box::new(snapshot_node(first)),
+            second: Box::new(snapshot_node(second)),
+        },
+    }
+}
+
+fn restore_node(node: PaneNodeSnapshot) -> Option<PaneNode> {
+    match node {
+        PaneNodeSnapshot::Leaf(id) => Some(PaneNode::Leaf(id)),
+        PaneNodeSnapshot::Split {
+            axis,
+            ratio_milli,
+            first,
+            second,
+        } => {
+            let axis = match axis.as_str() {
+                "columns" => SplitAxis::Columns,
+                "rows" => SplitAxis::Rows,
+                _ => return None,
+            };
+            let ratio = f32::from(ratio_milli) / 1000.0;
+            if !(MIN_PANE_SPLIT_RATIO..=1.0 - MIN_PANE_SPLIT_RATIO).contains(&ratio) {
+                return None;
+            }
+            Some(PaneNode::Split {
+                axis,
+                ratio,
+                first: Box::new(restore_node(*first)?),
+                second: Box::new(restore_node(*second)?),
+            })
+        }
     }
 }
 

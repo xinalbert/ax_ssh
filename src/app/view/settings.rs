@@ -292,6 +292,8 @@ pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
         cursor_column: 0,
         cursor_visible: false,
         cursor_text: " ".to_owned(),
+        mouse_reporting: Default::default(),
+        mouse_reporting_active: false,
     }
 }
 

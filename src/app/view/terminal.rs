@@ -176,6 +176,7 @@ pub(in crate::app) fn apply_active_snapshot(
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
+    ui.set_terminal_mouse_reporting(snapshot.mouse_reporting);
     apply_sftp_snapshot(ui, snapshot.sftp);
     apply_security_prompt(ui, snapshot.security_prompt);
 }
@@ -470,6 +471,7 @@ pub(super) fn terminal_view_from_rendered(
         foreground: to_slint_color(rendered.foreground),
         background: to_slint_color(rendered.background),
         selection_background: to_slint_color(rendered.selection_background),
+        mouse_reporting: rendered.mouse_reporting_active,
         right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
         copy_selection_on_select: ui.get_copy_selection_on_select(),
         option_as_meta: ui.get_option_as_meta(),
@@ -483,12 +485,17 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     let transfer_active_count = snapshot
         .transfers
         .iter()
-        .filter(|transfer| transfer.phase.cancellable())
+        .filter(|transfer| transfer.phase.active())
         .count() as i32;
     let transfer_failed_count = snapshot
         .transfers
         .iter()
-        .filter(|transfer| transfer.phase == SftpTransferPhase::Failed)
+        .filter(|transfer| {
+            matches!(
+                transfer.phase,
+                SftpTransferPhase::Failed | SftpTransferPhase::Cancelled
+            )
+        })
         .count() as i32;
     let transfer_completed_count = snapshot
         .transfers
@@ -521,12 +528,39 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_local_sftp_status(snapshot.local.status.into());
     ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);
     ui.set_local_sftp_all_selected(snapshot.local.all_selected);
-    ui.set_sftp_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(
-        snapshot.transfers,
-    ))));
+    let mut active = Vec::new();
+    let mut failed = Vec::new();
+    let mut completed = Vec::new();
+    for transfer in snapshot.transfers {
+        match transfer.phase {
+            SftpTransferPhase::Queued
+            | SftpTransferPhase::Downloading
+            | SftpTransferPhase::Pausing
+            | SftpTransferPhase::Paused
+            | SftpTransferPhase::Resuming
+            | SftpTransferPhase::Cancelling
+            | SftpTransferPhase::Opening => active.push(transfer),
+            SftpTransferPhase::Failed | SftpTransferPhase::Cancelled => failed.push(transfer),
+            SftpTransferPhase::Completed => completed.push(transfer),
+        }
+    }
+    ui.set_sftp_active_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(active))));
+    ui.set_sftp_failed_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(failed))));
+    ui.set_sftp_completed_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(completed))));
     ui.set_sftp_transfer_active_count(transfer_active_count);
     ui.set_sftp_transfer_failed_count(transfer_failed_count);
     ui.set_sftp_transfer_completed_count(transfer_completed_count);
+    ui.set_sftp_transfer_selected_active_count(snapshot.transfer_selected_active_count as i32);
+    ui.set_sftp_transfer_selected_pausable_count(snapshot.transfer_selected_pausable_count as i32);
+    ui.set_sftp_transfer_selected_resumable_count(
+        snapshot.transfer_selected_resumable_count as i32,
+    );
+    ui.set_sftp_editor_path(snapshot.editor_path.unwrap_or_default().into());
+    ui.set_sftp_editor_text(snapshot.editor_text.into());
+    ui.set_sftp_rename_name(snapshot.rename_name.into());
+    ui.set_sftp_editor_remote_changed(snapshot.editor_remote_changed);
+    ui.set_sftp_editor_auto_upload(snapshot.editor_auto_upload);
+    ui.set_sftp_editor_revision(snapshot.editor_revision as i32);
 }
 
 pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {
@@ -540,6 +574,7 @@ pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt
             ui.set_host_key_endpoint(format!("{}:{}", prompt.host, prompt.port).into());
             ui.set_host_key_fingerprint(prompt.fingerprint.into());
             ui.set_host_key_changed(prompt.changed);
+            ui.set_host_key_revoked(prompt.revoked);
             ui.set_password_dialog_open(false);
             ui.set_password_dialog_tab_id("".into());
             ui.set_host_key_dialog_open(true);
@@ -569,6 +604,7 @@ pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt
                 && !private_key
                 && ssh.credential_storage == Some(CredentialStorage::EncryptedVault);
             ui.set_host_key_dialog_open(false);
+            ui.set_host_key_revoked(false);
             ui.set_password_endpoint(profile_endpoint(&profile).into());
             ui.set_password_private_key(private_key);
             ui.set_password_vault_storage(vault_storage);

@@ -1,7 +1,7 @@
 use super::*;
 use crate::app::credential_tasks::credential_storage_for_save;
 
-pub(super) fn begin_authentication(
+pub(in crate::app) fn begin_authentication(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
@@ -422,9 +422,10 @@ pub(in crate::app) fn wire_authentication(
         let result = state_for_disconnect
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-            .and_then(|app| {
-                app.active_terminal()
-                    .context("no active terminal")?
+            .and_then(|mut app| {
+                let terminal = app.active_terminal_mut().context("no active terminal")?;
+                terminal.cancel_reconnect();
+                terminal
                     .worker
                     .as_ref()
                     .context("active terminal has no worker")?

@@ -8,6 +8,7 @@ mod persistence;
 mod session;
 mod settings;
 mod theme;
+mod workspace;
 
 #[cfg(test)]
 mod tests;
@@ -29,6 +30,10 @@ pub use self::settings::{
 };
 pub use self::theme::{
     TerminalColorScheme, ThemeMode, ThemePalette, ThemePaletteKind, ThemeSettings,
+};
+pub use self::workspace::{
+    PaneNodeSnapshot, WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot, WorkspaceTabSnapshot,
+    WorkspaceWindowSnapshot,
 };
 
 #[cfg(test)]

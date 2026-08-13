@@ -19,7 +19,10 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::config::{SessionProfile, X11Settings};
-use crate::sftp::{SftpBrowserEvent, SftpDownloadRequest, SftpTransferEvent, validate_remote_path};
+use crate::sftp::{
+    SftpBrowserEvent, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest, SftpWriteEvent,
+    SftpWriteOperation, validate_remote_path,
+};
 
 use super::x11::{X11Dispatcher, X11Forwarding};
 use super::{SshConnection, SshError};
@@ -60,6 +63,7 @@ pub enum SshSessionEvent {
     },
     Sftp(SftpBrowserEvent),
     SftpTransfer(SftpTransferEvent),
+    SftpWrite(SftpWriteEvent),
     X11ForwardingEnabled,
     X11ForwardingUnavailable(String),
     Disconnected,
@@ -68,11 +72,16 @@ pub enum SshSessionEvent {
     HostKeyRejected {
         expected: Option<String>,
         actual: String,
+        public_key: Option<String>,
+    },
+    HostKeyRevoked {
+        actual: String,
+        public_key: Option<String>,
     },
     Failed(String),
 }
 
-enum SshCommand {
+pub(crate) enum SshCommand {
     Send {
         input_sequence: u64,
         queued_at: Instant,
@@ -87,10 +96,23 @@ enum SshCommand {
     LoadMoreSftp,
     CloseSftp,
     OpenSftpFile {
-        request: SftpDownloadRequest,
+        root: SftpDownloadRoot,
+    },
+    OpenSftpUpload {
+        request: SftpUploadRequest,
     },
     CancelSftpTransfer {
         transfer_id: Uuid,
+    },
+    PauseSftpTransfer {
+        transfer_id: Uuid,
+    },
+    ResumeSftpTransfer {
+        transfer_id: Uuid,
+    },
+    SftpWrite {
+        operation_id: Uuid,
+        operation: SftpWriteOperation,
     },
     Disconnect,
 }
@@ -320,17 +342,59 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP close request: {error}"))
     }
 
-    pub fn request_open_sftp_file(&self, transfer_id: Uuid, path: String) -> Result<()> {
-        let request = SftpDownloadRequest::new(transfer_id, path)?;
+    pub fn request_open_sftp_file(
+        &self,
+        transfer_id: Uuid,
+        path: String,
+        local_directory: std::path::PathBuf,
+    ) -> Result<()> {
+        let root = SftpDownloadRoot::new(transfer_id, path, local_directory)?;
         self.command_tx
-            .try_send(SshCommand::OpenSftpFile { request })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP file-open request: {error}"))
+            .try_send(SshCommand::OpenSftpFile { root })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
     }
 
     pub fn request_cancel_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
         self.command_tx
             .try_send(SshCommand::CancelSftpTransfer { transfer_id })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer cancellation: {error}"))
+    }
+
+    pub fn request_open_sftp_upload(
+        &self,
+        transfer_id: Uuid,
+        path: String,
+        data: Vec<u8>,
+    ) -> Result<()> {
+        let request = SftpUploadRequest::new(transfer_id, path, data)?;
+        self.command_tx
+            .try_send(SshCommand::OpenSftpUpload { request })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))
+    }
+
+    pub fn request_pause_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
+        self.command_tx
+            .try_send(SshCommand::PauseSftpTransfer { transfer_id })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer pause: {error}"))
+    }
+
+    pub fn request_resume_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
+        self.command_tx
+            .try_send(SshCommand::ResumeSftpTransfer { transfer_id })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer resume: {error}"))
+    }
+
+    pub fn request_sftp_write(
+        &self,
+        operation_id: Uuid,
+        operation: SftpWriteOperation,
+    ) -> Result<()> {
+        self.command_tx
+            .try_send(SshCommand::SftpWrite {
+                operation_id,
+                operation,
+            })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP write request: {error}"))
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
@@ -408,7 +472,11 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::LoadMoreSftp)
                     | Some(SshCommand::CloseSftp)
                     | Some(SshCommand::OpenSftpFile { .. })
-                    | Some(SshCommand::CancelSftpTransfer { .. }) => {
+                    | Some(SshCommand::OpenSftpUpload { .. })
+                    | Some(SshCommand::CancelSftpTransfer { .. })
+                    | Some(SshCommand::PauseSftpTransfer { .. })
+                    | Some(SshCommand::ResumeSftpTransfer { .. })
+                    | Some(SshCommand::SftpWrite { .. }) => {
                         debug!(session_id = %session_id, "session command ignored before SSH authentication");
                     }
                     None => {
@@ -426,14 +494,30 @@ async fn run_session(task: SshSessionTask) {
     let (connection, x11_forwarding, x11_dispatcher, x11_requests) = match connection_result {
         Ok(startup) => startup,
         Err(error) => {
-            if let Some(SshError::HostKeyRejected { expected, actual }) =
+            if let Some(SshError::HostKeyRevoked { actual, public_key }) =
                 error.downcast_ref::<SshError>()
+            {
+                send_event(
+                    &event_tx,
+                    SshSessionEvent::HostKeyRevoked {
+                        actual: actual.clone(),
+                        public_key: public_key.clone(),
+                    },
+                    session_id,
+                )
+                .await;
+            } else if let Some(SshError::HostKeyRejected {
+                expected,
+                actual,
+                public_key,
+            }) = error.downcast_ref::<SshError>()
             {
                 send_event(
                     &event_tx,
                     SshSessionEvent::HostKeyRejected {
                         expected: expected.clone(),
                         actual: actual.clone(),
+                        public_key: public_key.clone(),
                     },
                     session_id,
                 )

@@ -232,9 +232,6 @@ impl client::Handler for ClientHandler {
             warn!(fingerprint = %actual, "SSH host key is revoked");
             return Ok(false);
         }
-        if decision == known_hosts::TrustDecision::Revoked {
-            return Ok(false);
-        }
         let expected_matches =
             fingerprint_is_trusted(self.expected_fingerprint.as_deref(), &actual);
         if self.expected_fingerprint.is_some() {

@@ -1,4 +1,5 @@
 use super::*;
+use tokio::time::timeout;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_session_monitor(
@@ -11,6 +12,7 @@ pub(super) fn spawn_session_monitor(
     mut events: mpsc::Receiver<SshSessionEvent>,
     mut credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
+    target: ConnectionTarget,
 ) {
     let Some(ssh) = profile.ssh().cloned() else {
         error!(session_id = %profile.id, "SSH monitor received a non-SSH profile");
@@ -30,6 +32,8 @@ pub(super) fn spawn_session_monitor(
                         |terminal| {
                             terminal.connected = true;
                             terminal.worker_running = true;
+                            let generation = terminal.reconnect_generation();
+                            terminal.mark_reconnect_connected(generation);
                             terminal.status = format!("Connected to {}", profile_endpoint(&profile));
                         },
                     ) else {
@@ -104,6 +108,16 @@ pub(super) fn spawn_session_monitor(
                         profile.id,
                         attempt_id,
                         |terminal| match event {
+                            SftpTransferEvent::Queued {
+                                transfer_id,
+                                remote_path: _,
+                                name,
+                                total_bytes,
+                            } => {
+                                let _ = terminal
+                                    .sftp
+                                    .queue_transfer(transfer_id, name, total_bytes);
+                            }
                             SftpTransferEvent::Started {
                                 transfer_id,
                                 remote_path: _,
@@ -125,15 +139,50 @@ pub(super) fn spawn_session_monitor(
                                     total_bytes,
                                 );
                             }
+                            SftpTransferEvent::Paused {
+                                transfer_id,
+                                downloaded_bytes,
+                                total_bytes,
+                            } => {
+                                terminal.sftp.update_transfer_progress(
+                                    transfer_id,
+                                    downloaded_bytes,
+                                    total_bytes,
+                                );
+                                terminal.sftp.pause_transfer(transfer_id);
+                            }
+                            SftpTransferEvent::Resumed {
+                                transfer_id,
+                                downloaded_bytes,
+                                total_bytes,
+                            } => {
+                                terminal.sftp.resume_transfer(
+                                    transfer_id,
+                                    downloaded_bytes,
+                                    total_bytes,
+                                );
+                            }
+                            SftpTransferEvent::DiscoveryFailed {
+                                transfer_id,
+                                name,
+                                message,
+                            } => {
+                                terminal
+                                    .sftp
+                                    .record_transfer_failure(transfer_id, name, message);
+                            }
                             SftpTransferEvent::Completed {
                                 transfer_id,
                                 local_path,
                                 total_bytes,
                             } => {
-                                if terminal
-                                    .sftp
-                                    .mark_transfer_opening(transfer_id, total_bytes)
-                                {
+                                if local_path.as_os_str().is_empty() {
+                                    terminal.sftp.finish_transfer(
+                                        transfer_id,
+                                        SftpTransferPhase::Completed,
+                                        "Uploaded".to_owned(),
+                                    );
+                                } else if terminal.sftp.mark_transfer_opening(transfer_id, total_bytes) {
                                     completed_open = Some((transfer_id, local_path));
                                 }
                             }
@@ -171,6 +220,93 @@ pub(super) fn spawn_session_monitor(
                             attempt_id,
                             transfer_id,
                             local_path,
+                        );
+                    }
+                }
+                SshSessionEvent::SftpWrite(event) => {
+                    let monitor_path = match &event {
+                        ax_ssh::sftp::SftpWriteEvent::Text { path, .. } => Some(path.clone()),
+                        ax_ssh::sftp::SftpWriteEvent::Updated { path, .. } => Some(path.clone()),
+                        _ => None,
+                    };
+                    let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| match event {
+                            ax_ssh::sftp::SftpWriteEvent::Completed { path, .. } => {
+                                terminal.sftp.status = format!("Updated {path}");
+                            }
+                            ax_ssh::sftp::SftpWriteEvent::Updated {
+                                path,
+                                size,
+                                modified,
+                                ..
+                            } => {
+                                terminal.sftp.status = format!("Updated {path}");
+                                terminal.sftp.editor_path = Some(path);
+                                terminal.sftp.editor_expected_size = Some(size);
+                                terminal.sftp.editor_expected_modified = modified;
+                                terminal.sftp.editor_remote_changed = false;
+                                terminal.sftp.editor_monitor_generation = terminal
+                                    .sftp
+                                    .editor_monitor_generation
+                                    .wrapping_add(1);
+                            }
+                            ax_ssh::sftp::SftpWriteEvent::Text {
+                                path,
+                                data,
+                                expected_size,
+                                expected_modified,
+                                ..
+                            } => {
+                                terminal.sftp.status = format!("Loaded {path}");
+                                terminal.sftp.editor_path = Some(path);
+                                terminal.sftp.editor_text = String::from_utf8_lossy(&data).into_owned();
+                                terminal.sftp.editor_expected_size = Some(expected_size);
+                                terminal.sftp.editor_expected_modified = expected_modified;
+                                terminal.sftp.editor_remote_changed = false;
+                                terminal.sftp.editor_revision = terminal.sftp.editor_revision.wrapping_add(1);
+                                terminal.sftp.editor_monitor_generation = terminal
+                                    .sftp
+                                    .editor_monitor_generation
+                                    .wrapping_add(1);
+                            }
+                            ax_ssh::sftp::SftpWriteEvent::Metadata {
+                                path,
+                                size,
+                                modified,
+                                ..
+                            } => {
+                                let changed = terminal.sftp.editor_expected_size != Some(size)
+                                    || terminal.sftp.editor_expected_modified != modified;
+                                terminal.sftp.editor_remote_changed = changed;
+                                terminal.sftp.status = if changed {
+                                    format!("Remote file changed: {path}")
+                                } else {
+                                    format!("Remote file unchanged: {path}")
+                                };
+                            }
+                            ax_ssh::sftp::SftpWriteEvent::Failed { message, .. } => {
+                                terminal.sftp.status = format!("SFTP write failed: {message}");
+                            }
+                        },
+                    ) else {
+                        continue;
+                    };
+                    if active {
+                        dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(path) = monitor_path {
+                        spawn_remote_editor_monitor(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.id,
+                            attempt_id,
+                            path,
                         );
                     }
                 }
@@ -225,23 +361,23 @@ pub(super) fn spawn_session_monitor(
                         |terminal| terminal.sftp.reset(),
                     );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
-                        let closed = global_window_router().is_some_and(|router| {
-                            close_terminal_child_pane(
-                                &router,
-                                None,
-                                tab_id,
-                                &state,
-                                &ui,
-                                &runtime_for_monitor,
-                            )
-                        });
-                        if !closed {
-                            set_tab_status(&state, &ui, tab_id, "Disconnected");
-                            refresh_workspace(&ui, &state);
-                        }
+                        schedule_reconnect(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Ssh,
+                            target,
+                        );
+                        refresh_workspace(&ui, &state);
                     }
                 }
-                SshSessionEvent::HostKeyRejected { expected, actual } => {
+                SshSessionEvent::HostKeyRejected {
+                    expected,
+                    actual,
+                    public_key,
+                } => {
                     terminal_event = true;
                     warn!(
                         tab_id = %tab_id,
@@ -256,7 +392,9 @@ pub(super) fn spawn_session_monitor(
                         host: ssh.host.clone(),
                         port: ssh.port,
                         fingerprint: actual,
+                        public_key,
                         changed: expected.is_some(),
+                        revoked: false,
                     };
                     match prepare_host_key_retry(
                         &state,
@@ -282,6 +420,26 @@ pub(super) fn spawn_session_monitor(
                         "SSH host key changed; verify it before reconnecting",
                     );
                     refresh_workspace(&ui, &state);
+                }
+                SshSessionEvent::HostKeyRevoked {
+                    actual,
+                    public_key,
+                } => {
+                    terminal_event = true;
+                    let prompt = PendingHostKey {
+                        tab_id,
+                        profile_id: profile.id,
+                        host: ssh.host.clone(),
+                        port: ssh.port,
+                        fingerprint: actual,
+                        public_key,
+                        changed: false,
+                        revoked: true,
+                    };
+                    if prepare_host_key_retry(&state, tab_id, profile.id, attempt_id, prompt).unwrap_or(false) {
+                        set_tab_status(&state, &ui, tab_id, "SSH host key is revoked; remove the record explicitly");
+                        refresh_workspace(&ui, &state);
+                    }
                 }
                 SshSessionEvent::AuthenticationFailed => {
                     terminal_event = true;
@@ -400,6 +558,15 @@ pub(super) fn spawn_session_monitor(
                         |terminal| terminal.sftp.reset(),
                     );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
+                        schedule_reconnect(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Ssh,
+                            target,
+                        );
                         set_tab_status(
                             &state,
                             &ui,
@@ -414,10 +581,74 @@ pub(super) fn spawn_session_monitor(
 
         let retired = retire_session_attempt(&state, tab_id, profile.id, attempt_id);
         if !terminal_event && retired {
-            set_tab_status(&state, &ui, tab_id, "SSH worker stopped");
+            schedule_reconnect(
+                &runtime_for_monitor,
+                state.clone(),
+                ui.clone(),
+                tab_id,
+                profile.clone(),
+                ReconnectProtocol::Ssh,
+                target,
+            );
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "SSH event monitor stopped");
+    });
+}
+
+fn spawn_remote_editor_monitor(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    attempt_id: Uuid,
+    path: String,
+) {
+    runtime.spawn(async move {
+        let generation = state.lock().ok().and_then(|app| {
+            app.terminal(tab_id)
+                .and_then(|terminal| {
+                    terminal
+                        .sftp
+                        .editor_path
+                        .as_deref()
+                        .filter(|current| *current == path.as_str())
+                })
+                .and_then(|_| {
+                    app.terminal(tab_id)
+                        .map(|terminal| terminal.sftp.editor_monitor_generation)
+                })
+        });
+        let Some(generation) = generation else {
+            return;
+        };
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            if !session_attempt_is_active(&state, tab_id, profile_id, attempt_id) {
+                break;
+            }
+            let queued = state.lock().ok().and_then(|mut app| {
+                let terminal = app.terminal_mut(tab_id)?;
+                if terminal.sftp.editor_path.as_deref() != Some(path.as_str())
+                    || terminal.sftp.editor_monitor_generation != generation
+                {
+                    return None;
+                }
+                terminal.worker.as_ref().and_then(|worker| {
+                    worker
+                        .request_sftp_write(
+                            Uuid::new_v4(),
+                            ax_ssh::sftp::SftpWriteOperation::CheckMetadata { path: path.clone() },
+                        )
+                        .ok()
+                })
+            });
+            if queued.is_none() {
+                break;
+            }
+            dispatch_active_snapshot(&ui, &state);
+        }
     });
 }
 
@@ -706,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_download_opener_never_transitions_to_completed() {
+    fn downloaded_file_opener_failure_stays_failed() {
         let (phase, status) =
             classify_downloaded_file_open(Err("no default application".to_owned()));
         assert_eq!(phase, SftpTransferPhase::Failed);

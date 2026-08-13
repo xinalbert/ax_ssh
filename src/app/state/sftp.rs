@@ -18,6 +18,14 @@ impl SftpBrowserState {
     }
 
     pub(super) fn snapshot(&self, available: bool) -> SftpBrowserSnapshot {
+        let transfer_selected_active_count =
+            self.selected_transfer_ids(SftpTransferPhase::active).len();
+        let transfer_selected_pausable_count = self
+            .selected_transfer_ids(SftpTransferPhase::pausable)
+            .len();
+        let transfer_selected_resumable_count = self
+            .selected_transfer_ids(SftpTransferPhase::resumable)
+            .len();
         SftpBrowserSnapshot {
             available,
             open: self.open,
@@ -37,8 +45,17 @@ impl SftpBrowserState {
             transfers: self
                 .transfers
                 .iter()
-                .map(SftpTransferState::snapshot)
+                .map(|transfer| transfer.snapshot(self.selected_transfers.contains(&transfer.id)))
                 .collect(),
+            transfer_selected_active_count,
+            transfer_selected_pausable_count,
+            transfer_selected_resumable_count,
+            editor_path: self.editor_path.clone(),
+            editor_text: self.editor_text.clone(),
+            rename_name: self.rename_name.clone(),
+            editor_remote_changed: self.editor_remote_changed,
+            editor_auto_upload: self.editor_auto_upload,
+            editor_revision: self.editor_revision,
         }
     }
 
@@ -48,8 +65,12 @@ impl SftpBrowserState {
         name: String,
         total_bytes: u64,
     ) -> Result<()> {
-        if self.transfers.iter().any(|transfer| transfer.id == id) {
-            anyhow::bail!("SFTP transfer already exists");
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
+            if transfer.phase == SftpTransferPhase::Queued {
+                transfer.name = name;
+                transfer.total_bytes = total_bytes;
+            }
+            return Ok(());
         }
         if self.transfers.len() >= SFTP_TRANSFER_HISTORY_LIMIT {
             let removable = self
@@ -57,7 +78,9 @@ impl SftpBrowserState {
                 .iter()
                 .position(|transfer| !transfer.phase.cancellable());
             if let Some(index) = removable {
-                self.transfers.remove(index);
+                if let Some(removed) = self.transfers.remove(index) {
+                    self.selected_transfers.remove(&removed.id);
+                }
             } else {
                 anyhow::bail!("SFTP transfer history is full");
             }
@@ -75,11 +98,29 @@ impl SftpBrowserState {
         Ok(())
     }
 
+    pub(in crate::app) fn record_transfer_failure(
+        &mut self,
+        id: Uuid,
+        name: String,
+        message: String,
+    ) {
+        if self.transfers.iter().any(|transfer| transfer.id == id) {
+            self.finish_transfer(id, SftpTransferPhase::Failed, message);
+            return;
+        }
+        if self.queue_transfer(id, name, 0).is_ok() {
+            self.finish_transfer(id, SftpTransferPhase::Failed, message);
+        }
+    }
+
     pub(in crate::app) fn start_transfer(&mut self, id: Uuid, name: String, total_bytes: u64) {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return;
         };
-        if transfer.phase != SftpTransferPhase::Queued {
+        if !matches!(
+            transfer.phase,
+            SftpTransferPhase::Queued | SftpTransferPhase::Resuming
+        ) {
             return;
         }
         transfer.name = name;
@@ -98,7 +139,10 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return;
         };
-        if transfer.phase != SftpTransferPhase::Downloading {
+        if !matches!(
+            transfer.phase,
+            SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
+        ) {
             return;
         }
         transfer.phase = SftpTransferPhase::Downloading;
@@ -121,6 +165,27 @@ impl SftpBrowserState {
         };
     }
 
+    #[cfg(test)]
+    pub(in crate::app) fn complete_download(&mut self, id: Uuid, total_bytes: u64) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if !matches!(
+            transfer.phase,
+            SftpTransferPhase::Downloading
+                | SftpTransferPhase::Pausing
+                | SftpTransferPhase::Resuming
+        ) {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Completed;
+        transfer.downloaded_bytes = total_bytes;
+        transfer.total_bytes = total_bytes;
+        transfer.bytes_per_second = 0;
+        transfer.status = "Downloaded".to_owned();
+        true
+    }
+
     pub(in crate::app) fn mark_transfer_opening(&mut self, id: Uuid, total_bytes: u64) -> bool {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
@@ -132,6 +197,66 @@ impl SftpBrowserState {
         transfer.downloaded_bytes = total_bytes;
         transfer.total_bytes = total_bytes;
         transfer.status = "Opening".to_owned();
+        true
+    }
+
+    pub(in crate::app) fn request_transfer_pause(&mut self, id: Uuid) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if transfer.phase != SftpTransferPhase::Downloading {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Pausing;
+        transfer.status = "Pausing".to_owned();
+        true
+    }
+
+    pub(in crate::app) fn pause_transfer(&mut self, id: Uuid) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if !matches!(
+            transfer.phase,
+            SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
+        ) {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Paused;
+        transfer.bytes_per_second = 0;
+        transfer.status = "Paused".to_owned();
+        true
+    }
+
+    pub(in crate::app) fn request_transfer_resume(&mut self, id: Uuid) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if transfer.phase != SftpTransferPhase::Paused {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Resuming;
+        transfer.status = "Resuming".to_owned();
+        true
+    }
+
+    pub(in crate::app) fn resume_transfer(
+        &mut self,
+        id: Uuid,
+        downloaded_bytes: u64,
+        total_bytes: u64,
+    ) -> bool {
+        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
+            return false;
+        };
+        if transfer.phase != SftpTransferPhase::Resuming {
+            return false;
+        }
+        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
+        transfer.total_bytes = total_bytes;
+        transfer.started_at = Some(Instant::now());
+        transfer.status = "Downloading".to_owned();
         true
     }
 
@@ -154,6 +279,53 @@ impl SftpBrowserState {
             .is_some_and(|transfer| transfer.phase.can_request_cancel())
     }
 
+    pub(in crate::app) fn transfer_is_pausable(&self, id: Uuid) -> bool {
+        self.transfers
+            .iter()
+            .find(|transfer| transfer.id == id)
+            .is_some_and(|transfer| transfer.phase == SftpTransferPhase::Downloading)
+    }
+
+    pub(in crate::app) fn transfer_is_resumable(&self, id: Uuid) -> bool {
+        self.transfers
+            .iter()
+            .find(|transfer| transfer.id == id)
+            .is_some_and(|transfer| transfer.phase == SftpTransferPhase::Paused)
+    }
+
+    pub(in crate::app) fn toggle_transfer_selection(&mut self, id: Uuid, selected: bool) -> bool {
+        if !self
+            .transfers
+            .iter()
+            .any(|transfer| transfer.id == id && transfer.phase.active())
+        {
+            return false;
+        }
+        if selected {
+            self.selected_transfers.insert(id);
+        } else {
+            self.selected_transfers.remove(&id);
+        }
+        true
+    }
+
+    pub(in crate::app) fn selected_transfer_ids(
+        &self,
+        predicate: impl Fn(SftpTransferPhase) -> bool,
+    ) -> Vec<Uuid> {
+        self.transfers
+            .iter()
+            .filter(|transfer| {
+                self.selected_transfers.contains(&transfer.id) && predicate(transfer.phase)
+            })
+            .map(|transfer| transfer.id)
+            .collect()
+    }
+
+    pub(in crate::app) fn selected_transfer_ids_for_active_page(&self) -> Vec<Uuid> {
+        self.selected_transfer_ids(SftpTransferPhase::active)
+    }
+
     pub(in crate::app) fn finish_transfer(
         &mut self,
         id: Uuid,
@@ -169,10 +341,19 @@ impl SftpBrowserState {
                 | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Pausing, SftpTransferPhase::Cancelled)
+                | (SftpTransferPhase::Pausing, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Paused, SftpTransferPhase::Cancelled)
+                | (SftpTransferPhase::Paused, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Resuming, SftpTransferPhase::Cancelled)
+                | (SftpTransferPhase::Resuming, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Opening, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Opening, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
+                | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
+                | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
         );
         if !allowed {
             return;
@@ -182,6 +363,9 @@ impl SftpBrowserState {
             transfer.downloaded_bytes = transfer.total_bytes;
         }
         transfer.status = status;
+        if !transfer.phase.active() {
+            self.selected_transfers.remove(&id);
+        }
     }
 
     pub(in crate::app) fn begin_navigation(
@@ -232,6 +416,14 @@ impl SftpBrowserState {
         self.has_more = false;
         self.truncated = false;
         self.selected.clear();
+        self.editor_path = None;
+        self.editor_text.clear();
+        self.rename_name.clear();
+        self.editor_expected_size = None;
+        self.editor_expected_modified = None;
+        self.editor_remote_changed = false;
+        self.editor_revision = self.editor_revision.wrapping_add(1);
+        self.editor_monitor_generation = self.editor_monitor_generation.wrapping_add(1);
         self.back_history.clear();
         self.forward_history.clear();
         self.pending_navigation = None;
@@ -280,6 +472,15 @@ impl SftpBrowserState {
         } else {
             self.selected.remove(path);
         }
+        self.rename_name = if self.selected_count() == 1 {
+            self.entries
+                .iter()
+                .find(|entry| self.selected.contains(&entry.path))
+                .map(|entry| entry.name.clone())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
         true
     }
 
@@ -290,6 +491,14 @@ impl SftpBrowserState {
         } else {
             self.selected.clear();
         }
+        self.rename_name = if self.selected_count() == 1 {
+            self.entries
+                .first()
+                .map(|entry| entry.name.clone())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
     }
 
     pub(in crate::app) fn selected_count(&self) -> usize {
@@ -305,6 +514,25 @@ impl SftpBrowserState {
 
     pub(in crate::app) fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    pub(in crate::app) fn set_editor_text(&mut self, text: String) -> Option<(String, u64)> {
+        if self.editor_path.is_none() || self.editor_text == text {
+            return None;
+        }
+        self.editor_text = text;
+        self.editor_revision = self.editor_revision.wrapping_add(1);
+        self.editor_path
+            .clone()
+            .map(|path| (path, self.editor_revision))
+    }
+
+    pub(in crate::app) fn set_editor_auto_upload(&mut self, enabled: bool) {
+        self.editor_auto_upload = enabled;
+    }
+
+    pub(in crate::app) fn editor_is_current(&self, path: &str, revision: u64) -> bool {
+        self.editor_path.as_deref() == Some(path) && self.editor_revision == revision
     }
 }
 
@@ -408,6 +636,9 @@ impl SftpTransferPhase {
         match self {
             Self::Queued => "queued",
             Self::Downloading => "downloading",
+            Self::Pausing => "pausing",
+            Self::Paused => "paused",
+            Self::Resuming => "resuming",
             Self::Cancelling => "cancelling",
             Self::Opening => "opening",
             Self::Completed => "completed",
@@ -417,16 +648,43 @@ impl SftpTransferPhase {
     }
 
     pub(in crate::app) fn cancellable(self) -> bool {
-        matches!(self, Self::Queued | Self::Downloading | Self::Cancelling)
+        matches!(
+            self,
+            Self::Queued | Self::Downloading | Self::Pausing | Self::Paused | Self::Resuming
+        )
+    }
+
+    pub(in crate::app) fn pausable(self) -> bool {
+        self == Self::Downloading
+    }
+
+    pub(in crate::app) fn resumable(self) -> bool {
+        self == Self::Paused
+    }
+
+    pub(in crate::app) fn active(self) -> bool {
+        matches!(
+            self,
+            Self::Queued
+                | Self::Downloading
+                | Self::Pausing
+                | Self::Paused
+                | Self::Resuming
+                | Self::Cancelling
+                | Self::Opening
+        )
     }
 
     fn can_request_cancel(self) -> bool {
-        matches!(self, Self::Queued | Self::Downloading)
+        matches!(
+            self,
+            Self::Queued | Self::Downloading | Self::Pausing | Self::Paused | Self::Resuming
+        )
     }
 }
 
 impl SftpTransferState {
-    fn snapshot(&self) -> SftpTransferSnapshot {
+    fn snapshot(&self, selected: bool) -> SftpTransferSnapshot {
         SftpTransferSnapshot {
             id: self.id,
             name: self.name.clone(),
@@ -435,6 +693,7 @@ impl SftpTransferState {
             total_bytes: self.total_bytes,
             bytes_per_second: self.bytes_per_second,
             status: self.status.clone(),
+            selected,
         }
     }
 }

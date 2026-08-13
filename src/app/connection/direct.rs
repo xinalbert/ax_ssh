@@ -29,6 +29,7 @@ pub(super) fn start_telnet_connection(
         let (worker, events) =
             TelnetSessionHandle::spawn(runtime, profile.id, config, columns, rows);
         terminal.set_telnet_attempt(Some(attempt_id));
+        terminal.enable_reconnect();
         terminal.worker = Some(TerminalWorker::Telnet(worker));
         terminal.worker_running = true;
         terminal.connected = false;
@@ -63,6 +64,7 @@ pub(super) fn start_serial_connection(
             anyhow::bail!("Serial terminal is stale or already has a worker");
         }
         terminal.set_serial_attempt(Some(attempt_id));
+        terminal.enable_reconnect();
         terminal.worker_running = true;
         terminal.connected = false;
         terminal.status = format!("Locating {}...", config.port_name);
@@ -75,7 +77,7 @@ pub(super) fn start_serial_connection(
         let ports = match tokio::time::timeout(SERIAL_RESOLVE_TIMEOUT, discovery).await {
             Ok(Ok(Ok(ports))) => ports,
             Ok(Ok(Err(error))) => {
-                finish_direct_attempt(
+                let finished = finish_direct_attempt(
                     &state,
                     tab_id,
                     profile.id,
@@ -83,11 +85,22 @@ pub(super) fn start_serial_connection(
                     DirectProtocol::Serial,
                     &format!("Cannot list serial ports: {error}"),
                 );
+                if finished {
+                    schedule_reconnect(
+                        &runtime_for_monitor,
+                        state.clone(),
+                        ui.clone(),
+                        tab_id,
+                        profile.clone(),
+                        ReconnectProtocol::Serial,
+                        ConnectionTarget::Terminal,
+                    );
+                }
                 refresh_workspace(&ui, &state);
                 return;
             }
             Ok(Err(error)) => {
-                finish_direct_attempt(
+                let finished = finish_direct_attempt(
                     &state,
                     tab_id,
                     profile.id,
@@ -95,11 +108,22 @@ pub(super) fn start_serial_connection(
                     DirectProtocol::Serial,
                     &format!("Serial port scan failed: {error}"),
                 );
+                if finished {
+                    schedule_reconnect(
+                        &runtime_for_monitor,
+                        state.clone(),
+                        ui.clone(),
+                        tab_id,
+                        profile.clone(),
+                        ReconnectProtocol::Serial,
+                        ConnectionTarget::Terminal,
+                    );
+                }
                 refresh_workspace(&ui, &state);
                 return;
             }
             Err(_) => {
-                finish_direct_attempt(
+                let finished = finish_direct_attempt(
                     &state,
                     tab_id,
                     profile.id,
@@ -107,6 +131,17 @@ pub(super) fn start_serial_connection(
                     DirectProtocol::Serial,
                     "Serial port scan timed out",
                 );
+                if finished {
+                    schedule_reconnect(
+                        &runtime_for_monitor,
+                        state.clone(),
+                        ui.clone(),
+                        tab_id,
+                        profile.clone(),
+                        ReconnectProtocol::Serial,
+                        ConnectionTarget::Terminal,
+                    );
+                }
                 refresh_workspace(&ui, &state);
                 return;
             }
@@ -119,7 +154,7 @@ pub(super) fn start_serial_connection(
                 if let Ok(mut app) = state.lock() {
                     app.replace_serial_ports(ports);
                 }
-                finish_direct_attempt(
+                let finished = finish_direct_attempt(
                     &state,
                     tab_id,
                     profile.id,
@@ -127,6 +162,17 @@ pub(super) fn start_serial_connection(
                     DirectProtocol::Serial,
                     &format!("Cannot open serial session: {error}"),
                 );
+                if finished {
+                    schedule_reconnect(
+                        &runtime_for_monitor,
+                        state.clone(),
+                        ui.clone(),
+                        tab_id,
+                        profile.clone(),
+                        ReconnectProtocol::Serial,
+                        ConnectionTarget::Terminal,
+                    );
+                }
                 refresh_workspace(&ui, &state);
                 return;
             }
@@ -201,6 +247,8 @@ fn spawn_telnet_monitor(
                         |terminal| {
                             terminal.connected = true;
                             terminal.worker_running = true;
+                            let generation = terminal.reconnect_generation();
+                            terminal.mark_reconnect_connected(generation);
                             terminal.status =
                                 format!("Connected to {}", profile_endpoint(&profile));
                         },
@@ -237,16 +285,16 @@ fn spawn_telnet_monitor(
                         attempt_id,
                         DirectProtocol::Telnet,
                         "Disconnected",
-                    ) && !global_window_router().is_some_and(|router| {
-                        close_terminal_child_pane(
-                            &router,
-                            None,
-                            tab_id,
-                            &state,
-                            &ui,
+                    ) {
+                        schedule_reconnect(
                             &runtime_for_monitor,
-                        )
-                    }) {
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Telnet,
+                            ConnectionTarget::Terminal,
+                        );
                         refresh_workspace(&ui, &state);
                     }
                 }
@@ -260,6 +308,15 @@ fn spawn_telnet_monitor(
                         DirectProtocol::Telnet,
                         &format!("Telnet connection failed: {message}"),
                     ) {
+                        schedule_reconnect(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Telnet,
+                            ConnectionTarget::Terminal,
+                        );
                         refresh_workspace(&ui, &state);
                     }
                 }
@@ -275,6 +332,15 @@ fn spawn_telnet_monitor(
                 "Telnet worker stopped",
             )
         {
+            schedule_reconnect(
+                &runtime_for_monitor,
+                state.clone(),
+                ui.clone(),
+                tab_id,
+                profile.clone(),
+                ReconnectProtocol::Telnet,
+                ConnectionTarget::Terminal,
+            );
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "Telnet event monitor stopped");
@@ -290,6 +356,7 @@ fn spawn_serial_monitor(
     attempt_id: Uuid,
     mut events: mpsc::Receiver<SerialSessionEvent>,
 ) {
+    let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
         while let Some(event) = events.recv().await {
@@ -304,6 +371,8 @@ fn spawn_serial_monitor(
                         |terminal| {
                             terminal.connected = true;
                             terminal.worker_running = true;
+                            let generation = terminal.reconnect_generation();
+                            terminal.mark_reconnect_connected(generation);
                             terminal.status = format!("Connected to serial port {port_name}");
                         },
                     ) else {
@@ -340,6 +409,15 @@ fn spawn_serial_monitor(
                         DirectProtocol::Serial,
                         "Serial port disconnected",
                     ) {
+                        schedule_reconnect(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Serial,
+                            ConnectionTarget::Terminal,
+                        );
                         refresh_workspace(&ui, &state);
                     }
                 }
@@ -353,6 +431,15 @@ fn spawn_serial_monitor(
                         DirectProtocol::Serial,
                         &format!("Serial connection failed: {message}"),
                     ) {
+                        schedule_reconnect(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.clone(),
+                            ReconnectProtocol::Serial,
+                            ConnectionTarget::Terminal,
+                        );
                         refresh_workspace(&ui, &state);
                     }
                 }
@@ -368,6 +455,15 @@ fn spawn_serial_monitor(
                 "Serial worker stopped",
             )
         {
+            schedule_reconnect(
+                &runtime_for_monitor,
+                state.clone(),
+                ui.clone(),
+                tab_id,
+                profile.clone(),
+                ReconnectProtocol::Serial,
+                ConnectionTarget::Terminal,
+            );
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "Serial event monitor stopped");
@@ -431,6 +527,8 @@ fn finish_direct_attempt(
     let Some(terminal) = app.terminal_mut(tab_id) else {
         return false;
     };
+    let generation = terminal.reconnect_generation();
+    terminal.finish_reconnect_attempt(generation);
     terminal.worker = None;
     match protocol {
         DirectProtocol::Telnet => terminal.set_telnet_attempt(None),

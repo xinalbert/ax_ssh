@@ -115,11 +115,17 @@ pub(super) struct TerminalTabState {
     pub(super) sftp: SftpBrowserState,
     pub(super) sftp_initial_path: Option<String>,
     pub(super) ssh_phase: SshConnectionPhase,
+    pub(super) reconnect_generation: u64,
+    pub(super) reconnect_attempt: u8,
+    pub(super) reconnecting: bool,
+    pub(super) reconnect_enabled: bool,
     pending_auth_secret: Option<zeroize::Zeroizing<String>>,
 }
 
 const SFTP_HISTORY_LIMIT: usize = 128;
-const SFTP_TRANSFER_HISTORY_LIMIT: usize = 32;
+// A recursively selected directory can contribute up to 512 individual files.
+// Keep every live row addressable until it reaches a terminal state.
+const SFTP_TRANSFER_HISTORY_LIMIT: usize = 512;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SftpNavigation {
@@ -150,6 +156,16 @@ pub(super) struct SftpBrowserState {
     pending_navigation: Option<PendingSftpNavigation>,
     pub(super) local: LocalDirectoryState,
     pub(super) transfers: VecDeque<SftpTransferState>,
+    pub(super) selected_transfers: HashSet<Uuid>,
+    pub(super) editor_path: Option<String>,
+    pub(super) editor_text: String,
+    pub(super) rename_name: String,
+    pub(super) editor_expected_size: Option<u64>,
+    pub(super) editor_expected_modified: Option<u32>,
+    pub(super) editor_remote_changed: bool,
+    pub(super) editor_auto_upload: bool,
+    pub(super) editor_revision: u64,
+    pub(super) editor_monitor_generation: u64,
 }
 
 #[derive(Default)]
@@ -181,6 +197,15 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) selected: HashSet<String>,
     pub(super) local: LocalDirectorySnapshot,
     pub(super) transfers: Vec<SftpTransferSnapshot>,
+    pub(super) transfer_selected_active_count: usize,
+    pub(super) transfer_selected_pausable_count: usize,
+    pub(super) transfer_selected_resumable_count: usize,
+    pub(super) editor_path: Option<String>,
+    pub(super) editor_text: String,
+    pub(super) rename_name: String,
+    pub(super) editor_remote_changed: bool,
+    pub(super) editor_auto_upload: bool,
+    pub(super) editor_revision: u64,
 }
 
 #[derive(Clone, Default)]
@@ -199,6 +224,9 @@ pub(super) struct LocalDirectorySnapshot {
 pub(super) enum SftpTransferPhase {
     Queued,
     Downloading,
+    Pausing,
+    Paused,
+    Resuming,
     Cancelling,
     Opening,
     Completed,
@@ -226,6 +254,7 @@ pub(super) struct SftpTransferSnapshot {
     pub(super) total_bytes: u64,
     pub(super) bytes_per_second: u64,
     pub(super) status: String,
+    pub(super) selected: bool,
 }
 
 pub(super) enum TerminalBackend {
@@ -277,6 +306,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
+    pub(super) mouse_reporting: bool,
     pub(super) sftp: SftpBrowserSnapshot,
     pub(super) security_prompt: ActiveSecurityPrompt,
 }
@@ -292,6 +322,7 @@ impl Default for ActiveTabSnapshot {
             terminal: None,
             connected: false,
             worker_running: false,
+            mouse_reporting: false,
             sftp: SftpBrowserSnapshot::default(),
             security_prompt: ActiveSecurityPrompt::None,
         }
@@ -370,7 +401,9 @@ pub(super) struct PendingHostKey {
     pub(super) host: String,
     pub(super) port: u16,
     pub(super) fingerprint: String,
+    pub(super) public_key: Option<String>,
     pub(super) changed: bool,
+    pub(super) revoked: bool,
 }
 
 pub(super) struct PendingProbe {

@@ -62,6 +62,57 @@ pub struct TerminalSnapshot {
     pub cursor_column: usize,
     pub cursor_visible: bool,
     pub cursor_text: String,
+    pub mouse_reporting: TerminalMouseReporting,
+    pub mouse_reporting_active: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerminalMouseReporting {
+    pub click: bool,
+    pub drag: bool,
+    pub motion: bool,
+    pub sgr: bool,
+    pub utf8: bool,
+    pub alternate_scroll: bool,
+}
+
+impl TerminalMouseReporting {
+    pub const fn enabled(self) -> bool {
+        self.click || self.drag || self.motion
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalMouseButton {
+    None,
+    Left,
+    Middle,
+    Right,
+    WheelUp,
+    WheelDown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalMouseEventKind {
+    Press,
+    Release,
+    Motion,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerminalMouseModifiers {
+    pub shift: bool,
+    pub alt: bool,
+    pub control: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalMouseEvent {
+    pub kind: TerminalMouseEventKind,
+    pub button: TerminalMouseButton,
+    pub column: usize,
+    pub row: usize,
+    pub modifiers: TerminalMouseModifiers,
 }
 
 pub struct TerminalModel {
@@ -85,8 +136,135 @@ impl TerminalModel {
         self.processor.advance(&mut self.term, bytes);
     }
 
+    /// Rebuild a bounded text-only view from a workspace snapshot.
+    /// Process state, alternate-screen mode, and ANSI cursor state are not persisted.
+    pub fn from_text(text: &str, columns: usize, rows: usize, scrollback_lines: usize) -> Self {
+        let mut terminal = Self::new(columns, rows, scrollback_lines);
+        terminal.process(text.as_bytes());
+        terminal
+    }
+
     pub fn application_cursor(&self) -> bool {
         self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
+    pub fn mouse_reporting(&self) -> TerminalMouseReporting {
+        let mode = self.term.mode();
+        TerminalMouseReporting {
+            click: mode.contains(TermMode::MOUSE_REPORT_CLICK),
+            drag: mode.contains(TermMode::MOUSE_DRAG),
+            motion: mode.contains(TermMode::MOUSE_MOTION),
+            sgr: mode.contains(TermMode::SGR_MOUSE),
+            utf8: mode.contains(TermMode::UTF8_MOUSE),
+            alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
+        }
+    }
+
+    pub fn mouse_reporting_active(&self) -> bool {
+        let reporting = self.mouse_reporting();
+        reporting.enabled()
+            || (reporting.alternate_scroll && self.term.mode().contains(TermMode::ALT_SCREEN))
+    }
+
+    /// Encode one bounded terminal mouse event according to the active private modes.
+    pub fn encode_mouse_event(&self, event: TerminalMouseEvent) -> Option<Vec<u8>> {
+        let reporting = self.mouse_reporting();
+        let is_wheel = matches!(
+            event.button,
+            TerminalMouseButton::WheelUp | TerminalMouseButton::WheelDown
+        );
+        let alternate_scroll = reporting.alternate_scroll
+            && self.term.mode().contains(TermMode::ALT_SCREEN)
+            && !reporting.enabled();
+        let allowed = match event.kind {
+            TerminalMouseEventKind::Press => {
+                !matches!(event.button, TerminalMouseButton::None)
+                    && (is_wheel || reporting.click || reporting.drag || reporting.motion)
+            }
+            TerminalMouseEventKind::Release => {
+                !is_wheel && (reporting.click || reporting.drag || reporting.motion)
+            }
+            TerminalMouseEventKind::Motion => {
+                (reporting.motion
+                    || (reporting.drag && !matches!(event.button, TerminalMouseButton::None)))
+                    && !is_wheel
+            }
+        };
+        if !reporting.enabled()
+            && !(reporting.alternate_scroll && self.term.mode().contains(TermMode::ALT_SCREEN))
+        {
+            return None;
+        }
+        if !allowed {
+            return None;
+        }
+        if alternate_scroll && is_wheel {
+            let application_cursor = self.term.mode().contains(TermMode::APP_CURSOR);
+            let direction = match event.button {
+                TerminalMouseButton::WheelUp => b'A',
+                TerminalMouseButton::WheelDown => b'B',
+                _ => return None,
+            };
+            return Some(vec![
+                0x1b,
+                if application_cursor { b'O' } else { b'[' },
+                direction,
+            ]);
+        }
+        let columns = self.term.grid().columns();
+        let rows = self.term.grid().screen_lines();
+        if columns == 0 || rows == 0 {
+            return None;
+        }
+        let column = event.column.min(columns - 1) + 1;
+        let row = event.row.min(rows - 1) + 1;
+        let mut code = match event.button {
+            TerminalMouseButton::None => 3,
+            TerminalMouseButton::Left => 0,
+            TerminalMouseButton::Middle => 1,
+            TerminalMouseButton::Right => 2,
+            TerminalMouseButton::WheelUp => 64,
+            TerminalMouseButton::WheelDown => 65,
+        };
+        if matches!(event.kind, TerminalMouseEventKind::Release) {
+            code = 3;
+        } else if matches!(event.kind, TerminalMouseEventKind::Motion) {
+            code |= 32;
+        }
+        if event.modifiers.shift {
+            code |= 4;
+        }
+        if event.modifiers.alt {
+            code |= 8;
+        }
+        if event.modifiers.control {
+            code |= 16;
+        }
+        if reporting.sgr {
+            let suffix = if matches!(event.kind, TerminalMouseEventKind::Release) {
+                'm'
+            } else {
+                'M'
+            };
+            return Some(format!("\x1b[<{};{};{}{}", code, column, row, suffix).into_bytes());
+        }
+        let encode = |value: usize| -> Option<Vec<u8>> {
+            let value = value + 32;
+            if reporting.utf8 {
+                let mut output = String::new();
+                char::from_u32(value as u32).map(|ch| {
+                    output.push(ch);
+                    output.into_bytes()
+                })
+            } else {
+                (value <= u8::MAX as usize).then_some(vec![value as u8])
+            }
+        };
+        let mut output = vec![0x1b, b'[', b'M'];
+        output.extend(encode(code)?);
+        output.extend(encode(column)?);
+        output.extend(encode(row)?);
+        Some(output)
     }
 
     pub fn resize(&mut self, columns: usize, rows: usize) {
@@ -155,6 +333,8 @@ impl TerminalModel {
             cursor_column: cursor.column.0,
             cursor_visible,
             cursor_text,
+            mouse_reporting: self.mouse_reporting(),
+            mouse_reporting_active: self.mouse_reporting_active(),
         }
     }
 
@@ -757,6 +937,109 @@ mod tests {
 
         terminal.process(b"\x1b[?1l");
         assert!(!terminal.application_cursor());
+    }
+
+    #[test]
+    fn encodes_sgr_click_release_wheel_drag_and_modifiers() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        terminal.process(b"\x1b[?1000h\x1b[?1006h");
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Press,
+                button: TerminalMouseButton::Left,
+                column: 2,
+                row: 3,
+                modifiers: TerminalMouseModifiers {
+                    shift: true,
+                    alt: false,
+                    control: true
+                },
+            }),
+            Some(b"\x1b[<20;3;4M".to_vec())
+        );
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Release,
+                button: TerminalMouseButton::Left,
+                column: 2,
+                row: 3,
+                modifiers: TerminalMouseModifiers::default(),
+            }),
+            Some(b"\x1b[<3;3;4m".to_vec())
+        );
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Press,
+                button: TerminalMouseButton::WheelDown,
+                column: 0,
+                row: 0,
+                modifiers: TerminalMouseModifiers::default(),
+            }),
+            Some(b"\x1b[<65;1;1M".to_vec())
+        );
+    }
+
+    #[test]
+    fn encodes_x10_and_utf8_coordinates_with_bounds() {
+        let mut terminal = TerminalModel::new(300, 100, 10);
+        terminal.process(b"\x1b[?1000h");
+        let event = TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Press,
+            button: TerminalMouseButton::Right,
+            column: 299,
+            row: 99,
+            modifiers: TerminalMouseModifiers::default(),
+        };
+        assert_eq!(terminal.encode_mouse_event(event), None);
+        terminal.process(b"\x1b[?1005h");
+        assert_eq!(
+            terminal.encode_mouse_event(event),
+            Some(vec![27, 91, 77, 34, 197, 140, 194, 132])
+        );
+    }
+
+    #[test]
+    fn reports_drag_and_motion_only_when_enabled() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        let event = TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Motion,
+            button: TerminalMouseButton::Left,
+            column: 1,
+            row: 1,
+            modifiers: TerminalMouseModifiers::default(),
+        };
+        assert_eq!(terminal.encode_mouse_event(event), None);
+        terminal.process(b"\x1b[?1002h");
+        assert!(terminal.encode_mouse_event(event).is_some());
+        terminal.process(b"\x1b[?1002l\x1b[?1003h");
+        assert!(terminal.encode_mouse_event(event).is_some());
+    }
+
+    #[test]
+    fn alternate_screen_scroll_uses_application_cursor_sequences() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        terminal.process(b"\x1b[?1049h\x1b[?1007h");
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Press,
+                button: TerminalMouseButton::WheelUp,
+                column: 0,
+                row: 0,
+                modifiers: TerminalMouseModifiers::default(),
+            }),
+            Some(b"\x1b[A".to_vec())
+        );
+        terminal.process(b"\x1b[?1h");
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Press,
+                button: TerminalMouseButton::WheelDown,
+                column: 0,
+                row: 0,
+                modifiers: TerminalMouseModifiers::default(),
+            }),
+            Some(b"\x1bOB".to_vec())
+        );
     }
 
     #[test]

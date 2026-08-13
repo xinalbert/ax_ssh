@@ -16,7 +16,7 @@ use slint::platform::Clipboard;
 use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{Duration, timeout};
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -112,12 +112,21 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let sessions = config.load().context("failed to load session profiles")?;
+    let workspace_snapshot = match config.load_workspace() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            warn!(%error, "workspace snapshot could not be loaded; starting with an empty workspace");
+            None
+        }
+    };
     let runtime = Runtime::new().context("failed to start Tokio runtime")?;
     let initial_font_families = vec![sessions.settings.appearance.application_font_family.clone()];
     let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
     let initial_fonts =
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
+    let restore_font_registry = font_registry.clone();
+    let restore_terminal_font_started = Arc::new(AtomicBool::new(false));
     let ui = AppWindow::new().context("failed to create Slint window")?;
     let window_router = WindowRouter::new(ui.as_weak());
     let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
@@ -207,14 +216,69 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         WindowCallbackContext {
             state: state.clone(),
             runtime: runtime.handle().clone(),
-            font_registry,
-            log_directory,
-            window_router,
+            font_registry: font_registry.clone(),
+            log_directory: log_directory.clone(),
+            window_router: window_router.clone(),
             window_id: MAIN_WINDOW_ID,
-            detached_windows,
+            detached_windows: detached_windows.clone(),
         },
     );
+    if let Some(ref snapshot) = workspace_snapshot {
+        match snapshot.validate() {
+            Ok(()) => {
+                if let Ok(mut app) = state.lock() {
+                    let _ = app.restore_workspace_tabs(&snapshot.tabs);
+                    window_router.apply_snapshot(snapshot, &mut app);
+                }
+                let restore_context = ConnectionContext::new(
+                    ui.as_weak(),
+                    state.clone(),
+                    runtime.handle().clone(),
+                    restore_font_registry.clone(),
+                    restore_terminal_font_started.clone(),
+                );
+                let restored = state
+                    .lock()
+                    .ok()
+                    .map(|app| app.restored_connection_targets())
+                    .unwrap_or_default();
+                for (tab_id, profile_id, target) in restored {
+                    resume_existing_connection(&restore_context, tab_id, profile_id, target);
+                }
+                let local_tabs = state
+                    .lock()
+                    .ok()
+                    .map(|app| app.restored_local_tabs())
+                    .unwrap_or_default();
+                for tab_id in local_tabs {
+                    if let Err(error) = resume_existing_local_shell(
+                        runtime.handle(),
+                        state.clone(),
+                        ui.as_weak(),
+                        tab_id,
+                    ) {
+                        warn!(%error, tab_id = %tab_id, "failed to restore local shell");
+                    }
+                }
+                refresh_workspace(&ui.as_weak(), &state);
+            }
+            Err(error) => {
+                warn!(%error, "workspace snapshot validation failed; starting with an empty workspace")
+            }
+        }
+    }
     ui.show().context("failed to show main window")?;
+    if let Some(snapshot) = workspace_snapshot.as_ref() {
+        restore_detached_workspaces(
+            snapshot,
+            &state,
+            runtime.handle(),
+            &font_registry_for_restore(&font_registry),
+            &log_directory_for_restore(&log_directory),
+            &window_router,
+            &detached_windows,
+        );
+    }
     #[cfg(target_os = "macos")]
     {
         let ui_for_window = ui.as_weak();
@@ -234,6 +298,12 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     info!("AxSSH UI initialized");
     let ui_result = slint::run_event_loop().context("Slint event loop failed");
 
+    if let Ok(app) = state.lock() {
+        let snapshot = window_router.snapshot(&app);
+        if let Err(error) = app.config.save_workspace(&snapshot) {
+            warn!(%error, "failed to save workspace snapshot during shutdown");
+        }
+    }
     let (workers, pending_probes) = {
         let mut app = state
             .lock()
@@ -261,6 +331,97 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui_result?;
     info!("AxSSH UI stopped");
     Ok(())
+}
+
+fn font_registry_for_restore(registry: &Arc<Mutex<FontRegistry>>) -> Arc<Mutex<FontRegistry>> {
+    registry.clone()
+}
+
+fn log_directory_for_restore(directory: &Path) -> PathBuf {
+    directory.to_owned()
+}
+
+fn restore_detached_workspaces(
+    snapshot: &ax_ssh::config::WorkspaceSnapshot,
+    state: &Arc<Mutex<AppState>>,
+    runtime: &Handle,
+    font_registry: &Arc<Mutex<FontRegistry>>,
+    log_directory: &Path,
+    window_router: &WindowRouter,
+    detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>,
+) {
+    for window in snapshot
+        .windows
+        .iter()
+        .filter(|window| window.id != MAIN_WINDOW_ID)
+    {
+        let Some(pane_snapshot) = window.panes.first().cloned() else {
+            continue;
+        };
+        let Some(workspace_tab_id) = pane_root_tab_id(&pane_snapshot) else {
+            continue;
+        };
+        let focused_tab_id = window.focused_tab_id.unwrap_or(workspace_tab_id);
+        let Some(pane_tree) =
+            PaneTree::from_snapshot(workspace_tab_id, pane_snapshot, focused_tab_id)
+        else {
+            warn!(window_id = %window.id, "skipping invalid detached workspace pane tree");
+            continue;
+        };
+        let Some(active_tab_id) = window.active_tab_id else {
+            continue;
+        };
+        let transfer = WorkspaceTransfer {
+            source_window_id: MAIN_WINDOW_ID,
+            tab_ids: window.tab_ids.clone(),
+            active_tab_id: Some(active_tab_id),
+        };
+        let detached_ui = match AppWindow::new().and_then(|ui| {
+            initialize_detached_component(&ui, state)
+                .map_err(|error| slint::PlatformError::from(error.to_string()))?;
+            ui.set_detached_window(true);
+            Ok(ui)
+        }) {
+            Ok(ui) => ui,
+            Err(error) => {
+                warn!(%error, window_id = %window.id, "failed to recreate detached workspace");
+                continue;
+            }
+        };
+        let new_window_id = Uuid::new_v4();
+        window_router.register_detached(
+            new_window_id,
+            detached_ui.as_weak(),
+            transfer,
+            Some(pane_tree),
+        );
+        wire_callbacks(
+            &detached_ui,
+            WindowCallbackContext {
+                state: state.clone(),
+                runtime: runtime.clone(),
+                font_registry: font_registry.clone(),
+                log_directory: log_directory.to_owned(),
+                window_router: window_router.clone(),
+                window_id: new_window_id,
+                detached_windows: detached_windows.clone(),
+            },
+        );
+        if let Err(error) = detached_ui.show() {
+            warn!(%error, window_id = %new_window_id, "failed to show restored detached workspace");
+            continue;
+        }
+        detached_windows
+            .borrow_mut()
+            .insert(new_window_id, detached_ui);
+    }
+}
+
+fn pane_root_tab_id(snapshot: &ax_ssh::config::PaneNodeSnapshot) -> Option<Uuid> {
+    match snapshot {
+        ax_ssh::config::PaneNodeSnapshot::Leaf(id) => Some(*id),
+        ax_ssh::config::PaneNodeSnapshot::Split { first, .. } => pane_root_tab_id(first),
+    }
 }
 
 fn load_startup_bundled_fonts(

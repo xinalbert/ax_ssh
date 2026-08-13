@@ -227,7 +227,9 @@ fn one_time_password_is_tab_scoped_and_cleared_on_idle() {
             host: "temporary.example".to_owned(),
             port: 22,
             fingerprint: "SHA256:temporary".to_owned(),
+            public_key: None,
             changed: false,
+            revoked: false,
         }))
     );
     assert_eq!(
@@ -801,7 +803,7 @@ fn sftp_snapshots_require_connected_sftp_tabs_and_remain_isolated() {
 }
 
 #[test]
-fn sftp_transfer_state_covers_progress_cancellation_and_terminal_phases() {
+fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();
 
@@ -815,6 +817,15 @@ fn sftp_transfer_state_covers_progress_cancellation_and_terminal_phases() {
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Downloading);
     assert_eq!(sftp.transfers[0].downloaded_bytes, 100);
     assert_eq!(sftp.transfers[0].status, "100%");
+
+    assert!(sftp.request_transfer_pause(transfer_id));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Pausing);
+    assert!(sftp.pause_transfer(transfer_id));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Paused);
+    assert!(sftp.request_transfer_resume(transfer_id));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Resuming);
+    assert!(sftp.resume_transfer(transfer_id, 100, 100));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Downloading);
 
     assert!(sftp.request_transfer_cancel(transfer_id));
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
@@ -831,7 +842,6 @@ fn sftp_transfer_state_covers_progress_cancellation_and_terminal_phases() {
     sftp.queue_transfer(failed_id, "broken.txt".to_owned(), 0)
         .expect("second transfer should be queued");
     sftp.start_transfer(failed_id, "broken.txt".to_owned(), 0);
-    assert!(sftp.mark_transfer_opening(failed_id, 0));
     sftp.finish_transfer(
         failed_id,
         SftpTransferPhase::Failed,
@@ -852,12 +862,7 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
 
     sftp.start_transfer(transfer_id, "report.txt".to_owned(), 100);
     sftp.update_transfer_progress(transfer_id, 50, 100);
-    assert!(!sftp.mark_transfer_opening(transfer_id, 100));
-    sftp.finish_transfer(
-        transfer_id,
-        SftpTransferPhase::Completed,
-        "Opened".to_owned(),
-    );
+    assert!(!sftp.complete_download(transfer_id, 100));
 
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
     assert_eq!(sftp.transfers[0].downloaded_bytes, 0);
@@ -867,6 +872,64 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
         "Cancelled".to_owned(),
     );
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelled);
+}
+
+#[test]
+fn sftp_editor_tracks_remote_fingerprint_and_debounced_revision() {
+    let mut sftp = SftpBrowserState {
+        editor_path: Some("/home/alice/readme.txt".to_owned()),
+        editor_text: "old".to_owned(),
+        editor_expected_size: Some(3),
+        editor_expected_modified: Some(10),
+        ..SftpBrowserState::default()
+    };
+    let revision = sftp.editor_revision;
+    assert!(sftp.set_editor_text("new".to_owned()).is_some());
+    assert!(!sftp.editor_is_current("/home/alice/readme.txt", revision));
+    sftp.editor_remote_changed = true;
+    sftp.set_editor_auto_upload(true);
+    let snapshot = sftp.snapshot(true);
+    assert!(snapshot.editor_remote_changed);
+    assert!(snapshot.editor_auto_upload);
+    assert!(snapshot.editor_revision > revision);
+}
+
+#[test]
+fn sftp_transfer_selection_counts_only_actionable_active_rows() {
+    let mut sftp = SftpBrowserState::default();
+    let downloading = Uuid::new_v4();
+    let paused = Uuid::new_v4();
+    let completed = Uuid::new_v4();
+    let failed = Uuid::new_v4();
+
+    for (id, name) in [
+        (downloading, "downloading.txt"),
+        (paused, "paused.txt"),
+        (completed, "completed.txt"),
+    ] {
+        sftp.queue_transfer(id, name.to_owned(), 10)
+            .expect("transfer should queue");
+        sftp.start_transfer(id, name.to_owned(), 10);
+    }
+    assert!(sftp.request_transfer_pause(paused));
+    assert!(sftp.pause_transfer(paused));
+    assert!(sftp.complete_download(completed, 10));
+    sftp.record_transfer_failure(failed, "failed.txt".to_owned(), "remote error".to_owned());
+
+    for id in [downloading, paused] {
+        assert!(sftp.toggle_transfer_selection(id, true));
+    }
+    assert!(!sftp.toggle_transfer_selection(completed, true));
+    assert!(!sftp.toggle_transfer_selection(failed, true));
+    let snapshot = sftp.snapshot(true);
+
+    assert_eq!(snapshot.transfer_selected_active_count, 2);
+    assert_eq!(snapshot.transfer_selected_pausable_count, 1);
+    assert_eq!(snapshot.transfer_selected_resumable_count, 1);
+    assert_eq!(
+        sftp.selected_transfer_ids_for_active_page(),
+        vec![downloading, paused]
+    );
 }
 
 #[test]
@@ -1117,4 +1180,40 @@ fn closing_a_companion_unlinks_the_surviving_tab() {
             companion_tab_id: sftp,
         })
     );
+}
+
+#[test]
+fn reconnect_state_is_bounded_and_generation_cancellable() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+    let generation = terminal.reconnect_generation();
+    for expected in 1..=TerminalTabState::MAX_RECONNECT_ATTEMPTS {
+        assert_eq!(terminal.begin_reconnect(), Some((generation, expected)));
+        assert!(terminal.finish_reconnect_attempt(generation));
+    }
+    assert_eq!(terminal.begin_reconnect(), None);
+    terminal.reconnect_attempt = 0;
+    terminal.reconnecting = false;
+    terminal.cancel_reconnect();
+    assert!(!terminal.reconnect_current(generation));
+}
+
+#[test]
+fn reconnect_does_not_replace_terminal_buffer() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"preserved output");
+    let before = terminal.terminal.as_ref().expect("model").snapshot();
+    terminal.begin_reconnect();
+    terminal.finish_reconnect_attempt(terminal.reconnect_generation());
+    let after = terminal.terminal.as_ref().expect("model").snapshot();
+    assert_eq!(before.lines, after.lines);
 }

@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use uuid::Uuid;
 
-use super::{MAX_CONFIG_FILE_BYTES, SessionStore};
+use super::{MAX_CONFIG_FILE_BYTES, SessionStore, WorkspaceSnapshot};
 
 /// Private persistence boundary for the versioned session store and vault files.
 #[derive(Clone, Debug)]
@@ -69,6 +69,57 @@ impl ConfigStore {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn workspace_path(&self) -> PathBuf {
+        self.path.with_file_name("workspace.json")
+    }
+
+    pub fn load_workspace(&self) -> Result<Option<WorkspaceSnapshot>> {
+        let path = self.workspace_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+        let file =
+            File::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
+        let metadata = file
+            .metadata()
+            .with_context(|| format!("failed to inspect {}", path.display()))?;
+        if metadata.len() > MAX_CONFIG_FILE_BYTES as u64 {
+            anyhow::bail!(
+                "workspace snapshot {} exceeds the {} byte limit",
+                path.display(),
+                MAX_CONFIG_FILE_BYTES
+            );
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take((MAX_CONFIG_FILE_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        if bytes.len() > MAX_CONFIG_FILE_BYTES {
+            anyhow::bail!(
+                "workspace snapshot {} exceeds the {} byte limit",
+                path.display(),
+                MAX_CONFIG_FILE_BYTES
+            );
+        }
+        let snapshot = serde_json::from_slice(&bytes)
+            .with_context(|| format!("invalid workspace snapshot {}", path.display()))?;
+        Ok(Some(snapshot))
+    }
+
+    pub fn save_workspace(&self, snapshot: &WorkspaceSnapshot) -> Result<()> {
+        snapshot
+            .validate()
+            .context("workspace snapshot validation failed")?;
+        let bytes =
+            serde_json::to_vec_pretty(snapshot).context("failed to encode workspace snapshot")?;
+        if bytes.len() > MAX_CONFIG_FILE_BYTES {
+            anyhow::bail!(
+                "encoded workspace snapshot exceeds the {MAX_CONFIG_FILE_BYTES} byte limit"
+            );
+        }
+        write_private_file_atomically(&self.workspace_path(), &bytes)
     }
 }
 

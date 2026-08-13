@@ -108,6 +108,46 @@ fn config_load_rejects_oversized_files_before_deserialization() {
 }
 
 #[test]
+fn workspace_snapshot_round_trips_separately_from_session_store() {
+    let path = std::env::temp_dir().join(format!("ax-ssh-workspace-{}.json", Uuid::new_v4()));
+    let store = ConfigStore::new(&path);
+    let tab_id = Uuid::new_v4();
+    let snapshot = WorkspaceSnapshot {
+        version: WORKSPACE_SNAPSHOT_VERSION,
+        tabs: vec![WorkspaceTabSnapshot {
+            id: tab_id,
+            title: "Shell".to_owned(),
+            kind: "terminal".to_owned(),
+            terminal_text: "hello\n".to_owned(),
+            sftp_remote_path: "/tmp".to_owned(),
+            sftp_local_path: "/tmp/local".to_owned(),
+            ..WorkspaceTabSnapshot::default()
+        }],
+        active_tab_id: Some(tab_id),
+        windows: vec![WorkspaceWindowSnapshot {
+            id: Uuid::nil(),
+            tab_ids: vec![tab_id],
+            active_tab_id: Some(tab_id),
+            focused_tab_id: Some(tab_id),
+            panes: vec![PaneNodeSnapshot::Leaf(tab_id)],
+        }],
+    };
+    store
+        .save_workspace(&snapshot)
+        .expect("workspace save should succeed");
+    assert_eq!(
+        store
+            .load_workspace()
+            .expect("workspace load should succeed"),
+        Some(snapshot)
+    );
+    assert_ne!(store.path(), &store.workspace_path());
+    assert!(store.workspace_path().exists());
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(store.workspace_path());
+}
+
+#[test]
 fn store_round_trips_and_upserts() {
     let temp = std::env::temp_dir().join(format!("ax-ssh-{}", Uuid::new_v4()));
     let store = ConfigStore::new(&temp);

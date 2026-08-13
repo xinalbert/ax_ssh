@@ -193,6 +193,7 @@ component TerminalPaneGroup inherits Rectangle {
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
     callback scroll-terminal(string, int);
+    callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
@@ -226,6 +227,9 @@ component TerminalPaneGroup inherits Rectangle {
         }
         resized(columns, rows) => { root.resize-terminal(pane.terminal.terminal_id, columns, rows); }
         scrolled(lines) => { root.scroll-terminal(pane.terminal.terminal_id, lines); }
+        mouse-event(row, column, button, kind, shift, alt, control) => {
+            root.mouse-event(pane.terminal.terminal_id, row, column, button, kind, shift, alt, control);
+        }
         selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
             return root.terminal-selection-text(
                 pane.terminal.terminal_id, anchor-row, anchor-column, focus-row, focus-column,
@@ -292,12 +296,30 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback toggle-local-sftp-selection(string, bool);
     callback select-all-local-sftp(bool);
     callback open-remote-sftp-file(string);
+    callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback toggle-sftp-transfer-selection(string, bool);
+    callback pause-sftp-transfer(string);
+    callback resume-sftp-transfer(string);
     callback cancel-sftp-transfer(string);
+    callback pause-selected-sftp-transfers();
+    callback resume-selected-sftp-transfers();
+    callback cancel-selected-sftp-transfers();
+    callback remove-selected-remote-sftp();
+    callback load-remote-sftp-file(string);
+    callback save-remote-sftp-file(string, string);
+    callback editor-text-changed-sftp(string);
+    callback toggle-editor-auto-upload-sftp(bool);
+    callback dropped-local-files-sftp(data-transfer);
+    pure callback drag-local-file-sftp(string) -> data-transfer;
+    callback upload-selected-local-sftp();
+    callback rename-remote-sftp(string);
+    callback edit-remote-sftp();
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
     callback scroll-terminal(string, int);
+    callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
@@ -341,6 +363,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             }
             resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
             scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+            mouse-event(id, row, column, button, kind, shift, alt, control) => {
+                root.mouse-event(id, row, column, button, kind, shift, alt, control);
+            }
             terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,
@@ -383,8 +408,27 @@ component DetachedWorkspaceContent inherits Rectangle {
             }
             select-all-local(selected) => { root.select-all-local-sftp(selected); }
             open-remote-file(path) => { root.open-remote-sftp-file(path); }
+            download-selected-remote => { root.download-selected-remote-sftp(); }
             open-local-file(path) => { root.open-local-sftp-file(path); }
+            toggle-transfer-selection(id, selected) => {
+                root.toggle-sftp-transfer-selection(id, selected);
+            }
+            pause-transfer(id) => { root.pause-sftp-transfer(id); }
+            resume-transfer(id) => { root.resume-sftp-transfer(id); }
             cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
+            pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
+            resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
+            cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+            remove-selected-remote => { root.remove-selected-remote-sftp(); }
+            upload-selected-local => { root.upload-selected-local-sftp(); }
+            rename-remote(name) => { root.rename-remote-sftp(name); }
+            edit-remote => { root.edit-remote-sftp(); }
+            load-remote-file(path) => { root.load-remote-sftp-file(path); }
+            save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
+            editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
+            toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
+            dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
+            drag-local-file(path) => { return root.drag-local-file-sftp(path); }
             close => { root.close-tab(root.view.active_tab_id); }
             write-clipboard(path) => { root.write-clipboard(path); }
         }
@@ -448,13 +492,31 @@ export component WorkspaceShell inherits Rectangle {
     callback toggle-local-sftp-selection(string, bool);
     callback select-all-local-sftp(bool);
     callback open-remote-sftp-file(string);
+    callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback toggle-sftp-transfer-selection(string, bool);
+    callback pause-sftp-transfer(string);
+    callback resume-sftp-transfer(string);
     callback cancel-sftp-transfer(string);
+    callback pause-selected-sftp-transfers();
+    callback resume-selected-sftp-transfers();
+    callback cancel-selected-sftp-transfers();
+    callback remove-selected-remote-sftp();
+    callback load-remote-sftp-file(string);
+    callback save-remote-sftp-file(string, string);
+    callback editor-text-changed-sftp(string);
+    callback toggle-editor-auto-upload-sftp(bool);
+    callback dropped-local-files-sftp(data-transfer);
+    pure callback drag-local-file-sftp(string) -> data-transfer;
+    callback upload-selected-local-sftp();
+    callback rename-remote-sftp(string);
+    callback edit-remote-sftp();
     callback close-sftp();
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
     callback scroll-terminal(string, int);
+    callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
@@ -539,7 +601,10 @@ export component WorkspaceShell inherits Rectangle {
             );
         }
         resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
-        scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+            scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+            mouse-event(id, row, column, button, kind, shift, alt, control) => {
+                root.mouse-event(id, row, column, button, kind, shift, alt, control);
+            }
         terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
             return root.terminal-selection-text(
                 id, anchor-row, anchor-column, focus-row, focus-column,
@@ -709,8 +774,27 @@ export component WorkspaceShell inherits Rectangle {
                         }
                         select-all-local(selected) => { root.select-all-local-sftp(selected); }
                         open-remote-file(path) => { root.open-remote-sftp-file(path); }
+                        download-selected-remote => { root.download-selected-remote-sftp(); }
                         open-local-file(path) => { root.open-local-sftp-file(path); }
+                        toggle-transfer-selection(id, selected) => {
+                            root.toggle-sftp-transfer-selection(id, selected);
+                        }
+                        pause-transfer(id) => { root.pause-sftp-transfer(id); }
+                        resume-transfer(id) => { root.resume-sftp-transfer(id); }
                         cancel-transfer(id) => { root.cancel-sftp-transfer(id); }
+                        pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
+                        resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
+                        cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+                        remove-selected-remote => { root.remove-selected-remote-sftp(); }
+                        upload-selected-local => { root.upload-selected-local-sftp(); }
+                        rename-remote(name) => { root.rename-remote-sftp(name); }
+                        edit-remote => { root.edit-remote-sftp(); }
+                        load-remote-file(path) => { root.load-remote-sftp-file(path); }
+                        save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
+                        editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
+                        toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
+                        dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
+                        drag-local-file(path) => { return root.drag-local-file-sftp(path); }
                         close => { root.close-tab(root.view.active_tab_id); }
                         write-clipboard(path) => { root.write-clipboard(path); }
                     }

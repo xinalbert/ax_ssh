@@ -51,14 +51,6 @@ pub(super) fn start_session_worker(
                 ssh.sftp_remote_path = initial_path;
             }
         }
-        if profile
-            .ssh()
-            .context("SSH worker requires an SSH profile")?
-            .host_key_fingerprint
-            .is_none()
-        {
-            anyhow::bail!("verify the SSH host key first");
-        }
         if app.terminal(tab_id).is_none_or(|terminal| {
             terminal.worker.is_some() || terminal.connection_target() != target
         }) {
@@ -88,6 +80,7 @@ pub(super) fn start_session_worker(
             anyhow::bail!("terminal tab is not an SSH terminal");
         }
         terminal.worker = Some(TerminalWorker::Ssh(worker));
+        terminal.enable_reconnect();
         terminal.worker_running = true;
         terminal.connected = false;
         terminal.status = format!("Connecting to {}...", profile_endpoint(&profile));
@@ -106,6 +99,7 @@ pub(super) fn start_session_worker(
         events,
         credential_to_store,
         used_stored_credential,
+        target,
     );
     Ok(())
 }

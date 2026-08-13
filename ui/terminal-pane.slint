@@ -38,6 +38,7 @@ export struct TerminalViewState {
     copy_selection_shortcut: string,
     paste_shortcut: string,
     select_all_shortcut: string,
+    mouse_reporting: bool,
 }
 
 component TerminalPaneCloseButton inherits FocusScope {
@@ -128,6 +129,7 @@ export component TerminalPane inherits Rectangle {
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resized(int, int);
     callback scrolled(int);
+    callback mouse-event(int, int, int, int, bool, bool, bool);
     callback selection-text(int, int, int, int) -> string;
     callback terminal-target-at-cell(int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(int, int, bool, bool) -> bool;
@@ -160,6 +162,7 @@ export component TerminalPane inherits Rectangle {
     private property <bool> initial-input-focus-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
+    private property <int> pressed-button: -1;
     private property <int> selection-anchor-row: 0;
     private property <int> selection-anchor-column: 0;
     private property <int> selection-focus-row: 0;
@@ -193,6 +196,7 @@ export component TerminalPane inherits Rectangle {
         font_family: root.terminal-font-family, font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,
         selection_background: root.terminal-selection-background,
+        mouse_reporting: root.view.mouse_reporting,
     };
     private property <TerminalSelectionView> grid-selection: {
         active: root.selection-active, first_row: root.selection-first-row,
@@ -512,12 +516,20 @@ export component TerminalPane inherits Rectangle {
                 right-click-pastes:
                     root.right-click-copy-or-paste || root.copy-selection-on-select;
                 target-highlight: root.terminal-target-highlight;
-                pointer-down(row, column, left, right, control, meta) => {
+                pointer-down(row, column, button, shift, alt, control, meta) => {
+                    let left = button == 0;
+                    let right = button == 2;
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-in-grid = true;
                     root.focus-terminal();
-                    if left && root.activate-terminal-target(row, column, control, meta) {
+                    if root.view.mouse_reporting {
+                        if button <= 2 {
+                            root.pressed-button = button;
+                            root.mouse-event(row, column, root.pressed-button, 0,
+                                shift, alt, control);
+                        }
+                    } else if left && root.activate-terminal-target(row, column, control, meta) {
                         root.clear-selection();
                     } else if left {
                         root.selection-anchor-row = row;
@@ -538,11 +550,19 @@ export component TerminalPane inherits Rectangle {
                         }
                     }
                 }
-                pointer-moved(row, column, control, meta) => {
+                pointer-moved(row, column, shift, alt, control, meta) => {
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-in-grid = true;
-                    if root.selecting {
+                    if root.view.mouse_reporting {
+                        if root.pressed-button >= 0 {
+                            root.mouse-event(row, column, root.pressed-button, 2,
+                                shift, alt, control);
+                        } else {
+                            root.mouse-event(row, column, 5, 2,
+                                shift, alt, control);
+                        }
+                    } else if root.selecting {
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
                         root.clear-terminal-target-highlight();
@@ -558,15 +578,29 @@ export component TerminalPane inherits Rectangle {
                         root.clear-terminal-target-highlight();
                     }
                 }
-                pointer-up => {
+                pointer-up(row, column, button) => {
+                    if root.view.mouse_reporting {
+                        if root.pressed-button >= 0 {
+                            root.mouse-event(row, column,
+                                root.pressed-button, 1, false, false, false);
+                        }
+                        root.pressed-button = -1;
+                    }
                     if root.selecting && root.copy-selection-on-select && root.selection-active {
                         root.copy-selection();
                     }
                     root.selecting = false;
                 }
-                scrolled(lines) => {
-                    root.clear-selection();
-                    root.scrolled(lines);
+                scrolled(row, column, lines, shift, alt, control) => {
+                    if root.view.mouse_reporting {
+                        root.mouse-event(
+                            row,
+                            column,
+                            lines > 0 ? 3 : 4, 0, control, alt, shift);
+                    } else {
+                        root.clear-selection();
+                        root.scrolled(lines);
+                    }
                 }
                 copy-request => { root.copy-selection(); }
                 paste-request => { root.paste-from-clipboard(); }

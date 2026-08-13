@@ -1,15 +1,17 @@
-//! Bounded read-only SFTP downloads into AxSSH's private open-file cache.
+//! Bounded SFTP downloads with private-cache opening kept as a separate flow.
 
 mod cache;
+mod local;
 
 use self::cache::*;
+use self::local::*;
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::fs::{self, File as LocalFile, OpenOptions};
 use std::future::Future;
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
@@ -17,7 +19,7 @@ use std::time::SystemTime;
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use russh_sftp::client::{Config, RawSftpSession};
-use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
+use russh_sftp::protocol::{File, FileAttributes, OpenFlags, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
 use tokio::sync::{Notify, mpsc};
@@ -37,6 +39,12 @@ const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
 const WRITER_QUEUE_CAPACITY: usize = 2;
 const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+pub(crate) const MAX_RECURSIVE_DOWNLOAD_FILES: usize = 512;
+pub(crate) const MAX_RECURSIVE_DOWNLOAD_DIRECTORIES: usize = 256;
+pub(crate) const MAX_RECURSIVE_DOWNLOAD_DEPTH: usize = 16;
+pub(crate) const MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_RECURSIVE_DOWNLOAD_ENTRIES: usize = 4_096;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITER_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -51,6 +59,12 @@ static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SftpTransferEvent {
+    Queued {
+        transfer_id: Uuid,
+        remote_path: String,
+        name: String,
+        total_bytes: u64,
+    },
     Started {
         transfer_id: Uuid,
         remote_path: String,
@@ -61,6 +75,21 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         downloaded_bytes: u64,
         total_bytes: u64,
+    },
+    Paused {
+        transfer_id: Uuid,
+        downloaded_bytes: u64,
+        total_bytes: u64,
+    },
+    Resumed {
+        transfer_id: Uuid,
+        downloaded_bytes: u64,
+        total_bytes: u64,
+    },
+    DiscoveryFailed {
+        transfer_id: Uuid,
+        name: String,
+        message: String,
     },
     Completed {
         transfer_id: Uuid,
@@ -77,18 +106,138 @@ pub enum SftpTransferEvent {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SftpUploadRequest {
+    transfer_id: Uuid,
+    remote_path: String,
+    name: String,
+    data: Vec<u8>,
+}
+
+impl SftpUploadRequest {
+    pub(crate) fn new(transfer_id: Uuid, remote_path: String, data: Vec<u8>) -> Result<Self> {
+        validate_remote_path(&remote_path)?;
+        if data.len() as u64 > super::MAX_UPLOAD_BYTES {
+            anyhow::bail!(
+                "upload content exceeds the {}-byte limit",
+                super::MAX_UPLOAD_BYTES
+            );
+        }
+        let name = remote_path
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .context("remote upload target is missing a file name")?;
+        if name.starts_with('.')
+            || name == "."
+            || name == ".."
+            || name.chars().any(char::is_control)
+            || name.contains(['/', '\\'])
+            || name.chars().count() > MAX_NAME_CHARS
+        {
+            anyhow::bail!("remote upload target name is invalid");
+        }
+        let name = name.to_owned();
+        Ok(Self {
+            transfer_id,
+            remote_path,
+            name,
+            data,
+        })
+    }
+
+    pub(crate) fn transfer_id(&self) -> Uuid {
+        self.transfer_id
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn total_bytes(&self) -> u64 {
+        self.data.len() as u64
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SftpDownloadRequest {
     transfer_id: Uuid,
     remote_path: String,
     name: String,
+    total_bytes: u64,
+    local_target: Option<LocalDownloadTarget>,
 }
 
 impl SftpDownloadRequest {
+    #[cfg(test)]
     pub(crate) fn new(transfer_id: Uuid, remote_path: String) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         Ok(Self {
             transfer_id,
             remote_path,
+            name,
+            total_bytes: 0,
+            local_target: None,
+        })
+    }
+
+    pub(crate) fn for_local_download(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+        local_components: Vec<String>,
+        total_bytes: u64,
+    ) -> Result<Self> {
+        validate_download_path(&remote_path)?;
+        let local_target = LocalDownloadTarget::new(local_directory, local_components)?;
+        let name = local_target.display_name();
+        Ok(Self {
+            transfer_id,
+            remote_path,
+            name,
+            total_bytes,
+            local_target: Some(local_target),
+        })
+    }
+
+    pub(crate) fn transfer_id(&self) -> Uuid {
+        self.transfer_id
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn remote_path(&self) -> &str {
+        &self.remote_path
+    }
+
+    pub(crate) fn total_bytes(&self) -> u64 {
+        self.total_bytes
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SftpDownloadRoot {
+    transfer_id: Uuid,
+    remote_path: String,
+    local_directory: PathBuf,
+    name: String,
+}
+
+impl SftpDownloadRoot {
+    pub(crate) fn new(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+    ) -> Result<Self> {
+        let name = validate_download_path(&remote_path)?.to_owned();
+        if local_directory.as_os_str().is_empty() {
+            anyhow::bail!("local download directory is empty");
+        }
+        Ok(Self {
+            transfer_id,
+            remote_path,
+            local_directory,
             name,
         })
     }
@@ -96,12 +245,89 @@ impl SftpDownloadRequest {
     pub(crate) fn transfer_id(&self) -> Uuid {
         self.transfer_id
     }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 pub(crate) struct SftpDownloadHandle {
     transfer_id: Uuid,
     cancellation: TransferCancellation,
     task: JoinHandle<()>,
+}
+
+pub(crate) struct SftpUploadHandle {
+    transfer_id: Uuid,
+    cancellation: TransferCancellation,
+    task: JoinHandle<()>,
+}
+
+impl SftpUploadHandle {
+    pub(crate) fn spawn<S>(
+        runtime: &Handle,
+        stream: S,
+        request: SftpUploadRequest,
+        event_tx: mpsc::Sender<SftpTransferEvent>,
+    ) -> Self
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let transfer_id = request.transfer_id;
+        let cancellation = TransferCancellation::new();
+        let task = runtime.spawn(run_upload(stream, request, cancellation.clone(), event_tx));
+        Self {
+            transfer_id,
+            cancellation,
+            task,
+        }
+    }
+
+    pub(crate) fn transfer_id(&self) -> Uuid {
+        self.transfer_id
+    }
+
+    pub(crate) fn is_finished(&self) -> bool {
+        self.task.is_finished()
+    }
+
+    pub(crate) fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+
+    pub(crate) fn pause(&self) {
+        self.cancellation.pause();
+    }
+
+    pub(crate) fn resume(&self) {
+        self.cancellation.resume();
+    }
+
+    pub(crate) async fn shutdown(mut self) -> Result<()> {
+        if !self.task.is_finished() {
+            self.cancellation.cancel();
+        }
+        match timeout(SHUTDOWN_TIMEOUT, &mut self.task).await {
+            Ok(joined) => joined.context("SFTP upload task failed during shutdown"),
+            Err(_) => {
+                self.task.abort();
+                match (&mut self.task).await {
+                    Err(error) if error.is_cancelled() => Ok(()),
+                    Err(error) => Err(error).context("failed to abort SFTP upload task"),
+                    Ok(()) => Ok(()),
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SftpUploadHandle {
+    fn drop(&mut self) {
+        if !self.task.is_finished() {
+            self.cancellation.cancel();
+            self.task.abort();
+        }
+    }
 }
 
 impl SftpDownloadHandle {
@@ -135,6 +361,14 @@ impl SftpDownloadHandle {
 
     pub(crate) fn cancel(&self) {
         self.cancellation.cancel();
+    }
+
+    pub(crate) fn pause(&self) {
+        self.cancellation.pause();
+    }
+
+    pub(crate) fn resume(&self) {
+        self.cancellation.resume();
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
@@ -240,13 +474,34 @@ async fn run_download<S>(
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let transfer_id = request.transfer_id;
-    let result = match cache_namespace() {
-        Ok(cache_dir) => {
-            download_to_cache(stream, &request, &cancellation, &event_tx, &cache_dir).await
+    let writes_local_target = request.local_target.is_some();
+    let result = if writes_local_target {
+        download_to_local(stream, &request, &cancellation, &event_tx).await
+    } else {
+        match cache_namespace() {
+            Ok(cache_dir) => {
+                download_to_cache(stream, &request, &cancellation, &event_tx, &cache_dir).await
+            }
+            Err(error) => Err(error),
         }
-        Err(error) => Err(error),
     };
     let terminal_event = match result {
+        Ok((local_path, _total_bytes)) if cancellation.is_cancelled() => {
+            if writes_local_target {
+                remove_local_download_best_effort(
+                    local_path,
+                    "transfer was cancelled after local publication",
+                )
+                .await;
+            } else {
+                remove_cache_file_best_effort(
+                    local_path,
+                    "transfer was cancelled after cache publication",
+                )
+                .await;
+            }
+            SftpTransferEvent::Cancelled { transfer_id }
+        }
         Ok((local_path, total_bytes)) => SftpTransferEvent::Completed {
             transfer_id,
             local_path,
@@ -274,7 +529,328 @@ async fn run_download<S>(
         }
     };
     if !delivered && let Some(path) = cleanup_path {
-        remove_cache_file_best_effort(path, "terminal transfer event was not delivered").await;
+        if writes_local_target {
+            remove_local_download_best_effort(path, "terminal transfer event was not delivered")
+                .await;
+        } else {
+            remove_cache_file_best_effort(path, "terminal transfer event was not delivered").await;
+        }
+    }
+}
+
+async fn run_upload<S>(
+    stream: S,
+    request: SftpUploadRequest,
+    cancellation: TransferCancellation,
+    event_tx: mpsc::Sender<SftpTransferEvent>,
+) where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let total_bytes = request.data.len() as u64;
+    let event = SftpTransferEvent::Started {
+        transfer_id: request.transfer_id,
+        remote_path: request.remote_path.clone(),
+        name: request.name.clone(),
+        total_bytes,
+    };
+    if send_transfer_state(&event_tx, event).await.is_err() {
+        return;
+    }
+    let result = upload_initialized(stream, &request, &cancellation, &event_tx).await;
+    let terminal = match result {
+        Ok(()) if cancellation.is_cancelled() => SftpTransferEvent::Cancelled {
+            transfer_id: request.transfer_id,
+        },
+        Ok(()) => SftpTransferEvent::Completed {
+            transfer_id: request.transfer_id,
+            local_path: PathBuf::new(),
+            total_bytes,
+        },
+        Err(error) if is_cancelled(&error) => SftpTransferEvent::Cancelled {
+            transfer_id: request.transfer_id,
+        },
+        Err(error) => SftpTransferEvent::Failed {
+            transfer_id: request.transfer_id,
+            message: bounded_error(&error),
+        },
+    };
+    let _ = send_transfer_state(&event_tx, terminal).await;
+}
+
+async fn upload_initialized<S>(
+    stream: S,
+    request: &SftpUploadRequest,
+    cancellation: &TransferCancellation,
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let session = RawSftpSession::new_with_config(
+        PacketLimitedStream::new(stream),
+        Config {
+            max_packet_len: MAX_PACKET_BYTES,
+            max_concurrent_writes: 1,
+            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
+        },
+    );
+    await_step(
+        cancellation,
+        Instant::now() + DOWNLOAD_TIMEOUT,
+        REQUEST_TIMEOUT,
+        "SFTP upload handshake",
+        session.init(),
+    )
+    .await?
+    .context("SFTP upload handshake failed")?;
+    let parent = request
+        .remote_path
+        .strip_suffix(&request.name)
+        .unwrap_or("")
+        .trim_end_matches('/');
+    let temporary = format!(
+        "{parent}/.{}.axssh-upload-{}",
+        request.name, request.transfer_id
+    );
+    let target_check =
+        ensure_remote_target_absent_for_transfer(&session, &request.remote_path).await;
+    if let Err(error) = target_check {
+        let _ = session.close_session();
+        return Err(error);
+    }
+    let handle = await_step(
+        cancellation,
+        Instant::now() + DOWNLOAD_TIMEOUT,
+        REQUEST_TIMEOUT,
+        "opening remote upload file",
+        session.open(
+            temporary.clone(),
+            OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+            FileAttributes::default(),
+        ),
+    )
+    .await?
+    .context("cannot open remote upload file")?
+    .handle;
+    let mut offset = 0_u64;
+    let mut next_progress = PROGRESS_STEP_BYTES.min(request.data.len() as u64);
+    let result = async {
+        while offset < request.data.len() as u64 {
+            cancellation.wait_until_running().await?;
+            let end = (offset as usize + DOWNLOAD_CHUNK_BYTES as usize).min(request.data.len());
+            let chunk = request.data[offset as usize..end].to_vec();
+            await_step(
+                cancellation,
+                Instant::now() + DOWNLOAD_TIMEOUT,
+                REQUEST_TIMEOUT,
+                "writing remote upload",
+                session.write(handle.clone(), offset, chunk),
+            )
+            .await?
+            .context("cannot write remote upload")?;
+            offset = end as u64;
+            if offset >= next_progress || offset == request.data.len() as u64 {
+                send_progress(
+                    event_tx,
+                    SftpTransferEvent::Progress {
+                        transfer_id: request.transfer_id,
+                        downloaded_bytes: offset,
+                        total_bytes: request.data.len() as u64,
+                    },
+                )?;
+                next_progress = offset.saturating_add(PROGRESS_STEP_BYTES);
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+    let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
+    if result.is_ok() && !cancellation.is_cancelled() {
+        if let Err(error) = timeout(
+            REQUEST_TIMEOUT,
+            session.rename(temporary.clone(), request.remote_path.clone()),
+        )
+        .await
+        .context("publishing remote upload timed out")?
+        {
+            let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
+            return Err(error.into());
+        }
+    } else {
+        let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
+    }
+    let _ = session.close_session();
+    result
+}
+
+async fn ensure_remote_target_absent_for_transfer(
+    session: &RawSftpSession,
+    path: &str,
+) -> Result<()> {
+    match timeout(REQUEST_TIMEOUT, session.lstat(path.to_owned())).await {
+        Ok(Ok(_)) => anyhow::bail!("remote target already exists; upload was rejected"),
+        Ok(Err(russh_sftp::client::error::Error::Status(status)))
+            if status.status_code == StatusCode::NoSuchFile =>
+        {
+            Ok(())
+        }
+        Ok(Err(error)) => Err(error).context("SFTP upload target check failed"),
+        Err(_) => anyhow::bail!("SFTP upload target check timed out"),
+    }
+}
+
+async fn download_to_local<S>(
+    stream: S,
+    request: &SftpDownloadRequest,
+    cancellation: &TransferCancellation,
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+) -> Result<(PathBuf, u64)>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let deadline = Instant::now() + DOWNLOAD_TIMEOUT;
+    let session = RawSftpSession::new_with_config(
+        PacketLimitedStream::new(stream),
+        Config {
+            max_packet_len: MAX_PACKET_BYTES,
+            max_concurrent_writes: 1,
+            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
+        },
+    );
+    await_step(
+        cancellation,
+        deadline,
+        REQUEST_TIMEOUT,
+        "SFTP transfer handshake",
+        session.init(),
+    )
+    .await?
+    .context("SFTP transfer handshake failed")?;
+
+    let result =
+        download_initialized_local(&session, request, cancellation, event_tx, deadline).await;
+    if let Err(error) = session.close_session() {
+        debug!(%error, "failed to close local SFTP download session");
+    }
+    result
+}
+
+async fn download_initialized_local(
+    session: &RawSftpSession,
+    request: &SftpDownloadRequest,
+    cancellation: &TransferCancellation,
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+    deadline: Instant,
+) -> Result<(PathBuf, u64)> {
+    let initial = lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
+    let handle = await_step(
+        cancellation,
+        deadline,
+        REQUEST_TIMEOUT,
+        "opening remote file",
+        session.open(
+            request.remote_path.clone(),
+            OpenFlags::READ,
+            FileAttributes::empty(),
+        ),
+    )
+    .await?
+    .with_context(|| format!("cannot open remote file {:?}", request.remote_path))?
+    .handle;
+
+    let result = download_open_local_handle(
+        session,
+        &handle,
+        request,
+        initial,
+        cancellation,
+        event_tx,
+        deadline,
+    )
+    .await;
+    close_remote_handle(session, handle).await;
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn download_open_local_handle(
+    session: &RawSftpSession,
+    handle: &str,
+    request: &SftpDownloadRequest,
+    initial: RemoteFileMetadata,
+    cancellation: &TransferCancellation,
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+    deadline: Instant,
+) -> Result<(PathBuf, u64)> {
+    let opened = await_step(
+        cancellation,
+        deadline,
+        REQUEST_TIMEOUT,
+        "validating opened remote file",
+        session.fstat(handle.to_owned()),
+    )
+    .await?
+    .context("cannot inspect opened remote file")?;
+    ensure_same_remote_file(initial, validate_regular_metadata(&opened.attrs)?)?;
+    let reopened =
+        lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
+    ensure_same_remote_file(initial, reopened)?;
+
+    send_transfer_state(
+        event_tx,
+        SftpTransferEvent::Started {
+            transfer_id: request.transfer_id,
+            remote_path: request.remote_path.clone(),
+            name: request.name.clone(),
+            total_bytes: initial.size,
+        },
+    )
+    .await?;
+
+    let target = request
+        .local_target
+        .clone()
+        .context("local SFTP download is missing its target")?;
+    let pending = prepare_local_download(target, cancellation, deadline).await?;
+    let (chunk_tx, chunk_rx) = mpsc::channel(WRITER_QUEUE_CAPACITY);
+    let writer_cancel = cancellation.clone();
+    let expected_bytes = initial.size;
+    let mut writer = tokio::task::spawn_blocking(move || {
+        write_local_file(pending, chunk_rx, expected_bytes, &writer_cancel)
+    });
+
+    let stream_result = stream_remote_file(
+        session,
+        handle,
+        &request.remote_path,
+        request.transfer_id,
+        initial,
+        cancellation,
+        event_tx,
+        &chunk_tx,
+        deadline,
+    )
+    .await;
+    drop(chunk_tx);
+
+    match stream_result {
+        Ok(()) => {
+            let local_path =
+                await_local_writer_success(&mut writer, cancellation, deadline).await?;
+            Ok((local_path, initial.size))
+        }
+        Err(stream_error) => {
+            let writer_error = await_local_writer_cleanup(&mut writer).await;
+            if is_cancelled(&stream_error) {
+                return Err(stream_error);
+            }
+            match writer_error {
+                Some(error) if !is_incomplete_local_write(&error) && !is_cancelled(&error) => {
+                    Err(error)
+                }
+                _ => Err(stream_error),
+            }
+        }
     }
 }
 
@@ -469,6 +1045,27 @@ async fn stream_remote_file(
     let mut downloaded_bytes = 0_u64;
     let mut next_progress = PROGRESS_STEP_BYTES.min(expected.size);
     while downloaded_bytes < expected.size {
+        if cancellation.is_paused() {
+            send_transfer_state(
+                event_tx,
+                SftpTransferEvent::Paused {
+                    transfer_id,
+                    downloaded_bytes,
+                    total_bytes: expected.size,
+                },
+            )
+            .await?;
+            cancellation.wait_until_running().await?;
+            send_transfer_state(
+                event_tx,
+                SftpTransferEvent::Resumed {
+                    transfer_id,
+                    downloaded_bytes,
+                    total_bytes: expected.size,
+                },
+            )
+            .await?;
+        }
         let remaining = expected.size - downloaded_bytes;
         let requested = remaining.min(u64::from(DOWNLOAD_CHUNK_BYTES)) as u32;
         let response = await_step(
@@ -506,7 +1103,7 @@ async fn stream_remote_file(
             cancellation,
             deadline,
             REQUEST_TIMEOUT,
-            "writing local cache",
+            "writing local download",
             chunk_tx.send(data),
         )
         .await?
@@ -599,6 +1196,16 @@ fn send_progress(
     }
 }
 
+async fn send_transfer_state(
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+    event: SftpTransferEvent,
+) -> Result<()> {
+    timeout(REQUEST_TIMEOUT, event_tx.send(event))
+        .await
+        .context("timed out reporting SFTP transfer state")?
+        .context("SFTP transfer event receiver dropped")
+}
+
 async fn await_step<T, F>(
     cancellation: &TransferCancellation,
     overall_deadline: Instant,
@@ -640,6 +1247,7 @@ struct TransferCancellation {
 
 struct TransferCancellationInner {
     cancelled: AtomicBool,
+    paused: AtomicBool,
     notify: Notify,
 }
 
@@ -648,6 +1256,7 @@ impl TransferCancellation {
         Self {
             inner: Arc::new(TransferCancellationInner {
                 cancelled: AtomicBool::new(false),
+                paused: AtomicBool::new(false),
                 notify: Notify::new(),
             }),
         }
@@ -659,8 +1268,46 @@ impl TransferCancellation {
         }
     }
 
+    fn pause(&self) {
+        if !self.is_cancelled() && !self.inner.paused.swap(true, Ordering::AcqRel) {
+            self.inner.notify.notify_waiters();
+        }
+    }
+
+    fn resume(&self) {
+        if self.inner.paused.swap(false, Ordering::AcqRel) {
+            self.inner.notify.notify_waiters();
+        }
+    }
+
     fn is_cancelled(&self) -> bool {
         self.inner.cancelled.load(Ordering::Acquire)
+    }
+
+    fn is_paused(&self) -> bool {
+        self.inner.paused.load(Ordering::Acquire)
+    }
+
+    async fn wait_until_running(&self) -> Result<()> {
+        loop {
+            if self.is_cancelled() {
+                return Err(cancelled_error());
+            }
+            if !self.is_paused() {
+                return Ok(());
+            }
+            let notified = self.inner.notify.notified();
+            if self.is_cancelled() {
+                return Err(cancelled_error());
+            }
+            if !self.is_paused() {
+                return Ok(());
+            }
+            tokio::select! {
+                _ = self.cancelled() => return Err(cancelled_error()),
+                _ = notified => {}
+            }
+        }
     }
 
     async fn cancelled(&self) {
@@ -745,6 +1392,256 @@ fn validate_download_path(path: &str) -> Result<&str> {
         anyhow::bail!("remote file name cannot exceed {MAX_NAME_CHARS} characters");
     }
     Ok(name)
+}
+
+pub(crate) async fn discover_download_requests<S>(
+    stream: S,
+    root: SftpDownloadRoot,
+) -> Result<Vec<SftpDownloadRequest>>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let session = RawSftpSession::new_with_config(
+        PacketLimitedStream::new(stream),
+        Config {
+            max_packet_len: MAX_PACKET_BYTES,
+            max_concurrent_writes: 1,
+            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
+        },
+    );
+    timeout(REQUEST_TIMEOUT, session.init())
+        .await
+        .context("SFTP recursive-download handshake timed out")?
+        .context("SFTP recursive-download handshake failed")?;
+    let result = match timeout(
+        DOWNLOAD_TIMEOUT,
+        discover_initialized_download_requests(&session, &root),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(anyhow::anyhow!(
+            "SFTP recursive download exceeded the overall timeout"
+        )),
+    };
+    if let Err(error) = session.close_session() {
+        debug!(%error, "failed to close SFTP recursive-download session");
+    }
+    result
+}
+
+async fn discover_initialized_download_requests(
+    session: &RawSftpSession,
+    root: &SftpDownloadRoot,
+) -> Result<Vec<SftpDownloadRequest>> {
+    let attrs = timeout(REQUEST_TIMEOUT, session.lstat(root.remote_path.clone()))
+        .await
+        .context("inspecting recursive-download root timed out")?
+        .with_context(|| format!("cannot inspect remote path {:?}", root.remote_path))?;
+    if attrs.attrs.is_symlink() {
+        anyhow::bail!("remote symbolic links cannot be downloaded");
+    }
+    if attrs.attrs.is_regular() {
+        let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
+        return Ok(vec![SftpDownloadRequest::for_local_download(
+            root.transfer_id,
+            root.remote_path.clone(),
+            root.local_directory.clone(),
+            vec![root.name.clone()],
+            total_bytes,
+        )?]);
+    }
+    if !attrs.attrs.is_dir() {
+        anyhow::bail!("remote path is neither a regular file nor a directory");
+    }
+
+    let mut requests = Vec::new();
+    let mut pending = std::collections::VecDeque::from([(
+        root.remote_path.clone(),
+        vec![root.name.clone()],
+        0_usize,
+    )]);
+    let mut directories = 1_usize;
+    let mut scanned_entries = 0_usize;
+    let mut total_text_bytes = root.remote_path.len().saturating_add(root.name.len());
+    let mut total_bytes = 0_u64;
+    while let Some((remote_directory, local_components, depth)) = pending.pop_front() {
+        let handle = timeout(REQUEST_TIMEOUT, session.opendir(remote_directory.clone()))
+            .await
+            .context("opening remote download directory timed out")?
+            .with_context(|| format!("cannot open remote directory {remote_directory:?}"))?
+            .handle;
+        let directory_result = discover_directory_entries(
+            session,
+            &handle,
+            &remote_directory,
+            &local_components,
+            depth,
+            &mut pending,
+            &mut requests,
+            &mut scanned_entries,
+            &mut directories,
+            &mut total_text_bytes,
+            &mut total_bytes,
+            root,
+        )
+        .await;
+        close_remote_handle(session, handle).await;
+        directory_result?;
+    }
+    if requests.is_empty() {
+        anyhow::bail!("remote directory contains no regular files eligible for download");
+    }
+    Ok(requests)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn discover_directory_entries(
+    session: &RawSftpSession,
+    handle: &str,
+    remote_directory: &str,
+    local_components: &[String],
+    depth: usize,
+    pending: &mut std::collections::VecDeque<(String, Vec<String>, usize)>,
+    requests: &mut Vec<SftpDownloadRequest>,
+    scanned_entries: &mut usize,
+    directories: &mut usize,
+    total_text_bytes: &mut usize,
+    total_bytes: &mut u64,
+    root: &SftpDownloadRoot,
+) -> Result<()> {
+    loop {
+        let response = timeout(REQUEST_TIMEOUT, session.readdir(handle.to_owned()))
+            .await
+            .context("reading remote download directory timed out")?;
+        let files = match response {
+            Ok(names) if names.files.is_empty() => break,
+            Ok(names) => names.files,
+            Err(russh_sftp::client::error::Error::Status(status))
+                if status.status_code == StatusCode::Eof =>
+            {
+                break;
+            }
+            Err(error) => return Err(error).context("cannot read remote download directory"),
+        };
+        for file in files {
+            reserve_recursive_entry(scanned_entries)?;
+            let Some((name, path, kind, size)) = bounded_discovery_entry(remote_directory, file)
+            else {
+                continue;
+            };
+            *total_text_bytes = total_text_bytes
+                .saturating_add(name.len())
+                .saturating_add(path.len());
+            if *total_text_bytes > MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES {
+                anyhow::bail!(
+                    "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES}-byte text limit"
+                );
+            }
+            let mut child_components = local_components.to_vec();
+            child_components.push(name);
+            match kind {
+                DiscoveryEntryKind::Directory => {
+                    if depth >= MAX_RECURSIVE_DOWNLOAD_DEPTH {
+                        anyhow::bail!(
+                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_DEPTH}-level depth limit"
+                        );
+                    }
+                    reserve_recursive_directory(directories)?;
+                    pending.push_back((path, child_components, depth + 1));
+                }
+                DiscoveryEntryKind::RegularFile => {
+                    if requests.len() >= MAX_RECURSIVE_DOWNLOAD_FILES {
+                        anyhow::bail!(
+                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_FILES}-file limit"
+                        );
+                    }
+                    *total_bytes = total_bytes.saturating_add(size);
+                    if *total_bytes > MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES {
+                        anyhow::bail!(
+                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES}-byte limit"
+                        );
+                    }
+                    requests.push(SftpDownloadRequest::for_local_download(
+                        if requests.is_empty() {
+                            root.transfer_id
+                        } else {
+                            Uuid::new_v4()
+                        },
+                        path,
+                        root.local_directory.clone(),
+                        child_components,
+                        size,
+                    )?);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reserve_recursive_entry(scanned_entries: &mut usize) -> Result<()> {
+    *scanned_entries = scanned_entries.saturating_add(1);
+    if *scanned_entries > MAX_RECURSIVE_DOWNLOAD_ENTRIES {
+        anyhow::bail!(
+            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_ENTRIES}-entry scan limit"
+        );
+    }
+    Ok(())
+}
+
+fn reserve_recursive_directory(directories: &mut usize) -> Result<()> {
+    *directories = directories.saturating_add(1);
+    if *directories > MAX_RECURSIVE_DOWNLOAD_DIRECTORIES {
+        anyhow::bail!(
+            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_DIRECTORIES}-directory limit"
+        );
+    }
+    Ok(())
+}
+
+enum DiscoveryEntryKind {
+    Directory,
+    RegularFile,
+}
+
+fn bounded_discovery_entry(
+    parent: &str,
+    file: File,
+) -> Option<(String, String, DiscoveryEntryKind, u64)> {
+    let name = file.filename;
+    if name == "."
+        || name == ".."
+        || name.is_empty()
+        || name.chars().count() > MAX_NAME_CHARS
+        || name.chars().any(char::is_control)
+        || name.contains(['/', '\\'])
+    {
+        return None;
+    }
+    let path = join_remote_path(parent, &name);
+    if validate_remote_path(&path).is_err() || file.attrs.is_symlink() {
+        return None;
+    }
+    if file.attrs.is_dir() {
+        return Some((name, path, DiscoveryEntryKind::Directory, 0));
+    }
+    if !file.attrs.is_regular() {
+        return None;
+    }
+    let size = file.attrs.size?;
+    if size > MAX_DOWNLOAD_BYTES {
+        return None;
+    }
+    Some((name, path, DiscoveryEntryKind::RegularFile, size))
+}
+
+fn join_remote_path(parent: &str, child: &str) -> String {
+    if parent == "/" {
+        format!("/{child}")
+    } else {
+        format!("{parent}/{child}")
+    }
 }
 
 #[cfg(test)]
@@ -956,6 +1853,48 @@ mod tests {
         assert!(validate_regular_metadata(&regular).is_err());
     }
 
+    #[test]
+    fn recursive_discovery_entries_skip_unsafe_and_non_regular_paths() {
+        let mut regular = FileAttributes::empty();
+        regular.set_regular(true);
+        regular.size = Some(7);
+        let regular = File::new("report.txt", regular);
+        assert!(matches!(
+            bounded_discovery_entry("/srv", regular),
+            Some((name, path, DiscoveryEntryKind::RegularFile, 7))
+                if name == "report.txt" && path == "/srv/report.txt"
+        ));
+
+        let mut directory = FileAttributes::empty();
+        directory.set_dir(true);
+        assert!(matches!(
+            bounded_discovery_entry("/srv", File::new("nested", directory)),
+            Some((name, path, DiscoveryEntryKind::Directory, 0))
+                if name == "nested" && path == "/srv/nested"
+        ));
+
+        let mut symlink = FileAttributes::empty();
+        symlink.set_symlink(true);
+        assert!(bounded_discovery_entry("/srv", File::new("link", symlink)).is_none());
+        assert!(
+            bounded_discovery_entry("/srv", File::new("../escape", FileAttributes::empty()))
+                .is_none()
+        );
+        assert!(
+            bounded_discovery_entry("/srv", File::new("nested\\file", FileAttributes::empty()))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn recursive_discovery_budgets_bound_scanned_entries_and_pending_directories() {
+        let mut entries = MAX_RECURSIVE_DOWNLOAD_ENTRIES;
+        assert!(reserve_recursive_entry(&mut entries).is_err());
+
+        let mut directories = MAX_RECURSIVE_DOWNLOAD_DIRECTORIES;
+        assert!(reserve_recursive_directory(&mut directories).is_err());
+    }
+
     #[tokio::test]
     async fn loopback_download_reads_bounded_chunks_and_atomically_publishes() {
         let content = Arc::new(
@@ -1030,6 +1969,65 @@ mod tests {
                 total_bytes: 150_000,
                 ..
             })
+        ));
+    }
+
+    #[tokio::test]
+    async fn loopback_download_publishes_into_the_selected_local_directory() {
+        let content = Arc::new(b"downloaded locally".to_vec());
+        let server = DownloadTestServer {
+            content: content.clone(),
+            reported_size: content.len() as u64,
+            reads: Arc::new(Mutex::new(Vec::new())),
+        };
+        let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
+        russh_sftp::server::run(server_stream, server).await;
+        let test_root = TestCacheDir::new();
+        fs::create_dir(test_root.path()).expect("local directory fixture should be created");
+        let request = SftpDownloadRequest::for_local_download(
+            Uuid::new_v4(),
+            "/srv/report.bin".to_owned(),
+            test_root.path().to_owned(),
+            vec!["selected".to_owned(), "report.bin".to_owned()],
+            content.len() as u64,
+        )
+        .expect("local download request should validate");
+        let cancellation = TransferCancellation::new();
+        let (event_tx, mut event_rx) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+
+        let (local_path, total_bytes) =
+            download_to_local(client_stream, &request, &cancellation, &event_tx)
+                .await
+                .expect("loopback local download should complete");
+
+        assert_eq!(total_bytes, content.len() as u64);
+        let canonical_root = fs::canonicalize(test_root.path())
+            .expect("local directory fixture should resolve canonically");
+        assert_eq!(local_path, canonical_root.join("selected/report.bin"));
+        assert_eq!(
+            fs::read(&local_path).expect("local download should read"),
+            *content
+        );
+        assert!(
+            fs::read_dir(
+                local_path
+                    .parent()
+                    .expect("local path should have a parent")
+            )
+            .expect("local download directory should read")
+            .all(|entry| !entry
+                .expect("local directory entry should read")
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".part"))
+        );
+        assert!(matches!(
+            event_rx.try_recv(),
+            Ok(SftpTransferEvent::Started { .. })
+        ));
+        assert!(matches!(
+            event_rx.try_recv(),
+            Ok(SftpTransferEvent::Progress { .. })
         ));
     }
 

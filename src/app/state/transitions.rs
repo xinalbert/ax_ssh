@@ -74,6 +74,8 @@ fn prepare_retry_with_phase(
         return Ok(false);
     }
     if let Some(terminal) = app.terminal_mut(tab_id) {
+        let generation = terminal.reconnect_generation();
+        terminal.finish_reconnect_attempt(generation);
         terminal.worker = None;
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
@@ -98,6 +100,8 @@ pub(in crate::app) fn prepare_host_key_retry(
         return Ok(false);
     }
     if let Some(terminal) = app.terminal_mut(tab_id) {
+        let generation = terminal.reconnect_generation();
+        terminal.finish_reconnect_attempt(generation);
         terminal.worker = None;
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
@@ -116,6 +120,8 @@ pub(in crate::app) fn retire_session_attempt(
     match state.lock() {
         Ok(mut app) if matches_attempt(&app, tab_id, session_id, attempt_id) => {
             if let Some(terminal) = app.terminal_mut(tab_id) {
+                let generation = terminal.reconnect_generation();
+                terminal.finish_reconnect_attempt(generation);
                 terminal.worker = None;
                 terminal.set_ssh_attempt(None);
                 terminal.connected = false;

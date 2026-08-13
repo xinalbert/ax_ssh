@@ -26,6 +26,7 @@ export struct TerminalGridView {
     cursor_column: int,
     cursor_visible: bool,
     cursor_text: string,
+    mouse_reporting: bool,
     font_family: string,
     font_size: length,
     foreground: color,
@@ -62,11 +63,11 @@ export component TerminalGrid inherits Rectangle {
     in property <bool> right-click-pastes;
     in property <TerminalTargetHighlight> target-highlight;
 
-    callback pointer-down(int, int, bool, bool, bool, bool);
-    callback pointer-moved(int, int, bool, bool);
+    callback pointer-down(int, int, int, bool, bool, bool, bool);
+    callback pointer-moved(int, int, bool, bool, bool, bool);
     callback pointer-hovered(bool);
-    callback pointer-up();
-    callback scrolled(int);
+    callback pointer-up(int, int, int);
+    callback scrolled(int, int, int, bool, bool, bool);
     callback copy-request();
     callback paste-request();
     callback select-all-request();
@@ -214,27 +215,44 @@ export component TerminalGrid inherits Rectangle {
                         floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,
                         floor(self.mouse-x / root.cell-width))),
-                    event.button == PointerEventButton.left,
-                    event.button == PointerEventButton.right,
+                    event.button == PointerEventButton.left ? 0
+                        : event.button == PointerEventButton.middle ? 1
+                        : event.button == PointerEventButton.right ? 2 : 5,
+                    event.modifiers.shift,
+                    event.modifiers.alt,
                     event.modifiers.control,
                     event.modifiers.meta,
                 );
-            } else if event.kind == PointerEventKind.up
-                && event.button == PointerEventButton.left {
-                root.pointer-up();
+            } else if event.kind == PointerEventKind.up {
+                root.pointer-up(
+                    max(0, min(root.view.render_lines.length - 1,
+                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
+                    max(0, min(root.view.content_columns - 1,
+                        floor(self.mouse-x / root.cell-width))),
+                    event.button == PointerEventButton.left ? 0
+                    : event.button == PointerEventButton.middle ? 1
+                    : event.button == PointerEventButton.right ? 2 : 5);
             } else if event.kind == PointerEventKind.move {
                 root.pointer-moved(
                     max(0, min(root.view.render_lines.length - 1,
                         floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,
                         floor(self.mouse-x / root.cell-width))),
+                    event.modifiers.shift,
+                    event.modifiers.alt,
                     event.modifiers.control,
                     event.modifiers.meta,
                 );
             }
         }
         scroll-event(event) => {
-            root.scrolled(event.delta-y > 0 ? 3 : -3);
+            root.scrolled(
+                max(0, min(root.view.render_lines.length - 1,
+                    floor((self.mouse-y - root.top-offset) / root.cell-height))),
+                max(0, min(root.view.content_columns - 1,
+                    floor(self.mouse-x / root.cell-width))),
+                event.delta-y > 0 ? 3 : -3,
+                event.modifiers.shift, event.modifiers.alt, event.modifiers.control);
             accept
         }
     }
@@ -242,7 +260,7 @@ export component TerminalGrid inherits Rectangle {
     ContextMenuArea {
         width: parent.width;
         height: parent.height;
-        enabled: !root.right-click-pastes;
+        enabled: !root.right-click-pastes && !root.view.mouse_reporting;
         Menu {
             MenuItem {
                 title: @tr("Copy");

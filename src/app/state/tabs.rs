@@ -1,4 +1,5 @@
 use super::*;
+use ax_ssh::config::{WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot};
 
 impl AppState {
     pub(in crate::app) fn new(config: ConfigStore, sessions: SessionStore) -> Self {
@@ -149,6 +150,10 @@ impl AppState {
                 sftp: SftpBrowserState::default(),
                 sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
+                reconnect_generation: 0,
+                reconnect_attempt: 0,
+                reconnecting: false,
+                reconnect_enabled: true,
                 pending_auth_secret: None,
             })),
             companion_tab_id: None,
@@ -202,6 +207,10 @@ impl AppState {
                 sftp: SftpBrowserState::for_standalone_tab(local_path),
                 sftp_initial_path: initial_path,
                 ssh_phase: SshConnectionPhase::Idle,
+                reconnect_generation: 0,
+                reconnect_attempt: 0,
+                reconnecting: false,
+                reconnect_enabled: true,
                 pending_auth_secret: None,
             })),
             companion_tab_id: None,
@@ -230,6 +239,10 @@ impl AppState {
                 sftp: SftpBrowserState::default(),
                 sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
+                reconnect_generation: 0,
+                reconnect_attempt: 0,
+                reconnecting: false,
+                reconnect_enabled: false,
                 pending_auth_secret: None,
             })),
             companion_tab_id: None,
@@ -517,6 +530,10 @@ impl AppState {
                     terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
                     connected: terminal.connected,
                     worker_running: terminal.worker_running,
+                    mouse_reporting: terminal
+                        .terminal
+                        .as_ref()
+                        .is_some_and(TerminalModel::mouse_reporting_active),
                     sftp,
                     security_prompt: self.security_prompt_for(Some(active_id)),
                 }
@@ -542,6 +559,253 @@ impl AppState {
 
     pub(in crate::app) fn active_tab_id(&self) -> Option<Uuid> {
         self.active_tab_id
+    }
+
+    pub(in crate::app) fn workspace_tab_snapshots(
+        &self,
+    ) -> Vec<ax_ssh::config::WorkspaceTabSnapshot> {
+        self.tabs
+            .iter()
+            .map(|tab| {
+                let (kind, profile_id, terminal_text, sftp_remote_path, sftp_local_path, status) =
+                    match &tab.kind {
+                        WorkspaceTabKind::Terminal(terminal) => (
+                            terminal.backend.kind().to_owned(),
+                            terminal.profile_id(),
+                            terminal
+                                .terminal
+                                .as_ref()
+                                .map(TerminalModel::contents)
+                                .unwrap_or_default(),
+                            terminal.sftp.path.clone(),
+                            terminal.sftp.local.path.clone(),
+                            terminal.status.clone(),
+                        ),
+                        WorkspaceTabKind::Settings => (
+                            "settings".to_owned(),
+                            None,
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                        ),
+                        WorkspaceTabKind::SessionEditor(editor) => (
+                            "session-editor".to_owned(),
+                            editor.profile_id,
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                        ),
+                    };
+                ax_ssh::config::WorkspaceTabSnapshot {
+                    id: tab.id,
+                    title: tab.title.clone(),
+                    kind,
+                    profile_id,
+                    companion_tab_id: tab.companion_tab_id,
+                    terminal_text,
+                    sftp_remote_path,
+                    sftp_local_path,
+                    status,
+                }
+            })
+            .collect()
+    }
+
+    pub(in crate::app) fn workspace_snapshot(&self) -> WorkspaceSnapshot {
+        WorkspaceSnapshot {
+            version: WORKSPACE_SNAPSHOT_VERSION,
+            tabs: self.workspace_tab_snapshots(),
+            active_tab_id: self.active_tab_id,
+            windows: Vec::new(),
+        }
+    }
+
+    pub(in crate::app) fn set_active_tab_from_snapshot(&mut self, tab_id: Option<Uuid>) {
+        if let Some(tab_id) = tab_id
+            && self.tabs.iter().any(|tab| tab.id == tab_id)
+        {
+            self.active_tab_id = Some(tab_id);
+        }
+    }
+
+    pub(in crate::app) fn restored_connection_targets(
+        &self,
+    ) -> Vec<(Uuid, Uuid, ConnectionTarget)> {
+        self.tabs
+            .iter()
+            .filter_map(|tab| {
+                let WorkspaceTabKind::Terminal(terminal) = &tab.kind else {
+                    return None;
+                };
+                terminal
+                    .profile_id()
+                    .map(|profile_id| (tab.id, profile_id, terminal.connection_target()))
+            })
+            .collect()
+    }
+
+    pub(in crate::app) fn restored_local_tabs(&self) -> Vec<Uuid> {
+        self.tabs
+            .iter()
+            .filter_map(|tab| {
+                matches!(&tab.kind, WorkspaceTabKind::Terminal(terminal) if terminal.is_local())
+                    .then_some(tab.id)
+            })
+            .collect()
+    }
+
+    pub(in crate::app) fn restore_workspace_tabs(
+        &mut self,
+        snapshots: &[ax_ssh::config::WorkspaceTabSnapshot],
+    ) -> Vec<Uuid> {
+        self.tabs.clear();
+        self.active_tab_id = None;
+        let mut restored = Vec::new();
+        for snapshot in snapshots {
+            if self.tabs.iter().any(|tab| tab.id == snapshot.id) {
+                continue;
+            }
+            let tab = match snapshot.kind.as_str() {
+                "terminal" | "sftp" => {
+                    let terminal = if let Some(profile_id) = snapshot.profile_id {
+                        let Some(profile) = self
+                            .sessions
+                            .sessions
+                            .iter()
+                            .find(|profile| profile.id == profile_id)
+                        else {
+                            continue;
+                        };
+                        let backend = match (&profile.connection, snapshot.kind.as_str()) {
+                            (ax_ssh::config::ConnectionProfile::Ssh(_), "sftp") => {
+                                TerminalBackend::Sftp {
+                                    profile_id,
+                                    attempt_id: None,
+                                }
+                            }
+                            (ax_ssh::config::ConnectionProfile::Telnet(_), "sftp")
+                            | (ax_ssh::config::ConnectionProfile::Serial(_), "sftp") => {
+                                continue;
+                            }
+                            (ax_ssh::config::ConnectionProfile::Ssh(_), _) => {
+                                TerminalBackend::Ssh {
+                                    profile_id,
+                                    attempt_id: None,
+                                }
+                            }
+                            (ax_ssh::config::ConnectionProfile::Telnet(_), _) => {
+                                TerminalBackend::Telnet {
+                                    profile_id,
+                                    attempt_id: None,
+                                }
+                            }
+                            (ax_ssh::config::ConnectionProfile::Serial(_), _) => {
+                                TerminalBackend::Serial {
+                                    profile_id,
+                                    attempt_id: None,
+                                }
+                            }
+                        };
+                        let terminal = if snapshot.kind == "sftp" {
+                            None
+                        } else {
+                            Some(TerminalModel::from_text(
+                                &snapshot.terminal_text,
+                                usize::from(self.sessions.settings.terminal.default_columns),
+                                usize::from(self.sessions.settings.terminal.default_rows),
+                                self.sessions.settings.terminal.scrollback_lines as usize,
+                            ))
+                        };
+                        let local_path = if snapshot.sftp_local_path.is_empty() {
+                            profile
+                                .ssh()
+                                .map(|ssh| ssh.sftp_local_path.as_str())
+                                .unwrap_or_default()
+                        } else {
+                            &snapshot.sftp_local_path
+                        };
+                        let mut sftp = if snapshot.kind == "sftp" {
+                            SftpBrowserState::for_standalone_tab(local_path)
+                        } else {
+                            SftpBrowserState::default()
+                        };
+                        sftp.path = snapshot.sftp_remote_path.clone();
+                        Box::new(TerminalTabState {
+                            backend,
+                            worker: None,
+                            terminal,
+                            status: if snapshot.status.is_empty() {
+                                "Restored; reconnecting...".to_owned()
+                            } else {
+                                snapshot.status.clone()
+                            },
+                            connected: false,
+                            worker_running: false,
+                            sftp,
+                            sftp_initial_path: (!snapshot.sftp_remote_path.is_empty())
+                                .then(|| snapshot.sftp_remote_path.clone()),
+                            ssh_phase: SshConnectionPhase::Idle,
+                            reconnect_generation: 0,
+                            reconnect_attempt: 0,
+                            reconnecting: false,
+                            reconnect_enabled: true,
+                            pending_auth_secret: None,
+                        })
+                    } else {
+                        let terminal = TerminalModel::from_text(
+                            &snapshot.terminal_text,
+                            usize::from(self.sessions.settings.terminal.default_columns),
+                            usize::from(self.sessions.settings.terminal.default_rows),
+                            self.sessions.settings.terminal.scrollback_lines as usize,
+                        );
+                        Box::new(TerminalTabState {
+                            backend: TerminalBackend::Local,
+                            worker: None,
+                            terminal: Some(terminal),
+                            status: snapshot.status.clone(),
+                            connected: false,
+                            worker_running: false,
+                            sftp: SftpBrowserState::default(),
+                            sftp_initial_path: None,
+                            ssh_phase: SshConnectionPhase::Idle,
+                            reconnect_generation: 0,
+                            reconnect_attempt: 0,
+                            reconnecting: false,
+                            reconnect_enabled: false,
+                            pending_auth_secret: None,
+                        })
+                    };
+                    WorkspaceTabKind::Terminal(terminal)
+                }
+                "settings" => WorkspaceTabKind::Settings,
+                "session-editor" => WorkspaceTabKind::SessionEditor(SessionEditorState {
+                    draft_id: Uuid::new_v4(),
+                    profile_id: snapshot.profile_id,
+                    group_name: String::new(),
+                }),
+                _ => continue,
+            };
+            self.tabs.push(WorkspaceTab {
+                id: snapshot.id,
+                title: snapshot.title.clone(),
+                kind: tab,
+                companion_tab_id: None,
+            });
+            restored.push(snapshot.id);
+        }
+        for snapshot in snapshots {
+            if !restored.contains(&snapshot.id) {
+                continue;
+            }
+            let companion = snapshot.companion_tab_id.filter(|id| restored.contains(id));
+            if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == snapshot.id) {
+                tab.companion_tab_id = companion;
+            }
+        }
+        self.active_tab_id = restored.first().copied();
+        restored
     }
 
     pub(in crate::app) fn active_editor_profile_id(&self) -> Option<Option<Uuid>> {
