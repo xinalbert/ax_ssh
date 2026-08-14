@@ -22,9 +22,6 @@ msgstr "/dev/cu.usbserial or COM3"
 msgid "1 character"
 msgstr "1 个字符"
 
-msgid "1.0-21.0"
-msgstr "1.0-21.0"
-
 msgid "10-300 columns, 3-100 rows"
 msgstr "10-300 列，3-100 行"
 
@@ -54,6 +51,9 @@ msgstr "3 个字符"
 
 msgid "4 characters"
 msgstr "4 个字符"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60%-120%；100% 保留终端原色"
 
 msgid "9-32 px"
 msgstr "9-32 像素"
@@ -352,6 +352,9 @@ msgstr "编辑选中的远端文件"
 msgid "Enable SSH X11 forwarding"
 msgstr "启用 SSH X11 转发"
 
+msgid "Enable semantic highlighting"
+msgstr "启用语义高亮"
+
 msgid "Encrypted application vault"
 msgstr "应用加密保险库"
 
@@ -457,6 +460,9 @@ msgstr "帮助"
 msgid "Hidden"
 msgstr "隐藏"
 
+msgid "Highlight links, paths, statuses, and log levels"
+msgstr "高亮链接、路径、状态和日志级别"
+
 msgid "Host"
 msgstr "主机"
 
@@ -558,9 +564,6 @@ msgstr "鼠标"
 
 msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
 msgstr "在会话侧栏中遮盖用户名和 IPv4 地址的中间字段"
-
-msgid "Minimum contrast ratio"
-msgstr "最低对比度"
 
 msgid "Modified"
 msgstr "修改时间"
@@ -1081,9 +1084,6 @@ msgstr "终端行高百分比"
 msgid "Terminal link and path highlight color"
 msgstr "终端链接和路径高亮颜色"
 
-msgid "Terminal minimum contrast ratio"
-msgstr "终端最低对比度"
-
 msgid "Terminal pane heights"
 msgstr "终端窗格高度"
 
@@ -1096,6 +1096,9 @@ msgstr "终端回滚行数"
 msgid "Terminal success highlight color"
 msgstr "终端成功高亮颜色"
 
+msgid "Terminal text brightness"
+msgstr "终端文字亮度"
+
 msgid "Terminal text selection background"
 msgstr "终端文字选择背景"
 
@@ -1104,6 +1107,9 @@ msgstr "终端警告高亮颜色"
 
 msgid "Text"
 msgstr "文字"
+
+msgid "Text brightness"
+msgstr "文字亮度"
 
 msgid "Theme default"
 msgstr "主题默认值"

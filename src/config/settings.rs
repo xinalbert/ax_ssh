@@ -4,16 +4,16 @@ use serde::{Deserialize, Serialize};
 use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
     DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER, DEFAULT_SIDEBAR_WIDTH,
-    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS,
-    DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
-    DEFAULT_TERMINAL_ROWS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
-    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS,
-    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS, MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
+    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY,
+    DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS,
+    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MAX_COLLAPSED_GROUP_LABEL_CHARS,
+    MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS,
+    MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS,
     MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_ROWS,
-    MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH,
-    MIN_TERMINAL_COLUMNS, MIN_TERMINAL_CONTRAST_RATIO_TENTHS, MIN_TERMINAL_FONT_SIZE,
-    MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_ROWS, SYSTEM_DEFAULT_SHELL, TerminalColorScheme,
-    ThemeSettings,
+    MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES,
+    MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
+    MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+    SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
 };
 
 /// The language-selection policy for AxSSH's fully translated UI locales.
@@ -89,7 +89,8 @@ pub struct AppearanceSettingsInput<'a> {
     pub terminal_font_size: i32,
     pub terminal_line_height_percent: i32,
     pub color_scheme: &'a str,
-    pub minimum_contrast_ratio: f32,
+    pub text_brightness: f32,
+    pub semantic_highlighting: bool,
     pub terminal_semantic_colors: TerminalSemanticColorsInput<'a>,
     pub bright_bold_text: bool,
     pub right_click_copy_or_paste: bool,
@@ -151,8 +152,10 @@ pub struct AppearanceSettings {
     pub terminal_color_scheme: TerminalColorScheme,
     #[serde(default)]
     pub theme: ThemeSettings,
-    #[serde(default = "default_terminal_minimum_contrast_ratio_tenths")]
-    pub terminal_minimum_contrast_ratio_tenths: u16,
+    #[serde(default = "default_terminal_text_brightness_percent")]
+    pub terminal_text_brightness_percent: u16,
+    #[serde(default)]
+    pub terminal_semantic_highlighting: bool,
     #[serde(default)]
     pub terminal_semantic_colors: TerminalSemanticColors,
     #[serde(default = "default_true")]
@@ -191,9 +194,10 @@ impl AppearanceSettings {
             ) as u16,
             terminal_color_scheme: theme.terminal_color_scheme(),
             theme,
-            terminal_minimum_contrast_ratio_tenths: normalize_terminal_minimum_contrast_ratio(
-                input.minimum_contrast_ratio,
+            terminal_text_brightness_percent: normalize_terminal_text_brightness(
+                input.text_brightness,
             ),
+            terminal_semantic_highlighting: input.semantic_highlighting,
             terminal_semantic_colors: TerminalSemanticColors::normalized(
                 input.terminal_semantic_colors,
             ),
@@ -216,7 +220,8 @@ impl AppearanceSettings {
             terminal_font_size: i32::from(self.terminal_font_size),
             terminal_line_height_percent: i32::from(self.terminal_line_height_percent),
             color_scheme: self.terminal_color_scheme.as_setting(),
-            minimum_contrast_ratio: f32::from(self.terminal_minimum_contrast_ratio_tenths) / 10.0,
+            text_brightness: f32::from(self.terminal_text_brightness_percent) / 100.0,
+            semantic_highlighting: self.terminal_semantic_highlighting,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: &self.terminal_semantic_colors.link,
                 success: &self.terminal_semantic_colors.success,
@@ -241,8 +246,8 @@ impl Default for AppearanceSettings {
             terminal_line_height_percent: default_terminal_line_height(),
             terminal_color_scheme: TerminalColorScheme::default(),
             theme: ThemeSettings::default(),
-            terminal_minimum_contrast_ratio_tenths: default_terminal_minimum_contrast_ratio_tenths(
-            ),
+            terminal_text_brightness_percent: default_terminal_text_brightness_percent(),
+            terminal_semantic_highlighting: false,
             terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
@@ -735,20 +740,21 @@ const fn default_terminal_line_height() -> u16 {
     DEFAULT_TERMINAL_LINE_HEIGHT
 }
 
-const fn default_terminal_minimum_contrast_ratio_tenths() -> u16 {
-    DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+const fn default_terminal_text_brightness_percent() -> u16 {
+    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
 }
 
-fn normalize_terminal_minimum_contrast_ratio(value: f32) -> u16 {
-    let tenths = if value.is_finite() {
-        (value * 10.0).round() as i32
+fn normalize_terminal_text_brightness(value: f32) -> u16 {
+    let percent = if value.is_finite() {
+        (value * 100.0).round() as i32
     } else {
-        i32::from(DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS)
+        i32::from(DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT)
     };
-    tenths.clamp(
-        i32::from(MIN_TERMINAL_CONTRAST_RATIO_TENTHS),
-        i32::from(MAX_TERMINAL_CONTRAST_RATIO_TENTHS),
-    ) as u16
+    let percent = percent.clamp(
+        i32::from(MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT),
+        i32::from(MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT),
+    );
+    ((percent + 2) / 5 * 5) as u16
 }
 
 fn normalize_terminal_semantic_color(value: &str) -> String {

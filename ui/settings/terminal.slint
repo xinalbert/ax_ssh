@@ -11,8 +11,9 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <int> draft-font-index;
     in-out property <int> draft-font-size;
     in-out property <int> draft-line-height-percent;
-    in-out property <float> draft-minimum-contrast-ratio;
+    in-out property <float> draft-text-brightness;
     in-out property <bool> draft-bright-bold-text;
+    in-out property <bool> draft-semantic-highlighting;
     in-out property <string> draft-semantic-link-color;
     in-out property <string> draft-semantic-success-color;
     in-out property <string> draft-semantic-info-color;
@@ -113,22 +114,22 @@ export component TerminalSettingsPage inherits Rectangle {
 
                 SettingsSectionHeading { label: @tr("DISPLAY"); }
                 SettingsRow {
-                    label: @tr("Minimum contrast ratio");
-                    description: @tr("1.0-21.0");
+                    label: @tr("Text brightness");
+                    description: @tr("60-120 percent; 100 percent preserves terminal colors");
                     SettingsField {
                         Slider {
                             width: Theme.settings-slider-width;
                             height: Theme.settings-control-height;
-                            minimum: 1;
-                            maximum: 21;
-                            step: 0.5;
-                            value: root.draft-minimum-contrast-ratio;
-                            accessible-label: @tr("Terminal minimum contrast ratio");
-                            changed(value) => { root.draft-minimum-contrast-ratio = value; }
+                            minimum: 0.60;
+                            maximum: 1.20;
+                            step: 0.05;
+                            value: root.draft-text-brightness;
+                            accessible-label: @tr("Terminal text brightness");
+                            changed(value) => { root.draft-text-brightness = value; }
                         }
                         Text {
                             width: Theme.settings-value-width;
-                            text: "\{root.draft-minimum-contrast-ratio}:1";
+                            text: "\{floor(root.draft-text-brightness * 100 + 0.5)}%";
                             color: Theme.muted;
                             font-size: Theme.font-small;
                             horizontal-alignment: right;
@@ -144,7 +145,13 @@ export component TerminalSettingsPage inherits Rectangle {
                 }
 
                 SettingsSectionHeading { label: @tr("SEMANTIC HIGHLIGHTING"); }
-                SettingsRow {
+                SettingsToggleRow {
+                    label: @tr("Enable semantic highlighting");
+                    description: @tr("Highlight links, paths, statuses, and log levels");
+                    checked <=> root.draft-semantic-highlighting;
+                    show-divider: root.draft-semantic-highlighting;
+                }
+                if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Link and path");
                     description: @tr("URL and remote path targets");
                     SettingsField {
@@ -156,7 +163,7 @@ export component TerminalSettingsPage inherits Rectangle {
                         }
                     }
                 }
-                SettingsRow {
+                if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Success");
                     description: @tr("Successful status words and HTTP 2xx");
                     SettingsField {
@@ -168,7 +175,7 @@ export component TerminalSettingsPage inherits Rectangle {
                         }
                     }
                 }
-                SettingsRow {
+                if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Information");
                     description: @tr("Informational status words");
                     SettingsField {
@@ -180,7 +187,7 @@ export component TerminalSettingsPage inherits Rectangle {
                         }
                     }
                 }
-                SettingsRow {
+                if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Warning");
                     description: @tr("Warnings and HTTP 4xx");
                     SettingsField {
@@ -192,7 +199,7 @@ export component TerminalSettingsPage inherits Rectangle {
                         }
                     }
                 }
-                SettingsRow {
+                if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Error");
                     description: @tr("Errors and HTTP 5xx");
                     show-divider: false;

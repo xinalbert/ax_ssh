@@ -17,10 +17,11 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_terminal_line_height_percent(i32::from(
         settings.appearance.terminal_line_height_percent,
     ));
-    ui.set_terminal_minimum_contrast_ratio(
-        f32::from(settings.appearance.terminal_minimum_contrast_ratio_tenths) / 10.0,
+    ui.set_terminal_text_brightness(
+        f32::from(settings.appearance.terminal_text_brightness_percent) / 100.0,
     );
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
+    ui.set_terminal_semantic_highlighting(settings.appearance.terminal_semantic_highlighting);
     ui.set_terminal_semantic_link_color(
         settings
             .appearance
@@ -144,6 +145,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_default_copy_selection_shortcut(defaults.copy_selection.into());
     ui.set_default_paste_shortcut(defaults.paste.into());
     ui.set_default_open_sftp_shortcut(defaults.open_sftp.into());
+    ui.set_terminal_appearance_revision(ui.get_terminal_appearance_revision().wrapping_add(1));
     #[cfg(target_os = "macos")]
     schedule_macos_application_menu_configuration(ui);
 }
@@ -216,7 +218,6 @@ pub(super) fn apply_theme_to_component(ui: &AppWindow, settings: &AppSettings) {
     ui.set_theme_palette(settings.appearance.theme.palette.as_setting().into());
     set_ui_theme_palette(ui, &settings.appearance.theme.custom_light, true);
     set_ui_theme_palette(ui, &settings.appearance.theme.custom_dark, false);
-    ui.set_theme_revision(ui.get_theme_revision().wrapping_add(1));
 }
 
 pub(super) fn set_theme_palette(theme: &Theme, palette: &ThemePalette, light: bool) {

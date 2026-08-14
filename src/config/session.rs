@@ -7,8 +7,8 @@ use uuid::Uuid;
 use super::settings::{default_toggle_sidebar_shortcut, previous_toggle_sidebar_shortcut};
 use super::{
     AppSettings, AppearanceSettings, CURRENT_SCHEMA_VERSION, DEFAULT_SIDEBAR_WIDTH,
-    DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS, PLATFORM_SHORTCUT_SCHEMA_VERSION,
-    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, TERMINAL_CONTRAST_SCHEMA_VERSION,
+    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, PLATFORM_SHORTCUT_SCHEMA_VERSION,
+    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION,
     THEME_SETTINGS_SCHEMA_VERSION, ThemeSettings, WORKSPACE_DENSITY_SCHEMA_VERSION,
 };
 
@@ -640,9 +640,10 @@ impl<'de> Deserialize<'de> for SessionStore {
                 settings.appearance.terminal_color_scheme,
             );
         }
-        if wire.version < TERMINAL_CONTRAST_SCHEMA_VERSION {
-            settings.appearance.terminal_minimum_contrast_ratio_tenths =
-                DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS;
+        if wire.version < TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION {
+            settings.appearance.terminal_text_brightness_percent =
+                DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT;
+            settings.appearance.terminal_semantic_highlighting = false;
         }
         settings.normalize_in_place();
         let mut store = Self {

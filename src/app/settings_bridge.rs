@@ -46,7 +46,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
     ("Terminal", "Font family", "Terminal character-cell font"),
     ("Terminal", "Font size", "9-32 px"),
     ("Terminal", "Line height", "100-200 percent"),
-    ("Terminal", "Minimum contrast ratio", "1.0-21.0"),
+    (
+        "Terminal",
+        "Text brightness",
+        "60-120 percent; 100 percent preserves terminal colors",
+    ),
     (
         "Terminal",
         "Bright colors for bold text",
@@ -55,7 +59,7 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
     (
         "Terminal",
         "Semantic highlighting",
-        "Link and path, success, information, warning, and error colors",
+        "Optional link, path, status, and log-level colors",
     ),
     (
         "Terminal",
@@ -300,10 +304,10 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
     ("Font size", "9-32 px", "字体大小", "9-32 px"),
     ("Line height", "100-200 percent", "行高", "100-200%"),
     (
-        "Minimum contrast ratio",
-        "1.0-21.0",
-        "最低对比度",
-        "1.0-21.0",
+        "Text brightness",
+        "60-120 percent; 100 percent preserves terminal colors",
+        "文字亮度",
+        "60-120%；100% 保留终端原色",
     ),
     (
         "Bright colors for bold text",
@@ -313,9 +317,9 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
     ),
     (
         "Semantic highlighting",
-        "Link and path, success, information, warning, and error colors",
+        "Optional link, path, status, and log-level colors",
         "语义高亮",
-        "链接、成功、信息、警告和错误颜色",
+        "可选的链接、路径、状态和日志级别颜色",
     ),
     (
         "Scrollback",
@@ -522,8 +526,9 @@ pub(super) fn wire_settings(
               terminal_font_family,
               font_size,
               line_height_percent,
-              minimum_contrast_ratio,
+              text_brightness,
               bright_bold_text,
+              terminal_semantic_highlighting,
               terminal_semantic_link_color,
               terminal_semantic_success_color,
               terminal_semantic_info_color,
@@ -638,7 +643,8 @@ pub(super) fn wire_settings(
                         theme_mode.as_str(),
                         theme_palette.as_str(),
                     ),
-                    minimum_contrast_ratio,
+                    text_brightness,
+                    semantic_highlighting: terminal_semantic_highlighting,
                     terminal_semantic_colors: TerminalSemanticColorsInput {
                         link: terminal_semantic_link_color.as_str(),
                         success: terminal_semantic_success_color.as_str(),

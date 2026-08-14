@@ -242,10 +242,9 @@ fn terminal_render_settings(ui: &AppWindow) -> TerminalRenderSettings {
         default_foreground: to_rgb_color(ui.get_theme_terminal_foreground()),
         default_background: to_rgb_color(ui.get_theme_terminal_background()),
         selection_background: to_rgb_color(ui.get_theme_terminal_selection()),
-        minimum_contrast_ratio: f64::from(
-            ui.get_terminal_minimum_contrast_ratio().clamp(1.0, 21.0),
-        ),
+        text_brightness: f64::from(ui.get_terminal_text_brightness().clamp(0.60, 1.20)),
         bright_bold_text: ui.get_bright_bold_text(),
+        semantic_highlighting: ui.get_terminal_semantic_highlighting(),
         semantic_colors: SemanticColorOverrides {
             link: semantic_color_override(ui.get_terminal_semantic_link_color().as_str()),
             success: semantic_color_override(ui.get_terminal_semantic_success_color().as_str()),

@@ -131,8 +131,9 @@ export component AppWindow inherits Window {
     in property <int> terminal-font-size: 14;
     in property <int> terminal-line-height-percent: 120;
     out property <string> terminal-color-scheme: Theme.terminal-color-scheme;
-    in property <float> terminal-minimum-contrast-ratio: 4.5;
+    in property <float> terminal-text-brightness: 1.0;
     in property <bool> bright-bold-text: true;
+    in property <bool> terminal-semantic-highlighting: false;
     in property <string> terminal-semantic-link-color: "";
     in property <string> terminal-semantic-success-color: "";
     in property <string> terminal-semantic-info-color: "";
@@ -157,7 +158,8 @@ export component AppWindow inherits Window {
     out property <color> theme-terminal-foreground: Theme.terminal-foreground;
     out property <color> theme-terminal-background: Theme.terminal-background;
     out property <color> theme-terminal-selection: Theme.terminal-selection;
-    in property <int> theme-revision: 0;
+    in property <int> terminal-appearance-revision: 0;
+    private property <bool> terminal-appearance-refresh-pending: false;
     in property <string> theme-mode: "dark";
     in property <string> theme-palette: "axssh";
     in property <string> theme-light-background: "#F7F8F7";
@@ -300,7 +302,8 @@ export component AppWindow inherits Window {
             terminal_font_family: root.terminal-font-family,
             terminal_font_options: root.terminal-font-options, terminal_font_index: root.terminal-font-index,
             terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
-            terminal_minimum_contrast_ratio: root.terminal-minimum-contrast-ratio, bright_bold_text: root.bright-bold-text,
+            terminal_text_brightness: root.terminal-text-brightness, bright_bold_text: root.bright-bold-text,
+            terminal_semantic_highlighting: root.terminal-semantic-highlighting,
             terminal_semantic_link_color: root.terminal-semantic-link-color,
             terminal_semantic_success_color: root.terminal-semantic-success-color,
             terminal_semantic_info_color: root.terminal-semantic-info-color,
@@ -397,7 +400,7 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, int, int, float, bool, string, string, string, string, string, string, string,
+        string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -481,12 +484,23 @@ export component AppWindow inherits Window {
     }
 
     init => { Palette.color-scheme = root.standard-widget-color-scheme; }
+    function schedule-terminal-appearance-refresh() {
+        root.terminal-appearance-refresh-pending = true;
+    }
     changed standard-widget-color-scheme => {
         Palette.color-scheme = root.standard-widget-color-scheme;
     }
-    changed terminal-color-scheme => { root.refresh-terminal-appearance(); }
-    changed theme-revision => { root.refresh-terminal-appearance(); }
+    changed terminal-color-scheme => { root.schedule-terminal-appearance-refresh(); }
+    changed terminal-appearance-revision => { root.schedule-terminal-appearance-refresh(); }
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
+    Timer {
+        running: root.terminal-appearance-refresh-pending;
+        interval: 1ms;
+        triggered => {
+            root.terminal-appearance-refresh-pending = false;
+            root.refresh-terminal-appearance();
+        }
+    }
     if !root.detached-window : MenuBar {
         Menu {
             title: @tr("File");
@@ -704,7 +718,7 @@ export component AppWindow inherits Window {
             return-workspace(id) => {
                 root.return-workspace(id);
             }
-            save-settings(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold,
+            save-settings(application-font, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
                           semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                           theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -719,7 +733,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           settings-tab-id, close-after-save) => {
-                root.save-settings(application-font, terminal-font, size, line-height, minimum-contrast-ratio, bright-bold,
+                root.save-settings(application-font, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                     theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,

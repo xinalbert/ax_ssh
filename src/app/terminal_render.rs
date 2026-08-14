@@ -8,7 +8,9 @@ use ax_ssh::terminal::{
 use super::terminal_targets::terminal_target_span_at_cell;
 
 const MAX_SEMANTIC_HIGHLIGHT_CHARS: usize = 512;
-const SEMANTIC_HIGHLIGHT_MINIMUM_CONTRAST_RATIO: f64 = 4.5;
+const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
+const MAX_TEXT_BRIGHTNESS: f64 = 1.20;
+const DIM_TEXT_BRIGHTNESS_FACTOR: f64 = 0.70;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RgbColor {
@@ -52,26 +54,11 @@ pub(super) struct SemanticColorOverrides {
 impl SemanticPalette {
     fn for_terminal(palette: &TerminalPalette, overrides: SemanticColorOverrides) -> Self {
         Self {
-            link: semantic_color(
-                overrides.link.unwrap_or(palette.ansi[14]),
-                palette.background,
-            ),
-            success: semantic_color(
-                overrides.success.unwrap_or(palette.ansi[10]),
-                palette.background,
-            ),
-            info: semantic_color(
-                overrides.info.unwrap_or(palette.ansi[12]),
-                palette.background,
-            ),
-            warning: semantic_color(
-                overrides.warning.unwrap_or(palette.ansi[11]),
-                palette.background,
-            ),
-            error: semantic_color(
-                overrides.error.unwrap_or(palette.ansi[9]),
-                palette.background,
-            ),
+            link: overrides.link.unwrap_or(palette.ansi[14]),
+            success: overrides.success.unwrap_or(palette.ansi[10]),
+            info: overrides.info.unwrap_or(palette.ansi[12]),
+            warning: overrides.warning.unwrap_or(palette.ansi[11]),
+            error: overrides.error.unwrap_or(palette.ansi[9]),
         }
     }
 
@@ -92,8 +79,9 @@ pub(super) struct TerminalRenderSettings {
     pub(super) default_foreground: RgbColor,
     pub(super) default_background: RgbColor,
     pub(super) selection_background: RgbColor,
-    pub(super) minimum_contrast_ratio: f64,
+    pub(super) text_brightness: f64,
     pub(super) bright_bold_text: bool,
+    pub(super) semantic_highlighting: bool,
     pub(super) semantic_colors: SemanticColorOverrides,
 }
 
@@ -134,11 +122,6 @@ pub(super) fn render_terminal(
     palette.foreground = settings.default_foreground;
     palette.background = settings.default_background;
     palette.selection_background = settings.selection_background;
-    let foreground = ensure_contrast_ratio(
-        palette.foreground,
-        palette.background,
-        settings.minimum_contrast_ratio,
-    );
     let lines = snapshot
         .lines
         .into_iter()
@@ -151,7 +134,7 @@ pub(super) fn render_terminal(
         cursor_column: snapshot.cursor_column,
         cursor_visible: snapshot.cursor_visible,
         cursor_text: snapshot.cursor_text,
-        foreground,
+        foreground: palette.foreground,
         background: palette.background,
         selection_background: palette.selection_background,
         mouse_reporting_active: snapshot.mouse_reporting_active,
@@ -163,11 +146,13 @@ fn render_line(
     palette: &TerminalPalette,
     settings: &TerminalRenderSettings,
 ) -> RenderedTerminalLine {
-    let semantic_palette = SemanticPalette::for_terminal(palette, settings.semantic_colors);
+    let semantic_palette = settings
+        .semantic_highlighting
+        .then(|| SemanticPalette::for_terminal(palette, settings.semantic_colors));
     let runs = line
         .runs
         .into_iter()
-        .flat_map(|run| render_run(run, palette, settings, &semantic_palette))
+        .flat_map(|run| render_run(run, palette, settings, semantic_palette.as_ref()))
         .collect();
     RenderedTerminalLine { runs }
 }
@@ -176,7 +161,7 @@ fn render_run(
     run: TerminalStyledRun,
     palette: &TerminalPalette,
     settings: &TerminalRenderSettings,
-    semantic_palette: &SemanticPalette,
+    semantic_palette: Option<&SemanticPalette>,
 ) -> Vec<RenderedTerminalRun> {
     let TerminalStyledRun {
         text,
@@ -184,7 +169,7 @@ fn render_run(
         cells,
         style,
     } = run;
-    let highlights = semantic_highlights(&text, cells, style);
+    let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
     let rendered = RenderedTerminalRun {
         text,
@@ -197,10 +182,17 @@ fn render_run(
         underline: style.underline,
         strikethrough: style.strikethrough,
     };
-    let Some(highlights) = highlights else {
-        return vec![rendered];
-    };
-    split_semantic_run(rendered, highlights, semantic_palette)
+    let mut rendered_runs =
+        if let (Some(highlights), Some(semantic_palette)) = (highlights, semantic_palette) {
+            split_semantic_run(rendered, highlights, semantic_palette)
+        } else {
+            vec![rendered]
+        };
+    for rendered_run in &mut rendered_runs {
+        rendered_run.foreground =
+            adjust_text_foreground(rendered_run.foreground, settings.text_brightness, style.dim);
+    }
+    rendered_runs
 }
 
 fn semantic_highlights(
@@ -436,10 +428,6 @@ fn split_semantic_run(
     runs
 }
 
-fn semantic_color(color: RgbColor, background: RgbColor) -> RgbColor {
-    ensure_contrast_ratio(color, background, SEMANTIC_HIGHLIGHT_MINIMUM_CONTRAST_RATIO)
-}
-
 fn resolve_style_colors(
     style: TerminalStyle,
     palette: &TerminalPalette,
@@ -457,16 +445,6 @@ fn resolve_style_colors(
     let mut background = resolve_color(style.background, palette.background, palette);
     if style.inverse {
         std::mem::swap(&mut foreground, &mut background);
-    }
-    if style.dim {
-        foreground = blend(foreground, background, 55);
-        foreground = ensure_contrast_ratio(
-            foreground,
-            background,
-            settings.minimum_contrast_ratio / 2.0,
-        );
-    } else {
-        foreground = ensure_contrast_ratio(foreground, background, settings.minimum_contrast_ratio);
     }
     (foreground, background)
 }
@@ -498,94 +476,73 @@ fn indexed_color(index: u8, palette: &TerminalPalette) -> RgbColor {
     }
 }
 
-fn ensure_contrast_ratio(color: RgbColor, background: RgbColor, ratio: f64) -> RgbColor {
-    let ratio = ratio.clamp(1.0, 21.0);
-    if contrast_ratio(color, background) >= ratio {
+fn adjust_text_foreground(color: RgbColor, brightness: f64, dim: bool) -> RgbColor {
+    let brightness = if brightness.is_finite() {
+        brightness.clamp(MIN_TEXT_BRIGHTNESS, MAX_TEXT_BRIGHTNESS)
+    } else {
+        1.0
+    };
+    let factor = if dim {
+        brightness * DIM_TEXT_BRIGHTNESS_FACTOR
+    } else {
+        brightness
+    };
+    if factor == 1.0 {
         return color;
     }
 
-    let white = adjust_toward(color, background, RgbColor::new(255, 255, 255), ratio);
-    let black = adjust_toward(color, background, RgbColor::new(0, 0, 0), ratio);
-    match (white, black) {
-        (Some((white, white_steps)), Some((black, black_steps))) => {
-            if white_steps <= black_steps {
-                white
+    let red = f64::from(color.red) / 255.0;
+    let green = f64::from(color.green) / 255.0;
+    let blue = f64::from(color.blue) / 255.0;
+    let maximum = red.max(green).max(blue);
+    let minimum = red.min(green).min(blue);
+    let lightness = (maximum + minimum) / 2.0;
+    let delta = maximum - minimum;
+    let (hue, saturation) = if delta == 0.0 {
+        (0.0, 0.0)
+    } else {
+        let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs());
+        let hue = if maximum == red {
+            ((green - blue) / delta).rem_euclid(6.0)
+        } else if maximum == green {
+            (blue - red) / delta + 2.0
+        } else {
+            (red - green) / delta + 4.0
+        } / 6.0;
+        (hue, saturation)
+    };
+    hsl_to_rgb(hue, saturation, (lightness * factor).clamp(0.0, 1.0))
+}
+
+fn hsl_to_rgb(hue: f64, saturation: f64, lightness: f64) -> RgbColor {
+    let channel = |offset: f64| {
+        let value = if saturation == 0.0 {
+            lightness
+        } else {
+            let q = if lightness < 0.5 {
+                lightness * (1.0 + saturation)
             } else {
-                black
-            }
-        }
-        (Some((white, _)), None) => white,
-        (None, Some((black, _))) => black,
-        (None, None) => color,
-    }
-}
-
-fn adjust_toward(
-    color: RgbColor,
-    background: RgbColor,
-    target: RgbColor,
-    ratio: f64,
-) -> Option<(RgbColor, u16)> {
-    if contrast_ratio(target, background) < ratio {
-        return None;
-    }
-
-    let mut low = 1u16;
-    let mut high = 255u16;
-    while low < high {
-        let middle = low + (high - low) / 2;
-        let candidate = blend_steps(color, target, middle);
-        if contrast_ratio(candidate, background) >= ratio {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    Some((blend_steps(color, target, low), low))
-}
-
-fn blend_steps(from: RgbColor, to: RgbColor, steps: u16) -> RgbColor {
-    let channel = |from: u8, to: u8| {
-        ((u16::from(from) * (255 - steps) + u16::from(to) * steps + 127) / 255) as u8
+                lightness + saturation - lightness * saturation
+            };
+            let p = 2.0 * lightness - q;
+            hue_channel(p, q, hue + offset)
+        };
+        (value * 255.0).round().clamp(0.0, 255.0) as u8
     };
-    RgbColor::new(
-        channel(from.red, to.red),
-        channel(from.green, to.green),
-        channel(from.blue, to.blue),
-    )
+    RgbColor::new(channel(1.0 / 3.0), channel(0.0), channel(-1.0 / 3.0))
 }
 
-fn blend(from: RgbColor, to: RgbColor, to_percent: u8) -> RgbColor {
-    let to_weight = u16::from(to_percent.min(100));
-    let from_weight = 100 - to_weight;
-    let channel = |from: u8, to: u8| {
-        ((u16::from(from) * from_weight + u16::from(to) * to_weight) / 100) as u8
-    };
-    RgbColor::new(
-        channel(from.red, to.red),
-        channel(from.green, to.green),
-        channel(from.blue, to.blue),
-    )
-}
-
-fn contrast_ratio(first: RgbColor, second: RgbColor) -> f64 {
-    let first = relative_luminance(first);
-    let second = relative_luminance(second);
-    let lighter = first.max(second);
-    let darker = first.min(second);
-    (lighter + 0.05) / (darker + 0.05)
-}
-
-fn relative_luminance(color: RgbColor) -> f64 {
-    let linear = |channel: u8| {
-        let channel = f64::from(channel) / 255.0;
-        if channel <= 0.04045 {
-            channel / 12.92
-        } else {
-            ((channel + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    linear(color.red) * 0.2126 + linear(color.green) * 0.7152 + linear(color.blue) * 0.0722
+fn hue_channel(p: f64, q: f64, hue: f64) -> f64 {
+    let hue = hue.rem_euclid(1.0);
+    if hue < 1.0 / 6.0 {
+        p + (q - p) * 6.0 * hue
+    } else if hue < 0.5 {
+        q
+    } else if hue < 2.0 / 3.0 {
+        p + (q - p) * (2.0 / 3.0 - hue) * 6.0
+    } else {
+        p
+    }
 }
 
 struct TerminalPalette {
@@ -794,9 +751,17 @@ mod tests {
             default_foreground: RgbColor::new(204, 204, 204),
             default_background: RgbColor::new(30, 30, 30),
             selection_background: RgbColor::new(38, 79, 120),
-            minimum_contrast_ratio: 4.5,
+            text_brightness: 1.0,
             bright_bold_text: true,
+            semantic_highlighting: false,
             semantic_colors: SemanticColorOverrides::default(),
+        }
+    }
+
+    fn semantic_settings() -> TerminalRenderSettings {
+        TerminalRenderSettings {
+            semantic_highlighting: true,
+            ..settings()
         }
     }
 
@@ -827,7 +792,8 @@ mod tests {
     #[test]
     fn semantic_highlights_cover_targets_statuses_and_bounded_keywords() {
         let text = "INFO 200 OK https://example.test 404 WARN 503 ERROR /srv/log";
-        let rendered = render_terminal(snapshot_line(vec![plain_run(text, 0)]), settings());
+        let rendered =
+            render_terminal(snapshot_line(vec![plain_run(text, 0)]), semantic_settings());
         let runs = &rendered.lines[0].runs;
         let run_for = |text: &str| {
             runs.iter()
@@ -859,7 +825,7 @@ mod tests {
         assert_eq!(source_runs.len(), 1);
         assert_eq!(source_runs[0].style, TerminalStyle::default());
 
-        let rendered = render_terminal(snapshot, settings());
+        let rendered = render_terminal(snapshot, semantic_settings());
         let runs = &rendered.lines[0].runs;
         let run_for = |text: &str| {
             runs.iter()
@@ -895,7 +861,7 @@ mod tests {
                     style: ansi_style,
                 },
             ]),
-            settings(),
+            semantic_settings(),
         );
         let runs = &rendered.lines[0].runs;
         let terror = runs
@@ -937,47 +903,21 @@ mod tests {
     }
 
     #[test]
-    fn semantic_colors_keep_contrast_for_terminal_schemes_and_custom_surfaces() {
-        let schemes = [
-            TerminalColorScheme::Dark,
-            TerminalColorScheme::Light,
-            TerminalColorScheme::SolarizedDark,
-            TerminalColorScheme::ArcticDark,
-            TerminalColorScheme::TokyoDark,
-            TerminalColorScheme::EmberDark,
-            TerminalColorScheme::ForestDark,
-        ];
-        for scheme in schemes {
-            let palette = TerminalPalette::for_scheme(scheme);
-            let semantic =
-                SemanticPalette::for_terminal(&palette, SemanticColorOverrides::default());
-            for color in [
-                semantic.link,
-                semantic.success,
-                semantic.info,
-                semantic.warning,
-                semantic.error,
-            ] {
-                assert!(contrast_ratio(color, palette.background) >= 4.5);
-            }
-        }
+    fn semantic_highlighting_is_disabled_by_default() {
+        let rendered = render_terminal(
+            snapshot_line(vec![plain_run("INFO ERROR https://example.test", 0)]),
+            settings(),
+        );
 
-        let mut palette = TerminalPalette::for_scheme(TerminalColorScheme::Dark);
-        palette.background = RgbColor::new(245, 242, 235);
-        let semantic = SemanticPalette::for_terminal(&palette, SemanticColorOverrides::default());
-        for color in [
-            semantic.link,
-            semantic.success,
-            semantic.info,
-            semantic.warning,
-            semantic.error,
-        ] {
-            assert!(contrast_ratio(color, palette.background) >= 4.5);
-        }
+        assert_eq!(rendered.lines[0].runs.len(), 1);
+        assert_eq!(
+            rendered.lines[0].runs[0].foreground,
+            settings().default_foreground
+        );
     }
 
     #[test]
-    fn configured_semantic_colors_override_theme_defaults_and_keep_contrast() {
+    fn configured_semantic_colors_are_brightened_after_selection() {
         let overrides = SemanticColorOverrides {
             link: Some(RgbColor::new(28, 202, 238)),
             success: Some(RgbColor::new(37, 211, 139)),
@@ -991,6 +931,8 @@ mod tests {
                 0,
             )]),
             TerminalRenderSettings {
+                text_brightness: 1.20,
+                semantic_highlighting: true,
                 semantic_colors: overrides,
                 ..settings()
             },
@@ -1004,33 +946,24 @@ mod tests {
 
         assert_eq!(
             run_for("https://example.test").foreground,
-            overrides.link.unwrap()
+            adjust_text_foreground(overrides.link.unwrap(), 1.20, false)
         );
-        assert_eq!(run_for("INFO").foreground, overrides.info.unwrap());
-        assert_eq!(run_for("200").foreground, overrides.success.unwrap());
-        assert_eq!(run_for("WARN").foreground, overrides.warning.unwrap());
-        assert_eq!(run_for("ERROR").foreground, overrides.error.unwrap());
-
-        let mut light_palette = TerminalPalette::for_scheme(TerminalColorScheme::Light);
-        light_palette.background = RgbColor::new(245, 242, 235);
-        let low_contrast = SemanticColorOverrides {
-            link: Some(RgbColor::new(250, 250, 250)),
-            success: Some(RgbColor::new(250, 250, 250)),
-            info: Some(RgbColor::new(250, 250, 250)),
-            warning: Some(RgbColor::new(250, 250, 250)),
-            error: Some(RgbColor::new(250, 250, 250)),
-        };
-        let corrected = SemanticPalette::for_terminal(&light_palette, low_contrast);
-        for color in [
-            corrected.link,
-            corrected.success,
-            corrected.info,
-            corrected.warning,
-            corrected.error,
-        ] {
-            assert_ne!(color, low_contrast.link.unwrap());
-            assert!(contrast_ratio(color, light_palette.background) >= 4.5);
-        }
+        assert_eq!(
+            run_for("INFO").foreground,
+            adjust_text_foreground(overrides.info.unwrap(), 1.20, false)
+        );
+        assert_eq!(
+            run_for("200").foreground,
+            adjust_text_foreground(overrides.success.unwrap(), 1.20, false)
+        );
+        assert_eq!(
+            run_for("WARN").foreground,
+            adjust_text_foreground(overrides.warning.unwrap(), 1.20, false)
+        );
+        assert_eq!(
+            run_for("ERROR").foreground,
+            adjust_text_foreground(overrides.error.unwrap(), 1.20, false)
+        );
     }
 
     #[test]
@@ -1062,11 +995,9 @@ mod tests {
             settings(),
         );
 
-        assert!(
-            contrast_ratio(
-                rendered.lines[0].runs[0].foreground,
-                rendered.lines[0].runs[0].background,
-            ) >= 4.5
+        assert_eq!(
+            rendered.lines[0].runs[0].foreground,
+            RgbColor::new(0, 0, 255)
         );
         assert_eq!(
             rendered.lines[0].runs[0].background,
@@ -1095,11 +1026,9 @@ mod tests {
             default_rendered.selection_background,
             RgbColor::new(48, 64, 80)
         );
-        assert!(
-            contrast_ratio(
-                indexed_rendered.lines[0].runs[0].foreground,
-                themed.default_background,
-            ) >= 4.5
+        assert_eq!(
+            indexed_rendered.lines[0].runs[0].foreground,
+            RgbColor::new(205, 49, 49)
         );
     }
 
@@ -1119,54 +1048,126 @@ mod tests {
     }
 
     #[test]
-    fn minimum_contrast_preserves_readable_colors_and_backgrounds() {
-        let palette = TerminalPalette::for_scheme(TerminalColorScheme::Dark);
-        let color = RgbColor::new(100, 120, 140);
+    fn neutral_brightness_preserves_all_foreground_sources_exactly() {
+        for (color, expected) in [
+            (TerminalColor::Default, RgbColor::new(204, 204, 204)),
+            (TerminalColor::Indexed(1), RgbColor::new(205, 49, 49)),
+            (TerminalColor::Indexed(208), RgbColor::new(255, 135, 0)),
+            (
+                TerminalColor::Rgb {
+                    red: 100,
+                    green: 120,
+                    blue: 140,
+                },
+                RgbColor::new(100, 120, 140),
+            ),
+        ] {
+            let rendered = render_terminal(
+                snapshot(TerminalStyle {
+                    foreground: color,
+                    ..TerminalStyle::default()
+                }),
+                settings(),
+            );
+            assert_eq!(rendered.lines[0].runs[0].foreground, expected);
+        }
+    }
+
+    #[test]
+    fn brightness_adjusts_all_foreground_sources_but_not_surfaces_or_cursor() {
         let background = RgbColor::new(220, 230, 240);
+        for color in [
+            TerminalColor::Default,
+            TerminalColor::Indexed(1),
+            TerminalColor::Indexed(208),
+            TerminalColor::Rgb {
+                red: 100,
+                green: 120,
+                blue: 140,
+            },
+        ] {
+            let rendered = render_terminal(
+                snapshot(TerminalStyle {
+                    foreground: color,
+                    background: TerminalColor::Rgb {
+                        red: background.red,
+                        green: background.green,
+                        blue: background.blue,
+                    },
+                    ..TerminalStyle::default()
+                }),
+                TerminalRenderSettings {
+                    text_brightness: 0.60,
+                    ..settings()
+                },
+            );
+            assert_ne!(
+                rendered.lines[0].runs[0].foreground,
+                resolve_color(
+                    color,
+                    settings().default_foreground,
+                    &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
+                )
+            );
+            assert_eq!(rendered.lines[0].runs[0].background, background);
+            assert_eq!(rendered.background, settings().default_background);
+            assert_eq!(
+                rendered.selection_background,
+                settings().selection_background
+            );
+            assert_eq!(rendered.foreground, settings().default_foreground);
+        }
+    }
+
+    #[test]
+    fn inverse_is_resolved_before_visible_foreground_brightness() {
         let rendered = render_terminal(
             snapshot(TerminalStyle {
-                foreground: TerminalColor::Rgb {
-                    red: color.red,
-                    green: color.green,
-                    blue: color.blue,
-                },
-                background: TerminalColor::Rgb {
-                    red: background.red,
-                    green: background.green,
-                    blue: background.blue,
-                },
+                foreground: TerminalColor::Indexed(208),
+                background: TerminalColor::Indexed(21),
+                inverse: true,
                 ..TerminalStyle::default()
             }),
             TerminalRenderSettings {
-                minimum_contrast_ratio: 4.5,
+                text_brightness: 0.60,
                 ..settings()
             },
         );
         let run = &rendered.lines[0].runs[0];
 
-        assert_eq!(run.background, background);
-        assert_ne!(run.foreground, color);
-        assert!(contrast_ratio(run.foreground, background) >= 4.5);
         assert_eq!(
-            render_terminal(
-                snapshot(TerminalStyle {
-                    foreground: TerminalColor::Rgb {
-                        red: color.red,
-                        green: color.green,
-                        blue: color.blue,
-                    },
-                    ..TerminalStyle::default()
-                }),
-                TerminalRenderSettings {
-                    minimum_contrast_ratio: 1.0,
-                    ..settings()
-                },
-            )
-            .lines[0]
-                .runs[0]
-                .foreground,
-            color
+            run.foreground,
+            adjust_text_foreground(RgbColor::new(0, 0, 255), 0.60, false)
         );
-        assert_eq!(palette.background, RgbColor::new(30, 30, 30));
+        assert_eq!(run.background, RgbColor::new(255, 135, 0));
+    }
+
+    #[test]
+    fn dim_combines_with_brightness_in_the_final_foreground_adjustment() {
+        let source = RgbColor::new(100, 120, 140);
+        let rendered = render_terminal(
+            snapshot(TerminalStyle {
+                foreground: TerminalColor::Rgb {
+                    red: source.red,
+                    green: source.green,
+                    blue: source.blue,
+                },
+                dim: true,
+                ..TerminalStyle::default()
+            }),
+            TerminalRenderSettings {
+                text_brightness: 1.20,
+                ..settings()
+            },
+        );
+
+        assert_eq!(
+            rendered.lines[0].runs[0].foreground,
+            adjust_text_foreground(source, 1.20, true)
+        );
+        assert_ne!(
+            rendered.lines[0].runs[0].foreground,
+            adjust_text_foreground(source, 1.20, false)
+        );
     }
 }

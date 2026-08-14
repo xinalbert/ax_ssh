@@ -236,7 +236,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_font_size: 18,
             terminal_line_height_percent: 135,
             color_scheme: "light",
-            minimum_contrast_ratio: 11.5,
+            text_brightness: 1.13,
+            semantic_highlighting: true,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "#17a8cd",
                 success: " #21cd8b ",
@@ -260,7 +261,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
                 custom_light: ThemePalette::axssh_light(),
                 custom_dark: ThemePalette::axssh_dark(),
             },
-            terminal_minimum_contrast_ratio_tenths: 115,
+            terminal_text_brightness_percent: 115,
+            terminal_semantic_highlighting: true,
             terminal_semantic_colors: TerminalSemanticColors {
                 link: "#17A8CD".into(),
                 success: "#21CD8B".into(),
@@ -280,7 +282,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_font_size: 100,
             terminal_line_height_percent: 1_000,
             color_scheme: "unknown",
-            minimum_contrast_ratio: 1_000.0,
+            text_brightness: 1_000.0,
+            semantic_highlighting: false,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "blue",
                 success: "#FFF",
@@ -299,7 +302,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_line_height_percent: MAX_TERMINAL_LINE_HEIGHT,
             terminal_color_scheme: TerminalColorScheme::Dark,
             theme: ThemeSettings::default(),
-            terminal_minimum_contrast_ratio_tenths: MAX_TERMINAL_CONTRAST_RATIO_TENTHS,
+            terminal_text_brightness_percent: MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+            terminal_semantic_highlighting: false,
             terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
@@ -336,12 +340,10 @@ fn legacy_appearance_migrates_into_versioned_settings() {
         TerminalColorScheme::Dark
     );
     assert_eq!(
-        store
-            .settings
-            .appearance
-            .terminal_minimum_contrast_ratio_tenths,
-        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+        store.settings.appearance.terminal_text_brightness_percent,
+        DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
+    assert!(!store.settings.appearance.terminal_semantic_highlighting);
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
     assert!(!store.settings.appearance.copy_selection_on_select);
@@ -365,33 +367,54 @@ fn legacy_appearance_migrates_into_versioned_settings() {
 }
 
 #[test]
-fn version_sixteen_brightness_migrates_to_default_contrast_ratio() {
+fn version_twenty_one_contrast_migrates_to_default_text_brightness() {
     let json = r#"{
-        "version": 16,
+        "version": 21,
         "settings": {
             "appearance": {
-                "terminal_brightness_percent": 140
+                "terminal_minimum_contrast_ratio_tenths": 210,
+                "terminal_semantic_highlighting": true
             }
         }
     }"#;
 
-    let store: SessionStore = serde_json::from_str(json).expect("version sixteen should migrate");
+    let store: SessionStore =
+        serde_json::from_str(json).expect("version twenty-one should migrate");
 
     assert_eq!(store.version, CURRENT_SCHEMA_VERSION);
     assert_eq!(
-        store
-            .settings
-            .appearance
-            .terminal_minimum_contrast_ratio_tenths,
-        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+        store.settings.appearance.terminal_text_brightness_percent,
+        DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
+    assert!(!store.settings.appearance.terminal_semantic_highlighting);
     let serialized = serde_json::to_value(store).expect("migrated settings should serialize");
     let appearance = &serialized["settings"]["appearance"];
     assert_eq!(
-        appearance["terminal_minimum_contrast_ratio_tenths"],
-        DEFAULT_TERMINAL_CONTRAST_RATIO_TENTHS
+        appearance["terminal_text_brightness_percent"],
+        DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
-    assert!(appearance.get("terminal_brightness_percent").is_none());
+    assert!(
+        appearance
+            .get("terminal_minimum_contrast_ratio_tenths")
+            .is_none()
+    );
+}
+
+#[test]
+fn terminal_text_brightness_and_semantic_highlighting_round_trip() {
+    let mut store = SessionStore::default();
+    store.settings.appearance.terminal_text_brightness_percent = 115;
+    store.settings.appearance.terminal_semantic_highlighting = true;
+
+    let encoded = serde_json::to_string(&store).expect("settings should serialize");
+    let decoded: SessionStore =
+        serde_json::from_str(&encoded).expect("settings should deserialize");
+
+    assert_eq!(
+        decoded.settings.appearance.terminal_text_brightness_percent,
+        115
+    );
+    assert!(decoded.settings.appearance.terminal_semantic_highlighting);
 }
 
 #[test]
@@ -749,7 +772,8 @@ fn app_settings_clamp_all_persisted_dimensions() {
             terminal_font_size: 100,
             terminal_line_height_percent: -1,
             color_scheme: "solarized-dark",
-            minimum_contrast_ratio: -1.0,
+            text_brightness: -1.0,
+            semantic_highlighting: true,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "#17A8CD",
                 success: "#21CD8B",
@@ -812,9 +836,10 @@ fn app_settings_clamp_all_persisted_dimensions() {
         TerminalColorScheme::SolarizedDark
     );
     assert_eq!(
-        settings.appearance.terminal_minimum_contrast_ratio_tenths,
-        MIN_TERMINAL_CONTRAST_RATIO_TENTHS
+        settings.appearance.terminal_text_brightness_percent,
+        MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
+    assert!(settings.appearance.terminal_semantic_highlighting);
     assert!(!settings.appearance.bright_bold_text);
     assert!(settings.appearance.right_click_copy_or_paste);
     assert!(settings.appearance.copy_selection_on_select);
