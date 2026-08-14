@@ -227,13 +227,17 @@ to be refreshed before a replaced icon appears.
 
 ## GitHub releases
 
-The repository uses date-based releases. The checked-in Cargo version is the
-Cargo-compatible form of the current release date (`YYYY.M.D`), while public
-release tags use `YYYY-MM-DD`. Run the **Create Dated Release** workflow on the
-default branch to derive the date in `Asia/Shanghai`, update `Cargo.toml`,
-`Cargo.lock`, and `packaging/macos/Info.plist`, commit those files, create the
-annotated tag, and dispatch CI. The release workflow starts only after that CI
-run succeeds and its cache-save step has completed. It publishes these assets:
+The repository uses date-based releases. The first public tag for a date uses
+`YYYY-MM-DD`; a later release that day uses a positive revision suffix such as
+`YYYY-MM-DD-1`. The first form maps to Cargo/Debian `YYYY.M.D` and macOS build
+`YYYYMMDD`; the revision example maps to Cargo `YYYY.M.D+1`, Debian
+`YYYY.M.D-1`, and macOS build `YYYYMMDD.1`, while its macOS short version stays
+`YYYY.M.D`. Run **Create Dated Release** on the default branch with revision
+`0` for the first release or `1` for the second. It derives the date in
+`Asia/Shanghai`, updates `Cargo.toml`, `Cargo.lock`, and
+`packaging/macos/Info.plist`, commits those files, creates the annotated tag,
+and dispatches CI. The release workflow starts only after that CI run succeeds
+and its cache-save step has completed. It publishes these assets:
 
 - Windows x86_64 ZIP with the executable, bundled fonts, and license notices
 - Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
@@ -250,12 +254,18 @@ changed lockfile or different architecture cannot reuse an incompatible cache.
 Releases always compile a fresh `--release --locked` binary and never publish
 CI's check or debug artifacts.
 
-The release workflow verifies that the selected tag names an annotated date tag,
-that its own tagged CI run succeeded, and that the Cargo package, lockfile, and
-macOS bundle metadata agree before compiling. An existing date tag is never replaced.
-To re-run a completed release, manually dispatch **Release** with an exact
-`YYYY-MM-DD` tag. The local `packaging/macos/build-app.sh` script consumes the
-checked-in version and does not mutate release metadata.
+The release workflow verifies that the selected tag names an annotated release
+tag, that its own tagged CI run succeeded, and that the Cargo package, lockfile,
+and macOS bundle metadata agree before compiling. **Create Dated Release** is
+only for a new date/revision tag. To retry CI or packaging for an existing tag,
+run **Retry Existing Release** from the default branch with its exact
+`YYYY-MM-DD[-N]` value. It checks the annotated tag and its metadata, dispatches
+CI for that exact tag SHA, then dispatches Release only after CI succeeds; it
+cannot create, replace, or move a tag. A failed packaging-only run with an
+already successful matching CI may also be retried directly through **Release**.
+The local
+`packaging/macos/build-app.sh` script consumes the checked-in version and does
+not mutate release metadata.
 
 Before creating the GitHub Release, `scripts/generate_release_highlights.py`
 reads the checked-out tag history and writes a short, categorized **Highlights**

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Sequence
 
 
-DATE_TAG_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATE_TAG_PATTERN = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})(?:-[1-9]\d*)?$")
 MAX_COMMITS_PER_CATEGORY = 8
 TRACKING_PATTERN = re.compile(
     r"docs\(tracking\)|implementation tracking|tracking records|tracking docs|"
@@ -107,10 +107,11 @@ class GitCommandError(ReleaseHighlightsError):
 def validate_date_tag(tag: str) -> None:
     """Require the public release tag format used by AxSSH."""
 
-    if not DATE_TAG_PATTERN.fullmatch(tag):
-        raise ReleaseHighlightsError(f"release tag must use YYYY-MM-DD: {tag!r}")
+    match = DATE_TAG_PATTERN.fullmatch(tag)
+    if not match:
+        raise ReleaseHighlightsError(f"release tag must use YYYY-MM-DD[-N]: {tag!r}")
     try:
-        dt.date.fromisoformat(tag)
+        dt.date.fromisoformat(match.group("date"))
     except ValueError as error:
         raise ReleaseHighlightsError(f"release tag has an invalid date: {tag!r}") from error
 
@@ -155,7 +156,7 @@ def previous_release_tag(repository: Path, current_commit: str) -> str | None:
             "--tags",
             "--abbrev=0",
             "--match",
-            "????-??-??",
+            "????-??-??*",
             f"{current_commit}^",
         )
     except GitCommandError as error:
@@ -272,7 +273,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the release workflow's explicit inputs."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", required=True, help="Date tag to summarize (YYYY-MM-DD)")
+    parser.add_argument("--tag", required=True, help="Date tag to summarize (YYYY-MM-DD[-N])")
     parser.add_argument(
         "--repository-url",
         required=True,

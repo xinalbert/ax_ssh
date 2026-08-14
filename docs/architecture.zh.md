@@ -655,10 +655,14 @@ pane 底边，并优先裁剪较旧的顶部行；终端只会在这些度量和
 覆盖语言选择。远端 Terminal 内容、用户值、日志和运行时技术错误详情不作为翻译键，也不会被翻译。
 
 发行自动化只拥有发行元数据，不拥有应用运行时状态。手动启动的 `Create Dated Release` workflow
-按 `Asia/Shanghai` 计算日期，把公开的 `YYYY-MM-DD` 映射为 Cargo 兼容的 `YYYY.M.D` package
-版本，更新锁文件和 macOS bundle 元数据，再创建 annotated `YYYY-MM-DD` tag，显式为该 tag dispatch
-CI，并且只在 CI 成功后 dispatch 发布 workflow。发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，
-以及 arm64/x86_64 macOS 二进制；随后合并
+按 `Asia/Shanghai` 计算日期：当天首发公开 tag 为 `YYYY-MM-DD`，正整数修订后缀形成
+`YYYY-MM-DD-N`。基础日期映射为 Cargo/Debian 的 `YYYY.M.D` 和 macOS build 的 `YYYYMMDD`；
+修订映射为 Cargo `YYYY.M.D+N`、Debian `YYYY.M.D-N` 和 macOS build `YYYYMMDD.N`，macOS short
+version 保持 `YYYY.M.D`。workflow 更新锁文件和 macOS bundle 元数据，再创建 annotated release tag。
+`Retry Existing Release` 既是新 tag 创建后调用的 reusable workflow，也是手动重试明确已有 tag 的入口；
+它校验 annotated tag 和已提交元数据、为精确 SHA dispatch CI，并且只在 CI 成功后 dispatch Release，
+不具备任何写 tag 操作。
+发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，以及 arm64/x86_64 macOS 二进制；随后合并
 macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 只在默认分支或
 日期 tag 成功后写入按 target 隔离的共享 Cargo cache，失败 job 不会写入；发布 job 也会独立验证所选
 tag 的 CI 成功后才恢复该缓存，并重新构建锁定的 release 二进制。构建前会校验

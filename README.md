@@ -34,14 +34,16 @@ for session setup, terminal controls, settings, and data-storage behavior.
 
 ## Releases
 
-GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and a universal
-macOS application bundle. Run the **Create Dated Release** workflow from the
-default branch to publish the current Shanghai date. It creates a tag such as
-`2026-08-12`, synchronizes Cargo and macOS metadata, and starts CI. A successful
-CI run then starts the platform build workflow. A release tag must use the exact
-`YYYY-MM-DD` format. Each published Release groups high-signal commits into a
-short Highlights section with an explicit full-changelog link, then retains
-GitHub's generated release notes for the complete change list.
+GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
+Silicon, Intel, and universal application bundles. Run **Create Dated Release**
+from the default branch only to create a new Shanghai-date tag such as
+`2026-08-12`; use revision `1` for a second same-day release such as
+`2026-08-12-1`. It synchronizes Cargo and macOS metadata first. To retry CI or
+packaging for an existing valid tag, run **Retry Existing Release** with its
+exact `YYYY-MM-DD[-N]` value. The retry path cannot create, replace, or move
+tags. Each published Release groups high-signal commits into a short Highlights
+section with an explicit full-changelog link, then retains GitHub's generated
+release notes for the complete change list.
 
 ## Documentation
 

@@ -124,11 +124,31 @@ class ReleaseHighlightsTests(unittest.TestCase):
         )
         self.assertIn("No categorized feature commits were found.", body)
 
+    def test_same_day_revision_compares_against_the_first_release(self) -> None:
+        self.commit("Initial workspace")
+        self.tag("2026-08-12")
+        package_sha = self.commit("Package release revision")
+        self.tag("2026-08-12-1")
+
+        body = release_highlights.generate_release_body(
+            "2026-08-12-1",
+            "https://github.example/AxSSH/ax_ssh",
+            self.repository,
+        )
+
+        self.assertIn(
+            "[Full changelog](https://github.example/AxSSH/ax_ssh/compare/2026-08-12...2026-08-12-1)",
+            body,
+        )
+        self.assertIn(f"/commit/{package_sha}", body)
+
     def test_invalid_date_tag_is_rejected(self) -> None:
         with self.assertRaises(release_highlights.ReleaseHighlightsError):
             release_highlights.validate_date_tag("v2026-08-12")
         with self.assertRaises(release_highlights.ReleaseHighlightsError):
             release_highlights.validate_date_tag("2026-02-30")
+        with self.assertRaises(release_highlights.ReleaseHighlightsError):
+            release_highlights.validate_date_tag("2026-08-12-0")
 
     def test_unexpected_git_failure_is_not_treated_as_a_first_release(self) -> None:
         with self.assertRaises(release_highlights.GitCommandError):

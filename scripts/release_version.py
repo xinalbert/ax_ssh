@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 
 DATE_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$")
-TAG_PATTERN = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})$")
+TAG_PATTERN = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})(?:-(?P<revision>[1-9]\d*))?$")
 
 
 @dataclass(frozen=True)
@@ -22,12 +22,20 @@ class ReleaseVersion:
 
     public_version: str
     cargo_version: str
+    debian_version: str
     macos_short_version: str
     macos_bundle_version: str
     tag: str
 
 
-def release_version_from_date(raw_date: str) -> ReleaseVersion:
+def validate_revision(revision: int) -> int:
+    """Require a non-negative in-process revision number."""
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+        raise ValueError("release revision must be a non-negative integer")
+    return revision
+
+
+def release_version_from_date(raw_date: str, revision: int = 0) -> ReleaseVersion:
     """Validate an ISO date and derive package-manager-specific version strings."""
     match = DATE_PATTERN.fullmatch(raw_date)
     if not match:
@@ -42,13 +50,26 @@ def release_version_from_date(raw_date: str) -> ReleaseVersion:
     except ValueError as error:
         raise ValueError(f"invalid release date {raw_date!r}: {error}") from error
 
-    cargo_version = f"{date.year}.{date.month}.{date.day}"
+    revision = validate_revision(revision)
+    package_date = f"{date.year}.{date.month}.{date.day}"
+    public_version = date.isoformat()
+    if revision:
+        public_version = f"{public_version}-{revision}"
+        cargo_version = f"{package_date}+{revision}"
+        debian_version = f"{package_date}-{revision}"
+        macos_bundle_version = f"{date:%Y%m%d}.{revision}"
+    else:
+        cargo_version = package_date
+        debian_version = package_date
+        macos_bundle_version = date.strftime("%Y%m%d")
+
     return ReleaseVersion(
-        public_version=date.isoformat(),
+        public_version=public_version,
         cargo_version=cargo_version,
-        macos_short_version=cargo_version,
-        macos_bundle_version=date.strftime("%Y%m%d"),
-        tag=date.isoformat(),
+        debian_version=debian_version,
+        macos_short_version=package_date,
+        macos_bundle_version=macos_bundle_version,
+        tag=public_version,
     )
 
 
@@ -56,17 +77,18 @@ def release_version_from_tag(tag: str) -> ReleaseVersion:
     """Validate a Git release tag and map it to its date version."""
     match = TAG_PATTERN.fullmatch(tag)
     if not match:
-        raise ValueError("expected release tag in YYYY-MM-DD format")
-    return release_version_from_date(match.group("date"))
+        raise ValueError("expected release tag in YYYY-MM-DD[-N] format")
+    revision = int(match.group("revision") or "0")
+    return release_version_from_date(match.group("date"), revision)
 
 
-def today_in_timezone(timezone: str) -> ReleaseVersion:
+def today_in_timezone(timezone: str, revision: int = 0) -> ReleaseVersion:
     """Resolve today's date from an IANA timezone, failing clearly if unknown."""
     try:
         zone = ZoneInfo(timezone)
     except Exception as error:
         raise ValueError(f"unknown IANA timezone {timezone!r}") from error
-    return release_version_from_date(dt.datetime.now(zone).date().isoformat())
+    return release_version_from_date(dt.datetime.now(zone).date().isoformat(), revision)
 
 
 def read_package_version(cargo_toml: Path) -> str:
@@ -168,7 +190,7 @@ def print_environment(version: ReleaseVersion) -> None:
     """Emit shell-safe GitHub Actions environment assignments."""
     print(f"RELEASE_PUBLIC_VERSION={version.public_version}")
     print(f"RELEASE_CARGO_VERSION={version.cargo_version}")
-    print(f"RELEASE_DEBIAN_VERSION={version.cargo_version}")
+    print(f"RELEASE_DEBIAN_VERSION={version.debian_version}")
     print(f"RELEASE_MACOS_SHORT_VERSION={version.macos_short_version}")
     print(f"RELEASE_MACOS_BUNDLE_VERSION={version.macos_bundle_version}")
     print(f"RELEASE_TAG={version.tag}")
@@ -177,17 +199,34 @@ def print_environment(version: ReleaseVersion) -> None:
 def version_from_args(args: argparse.Namespace) -> ReleaseVersion:
     """Resolve exactly one explicit date, tag, or timezone-derived date."""
     if args.date:
+        if args.revision:
+            raise ValueError("--revision may only be used with --timezone")
         return release_version_from_date(args.date)
     if args.tag:
+        if args.revision:
+            raise ValueError("--revision may only be used with --timezone")
         return release_version_from_tag(args.tag)
-    return today_in_timezone(args.timezone)
+    return today_in_timezone(args.timezone, args.revision)
+
+
+def parse_revision(raw_revision: str) -> int:
+    """Parse the optional timezone-derived same-day release revision."""
+    if not re.fullmatch(r"0|[1-9]\d*", raw_revision):
+        raise argparse.ArgumentTypeError("revision must be 0 or a positive integer without leading zeroes")
+    return int(raw_revision)
 
 
 def add_version_source_arguments(parser: argparse.ArgumentParser) -> None:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--date", help="release date in YYYY-MM-DD format")
-    source.add_argument("--tag", help="release tag in YYYY-MM-DD format")
+    source.add_argument("--tag", help="release tag in YYYY-MM-DD[-N] format")
     source.add_argument("--timezone", help="derive the date from this IANA timezone")
+    parser.add_argument(
+        "--revision",
+        type=parse_revision,
+        default=0,
+        help="same-day revision for --timezone (0 for the first release)",
+    )
 
 
 def add_release_file_arguments(parser: argparse.ArgumentParser) -> None:

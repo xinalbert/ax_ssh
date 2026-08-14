@@ -1,5 +1,14 @@
 # 项目环境变化记录
 
+## 2026-08-14 日期化 Release 重试与元数据施工预检
+
+- 日期：2026-08-14
+- 变化摘要：发现 `2026-08-14` 已重建到当前 `master`，但 `Cargo.toml`、`Cargo.lock` 和 `packaging/macos/Info.plist` 仍携带 `2026.8.13`。Create workflow 拒绝已存在 tag 是设计行为，Release 则缺少用户可见的已有 tag 重试入口。
+- 受影响文件：`.github/workflows/{ci,create-dated-release,retry-existing-release,release}.yml`、`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、发布文档及 `docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、Python 3、Ruby YAML 解析和 GitHub-hosted Actions；计划将 `actions/github-script` 更新为 v8/Node 24，不新增语言依赖或运行时边界。
+- 验证结果：修复前 `python scripts/release_version.py verify --tag 2026-08-14` 明确失败于 `Cargo.toml` 版本不匹配；workflow 静态审阅确认 tag CI 只接受同 tag SHA 的 successful workflow-dispatch run。
+- 风险/待办：只能在尚未发布 GitHub Release 前重建日期 tag；已发布 tag 必须保持不变，后续修复需要新的版本标识。远端 CI/Release 需使用明确 tag 输入执行。
+
 ## 2026-08-14 本地 PTY shutdown CI 回归施工预检
 
 - 日期：2026-08-14
@@ -496,3 +505,10 @@
 - 变化摘要：新增直接锁定依赖 `hmac 0.13.0`/`sha1 0.11.0`，实现 OpenSSH known_hosts 的有界解析、shared trust、`@revoked` 拒绝和原子追加/替换/移除；不改变 Rust 2024、MSRV、Slint/Tokio/russh 版本。
 - 更新后的命令或环境：继续使用 `cargo fmt/check/clippy/test --locked --offline`、翻译、tracker 和 diff 门禁；系统文件路径与权限依赖目标平台。
 - 验证结果：known_hosts 定向 4 项、完整 Cargo 测试（库 167、应用 160、Doc tests 0）、locked check、严格 Clippy、翻译、tracker 和 diff 检查通过。真实 SSH 工具互操作、系统权限和 GUI revoked/changed 呈现仍需用户验收。
+
+## 2026-08-14 同日 Release 修订环境验证
+
+- 变化摘要：日期发布支持不可变的 `YYYY-MM-DD[-N]` tag；第二次同日发行 `2026-08-14-1` 使用 Cargo `2026.8.14+1`、Debian `2026.8.14-1`、macOS short `2026.8.14` 与 build `20260814.1`。Create 只创建新 tag，Retry 不具备 tag 写权限。
+- 受影响文件：`.github/workflows/{create-dated-release,retry-existing-release,release}.yml`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归、`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、发布文档与 `docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、锁定离线 Cargo 和 Python 标准库；GitHub Script 使用 v8/Node 24，远端仍以 tag SHA 的 workflow-dispatch CI 作为 Release 前提。
+- 验证结果：Python 12 项、`release_version.py verify --tag 2026-08-14-1`、Ruby YAML、plist、`cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）、tracker、Markdown 相对链接和 `git diff --check` 通过。推送前远端 `master` 无分叉，`2026-08-14-1` 不存在。

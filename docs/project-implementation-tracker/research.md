@@ -167,3 +167,12 @@
 - 关键结论：未检索到直接对应的统一公开 benchmark，所有产品和平台文档均为 proxy evidence。WinSCP/Cyberduck 都先下载临时副本再交给外部应用，编辑回传还需要 watch、进程复用处理、后台队列、冲突/版本和清理；VS Code 采用远端文件系统代理，不适合 AxSSH 当前的系统默认应用目标。系统图标应由平台 provider 统一转成缓存位图：macOS 优先核对现代 `iconForContentType`/UTType，Windows 可用 `SHGFI_USEFILEATTRIBUTES` 查询不存在的合成扩展名路径，Linux 采用 MIME + icon theme + hicolor 回退。
 - 对实施计划的影响：建立目标 `20260806-sftp-icons-local-open`，分 P1-P9 执行。首版只做 regular file 的本地重验证后 detached open，以及远端 regular file 的有界 chunked download -> 私有 ProjectDirs cache -> fsync/rename -> detached open；目录继续导航，symlink 首版拒绝，失败/取消不打开半文件。远端下载在同一已认证 SSH worker 中开独立 SFTP subsystem task，由 worker 统一拥有取消、并发、进度和 Tab 关闭回收；图标 provider/cache 与 Slint `SftpEntryRow` DTO 分离，列表渲染不调用平台 API。
 - 未解决问题：Apple 新 API feature/最低系统版本、Windows Shell/GDI 句柄到 PNG 的 DPI 与释放、Linux 主题依赖的 MSRV/系统环境、远端大文件上限、symlink 策略、缓存占用清理和真实三平台默认应用行为需要 P1/P5-P9 验证；受管编辑/上传/冲突另建目标，不在本轮。
+
+## 2026-08-14 GitHub Actions Retry And Same-Day Release Tags
+
+- 检索问题：同一日期已有 release tag 时，CI 或平台打包失败需要安全地重试；若需要第二个同日发行，应如何命名并保持包版本可区分？
+- 检索原因：已有 `2026-08-14` 的 CI 和 Release 失败后不能安全地覆盖 tag；需要确定能重试已有 tag、又能创建当天第二个独立发行的 GitHub Actions 约定。
+- 来源列表：GitHub Docs, [Triggering a workflow](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow), [Reusing workflows](https://docs.github.com/en/actions/how-tos/sharing-automations/reusing-workflows), [Using concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)；用户指定的 AxShell 参考仓库近期 tag 使用 `v2026.7.16-1`。
+- 关键结论：`workflow_dispatch` 应接收显式 tag input，`workflow_call` 可复用同一验证/CI 等待链路，concurrency group 应按 tag 串行化。创建新 tag 与重试已有 tag 必须分离；重试路径不应拥有 tag 写权限。第二次同日发行采用 `YYYY-MM-DD-1`，而不是覆盖首个 tag。
+- 对实施计划的影响：Create workflow 保留新 tag 创建职责并调用可复用 retry flow；Retry Existing Release 只验证/dispatch 既有 tag。版本工具接受可选正整数 revision，将第二个 tag 映射为区分的 Cargo、Debian 与 macOS build 版本；Highlights 同时识别修订日期 tag。
+- 未解决问题：GitHub-hosted tag CI、平台构建和 Release 附件仍需远端执行；已发布的 tag 不得移动，后续修复应创建下一个修订 tag。

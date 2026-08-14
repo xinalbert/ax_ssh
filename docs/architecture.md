@@ -1022,17 +1022,23 @@ translated or used as translation keys.
 
 Release automation owns distribution metadata, not application runtime state.
 The manually dispatched `Create Dated Release` workflow derives the date in
-`Asia/Shanghai`, maps its public `YYYY-MM-DD` value to the Cargo-compatible
-`YYYY.M.D` package version, updates the lockfile and macOS bundle metadata, then
-creates an annotated `YYYY-MM-DD` tag, explicitly dispatches CI for that tag,
-and dispatches the release workflow only after that CI succeeds. The release
-workflow builds Windows x86_64, Linux x86_64/aarch64, and arm64/x86_64 macOS binaries; it
-assembles a universal macOS bundle and retains `assets/fonts/`, icons, and the
-independent license notices in each applicable package. CI writes the shared
-target-specific Cargo cache only after a successful default-branch or date-tag
-run; failed jobs cannot save it, and release jobs independently require that tagged
-CI success before restoring it to build new locked release binaries. The workflow verifies all version
-representations before building and does not read or package
+`Asia/Shanghai`. Its first public tag uses `YYYY-MM-DD`; a positive same-day
+revision suffix produces `YYYY-MM-DD-N`. The base date maps to Cargo/Debian
+`YYYY.M.D` and macOS build `YYYYMMDD`; a revision maps to Cargo `YYYY.M.D+N`,
+Debian `YYYY.M.D-N`, and macOS build `YYYYMMDD.N`, while macOS short version
+stays `YYYY.M.D`. It updates the lockfile and macOS bundle metadata, then
+creates an annotated release tag. `Retry Existing Release` is both a reusable
+workflow for that new tag and the manual retry entry for an explicit existing
+tag. It verifies the annotated tag and checked-in metadata, dispatches CI for
+its exact SHA, and dispatches Release only after that CI succeeds; it has no
+tag-writing operation. The release workflow builds Windows x86_64, Linux
+x86_64/aarch64, and arm64/x86_64 macOS binaries; it assembles a universal macOS
+bundle and retains `assets/fonts/`, icons, and the independent license notices
+in each applicable package. CI writes the shared target-specific Cargo cache
+only after a successful default-branch or date-tag run; failed jobs cannot save
+it, and release jobs independently require that tagged CI success before
+restoring it to build new locked release binaries. The workflow verifies all
+version representations before building and does not read or package
 `third_package/axshell`. Before publication, the workflow gives
 `scripts/generate_release_highlights.py` only the checked-out tag history and
 repository URL; the script returns Markdown, not application state or release

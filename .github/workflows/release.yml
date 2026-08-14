@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Date tag to release (YYYY-MM-DD)
+        description: Release tag to publish (YYYY-MM-DD[-N])
         required: true
         type: string
 
@@ -36,10 +36,11 @@ jobs:
           set -euo pipefail
           tag_ref="refs/tags/${RELEASE_TAG}"
           git show-ref --verify --quiet "$tag_ref"
+          test "$(git cat-file -t "$tag_ref")" = tag
           echo "sha=$(git rev-parse "${tag_ref}^{}")" >> "$GITHUB_OUTPUT"
 
       - name: Require successful CI for this tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           RELEASE_SHA: ${{ steps.release_ref.outputs.sha }}
           RELEASE_TAG: ${{ env.RELEASE_TAG }}

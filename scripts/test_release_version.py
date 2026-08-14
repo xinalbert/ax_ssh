@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import plistlib
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
+from contextlib import redirect_stderr
 from pathlib import Path
 
 
@@ -24,16 +27,43 @@ class ReleaseVersionTests(unittest.TestCase):
 
         self.assertEqual(version.public_version, "2026-08-12")
         self.assertEqual(version.cargo_version, "2026.8.12")
+        self.assertEqual(version.debian_version, "2026.8.12")
         self.assertEqual(version.macos_short_version, "2026.8.12")
         self.assertEqual(version.macos_bundle_version, "20260812")
         self.assertEqual(version.tag, "2026-08-12")
+
+    def test_same_day_revision_uses_package_specific_versions(self) -> None:
+        version = release_version.release_version_from_tag("2026-08-14-1")
+
+        self.assertEqual(version.public_version, "2026-08-14-1")
+        self.assertEqual(version.cargo_version, "2026.8.14+1")
+        self.assertEqual(version.debian_version, "2026.8.14-1")
+        self.assertEqual(version.macos_short_version, "2026.8.14")
+        self.assertEqual(version.macos_bundle_version, "20260814.1")
+        self.assertEqual(version.tag, "2026-08-14-1")
 
     def test_invalid_dates_and_tags_are_rejected(self) -> None:
         for raw_date in ["2026-2-12", "2026-02-30", "v2026-08-12"]:
             with self.assertRaises(ValueError):
                 release_version.release_version_from_date(raw_date)
+        for tag in ["v2026-08-12", "2026-08-12-0", "2026-08-12-01", "2026-08-12-one"]:
+            with self.assertRaises(ValueError):
+                release_version.release_version_from_tag(tag)
+
+    def test_timezone_revision_rejects_invalid_and_conflicting_values(self) -> None:
+        parser = release_version.build_parser()
+        arguments = parser.parse_args(["env", "--timezone", "Asia/Shanghai", "--revision", "1"])
+        self.assertEqual(arguments.revision, 1)
+
+        for revision in ["-1", "01", "one"]:
+            with redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(["env", "--timezone", "Asia/Shanghai", "--revision", revision])
+
         with self.assertRaises(ValueError):
-            release_version.release_version_from_tag("v2026-08-12")
+            release_version.version_from_args(
+                Namespace(date="2026-08-12", tag=None, timezone=None, revision=1),
+            )
 
     def test_sync_updates_only_root_package_and_macos_version_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -60,7 +90,7 @@ class ReleaseVersionTests(unittest.TestCase):
                     sort_keys=False,
                 )
 
-            version = release_version.release_version_from_date("2026-08-12")
+            version = release_version.release_version_from_tag("2026-08-12-1")
             self.assertTrue(release_version.replace_root_package_version(cargo_toml, "ax_ssh", version.cargo_version))
             self.assertTrue(release_version.replace_root_package_version(cargo_lock, "ax_ssh", version.cargo_version))
             self.assertTrue(release_version.update_macos_plist(plist, version))
@@ -82,7 +112,8 @@ class ReleaseVersionTests(unittest.TestCase):
             with plist.open("rb") as file:
                 contents = plistlib.load(file)
             self.assertEqual(contents["CFBundleName"], "AxSSH")
-            self.assertEqual(contents["CFBundleVersion"], "20260812")
+            self.assertEqual(contents["CFBundleShortVersionString"], "2026.8.12")
+            self.assertEqual(contents["CFBundleVersion"], "20260812.1")
 
 
 if __name__ == "__main__":

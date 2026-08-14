@@ -177,8 +177,11 @@ Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Li
 
 ## GitHub 发布
 
-仓库使用按日期发布。提交中的 Cargo 版本使用兼容 Cargo 的 `YYYY.M.D` 形式，公开发布 tag
-使用 `YYYY-MM-DD`。在默认分支运行 **Create Dated Release** workflow，会按
+仓库使用按日期发布。当天首个公开 tag 使用 `YYYY-MM-DD`，当天后续发行使用正整数修订后缀，
+例如 `YYYY-MM-DD-1`。首发映射到 Cargo/Debian 的 `YYYY.M.D` 和 macOS build 的
+`YYYYMMDD`；修订示例映射到 Cargo `YYYY.M.D+1`、Debian `YYYY.M.D-1` 与 macOS build
+`YYYYMMDD.1`，macOS short version 仍为 `YYYY.M.D`。在默认分支运行 **Create Dated
+Release** workflow，首发输入 revision `0`，当天第二次发布输入 `1`。它会按
 `Asia/Shanghai` 当天日期计算版本，更新 `Cargo.toml`、`Cargo.lock` 和
 `packaging/macos/Info.plist`，提交这些文件、创建 annotated tag，并显式启动 CI。只有该 CI
 成功且 cache 保存步骤完成后，发布 workflow 才会启动并生成：
@@ -193,9 +196,11 @@ CI 只在默认分支或日期 tag 成功后写入共享 Cargo cache，失败 jo
 包含 target triple、Rust 版本和 `Cargo.lock` 指纹，所以锁文件变更或架构不同都不会复用不兼容的缓存。
 发布仍会重新执行 `--release --locked` 编译，绝不把 CI 的 check 或 debug 产物作为发行物。
 
-构建前会校验所选 tag 确实是日期 annotated tag、该 tag 的 CI 已成功，以及 Cargo package、锁文件和
-macOS bundle 元数据一致。已有日期 tag 不会被覆盖。
-需要重跑已完成发布时，手动运行 **Release** 并输入严格的 `YYYY-MM-DD` tag。本地
+构建前会校验所选 tag 确实是 annotated release tag、该 tag 的 CI 已成功，以及 Cargo package、锁文件和
+macOS bundle 元数据一致。**Create Dated Release** 只用于创建新的日期/修订 tag；已有 tag 的 CI 或打包失败时，
+在默认分支运行 **Retry Existing Release** 并输入严格的 `YYYY-MM-DD[-N]`。它会校验 annotated tag 与
+元数据、为该 tag SHA dispatch CI，只有 CI 成功后才 dispatch Release；该路径不能创建、覆盖或移动 tag。
+若已有同一 SHA 的成功 CI 而只有打包失败，也可直接重跑 **Release**。本地
 `packaging/macos/build-app.sh` 只使用已提交的版本，不会修改发布元数据。
 
 创建 GitHub Release 前，`scripts/generate_release_highlights.py` 会读取已检出的 tag 历史，生成带

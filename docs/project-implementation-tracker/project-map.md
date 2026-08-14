@@ -24,8 +24,8 @@
 | `vendor/vt100/` | 历史终端网格补丁的保留副本 | 审计旧差异或移除遗留依赖时 | 当前迁移不修改其源码；不得再作为新的终端功能实现点 |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |
-| `.github/workflows/` | 三平台 CI、按上海日期升版和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | CI 成功后按 target 写入共享 Cargo cache；Release 再确认 tag CI 成功后只恢复对应 cache 并重新构建发行二进制，发布 macOS arm64/x86_64/Universal bundle，生成分类 Highlights 并保留 GitHub 自动说明，不 checkout 或打包参考子模块 |
-| `scripts/` | 发布日期解析、Highlights、Cargo/lock/plist 同步与回归 | 调整 tag 格式、发布日期或发行元数据时 | 公开 tag 严格为 `YYYY-MM-DD`；Cargo/Debian/macOS short version 为 `YYYY.M.D`，macOS build version 为 `YYYYMMDD`；Highlights 只读取 tag Git 历史并输出 Markdown |
+| `.github/workflows/` | 三平台 CI、按上海日期升版、已有 tag 重试和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | Create Dated Release 只创建新 tag，并以 revision `0`/`N` 创建首发/同日修订；Retry Existing Release 只校验显式 tag 并触发 CI/Release，不移动 tag；Release 再确认同 tag SHA 的成功 CI 后只恢复对应 cache 并重新构建发行二进制，发布 macOS arm64/x86_64/Universal bundle，生成分类 Highlights 并保留 GitHub 自动说明，不 checkout 或打包参考子模块 |
+| `scripts/` | 发布日期解析、Highlights、Cargo/lock/plist 同步与回归 | 调整 tag 格式、发布日期或发行元数据时 | 公开 tag 为 `YYYY-MM-DD[-N]`；首发 Cargo/Debian/macOS short 为 `YYYY.M.D`、macOS build 为 `YYYYMMDD`，修订 Cargo 为 `YYYY.M.D+N`、Debian 为 `YYYY.M.D-N`、macOS build 为 `YYYYMMDD.N`；Highlights 只读取 tag Git 历史并输出 Markdown |
 | `third_package/axshell` | 仅供产品/行为参考的 Git 子模块 | 需要核对参考行为时 | 不进入 Cargo workspace 或 build graph |
 
 ## 关键文件
@@ -37,7 +37,7 @@
 | `LICENSE` | AxSSH 主许可证正文 | GNU GPL version 3 | 发布源码或二进制、核对 GPL 条款时 |
 | `THIRD_PARTY_NOTICES.md` | 第三方许可入口 | Slint、OFL 字体、MIT vt100、平台文件图标 API/依赖、Cargo 依赖 | 修改依赖、字体、vendor 或发行声明时 |
 | `Cargo.toml` | 根包、许可证、依赖和 Linux package 定义 | `[package]`、`license`、Slint/russh/终端模拟器、`package.metadata.deb` | 工具链、版本、授权和构建/打包范围 |
-| `.github/workflows/{create-dated-release,release}.yml` | 日期 tag 创建、跨平台发行与 GitHub Release | `workflow_dispatch`、CI dispatch/wait、release matrix、Highlights | 默认分支创建 tag 后先 dispatch CI；只有 CI 成功才 dispatch 构建 Windows x86_64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle；Release 发布前调用 `scripts/generate_release_highlights.py` 生成分类 Highlights 并保留 GitHub 自动说明 |
+| `.github/workflows/{create-dated-release,retry-existing-release,release}.yml` | 日期 tag 创建、已有 tag 重试、跨平台发行与 GitHub Release | `workflow_dispatch`、tag/metadata verify、CI dispatch/wait、release matrix、Highlights | 默认分支 Create 只创建新 tag；Retry 从明确现有 annotated tag 解析 SHA、dispatch tag CI，成功后 dispatch Release；Release 发布 Windows x86_64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle，并调用 Highlights 生成器 |
 | `scripts/generate_release_highlights.py` 与 `scripts/test_generate_release_highlights.py` | Git-backed Release Highlights 生成和回归 | `generate_release_body`、`render_release_body`、临时 annotated tags | 修改发布描述分类、比较/commit 链接、tag range 或跟踪提交排除时；只依赖 Python 标准库和已检出 Git 历史 |
 | `assets/ion/terminal_icon.svg` | AxSSH Terminal 图标的 canonical 矢量源副本 | 更换或重新生成各平台位图/容器时 | `terminal_icon_all_formats/terminal_icon.svg` 保留同一源副本；所有 PNG、ICO、ICNS 从此 SVG 生成，保持 RGBA 透明背景 |
 | `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
@@ -134,7 +134,7 @@
 - 修改主题：先改 `src/config.rs` 的领域/迁移/对比度保护，再同步 `src/app/{settings_bridge,view,terminal_bridge}.rs`、`ui/{app,settings,theme}.slint` 和 Appearance 的共享 `ThemePaletteEditor`；系统跟随只能留在 Slint，不能把平台配色写进配置。需要精确弹层配色的选择控件统一使用 `ui/components/themed-combo-box.slint`，边框/分隔线/焦点/hover/selected 使用 `Theme` 状态 token。
 - 修改界面语言：先改 `src/config/settings.rs` 的稳定 `UiLanguage` 与迁移，再同步 `src/app/{settings_bridge,view/settings}.rs`、`ui/` 的 `@tr`/稳定 selector index、`translations/zh-CN/` 和 `scripts/{build_zh_catalog,check_translations}.py`；语言必须先持久化再在 UI 线程切换，普通 Settings preview/save 不得覆盖已提交语言。
 - 修改应用图标资源：先检查 `assets/ion/terminal_icon.svg`，再从该源生成 `assets/ion/terminal_icon_all_formats/` 中的 PNG、ICO 和 ICNS；窗口入口在 `ui/app.slint`，Windows resource 在 `packaging/windows/axssh.rc`，macOS Dock/Bundle 在 `src/app/macos_window.rs` 与 `packaging/macos/`，Linux desktop/deb 安装表在 `packaging/linux/axssh.desktop` 与 `Cargo.toml`。
-- 修改 GitHub 发布或版本：先检查 `Cargo.{toml,lock}`、`packaging/macos/Info.plist`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归和 `.github/workflows/{ci,create-dated-release,release}.yml`；公开 tag 必须为 `YYYY-MM-DD` 并在 build 前和三种包元数据一致。保持 CI 成功后按 target 写 cache、Release 仅读对应 cache 的边界，发布 job 始终重新执行 `cargo build --release --locked`，并保留字体、图标和独立许可证声明。Highlights 只读已检出 tag 历史、作为 `body_path` 前缀，必须继续保留 GitHub 自动说明。不得把 `third_package/axshell` 加入 checkout、缓存、构建或发行物。
+- 修改 GitHub 发布或版本：先检查 `Cargo.{toml,lock}`、`packaging/macos/Info.plist`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归和 `.github/workflows/{ci,create-dated-release,retry-existing-release,release}.yml`；公开 tag 必须为 `YYYY-MM-DD[-N]` 并在 build 前和三种包元数据一致。保持 CI 成功后按 target 写 cache、Release 仅读对应 cache 的边界，发布 job 始终重新执行 `cargo build --release --locked`，并保留字体、图标和独立许可证声明。Highlights 只读已检出 tag 历史、作为 `body_path` 前缀，必须继续保留 GitHub 自动说明。不得把 `third_package/axshell` 加入 checkout、缓存、构建或发行物。
 - 修改许可证或发行声明：先检查 `LICENSE`、`THIRD_PARTY_NOTICES.md` 和 `Cargo.toml` 的 SPDX/安装表，再同步 `ui/settings/about.slint`、根 README、`docs/{architecture,development}*.md` 与平台打包脚本；不得用根 GPL 覆盖 OFL 字体或 MIT vendor 的独立声明。
 - 修改 Rust/Slint 工程规则：先读根 `AGENTS.md`，再由项目 skill 选择 Rust 或 Slint reference。
 - 修改工程边界：同步根 README、`docs/architecture*.md` 和本项目地图。
@@ -161,7 +161,7 @@
 - 最近依据：2026-08-12 Terminal render mapper 对每个有界可见行的默认 ASCII run 做边界感知语义标注；真实 `TerminalModel` snapshot 回归覆盖其到 Slint render run 的颜色传递。URL/路径、HTTP 2xx-5xx 和常见成功/信息/警告/错误词分别使用当前 ANSI 色表的 link/success/info/warning/error 色，并对当前终端背景校正至至少 4.5:1。显式 ANSI/真彩色、非默认背景、inverse、dim 与非 ASCII run 不改变；不向 Slint、worker 或持久化层传递额外终端内容。
 - 最近依据：2026-08-12 `ElidedLabel` 统一测量自然宽度、绘制单行省略和仅溢出时的有界全文 Tooltip；`ElidedButton` 保留标准 Button 的 focus/keyboard/enabled/pressed/accessibility/click 所有权，并显式接收 text、tooltip 覆盖和无障碍名称。SFTP、Settings、Sidebar、认证、会话、工作区 Tab/连接行共用该呈现能力；纯图标和已有富详情 Tooltip 不重复包装。
 - 最近依据：2026-08-12 schema v21 增加 Follow system/English/简体中文界面语言策略；构建内嵌完整 `zh-CN` 静态 Slint 目录，独立保存成功后同步进程 locale 和全部窗口。生成/检查器覆盖 386 条非空翻译、陈旧项和编号占位符；技术错误详情保持原文。
-- 最近依据：2026-08-12 Release 在日期 tag 的已检出 Git 历史上生成短小、分类且去重的 Highlights，带 compare 与完整 commit 链接；实施跟踪提交排除，`body_path` 与 `generate_release_notes: true` 并用，CI 覆盖 tag range、首次发布和 Git 错误路径。
+- 最近依据：2026-08-14 Release 支持不可变的 `YYYY-MM-DD[-N]` tag；Create 只创建新的日期/修订 tag，Retry 只能校验并重试已有 tag，revision 映射由单一 Python helper 派生，Highlights 可将同日修订与首发 tag 比较。
 - 最近依据：2026-08-13 SFTP Transfers 使用 Slint-only 三页及勾选/批量 intent；AppState 持有有界 phase/选择，worker 独占最多 4,096 项扫描的递归发现、最多两个 active/opening stream、暂停/从当前 offset 继续、取消与 join。远端文件和目录下载到当前 Local files 相对树，经非符号链接路径验证、`.part` fsync/无覆盖原子发布；失败、取消和发布后观察到的取消清理该任务创建的内容，完成文件保留。
 - 最近依据：2026-08-13 `TerminalModel` 以有界私有队列返回 `PtyWrite` 协议应答，应用 bridge 只写回当前 Tab 的现有 worker，满足 Windows ConPTY inherit-cursor 启动握手；本地 PTY worker 去重相同尺寸、自动退出时保留 owner 并执行有超时 shutdown，Drop 保留 child-killer 兜底。New Session 以内容 preferred height 驱动 scroll viewport。
 - 最近依据：2026-08-10 用 Slint-local command + bounded revision 增加 Terminal-only Edit Copy/Paste/Select All；主/独立窗口共用 `TerminalPaneGroup`，只有 focused pane 执行，Copy/Paste 复用配置快捷键，Select All 使用不占用 Windows/Linux `Ctrl+A` 的固定 accelerator。
@@ -169,6 +169,7 @@
 
 ## 最后更新时间
 
+- 2026-08-14：开始整理日期化发布重试路由；Create workflow 保留新日期 tag 的一次性创建职责，新增 Retry Existing Release 将只接受明确 tag、校验元数据并重新触发 CI/Release，避免 tag 创建和失败后的打包重试混淆。
 - 2026-08-14：刷新本地 PTY 满事件队列 shutdown 路由；正常输出保持有界反压，owner 取消优先终止待投递事件，process-group SIGKILL 成功后不再进入 child-killer 的额外等待路径。
 - 2026-08-13：完成终端连续 resize 边界修复；共享 `TerminalSize` 统一模型、AppState、local/SSH/Telnet backend 的尺寸上限，SSH 交互 PTY 明确启用 `OPOST/ONLCR`，硬换行列归零和真实 loopback PTY mode 回归通过；普通高度从顶部对齐并将非完整字符格余量留在底部，低于三行保底时才负偏移锚定底行。
 - 2026-08-14：终端纵向扩容直接使用锁定 `alacritty_terminal` 语义；只恢复真实 scrollback，历史不足时内容留在顶部、空行留在底部，禁止模型层强制底部锚定。
