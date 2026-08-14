@@ -12,6 +12,7 @@ const MAX_FONT_OPTIONS: usize = 256;
 const MAX_BUNDLED_FONT_FILE_BYTES: u64 = 24 * 1024 * 1024;
 
 const BUNDLED_UI_FONT_FAMILY: &str = "JetBrains Mono";
+const TERMINAL_CJK_FALLBACK_FONT_FAMILY: &str = "Maple Mono NF CN";
 const EMBEDDED_UI_FONT_FILES: &[&[u8]] = &[
     include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf"),
     include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
@@ -26,7 +27,7 @@ struct BundledFont {
 
 const BUNDLED_FONTS: &[BundledFont] = &[
     BundledFont {
-        family: "Maple Mono NF CN",
+        family: TERMINAL_CJK_FALLBACK_FONT_FAMILY,
         files: &["MapleMono-NF-CN-Regular.ttf", "MapleMono-NF-CN-Bold.ttf"],
     },
     BundledFont {
@@ -78,12 +79,21 @@ pub(super) fn load_terminal_font_on_demand(
     let Some(family) = family else {
         return;
     };
-    if bundled_font(&family).is_none() || started.swap(true, Ordering::AcqRel) {
+    if started.swap(true, Ordering::AcqRel) {
         return;
     }
-    let resources = match font_registry.lock() {
-        Ok(registry) if registry.is_registered(&family) => return,
-        Ok(registry) => registry.resources(),
+    let terminal_families = terminal_bundled_font_families(&family);
+    let (resources, pending_families) = match font_registry.lock() {
+        Ok(registry) => {
+            let pending = terminal_families
+                .into_iter()
+                .filter(|family| !registry.is_registered(family))
+                .collect::<Vec<_>>();
+            if pending.is_empty() {
+                return;
+            }
+            (registry.resources(), pending)
+        }
         Err(_) => {
             started.store(false, Ordering::Release);
             tracing::warn!("cannot access font resources for terminal startup");
@@ -91,37 +101,34 @@ pub(super) fn load_terminal_font_on_demand(
         }
     };
     runtime.spawn(async move {
-        let family_for_load = family.clone();
         let loaded =
-            tokio::task::spawn_blocking(move || resources.load_bundled_font(&family_for_load))
+            tokio::task::spawn_blocking(move || resources.load_bundled_fonts(&pending_families))
                 .await;
-        let font = match loaded {
-            Ok(Ok(Some(font))) => font,
-            Ok(Ok(None)) => {
-                tracing::warn!(family = %family, "configured terminal bundled font is unavailable");
-                started.store(false, Ordering::Release);
-                return;
-            }
+        let fonts = match loaded {
+            Ok(Ok(fonts)) => fonts,
             Ok(Err(error)) => {
-                tracing::warn!(%error, "failed to read configured terminal font");
+                tracing::warn!(%error, "failed to read terminal font resources");
                 started.store(false, Ordering::Release);
                 return;
             }
             Err(error) => {
-                tracing::warn!(%error, "configured terminal font task failed");
+                tracing::warn!(%error, "terminal font task failed");
                 started.store(false, Ordering::Release);
                 return;
             }
         };
         super::view::dispatch_ui(&ui, move |ui| {
-            let registration = font_registry
-                .lock()
-                .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
-                .and_then(|mut registry| registry.register_loaded_font(font));
-            if let Err(error) = registration {
-                started.store(false, Ordering::Release);
-                tracing::warn!(%error, "failed to register configured terminal font");
-                ui.set_status(format!("Cannot register terminal font: {error}").into());
+            for font in fonts {
+                let registration = font_registry
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
+                    .and_then(|mut registry| registry.register_loaded_font(font));
+                if let Err(error) = registration {
+                    started.store(false, Ordering::Release);
+                    tracing::warn!(%error, "failed to register terminal font resources");
+                    ui.set_status(format!("Cannot register terminal font: {error}").into());
+                    return;
+                }
             }
         });
     });
@@ -213,19 +220,48 @@ impl FontRegistry {
             return Ok(());
         }
         let mut collection = slint::fontique_010::shared_collection();
-        for bytes in font.files {
-            let registered = collection.register_fonts(fontique::Blob::new(Arc::new(bytes)), None);
-            if registered.is_empty() {
-                anyhow::bail!("bundled font data could not be registered");
-            }
-        }
-        self.registered_families.insert(font.family);
-        tracing::info!(
-            family = font.family,
-            "bundled font registered from resources"
-        );
+        let family = font.family;
+        register_loaded_font_in_collection(&mut collection, font)?;
+        self.registered_families.insert(family);
+        tracing::info!(family, "bundled font registered from resources");
         Ok(())
     }
+}
+
+fn terminal_bundled_font_families(primary_family: &str) -> Vec<String> {
+    let mut families = bundled_font(primary_family)
+        .map(|font| vec![font.family.to_owned()])
+        .unwrap_or_default();
+    if !families
+        .iter()
+        .any(|family| family == TERMINAL_CJK_FALLBACK_FONT_FAMILY)
+    {
+        families.push(TERMINAL_CJK_FALLBACK_FONT_FAMILY.to_owned());
+    }
+    families
+}
+
+fn register_loaded_font_in_collection(
+    collection: &mut fontique::Collection,
+    font: LoadedBundledFont,
+) -> Result<()> {
+    let mut registered_family_ids = BTreeSet::new();
+    for bytes in font.files {
+        let registered = collection.register_fonts(fontique::Blob::new(Arc::new(bytes)), None);
+        if registered.is_empty() {
+            anyhow::bail!("bundled font data could not be registered");
+        }
+        registered_family_ids.extend(registered.into_iter().map(|(family_id, _)| family_id));
+    }
+    if font.family == TERMINAL_CJK_FALLBACK_FONT_FAMILY
+        && !collection.set_fallbacks(
+            fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Hani"), None),
+            registered_family_ids.into_iter(),
+        )
+    {
+        anyhow::bail!("bundled CJK fallback could not be configured");
+    }
+    Ok(())
 }
 
 pub(super) fn discover_system_monospace_families() -> Vec<String> {
@@ -447,5 +483,51 @@ mod tests {
         assert_eq!(loaded.family, BUNDLED_UI_FONT_FAMILY);
         assert_eq!(loaded.files.len(), EMBEDDED_UI_FONT_FILES.len());
         assert!(loaded.files.iter().all(|bytes| !bytes.is_empty()));
+    }
+
+    #[test]
+    fn terminal_font_loading_uses_one_cjk_fallback_path() {
+        assert_eq!(
+            terminal_bundled_font_families("JetBrains Mono"),
+            ["JetBrains Mono", TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+        );
+        assert_eq!(
+            terminal_bundled_font_families(TERMINAL_CJK_FALLBACK_FONT_FAMILY),
+            [TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+        );
+        assert_eq!(
+            terminal_bundled_font_families("System Monospace"),
+            [TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+        );
+    }
+
+    #[test]
+    fn maple_is_the_only_registered_han_fallback() {
+        let resources = FontResources {
+            directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+        };
+        let maple = resources
+            .load_bundled_font(TERMINAL_CJK_FALLBACK_FONT_FAMILY)
+            .expect("Maple font resources should load")
+            .expect("Maple should be a bundled font");
+        let mut collection = fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        });
+
+        register_loaded_font_in_collection(&mut collection, maple)
+            .expect("Maple should register as the Han fallback");
+
+        let fallback_ids = collection
+            .fallback_families(fontique::FallbackKey::new(
+                fontique::Script::from_bytes(*b"Hani"),
+                None,
+            ))
+            .collect::<Vec<_>>();
+        assert_eq!(fallback_ids.len(), 1);
+        assert_eq!(
+            collection.family_name(fallback_ids[0]),
+            Some(TERMINAL_CJK_FALLBACK_FONT_FAMILY)
+        );
     }
 }
