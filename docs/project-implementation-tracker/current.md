@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260814-macos-release-artifacts
-- 目标：让日期化 GitHub Release 同时提供 Universal、Apple Silicon 和 Intel macOS application bundle。
-- 交付物：三个命名明确、内容一致且完成 ad-hoc 签名校验的 macOS `.app` ZIP；更新双语发布说明与实施记录。
+- 目标 ID：20260814-local-shell-shutdown-backpressure
+- 目标：修复 CI 中本地 PTY 事件队列满时 shutdown 偶发超时的问题。
+- 交付物：取消后可确定收敛的本地 PTY reader/worker join；覆盖满队列压力回归并恢复完整 Cargo 门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`.github/workflows/release.yml`、`docs/development.md`、`docs/development.zh.md`、`docs/project-{implementation-tracker,env-audit}/`。
-- 不在本轮范围内：日期 tag 创建、CI 成功门禁、Cargo 缓存策略、Rust 依赖/工具链、应用运行时、SSH host-key trust、凭据，以及参考工程源码。
+- 当前范围：`src/local_shell.rs` 及 `docs/project-{implementation-tracker,env-audit}/`。
+- 不在本轮范围内：Slint UI、应用 bridge、SSH host-key trust、凭据、其他 transport、日期 tag、CI 缓存策略、Rust 依赖/工具链，以及参考工程源码。
 
 ## 当前状态
 
@@ -23,6 +23,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| LS1 | completed | 取消感知的本地 PTY 有界事件投递收敛 | 定向满队列 shutdown 压力回归 | 正常运行保持反压；取消后可丢弃未投递事件。 |
+| LS2 | completed | reader/worker/child 生命周期回归 | 重复 `local_shell` 定向测试 | 不遗留阻塞 join 或孤儿 child。 |
+| LS3 | completed | 完整 Rust 门禁与实施记录 | fmt/check/clippy/test/tracker/diff | 不修改 UI、SSH trust、凭据或依赖。 |
 | MRA1 | completed | 每个 macOS target 的独立 `.app` ZIP 与明确附件名 | YAML/Shell 静态检查 | bundle 仅来自当前 target binary、本仓库资源与许可证。 |
 | MRA2 | completed | 从两个独立 bundle 合并的 Universal `.app` ZIP | `lipo`/`codesign` CI 命令审阅 | Universal 只替换可执行文件，资源来自已验证 arm64 bundle。 |
 | MRA3 | completed | 双语发布说明、环境/实施记录和全部静态门禁 | Python/YAML/Markdown/tracker/diff | 远端 macOS runner 与 GitHub Release 附件留实际 tag 验证。 |
@@ -90,6 +93,8 @@
 - 已完成 RB3：同步中英文架构/使用说明、项目地图、环境预检、外部来源和实施记录。
 - 已完成 MRA1-MRA2：两个 macOS target 均使用 `packaging/macos/build-app.sh` 将当前 target binary 和本仓库资源封装为独立 `.app` ZIP；Universal job 解包两个 bundle、以 `lipo` 替换可执行文件后重新 ad-hoc 签名并发布第三个 ZIP。
 - 已完成 MRA3-MRA4：本机 arm64、x86_64 与 Universal release bundle 均已通过 `lipo` 架构验证、ad-hoc 签名、ZIP 打包/解包、资源存在性与解包后二次签名验证；YAML/Shell、Python release 回归和完整离线 Cargo 门禁均通过。
+- 已复现依据：GitHub-hosted macOS `cargo test --locked` 中，`local_shell::tests::shutdown_terminates_a_running_shell_with_a_full_event_queue` 在满事件队列时超过 5 秒；本机单次定向测试通过，故按间歇性竞态处理。
+- 已完成 LS1-LS2：取消现在在每次 event delivery 前优先终止未投递事件；有效 process group 被终止后不再等待 child-killer 锁和 SIGHUP 宽限期。新增取消时不入队回归，满队列 shutdown 定向测试连续 20 次通过。
 
 ## 验证
 
@@ -99,6 +104,8 @@
 - 已完成：连续 resize 硬换行列回归、AppState 41 项状态回归、真实 loopback SSH PTY modes 回归、`cargo check`、严格 Clippy、完整 Cargo 测试、翻译检查、tracker 校验和差异检查。
 - 已完成：RB4 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 173、应用 160、Doc tests 0）、tracker/Markdown 链接与 `git diff --check`。
 - 已完成：MRA3-MRA4 的 Ruby YAML 解析、`sh -n packaging/macos/build-app.sh`、Python release-version/Highlights 9 项回归、本机 arm64、x86_64 与 Universal macOS bundle 的 `lipo`/codesign/ZIP round-trip（Universal 保留 17 个运行时字体文件）、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 177、应用 162、Doc tests 0）、tracker、Markdown 相对链接与差异检查。
+- 已完成：本机 `cargo test --lib local_shell::tests::shutdown_terminates_a_running_shell_with_a_full_event_queue --locked --offline -- --exact --nocapture` 单次通过。
+- 已完成：LS3 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 178、应用 162、Doc tests 0）和 `git diff --check`。
 - 未完成：Windows 新 EXE 的字体注册、ConPTY、UI、真实 SSH 连接、正常 shell 的连续纵向拖动、分屏极小尺寸和鼠标/IME 坐标均需目标平台人工验收。
 - 未完成：下一次日期 tag 的 GitHub-hosted macOS runner 需实际验证两个 target 链接、ad-hoc 签名、Universal `lipo` 合并以及 Release 页面上的三份 macOS 附件。
 
@@ -109,16 +116,18 @@
 - 递归目录下载必须限制深度、文件数、路径文本和总字节，且跳过符号链接；超限或不可读项将以有界失败行呈现。
 - 主屏高度增长且存在 scrollback 时，当前提示符下移、顶部露出历史行是预期行为；修复只禁止伪造空白历史行。
 - GitHub Release 继续使用 ad-hoc 签名，不包含 Developer ID 签名或 notarization；本轮只确保三个附件的架构和 bundle 内容一致。
+- 本地 PTY 的正常输出不可因 UI 消费短暂滞后而无界积压或静默丢失；仅在 owner 已请求取消时允许放弃尚未投递的事件以保证 join 收敛。
 
 ## 下一步
 
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
 - 在相同构建中连续纵向缩放普通 shell；无 scrollback 时确认已有输出留在顶部、空行只出现在底部，并确认有 scrollback 时顶部显示真实历史行。
 - 在下一个日期 tag 检查 Release 是否列出 `AxSSH-<version>-macos-aarch64.zip`、`AxSSH-<version>-macos-x86_64.zip` 和 `AxSSH-<version>-macos-universal.zip`，并在目标 Apple Silicon/Intel 机器启动对应 bundle。
+- 在新提交上重建 `2026-08-14` tag，推送后手动 dispatch tag CI；CI 成功后再执行 Release workflow。
 
 ## 最后更新时间
 
-- 2026-08-14：完成 MRA1-MRA4；日期化 Release 将发布 arm64、x86_64 与 Universal 三份 macOS bundle，每份含相同资源和许可证；本机三份 bundle 与全部静态门禁通过，不联网、未使用 multi-agent。远端 release job 仍需在下一次有效日期 tag 执行。
+- 2026-08-14：完成 LS1-LS3；取消在任何本地 PTY event 投递前优先终止，process group 强杀成功后不再额外等待 child-killer。7 项 local shell 定向、20 次满队列压力和完整 Rust 门禁通过；不联网、未使用 multi-agent。新提交需重建日期 tag 并复验远端 CI。
 
 - 2026-08-13：完成 MP1-MP3 全屏终端 mouse reporting 实施；不联网、不使用多 agent。工作区恢复、SFTP WR1-WR5 和 RE1-RE4 保持完成。真实 TUI 交互仍需用户验收。
 - 2026-08-13：启动 KH1-KH4 known_hosts 兼容实施；复用锁定的 `russh`/`ssh-key`，不联网、不使用多 agent。

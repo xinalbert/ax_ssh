@@ -79,7 +79,7 @@
 | `src/terminal.rs` | 有界终端文本模型与 mouse reporting 编码 | `TerminalModel`、`TerminalMouseEvent`、`TerminalMouseReporting`、`visible_row_text_at_cell`、`visible_row_cell_span_for_characters`、Alacritty `Term`/`Processor` 映射 | shell 输出解析、主屏 reflow、纵向扩容时仅恢复真实 scrollback、无历史内容顶部对齐、硬换行列归零回归、光标、宽字符安全映射，以及按私有模式生成 SGR/UTF-8/X10 鼠标事件 |
 | `src/terminal_dimensions.rs` | 终端模型、设置和后端共享的尺寸契约 | `MIN_TERMINAL_*`、`MAX_TERMINAL_*` | 统一 `10x3..300x100` UI/模型边界与 worker 的 `300x100` 最大值；PTY 入口仍单独允许 `1x1` |
 | `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalModifiers`、`encode_key` | 控制字节、application-cursor Home/End、导航/Function 键和 xterm 修饰序列 |
-| `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；shutdown 先终止进程资源再等待 worker，不遗留 detached blocking join |
+| `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；取消优先放弃未投递事件，process-group 终止成功后不等待 child-killer，shutdown 不遗留 detached blocking join |
 | `src/logging.rs` | 进程级 tracing 生命周期 | `LoggingGuard`、滚动 writer | 日志目录、过滤、保留、退出 flush，以及向 About 提供已创建目录 |
 | `src/x_server.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`XServerPlan` | macOS bundle/Windows PATH 与 Program Files 系统发现、只读已知位置快照、Custom executable、display 候选和首个 X11 channel 时的有界启动；不持有 SSH channel、cookie 或 UI 状态 |
 | `src/ssh.rs` | russh 传输与 host-key trust 边界 | `ClientHandler`、`SshConnection`、`SshSessionHandle`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；不保存 agent 端点/identity，不把静默 shell 当作断连 |
@@ -169,6 +169,7 @@
 
 ## 最后更新时间
 
+- 2026-08-14：刷新本地 PTY 满事件队列 shutdown 路由；正常输出保持有界反压，owner 取消优先终止待投递事件，process-group SIGKILL 成功后不再进入 child-killer 的额外等待路径。
 - 2026-08-13：完成终端连续 resize 边界修复；共享 `TerminalSize` 统一模型、AppState、local/SSH/Telnet backend 的尺寸上限，SSH 交互 PTY 明确启用 `OPOST/ONLCR`，硬换行列归零和真实 loopback PTY mode 回归通过；普通高度从顶部对齐并将非完整字符格余量留在底部，低于三行保底时才负偏移锚定底行。
 - 2026-08-14：终端纵向扩容直接使用锁定 `alacritty_terminal` 语义；只恢复真实 scrollback，历史不足时内容留在顶部、空行留在底部，禁止模型层强制底部锚定。
 - 2026-08-12 17:31 +0800：补充界面语言配置、内嵌简体中文目录、独立保存/多窗口 locale 切换及翻译校验路由。

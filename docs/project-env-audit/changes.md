@@ -1,5 +1,23 @@
 # 项目环境变化记录
 
+## 2026-08-14 本地 PTY shutdown CI 回归施工预检
+
+- 日期：2026-08-14
+- 变化摘要：GitHub-hosted macOS 的 `cargo test --locked` 显示本地 PTY 满事件队列时 shutdown 在测试的 5 秒上限内没有完成；开始检查取消、child 终止、reader join 与有界事件反压的竞态。
+- 受影响文件：`src/local_shell.rs`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、Tokio、portable-pty 和既有 macOS CI；不新增依赖、工具链、运行时或安全边界。
+- 验证结果：已读取 CI 失败日志；本机首次 `local_shell::tests::shutdown_terminates_a_running_shell_with_a_full_event_queue` 定向运行通过，表明需要按间歇性时序竞争重复验证。
+- 风险/待办：正常运行必须保留 32 项有界事件队列的反压语义；取消后可放弃未投递事件以避免 reader/worker join 阻塞。修复后需要完整 locked/offline Cargo 门禁和远端 tag CI 复验。
+
+## 2026-08-14 本地 PTY shutdown CI 回归环境验证
+
+- 日期：2026-08-14
+- 变化摘要：在 event delivery 前检查取消，使 reader 不会在 owner shutdown 后继续发送；process group 的 SIGKILL 成功时直接结束，不再取得 child-killer 锁并执行额外 SIGHUP 宽限等待。
+- 受影响文件：`src/local_shell.rs`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：无。保留 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、Tokio、portable-pty 与既有 macOS CI；不新增依赖或工具链。
+- 验证结果：7 项 local shell 定向测试、20 次满队列 shutdown 压力运行、fmt/check/严格 Clippy 和完整 Cargo 测试（库 178、应用 162、Doc tests 0）通过。
+- 风险/待办：正常运行仍以有界反压保护输出；只有 owner 已取消时才放弃尚未投递的事件。重建 `2026-08-14` tag 后需由 GitHub-hosted macOS CI 复验。
+
 ## 2026-08-14 macOS 多架构 Release 施工预检
 
 - 日期：2026-08-14

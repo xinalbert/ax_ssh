@@ -1,5 +1,22 @@
 # 项目环境当前态
 
+## 2026-08-14 本地 PTY shutdown CI 回归施工预检
+
+- 项目边界：`src/local_shell.rs` 的本地 PTY reader/worker/child 生命周期及其测试；不调整 Slint、应用 bridge、SSH trust、凭据或其他 transport。
+- 环境记忆状态：已复核 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、本地 PTY 的 32 项命令/事件容量、取消 flag、child killer/process group 和有超时 join。GitHub-hosted macOS 的完整 Cargo 测试报告满事件队列 shutdown 超过 5 秒；本机首次定向测试通过。
+- 运行环境：保持既有 Rust/Tokio/portable-pty 与 locked/offline Cargo 环境；不新增依赖、不改工具链或 CI 配置。
+- 测试环境：先重复 `local_shell::tests::shutdown_terminates_a_running_shell_with_a_full_event_queue`，随后执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline` 和 `git diff --check`。
+- 环境变化检查：否；问题属于 worker-owned 取消与有界事件交付，不涉及网络、秘密、持久化或 UI 线程。
+- 开工判定：允许开工。
+
+## 2026-08-14 本地 PTY shutdown CI 回归环境验证
+
+- 变化摘要：取消现在在每次本地 PTY event 投递前优先终止未投递事件；process group 强杀成功后直接返回，不再额外锁定并调用 child-killer 的 SIGHUP 宽限路径。
+- 受影响文件：`src/local_shell.rs`、`docs/project-{implementation-tracker,env-audit}/`。
+- 环境变化：无。未新增依赖、未修改 `Cargo.lock`、工具链、Slint、SSH trust、凭据或 CI 配置。
+- 验证结果：7 项 `local_shell` 定向回归、满队列 shutdown 连续 20 次压力运行、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 178、应用 162、Doc tests 0）均通过。
+- 人工/远端验收：需要将日期 tag 指向修复提交后手动 dispatch GitHub-hosted macOS CI；成功后才能运行 Release workflow。
+
 ## 2026-08-14 macOS 多架构 Release 施工预检
 
 - 项目边界：`.github/workflows/release.yml` 与双语发布说明；只调整 GitHub-hosted macOS 发行包的组装及附件，不变更本地应用运行时。

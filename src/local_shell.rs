@@ -208,27 +208,18 @@ fn force_kill_child_blocking(
     child_killer: &Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
     process_group: &Arc<AtomicI32>,
 ) -> Result<()> {
-    let mut killer = child_killer
-        .lock()
-        .map_err(|_| anyhow::anyhow!("local PTY child killer lock poisoned"))?;
     let process_group = process_group.load(Ordering::Acquire);
-    if killer.is_none() && process_group <= 0 {
-        return Ok(());
-    }
-    let group_result = kill_local_process_group(process_group);
-    let child_result = killer.as_mut().map_or_else(
-        || {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "local PTY child killer is unavailable",
-            ))
-        },
-        |killer| killer.kill(),
-    );
-    match (group_result, child_result) {
-        (Ok(()), _) | (_, Ok(())) => Ok(()),
-        (Err(group_error), Err(_)) => {
-            Err(group_error).context("failed to terminate local PTY child")
+    match kill_local_process_group(process_group) {
+        Ok(()) => Ok(()),
+        Err(group_error) => {
+            let mut killer = child_killer
+                .lock()
+                .map_err(|_| anyhow::anyhow!("local PTY child killer lock poisoned"))?;
+            match killer.as_mut() {
+                Some(killer) => killer.kill().context("failed to terminate local PTY child"),
+                None if process_group <= 0 => Ok(()),
+                None => Err(group_error).context("failed to terminate local PTY child"),
+            }
         }
     }
 }
@@ -561,12 +552,12 @@ fn send_event_with_cancellation(
     shutdown_requested: &Arc<AtomicBool>,
 ) -> Result<()> {
     loop {
+        if shutdown_requested.load(Ordering::Acquire) {
+            anyhow::bail!("local PTY shutdown cancelled pending event delivery");
+        }
         match event_tx.try_send(event) {
             Ok(()) => return Ok(()),
             Err(mpsc::error::TrySendError::Full(returned)) => {
-                if shutdown_requested.load(Ordering::Acquire) {
-                    anyhow::bail!("local PTY shutdown cancelled pending event delivery");
-                }
                 event = returned;
                 thread::sleep(EVENT_BACKPRESSURE_INTERVAL);
             }
@@ -784,6 +775,22 @@ mod tests {
                 rows: 30,
             })
         );
+    }
+
+    #[test]
+    fn cancellation_does_not_enqueue_pending_local_pty_events() {
+        let shutdown_requested = Arc::new(AtomicBool::new(true));
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+
+        assert!(
+            send_event_with_cancellation(
+                &event_tx,
+                LocalShellEvent::Output(b"discard on shutdown".to_vec()),
+                &shutdown_requested,
+            )
+            .is_err()
+        );
+        assert!(event_rx.try_recv().is_err());
     }
 
     #[cfg(not(windows))]
