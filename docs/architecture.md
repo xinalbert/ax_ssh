@@ -890,6 +890,8 @@ timeouts and a 30-minute overall timeout, and reports owned queue, state,
 progress, and terminal events. The application state owns bounded rows split
 into active, failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
+The active-page batch actions share the right side of the transfer page bar;
+they do not reserve a second toolbar row or introduce another callback path.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
 and the stream resumes at its current offset only while that worker lives.
 

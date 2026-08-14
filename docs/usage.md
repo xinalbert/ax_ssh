@@ -187,7 +187,9 @@ GiB in total.
 
 The Transfers area has separate **Transferring**, **Failed**, and **Success**
 pages. Select active rows with their checkboxes to pause, resume, or cancel
-them in a batch. Pause/resume preserves the downloaded prefix through the live
+them in a batch from the right side of the **Transferring** page bar. These
+actions share the page bar instead of reserving a separate row. Pause/resume
+preserves the downloaded prefix through the live
 worker and continues from that offset; it is available only while this
 application and SFTP worker remain running. Each SFTP Tab runs at most two
 active or opening downloads at once. Cancel removes the task's partial content,

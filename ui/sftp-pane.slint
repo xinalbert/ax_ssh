@@ -990,6 +990,36 @@ component SftpTransferQueue inherits Rectangle {
                     enabled: true;
                     clicked => { root.page = "completed"; }
                 }
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+                if !root.collapsed && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Pause");
+                    tooltip-text: @tr("Pause selected");
+                    accessible-name: @tr("Pause selected");
+                    enabled: root.selected-pausable-count > 0;
+                    clicked => { root.pause-selected(); }
+                }
+                if !root.collapsed && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Resume");
+                    tooltip-text: @tr("Resume selected");
+                    accessible-name: @tr("Resume selected");
+                    enabled: root.selected-resumable-count > 0;
+                    clicked => { root.resume-selected(); }
+                }
+                if !root.collapsed && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Cancel");
+                    tooltip-text: @tr("Cancel selected");
+                    accessible-name: @tr("Cancel selected");
+                    enabled: root.selected-active-count > 0;
+                    clicked => { root.cancel-selected(); }
+                }
             }
             Rectangle {
                 y: parent.height - Theme.hairline;
@@ -1059,42 +1089,6 @@ component SftpTransferQueue inherits Rectangle {
                 horizontal-alignment: right;
                 overflow: elide;
                 vertical-alignment: center;
-            }
-            Rectangle {
-                y: parent.height - Theme.hairline;
-                width: parent.width;
-                height: Theme.hairline;
-                background: Theme.divider;
-            }
-        }
-        if !root.collapsed && root.page == "active" : Rectangle {
-            height: Theme.sftp-transfer-header-height;
-            background: Theme.panel-alt;
-            HorizontalLayout {
-                padding-left: Theme.sftp-column-padding;
-                padding-right: Theme.sftp-column-padding;
-                spacing: Theme.space-sm;
-                if root.page == "active" : SftpActionButton {
-                    width: 88px;
-                    height: Theme.sftp-control-min-height;
-                    text: @tr("Pause selected");
-                    enabled: root.selected-pausable-count > 0;
-                    clicked => { root.pause-selected(); }
-                }
-                if root.page == "active" : SftpActionButton {
-                    width: 94px;
-                    height: Theme.sftp-control-min-height;
-                    text: @tr("Resume selected");
-                    enabled: root.selected-resumable-count > 0;
-                    clicked => { root.resume-selected(); }
-                }
-                if root.page == "active" : SftpActionButton {
-                    width: 100px;
-                    height: Theme.sftp-control-min-height;
-                    text: @tr("Cancel selected");
-                    enabled: root.selected-active-count > 0;
-                    clicked => { root.cancel-selected(); }
-                }
             }
             Rectangle {
                 y: parent.height - Theme.hairline;
