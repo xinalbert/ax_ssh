@@ -237,7 +237,10 @@ run succeeds and its cache-save step has completed. It publishes these assets:
 
 - Windows x86_64 ZIP with the executable, bundled fonts, and license notices
 - Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
-- A universal macOS `.app` ZIP assembled from arm64 and x86_64 binaries
+- macOS Apple Silicon (`macos-aarch64`), Intel (`macos-x86_64`), and universal
+  `.app` ZIPs; every bundle contains the same icon, runtime fonts, and license
+  notices, while the universal executable is assembled from the two native
+  binaries
 
 CI writes the shared Cargo cache only after successful default-branch or date-tag
 runs; failed jobs cannot save it. Release jobs independently require a successful

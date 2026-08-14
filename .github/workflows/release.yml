@@ -86,10 +86,12 @@ jobs:
             target: aarch64-apple-darwin
             name: macos-aarch64
             binary: ax_ssh
+            macos_arch: arm64
           - os: macos-14
             target: x86_64-apple-darwin
             name: macos-x86_64
             binary: ax_ssh
+            macos_arch: x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -126,13 +128,21 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Upload macOS architecture binary
+      - name: Package macOS application
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.name }}-binary
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
-          if-no-files-found: error
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="AxSSH.app"
+          AXSSH_BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.binary }}" \
+            packaging/macos/build-app.sh "$app"
+          binary="$app/Contents/MacOS/AxSSH"
+          lipo "$binary" -verify_arch "${{ matrix.macos_arch }}"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          asset="AxSSH-${RELEASE_PUBLIC_VERSION}-${{ matrix.name }}.zip"
+          ditto -c -k --keepParent "$app" "$asset"
+          echo "ASSET_PATH=$asset" >> "$GITHUB_ENV"
 
       - name: Package Windows archive
         if: runner.os == 'Windows'
@@ -194,7 +204,6 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Upload packaged artifacts
-        if: runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
@@ -216,39 +225,47 @@ jobs:
           set -euo pipefail
           python scripts/release_version.py verify --tag "$RELEASE_TAG" >> "$GITHUB_ENV"
 
-      - name: Download macOS ARM64 binary
+      - name: Download macOS ARM64 application
         uses: actions/download-artifact@v4
         with:
-          name: macos-aarch64-binary
+          name: release-macos-aarch64
           path: dist/macos-aarch64
 
-      - name: Download macOS x86_64 binary
+      - name: Download macOS x86_64 application
         uses: actions/download-artifact@v4
         with:
-          name: macos-x86_64-binary
+          name: release-macos-x86_64
           path: dist/macos-x86_64
 
       - name: Assemble universal macOS application
         shell: bash
         run: |
           set -euo pipefail
-          arm_binary="$(find dist/macos-aarch64 -type f -name ax_ssh -print -quit)"
-          x86_binary="$(find dist/macos-x86_64 -type f -name ax_ssh -print -quit)"
-          if [ -z "$arm_binary" ] || [ -z "$x86_binary" ]; then
+          arm_archive="$(find dist/macos-aarch64 -type f -name '*.zip' -print -quit)"
+          x86_archive="$(find dist/macos-x86_64 -type f -name '*.zip' -print -quit)"
+          if [ -z "$arm_archive" ] || [ -z "$x86_archive" ]; then
             echo "macOS architecture artifact is missing" >&2
             exit 1
           fi
+          mkdir -p expanded/arm64 expanded/x86_64
+          ditto -x -k "$arm_archive" expanded/arm64
+          ditto -x -k "$x86_archive" expanded/x86_64
+          arm_app="expanded/arm64/AxSSH.app"
+          x86_app="expanded/x86_64/AxSSH.app"
+          arm_binary="$arm_app/Contents/MacOS/AxSSH"
+          x86_binary="$x86_app/Contents/MacOS/AxSSH"
+          if [ ! -f "$arm_binary" ] || [ ! -f "$x86_binary" ]; then
+            echo "macOS application binary is missing" >&2
+            exit 1
+          fi
           app="AxSSH.app"
-          contents="$app/Contents"
-          mkdir -p "$contents/MacOS" "$contents/Resources/assets/fonts"
-          lipo -create "$arm_binary" "$x86_binary" -output "$contents/MacOS/AxSSH"
-          chmod 755 "$contents/MacOS/AxSSH"
-          cp packaging/macos/Info.plist "$contents/Info.plist"
-          cp assets/ion/terminal_icon_all_formats/terminal_icon.icns "$contents/Resources/AxSSH.icns"
-          cp -R assets/fonts/. "$contents/Resources/assets/fonts/"
-          cp LICENSE THIRD_PARTY_NOTICES.md "$contents/Resources/"
+          cp -R "$arm_app" "$app"
+          universal_binary="$app/Contents/MacOS/AxSSH"
+          lipo -create "$arm_binary" "$x86_binary" -output "$universal_binary"
+          chmod 755 "$universal_binary"
+          lipo "$universal_binary" -verify_arch arm64 x86_64
           codesign --force --deep --sign - "$app"
-          codesign --verify --verbose "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
           asset="AxSSH-${RELEASE_PUBLIC_VERSION}-macos-universal.zip"
           ditto -c -k --keepParent "$app" "$asset"
           echo "ASSET_PATH=$asset" >> "$GITHUB_ENV"

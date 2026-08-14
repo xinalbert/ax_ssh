@@ -1,5 +1,22 @@
 # 项目环境当前态
 
+## 2026-08-14 macOS 多架构 Release 施工预检
+
+- 项目边界：`.github/workflows/release.yml` 与双语发布说明；只调整 GitHub-hosted macOS 发行包的组装及附件，不变更本地应用运行时。
+- 环境记忆状态：已复核 `Cargo.toml`、`Cargo.lock`、`.github/workflows/{ci,create-dated-release,release}.yml`、`packaging/macos/Info.plist`、`packaging/macos/build-app.sh` 和当前发布文档。发布矩阵已构建 `aarch64-apple-darwin` 与 `x86_64-apple-darwin`，但仅上传 Universal bundle。
+- 运行环境：保持 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、Python 3 标准库及现有 GitHub Actions action 版本；不新增依赖或工具链。
+- 测试环境：本机执行 YAML/Shell/Markdown/tracker/diff 检查和 `cargo check --locked --offline`；`lipo`、codesign、两个 macOS target 和 GitHub Release 附件由 GitHub-hosted macOS runner 在下一个日期 tag 验证。
+- 环境变化检查：否；不改 CI tag 成功门禁、target 专属 Cargo cache、日期版本脚本、应用代码、SSH trust 或凭据。
+- 开工判定：允许开工。
+
+## 2026-08-14 macOS 多架构 Release 环境验证
+
+- 变化摘要：日期化 Release 现在发布 `macos-aarch64`、`macos-x86_64` 与 `macos-universal` 三份 app ZIP。每个原生 job 使用已构建的 target binary 和共同的本仓库 bundle 资源；Universal job 从两个原生 bundle 合成 fat executable 后重新签名。
+- 受影响文件：`.github/workflows/release.yml`、`packaging/macos/build-app.sh`、`docs/development{,.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 环境变化：无。未新增依赖、未修改 `Cargo.lock`、工具链、日期 tag/CI 门禁、target 专属 cache、应用代码、SSH trust 或凭据。
+- 验证结果：Ruby YAML 解析、POSIX shell 语法、Python release-version/Highlights 9 项回归、本机 arm64、x86_64 和 Universal bundle 的 `lipo`、ad-hoc codesign、ZIP round-trip 和资源检查（Universal 保留 17 个运行时字体文件），以及完整 locked/offline fmt/check/Clippy/Cargo test（库 177、应用 162、Doc tests 0）均通过。
+- 人工/远端验收：下一个有效日期 tag 需在 GitHub-hosted macOS runner 验证 Intel target、Universal `lipo`、三份附件名称及目标 Apple Silicon/Intel 启动；发布仍是 ad-hoc 签名，未包含 notarization。
+
 ## 2026-08-14 终端缓冲区 resize 施工预检
 
 - 项目边界：`src/terminal.rs` 与终端 resize 语义的双语/跟踪文档；不调整 `ui/`、PTY worker、SSH trust 或凭据。

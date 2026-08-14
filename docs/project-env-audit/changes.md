@@ -1,5 +1,32 @@
 # 项目环境变化记录
 
+## 2026-08-14 macOS 多架构 Release 施工预检
+
+- 日期：2026-08-14
+- 变化摘要：开始调整 GitHub Release 的 macOS 附件，使 Universal、Apple Silicon 和 Intel bundle 同时发布；保留现有日期 tag、CI 成功和 target 专属 Cargo cache 门禁。
+- 受影响文件：`.github/workflows/release.yml`、`docs/development{,.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、现有 `Cargo.lock`、Python 3 标准库和 GitHub-hosted macOS runner；不新增依赖、工具链、运行时或安全边界。
+- 验证结果：已复核发布矩阵、`lipo`/codesign bundle 组装路径和同级项目的独立架构+Universal 发布模式；实现后将运行 YAML/Shell/Markdown/tracker/diff 与 `cargo check --locked --offline`。真实 GitHub Actions 附件在下一次日期 tag 验证。
+- 风险/待办：GitHub-hosted macOS runner 才能验证 Intel target 链接、ad-hoc codesign、ZIP 展开和 Release 附件列表。
+
+## 2026-08-14 macOS 多架构 Release 环境验证
+
+- 日期：2026-08-14
+- 变化摘要：Release 的两个 macOS target 各自产出完整、签名过的 `.app` ZIP，Universal job 解包二者并以 `lipo` 合并可执行文件后重新签名；发布 job 以既有 `release-*` pattern 收集三份 macOS 资产。
+- 受影响文件：`.github/workflows/release.yml`、`packaging/macos/build-app.sh`、`docs/development{,.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、现有 `Cargo.lock`、Python 3 标准库、GitHub-hosted macOS runner 和 target 专属 cache；不新增依赖、工具链、运行时或安全边界。
+- 验证结果：YAML、Shell、Python 9 项 release 回归、本机 ARM64 `.app` 的 `lipo`/codesign/ZIP round-trip、完整 `cargo fmt/check/clippy/test --locked --offline`（库 177、应用 162、Doc tests 0）和差异检查通过。
+- 风险/待办：下一次有效日期 tag 的远端 runner 仍需验证 x86_64 target、双架构 `lipo` 和 GitHub Release 上的三个附件；ad-hoc 签名不等同于 Developer ID 签名或 notarization。
+
+## 2026-08-14 macOS 三份 bundle 本机回环验证
+
+- 日期：2026-08-14
+- 变化摘要：使用两个已完成的 target release binary 完整复现 Release 打包路径，分别产出 arm64、x86_64 与 Universal `.app` ZIP；Universal 从两个已签名的原生 bundle 解包、合成可执行文件并重新签名。
+- 受影响文件：`docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：无。继续使用本机 macOS 的 `lipo`、codesign、ditto 和既有 release binary；不新增依赖、工具链、运行时或安全边界。
+- 验证结果：三个 bundle 的架构断言、严格 ad-hoc codesign、ZIP 打包/解包回环、`Info.plist` 校验、图标和许可证存在性检查均通过；Universal bundle 保留 17 个运行时字体文件。
+- 风险/待办：GitHub-hosted macOS runner 的 artifact 上传/下载与实际 Release 附件列表仍需在下一个有效日期 tag 验证；ad-hoc 签名不等同于 Developer ID 签名或 notarization。
+
 ## 2026-08-14 终端缓冲区 resize 施工预检
 
 - 日期：2026-08-14

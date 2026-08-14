@@ -185,7 +185,8 @@ Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Li
 
 - Windows x86_64 ZIP，包含可执行文件、自带字体和许可证声明
 - Linux x86_64 与 aarch64 TAR.GZ，以及对应的 `.deb`
-- 从 arm64 和 x86_64 二进制合并出的 macOS 通用 `.app` ZIP
+- macOS Apple Silicon（`macos-aarch64`）、Intel（`macos-x86_64`）和从两个原生
+  二进制合并的通用 `.app` ZIP；三种 bundle 都包含相同的图标、运行时字体和许可证声明
 
 CI 只在默认分支或日期 tag 成功后写入共享 Cargo cache，失败 job 不会写入；发布 job 会再次验证
 所选 tag 的 CI 成功，只恢复而不写回该 cache。缓存键

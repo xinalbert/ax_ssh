@@ -2,27 +2,31 @@
 
 ## 当前目标
 
-- 目标 ID：20260814-terminal-vertical-resize
-- 目标：修复普通终端在纵向放大后将无内容空行错误置于顶部、使既有输出贴近底部的缓冲区 resize 行为。
-- 交付物：采用锁定 `alacritty_terminal` 的主屏 resize 语义；覆盖无 scrollback 顶部对齐、存在 scrollback 时历史恢复，以及重复 resize 的回归；同步双语架构与实施记录。
+- 目标 ID：20260814-macos-release-artifacts
+- 目标：让日期化 GitHub Release 同时提供 Universal、Apple Silicon 和 Intel macOS application bundle。
+- 交付物：三个命名明确、内容一致且完成 ad-hoc 签名校验的 macOS `.app` ZIP；更新双语发布说明与实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal.rs`、`docs/architecture.md`、`docs/architecture.zh.md`、`docs/project-{implementation-tracker,env-audit}/`。
-- 不在本轮范围内：`ui/` 布局、Slint 坐标、PTY resize 传输、SSH host-key trust、凭据、worker 生命周期、配置 schema、依赖或工具链，以及参考工程源码。
+- 当前范围：`.github/workflows/release.yml`、`docs/development.md`、`docs/development.zh.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 不在本轮范围内：日期 tag 创建、CI 成功门禁、Cargo 缓存策略、Rust 依赖/工具链、应用运行时、SSH host-key trust、凭据，以及参考工程源码。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| MRA1 | completed | 每个 macOS target 的独立 `.app` ZIP 与明确附件名 | YAML/Shell 静态检查 | bundle 仅来自当前 target binary、本仓库资源与许可证。 |
+| MRA2 | completed | 从两个独立 bundle 合并的 Universal `.app` ZIP | `lipo`/`codesign` CI 命令审阅 | Universal 只替换可执行文件，资源来自已验证 arm64 bundle。 |
+| MRA3 | completed | 双语发布说明、环境/实施记录和全部静态门禁 | Python/YAML/Markdown/tracker/diff | 远端 macOS runner 与 GitHub Release 附件留实际 tag 验证。 |
+| MRA4 | completed | arm64、x86_64 与 Universal 三份本机 bundle 回环验证 | `lipo`、codesign、ZIP 解包和资源检查 | 三份 archive 使用 CI 同一组装步骤；Universal 从两份原生 bundle 合成。 |
 | TR1 | completed | 有界 download state、选择和暂停/恢复/取消状态转换 | `app::state` 定向回归 | 状态属于 AppState；UI 只接收有界行 DTO。 |
 | TR2 | completed | SFTP worker 的递归展开、暂停/恢复/取消与断点缓存协议 | `sftp::transfer`、`ssh::worker::sftp` 回归 | russh session 留在 worker；取消只清理该任务创建的数据。 |
 | TR3 | completed | 三个 Transfers 页面、行勾选和批量操作回调 | `cargo check --locked --offline` | Slint 不执行文件系统或网络操作。 |
@@ -84,6 +88,8 @@
 - 已完成外部语义对照：Alacritty、xterm.js、WezTerm 与 kitty 的增长路径都只使用真实 scrollback 填充新增区域；无历史时保留内容顶部并在底部补空行。
 - 已完成 RB2：删除 `Term::resize` 后的二次网格滚动和 cursor-to-bottom 修正；25 项 `terminal` 定向回归通过。
 - 已完成 RB3：同步中英文架构/使用说明、项目地图、环境预检、外部来源和实施记录。
+- 已完成 MRA1-MRA2：两个 macOS target 均使用 `packaging/macos/build-app.sh` 将当前 target binary 和本仓库资源封装为独立 `.app` ZIP；Universal job 解包两个 bundle、以 `lipo` 替换可执行文件后重新 ad-hoc 签名并发布第三个 ZIP。
+- 已完成 MRA3-MRA4：本机 arm64、x86_64 与 Universal release bundle 均已通过 `lipo` 架构验证、ad-hoc 签名、ZIP 打包/解包、资源存在性与解包后二次签名验证；YAML/Shell、Python release 回归和完整离线 Cargo 门禁均通过。
 
 ## 验证
 
@@ -92,7 +98,9 @@
 - 已完成：新增 Rust 共享尺寸模块；配置常量保持兼容 re-export；模型、设置控件、local/SSH/Telnet 后端复用最大值；网格、预编辑层和 IME proxy 复用 pane 的 `cursor-cell-y`；设置文案与中文目录已同步。
 - 已完成：连续 resize 硬换行列回归、AppState 41 项状态回归、真实 loopback SSH PTY modes 回归、`cargo check`、严格 Clippy、完整 Cargo 测试、翻译检查、tracker 校验和差异检查。
 - 已完成：RB4 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 173、应用 160、Doc tests 0）、tracker/Markdown 链接与 `git diff --check`。
+- 已完成：MRA3-MRA4 的 Ruby YAML 解析、`sh -n packaging/macos/build-app.sh`、Python release-version/Highlights 9 项回归、本机 arm64、x86_64 与 Universal macOS bundle 的 `lipo`/codesign/ZIP round-trip（Universal 保留 17 个运行时字体文件）、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 177、应用 162、Doc tests 0）、tracker、Markdown 相对链接与差异检查。
 - 未完成：Windows 新 EXE 的字体注册、ConPTY、UI、真实 SSH 连接、正常 shell 的连续纵向拖动、分屏极小尺寸和鼠标/IME 坐标均需目标平台人工验收。
+- 未完成：下一次日期 tag 的 GitHub-hosted macOS runner 需实际验证两个 target 链接、ad-hoc 签名、Universal `lipo` 合并以及 Release 页面上的三份 macOS 附件。
 
 ## 风险与阻塞
 
@@ -100,15 +108,17 @@
 - SFTP v3 没有持久化任务恢复协议；本轮的断点继续限定为同一运行期的暂停后继续，partial 文件只属于仍存活的 worker-owned 传输。
 - 递归目录下载必须限制深度、文件数、路径文本和总字节，且跳过符号链接；超限或不可读项将以有界失败行呈现。
 - 主屏高度增长且存在 scrollback 时，当前提示符下移、顶部露出历史行是预期行为；修复只禁止伪造空白历史行。
+- GitHub Release 继续使用 ad-hoc 签名，不包含 Developer ID 签名或 notarization；本轮只确保三个附件的架构和 bundle 内容一致。
 
 ## 下一步
 
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
 - 在相同构建中连续纵向缩放普通 shell；无 scrollback 时确认已有输出留在顶部、空行只出现在底部，并确认有 scrollback 时顶部显示真实历史行。
+- 在下一个日期 tag 检查 Release 是否列出 `AxSSH-<version>-macos-aarch64.zip`、`AxSSH-<version>-macos-x86_64.zip` 和 `AxSSH-<version>-macos-universal.zip`，并在目标 Apple Silicon/Intel 机器启动对应 bundle。
 
 ## 最后更新时间
 
-- 2026-08-13：完成 TB6-TB9；定位 SSH 交互 PTY 未声明 `ONLCR` 与 resize 边界重复实现，统一尺寸事务、补充硬换行/真实 PTY mode 回归并完成全量自动化门禁；不联网、未使用 multi-agent。
+- 2026-08-14：完成 MRA1-MRA4；日期化 Release 将发布 arm64、x86_64 与 Universal 三份 macOS bundle，每份含相同资源和许可证；本机三份 bundle 与全部静态门禁通过，不联网、未使用 multi-agent。远端 release job 仍需在下一次有效日期 tag 执行。
 
 - 2026-08-13：完成 MP1-MP3 全屏终端 mouse reporting 实施；不联网、不使用多 agent。工作区恢复、SFTP WR1-WR5 和 RE1-RE4 保持完成。真实 TUI 交互仍需用户验收。
 - 2026-08-13：启动 KH1-KH4 known_hosts 兼容实施；复用锁定的 `russh`/`ssh-key`，不联网、不使用多 agent。
