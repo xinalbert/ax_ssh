@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260814-tag-push-release-orchestration
-- 目标：让有效日期 release tag 的 push 自动进入 CI 后发布链路，同时保留手动重试和精确 tag SHA 的 CI 成功门禁。
-- 交付物：支持日期 tag push 的 Release orchestration workflow、同步的双语发布说明、项目环境和实施记录。
+- 目标 ID：20260814-terminal-text-brightness
+- 目标：保留 Terminal 的 ANSI/256/真彩色语义，并以单一全局文字亮度统一调整最终可见前景色。
+- 交付物：schema v22 终端文字亮度、可选语义高亮、Rust/Slint 单链路渲染、双语说明和回归验证。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`.github/workflows/retry-existing-release.yml`、`README.md`、`docs/{architecture,architecture.zh,development,development.zh}.md` 与 `docs/project-{implementation-tracker,env-audit}/`。
-- 不在本轮范围内：Slint UI、应用 bridge、SSH host-key trust、凭据、其他 transport、Rust 依赖/工具链、缓存键、Release build matrix、tag 元数据格式，以及参考工程源码。
+- 当前范围：`src/config*`、`src/app/{terminal_render,settings_bridge,view}*`、`ui/{app,settings,settings/terminal}.slint`、翻译目录、双语使用/架构说明和实施记录。
+- 不在本轮范围内：终端字节解析、PTY/SSH/Telnet/Serial worker、SSH host-key trust、凭据、字体回退、Cargo 依赖/工具链，以及参考工程源码。
 
 ## 当前状态
 
@@ -23,6 +23,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| FB1 | completed | schema v22 终端文字亮度与语义高亮配置契约 | config migration/normalization tests | 旧最小对比度不映射，迁移后亮度为 1.00。 |
+| FB2 | completed | 最终可见前景色的一次性亮度调整 | terminal renderer focused tests | factor 1.00 保持原色；背景、选区和光标不调整。 |
+| FB3 | completed | Slint Settings、即时重绘与中文翻译 | Cargo/Slint compile + translation check | 语义高亮默认关闭；亮度变化无需等待新输出。 |
+| FB4 | completed | 双语契约、tracker 和完整仓库门禁 | fmt/check/clippy/test/tracker/Markdown/diff | GUI 色彩验收留用户提供截图。 |
 | TP1 | completed | 日期 tag push 的 CI-to-Release 编排入口 | YAML 解析与工作流静态审阅 | 复用 Retry Existing Release；Release 继续只接受 workflow dispatch。 |
 | TP2 | completed | 双语发布约定与项目地图同步 | Markdown 链接与 tracker 校验 | 自动路径与手动重试路径共用同一 SHA 门禁。 |
 | TP3 | completed | 本地静态与仓库验证 | YAML、Python、Cargo、tracker、Markdown、diff 检查 | 远端 GitHub Actions 由下一个日期 tag 实际验证。 |
@@ -108,6 +112,10 @@
 
 ## 验证
 
+- 已完成：只读审计当前 Theme -> renderer -> Slint 链路，并核对参考工程的全局 Terminal 前景亮度契约；未复制或依赖参考源码。
+- 已完成：FB1-FB4 的 schema v22 迁移、renderer 13 项定向回归、Slint 单次合并刷新、415 条中文翻译与双语契约；生产 renderer 中最终前景亮度函数只有一个调用点。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy 和完整 `cargo test --locked --offline`（库 179、应用 167、Doc tests 0）。
+- 已完成：本轮 tracker 记录符合当前格式；validator 仅报告月度历史和 `research.md` 中既有的缺失或旧格式时间字段，本轮不批量改写历史。
 - 已完成：工作流现有权限、tag metadata 验证、tag CI dispatch/wait 及 Release 的 exact-SHA 门禁审阅。
 - 已完成：Ruby YAML 解析、Python 12 项 release/Highlights 回归、`release_version.py verify --tag 2026-08-14-1`、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy 与完整 `cargo test --locked --offline`（库 178、应用 162、Doc tests 0）。
 - 未完成：`actionlint` 本机未安装；下一个新的有效日期 tag 需在 GitHub-hosted Actions 验证 push 到 CI/Release 的远端事件链路。
@@ -127,6 +135,8 @@
 
 ## 风险与阻塞
 
+- 亮度只允许作用于解析、反色和可选语义高亮之后的最终可见前景；不得修改背景或与旧最小对比度算法叠加。
+- `dim` 必须保留终端语义，但应与全局亮度合并为一次最终前景变换；factor 1.00 时非 dim ANSI/256/真彩色必须逐值保持。
 - tag push 将为匹配日期格式的 tag 自动启动编排；无效日期、轻量 tag 或元数据不匹配会在校验阶段失败，不得创建 Release。
 - 自动重连只在当前进程内有效，最多 5 次；跨进程重连、密码明文缓存和未知/变更 host key 自动接受均明确不支持。
 - SFTP v3 没有持久化任务恢复协议；本轮的断点继续限定为同一运行期的暂停后继续，partial 文件只属于仍存活的 worker-owned 传输。
@@ -138,6 +148,7 @@
 
 ## 下一步
 
+- 使用用户提供的目标平台截图验收 60%、100%、120% 三档 Terminal 文字观感，以及语义高亮开关；本地自动化不替代 GUI 色彩验收。
 - 下一个新的有效日期 tag 应自动进入 Retry Existing Release；确认 tag CI 成功后出现 Release workflow 和 GitHub Release。已有 tag 仍可手动运行 Retry Existing Release。
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
 - 在相同构建中连续纵向缩放普通 shell；无 scrollback 时确认已有输出留在顶部、空行只出现在底部，并确认有 scrollback 时顶部显示真实历史行。
@@ -146,6 +157,9 @@
 
 ## 最后更新时间
 
+- 2026-08-14 15:29 +0800
+- 2026-08-14：完成 FB1-FB4；Terminal 只保留最终可见前景的一次 HSL lightness 调整，旧最小对比度退出渲染，语义高亮默认关闭。完整 Rust/Slint 与翻译门禁通过，未联网、未使用多 agent。
+- 2026-08-14 14:55 +0800
 - 2026-08-14：完成日期 tag push 自动编排；不联网、不使用多 agent，保留既有 CI 成功门禁和手动 Retry 入口。
 - 2026-08-14：完成并准备发布同日第二发行；`2026-08-14-1` 映射为 Cargo `2026.8.14+1`、Debian `2026.8.14-1`、macOS build `20260814.1`。完整本地门禁、tracker 与链接检查均通过；未使用多 agent。
 

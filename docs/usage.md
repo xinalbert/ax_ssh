@@ -364,11 +364,11 @@ directory when an already-open companion is available. If the companion is
 still completing host-key confirmation, authentication, or browser startup,
 the path is held only on that runtime Tab and applied when the normal flow is
 ready.
-Plain terminal output also receives restrained semantic color: URLs and paths,
-HTTP response classes, and familiar success, informational, warning, and error
-words use separate colors. The colors follow the selected terminal palette by default and stay
-readable against its background; Settings can override each category. Output that already specifies ANSI or
-true-color styling keeps that styling unchanged.
+Optional semantic highlighting can color URLs and paths, HTTP response classes,
+and familiar success, informational, warning, and error words. It is disabled
+by default. When enabled, the colors follow the selected terminal palette unless
+Settings overrides a category; explicit ANSI or true-color foregrounds are never
+replaced by semantic highlighting.
 In **Settings > Terminal**, **Copy selection on select** is disabled by default.
 When enabled, completed pointer selections and **Select All** copy immediately,
 and a direct right-click always pastes.
@@ -425,14 +425,16 @@ essential borders, focus/status states, or terminal text are replaced with
 readable defaults for that side.
 
 **Settings > Terminal** independently controls the Terminal font, font size,
-line height, minimum contrast ratio, bright ANSI colors for bold text, five semantic highlight
-colors, scrollback, mouse behavior, and the platform-specific Option-as-Meta preference. Enter
-an opaque `#RRGGBB` for Link and path, Success, Information, Warning, or Error; leave a field
-empty to follow the active terminal palette. The contrast
-ratio ranges from 1.0:1 to 21.0:1 and defaults to 4.5:1; 1.0:1 keeps the original
-ANSI/256/true-color foregrounds. Rendering checks each cell's actual background
-and changes only a foreground that is below the target, leaving backgrounds and
-already-readable colors intact. Bundled fonts appear before discovered system
+line height, text brightness, bright ANSI colors for bold text, optional semantic
+highlighting, scrollback, mouse behavior, and the platform-specific Option-as-Meta
+preference. Text brightness ranges from 60% to 120% in 5% steps and defaults to
+100%, which preserves resolved ANSI/256/true-color foregrounds exactly. Rendering
+first resolves the program color and inverse state, then an enabled semantic
+foreground, and finally applies the brightness once to the visible text. `dim`
+participates in that same final adjustment. Backgrounds, selection, and the cursor
+are not adjusted. When semantic highlighting is enabled, enter an opaque `#RRGGBB`
+for Link and path, Success, Information, Warning, or Error; leave a field empty to
+follow the active terminal palette. Bundled fonts appear before discovered system
 monospace fonts in both font lists. The selected Terminal font remains the
 primary family. When it does not contain a Han glyph, AxSSH uses bundled Maple
 Mono NF CN as the single Han fallback; choosing another Terminal font does not
