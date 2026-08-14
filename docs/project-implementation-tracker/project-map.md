@@ -24,7 +24,7 @@
 | `vendor/vt100/` | 历史终端网格补丁的保留副本 | 审计旧差异或移除遗留依赖时 | 当前迁移不修改其源码；不得再作为新的终端功能实现点 |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |
-| `.github/workflows/` | 三平台 CI、按上海日期升版、已有 tag 重试和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | Create Dated Release 只创建新 tag，并以 revision `0`/`N` 创建首发/同日修订；Retry Existing Release 只校验显式 tag 并触发 CI/Release，不移动 tag；Release 再确认同 tag SHA 的成功 CI 后只恢复对应 cache 并重新构建发行二进制，发布 macOS arm64/x86_64/Universal bundle，生成分类 Highlights 并保留 GitHub 自动说明，不 checkout 或打包参考子模块 |
+| `.github/workflows/` | 三平台 CI、按上海日期升版、日期 tag 自动编排、已有 tag 重试和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | Create Dated Release 只创建新 tag，并以 revision `0`/`N` 创建首发/同日修订；有效日期 tag push 或手动 Retry Existing Release 都会校验 annotated tag、dispatch 精确 SHA 的 CI，成功后才 dispatch Release，不移动 tag；Release 再确认同 tag SHA 的成功 CI 后只恢复对应 cache 并重新构建发行二进制，发布 macOS arm64/x86_64/Universal bundle，生成分类 Highlights 并保留 GitHub 自动说明，不 checkout 或打包参考子模块 |
 | `scripts/` | 发布日期解析、Highlights、Cargo/lock/plist 同步与回归 | 调整 tag 格式、发布日期或发行元数据时 | 公开 tag 为 `YYYY-MM-DD[-N]`；首发 Cargo/Debian/macOS short 为 `YYYY.M.D`、macOS build 为 `YYYYMMDD`，修订 Cargo 为 `YYYY.M.D+N`、Debian 为 `YYYY.M.D-N`、macOS build 为 `YYYYMMDD.N`；Highlights 只读取 tag Git 历史并输出 Markdown |
 | `third_package/axshell` | 仅供产品/行为参考的 Git 子模块 | 需要核对参考行为时 | 不进入 Cargo workspace 或 build graph |
 
@@ -37,7 +37,7 @@
 | `LICENSE` | AxSSH 主许可证正文 | GNU GPL version 3 | 发布源码或二进制、核对 GPL 条款时 |
 | `THIRD_PARTY_NOTICES.md` | 第三方许可入口 | Slint、OFL 字体、MIT vt100、平台文件图标 API/依赖、Cargo 依赖 | 修改依赖、字体、vendor 或发行声明时 |
 | `Cargo.toml` | 根包、许可证、依赖和 Linux package 定义 | `[package]`、`license`、Slint/russh/终端模拟器、`package.metadata.deb` | 工具链、版本、授权和构建/打包范围 |
-| `.github/workflows/{create-dated-release,retry-existing-release,release}.yml` | 日期 tag 创建、已有 tag 重试、跨平台发行与 GitHub Release | `workflow_dispatch`、tag/metadata verify、CI dispatch/wait、release matrix、Highlights | 默认分支 Create 只创建新 tag；Retry 从明确现有 annotated tag 解析 SHA、dispatch tag CI，成功后 dispatch Release；Release 发布 Windows x86_64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle，并调用 Highlights 生成器 |
+| `.github/workflows/{create-dated-release,retry-existing-release,release}.yml` | 日期 tag 创建、tag push/手动重试编排、跨平台发行与 GitHub Release | `push.tags`、`workflow_dispatch`、tag/metadata verify、CI dispatch/wait、release matrix、Highlights | 默认分支 Create 只创建新 tag；日期 tag push 与手动 Retry 都从已有 annotated tag 解析 SHA、dispatch tag CI，成功后 dispatch Release；Release 发布 Windows x86_64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle，并调用 Highlights 生成器 |
 | `scripts/generate_release_highlights.py` 与 `scripts/test_generate_release_highlights.py` | Git-backed Release Highlights 生成和回归 | `generate_release_body`、`render_release_body`、临时 annotated tags | 修改发布描述分类、比较/commit 链接、tag range 或跟踪提交排除时；只依赖 Python 标准库和已检出 Git 历史 |
 | `assets/ion/terminal_icon.svg` | AxSSH Terminal 图标的 canonical 矢量源副本 | 更换或重新生成各平台位图/容器时 | `terminal_icon_all_formats/terminal_icon.svg` 保留同一源副本；所有 PNG、ICO、ICNS 从此 SVG 生成，保持 RGBA 透明背景 |
 | `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
@@ -169,6 +169,7 @@
 
 ## 最后更新时间
 
+- 2026-08-14：日期 tag push 复用 `Retry Existing Release` 的 annotated tag/metadata 验证、精确 SHA CI 与成功后的 Release dispatch；Release 不直接监听 tag push，手动 Retry 入口保留。
 - 2026-08-14：开始整理日期化发布重试路由；Create workflow 保留新日期 tag 的一次性创建职责，新增 Retry Existing Release 将只接受明确 tag、校验元数据并重新触发 CI/Release，避免 tag 创建和失败后的打包重试混淆。
 - 2026-08-14：刷新本地 PTY 满事件队列 shutdown 路由；正常输出保持有界反压，owner 取消优先终止待投递事件，process-group SIGKILL 成功后不再进入 child-killer 的额外等待路径。
 - 2026-08-13：完成终端连续 resize 边界修复；共享 `TerminalSize` 统一模型、AppState、local/SSH/Telnet backend 的尺寸上限，SSH 交互 PTY 明确启用 `OPOST/ONLCR`，硬换行列归零和真实 loopback PTY mode 回归通过；普通高度从顶部对齐并将非完整字符格余量留在底部，低于三行保底时才负偏移锚定底行。

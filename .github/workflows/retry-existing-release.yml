@@ -1,6 +1,8 @@
 name: Retry Existing Release
 
 on:
+  push:
+    tags: ["20??-??-??*"]
   workflow_call:
     inputs:
       tag:
@@ -19,15 +21,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: retry-existing-release-${{ inputs.tag }}
+  group: retry-existing-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ inputs.tag }}
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   dispatch-tagged-ci:
-    if: github.ref_name == 'main' || github.ref_name == 'master'
+    if: github.event_name == 'push' || github.ref_name == 'main' || github.ref_name == 'master'
     runs-on: ubuntu-latest
     outputs:
       release_sha: ${{ steps.release_ref.outputs.sha }}
@@ -35,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
 
       - name: Verify the existing release tag and metadata

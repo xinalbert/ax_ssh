@@ -183,8 +183,9 @@ Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Li
 `YYYYMMDD.1`，macOS short version 仍为 `YYYY.M.D`。在默认分支运行 **Create Dated
 Release** workflow，首发输入 revision `0`，当天第二次发布输入 `1`。它会按
 `Asia/Shanghai` 当天日期计算版本，更新 `Cargo.toml`、`Cargo.lock` 和
-`packaging/macos/Info.plist`，提交这些文件、创建 annotated tag，并显式启动 CI。只有该 CI
-成功且 cache 保存步骤完成后，发布 workflow 才会启动并生成：
+`packaging/macos/Info.plist`，提交这些文件、创建 annotated tag，并进入 CI 到 Release 链路。直接
+push 有效的 annotated `YYYY-MM-DD[-N]` tag 也会进入同一链路。只有精确 tag SHA 的 CI 成功且
+cache 保存步骤完成后，发布 workflow 才会启动并生成：
 
 - Windows x86_64 ZIP，包含可执行文件、自带字体和许可证声明
 - Linux x86_64 与 aarch64 TAR.GZ，以及对应的 `.deb`
@@ -199,8 +200,8 @@ CI 只在默认分支或日期 tag 成功后写入共享 Cargo cache，失败 jo
 构建前会校验所选 tag 确实是 annotated release tag、该 tag 的 CI 已成功，以及 Cargo package、锁文件和
 macOS bundle 元数据一致。**Create Dated Release** 只用于创建新的日期/修订 tag；已有 tag 的 CI 或打包失败时，
 在默认分支运行 **Retry Existing Release** 并输入严格的 `YYYY-MM-DD[-N]`。它会校验 annotated tag 与
-元数据、为该 tag SHA dispatch CI，只有 CI 成功后才 dispatch Release；该路径不能创建、覆盖或移动 tag。
-若已有同一 SHA 的成功 CI 而只有打包失败，也可直接重跑 **Release**。本地
+元数据；直接 tag push 与手动重试都会为该精确 SHA dispatch CI，只有 CI 成功后才 dispatch Release；两条
+路径都不能创建、覆盖或移动 tag。若已有同一 SHA 的成功 CI 而只有打包失败，也可直接重跑 **Release**。本地
 `packaging/macos/build-app.sh` 只使用已提交的版本，不会修改发布元数据。
 
 创建 GitHub Release 前，`scripts/generate_release_highlights.py` 会读取已检出的 tag 历史，生成带

@@ -1,5 +1,14 @@
 # 项目环境当前态
 
+## 2026-08-14 日期 Tag Push Release 编排环境验证
+
+- 项目边界：`.github/workflows/retry-existing-release.yml`、发布双语说明、`README.md` 及项目跟踪；不修改 Rust/Slint 运行时、SSH trust、凭据、依赖、锁文件、缓存键或 Release build matrix。
+- 环境记忆状态：已复核 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、GitHub-hosted Actions、`workflow_dispatch` tag CI 与 Release 的 exact-SHA 成功门禁。日期 tag 及版本元数据继续由 `scripts/release_version.py` 校验，新增 push 入口不改变 metadata 或权限边界。
+- 运行环境：保持现有 Cargo/Rust 与 GitHub Actions 运行环境；不新增依赖或 action，继续使用 `actions/github-script@v8`。
+- 测试环境：已通过 YAML 解析、Python release helper 12 项回归、`release_version.py verify --tag 2026-08-14-1` 与 `cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）；GitHub-hosted runner 在下一个有效日期 tag 上验证 push event 到 CI/Release 的完整链路。
+- 环境变化检查：是；日期 tag push 将复用既有 Retry Existing Release 的校验、CI dispatch/wait 和 Release dispatch 路径，而非让 Release 绕过门禁直接监听 tag。
+- 开工判定：允许开工。
+
 ## 2026-08-14 同日 Release 修订与重试环境验证
 
 - 项目边界：`.github/workflows/{ci,create-dated-release,retry-existing-release,release}.yml`、`scripts/{release_version,generate_release_highlights}.py` 与回归、日期发布元数据及文档；不改应用运行时、依赖、缓存键、SSH trust 或凭据。

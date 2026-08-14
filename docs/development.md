@@ -236,8 +236,10 @@ The repository uses date-based releases. The first public tag for a date uses
 `0` for the first release or `1` for the second. It derives the date in
 `Asia/Shanghai`, updates `Cargo.toml`, `Cargo.lock`, and
 `packaging/macos/Info.plist`, commits those files, creates the annotated tag,
-and dispatches CI. The release workflow starts only after that CI run succeeds
-and its cache-save step has completed. It publishes these assets:
+and enters the CI-to-Release chain. Pushing a valid annotated
+`YYYY-MM-DD[-N]` tag directly enters that same chain. The release workflow
+starts only after CI for the exact tag SHA succeeds and its cache-save step has
+completed. It publishes these assets:
 
 - Windows x86_64 ZIP with the executable, bundled fonts, and license notices
 - Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
@@ -259,11 +261,11 @@ tag, that its own tagged CI run succeeded, and that the Cargo package, lockfile,
 and macOS bundle metadata agree before compiling. **Create Dated Release** is
 only for a new date/revision tag. To retry CI or packaging for an existing tag,
 run **Retry Existing Release** from the default branch with its exact
-`YYYY-MM-DD[-N]` value. It checks the annotated tag and its metadata, dispatches
-CI for that exact tag SHA, then dispatches Release only after CI succeeds; it
-cannot create, replace, or move a tag. A failed packaging-only run with an
-already successful matching CI may also be retried directly through **Release**.
-The local
+`YYYY-MM-DD[-N]` value. Direct tag push and manual retry both check the
+annotated tag and its metadata, dispatch CI for that exact tag SHA, then
+dispatch Release only after CI succeeds; neither path can create, replace, or
+move a tag. A failed packaging-only run with an already successful matching CI
+may also be retried directly through **Release**. The local
 `packaging/macos/build-app.sh` script consumes the checked-in version and does
 not mutate release metadata.
 

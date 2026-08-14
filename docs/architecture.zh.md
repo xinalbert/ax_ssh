@@ -659,9 +659,9 @@ pane 底边，并优先裁剪较旧的顶部行；终端只会在这些度量和
 `YYYY-MM-DD-N`。基础日期映射为 Cargo/Debian 的 `YYYY.M.D` 和 macOS build 的 `YYYYMMDD`；
 修订映射为 Cargo `YYYY.M.D+N`、Debian `YYYY.M.D-N` 和 macOS build `YYYYMMDD.N`，macOS short
 version 保持 `YYYY.M.D`。workflow 更新锁文件和 macOS bundle 元数据，再创建 annotated release tag。
-`Retry Existing Release` 既是新 tag 创建后调用的 reusable workflow，也是手动重试明确已有 tag 的入口；
-它校验 annotated tag 和已提交元数据、为精确 SHA dispatch CI，并且只在 CI 成功后 dispatch Release，
-不具备任何写 tag 操作。
+直接 push 日期 tag 也会进入同一编排。`Retry Existing Release` 既是新 tag 创建后调用的 reusable workflow，
+也是手动重试明确已有 tag 的入口；它校验 annotated tag 和已提交元数据、为精确 SHA dispatch CI，并且只在 CI
+成功后 dispatch Release，不具备任何写 tag 操作。
 发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，以及 arm64/x86_64 macOS 二进制；随后合并
 macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 只在默认分支或
 日期 tag 成功后写入按 target 隔离的共享 Cargo cache，失败 job 不会写入；发布 job 也会独立验证所选

@@ -512,3 +512,11 @@
 - 受影响文件：`.github/workflows/{create-dated-release,retry-existing-release,release}.yml`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归、`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、发布文档与 `docs/project-{implementation-tracker,env-audit}/`。
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、锁定离线 Cargo 和 Python 标准库；GitHub Script 使用 v8/Node 24，远端仍以 tag SHA 的 workflow-dispatch CI 作为 Release 前提。
 - 验证结果：Python 12 项、`release_version.py verify --tag 2026-08-14-1`、Ruby YAML、plist、`cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）、tracker、Markdown 相对链接和 `git diff --check` 通过。推送前远端 `master` 无分叉，`2026-08-14-1` 不存在。
+
+## 2026-08-14 日期 Tag Push Release 编排环境验证
+
+- 目的：让直接 push 的有效日期 tag 自动开始发布，而不放宽 Release 对精确 tag SHA CI 的成功要求。
+- 改动范围：`.github/workflows/retry-existing-release.yml`、`README.md`、`docs/{architecture,architecture.zh,development,development.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 执行内容：新增日期 tag push 触发器；Retry 统一解析输入 tag 或 push ref，继续校验 annotated tag、已提交版本元数据、精确 tag SHA 的 CI，且仅在 CI 成功后 dispatch Release。Release 不直接监听 tag push，Create workflow 与手动 Retry 均保持可用。
+- 验证结果：Ruby YAML 解析、Python 12 项 release/Highlights 回归、版本 verify、`cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）通过；`actionlint` 未在本机安装，GitHub-hosted push event 链路待下一个新日期 tag 验证。
+- 风险/待办：已有 `2026-08-14-1` 不会因本次默认分支 workflow 改动而回溯触发新的 push event；需要发布它时仍运行手动 Retry Existing Release。新 tag 应自动进入该编排。

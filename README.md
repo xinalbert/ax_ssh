@@ -38,12 +38,14 @@ GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
 Silicon, Intel, and universal application bundles. Run **Create Dated Release**
 from the default branch only to create a new Shanghai-date tag such as
 `2026-08-12`; use revision `1` for a second same-day release such as
-`2026-08-12-1`. It synchronizes Cargo and macOS metadata first. To retry CI or
-packaging for an existing valid tag, run **Retry Existing Release** with its
-exact `YYYY-MM-DD[-N]` value. The retry path cannot create, replace, or move
-tags. Each published Release groups high-signal commits into a short Highlights
-section with an explicit full-changelog link, then retains GitHub's generated
-release notes for the complete change list.
+`2026-08-12-1`. It synchronizes Cargo and macOS metadata first. Pushing an
+annotated `YYYY-MM-DD[-N]` tag directly also starts the same CI-to-Release
+chain. To retry CI or packaging for an existing valid tag, run **Retry Existing
+Release** with its exact value. Both paths validate the tag and metadata,
+require successful CI for the exact tag SHA, and cannot create, replace, or
+move tags. Each published Release groups high-signal commits into a short
+Highlights section with an explicit full-changelog link, then retains GitHub's
+generated release notes for the complete change list.
 
 ## Documentation
 

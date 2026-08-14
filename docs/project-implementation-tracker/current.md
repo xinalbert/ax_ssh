@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260814-same-day-release-revision
-- 目标：保留不可变的 `2026-08-14` 首发 tag，完成今天第二个发行版本并发布 `2026-08-14-1`。
-- 交付物：支持修订 tag 的版本/Highlights 脚本、Create/Retry/Release workflow、与新 tag 一致的包元数据，以及已推送的 `2026-08-14-1` annotated tag。
+- 目标 ID：20260814-tag-push-release-orchestration
+- 目标：让有效日期 release tag 的 push 自动进入 CI 后发布链路，同时保留手动重试和精确 tag SHA 的 CI 成功门禁。
+- 交付物：支持日期 tag push 的 Release orchestration workflow、同步的双语发布说明、项目环境和实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`.github/workflows/{ci,create-dated-release,retry-existing-release,release}.yml`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归、`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、发布文档及 `docs/project-{implementation-tracker,env-audit}/`。
-- 不在本轮范围内：Slint UI、应用 bridge、SSH host-key trust、凭据、其他 transport、Rust 依赖/工具链、缓存键、Release build matrix，以及参考工程源码。
+- 当前范围：`.github/workflows/retry-existing-release.yml`、`README.md`、`docs/{architecture,architecture.zh,development,development.zh}.md` 与 `docs/project-{implementation-tracker,env-audit}/`。
+- 不在本轮范围内：Slint UI、应用 bridge、SSH host-key trust、凭据、其他 transport、Rust 依赖/工具链、缓存键、Release build matrix、tag 元数据格式，以及参考工程源码。
 
 ## 当前状态
 
@@ -23,6 +23,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| TP1 | completed | 日期 tag push 的 CI-to-Release 编排入口 | YAML 解析与工作流静态审阅 | 复用 Retry Existing Release；Release 继续只接受 workflow dispatch。 |
+| TP2 | completed | 双语发布约定与项目地图同步 | Markdown 链接与 tracker 校验 | 自动路径与手动重试路径共用同一 SHA 门禁。 |
+| TP3 | completed | 本地静态与仓库验证 | YAML、Python、Cargo、tracker、Markdown、diff 检查 | 远端 GitHub Actions 由下一个日期 tag 实际验证。 |
 | RR1 | completed | 既有 tag 的无写权限 CI 到 Release 重试 workflow | YAML 解析、workflow 静态审阅 | 不创建、删除或移动 tag；仅接受显式输入。 |
 | RR2 | completed | 同日修订 tag 的版本、元数据和 Highlights 语义 | Python 回归、`release_version.py verify --tag 2026-08-14-1` | 首发 tag 保持 `2026-08-14`；第二个发行使用 `2026-08-14-1`。 |
 | RR3 | completed | Create/Retry/Release workflow 和双语文档支持修订 tag | YAML、Markdown、tracker 检查 | 重试路径仍不创建、替换或移动 tag。 |
@@ -81,6 +84,8 @@
 
 ## 已完成
 
+- 已完成本轮环境预检：保持 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、GitHub-hosted Actions 与现有 `workflow_dispatch` tag CI；本轮不需要联网或多 agent。
+- 已完成 TP1-TP2：日期 tag push、Create workflow 和手动 Retry 均复用已有 annotated tag 的 metadata 校验、精确 SHA CI 与成功后的 Release dispatch；Release 自身仍不接受 push 事件。
 - 已完成施工前环境预检：项目保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1 与锁定离线 Cargo 门禁；本机 `cargo fmt` 和 `cargo clippy` 可用。
 - 已确认项目地图已覆盖 SFTP transfer、worker、application bridge 和 Slint 组合路径；本轮只需在收口时更新其传输语义摘要。
 - 已确认既有能力仅为 private-cache 的单文件 download-to-open，取消会删除未发布的部分文件；它不提供暂停、续传或目录递归。
@@ -103,6 +108,9 @@
 
 ## 验证
 
+- 已完成：工作流现有权限、tag metadata 验证、tag CI dispatch/wait 及 Release 的 exact-SHA 门禁审阅。
+- 已完成：Ruby YAML 解析、Python 12 项 release/Highlights 回归、`release_version.py verify --tag 2026-08-14-1`、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy 与完整 `cargo test --locked --offline`（库 178、应用 162、Doc tests 0）。
+- 未完成：`actionlint` 本机未安装；下一个新的有效日期 tag 需在 GitHub-hosted Actions 验证 push 到 CI/Release 的远端事件链路。
 - 已完成：默认字体无外部目录回归、SSH banner 后提前断开回归、既有 probe/password loopback 回归、开发机 OpenSSH/AxSSH 对同一目标的只读 host-key 互操作诊断；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 172、应用 162、Doc tests 0）、413 条翻译、46 个 Markdown 相对链接、差异检查及独立 target 的 Windows MSVC release 交叉构建通过。
 - 已完成：TerminalPane/TerminalGrid 内容区边界修复；既有 TB1/TB2 的 Cargo、Clippy、格式、测试和差异门禁。
 - 已完成：新增 Rust 共享尺寸模块；配置常量保持兼容 re-export；模型、设置控件、local/SSH/Telnet 后端复用最大值；网格、预编辑层和 IME proxy 复用 pane 的 `cursor-cell-y`；设置文案与中文目录已同步。
@@ -119,6 +127,7 @@
 
 ## 风险与阻塞
 
+- tag push 将为匹配日期格式的 tag 自动启动编排；无效日期、轻量 tag 或元数据不匹配会在校验阶段失败，不得创建 Release。
 - 自动重连只在当前进程内有效，最多 5 次；跨进程重连、密码明文缓存和未知/变更 host key 自动接受均明确不支持。
 - SFTP v3 没有持久化任务恢复协议；本轮的断点继续限定为同一运行期的暂停后继续，partial 文件只属于仍存活的 worker-owned 传输。
 - 递归目录下载必须限制深度、文件数、路径文本和总字节，且跳过符号链接；超限或不可读项将以有界失败行呈现。
@@ -129,6 +138,7 @@
 
 ## 下一步
 
+- 下一个新的有效日期 tag 应自动进入 Retry Existing Release；确认 tag CI 成功后出现 Release workflow 和 GitHub Release。已有 tag 仍可手动运行 Retry Existing Release。
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
 - 在相同构建中连续纵向缩放普通 shell；无 scrollback 时确认已有输出留在顶部、空行只出现在底部，并确认有 scrollback 时顶部显示真实历史行。
 - 在下一个日期 tag 检查 Release 是否列出 `AxSSH-<version>-macos-aarch64.zip`、`AxSSH-<version>-macos-x86_64.zip` 和 `AxSSH-<version>-macos-universal.zip`，并在目标 Apple Silicon/Intel 机器启动对应 bundle。
@@ -136,6 +146,7 @@
 
 ## 最后更新时间
 
+- 2026-08-14：完成日期 tag push 自动编排；不联网、不使用多 agent，保留既有 CI 成功门禁和手动 Retry 入口。
 - 2026-08-14：完成并准备发布同日第二发行；`2026-08-14-1` 映射为 Cargo `2026.8.14+1`、Debian `2026.8.14-1`、macOS build `20260814.1`。完整本地门禁、tracker 与链接检查均通过；未使用多 agent。
 
 - 2026-08-13：完成 MP1-MP3 全屏终端 mouse reporting 实施；不联网、不使用多 agent。工作区恢复、SFTP WR1-WR5 和 RE1-RE4 保持完成。真实 TUI 交互仍需用户验收。

@@ -1027,11 +1027,12 @@ revision suffix produces `YYYY-MM-DD-N`. The base date maps to Cargo/Debian
 `YYYY.M.D` and macOS build `YYYYMMDD`; a revision maps to Cargo `YYYY.M.D+N`,
 Debian `YYYY.M.D-N`, and macOS build `YYYYMMDD.N`, while macOS short version
 stays `YYYY.M.D`. It updates the lockfile and macOS bundle metadata, then
-creates an annotated release tag. `Retry Existing Release` is both a reusable
-workflow for that new tag and the manual retry entry for an explicit existing
-tag. It verifies the annotated tag and checked-in metadata, dispatches CI for
-its exact SHA, and dispatches Release only after that CI succeeds; it has no
-tag-writing operation. The release workflow builds Windows x86_64, Linux
+creates an annotated release tag. A direct push of a date tag enters the same
+orchestration. `Retry Existing Release` is both a reusable workflow for a new
+tag and the manual retry entry for an explicit existing tag. It verifies the
+annotated tag and checked-in metadata, dispatches CI for its exact SHA, and
+dispatches Release only after that CI succeeds; it has no tag-writing
+operation. The release workflow builds Windows x86_64, Linux
 x86_64/aarch64, and arm64/x86_64 macOS binaries; it assembles a universal macOS
 bundle and retains `assets/fonts/`, icons, and the independent license notices
 in each applicable package. CI writes the shared target-specific Cargo cache
