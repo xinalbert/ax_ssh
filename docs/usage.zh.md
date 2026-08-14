@@ -270,7 +270,9 @@ Light 模式保留可读的浅色 ANSI 色表。Custom 会展开 Light/Dark 两�
 scrollback、鼠标行为以及平台相关的 Option-as-Meta。Link and path、Success、Information、Warning 与 Error 都可填入不透明 `#RRGGBB`；留空时跟随当前 Terminal 色表。最小对比度范围为 1.0:1 至 21.0:1，
 默认 4.5:1；设置为 1.0:1 会保留原始 ANSI/256/真彩色前景。渲染会按每个单元格的实际背景检查，
 只修正低于目标的前景，背景和已经可读的颜色保持不变。两个字体列表都先显示软件自带字体，
-再显示自动发现的系统等宽字体。
+再显示自动发现的系统等宽字体。选中的 Terminal 字体始终是主字体；当它缺少汉字字形时，
+AxSSH 只使用自带的 Maple Mono NF CN 作为唯一汉字回退。切换 Terminal 字体不会改写已保存的
+选择，也不会增加第二条回退链路。
 
 **Settings > X11** 控制当前平台的本机 X server provider、首个 X11 application 时启动和显式的
 loopback-only no-auth 兼容模式。已知 provider 的检测位置会以只读方式显示；应用路径只在 Custom

@@ -134,11 +134,13 @@ registry.
   terminal must not become drag regions.
 - Bundled fonts must live under `assets/fonts/` with their independent license
   and notices. The four JetBrains Mono faces are compiled into the executable
-  as the always-available application and Terminal default. The other bundled
-  families remain runtime resources, so release packages must retain the font
-  directory beside the executable or in the platform resource path resolved by
-  `src/app/font_bridge.rs`. Read external files on a Tokio blocking task and
-  register all font bytes only on the Slint UI thread; never load static
+  as the always-available application and Terminal default. Maple Mono NF CN is
+  the single Han fallback and remains a required runtime resource; Iosevka Term
+  and Monaspace Neon are optional primary families. Release packages must retain
+  the font directory beside the executable or in the platform resource path
+  resolved by `src/app/font_bridge.rs`. Read external files on a Tokio blocking
+  task and register all font bytes through `FontRegistry` only on the Slint UI
+  thread; do not add a renderer-side fallback path, and never load static
   resources from `third_package/axshell` at build time or runtime.
 - `assets/ion/terminal_icon.svg` is the canonical application-icon source.
   Regenerate all PNG, ICO, and ICNS variants from it as one set. The Slint
@@ -211,9 +213,11 @@ ditto -c -k --sequesterRsrc --keepParent "$stage" "$stage.zip"
 ```
 
 Copy the resulting ZIP to the Windows host and extract it as a directory.
-Keep `assets/fonts/` beside `AxSSH.exe` so Maple Mono NF CN, Iosevka Term, and
-Monaspace Neon remain selectable. JetBrains Mono is embedded and remains
-available when testing the executable alone. The cross-compiled binary still
+Keep `assets/fonts/` beside `AxSSH.exe`; Maple Mono NF CN is required for the
+single deterministic Han fallback, while Iosevka Term and Monaspace Neon remain
+selectable primary families. JetBrains Mono is embedded and remains available
+when testing the executable alone, but its Terminal Chinese fallback requires
+the Maple runtime files. The cross-compiled binary still
 needs manual validation on Windows for ConPTY, native window behavior,
 credentials, and real SSH connections.
 

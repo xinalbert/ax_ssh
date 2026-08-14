@@ -966,21 +966,30 @@ They are not Slint imports. The four JetBrains Mono faces are compiled into the
 executable as the always-available application and Terminal default; a Tokio
 blocking task reads any selected external bundled family from the AxSSH resource
 path. The Slint UI thread registers all bytes with its shared collection. The
-selected Terminal family is loaded on the first Terminal or local shell tab,
-while later bundled selections are loaded on demand when a live Settings preview
-first selects them. All external reads remain on Tokio blocking tasks. The UI
-applies the candidate immediately, then reapplies the current in-memory settings
-after registration so a delayed font read cannot restore stale choices. Appearance
+first Terminal or local shell Tab uses one application-owned loading path to
+ensure that its selected bundled primary family, when applicable, and Maple Mono
+NF CN are registered. `FontRegistry::register_loaded_font` is the sole
+registration boundary; when Maple is registered, it replaces the shared
+Fontique `Hani` fallback list with that one family. There is no renderer-side
+font substitution path. Later bundled selections are loaded through the same
+registry when a live Settings preview first selects them. All external reads
+remain on Tokio blocking tasks. The UI applies the candidate immediately, then
+reapplies the current in-memory settings after registration so a delayed font
+read cannot restore stale choices. Appearance
 owns the application font, display mode, and palette; Terminal owns its font, size, line height,
 minimum contrast ratio, bold-color behavior, five optional semantic highlight colors, and terminal interactions. Both font lists
 place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
 and explicit non-terminal monospace labels, while `TerminalViewState.font_family`
-remains the only source for terminal cell measurement and rendering. No font is
+remains the only primary family source for terminal cell measurement and
+rendering; the single `Hani` fallback only supplies glyphs absent from that
+family. No font is
 loaded from `third_package/axshell` during build or runtime;
 release packages must retain `assets/fonts/` by the executable or platform
-resource path for the three optional bundled families and all font notices.
+resource path. Maple Mono NF CN is required there for deterministic Han glyph
+rendering; Iosevka Term and Monaspace Neon remain optional primary families,
+and all font notices remain required.
 Slint measures the configured font and uses the measured cell
 width plus the configured line-height percentage for rendering, selection,
 cursor, and floor-based PTY dimensions. `TerminalPane` computes one

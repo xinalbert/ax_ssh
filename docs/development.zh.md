@@ -96,9 +96,10 @@ git diff --check
 - macOS 必须关闭整窗背景拖动；只有零 Tab 空白条或最右侧专用留白的鼠标左键 down
   可以调用 UI 线程原生拖动 callback，Tab、Activity Bar、侧栏和终端不得成为拖动区域。
 - 自带字体必须放在 `assets/fonts/`，并保留独立许可证和声明。JetBrains Mono 四个字重会编译进
-  可执行文件，保证应用和 Terminal 默认字体始终可用；其余自带字体仍是运行时资源，发行包必须把
-  字体目录保留在可执行文件旁或 `src/app/font_bridge.rs` 解析的平台资源路径中。外部文件读取必须在
-  Tokio blocking task，所有字体字节只能在 Slint UI 线程注册；构建或运行时不得从
+  可执行文件，保证应用和 Terminal 默认字体始终可用；Maple Mono NF CN 是唯一汉字回退，必须作为
+  运行时资源随包发布，Iosevka Term 和 Monaspace Neon 是可选主字体。发行包必须把字体目录保留在
+  可执行文件旁或 `src/app/font_bridge.rs` 解析的平台资源路径中。外部文件读取必须在 Tokio blocking task，
+  所有字体字节只能通过 `FontRegistry` 在 Slint UI 线程注册；不得新增渲染器侧回退路径，构建或运行时不得从
   `third_package/axshell` 加载静态资源。
 - `assets/ion/terminal_icon.svg` 是应用图标的唯一源文件。PNG、ICO 和 ICNS 必须作为一组从该
   SVG 重新生成。Slint 窗口使用 256px PNG；Windows 通过
@@ -165,9 +166,10 @@ cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
 ditto -c -k --sequesterRsrc --keepParent "$stage" "$stage.zip"
 ```
 
-把生成的 ZIP 复制到 Windows 主机后解压为目录。保持 `assets/fonts/` 位于
-`AxSSH.exe` 旁边，才能继续选择 Maple Mono NF CN、Iosevka Term 和 Monaspace Neon；
-单独测试可执行文件时，内嵌的 JetBrains Mono 仍然可用。交叉编译的二进制仍需在
+把生成的 ZIP 复制到 Windows 主机后解压为目录。必须保持 `assets/fonts/` 位于
+`AxSSH.exe` 旁边：Maple Mono NF CN 用于唯一、确定的汉字回退，Iosevka Term 和 Monaspace Neon 仍可选为
+主字体。单独测试可执行文件时，内嵌的 JetBrains Mono 仍然可用，但 Terminal 中文回退仍需要 Maple 运行时文件。
+交叉编译的二进制仍需在
 Windows 上手工验收 ConPTY、原生窗口行为、凭据和真实 SSH 连接。
 
 Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Linux 的 `cargo deb` 会读取

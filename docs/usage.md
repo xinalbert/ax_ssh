@@ -431,7 +431,10 @@ ratio ranges from 1.0:1 to 21.0:1 and defaults to 4.5:1; 1.0:1 keeps the origina
 ANSI/256/true-color foregrounds. Rendering checks each cell's actual background
 and changes only a foreground that is below the target, leaving backgrounds and
 already-readable colors intact. Bundled fonts appear before discovered system
-monospace fonts in both font lists.
+monospace fonts in both font lists. The selected Terminal font remains the
+primary family. When it does not contain a Han glyph, AxSSH uses bundled Maple
+Mono NF CN as the single Han fallback; choosing another Terminal font does not
+replace the saved selection or add another fallback route.
 
 **Settings > X11** controls the platform-local X server provider, first-X11-
 application startup behavior, and the explicit loopback-only no-auth

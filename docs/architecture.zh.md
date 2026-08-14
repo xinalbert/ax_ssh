@@ -622,17 +622,21 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 `assets/fonts/` 保存 AxSSH 自有的 Maple Mono NF CN、Iosevka Term、JetBrains Mono
 和 Monaspace Neon 文件及各自许可证/声明。它们不是 Slint import；JetBrains Mono 四个字重会编译进
 可执行文件，作为始终可用的应用和 Terminal 默认字体。Tokio blocking task 只从 AxSSH 资源路径读取
-已选中的其他自带字体，再由 Slint UI 线程统一把字节注册到共享 collection。选中 Terminal 或打开
-本地 shell 的第一个终端 Tab 时才加载 Terminal 字体；之后在 Settings 即时预览中首次选到的自带字体
-也会按需加载。候选设置先立即应用，注册
+已选中的其他自带字体，再由 Slint UI 线程统一把字节注册到共享 collection。第一个 Terminal 或
+本地 shell Tab 只通过一条应用层加载路径，确保已选的自带主字体（如适用）和 Maple Mono NF CN
+已注册。`FontRegistry::register_loaded_font` 是唯一注册边界；Maple 注册时会把共享 Fontique 的
+`Hani` 回退列表替换为该字体一项，不存在渲染器侧字体替换路径。之后在 Settings 即时预览中首次选到的
+自带字体也经同一 registry 按需加载。候选设置先立即应用，注册
 完成后再读取当前内存设置重新应用，避免迟到字体读取恢复旧选择。Appearance 只拥有应用字体、显示模式与配色；Terminal
 拥有自己的字体、字号、行高、
 最小对比度、粗体亮色、五项可选语义高亮色和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
 Tokio blocking task 中发现、按大小写无关去重并按字母排序且有数量上限的系统等宽字体。
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
-`TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一字体来源。构建和运行时都不会从
+`TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一主字体来源；唯一的 `Hani`
+回退只补齐该字体缺少的字形。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
-`assets/fonts/` 保留在可执行文件旁或平台资源路径中，以提供三个可选自带字体和全部字体声明。Slint 测量配置字体，并用测得的字符格
+`assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
+Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 测量配置字体，并用测得的字符格
 宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；`TerminalPane` 只计算一个内容区
 光标 cell y 坐标，网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的垂直溢出边界。正常高度下不能组成完整字符格的
 剩余高度保留在网格底部，避免扩大终端顶部内容边界，IME 和指针坐标使用同一原点。pane group 会把每个
