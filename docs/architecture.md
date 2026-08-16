@@ -875,8 +875,14 @@ publishes the snapshot before calling the platform default application through
 directory request, path, or identity/fingerprint mismatch is rejected before dispatch,
 and a later path replacement cannot redirect the opener to a different file identity.
 
-Selecting remote files or directories sends a small download-root intent to the
-worker. Worker-owned recursive discovery opens its own SFTP subsystem, rejects
+Each remote file row owns a Slint-only context menu backed by the shared
+`FlatActionMenu`. Activating Download or Delete on an unselected row first
+replaces the remote selection with that row; activating it on a selected row
+preserves the current multi-selection. The menu then reuses the existing
+selection, download, and remove callbacks, so no path, handle, worker, or
+filesystem state is added to Slint. Selecting remote files or directories for
+Download sends a small download-root intent to the worker. Worker-owned
+recursive discovery opens its own SFTP subsystem, rejects
 links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
 Discovery scans at most 4,096 entries and is bounded to 512 files, 256
@@ -903,8 +909,9 @@ concurrent local file.
 Cancellation and failures remove the partial data; a cancellation observed after
 publication removes the completed target before it can be reported successful.
 Completed local downloads are retained. Tab shutdown cancels and joins pending
-discovery, subsystem openings, and active transfers. The remote toolbar owns
-bounded delete, rename, UTF-8 edit, and Save As operations; local regular files
+discovery, subsystem openings, and active transfers. The remote row context
+menu owns bounded Download and Delete intents; the remote toolbar retains
+rename, UTF-8 edit, and Save As operations. Local regular files
 can be uploaded through the same transfer queue. Editor monitoring polls a
 remote size/mtime fingerprint while the editor is open. Automatic upload is
 explicit and off by default, debounced, and still guarded by the observed
