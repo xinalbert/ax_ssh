@@ -301,9 +301,6 @@ msgstr "删除"
 msgid "Delete group"
 msgstr "删除组"
 
-msgid "Delete selected remote files"
-msgstr "删除选中的远端文件"
-
 msgid "Delete server"
 msgstr "删除服务器"
 
@@ -339,9 +336,6 @@ msgstr "分隔线和控件轮廓"
 
 msgid "Download"
 msgstr "下载"
-
-msgid "Download selected files"
-msgstr "下载所选文件"
 
 msgid "Edit"
 msgstr "编辑"
