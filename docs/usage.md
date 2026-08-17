@@ -338,8 +338,12 @@ the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
-UTF-8, or legacy encoding. While reporting is active, the TUI owns those
-gestures; otherwise AxSSH keeps local selection and scroll behavior.
+UTF-8, or legacy encoding. While reporting is active, ordinary pointer gestures
+belong to the TUI; hold `Shift` while left-dragging to select text locally, or
+while using the wheel to scroll local history. Outside reporting mode, direct
+left-drag selection and wheel scrolling remain local. A pointer gesture keeps
+the owner chosen at button press until release, so one drag is never handled by
+both AxSSH and the remote program.
 Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. With a Terminal Tab
 active, **Edit > Copy**, **Paste**, and **Select All** affect only the focused

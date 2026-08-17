@@ -99,8 +99,10 @@ Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 只暴露当前私有 mouse mode，并生成有界的 SGR、UTF-8
 或传统 X10 事件。启用 reporting 时，`TerminalGrid` 通过带 pane UUID 的 callback 转发按下/释放、滚轮、
-拖动和 motion 坐标；bridge 重验 pane 后才把字节发送给对应 worker。关闭 reporting 时，既有本地选区和
-滚动 fallback 继续生效。备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
+拖动和 motion 坐标；bridge 重验 pane 后才把字节发送给对应 worker。`TerminalPane` 在按下时只选择一个
+手势 owner：普通手势使用远端 reporting，`Shift` + 左键拖动则由本地选区 owner 持续处理至释放；
+`Shift` + 滚轮也使用本地 scrollback。关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
+备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
 应用状态。

@@ -117,10 +117,13 @@ Mouse input follows the same ownership boundary. `TerminalModel` exposes only
 the active private mouse modes and emits bounded SGR, UTF-8, or legacy X10
 events. `TerminalGrid` forwards button press/release, wheel, drag, and motion
 coordinates through the pane UUID callback when reporting is active; the bridge
-validates the pane and sends the bytes to its worker. When reporting is off,
-the existing local selection and scroll fallback remains in control. Alternate
-screen alternate-scroll is treated as reporting only while the terminal is on
-its alternate screen.
+validates the pane and sends the bytes to its worker. `TerminalPane` chooses one
+gesture owner at button press: ordinary gestures use remote reporting, while
+`Shift` + left drag uses the local selection owner through release. `Shift` +
+wheel also uses local scrollback. When reporting is off, the existing direct
+local selection and scroll fallback remains in control. Alternate-screen
+alternate-scroll is treated as reporting only while the terminal is on its
+alternate screen.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
 revision. Every pane observes that signal, but only the focused pane invokes its
 existing local copy, paste, or select-all operation; selection coordinates and
