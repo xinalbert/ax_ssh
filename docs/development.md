@@ -28,6 +28,14 @@ Offline commands require the dependencies in `Cargo.lock` to be present in the
 local Cargo cache. Remove `--offline` when the cache must be populated from the
 registry.
 
+The development profile disables rustc incremental code generation. AxSSH's
+large generated Slint application unit can otherwise accumulate incompatible
+code-generation objects across repeated macOS rebuilds and fail at the final
+arm64 link with missing internal `_anon...llvm...` symbols. Dependency artifacts
+remain cached, and the release profile keeps its existing ThinLTO settings. If
+an older checkout already has affected artifacts, remove only this package's
+development output with `cargo clean --profile dev --package ax_ssh`.
+
 ## Change rules
 
 - Keep Slint generated types in `src/app.rs`; domain and transport modules must

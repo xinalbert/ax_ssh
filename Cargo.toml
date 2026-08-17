@@ -79,6 +79,7 @@ assets = [
 ]
 
 [profile.dev]
+incremental = false
 opt-level = 1
 
 [profile.release]

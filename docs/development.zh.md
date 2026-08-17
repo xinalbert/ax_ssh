@@ -26,6 +26,12 @@ git diff --check
 离线命令要求本机 Cargo 缓存中已有 `Cargo.lock` 锁定的依赖；需要从 registry 填充
 缓存时移除 `--offline`。
 
+开发 profile 禁用 rustc 增量代码生成。AxSSH 较大的 Slint 生成应用单元在 macOS 反复构建后，
+可能累积互不兼容的 code-generation 对象，并在最终 arm64 链接时报告内部
+`_anon...llvm...` 符号缺失。依赖产物仍会缓存，release profile 继续使用既有 ThinLTO 设置。
+旧工作区若已有受影响产物，只清理本 package 的开发输出：
+`cargo clean --profile dev --package ax_ssh`。
+
 ## 修改规则
 
 - Slint 生成类型集中在 `src/app.rs`；领域模块和传输模块不得依赖 UI。
