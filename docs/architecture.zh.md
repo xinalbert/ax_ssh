@@ -575,7 +575,10 @@ AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证后的路径替换也无法把 opener 重定向到另一个
 文件 identity。
 
-选择远端文件或目录会向 worker 发送小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
+每个远端文件行持有只属于 Slint 的右键菜单，并复用共享 `FlatActionMenu`。在未选中行触发下载或删除时，
+先把远端选择替换为该行；在已选中行触发时保留当前多选集合。随后菜单复用既有选择、下载和删除 callback，
+不会把路径、handle、worker 或文件系统状态新增到 Slint。为下载选择远端文件或目录后，会向 worker 发送
+小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
 拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
 目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总字节，
 每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动或正在打开的 transfer，每个 transfer 独占单独的 SFTP
@@ -590,7 +593,8 @@ subsystem stream。
 本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
-和活动 transfer。远端工具栏负责有界删除、重命名、UTF-8 编辑和 Save As；本地 regular file 通过同一 transfer queue 上传。
+和活动 transfer。远端文件行右键菜单负责有界下载和删除 intent；远端工具栏保留重命名、UTF-8 编辑和
+Save As。本地 regular file 通过同一 transfer queue 上传。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
 拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。
 

@@ -177,7 +177,10 @@ outside the UI thread, copies that exact handle into its private bounded cache,
 and opens the completed read-only snapshot. Replacing the original path after
 validation cannot redirect the open request.
 
-Select remote files or folders and use **Download**. Each file is written into
+Right-click a remote file or folder and choose **Download**. Right-clicking an
+unselected row first makes it the only selected row; right-clicking a selected
+row keeps the current multi-selection, so the menu action applies to that
+selection. Each file is written into
 the current **Local files** directory; directory downloads recursively preserve
 their selected directory tree. Remote symbolic links and non-regular entries
 are skipped or rejected, existing local files are never overwritten, and a file
@@ -198,9 +201,11 @@ including a file published just before cancellation wins; failures remove the
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
 active download work before closing the browser and SSH transport.
 
-The remote toolbar also supports deleting selected files (directories are
-non-recursive), renaming one selected entry, editing bounded UTF-8 text, and
-saving to an explicit remote path. While the editor is open, a worker-owned
+The remote row context menu also supports deleting its selected files and
+directories (directories are non-recursive). Download and Delete no longer
+occupy the directory toolbar. The remaining remote controls support renaming
+one selected entry, editing bounded UTF-8 text, and saving to an explicit
+remote path. While the editor is open, a worker-owned
 poll checks the remote size/mtime fingerprint; a change disables Save and
 reports a conflict. The local toolbar uploads one selected regular file, and
 dropping a local path onto Local files enters the same private-temp-file

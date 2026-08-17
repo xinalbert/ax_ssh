@@ -180,6 +180,7 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-08-15 17:38 CST：SFTP 远端文件行右键菜单继续使用 Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1 和既有 `FlatActionMenu`/选择/下载/删除 callbacks；未新增 crate、配置 schema、工具链、CI、worker、SSH trust、凭据或本地文件删除能力。fmt、locked/offline check、严格 Clippy、完整测试（库 179、应用 172、Doc tests 0）、413 条中文目录、tracker、Markdown 相对链接和差异检查通过；真实右键菜单视觉与手感留用户验收。
 - 2026-08-12 09:00 CST
 - 2026-08-12 21:13 +0800：复核 release helper 扩展仍只使用 Python 标准库和 Git；CI 额外运行 Git-backed Highlights 回归，Rust 依赖、工具链、构建矩阵、日期 tag、CI 门禁和发行包内容未改变。
 - 2026-08-12 22:20 +0800：本地 SFTP 只读打开的目录快照/打开重验从平台文件 identity 强化为 identity 加长度、修改时间和创建时间 fingerprint；未改 Rust 依赖、工具链、CI、SSH trust 或凭据。Linux 和 Windows CI 证明快速同长度写入可保留相同可查询时间字段，因此 fingerprint 只能拒绝可观察到的变化，不能作为原地内容完整性证明。

@@ -169,6 +169,7 @@
 
 ## 最后更新时间
 
+- 2026-08-15：SFTP 远端文件行新增共享 `FlatActionMenu` 右键菜单，Download/Delete 从顶部工具栏迁入菜单；未选中命中行先成为唯一选择，已选中行保留当前多选集合。菜单只复用既有 Slint/Rust callbacks，不新增本地删除、worker、transport 或文件系统状态。
 - 2026-08-14：日期 tag push 复用 `Retry Existing Release` 的 annotated tag/metadata 验证、精确 SHA CI 与成功后的 Release dispatch；Release 不直接监听 tag push，手动 Retry 入口保留。
 - 2026-08-14：开始整理日期化发布重试路由；Create workflow 保留新日期 tag 的一次性创建职责，新增 Retry Existing Release 将只接受明确 tag、校验元数据并重新触发 CI/Release，避免 tag 创建和失败后的打包重试混淆。
 - 2026-08-14：刷新本地 PTY 满事件队列 shutdown 路由；正常输出保持有界反压，owner 取消优先终止待投递事件，process-group SIGKILL 成功后不再进入 child-killer 的额外等待路径。
