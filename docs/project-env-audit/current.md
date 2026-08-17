@@ -1,12 +1,12 @@
 # 项目环境当前态
 
-## 2026-08-14 日期 Tag Push Release 编排环境验证
+## 2026-08-17 直接日期 Tag 发布环境预检
 
-- 项目边界：`.github/workflows/retry-existing-release.yml`、发布双语说明、`README.md` 及项目跟踪；不修改 Rust/Slint 运行时、SSH trust、凭据、依赖、锁文件、缓存键或 Release build matrix。
-- 环境记忆状态：已复核 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、GitHub-hosted Actions、`workflow_dispatch` tag CI 与 Release 的 exact-SHA 成功门禁。日期 tag 及版本元数据继续由 `scripts/release_version.py` 校验，新增 push 入口不改变 metadata 或权限边界。
-- 运行环境：保持现有 Cargo/Rust 与 GitHub Actions 运行环境；不新增依赖或 action，继续使用 `actions/github-script@v8`。
-- 测试环境：已通过 YAML 解析、Python release helper 12 项回归、`release_version.py verify --tag 2026-08-14-1` 与 `cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）；GitHub-hosted runner 在下一个有效日期 tag 上验证 push event 到 CI/Release 的完整链路。
-- 环境变化检查：是；日期 tag push 将复用既有 Retry Existing Release 的校验、CI dispatch/wait 和 Release dispatch 路径，而非让 Release 绕过门禁直接监听 tag。
+- 项目边界：`.github/workflows/{ci,release}.yml`、删除 `create-dated-release.yml` 与 `retry-existing-release.yml`、发布双语说明、`README.md` 及项目跟踪；不修改 Rust/Slint 运行时、SSH trust、凭据、依赖、锁文件、缓存键或 Release build matrix。
+- 环境记忆状态：已复核 Rust 2024、MSRV 1.92.0、锁定 `Cargo.lock`、GitHub-hosted Actions 和日期版本脚本。日期 tag 及版本元数据继续由 `scripts/release_version.py` 校验；Release 在 tag push 后直接检查 annotated tag，不再需要 tag CI dispatch/wait。
+- 运行环境：保持现有 Cargo/Rust 与 GitHub Actions 运行环境；移除不再使用的 `actions/github-script@v8`，不新增依赖或 action。
+- 测试环境：YAML 解析、Python release helper/Highlights 12 项回归、`release_version.py verify --tag 2026-08-17`、`cargo fmt/check/clippy/test --locked --offline`、Markdown 相对链接和 `git diff --check` 已通过；tracker validator 只报告 39 条既有历史时间字段错误。GitHub-hosted runner 在下一个有效日期 tag 上验证直接发布链路。
+- 环境变化检查：是；发布者在本地同步并推送 annotated 日期 tag，tag 直接进入 Release 的校验、构建和发布，CI 只在默认分支保存共享 cache。
 - 开工判定：允许开工。
 
 ## 2026-08-14 同日 Release 修订与重试环境验证
@@ -114,7 +114,7 @@ git diff --check
 - 真实 SFTP 服务兼容性与 GUI 文件面板需要目标环境手工验证。
 - X11 forwarding 依赖目标平台可用的本机 X server。普通 SSH shell 创建只发送 forwarding request，不读取本机 `DISPLAY`、不运行 `xauth`、不探测端点且不启动 provider；远端实际打开 X11 channel 后才进行本机准备。AxSSH 从 Settings 显示 macOS bundle identifier 或 Windows `PATH`/Program Files 检测到的只读已知位置，且仅在 Custom 时接受用户提供的 executable 路径。安全默认仍要求 local-only `DISPLAY` 和可查询精确 `MIT-MAGIC-COOKIE-1` 的 `xauth`。MacXServer 和自动启动的 VcXsrv/Xming 只有在显式 no-auth 兼容下使用 loopback/`-ac`。真实 XQuartz/MacXServer、X.Org/Xwayland、VcXsrv/Xming 行为需目标平台手工验证，AxSSH 不安装软件或修改远端 `sshd_config`。
 - JetBrains Mono 四个默认 TTF 由 Rust `include_bytes!` 编译进可执行文件，不经 Slint import；其余自带 TTF 作为 `assets/fonts/` 运行时资源保留在发行包。系统字体扫描依赖 `fontdb` 的预定义目录，必须在 Tokio blocking worker 中执行；各平台真实可见字体和打包后 Resources 路径须手工验收。
-- 当前 Cargo 构建版本为 `2026.8.14+1`；公开 release tag 使用 `YYYY-MM-DD[-N]`，其中同日修订 `2026-08-14-1` 对应 Cargo `2026.8.14+1`、Debian `2026.8.14-1`、macOS short `2026.8.14` 和 build `20260814.1`。`scripts/release_version.py` 与 `scripts/generate_release_highlights.py` 只依赖 Python 标准库；后者在已检出的 tag 历史上生成分类 Markdown，定向测试用临时 Git 仓库覆盖 tag range、去重、跟踪提交排除、同日修订比较和失败路径。日期 workflow 使用 `Asia/Shanghai` 生成并验证 Cargo/lockfile/macOS plist 版本。日期 workflow 显式 dispatch tag CI；CI 在成功 default-branch 或已验证日期-tag run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache 并重新构建 `--release --locked` binary。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
+- 当前 Cargo 构建版本为 `2026.8.17`；公开 release tag 使用 `YYYY-MM-DD[-N]`，版本字段由 `scripts/release_version.py` 从 tag 统一派生并校验 Cargo/lockfile/macOS plist。`scripts/release_version.py` 与 `scripts/generate_release_highlights.py` 只依赖 Python 标准库；后者在已检出的 tag 历史上生成分类 Markdown，定向测试用临时 Git 仓库覆盖 tag range、去重、跟踪提交排除、同日修订比较和失败路径。发布者在默认分支用版本脚本同步并提交元数据后推送 annotated tag；Release 直接监听候选日期 tag，先验证 annotated tag 与元数据，再重建 `--release --locked` binary 并发布。CI 只在成功默认分支 run 后按 Rust target 保存共享 Cargo cache，Release 只读取对应 cache。真实 GitHub-hosted ARM、Windows 和 macOS build，以及 GitHub Release 仍需远端仓库权限和网络执行。
 
 ## 证据文件
 
@@ -180,6 +180,7 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-08-17 14:28 +0800：Release 现在仅由外部推送的 annotated 日期 tag 直接启动；Create/Retry、tag CI dispatch/wait 与 GitHub Script action 已删除。两个 YAML、现有 tag/元数据、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、Markdown 相对链接和差异检查通过；tracker validator 仅保留 39 条既有历史时间字段错误。下一枚新 tag 仍需 GitHub-hosted 平台/发布验收。
 - 2026-08-15 17:38 CST：SFTP 远端文件行右键菜单继续使用 Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1 和既有 `FlatActionMenu`/选择/下载/删除 callbacks；未新增 crate、配置 schema、工具链、CI、worker、SSH trust、凭据或本地文件删除能力。fmt、locked/offline check、严格 Clippy、完整测试（库 179、应用 172、Doc tests 0）、413 条中文目录、tracker、Markdown 相对链接和差异检查通过；真实右键菜单视觉与手感留用户验收。
 - 2026-08-12 09:00 CST
 - 2026-08-12 21:13 +0800：复核 release helper 扩展仍只使用 Python 标准库和 Git；CI 额外运行 Git-backed Highlights 回归，Rust 依赖、工具链、构建矩阵、日期 tag、CI 门禁和发行包内容未改变。

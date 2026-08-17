@@ -244,14 +244,21 @@ The repository uses date-based releases. The first public tag for a date uses
 `YYYY-MM-DD-1`. The first form maps to Cargo/Debian `YYYY.M.D` and macOS build
 `YYYYMMDD`; the revision example maps to Cargo `YYYY.M.D+1`, Debian
 `YYYY.M.D-1`, and macOS build `YYYYMMDD.1`, while its macOS short version stays
-`YYYY.M.D`. Run **Create Dated Release** on the default branch with revision
-`0` for the first release or `1` for the second. It derives the date in
-`Asia/Shanghai`, updates `Cargo.toml`, `Cargo.lock`, and
-`packaging/macos/Info.plist`, commits those files, creates the annotated tag,
-and enters the CI-to-Release chain. Pushing a valid annotated
-`YYYY-MM-DD[-N]` tag directly enters that same chain. The release workflow
-starts only after CI for the exact tag SHA succeeds and its cache-save step has
-completed. It publishes these assets:
+`YYYY.M.D`. On the default branch, synchronize the date tag with the committed
+release metadata, then create and push an annotated tag:
+
+```bash
+python3 scripts/release_version.py sync --tag 2026-08-12
+git add Cargo.toml Cargo.lock packaging/macos/Info.plist
+git commit -m "Release 2026-08-12"
+git tag -a 2026-08-12 -m "AxSSH 2026-08-12"
+git push
+git push origin 2026-08-12
+```
+
+Pushing a valid annotated `YYYY-MM-DD[-N]` tag directly starts the Release
+workflow. It verifies the tag and checked-in metadata before building and
+publishes these assets:
 
 - Windows x86_64 ZIP with the executable, bundled fonts, and license notices
 - Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
@@ -260,24 +267,19 @@ completed. It publishes these assets:
   notices, while the universal executable is assembled from the two native
   binaries
 
-CI writes the shared Cargo cache only after successful default-branch or date-tag
-runs; failed jobs cannot save it. Release jobs independently require a successful
-CI run for the selected tag, restore that cache, but never save into it. The cache key
-includes the target triple, Rust version, and `Cargo.lock` fingerprint, so a
-changed lockfile or different architecture cannot reuse an incompatible cache.
+CI writes the shared Cargo cache only after successful default-branch runs;
+failed jobs and pull-request/tag runs cannot save it. Release jobs restore that
+cache but never save into it. The cache key includes the target triple, Rust
+version, and `Cargo.lock` fingerprint, so a changed lockfile or different
+architecture cannot reuse an incompatible cache.
 Releases always compile a fresh `--release --locked` binary and never publish
 CI's check or debug artifacts.
 
-The release workflow verifies that the selected tag names an annotated release
-tag, that its own tagged CI run succeeded, and that the Cargo package, lockfile,
-and macOS bundle metadata agree before compiling. **Create Dated Release** is
-only for a new date/revision tag. To retry CI or packaging for an existing tag,
-run **Retry Existing Release** from the default branch with its exact
-`YYYY-MM-DD[-N]` value. Direct tag push and manual retry both check the
-annotated tag and its metadata, dispatch CI for that exact tag SHA, then
-dispatch Release only after CI succeeds; neither path can create, replace, or
-move a tag. A failed packaging-only run with an already successful matching CI
-may also be retried directly through **Release**. The local
+The release workflow verifies that the pushed ref names an annotated release
+tag and that the Cargo package, lockfile, and macOS bundle metadata agree
+before compiling. There is no Create or Retry workflow, tag CI dispatch, or
+polling chain. Re-run the failed Release run from GitHub Actions for the same
+immutable tag. The local
 `packaging/macos/build-app.sh` script consumes the checked-in version and does
 not mutate release metadata.
 

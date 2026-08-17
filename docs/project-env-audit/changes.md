@@ -520,3 +520,21 @@
 - 执行内容：新增日期 tag push 触发器；Retry 统一解析输入 tag 或 push ref，继续校验 annotated tag、已提交版本元数据、精确 tag SHA 的 CI，且仅在 CI 成功后 dispatch Release。Release 不直接监听 tag push，Create workflow 与手动 Retry 均保持可用。
 - 验证结果：Ruby YAML 解析、Python 12 项 release/Highlights 回归、版本 verify、`cargo fmt/check/clippy/test --locked --offline`（库 178、应用 162、Doc tests 0）通过；`actionlint` 未在本机安装，GitHub-hosted push event 链路待下一个新日期 tag 验证。
 - 风险/待办：已有 `2026-08-14-1` 不会因本次默认分支 workflow 改动而回溯触发新的 push event；需要发布它时仍运行手动 Retry Existing Release。新 tag 应自动进入该编排。
+
+## 2026-08-17 直接日期 Tag 发布环境收口
+
+- 目的：收敛为一个可实际触发的发布入口：发布者推送 annotated 日期 tag 后直接构建并创建 GitHub Release。
+- 改动范围：`.github/workflows/{ci,release}.yml`、删除 `.github/workflows/{create-dated-release,retry-existing-release}.yml`、`README.md`、`docs/{architecture,architecture.zh,development,development.zh}.md`、`docs/project-{implementation-tracker,env-audit}/`。
+- 执行内容：Release 直接监听 `20*-*-*`，在完整 checkout 中检查 tag object 为 annotated，再运行 `scripts/release_version.py verify --tag`；构建、Universal macOS bundle、Highlights 和仅 publish job 的 `contents: write` 保持不变。CI 只由成功默认分支 run 写共享 target cache，Release 只恢复。移除 Create，避免默认 `GITHUB_TOKEN` 推送不能触发 `push` workflow 的隐蔽分支；tag 由发布者在默认分支用版本脚本同步、提交和推送。
+- 环境变化：无 Rust crate、锁文件、工具链、构建矩阵、SSH trust 或凭据变化；移除不再需要的 GitHub Script action 和多 workflow dispatch/wait 路由。
+- 验证结果：两个 YAML 工作流解析通过；现有 annotated `2026-08-17` 的 tag object/元数据 verify 通过；Python release/Highlights 12 项、413 条翻译、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy 和完整 `cargo test --locked --offline`（库 179、应用 167、Doc tests 0）通过。Markdown、tracker 和 diff 最终检查待本轮收口。
+- 风险/待办：已有 `2026-08-17` 来自旧 workflow 快照，不会回溯触发新 Release；使用下一枚同步元数据后的 annotated 日期 tag 验证 GitHub-hosted 五平台构建、附件与 GitHub Release。
+
+## 2026-08-17 直接日期 Tag 发布最终验证
+
+- 目的：记录 direct tag Release 的本地门禁结果，并区分可本地验证的发布契约与 GitHub-hosted 执行。
+- 改动范围：`docs/project-{implementation-tracker,env-audit}/`。
+- 执行内容：完成 YAML、annotated tag/metadata、Python、Cargo、翻译、Markdown 和差异验证；确认 tracker current 使用标准联网状态字段，新增记录采用完整时间格式。
+- 环境变化：无。
+- 验证结果：两个 YAML、现有 `2026-08-17` tag/metadata、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、30 份非参考子模块 Markdown 相对链接和差异检查通过。tracker validator 只保留 39 条既有历史时间字段错误，本轮记录没有新增 validator 报告。
+- 风险/待办：下一枚有效 annotated 日期 tag 仍须在 GitHub-hosted Windows、Linux x86_64/aarch64、macOS arm64/x86_64 以及 GitHub Release 权限下执行验证。

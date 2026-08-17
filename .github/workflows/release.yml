@@ -1,69 +1,41 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Release tag to publish (YYYY-MM-DD[-N])
-        required: true
-        type: string
+  push:
+    tags: ["20*-*-*"]
 
 permissions:
-  actions: read
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ inputs.tag }}
+  RELEASE_TAG: ${{ github.ref_name }}
 
 jobs:
-  verify-tagged-ci:
-    name: Verify tagged CI
+  verify-release-tag:
+    name: Verify release tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
-          fetch-depth: 1
+          ref: ${{ github.ref }}
+          fetch-depth: 0
 
-      - name: Resolve the checked-out tag commit
-        id: release_ref
+      - name: Verify annotated tag and release metadata
         shell: bash
         run: |
           set -euo pipefail
           tag_ref="refs/tags/${RELEASE_TAG}"
           git show-ref --verify --quiet "$tag_ref"
           test "$(git cat-file -t "$tag_ref")" = tag
-          echo "sha=$(git rev-parse "${tag_ref}^{}")" >> "$GITHUB_OUTPUT"
-
-      - name: Require successful CI for this tag
-        uses: actions/github-script@v8
-        env:
-          RELEASE_SHA: ${{ steps.release_ref.outputs.sha }}
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
-        with:
-          script: |
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: "ci.yml",
-              per_page: 100,
-            });
-            const run = data.workflow_runs.find((candidate) =>
-              candidate.event === "workflow_dispatch"
-                && candidate.head_branch === process.env.RELEASE_TAG
-                && candidate.head_sha === process.env.RELEASE_SHA,
-            );
-            if (!run || run.conclusion !== "success") {
-              throw new Error("a successful workflow-dispatch CI run is required for this release tag");
-            }
+          python scripts/release_version.py verify --tag "$RELEASE_TAG"
 
   build:
     name: ${{ matrix.name }}
-    needs: verify-tagged-ci
+    needs: verify-release-tag
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -97,7 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ github.ref }}
 
       - name: Resolve and verify release metadata
         shell: bash
@@ -218,7 +190,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ github.ref }}
 
       - name: Resolve and verify release metadata
         shell: bash
@@ -288,7 +260,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.tag }}
+          ref: ${{ github.ref }}
 
       - name: Resolve and verify release metadata
         shell: bash
@@ -316,7 +288,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
+          tag_name: ${{ env.RELEASE_TAG }}
           name: AxSSH ${{ env.RELEASE_PUBLIC_VERSION }}
           files: dist/**/*
           body_path: release/body.md

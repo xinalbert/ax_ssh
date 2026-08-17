@@ -35,15 +35,13 @@ for session setup, terminal controls, settings, and data-storage behavior.
 ## Releases
 
 GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
-Silicon, Intel, and universal application bundles. Run **Create Dated Release**
-from the default branch only to create a new Shanghai-date tag such as
-`2026-08-12`; use revision `1` for a second same-day release such as
-`2026-08-12-1`. It synchronizes Cargo and macOS metadata first. Pushing an
-annotated `YYYY-MM-DD[-N]` tag directly also starts the same CI-to-Release
-chain. To retry CI or packaging for an existing valid tag, run **Retry Existing
-Release** with its exact value. Both paths validate the tag and metadata,
-require successful CI for the exact tag SHA, and cannot create, replace, or
-move tags. Each published Release groups high-signal commits into a short
+Silicon, Intel, and universal application bundles. On the default branch,
+synchronize and commit the release metadata, then push a valid annotated
+`YYYY-MM-DD[-N]` tag such as `2026-08-12` or `2026-08-12-1`. That tag directly
+starts the Release workflow. The workflow validates the tag and checked-in
+metadata before rebuilding every release asset, and failed jobs can be re-run
+from the same tag run without moving the tag. Each published Release groups
+high-signal commits into a short
 Highlights section with an explicit full-changelog link, then retains GitHub's
 generated release notes for the complete change list.
 

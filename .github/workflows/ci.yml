@@ -36,14 +36,11 @@ jobs:
         with:
           components: rustfmt
           targets: ${{ matrix.target }}
-      - name: Decide whether this CI run may refresh the release cache
+      - name: Decide whether the default branch may refresh the release cache
         shell: bash
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" = "refs/heads/main" ] || [ "$GITHUB_REF" = "refs/heads/master" ]; then
-            echo "SAVE_RELEASE_CACHE=true" >> "$GITHUB_ENV"
-          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            python scripts/release_version.py verify --tag "$GITHUB_REF_NAME"
             echo "SAVE_RELEASE_CACHE=true" >> "$GITHUB_ENV"
           else
             echo "SAVE_RELEASE_CACHE=false" >> "$GITHUB_ENV"
