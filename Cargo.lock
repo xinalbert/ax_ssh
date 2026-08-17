@@ -513,7 +513,7 @@ dependencies = [
 
 [[package]]
 name = "ax_ssh"
-version = "2026.8.17"
+version = "2026.8.17+1"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
