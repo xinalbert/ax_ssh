@@ -552,6 +552,27 @@ struct TerminalPalette {
     ansi: [RgbColor; 16],
 }
 
+// Keep dark terminal ANSI colors aligned with axshell while allowing each
+// AxSSH theme to retain its own default foreground, background, and selection.
+const AXSHELL_DARK_ANSI: [RgbColor; 16] = [
+    RgbColor::new(31, 36, 48),
+    RgbColor::new(255, 92, 87),
+    RgbColor::new(90, 247, 142),
+    RgbColor::new(243, 249, 157),
+    RgbColor::new(87, 199, 255),
+    RgbColor::new(255, 106, 193),
+    RgbColor::new(154, 237, 254),
+    RgbColor::new(241, 241, 240),
+    RgbColor::new(104, 104, 104),
+    RgbColor::new(255, 92, 87),
+    RgbColor::new(90, 247, 142),
+    RgbColor::new(243, 249, 157),
+    RgbColor::new(87, 199, 255),
+    RgbColor::new(255, 106, 193),
+    RgbColor::new(154, 237, 254),
+    RgbColor::new(255, 255, 255),
+];
+
 impl TerminalPalette {
     fn for_scheme(scheme: TerminalColorScheme) -> Self {
         match scheme {
@@ -559,24 +580,7 @@ impl TerminalPalette {
                 foreground: RgbColor::new(204, 204, 204),
                 background: RgbColor::new(30, 30, 30),
                 selection_background: RgbColor::new(38, 79, 120),
-                ansi: [
-                    RgbColor::new(0, 0, 0),
-                    RgbColor::new(205, 49, 49),
-                    RgbColor::new(13, 188, 121),
-                    RgbColor::new(229, 229, 16),
-                    RgbColor::new(36, 114, 200),
-                    RgbColor::new(188, 63, 188),
-                    RgbColor::new(17, 168, 205),
-                    RgbColor::new(229, 229, 229),
-                    RgbColor::new(102, 102, 102),
-                    RgbColor::new(241, 76, 76),
-                    RgbColor::new(35, 209, 139),
-                    RgbColor::new(245, 245, 67),
-                    RgbColor::new(59, 142, 234),
-                    RgbColor::new(214, 112, 214),
-                    RgbColor::new(41, 184, 219),
-                    RgbColor::new(255, 255, 255),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
             TerminalColorScheme::Light => Self {
                 foreground: RgbColor::new(51, 51, 51),
@@ -605,116 +609,31 @@ impl TerminalPalette {
                 foreground: RgbColor::new(131, 148, 150),
                 background: RgbColor::new(0, 43, 54),
                 selection_background: RgbColor::new(7, 54, 66),
-                ansi: [
-                    RgbColor::new(7, 54, 66),
-                    RgbColor::new(220, 50, 47),
-                    RgbColor::new(133, 153, 0),
-                    RgbColor::new(181, 137, 0),
-                    RgbColor::new(38, 139, 210),
-                    RgbColor::new(211, 54, 130),
-                    RgbColor::new(42, 161, 152),
-                    RgbColor::new(238, 232, 213),
-                    RgbColor::new(0, 43, 54),
-                    RgbColor::new(203, 75, 22),
-                    RgbColor::new(88, 110, 117),
-                    RgbColor::new(101, 123, 131),
-                    RgbColor::new(131, 148, 150),
-                    RgbColor::new(108, 113, 196),
-                    RgbColor::new(147, 161, 161),
-                    RgbColor::new(253, 246, 227),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
             TerminalColorScheme::ArcticDark => Self {
                 foreground: RgbColor::new(213, 226, 232),
                 background: RgbColor::new(17, 28, 37),
                 selection_background: RgbColor::new(39, 86, 107),
-                ansi: [
-                    RgbColor::new(20, 30, 40),
-                    RgbColor::new(195, 76, 92),
-                    RgbColor::new(73, 151, 115),
-                    RgbColor::new(183, 137, 55),
-                    RgbColor::new(77, 136, 191),
-                    RgbColor::new(145, 105, 184),
-                    RgbColor::new(63, 151, 178),
-                    RgbColor::new(210, 222, 230),
-                    RgbColor::new(91, 111, 126),
-                    RgbColor::new(231, 105, 119),
-                    RgbColor::new(105, 194, 151),
-                    RgbColor::new(218, 177, 87),
-                    RgbColor::new(111, 174, 232),
-                    RgbColor::new(182, 142, 224),
-                    RgbColor::new(100, 198, 220),
-                    RgbColor::new(241, 247, 250),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
             TerminalColorScheme::TokyoDark => Self {
                 foreground: RgbColor::new(200, 211, 245),
                 background: RgbColor::new(16, 19, 35),
                 selection_background: RgbColor::new(51, 70, 124),
-                ansi: [
-                    RgbColor::new(26, 27, 38),
-                    RgbColor::new(211, 97, 111),
-                    RgbColor::new(95, 188, 142),
-                    RgbColor::new(224, 175, 104),
-                    RgbColor::new(122, 162, 247),
-                    RgbColor::new(187, 154, 247),
-                    RgbColor::new(125, 207, 255),
-                    RgbColor::new(192, 202, 245),
-                    RgbColor::new(76, 82, 112),
-                    RgbColor::new(245, 118, 135),
-                    RgbColor::new(133, 211, 162),
-                    RgbColor::new(242, 196, 124),
-                    RgbColor::new(141, 176, 255),
-                    RgbColor::new(205, 178, 255),
-                    RgbColor::new(147, 218, 255),
-                    RgbColor::new(232, 236, 255),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
             TerminalColorScheme::EmberDark => Self {
                 foreground: RgbColor::new(231, 214, 207),
                 background: RgbColor::new(26, 18, 16),
                 selection_background: RgbColor::new(112, 65, 45),
-                ansi: [
-                    RgbColor::new(34, 23, 20),
-                    RgbColor::new(210, 83, 75),
-                    RgbColor::new(117, 174, 109),
-                    RgbColor::new(224, 170, 91),
-                    RgbColor::new(215, 121, 77),
-                    RgbColor::new(198, 112, 154),
-                    RgbColor::new(98, 182, 181),
-                    RgbColor::new(235, 216, 207),
-                    RgbColor::new(112, 79, 68),
-                    RgbColor::new(239, 116, 106),
-                    RgbColor::new(143, 207, 133),
-                    RgbColor::new(245, 197, 116),
-                    RgbColor::new(243, 151, 98),
-                    RgbColor::new(227, 144, 183),
-                    RgbColor::new(121, 207, 206),
-                    RgbColor::new(255, 244, 238),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
             TerminalColorScheme::ForestDark => Self {
                 foreground: RgbColor::new(209, 230, 214),
                 background: RgbColor::new(14, 25, 18),
                 selection_background: RgbColor::new(40, 94, 59),
-                ansi: [
-                    RgbColor::new(16, 28, 20),
-                    RgbColor::new(202, 80, 92),
-                    RgbColor::new(103, 188, 128),
-                    RgbColor::new(201, 174, 93),
-                    RgbColor::new(101, 161, 221),
-                    RgbColor::new(177, 128, 205),
-                    RgbColor::new(91, 182, 177),
-                    RgbColor::new(215, 233, 220),
-                    RgbColor::new(77, 106, 84),
-                    RgbColor::new(236, 105, 116),
-                    RgbColor::new(129, 213, 153),
-                    RgbColor::new(229, 205, 120),
-                    RgbColor::new(132, 188, 240),
-                    RgbColor::new(203, 153, 231),
-                    RgbColor::new(117, 211, 203),
-                    RgbColor::new(242, 250, 244),
-                ],
+                ansi: AXSHELL_DARK_ANSI,
             },
         }
     }
@@ -979,7 +898,7 @@ mod tests {
 
         assert_eq!(
             rendered.lines[0].runs[0].foreground,
-            RgbColor::new(241, 76, 76)
+            RgbColor::new(255, 92, 87)
         );
     }
 
@@ -1028,22 +947,21 @@ mod tests {
         );
         assert_eq!(
             indexed_rendered.lines[0].runs[0].foreground,
-            RgbColor::new(205, 49, 49)
+            RgbColor::new(255, 92, 87)
         );
     }
 
     #[test]
-    fn fixed_dark_theme_schemes_keep_distinct_ansi_blue() {
-        for (scheme, blue) in [
-            (TerminalColorScheme::ArcticDark, RgbColor::new(77, 136, 191)),
-            (TerminalColorScheme::TokyoDark, RgbColor::new(122, 162, 247)),
-            (TerminalColorScheme::EmberDark, RgbColor::new(215, 121, 77)),
-            (
-                TerminalColorScheme::ForestDark,
-                RgbColor::new(101, 161, 221),
-            ),
+    fn fixed_dark_theme_schemes_use_axshell_ansi() {
+        for scheme in [
+            TerminalColorScheme::Dark,
+            TerminalColorScheme::SolarizedDark,
+            TerminalColorScheme::ArcticDark,
+            TerminalColorScheme::TokyoDark,
+            TerminalColorScheme::EmberDark,
+            TerminalColorScheme::ForestDark,
         ] {
-            assert_eq!(TerminalPalette::for_scheme(scheme).ansi[4], blue);
+            assert_eq!(TerminalPalette::for_scheme(scheme).ansi, AXSHELL_DARK_ANSI);
         }
     }
 
@@ -1051,7 +969,7 @@ mod tests {
     fn neutral_brightness_preserves_all_foreground_sources_exactly() {
         for (color, expected) in [
             (TerminalColor::Default, RgbColor::new(204, 204, 204)),
-            (TerminalColor::Indexed(1), RgbColor::new(205, 49, 49)),
+            (TerminalColor::Indexed(1), RgbColor::new(255, 92, 87)),
             (TerminalColor::Indexed(208), RgbColor::new(255, 135, 0)),
             (
                 TerminalColor::Rgb {

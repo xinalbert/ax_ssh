@@ -1109,8 +1109,10 @@ the private application configuration directory and never includes its vault
 password. Display strategy
 is persisted independently as System, Light, or Dark; the selected color family
 is AxSSH, Solarized, Arctic, Tokyo, Ember, Forest, or Custom. The fixed
-families supply independent Light/Dark semantic palettes; when a fixed family
-resolves Dark, its matching ANSI-16 terminal palette is used. Custom stores
+families supply independent Light/Dark semantic palettes; when a palette
+resolves Dark, it uses one shared axshell-compatible ANSI-16 table while
+retaining palette-specific terminal background, default foreground, and
+selection colors. Custom stores
 separate Light and Dark sets of 13 canonical `#RRGGBB` or `#RRGGBBAA` semantic
 UI/terminal-default colors. Schema version 11 splits the former combined modes:
 Solarized Dark becomes Dark plus Solarized, while a legacy Custom palette is

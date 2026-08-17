@@ -708,7 +708,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
 没有已记住密码的 profile 省略该字段。另一种加密保险库记录单独位于私有应用配置目录，
 从不包含保险库口令。显示策略独立保存为 System、Light 或 Dark，配色方案独立选择 AxSSH、
 Solarized、Arctic、Tokyo、Ember、Forest 或 Custom。固定方案各自提供 Light/Dark 语义色；
-固定方案解析为 Dark 时，会使用匹配的 ANSI-16 Terminal 色表。Custom 分别保存 Light/Dark
+配色解析为 Dark 时，共用一套与 axshell 兼容的 ANSI-16 色表，同时保留各自的终端背景、默认前景
+和选区色。Custom 分别保存 Light/Dark
 两套 13 个语义 UI/终端默认色，并规范化为 `#RRGGBB` 或 `#RRGGBBAA`。schema 版本 11 会
 拆分旧的组合模式：Solarized Dark 迁移为 Dark + Solarized；旧 Custom 按背景明暗进入对应的
 一侧，另一侧使用安全 AxSSH 默认。主题规范化会保证 Light 表面保持浅色、Dark 表面保持深色；

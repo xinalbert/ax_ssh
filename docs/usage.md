@@ -426,8 +426,9 @@ without changing terminal cell metrics. Display mode selects **Follow system**,
 **Solarized**, **Arctic**, **Tokyo**, **Ember**, **Forest**, or **Custom**, so
 every fixed palette can be used in both Light and Dark modes. Arctic is a cool
 technical palette, Tokyo is a night-oriented palette, Ember is warm, and Forest
-uses green contrast. In Dark mode, each fixed palette also selects its matching
-Terminal ANSI colors; Light mode retains the readable light ANSI palette.
+uses green contrast. In Dark mode, all palettes share axshell's vivid ANSI-16
+colors while retaining their own terminal background, default foreground, and
+selection colors; Light mode retains the readable light ANSI palette.
 Custom exposes separate Light and Dark semantic colors. During the immediate
 preview and on persistence, invalid hex values or colors that would hide text,
 essential borders, focus/status states, or terminal text are replaced with

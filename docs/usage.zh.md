@@ -266,8 +266,9 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
 **AxSSH**、**Solarized**、**Arctic**、**Tokyo**、**Ember**、**Forest** 或 **Custom**，因此
 所有固定配色都能同时用于浅色和深色。Arctic 偏冷色技术感，Tokyo 偏夜间，Ember 偏暖色，
-Forest 使用绿色高对比。在 Dark 模式中，每个固定配色也会选择相应的 Terminal ANSI 色表；
-Light 模式保留可读的浅色 ANSI 色表。Custom 会展开 Light/Dark 两套语义色。即时预览和持久化时，
+Forest 使用绿色高对比。在 Dark 模式中，所有配色共用 axshell 的高饱和 ANSI-16 色，同时保留
+各自的终端背景、默认前景和选区色；Light 模式保留可读的浅色 ANSI 色表。Custom 会展开
+Light/Dark 两套语义色。即时预览和持久化时，
 无效十六进制值或会让文字、必要边框、焦点/状态及终端文字看不清的颜色，会回退到对应明暗侧的
 可读默认。
 
