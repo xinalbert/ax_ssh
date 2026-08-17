@@ -323,11 +323,10 @@ keys, Home, End, and Enter or Space for reset. Each side remains between 10%
 and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
 Terminal rows, the cursor, preedit text, and the native input proxy remain
-clipped to their pane even when nested splits make one side unusually small. At
-normal heights the character grid starts at the top of the content area and
-any remainder that cannot form a complete cell stays below it; only a pane
-shorter than three rows anchors the current bottom row to the pane bottom and
-clips older top rows first.
+clipped to their pane even when nested splits make one side unusually small.
+Every pane keeps its final terminal row at the pane bottom. A height that is
+not a whole cell adds one visible row and clips only that first row at the top;
+space above the maximum row count remains above the grid.
 This clipping and bottom alignment are established on the pane's initial layout,
 not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,

@@ -280,9 +280,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
    下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
    pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
-   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。完整字符行在测得网格
-   区域内从顶部开始绘制：行数向下取整后剩余的零散高度放在最后一行下方，而非第一行上方。
-   同一内容区原点同时用于字符格、光标/IME 预编辑和指针行映射，不会改变计算出的行数或任何 PTY 请求。
+   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。纵向行数向上取整，使最后一行
+   始终贴住 pane 底边；不足一格的高度只从顶部裁切第一行，超过最大行数后的高度保留在网格上方。
+   同一内容区原点同时用于字符格、光标/IME 预编辑和指针行映射，向上取整后的行数也会沿既有 PTY
+   resize 请求发送。
    `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
    对应 worker 的 resize，再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
    对端接受选项后发送 NAWS；Serial 没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口
@@ -645,12 +646,11 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
 Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 测量配置字体，并用测得的字符格
-宽度和配置的行高百分比统一计算渲染、选区、光标和向下取整的 PTY 尺寸；`TerminalPane` 只计算一个内容区
-光标 cell y 坐标，网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的垂直溢出边界。正常高度下不能组成完整字符格的
-剩余高度保留在网格底部，避免扩大终端顶部内容边界，IME 和指针坐标使用同一原点。pane group 会把每个
-终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、预编辑覆盖层和透明 IME proxy，确保
-尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外。pane 高度不足终端保底三行时，网格才把当前底行贴住
-pane 底边，并优先裁剪较旧的顶部行；终端只会在这些度量和布局稳定后合并发送 resize。
+宽度和配置的行高百分比统一计算渲染、选区、光标、向下取整的 PTY 列数和向上取整的 PTY 行数；
+`TerminalPane` 只计算一个内容区光标 cell y 坐标，网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
+垂直溢出边界。每个 pane 的最后一行都贴住底边：不足一格的高度从顶部裁切第一行，超过最大行数后的空间保留在网格上方。
+IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
+预编辑覆盖层和透明 IME proxy，确保尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外；终端只会在这些度量和布局稳定后合并发送 resize。
 
 首次打开 Settings 时才会在 blocking worker 中发现本地 shell、系统等宽字体和已知 X server
 安装位置；再次激活现有单例 Tab 不会重复扫描。关闭 Settings 会释放发现出的系统字体与 X server

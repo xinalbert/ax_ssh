@@ -419,12 +419,12 @@ must not locally hide either dialog before the Rust state transition accepts it.
    that same coalesced update, so an already-connected pane reaches its settled
    initial grid without waiting for a later window or divider resize. This keeps
    a Settings font change and a later return to a connected terminal on the
-   same current-grid path as a window resize. Complete character rows are
-   top-aligned inside the measured grid region: the fractional height left after
-   floor-based row calculation is placed below the last row, not above the first
-   row. The same local origin is applied to grid cells, cursor/IME preedit, and
-   pointer row mapping; it does not alter the calculated row count or any PTY
-   request.
+   same current-grid path as a window resize. Its vertical row count rounds up,
+   so the final terminal row always meets the pane bottom. A fractional cell
+   clips only the first row at the top; height beyond the maximum row count
+   remains above the grid. The same local origin is applied to grid cells,
+   cursor/IME preedit, and pointer row mapping, and that rounded row count is
+   the one sent through the existing PTY resize request.
    `AppState::resize_terminal(tab_id, ...)` is the single application entry for
    a UI grid change: it requests the specified visible pane's existing worker
    resize first and then immediately resizes that Tab's local `TerminalModel`.
@@ -1003,21 +1003,19 @@ release packages must retain `assets/fonts/` by the executable or platform
 resource path. Maple Mono NF CN is required there for deterministic Han glyph
 rendering; Iosevka Term and Monaspace Neon remain optional primary families,
 and all font notices remain required.
-Slint measures the configured font and uses the measured cell
-width plus the configured line-height percentage for rendering, selection,
-cursor, and floor-based PTY dimensions. `TerminalPane` computes one
-content-space cursor-cell y position; the grid, pre-edit overlay, and native
-IME proxy all consume it, while the pane clip is the only vertical overflow
-boundary. At normal heights, any remaining
-partial cell height stays below the top-aligned grid so it cannot expand the
-terminal's top content boundary; IME and pointer coordinates use that same
+Slint measures the configured font and uses the measured cell width plus the
+configured line-height percentage for rendering, selection, cursor,
+floor-based PTY columns, and ceiling-based PTY rows. `TerminalPane` computes
+one content-space cursor-cell y position; the grid, pre-edit overlay, and
+native IME proxy all consume it, while the pane clip is the only vertical
+overflow boundary. Every pane bottom-aligns its final terminal row: a partial
+cell is clipped from the first row at the top, while space above the maximum
+row count remains above the grid. IME and pointer coordinates use that same
 origin. The pane group clips every terminal surface to its assigned split
 rectangle, and each pane also clips its grid, cursor, preedit overlay, and
 transparent IME proxy so an undersized nested split cannot paint into a
-neighbor or outside the workspace. When a pane is shorter than the three-row
-terminal floor, its grid alone keeps the active bottom row aligned to the pane
-and clips older top rows first. The terminal batches the resulting resize only
-after those metrics and its layout have settled.
+neighbor or outside the workspace. The terminal batches the resulting resize
+only after those metrics and its layout have settled.
 
 The first Settings opening discovers local shells, system monospace families,
 and known X-server installations on blocking workers. Reactivating the existing

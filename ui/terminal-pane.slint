@@ -151,12 +151,11 @@ export component TerminalPane inherits Rectangle {
             min(Theme.terminal-grid-max-columns, floor(grid-clip.width / root.cell-width)));
     private property <int> terminal-rows:
         max(Theme.terminal-grid-min-rows,
-            min(Theme.terminal-grid-max-rows, floor(grid-clip.height / root.cell-height)));
-    // Keep normal grids flush with the content top. If a nested split is
-    // shorter than the minimum grid, clip old top rows first so the active
-    // bottom row remains aligned with the pane boundary.
+            min(Theme.terminal-grid-max-rows, ceil(grid-clip.height / root.cell-height)));
+    // The terminal's current row always meets the pane bottom. A partial cell
+    // is clipped at the top; space beyond the maximum grid stays above it.
     private property <length> grid-top-offset:
-        min(0px, grid-clip.height - root.terminal-rows * root.cell-height);
+        grid-clip.height - root.terminal-rows * root.cell-height;
     // The grid, pre-edit overlay, and native IME proxy share this one
     // content-space cursor position. The clipping parent handles negatives.
     private property <length> cursor-cell-y:
