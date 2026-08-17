@@ -103,8 +103,10 @@ sends user intent such as activation, close, connect, save, or cancel upward by
 callback. `TerminalPaneGroup` renders bounded per-window lists of normalized
 `TerminalPane` placements and internal split dividers. Each `TerminalPane` receives a read-only
 `TerminalViewState` and owns only terminal-local focus, IME proxy, selection,
-cursor blink, and measured sizing. It never owns a worker, a terminal buffer,
-or connection state. Terminal panes intentionally have no visual frame;
+cursor blink, and measured sizing. Its selection clears when the logical pane or
+transparent native input loses focus, while the terminal context menu retains it
+through a Copy action. It never owns a worker, a terminal buffer, or connection
+state. Terminal panes intentionally have no visual frame;
 `AppWindow` draws the one client-area frame around the whole application window.
 Only a newly created `TerminalPane` queues one IME focus retry until its first
 layout pass completes, then rechecks visible, focused, and connected state
@@ -121,9 +123,11 @@ validates the pane and sends the bytes to its worker. `TerminalPane` chooses one
 gesture owner at button press: ordinary gestures use remote reporting, while
 `Shift` + left drag uses the local selection owner through release. `Shift` +
 wheel also uses local scrollback. When reporting is off, the existing direct
-local selection and scroll fallback remains in control. Alternate-screen
-alternate-scroll is treated as reporting only while the terminal is on its
-alternate screen.
+local selection and scroll fallback remains in control. Moving focus to another
+pane, a divider, or another window control clears that local selection; the
+terminal context-menu Copy action retains it until the action completes.
+Alternate-screen alternate-scroll is treated as reporting only while the
+terminal is on its alternate screen.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
 revision. Every pane observes that signal, but only the focused pane invokes its
 existing local copy, paste, or select-all operation; selection coordinates and

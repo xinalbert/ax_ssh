@@ -347,7 +347,9 @@ belong to the TUI; hold `Shift` while left-dragging to select text locally, or
 while using the wheel to scroll local history. Outside reporting mode, direct
 left-drag selection and wheel scrolling remain local. A pointer gesture keeps
 the owner chosen at button press until release, so one drag is never handled by
-both AxSSH and the remote program.
+both AxSSH and the remote program. Moving focus to another pane, a divider, or
+another window control clears a terminal selection; the terminal context menu
+keeps it long enough to use **Copy**.
 Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. With a Terminal Tab
 active, **Edit > Copy**, **Paste**, and **Select All** affect only the focused

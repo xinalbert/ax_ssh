@@ -214,7 +214,8 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。reporting 开启时，普通指针手势交给 TUI；按住 `Shift` 再用左键拖动可强制
 使用本地文字选择，按住 `Shift` 滚轮则滚动本地历史。reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
-一次指针手势从按下到释放始终沿用按下时确定的 owner，不会同时进入 AxSSH 与远端程序两条链路。
+一次指针手势从按下到释放始终沿用按下时确定的 owner，不会同时进入 AxSSH 与远端程序两条链路。焦点移到另一 pane、
+分隔条或其他窗口控件时会清除终端选区；终端上下文菜单会保留选区至 **Copy** 动作完成。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、
 **Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
 `Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`，并可在

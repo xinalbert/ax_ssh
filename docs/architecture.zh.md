@@ -93,7 +93,8 @@ Rust
 它通过只读 `WorkspaceViewState` 接收 Tab、Profile、终端和设置数据，并用 callback 向上发送
 激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
 `TerminalPane` placement 与内部 split divider 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
-终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；它不拥有 worker、终端缓冲区或连接状态。
+终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；逻辑 pane 或透明原生输入失焦时其选区会清除，
+但终端上下文菜单会将选区保留至 Copy 动作完成；它不拥有 worker、终端缓冲区或连接状态。
 Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
@@ -102,6 +103,7 @@ pane tree 时才处理。
 拖动和 motion 坐标；bridge 重验 pane 后才把字节发送给对应 worker。`TerminalPane` 在按下时只选择一个
 手势 owner：普通手势使用远端 reporting，`Shift` + 左键拖动则由本地选区 owner 持续处理至释放；
 `Shift` + 滚轮也使用本地 scrollback。关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
+焦点移到另一 pane、分隔条或其他窗口控件时会清除该局部选区；终端上下文菜单的 Copy 会将选区保留至动作完成。
 备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到

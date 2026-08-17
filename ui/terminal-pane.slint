@@ -301,6 +301,8 @@ export component TerminalPane inherits Rectangle {
     changed focused => {
         if root.focused && root.connected {
             root.focus-input();
+        } else {
+            root.clear-selection();
         }
     }
     changed edit-command-revision => {
@@ -391,6 +393,8 @@ export component TerminalPane inherits Rectangle {
         changed has-focus => {
             if self.has-focus {
                 root.cursor-blink = true;
+            } else {
+                root.clear-selection();
             }
         }
         key-pressed(event) => {
