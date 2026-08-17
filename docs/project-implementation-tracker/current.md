@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260814-terminal-text-brightness
-- 目标：保留 Terminal 的 ANSI/256/真彩色语义，并以单一全局文字亮度统一调整最终可见前景色。
-- 交付物：schema v22 终端文字亮度、可选语义高亮、Rust/Slint 单链路渲染、双语说明和回归验证。
+- 目标 ID：20260814-macos-debug-link
+- 目标：消除 macOS arm64 普通 debug 构建的增量对象链接失败，并防止同类缓存再次累积。
+- 交付物：可复现根因、dev profile 非增量代码生成、精确缓存清理、双语开发说明和完整验证。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config*`、`src/app/{terminal_render,settings_bridge,view}*`、`ui/{app,settings,settings/terminal}.slint`、翻译目录、双语使用/架构说明和实施记录。
-- 不在本轮范围内：终端字节解析、PTY/SSH/Telnet/Serial worker、SSH host-key trust、凭据、字体回退、Cargo 依赖/工具链，以及参考工程源码。
+- 当前范围：`Cargo.toml` 的 dev profile、中英文开发说明、项目地图和实施记录；保留尚未提交的 Terminal 鼠标选择修复。
+- 不在本轮范围内：依赖版本/锁文件、release profile、运行时 UI/颜色/终端/worker 行为、SSH host-key trust、凭据、工具链版本，以及参考工程源码。
 
 ## 当前状态
 
@@ -23,6 +23,11 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| DL1 | completed | debug 链接失败复现、增量对象根因和精确缓存清理 | failing build + non-incremental comparison | 同一 `ax_ssh-9d4ad7ef...` hash 复现；只清理 AxSSH dev 产物。 |
+| DL2 | completed | dev profile 固化、双语说明与完整门禁 | repeated debug build + fmt/check/clippy/test/docs/diff | release ThinLTO 与依赖缓存不变。 |
+| MS1 | completed | 鼠标手势的单一所有权分流与 Shift 本地选择覆盖 | Slint compile + static route review | 手势按下时确定归本地或远端，不在拖动中切换 owner。 |
+| MS2 | completed | 滚轮修饰键顺序与本地 fallback 回归 | Cargo/Slint check | Shift fallback 不发送远端 mouse event。 |
+| MS3 | completed | 双语契约、tracker 和完整仓库门禁 | fmt/check/clippy/test/tracker/Markdown/diff | GUI 拖选由用户在目标平台验收。 |
 | FB1 | completed | schema v22 终端文字亮度与语义高亮配置契约 | config migration/normalization tests | 旧最小对比度不映射，迁移后亮度为 1.00。 |
 | FB2 | completed | 最终可见前景色的一次性亮度调整 | terminal renderer focused tests | factor 1.00 保持原色；背景、选区和光标不调整。 |
 | FB3 | completed | Slint Settings、即时重绘与中文翻译 | Cargo/Slint compile + translation check | 语义高亮默认关闭；亮度变化无需等待新输出。 |
@@ -112,6 +117,13 @@
 
 ## 验证
 
+- 已完成：普通 `cargo build --locked --offline` 以用户提供的 `ax_ssh-9d4ad7ef...` hash 复现 `_anon...llvm...` arm64 缺失符号；release 连续两次链接成功，排除 Slint 源码和系统库缺失。
+- 已完成：`target/debug` 中存在 155 个 AxSSH 增量目录；`CARGO_INCREMENTAL=0` 对照构建成功。Cargo 精确清除 `--profile dev --package ax_ssh` 的 184,950 个可再生文件（约 123GB），未删除源码、配置、依赖下载缓存或 release 产物。
+- 已完成：manifest 禁用 dev 增量后，普通 debug 首次重建 2 分 04 秒成功，第二次构建 0.86 秒成功。
+- 已完成：DL2 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 179、应用 167、Doc tests 0）、415 条翻译、46 个 Markdown 相对链接和 `git diff --check`。
+- 已完成：MS1-MS2 单一路由静态复核与 Slint 重新编译；正常 shell 直接拖选，mouse-reporting TUI 由 `Shift` + 左键拖动强制本地选择，移动/释放沿用按下时确定的 owner；`Shift` + 滚轮进入本地 scrollback，滚轮修饰键顺序已修正。
+- 已完成：MS3 的 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 179、应用 167、Doc tests 0）、415 条翻译、46 个 Markdown 相对链接和 `git diff --check`。
+- 已完成：tracker validator 仅报告月度历史和 `research.md` 中既有的缺失或旧格式时间字段，本轮两条记录未新增错误。
 - 已完成：只读审计当前 Theme -> renderer -> Slint 链路，并核对参考工程的全局 Terminal 前景亮度契约；未复制或依赖参考源码。
 - 已完成：FB1-FB4 的 schema v22 迁移、renderer 13 项定向回归、Slint 单次合并刷新、415 条中文翻译与双语契约；生产 renderer 中最终前景亮度函数只有一个调用点。
 - 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy 和完整 `cargo test --locked --offline`（库 179、应用 167、Doc tests 0）。
@@ -135,6 +147,8 @@
 
 ## 风险与阻塞
 
+- dev profile 禁用增量代码生成会让修改 AxSSH 源码后的首次 crate 重建更慢，但依赖产物仍缓存；release profile 和发行性能不受影响。
+- mouse-reporting 启用时，普通手势必须继续归远端 TUI；只有按下时带 Shift 的手势强制归本地选区，避免一次拖动被两条链路同时处理。
 - 亮度只允许作用于解析、反色和可选语义高亮之后的最终可见前景；不得修改背景或与旧最小对比度算法叠加。
 - `dim` 必须保留终端语义，但应与全局亮度合并为一次最终前景变换；factor 1.00 时非 dim ANSI/256/真彩色必须逐值保持。
 - tag push 将为匹配日期格式的 tag 自动启动编排；无效日期、轻量 tag 或元数据不匹配会在校验阶段失败，不得创建 Release。
@@ -148,6 +162,7 @@
 
 ## 下一步
 
+- 在普通 shell 直接左键拖选；在 vim/htop/lazygit 等启用 mouse-reporting 的界面以 Shift+左键拖选，并确认普通点击仍交给 TUI。
 - 使用用户提供的目标平台截图验收 60%、100%、120% 三档 Terminal 文字观感，以及语义高亮开关；本地自动化不替代 GUI 色彩验收。
 - 下一个新的有效日期 tag 应自动进入 Retry Existing Release；确认 tag CI 成功后出现 Release workflow 和 GitHub Release。已有 tag 仍可手动运行 Retry Existing Release。
 - 在 Windows 目标机使用本轮新 EXE 复测 cmd/PowerShell 输出与输入、`conhost.exe` 空闲 CPU、关闭 Tab 后 child 消失、AxSSH 正常退出，以及 New Session 超长内容滚动。
@@ -157,6 +172,14 @@
 
 ## 最后更新时间
 
+- 2026-08-14 18:30 +0800
+- 2026-08-14：完成 DL1-DL2；dev profile 禁用增量代码生成，精确清理旧 AxSSH dev 产物后普通 build 连续成功，完整离线 Cargo 与文档门禁通过。release ThinLTO、依赖和运行时链路不变；未联网、未使用多 agent。
+- 2026-08-14 18:27 +0800
+- 2026-08-14：启动 DL1-DL2；原样复现普通 debug 的 arm64 `_anon...llvm...` 链接失败，确认 155 个 AxSSH 增量目录混用 codegen 对象。非增量对照与清理后重复构建通过，进入完整门禁；未联网、未使用多 agent。
+- 2026-08-14 17:49 +0800
+- 2026-08-14：完成 MS1-MS3；mouse-reporting 开启时保留远端普通手势，并增加 `Shift` 本地拖选/滚动覆盖；按下到释放仅由一个 owner 处理。完整离线门禁通过，未联网、未使用多 agent。
+- 2026-08-14 17:41 +0800
+- 2026-08-14：启动 MS1-MS3；确认 mouse-reporting 分流忽略 Shift，导致 TUI 模式没有本地选择覆盖。修复限定在 Slint 手势 owner，不修改颜色、worker 或 SSH 安全边界；未联网、未使用多 agent。
 - 2026-08-14 15:29 +0800
 - 2026-08-14：完成 FB1-FB4；Terminal 只保留最终可见前景的一次 HSL lightness 调整，旧最小对比度退出渲染，语义高亮默认关闭。完整 Rust/Slint 与翻译门禁通过，未联网、未使用多 agent。
 - 2026-08-14 14:55 +0800
