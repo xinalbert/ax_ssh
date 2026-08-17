@@ -2,7 +2,7 @@ name: Retry Existing Release
 
 on:
   push:
-    tags: ["20??-??-??*"]
+    tags: ["20*-*-*"]
   workflow_call:
     inputs:
       tag:
