@@ -129,7 +129,9 @@ export component AppWindow inherits Window {
     in property <int> terminal-cursor-column: 0;
     in property <bool> terminal-cursor-visible: false;
     in property <string> terminal-cursor-text: " ";
-    in property <bool> terminal-mouse-reporting: false;
+    in property <bool> terminal-mouse-button-reporting: false;
+    in property <bool> terminal-mouse-wheel-reporting: false;
+    in property <bool> terminal-mouse-local-selection-priority: true;
     in property <string> application-font-family: "JetBrains Mono";
     in property <[string]> application-font-options;
     in property <int> application-font-index: 0;
@@ -284,7 +286,9 @@ export component AppWindow inherits Window {
             option_as_meta: root.option-as-meta,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
             select_all_shortcut: root.select-all-shortcut,
-            mouse_reporting: root.terminal-mouse-reporting,
+            mouse_button_reporting: root.terminal-mouse-button-reporting,
+            mouse_wheel_reporting: root.terminal-mouse-wheel-reporting,
+            mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
         },
         terminal_panes: root.terminal-panes,
         terminal_dividers: root.terminal-dividers,
@@ -349,6 +353,7 @@ export component AppWindow inherits Window {
             theme_dark_terminal_selection: root.theme-dark-terminal-selection,
             right_click_copy_or_paste: root.right-click-copy-or-paste,
             copy_selection_on_select: root.copy-selection-on-select, option_as_meta: root.option-as-meta,
+            terminal_mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
             x11_server_provider_options: root.x11-server-provider-options,
             x11_server_installations: root.x11-server-installations,
             x11_server_provider: root.x11-server-provider,
@@ -424,7 +429,7 @@ export component AppWindow inherits Window {
         string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
     callback save-ui-language(int);
@@ -752,7 +757,7 @@ export component AppWindow inherits Window {
                           theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                           theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                           theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                          theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
+                          theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta,
                           x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
@@ -767,7 +772,7 @@ export component AppWindow inherits Window {
                     theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                     theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                     theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                    theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, option-as-meta,
+                    theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta,
                     x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key,

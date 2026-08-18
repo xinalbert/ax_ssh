@@ -123,20 +123,34 @@ split-pane focus, connection, visibility, and divider-release requests focus the
 native proxy synchronously. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
-Mouse input follows the same ownership boundary. `TerminalModel` exposes only
-the active private mouse modes and emits bounded SGR, UTF-8, or legacy X10
-events. `TerminalPane` uses an xterm.js-style `mouseEventsRequireAlt` policy
-for button gestures: left dragging selects local text by default, while holding
-`Alt` (`Option` on macOS) with reporting active forwards click, release, drag,
-and cell-motion coordinates through the pane UUID callback. The bridge validates
-the pane and sends those bytes to its worker. Wheel events still follow active
-reporting so full-screen TUIs can scroll normally; `Shift` + wheel uses local
-scrollback. When reporting is off, the existing direct local selection and scroll
-fallback remains in control. Moving focus to another pane, a divider, or another
-window control clears that local selection; the terminal context-menu Copy action
-retains it until the action completes.
-Alternate-screen alternate-scroll is treated as reporting only while the
-terminal is on its alternate screen.
+Mouse input follows the same ownership boundary. `TerminalModel` exposes
+separate button and wheel capabilities from the active private mouse modes and
+emits bounded SGR, UTF-8, or legacy X10 events. The protocol encoder is
+independent from the UI interaction policy: SGR 1006 release preserves the
+pressed button, reads modifiers from the release event, and terminates with
+lowercase `m`, while legacy X10/UTF-8 release uses button code 3. Settings expose
+two policies. Standard xterm mode forwards reporting gestures normally and uses
+`Shift` as the local-selection bypass; `Alt`/`Option` remains only the xterm
+modifier bit. The default **Local selection priority** mode keeps direct left
+dragging local and requires `Alt`/`Option` to start a remote button gesture.
+Wheel events still follow active reporting in either mode, while `Shift` + wheel
+uses local scrollback. `TerminalPane` chooses the gesture owner at button down;
+Slint pointer capture preserves that owner through motion and release outside the
+grid, and cancellation emits the matching release at the last bounded cell before
+clearing the owner. Cancellation uses the modifiers from the last pointer event.
+Motion is coalesced to the newest cell once per display frame. The bridge
+validates the pane UUID before sending bytes to its worker and treats a full
+motion queue as normal lossy backpressure; press, release, closed-worker, and
+routing failures remain observable. Tokio command queues retain one slot for
+those reliable events. When reporting is off, direct local selection and
+scrolling remain in control. Moving focus to another pane, a divider, or another window control clears
+that local selection; the terminal context-menu Copy action retains it until the
+action completes. While reporting is active, the context menu is opened explicitly
+only for the local owner: `Shift` + right-click in standard mode, or ordinary
+right-click in Local selection priority mode; `Alt`/`Option` + right-click remains
+remote in the latter mode.
+Alternate-screen alternate-scroll enables only the wheel capability while the
+terminal is on its alternate screen; it never enables button reporting.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
 revision. Every pane observes that signal, but only the focused pane invokes its
 existing local copy, paste, or select-all operation; selection coordinates and
@@ -1102,7 +1116,10 @@ text brightness, bold-color, optional semantic highlighting and its color overri
     `AppSettingsInput`, grouped into appearance, terminal, workspace, and shortcut
     ownership domains. These inputs contain no Slint values and normalize into the
     same persisted `AppSettings`; they do not leak Slint values into the JSON
-    schema. Schema version 22 adds `terminal_text_brightness_percent`, stored from
+    schema. Schema version 23 adds the default-enabled
+    `terminal_mouse_local_selection_priority` policy; disabling it selects standard
+    xterm mouse routing, and older files preserve the prior local-selection-first
+    behavior. Schema version 22 adds `terminal_text_brightness_percent`, stored from
     60 through 120 with a default of 100, and the default-disabled
     `terminal_semantic_highlighting` switch. Versions through 21 discard the old
     minimum-contrast field and migrate to 100 because there is no safe numeric

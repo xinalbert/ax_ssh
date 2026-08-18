@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::config::TelnetConfig;
 use crate::terminal_dimensions::TerminalSize;
+use crate::terminal_input::try_queue_tokio_motion;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
@@ -175,6 +176,21 @@ impl TelnetSessionHandle {
         self.command_tx
             .try_send(TelnetCommand::Send(data))
             .map_err(|error| anyhow::anyhow!("cannot queue Telnet input: {error}"))
+    }
+
+    /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
+    pub fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
+        if data.is_empty() {
+            return Ok(true);
+        }
+        if data.len() > MAX_INPUT_BYTES {
+            anyhow::bail!("terminal input cannot exceed {MAX_INPUT_BYTES} bytes");
+        }
+        try_queue_tokio_motion(
+            &self.command_tx,
+            TelnetCommand::Send(data),
+            "cannot queue Telnet mouse motion after worker stopped",
+        )
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {

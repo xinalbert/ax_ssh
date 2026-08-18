@@ -333,6 +333,15 @@ impl TerminalWorker {
         }
     }
 
+    pub(in crate::app) fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
+        match self {
+            Self::Ssh(worker) => worker.request_send_motion(data),
+            Self::Telnet(worker) => worker.request_send_motion(data),
+            Self::Serial(worker) => worker.request_send_motion(data),
+            Self::Local(worker) => worker.request_send_motion(data),
+        }
+    }
+
     pub(in crate::app) fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_resize(columns, rows),

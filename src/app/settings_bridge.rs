@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 39] = [
     (
         "General",
         "Language",
@@ -75,6 +75,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 38] = [
         "Terminal",
         "Copy selection on select",
         "Copy completed terminal selections immediately",
+    ),
+    (
+        "Terminal",
+        "Local selection priority",
+        "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
     ),
     (
         "Terminal",
@@ -240,7 +245,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 39] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -338,6 +343,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 38] = [
         "Copy completed terminal selections immediately",
         "选中后复制",
         "完成终端选择后立即复制",
+    ),
+    (
+        "Local selection priority",
+        "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
+        "本地选区优先",
+        "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择",
     ),
     (
         "Option acts as Meta",
@@ -564,6 +575,7 @@ pub(super) fn wire_settings(
               theme_dark_terminal_selection,
               right_click_copy_or_paste,
               copy_selection_on_select,
+              terminal_mouse_local_selection_priority,
               option_as_meta,
               x11_server_provider,
               x11_server_app_path,
@@ -655,6 +667,7 @@ pub(super) fn wire_settings(
                     bright_bold_text,
                     right_click_copy_or_paste,
                     copy_selection_on_select,
+                    terminal_mouse_local_selection_priority,
                 },
                 terminal: TerminalSettingsInput {
                     scrollback_lines,

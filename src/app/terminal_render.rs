@@ -95,7 +95,8 @@ pub(super) struct RenderedTerminal {
     pub(super) foreground: RgbColor,
     pub(super) background: RgbColor,
     pub(super) selection_background: RgbColor,
-    pub(super) mouse_reporting_active: bool,
+    pub(super) mouse_button_reporting_active: bool,
+    pub(super) mouse_wheel_reporting_active: bool,
 }
 
 pub(super) struct RenderedTerminalLine {
@@ -138,7 +139,8 @@ pub(super) fn render_terminal(
         foreground: palette.foreground,
         background: palette.background,
         selection_background: palette.selection_background,
-        mouse_reporting_active: snapshot.mouse_reporting_active,
+        mouse_button_reporting_active: snapshot.mouse_button_reporting_active,
+        mouse_wheel_reporting_active: snapshot.mouse_wheel_reporting_active,
     }
 }
 
@@ -664,7 +666,8 @@ mod tests {
             cursor_visible: true,
             cursor_text: " ".into(),
             mouse_reporting: Default::default(),
-            mouse_reporting_active: false,
+            mouse_button_reporting_active: false,
+            mouse_wheel_reporting_active: false,
         }
     }
 
@@ -699,7 +702,8 @@ mod tests {
             cursor_visible: false,
             cursor_text: String::new(),
             mouse_reporting: Default::default(),
-            mouse_reporting_active: false,
+            mouse_button_reporting_active: false,
+            mouse_wheel_reporting_active: false,
         }
     }
 

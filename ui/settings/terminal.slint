@@ -22,6 +22,7 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <int> draft-scrollback-lines;
     in-out property <bool> draft-right-click-copy-or-paste;
     in-out property <bool> draft-copy-selection-on-select;
+    in-out property <bool> draft-terminal-mouse-local-selection-priority;
     in property <bool> apple-platform: false;
     in-out property <bool> draft-option-as-meta;
 
@@ -237,6 +238,11 @@ export component TerminalSettingsPage inherits Rectangle {
                 }
 
                 SettingsSectionHeading { label: @tr("MOUSE"); }
+                SettingsToggleRow {
+                    label: @tr("Local selection priority");
+                    description: @tr("On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection");
+                    checked <=> root.draft-terminal-mouse-local-selection-priority;
+                }
                 SettingsToggleRow {
                     label: @tr("Right-click copy or paste");
                     description: @tr("Copy a selection; otherwise paste");

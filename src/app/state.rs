@@ -307,7 +307,8 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
     pub(super) worker_running: bool,
-    pub(super) mouse_reporting: bool,
+    pub(super) mouse_button_reporting: bool,
+    pub(super) mouse_wheel_reporting: bool,
     pub(super) sftp: SftpBrowserSnapshot,
     pub(super) security_prompt: ActiveSecurityPrompt,
 }
@@ -324,7 +325,8 @@ impl Default for ActiveTabSnapshot {
             terminal: None,
             connected: false,
             worker_running: false,
-            mouse_reporting: false,
+            mouse_button_reporting: false,
+            mouse_wheel_reporting: false,
             sftp: SftpBrowserSnapshot::default(),
             security_prompt: ActiveSecurityPrompt::None,
         }

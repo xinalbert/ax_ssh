@@ -281,7 +281,7 @@ pub(super) fn wire_terminal(
                     }
                     let terminal = app.terminal_mut(tab_id).context("terminal tab not found")?;
                     if !terminal.connected {
-                        return Ok(());
+                        return Ok(true);
                     }
                     let model = terminal
                         .terminal
@@ -298,20 +298,30 @@ pub(super) fn wire_terminal(
                             control,
                         },
                     }) else {
-                        return Ok(());
+                        return Ok(true);
                     };
-                    terminal
+                    let worker = terminal
                         .worker
                         .as_ref()
-                        .context("active terminal has no worker")?
-                        .request_send(data)
+                        .context("active terminal has no worker")?;
+                    if kind == TerminalMouseEventKind::Motion {
+                        worker.request_send_motion(data)
+                    } else {
+                        worker.request_send(data).map(|()| true)
+                    }
                 });
-            if let Err(error) = result {
-                debug!(%error, "terminal mouse event failed");
-                set_status(
-                    &ui_for_mouse,
-                    &format!("Cannot send terminal mouse event: {error}"),
-                );
+            match result {
+                Ok(true) => {}
+                Ok(false) => {
+                    debug!(%tab_id, "terminal mouse motion dropped under worker backpressure");
+                }
+                Err(error) => {
+                    debug!(%error, "terminal mouse event failed");
+                    set_status(
+                        &ui_for_mouse,
+                        &format!("Cannot send terminal mouse event: {error}"),
+                    );
+                }
             }
         },
     );

@@ -248,6 +248,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
+            terminal_mouse_local_selection_priority: true,
         }),
         AppearanceSettings {
             application_font_family: "JetBrains Mono".into(),
@@ -273,6 +274,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
+            terminal_mouse_local_selection_priority: true,
         }
     );
     assert_eq!(
@@ -294,6 +296,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
+            terminal_mouse_local_selection_priority: false,
         }),
         AppearanceSettings {
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
@@ -308,6 +311,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
+            terminal_mouse_local_selection_priority: false,
         }
     );
 }
@@ -753,13 +757,29 @@ fn copy_selection_on_select_defaults_disabled_and_round_trips() {
     assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
     assert!(legacy.settings.appearance.right_click_copy_or_paste);
     assert!(!legacy.settings.appearance.copy_selection_on_select);
+    assert!(
+        legacy
+            .settings
+            .appearance
+            .terminal_mouse_local_selection_priority
+    );
 
     let mut current = SessionStore::default();
     current.settings.appearance.copy_selection_on_select = true;
+    current
+        .settings
+        .appearance
+        .terminal_mouse_local_selection_priority = false;
     let encoded = serde_json::to_string(&current).expect("settings should serialize");
     let decoded: SessionStore =
         serde_json::from_str(&encoded).expect("settings should deserialize");
     assert!(decoded.settings.appearance.copy_selection_on_select);
+    assert!(
+        !decoded
+            .settings
+            .appearance
+            .terminal_mouse_local_selection_priority
+    );
 }
 
 #[test]
@@ -784,6 +804,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             bright_bold_text: false,
             right_click_copy_or_paste: true,
             copy_selection_on_select: true,
+            terminal_mouse_local_selection_priority: true,
         },
         terminal: TerminalSettingsInput {
             scrollback_lines: -1,

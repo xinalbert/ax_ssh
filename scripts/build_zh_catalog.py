@@ -79,6 +79,8 @@ TRANSLATIONS = {
     "Copy current path": "复制当前路径",
     "Copy diagnostics": "复制诊断信息",
     "Copy selection on select": "选中后复制",
+    "Local selection priority": "本地选区优先",
+    "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection": "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择",
     "Copy version and build information without connection data": "复制不含连接数据的版本和构建信息",
     "Credential storage": "凭据存储",
     "Credential vault password": "凭据保险库密码",

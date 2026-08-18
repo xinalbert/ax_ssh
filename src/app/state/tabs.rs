@@ -532,10 +532,14 @@ impl AppState {
                     terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
                     connected: terminal.connected,
                     worker_running: terminal.worker_running,
-                    mouse_reporting: terminal
+                    mouse_button_reporting: terminal
                         .terminal
                         .as_ref()
-                        .is_some_and(TerminalModel::mouse_reporting_active),
+                        .is_some_and(TerminalModel::mouse_button_reporting_active),
+                    mouse_wheel_reporting: terminal
+                        .terminal
+                        .as_ref()
+                        .is_some_and(TerminalModel::mouse_wheel_reporting_active),
                     sftp,
                     security_prompt: self.security_prompt_for(Some(active_id)),
                 }

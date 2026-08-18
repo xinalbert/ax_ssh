@@ -176,3 +176,13 @@
 - 关键结论：`workflow_dispatch` 应接收显式 tag input，`workflow_call` 可复用同一验证/CI 等待链路，concurrency group 应按 tag 串行化。创建新 tag 与重试已有 tag 必须分离；重试路径不应拥有 tag 写权限。第二次同日发行采用 `YYYY-MM-DD-1`，而不是覆盖首个 tag。
 - 对实施计划的影响：Create workflow 保留新 tag 创建职责并调用可复用 retry flow；Retry Existing Release 只验证/dispatch 既有 tag。版本工具接受可选正整数 revision，将第二个 tag 映射为区分的 Cargo、Debian 与 macOS build 版本；Highlights 同时识别修订日期 tag。
 - 未解决问题：GitHub-hosted tag CI、平台构建和 Release 附件仍需远端执行；已发布的 tag 不得移动，后续修复应创建下一个修订 tag。
+
+## 2026-08-18 xterm 鼠标能力与事件修饰键时态
+
+- 时间：2026-08-18 16:05 +0800
+- 检索问题：xterm 的 1007 alternate-scroll 是否应激活按钮 reporting；SGR/传统 release 和 motion 的 modifier bits 应取按下时还是各事件发生时的状态；主流终端如何区分所需 mouse event 类型。
+- 检索原因：当前 AxSSH 将备用屏 1007 合并进单一 `mouse_reporting_active`，并在 release/cancel 复用按下时修饰键，可能造成按钮 owner 误判和事件语义偏差。
+- 来源列表：xterm control sequences <https://invisible-island.net/xterm/ctlseqs/ctlseqs.txt>；xterm `button.c` <https://github.com/ThomasDickey/xterm-snapshots/blob/master/button.c>；xterm.js `MouseStateService.ts` 与浏览器 `MouseService.ts` <https://github.com/xtermjs/xterm.js/tree/master/src/common/services>、<https://github.com/xtermjs/xterm.js/blob/master/src/browser/services/MouseService.ts>。
+- 关键结论：DECSET 1007 只在备用屏将滚轮转换为 cursor up/down，不启用 button press/release/drag；1000/1002/1003 分别决定 button、drag 和 all-motion。xterm 的 `BtnCode` 直接读取当前 X event `state`，xterm.js 也从当前 `mouseup`/`mousemove` 读取 Shift/Alt/Ctrl。xterm.js 按协议暴露 DOWN/UP/WHEEL/DRAG/MOVE 独立事件位，而不是一个总布尔值。
+- 对实施计划的影响：Rust snapshot 拆分 button 与 wheel reporting；Slint 按 button capability 决定 owner/右键菜单、按 wheel capability 决定滚轮；release 使用 pointer-up modifier，cancel 使用最后 pointer motion modifier。高频 motion 采用最新值合并并允许背压丢弃，press/release 保持可观察。
+- 未解决问题：Slint 在三平台窗口失活时提供的 cancel modifier 完整性需要用户实机确认；xterm.js 的 DOM 监听实现只作事件能力参考，不复制其源码或引入依赖。

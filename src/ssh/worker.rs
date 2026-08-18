@@ -24,6 +24,7 @@ use crate::sftp::{
     SftpWriteOperation, validate_remote_path,
 };
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
+use crate::terminal_input::try_queue_tokio_motion;
 
 use super::x11::{X11Dispatcher, X11Forwarding};
 use super::{SshConnection, SshError};
@@ -294,6 +295,35 @@ impl SshSessionHandle {
                 Err(anyhow::anyhow!("cannot queue terminal input: {error}"))
             }
         }
+    }
+
+    /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
+    pub fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
+        if data.is_empty() {
+            return Ok(true);
+        }
+        if data.len() > MAX_INPUT_BYTES {
+            anyhow::bail!("terminal input cannot exceed {MAX_INPUT_BYTES} bytes");
+        }
+        let input_sequence = self.next_input_sequence.fetch_add(1, Ordering::Relaxed);
+        let queued = try_queue_tokio_motion(
+            &self.command_tx,
+            SshCommand::Send {
+                input_sequence,
+                queued_at: Instant::now(),
+                data,
+            },
+            "cannot queue SSH mouse motion after worker stopped",
+        )?;
+        tracing::debug!(
+            target: LATENCY_TARGET,
+            event = "ssh-input",
+            stage = if queued { "worker-queued" } else { "worker-queue-dropped" },
+            session_id = %self.session_id,
+            input_sequence,
+            "SSH terminal mouse motion queue result"
+        );
+        Ok(queued)
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {

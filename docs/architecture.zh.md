@@ -102,13 +102,22 @@ Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属�
 Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不显示该 notice，既有的阻塞式安全覆盖层仍是唯一权威。
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
-鼠标输入遵循同一所有权边界。`TerminalModel` 只暴露当前私有 mouse mode，并生成有界的 SGR、UTF-8
-或传统 X10 事件。`TerminalPane` 对 button 手势采用接近 xterm.js `mouseEventsRequireAlt` 的策略：
-左键拖动默认使用本地文字选区；reporting 开启且按住 `Alt`（macOS 为 `Option`）时，点击、释放、拖动和
-cell motion 坐标才通过带 pane UUID 的 callback 转发，bridge 重验 pane 后才把字节发送给对应 worker。
-滚轮在 reporting 开启时继续交给全屏 TUI，`Shift` + 滚轮使用本地 scrollback。关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
+鼠标输入遵循同一所有权边界。`TerminalModel` 从当前私有 mouse mode 分别暴露 button 与 wheel 能力，
+并生成有界的 SGR、UTF-8 或传统 X10 事件。协议编码与 UI 交互策略分离：SGR 1006 的 release 保留按下时的
+按钮、读取 release 事件发生时的修饰键，并以小写 `m` 结束；传统 X10/UTF-8 release 才使用按钮码 3。
+Settings 提供两种策略：标准 xterm 模式按 reporting
+原样转发 button 手势，`Shift` 作为本地选区绕过键，`Alt`/`Option` 只作为 xterm modifier bit；默认开启的
+**Local selection priority** 模式让普通左键拖动保持本地选区，按住 `Alt`/`Option` 才开始远端 button 手势。
+两种模式下滚轮都继续遵循 reporting，`Shift` + 滚轮使用本地 scrollback。`TerminalPane` 在 button down
+时确定唯一 owner；Slint pointer capture 使指针离开 grid 后的 motion/release 仍沿用该 owner，cancel 时则在
+最后一个有界 cell 使用最近一次 pointer 事件的修饰键发送匹配 release，再清理 owner。motion 每个显示帧只
+保留最新 cell；bridge 重验 pane UUID 后才把字节发送给对应 worker，motion 队列满属于可丢弃的正常背压，
+press、release、worker 关闭和路由失败仍保持可观察。Tokio command queue 会为这些可靠事件保留一个槽位。
+关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
 焦点移到另一 pane、分隔条或其他窗口控件时会清除该局部选区；终端上下文菜单的 Copy 会将选区保留至动作完成。
-备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
+reporting 开启时只为本地 owner 显式打开该菜单：标准模式使用 `Shift` + 右键，本地选区优先模式使用普通右键；
+后者的 `Alt`/`Option` + 右键仍属于远端。
+alternate-scroll 只在终端确实处于备用屏时启用 wheel 能力，绝不会启用 button reporting。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
 应用状态。
@@ -701,7 +710,9 @@ GitHub 自动生成的 notes 继续保留完整提交列表。
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
     非秘密的 X11 provider/path/启动/兼容设置、SSH 认证方式（可选择 agent，但不包含 agent 端点或
-    identity），以及记住密码的默认后端和界面语言策略。schema 版本 22 新增
+    identity），以及记住密码的默认后端和界面语言策略。schema 版本 23 新增默认开启的
+    `terminal_mouse_local_selection_priority`；关闭后使用标准 xterm 鼠标路由，旧文件保持此前的本地选区优先行为。
+    schema 版本 22 新增
     `terminal_text_brightness_percent`，保存范围为 60-120、默认 100，并新增默认关闭的
     `terminal_semantic_highlighting`。版本 21 及更早文件会丢弃旧最小对比度字段并迁移为 100，
     因为二者不存在安全数值映射；已保存的语义覆盖色会保留，但启用前不生效。schema 版本 21 新增跟随系统的界面语言策略；缺失或无效值默认跟随系统。schema 版本 20 增加五项可选 Terminal 语义色覆盖；空值或无效值跟随活动 ANSI 色表，非空值规范化为不透明 `#RRGGBB`。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值

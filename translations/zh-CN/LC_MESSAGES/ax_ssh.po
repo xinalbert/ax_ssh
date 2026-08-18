@@ -544,6 +544,9 @@ msgstr "本地默认目录"
 msgid "Local files"
 msgstr "本地文件"
 
+msgid "Local selection priority"
+msgstr "本地选区优先"
+
 msgid "Local shell"
 msgstr "本地 Shell"
 
@@ -624,6 +627,9 @@ msgstr "没有成功的传输"
 
 msgid "No transfers in progress"
 msgstr "没有正在传输的文件"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择"
 
 msgid "Open"
 msgstr "打开"

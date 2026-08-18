@@ -346,16 +346,25 @@ the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
-UTF-8, or legacy encoding. While reporting is active, left-dragging still
-selects local text by default; hold `Alt` (`Option` on macOS) to send clicks,
-drags, and cell motion to the TUI. Wheel events still go to the TUI while
-reporting is active; hold `Shift` while using the wheel to scroll local
-history. Outside reporting mode, direct left-drag selection and wheel scrolling
-remain local. A pointer gesture keeps
-the owner chosen at button press until release, so one drag is never handled by
-both AxSSH and the remote program. Moving focus to another pane, a divider, or
-another window control clears a terminal selection; the terminal context menu
-keeps it long enough to use **Copy**.
+UTF-8, or legacy encoding. **Local selection priority** is enabled by default:
+left-dragging selects local text, while `Alt` (`Option` on macOS) sends a button
+gesture to the TUI. Disable it in **Settings > Terminal** for standard xterm
+behavior: reporting receives ordinary clicks, releases, drags, and motion;
+`Shift` bypasses reporting for local selection, and `Alt`/`Option` is only a
+reported modifier. Wheel events go to the TUI while reporting is active in both
+modes; `Shift` + wheel scrolls local history. Outside reporting mode, direct
+left-drag selection and wheel scrolling remain local. A pointer gesture keeps
+the owner chosen at button press through release or cancellation, including
+motion outside the grid, so one drag is never handled by both AxSSH and the
+remote program. Release reports the current modifier state; cancellation uses
+the last observed pointer state. High-frequency motion keeps only the newest
+cell per display frame, while the final motion is flushed before release.
+Mode 1007 enables only alternate-screen wheel translation and never takes
+ownership of button gestures. Moving focus to another pane, a divider, or another window
+control clears a terminal selection; the terminal context menu keeps it long
+enough to use **Copy**. While reporting is active, standard mode uses
+`Shift` + right-click for that local menu; Local selection priority uses an
+ordinary right-click, while `Alt`/`Option` + right-click remains remote.
 Home and End follow application-cursor mode in full-screen programs. Plain
 `Ctrl+C` is sent to the active terminal as an interrupt. With a Terminal Tab
 active, **Edit > Copy**, **Paste**, and **Select All** affect only the focused
@@ -385,7 +394,9 @@ and familiar success, informational, warning, and error words. It is disabled
 by default. When enabled, the colors follow the selected terminal palette unless
 Settings overrides a category; explicit ANSI or true-color foregrounds are never
 replaced by semantic highlighting.
-In **Settings > Terminal**, **Copy selection on select** is disabled by default.
+In **Settings > Terminal**, **Local selection priority** chooses between the
+default selection-first interaction and standard xterm mouse routing.
+**Copy selection on select** is disabled by default.
 When enabled, completed pointer selections and **Select All** copy immediately,
 and a direct right-click always pastes.
 The default **New Server** shortcut is `Cmd+N` on macOS and `Ctrl+N` elsewhere.
@@ -496,8 +507,7 @@ when such a connection is no longer live.
 ## Current limitations
 
 In-app known-hosts administration beyond the shared parser, SFTP upload,
-explicit Save As, mutation/edit sync, reconnect, persisted
-workspace restoration, and complete full-screen terminal mouse reporting remain
-planned work. Serial availability, device permissions, and supported parameter
+explicit Save As, mutation/edit sync, reconnect, and persisted workspace
+restoration remain planned work. Serial availability, device permissions, and supported parameter
 combinations depend on the target operating system and hardware; Telnet has no
 encryption or automated login.

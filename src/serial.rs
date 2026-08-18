@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::config::{
     SerialConfig, SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits,
 };
+use crate::terminal_input::try_queue_tokio_motion;
 
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 const COMMAND_CAPACITY: usize = 32;
@@ -161,6 +162,21 @@ impl SerialSessionHandle {
         self.command_tx
             .try_send(SerialCommand::Send(data))
             .map_err(|error| anyhow::anyhow!("cannot queue serial input: {error}"))
+    }
+
+    /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
+    pub fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
+        if data.is_empty() {
+            return Ok(true);
+        }
+        if data.len() > MAX_INPUT_BYTES {
+            anyhow::bail!("terminal input cannot exceed {MAX_INPUT_BYTES} bytes");
+        }
+        try_queue_tokio_motion(
+            &self.command_tx,
+            SerialCommand::Send(data),
+            "cannot queue serial mouse motion after worker stopped",
+        )
     }
 
     pub async fn shutdown(mut self) -> Result<()> {

@@ -214,11 +214,16 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
-SGR、UTF-8 或传统格式发送。reporting 开启时，左键拖动默认仍使用本地文字选择；按住 `Alt`（macOS 为
-`Option`）时，点击、拖动和 cell motion 交给 TUI。滚轮在 reporting 开启时继续交给 TUI，按住 `Shift`
-滚轮则滚动本地历史。reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
-一次指针手势从按下到释放始终沿用按下时确定的 owner，不会同时进入 AxSSH 与远端程序两条链路。焦点移到另一 pane、
-分隔条或其他窗口控件时会清除终端选区；终端上下文菜单会保留选区至 **Copy** 动作完成。
+SGR、UTF-8 或传统格式发送。默认开启 **Local selection priority**：普通左键拖动使用本地文字选择，按住
+`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI。在 **Settings > Terminal** 关闭该选项后进入标准
+xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`Shift` 绕过 reporting 进入本地选区，
+`Alt`/`Option` 只作为上报的 modifier bit。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
+滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
+一次指针手势从按下到释放或 cancel 始终沿用按下时确定的 owner，指针移出 grid 后也不会切换链路。release
+上报当时的修饰键状态，cancel 使用最近一次 pointer 状态；高频 motion 每个显示帧只保留最新 cell，并在 release
+前刷新最后一帧。1007 只启用备用屏滚轮转换，绝不会接管 button 手势。焦点移到另一 pane、
+分隔条或其他窗口控件时会清除终端选区；终端上下文菜单会保留选区至 **Copy** 动作完成。reporting 开启时，
+标准模式使用 `Shift` + 右键打开本地菜单；本地选区优先模式使用普通右键，`Alt`/`Option` + 右键仍转发远端。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、
 **Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
 `Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`，并可在
@@ -237,7 +242,8 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 可选语义高亮可为 URL 和路径、HTTP 响应类别，以及常见成功、信息、警告和错误状态词使用
 不同颜色；该功能默认关闭。开启后，颜色默认跟随所选 Terminal 色表，Settings 可分别覆盖每一类；
 已经指定 ANSI 或真彩色前景的输出不会被语义高亮替换。
-**Settings > Terminal** 的 **Copy selection on select** 默认关闭。开启后，完成鼠标选区和
+**Settings > Terminal** 的 **Local selection priority** 用于选择默认的本地选区优先交互或标准 xterm
+鼠标路由。**Copy selection on select** 默认关闭。开启后，完成鼠标选区和
 **Select All** 会立即复制，直接右击始终粘贴。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。
 File 菜单导入默认使用 `Cmd/Ctrl+Shift+I`，导出所选 Group 或服务器默认使用

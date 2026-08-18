@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
+use crate::terminal_input::try_queue_sync_motion;
 
 pub const SYSTEM_SHELL: &str = "System default";
 
@@ -141,6 +142,21 @@ impl LocalShellHandle {
         self.command_tx
             .try_send(LocalShellCommand::Send(data))
             .map_err(|error| anyhow::anyhow!("cannot queue local terminal input: {error}"))
+    }
+
+    /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
+    pub fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
+        if data.is_empty() {
+            return Ok(true);
+        }
+        if data.len() > MAX_INPUT_BYTES {
+            anyhow::bail!("terminal input cannot exceed {MAX_INPUT_BYTES} bytes");
+        }
+        try_queue_sync_motion(
+            &self.command_tx,
+            LocalShellCommand::Send(data),
+            "cannot queue local mouse motion after PTY worker stopped",
+        )
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {

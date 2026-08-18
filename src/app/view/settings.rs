@@ -64,6 +64,9 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     );
     ui.set_right_click_copy_or_paste(settings.appearance.right_click_copy_or_paste);
     ui.set_copy_selection_on_select(settings.appearance.copy_selection_on_select);
+    ui.set_terminal_mouse_local_selection_priority(
+        settings.appearance.terminal_mouse_local_selection_priority,
+    );
     ui.set_option_as_meta(settings.terminal.option_as_meta);
     ui.set_x11_server_provider(
         ax_ssh::x_server::provider_for_current_platform(settings.x11.provider)
@@ -294,7 +297,8 @@ pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
         cursor_visible: false,
         cursor_text: " ".to_owned(),
         mouse_reporting: Default::default(),
-        mouse_reporting_active: false,
+        mouse_button_reporting_active: false,
+        mouse_wheel_reporting_active: false,
     }
 }
 

@@ -66,6 +66,7 @@ export struct SettingsViewState {
     theme_dark_terminal_selection: string,
     right_click_copy_or_paste: bool,
     copy_selection_on_select: bool,
+    terminal_mouse_local_selection_priority: bool,
     option_as_meta: bool,
     x11_server_provider_options: [string],
     x11_server_installations: [string],
@@ -164,6 +165,8 @@ export component SettingsPane inherits Rectangle {
     private property <string> theme-dark-terminal-selection: root.source.theme_dark_terminal_selection;
     private property <bool> right-click-copy-or-paste: root.source.right_click_copy_or_paste;
     private property <bool> copy-selection-on-select: root.source.copy_selection_on_select;
+    private property <bool> terminal-mouse-local-selection-priority:
+        root.source.terminal_mouse_local_selection_priority;
     private property <bool> option-as-meta: root.source.option_as_meta;
     private property <[string]> x11-server-provider-options: root.source.x11_server_provider_options;
     private property <[string]> x11-server-installations: root.source.x11_server_installations;
@@ -205,7 +208,7 @@ export component SettingsPane inherits Rectangle {
         string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, string, bool,
     );
     callback save-ui-language(int);
@@ -268,6 +271,8 @@ export component SettingsPane inherits Rectangle {
         root.right-click-copy-or-paste;
     private property <bool> draft-copy-selection-on-select:
         root.copy-selection-on-select;
+    private property <bool> draft-terminal-mouse-local-selection-priority:
+        root.terminal-mouse-local-selection-priority;
     private property <bool> draft-option-as-meta: root.option-as-meta;
     private property <string> draft-x11-server-provider: root.x11-server-provider;
     private property <int> draft-x11-server-provider-index: root.x11-server-provider-index;
@@ -372,6 +377,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-theme-dark-terminal-selection,
             root.draft-right-click-copy-or-paste,
             root.draft-copy-selection-on-select,
+            root.draft-terminal-mouse-local-selection-priority,
             root.draft-option-as-meta,
             root.draft-x11-server-provider,
             root.draft-x11-server-app-path,
@@ -444,6 +450,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-theme-dark-terminal-selection,
             root.draft-right-click-copy-or-paste,
             root.draft-copy-selection-on-select,
+            root.draft-terminal-mouse-local-selection-priority,
             root.draft-option-as-meta,
             root.draft-x11-server-provider,
             root.draft-x11-server-app-path,
@@ -513,6 +520,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-theme-dark-terminal-selection => { root.schedule-preview(); }
     changed draft-right-click-copy-or-paste => { root.schedule-preview(); }
     changed draft-copy-selection-on-select => { root.schedule-preview(); }
+    changed draft-terminal-mouse-local-selection-priority => { root.schedule-preview(); }
     changed draft-option-as-meta => { root.schedule-preview(); }
     changed draft-x11-server-provider => { root.schedule-preview(); }
     changed draft-x11-server-app-path => { root.schedule-preview(); }
@@ -770,6 +778,7 @@ export component SettingsPane inherits Rectangle {
                         draft-scrollback-lines <=> root.draft-scrollback-lines;
                         draft-right-click-copy-or-paste <=> root.draft-right-click-copy-or-paste;
                         draft-copy-selection-on-select <=> root.draft-copy-selection-on-select;
+                        draft-terminal-mouse-local-selection-priority <=> root.draft-terminal-mouse-local-selection-priority;
                         apple-platform: root.apple-platform;
                         draft-option-as-meta <=> root.draft-option-as-meta;
                     }

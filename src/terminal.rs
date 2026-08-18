@@ -85,7 +85,8 @@ pub struct TerminalSnapshot {
     pub cursor_visible: bool,
     pub cursor_text: String,
     pub mouse_reporting: TerminalMouseReporting,
-    pub mouse_reporting_active: bool,
+    pub mouse_button_reporting_active: bool,
+    pub mouse_wheel_reporting_active: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -197,7 +198,11 @@ impl TerminalModel {
         }
     }
 
-    pub fn mouse_reporting_active(&self) -> bool {
+    pub fn mouse_button_reporting_active(&self) -> bool {
+        self.mouse_reporting().enabled()
+    }
+
+    pub fn mouse_wheel_reporting_active(&self) -> bool {
         let reporting = self.mouse_reporting();
         reporting.enabled()
             || (reporting.alternate_scroll && self.term.mode().contains(TermMode::ALT_SCREEN))
@@ -219,7 +224,9 @@ impl TerminalModel {
                     && (is_wheel || reporting.click || reporting.drag || reporting.motion)
             }
             TerminalMouseEventKind::Release => {
-                !is_wheel && (reporting.click || reporting.drag || reporting.motion)
+                !is_wheel
+                    && !matches!(event.button, TerminalMouseButton::None)
+                    && (reporting.click || reporting.drag || reporting.motion)
             }
             TerminalMouseEventKind::Motion => {
                 (reporting.motion
@@ -263,7 +270,7 @@ impl TerminalModel {
             TerminalMouseButton::WheelUp => 64,
             TerminalMouseButton::WheelDown => 65,
         };
-        if matches!(event.kind, TerminalMouseEventKind::Release) {
+        if matches!(event.kind, TerminalMouseEventKind::Release) && !reporting.sgr {
             code = 3;
         } else if matches!(event.kind, TerminalMouseEventKind::Motion) {
             code |= 32;
@@ -347,7 +354,8 @@ impl TerminalModel {
             cursor_visible,
             cursor_text,
             mouse_reporting: self.mouse_reporting(),
-            mouse_reporting_active: self.mouse_reporting_active(),
+            mouse_button_reporting_active: self.mouse_button_reporting_active(),
+            mouse_wheel_reporting_active: self.mouse_wheel_reporting_active(),
         }
     }
 
@@ -1064,9 +1072,13 @@ mod tests {
                 button: TerminalMouseButton::Left,
                 column: 2,
                 row: 3,
-                modifiers: TerminalMouseModifiers::default(),
+                modifiers: TerminalMouseModifiers {
+                    shift: true,
+                    alt: true,
+                    control: true,
+                },
             }),
-            Some(b"\x1b[<3;3;4m".to_vec())
+            Some(b"\x1b[<28;3;4m".to_vec())
         );
         assert_eq!(
             terminal.encode_mouse_event(TerminalMouseEvent {
@@ -1096,6 +1108,115 @@ mod tests {
         assert_eq!(
             terminal.encode_mouse_event(event),
             Some(vec![27, 91, 77, 34, 197, 140, 194, 132])
+        );
+
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Release,
+                button: TerminalMouseButton::Right,
+                column: 2,
+                row: 3,
+                modifiers: TerminalMouseModifiers {
+                    shift: true,
+                    alt: true,
+                    control: true,
+                },
+            }),
+            Some(vec![27, 91, 77, 63, 35, 36])
+        );
+    }
+
+    #[test]
+    fn mouse_reporting_modes_gate_press_drag_and_motion_independently() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        let press = TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Press,
+            button: TerminalMouseButton::Left,
+            column: 1,
+            row: 1,
+            modifiers: TerminalMouseModifiers::default(),
+        };
+        let release = TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Release,
+            ..press
+        };
+        let motion = TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Motion,
+            ..press
+        };
+        let cell_motion = TerminalMouseEvent {
+            button: TerminalMouseButton::None,
+            ..motion
+        };
+        let invalid_release = TerminalMouseEvent {
+            button: TerminalMouseButton::None,
+            ..release
+        };
+
+        terminal.process(b"\x1b[?1000h");
+        assert!(terminal.encode_mouse_event(press).is_some());
+        assert!(terminal.encode_mouse_event(release).is_some());
+        assert!(terminal.encode_mouse_event(invalid_release).is_none());
+        assert!(terminal.encode_mouse_event(motion).is_none());
+        assert!(terminal.encode_mouse_event(cell_motion).is_none());
+
+        terminal.process(b"\x1b[?1000l\x1b[?1002h");
+        assert!(terminal.encode_mouse_event(press).is_some());
+        assert!(terminal.encode_mouse_event(release).is_some());
+        assert!(terminal.encode_mouse_event(motion).is_some());
+        assert!(terminal.encode_mouse_event(cell_motion).is_none());
+
+        terminal.process(b"\x1b[?1002l\x1b[?1003h");
+        assert!(terminal.encode_mouse_event(press).is_some());
+        assert!(terminal.encode_mouse_event(release).is_some());
+        assert!(terminal.encode_mouse_event(motion).is_some());
+        assert!(terminal.encode_mouse_event(cell_motion).is_some());
+    }
+
+    #[test]
+    fn button_and_wheel_reporting_capabilities_are_independent() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+
+        terminal.process(b"\x1b[?1007h");
+        assert!(!terminal.mouse_button_reporting_active());
+        assert!(!terminal.mouse_wheel_reporting_active());
+
+        terminal.process(b"\x1b[?1049h");
+        assert!(!terminal.mouse_button_reporting_active());
+        assert!(terminal.mouse_wheel_reporting_active());
+
+        terminal.process(b"\x1b[?1000h");
+        assert!(terminal.mouse_button_reporting_active());
+        assert!(terminal.mouse_wheel_reporting_active());
+
+        terminal.process(b"\x1b[?1000l\x1b[?1002h");
+        assert!(terminal.mouse_button_reporting_active());
+        assert!(terminal.mouse_wheel_reporting_active());
+
+        terminal.process(b"\x1b[?1002l\x1b[?1003h");
+        assert!(terminal.mouse_button_reporting_active());
+        assert!(terminal.mouse_wheel_reporting_active());
+    }
+
+    #[test]
+    fn mouse_coordinates_follow_wide_character_cell_columns() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        terminal.process("中A".as_bytes());
+        terminal.process(b"\x1b[?1000h\x1b[?1006h");
+
+        let snapshot = terminal.snapshot();
+        assert_eq!(snapshot.lines[0].runs[0].column, 0);
+        assert_eq!(snapshot.lines[0].runs[0].cells, 2);
+        assert_eq!(snapshot.lines[0].runs[1].column, 2);
+        assert_eq!(
+            terminal.encode_mouse_event(TerminalMouseEvent {
+                kind: TerminalMouseEventKind::Press,
+                button: TerminalMouseButton::Left,
+                column: 2,
+                row: 0,
+                modifiers: TerminalMouseModifiers::default(),
+            }),
+            Some(b"\x1b[<0;3;1M".to_vec())
         );
     }
 

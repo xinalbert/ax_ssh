@@ -185,7 +185,8 @@ pub(in crate::app) fn apply_active_snapshot(
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
-    ui.set_terminal_mouse_reporting(snapshot.mouse_reporting);
+    ui.set_terminal_mouse_button_reporting(snapshot.mouse_button_reporting);
+    ui.set_terminal_mouse_wheel_reporting(snapshot.mouse_wheel_reporting);
     apply_sftp_snapshot(ui, snapshot.sftp);
     apply_security_prompt(ui, snapshot.security_prompt);
 }
@@ -482,13 +483,15 @@ pub(super) fn terminal_view_from_rendered(
         foreground: to_slint_color(rendered.foreground),
         background: to_slint_color(rendered.background),
         selection_background: to_slint_color(rendered.selection_background),
-        mouse_reporting: rendered.mouse_reporting_active,
+        mouse_button_reporting: rendered.mouse_button_reporting_active,
+        mouse_wheel_reporting: rendered.mouse_wheel_reporting_active,
         right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
         copy_selection_on_select: ui.get_copy_selection_on_select(),
         option_as_meta: ui.get_option_as_meta(),
         copy_selection_shortcut: ui.get_copy_selection_shortcut(),
         paste_shortcut: ui.get_paste_shortcut(),
         select_all_shortcut: ui.get_select_all_shortcut(),
+        mouse_local_selection_priority: ui.get_terminal_mouse_local_selection_priority(),
     }
 }
 

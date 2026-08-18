@@ -95,6 +95,7 @@ pub struct AppearanceSettingsInput<'a> {
     pub bright_bold_text: bool,
     pub right_click_copy_or_paste: bool,
     pub copy_selection_on_select: bool,
+    pub terminal_mouse_local_selection_priority: bool,
 }
 
 /// Raw Terminal semantic highlight colors supplied by an application settings surface.
@@ -165,6 +166,10 @@ pub struct AppearanceSettings {
     /// Whether a completed terminal selection is copied to the clipboard.
     #[serde(default)]
     pub copy_selection_on_select: bool,
+    /// Prefer local text selection while terminal mouse reporting is active.
+    /// Holding Alt/Option sends the gesture to the remote application.
+    #[serde(default = "default_true")]
+    pub terminal_mouse_local_selection_priority: bool,
 }
 
 impl AppearanceSettings {
@@ -204,6 +209,7 @@ impl AppearanceSettings {
             bright_bold_text: input.bright_bold_text,
             right_click_copy_or_paste: input.right_click_copy_or_paste,
             copy_selection_on_select: input.copy_selection_on_select,
+            terminal_mouse_local_selection_priority: input.terminal_mouse_local_selection_priority,
         }
     }
 
@@ -232,6 +238,7 @@ impl AppearanceSettings {
             bright_bold_text: self.bright_bold_text,
             right_click_copy_or_paste: self.right_click_copy_or_paste,
             copy_selection_on_select: self.copy_selection_on_select,
+            terminal_mouse_local_selection_priority: self.terminal_mouse_local_selection_priority,
         };
         *self = Self::normalized_with_theme(input, theme);
     }
@@ -252,6 +259,7 @@ impl Default for AppearanceSettings {
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
+            terminal_mouse_local_selection_priority: true,
         }
     }
 }

@@ -11,3 +11,5 @@ pub mod telnet;
 pub mod terminal;
 pub mod terminal_dimensions;
 pub mod x_server;
+
+mod terminal_input;
