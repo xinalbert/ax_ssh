@@ -108,6 +108,14 @@ transparent native input loses focus, while the terminal context menu retains it
 through a Copy action. It never owns a worker, a terminal buffer, or connection
 state. Terminal panes intentionally have no visual frame;
 `AppWindow` draws the one client-area frame around the whole application window.
+The Rust-owned terminal snapshot may also carry one small, tab-local connection
+notice. A failed connection, unexpected disconnect, reconnect countdown, or
+exhausted retry budget appears as a non-blocking banner in that terminal pane,
+including split panes and detached Terminal windows. Its Retry and Close intents
+carry the pane UUID back to the application, which revalidates the window route
+before restarting the existing worker route or closing the affected tab. The
+notice is deliberately absent while a host-key or authentication security phase
+is active; those existing blocking security overlays remain authoritative.
 Only a newly created `TerminalPane` queues one IME focus retry until its first
 layout pass completes, then rechecks visible, focused, and connected state
 before focusing the native proxy. Identity-preserving terminal identity,
@@ -117,15 +125,16 @@ carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Mouse input follows the same ownership boundary. `TerminalModel` exposes only
 the active private mouse modes and emits bounded SGR, UTF-8, or legacy X10
-events. `TerminalGrid` forwards button press/release, wheel, drag, and motion
-coordinates through the pane UUID callback when reporting is active; the bridge
-validates the pane and sends the bytes to its worker. `TerminalPane` chooses one
-gesture owner at button press: ordinary gestures use remote reporting, while
-`Shift` + left drag uses the local selection owner through release. `Shift` +
-wheel also uses local scrollback. When reporting is off, the existing direct
-local selection and scroll fallback remains in control. Moving focus to another
-pane, a divider, or another window control clears that local selection; the
-terminal context-menu Copy action retains it until the action completes.
+events. `TerminalPane` uses an xterm.js-style `mouseEventsRequireAlt` policy
+for button gestures: left dragging selects local text by default, while holding
+`Alt` (`Option` on macOS) with reporting active forwards click, release, drag,
+and cell-motion coordinates through the pane UUID callback. The bridge validates
+the pane and sends those bytes to its worker. Wheel events still follow active
+reporting so full-screen TUIs can scroll normally; `Shift` + wheel uses local
+scrollback. When reporting is off, the existing direct local selection and scroll
+fallback remains in control. Moving focus to another pane, a divider, or another
+window control clears that local selection; the terminal context-menu Copy action
+retains it until the action completes.
 Alternate-screen alternate-scroll is treated as reporting only while the
 terminal is on its alternate screen.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
@@ -511,10 +520,14 @@ must not locally hide either dialog before the Rust state transition accepts it.
     macOS close-tab item and the cross-platform fixed **Switch SSH/SFTP Tab**
     item intentionally have no dynamic active-tab menu properties. Their
     application callbacks resolve the active runtime Tab only when invoked.
-    Terminal Edit enablement alone follows the active Tab kind; workspace
-    refreshes, shortcut/security-state changes, and replacement of the workspace
-    Tab model may therefore rebuild the native menu. The existing AppKit bridge
-    then idempotently rebinds the current Settings/About items. Rebinding scans the current native menu
+    Terminal Edit, previous/next Tab, move, and close enablement consume small
+    Rust-published menu-state booleans for the active Terminal surface, multiple
+    Tabs, and active Tab presence. Those booleans are only written when the
+    underlying workspace snapshot state changes, so terminal output, notices,
+    status refreshes, and replacement of the workspace Tab model do not rebuild
+    an already-open native menu. Shortcut/security-state changes and real
+    menu-relevant workspace changes still let the existing AppKit bridge
+    idempotently rebind the current Settings/About items. Rebinding scans the current native menu
     tree for the application submenu and About title, accepts the platform's
     ellipsis spelling for Settings, and retries briefly when AppKit has not
     published the rebuilt menu yet. Transient lookup failures remain silent
@@ -1007,14 +1020,21 @@ release packages must retain `assets/fonts/` by the executable or platform
 resource path. Maple Mono NF CN is required there for deterministic Han glyph
 rendering; Iosevka Term and Monaspace Neon remain optional primary families,
 and all font notices remain required.
-Slint measures the configured font and uses the measured cell width plus the
-configured line-height percentage for rendering, selection, cursor,
-floor-based PTY columns, and ceiling-based PTY rows. `TerminalPane` computes
-one content-space cursor-cell y position; the grid, pre-edit overlay, and
-native IME proxy all consume it, while the pane clip is the only vertical
-overflow boundary. Every pane bottom-aligns its final terminal row: a partial
-cell is clipped from the first row at the top, while space above the maximum
-row count remains above the grid. IME and pointer coordinates use that same
+Slint measures the configured primary font with 50 Latin cells, the registered
+Han fallback with 25 double-width glyphs, and three box-drawing glyphs.
+`TerminalPane` uses the largest resulting single-cell advance so Latin,
+Han, and box-drawing rendering share one conservative grid metric. Rust
+preserves the terminal's logical columns, keeps ASCII text batched, and
+publishes non-ASCII cells as independent render runs. The grid centers each
+non-ASCII glyph inside its one- or two-cell span, so fallback shaping cannot
+move a following ASCII cell. This shared cell width and the configured
+line-height percentage drive rendering, selection, cursor, floor-based PTY
+columns, and ceiling-based PTY rows. `TerminalPane` computes one
+content-space cursor-cell y position; the grid, pre-edit overlay, and native
+IME proxy all consume it, while the pane clip is the only vertical overflow
+boundary. Every pane bottom-aligns its final terminal row: a partial cell is
+clipped from the first row at the top, while space above the maximum row count
+remains above the grid. IME and pointer coordinates use that same
 origin. The pane group clips every terminal surface to its assigned split
 rectangle, and each pane also clips its grid, cursor, preedit overlay, and
 transparent IME proxy so an undersized nested split cannot paint into a

@@ -315,6 +315,10 @@ records. Read failures and malformed lines only reduce trust, and the normal
 confirmation button cannot bypass a revoked record.
 Connection and authentication failures remain visible for diagnosis. Closing
 the visible Terminal Tab still closes every terminal pane in that layout.
+When a connection attempt fails or an unexpected disconnect exhausts its retry
+budget, the owning pane shows a non-blocking notice with **Retry** and **Close**;
+a failed local shell offers **Restart** instead. Host-key, authentication, and
+vault-unlock prompts remain the blocking security dialogs for their own Tab.
 
 Each split has a visible divider. Drag a vertical divider to change pane widths
 or a horizontal divider to change pane heights; double-click it to restore an
@@ -342,10 +346,12 @@ the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
-UTF-8, or legacy encoding. While reporting is active, ordinary pointer gestures
-belong to the TUI; hold `Shift` while left-dragging to select text locally, or
-while using the wheel to scroll local history. Outside reporting mode, direct
-left-drag selection and wheel scrolling remain local. A pointer gesture keeps
+UTF-8, or legacy encoding. While reporting is active, left-dragging still
+selects local text by default; hold `Alt` (`Option` on macOS) to send clicks,
+drags, and cell motion to the TUI. Wheel events still go to the TUI while
+reporting is active; hold `Shift` while using the wheel to scroll local
+history. Outside reporting mode, direct left-drag selection and wheel scrolling
+remain local. A pointer gesture keeps
 the owner chosen at button press until release, so one drag is never handled by
 both AxSSH and the remote program. Moving focus to another pane, a divider, or
 another window control clears a terminal selection; the terminal context menu

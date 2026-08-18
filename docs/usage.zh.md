@@ -195,7 +195,9 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 每个非根 pane 的右上角都有一个小型关闭控件；点击后只关闭该 pane 及其会话，并自动折叠剩余布局，
 根 pane 不提供独立关闭控件。在子 pane 的 local shell 中正常执行 `exit`，或子 SSH/Telnet 正常断开，
 也会执行相同的关闭。连接和认证失败会继续保留在界面上便于排查。关闭可见 Terminal Tab 仍会关闭
-其布局中的全部 terminal pane。
+其布局中的全部 terminal pane。连接尝试失败或非主动断开达到重试上限时，对应 pane 内显示非阻塞提示，
+提供 **Retry** 和 **Close**；本地 shell 失败则提供 **Restart**。host-key、认证和 vault 解锁仍只使用该 Tab
+自己的阻塞式安全弹窗。
 
 每个 split 都有可见分隔线。拖动竖线可调整 pane 宽度，拖动横线可调整 pane 高度；双击会恢复
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
@@ -212,8 +214,9 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
-SGR、UTF-8 或传统格式发送。reporting 开启时，普通指针手势交给 TUI；按住 `Shift` 再用左键拖动可强制
-使用本地文字选择，按住 `Shift` 滚轮则滚动本地历史。reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
+SGR、UTF-8 或传统格式发送。reporting 开启时，左键拖动默认仍使用本地文字选择；按住 `Alt`（macOS 为
+`Option`）时，点击、拖动和 cell motion 交给 TUI。滚轮在 reporting 开启时继续交给 TUI，按住 `Shift`
+滚轮则滚动本地历史。reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
 一次指针手势从按下到释放始终沿用按下时确定的 owner，不会同时进入 AxSSH 与远端程序两条链路。焦点移到另一 pane、
 分隔条或其他窗口控件时会清除终端选区；终端上下文菜单会保留选区至 **Copy** 动作完成。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、

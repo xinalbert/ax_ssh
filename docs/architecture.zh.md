@@ -96,13 +96,17 @@ Rust
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；逻辑 pane 或透明原生输入失焦时其选区会清除，
 但终端上下文菜单会将选区保留至 Copy 动作完成；它不拥有 worker、终端缓冲区或连接状态。
 Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
+Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
+重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。
+其中的 Retry 与 Close 意图会把 pane UUID 交回 application；application 在重新启动既有 worker 路由或关闭对应
+Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不显示该 notice，既有的阻塞式安全覆盖层仍是唯一权威。
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 只暴露当前私有 mouse mode，并生成有界的 SGR、UTF-8
-或传统 X10 事件。启用 reporting 时，`TerminalGrid` 通过带 pane UUID 的 callback 转发按下/释放、滚轮、
-拖动和 motion 坐标；bridge 重验 pane 后才把字节发送给对应 worker。`TerminalPane` 在按下时只选择一个
-手势 owner：普通手势使用远端 reporting，`Shift` + 左键拖动则由本地选区 owner 持续处理至释放；
-`Shift` + 滚轮也使用本地 scrollback。关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
+或传统 X10 事件。`TerminalPane` 对 button 手势采用接近 xterm.js `mouseEventsRequireAlt` 的策略：
+左键拖动默认使用本地文字选区；reporting 开启且按住 `Alt`（macOS 为 `Option`）时，点击、释放、拖动和
+cell motion 坐标才通过带 pane UUID 的 callback 转发，bridge 重验 pane 后才把字节发送给对应 worker。
+滚轮在 reporting 开启时继续交给全屏 TUI，`Shift` + 滚轮使用本地 scrollback。关闭 reporting 时，既有的直接本地选区和滚动 fallback 继续生效。
 焦点移到另一 pane、分隔条或其他窗口控件时会清除该局部选区；终端上下文菜单的 Copy 会将选区保留至动作完成。
 备用屏的 alternate-scroll 只在终端确实处于备用屏时视为 reporting。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
@@ -334,9 +338,12 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     `Cmd+Shift+]`，Windows/Linux 使用 `Ctrl+Shift+[` / `Ctrl+Shift+]`。它们只在多于一个
     Tab 时启用，并共用快捷键录制/安全提示禁用闸门。macOS
     的关闭 Tab 菜单项与跨平台固定的 **Switch SSH/SFTP Tab** 菜单项刻意不绑定动态活动 Tab
-    属性，其应用 callback 只在命令触发时解析当前运行时 Tab。只有 Terminal Edit 的 enabled
-    状态跟随活动 Tab 类型；工作区刷新、快捷键/安全状态变化以及替换工作区 Tab model 都可能触发
-    原生菜单重建，既有 AppKit bridge 随后会幂等重绑当前 Settings/About；重绑会扫描当前 native menu
+    属性，其应用 callback 只在命令触发时解析当前运行时 Tab。Terminal Edit、前后 Tab、
+    移动和关闭的 enabled 状态只消费 Rust 发布的三个小布尔值：当前是否 Terminal surface、
+    是否多于一个 Tab、是否存在活动 Tab。这些值只在底层 workspace snapshot 状态真实变化时写入，
+    因此终端输出、notice、状态刷新和替换 workspace Tab model 不再让已打开的原生菜单被重建。
+    快捷键/安全状态变化以及真正影响菜单的 workspace 变化仍会让既有 AppKit bridge 幂等重绑
+    当前 Settings/About；重绑会扫描当前 native menu
     tree 的应用 submenu 和 About 标题，兼容平台使用的省略号写法，并在 AppKit 尚未发布重建菜单时
     短暂重试。有界重试预算内的瞬时查找失败保持静默；只有预算耗尽后才输出一条带总尝试次数的
     warning。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
@@ -647,9 +654,13 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 回退只补齐该字体缺少的字形。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
-Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 测量配置字体，并用测得的字符格
-宽度和配置的行高百分比统一计算渲染、选区、光标、向下取整的 PTY 列数和向上取整的 PTY 行数；
-`TerminalPane` 只计算一个内容区光标 cell y 坐标，网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
+Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 分别测量配置主字体的
+50 个 Latin cell、已注册 Han fallback 的 25 个双宽字形和 3 个 box-drawing 字形；`TerminalPane`
+取三者中最大的单 cell advance，使 Latin、Han 与盒线共用保守的一套 grid metric。Rust 保留终端逻辑列，
+继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
+span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
+光标、向下取整的 PTY 列数和向上取整的 PTY 行数；`TerminalPane` 只计算一个内容区光标 cell y 坐标，
+网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
 垂直溢出边界。每个 pane 的最后一行都贴住底边：不足一格的高度从顶部裁切第一行，超过最大行数后的空间保留在网格上方。
 IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
 预编辑覆盖层和透明 IME proxy，确保尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外；终端只会在这些度量和布局稳定后合并发送 resize。
