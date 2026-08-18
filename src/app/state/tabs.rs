@@ -527,6 +527,7 @@ impl AppState {
                     kind: terminal.backend.kind(),
                     title: tab.title.clone(),
                     status: terminal.status.clone(),
+                    notice: terminal.notice_snapshot(),
                     editor: None,
                     terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
                     connected: terminal.connected,
