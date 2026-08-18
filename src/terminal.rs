@@ -645,6 +645,15 @@ fn cell_text(cell: &Cell) -> String {
     text
 }
 
+fn cell_contains_non_ascii(cell: &Cell) -> bool {
+    !cell.c.is_ascii()
+        || cell
+            .zerowidth()
+            .into_iter()
+            .flatten()
+            .any(|character| !character.is_ascii())
+}
+
 fn styled_line(
     term: &Term<TerminalEventListener>,
     row: usize,
@@ -673,6 +682,8 @@ fn styled_line(
                 if next.flags.contains(Flags::WIDE_CHAR)
                     || is_wide_continuation(next)
                     || terminal_style(next) != style
+                    || cell_contains_non_ascii(cell)
+                    || cell_contains_non_ascii(next)
                 {
                     break;
                 }
@@ -775,6 +786,27 @@ mod tests {
         assert_eq!(snapshot.lines[0].runs[1].cells, 2);
         assert_eq!(snapshot.lines[0].runs[2].column, 3);
         assert_eq!(snapshot.cursor_column, 4);
+    }
+
+    #[test]
+    fn non_ascii_single_cell_runs_do_not_shape_across_ascii() {
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        terminal.process("A┌─┐B".as_bytes());
+        let runs = terminal.snapshot().lines[0].runs.clone();
+
+        assert_eq!(runs.len(), 5);
+        assert_eq!(
+            runs[..4]
+                .iter()
+                .map(|run| run.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["A", "┌", "─", "┐"]
+        );
+        assert!(runs[4].text.starts_with('B'));
+        assert_eq!(
+            runs.iter().map(|run| run.column).collect::<Vec<_>>(),
+            vec![0, 1, 2, 3, 4]
+        );
     }
 
     #[test]

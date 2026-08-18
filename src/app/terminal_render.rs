@@ -112,6 +112,7 @@ pub(super) struct RenderedTerminalRun {
     pub(super) italic: bool,
     pub(super) underline: bool,
     pub(super) strikethrough: bool,
+    pub(super) centered: bool,
 }
 
 pub(super) fn render_terminal(
@@ -169,6 +170,7 @@ fn render_run(
         cells,
         style,
     } = run;
+    let centered = !text.is_ascii();
     let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
     let rendered = RenderedTerminalRun {
@@ -181,6 +183,7 @@ fn render_run(
         italic: style.italic,
         underline: style.underline,
         strikethrough: style.strikethrough,
+        centered,
     };
     let mut rendered_runs =
         if let (Some(highlights), Some(semantic_palette)) = (highlights, semantic_palette) {
@@ -422,6 +425,7 @@ fn split_semantic_run(
             italic: run.italic,
             underline: run.underline,
             strikethrough: run.strikethrough,
+            centered: run.centered,
         });
         start = end;
     }
@@ -697,6 +701,33 @@ mod tests {
             mouse_reporting: Default::default(),
             mouse_reporting_active: false,
         }
+    }
+
+    #[test]
+    fn non_ascii_runs_use_fixed_cell_alignment() {
+        let rendered = render_terminal(
+            snapshot_line(vec![
+                TerminalStyledRun {
+                    text: "中".into(),
+                    column: 0,
+                    cells: 2,
+                    style: TerminalStyle::default(),
+                },
+                TerminalStyledRun {
+                    text: "┌".into(),
+                    column: 2,
+                    cells: 1,
+                    style: TerminalStyle::default(),
+                },
+                plain_run("A", 3),
+            ]),
+            settings(),
+        );
+        let runs = &rendered.lines[0].runs;
+
+        assert!(runs[0].centered);
+        assert!(runs[1].centered);
+        assert!(!runs[2].centered);
     }
 
     fn plain_run(text: &str, column: usize) -> TerminalStyledRun {

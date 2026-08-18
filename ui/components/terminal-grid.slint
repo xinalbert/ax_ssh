@@ -10,6 +10,7 @@ export struct TerminalRenderRun {
     italic: bool,
     underline: bool,
     strikethrough: bool,
+    centered: bool,
 }
 
 export struct TerminalRenderLine {
@@ -117,7 +118,7 @@ export component TerminalGrid inherits Rectangle {
             font-weight: run.bold ? 700 : 400;
             font-italic: run.italic;
             letter-spacing: 0px;
-            horizontal-alignment: left;
+            horizontal-alignment: run.centered ? center : left;
             vertical-alignment: center;
             overflow: clip;
         }
@@ -260,7 +261,7 @@ export component TerminalGrid inherits Rectangle {
     ContextMenuArea {
         width: parent.width;
         height: parent.height;
-        enabled: !root.right-click-pastes && !root.view.mouse_reporting;
+        enabled: !root.right-click-pastes;
         Menu {
             MenuItem {
                 title: @tr("Copy");

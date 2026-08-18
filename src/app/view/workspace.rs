@@ -17,20 +17,20 @@ pub(in crate::app) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc
                 return;
             }
         };
+        let tab_count = tabs.len();
+        apply_menu_workspace_state(ui, snapshot.kind, tab_count, snapshot.id.is_some());
         let settings_tab_id = tabs
             .iter()
             .find(|tab| tab.kind.as_str() == "settings")
             .map(|tab| tab.id.clone())
             .unwrap_or_default();
-        ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
+        apply_workspace_tab_rows(ui, tabs);
         ui.set_settings_tab_id(settings_tab_id);
         apply_active_snapshot(ui, snapshot, None);
         ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
         ui.set_terminal_dividers(ModelRc::new(VecModel::from(
             Vec::<TerminalPaneDividerView>::new(),
         )));
-        #[cfg(target_os = "macos")]
-        schedule_macos_application_menu_configuration(ui);
     });
 }
 
@@ -77,21 +77,24 @@ pub(super) fn refresh_workspace_multi_window(
             let Some(ui) = view.ui.upgrade() else {
                 continue;
             };
+            let tab_count = view.tabs.len();
+            apply_menu_workspace_state(
+                &ui,
+                view.snapshot.kind,
+                tab_count,
+                view.snapshot.id.is_some(),
+            );
             let settings_tab_id = view
                 .tabs
                 .iter()
                 .find(|tab| tab.kind == "settings")
                 .map(|tab| tab.id.to_string())
                 .unwrap_or_default();
-            ui.set_workspace_tabs(ModelRc::new(VecModel::from(visible_workspace_tab_rows(
-                view.tabs,
-            ))));
+            apply_workspace_tab_rows(&ui, visible_workspace_tab_rows(view.tabs));
             ui.set_settings_tab_id(settings_tab_id.into());
             apply_active_snapshot(&ui, view.snapshot, view.active_tab_id);
             apply_terminal_panes(&ui, view.terminal_panes, view.terminal_dividers);
             applied_view_count = applied_view_count.saturating_add(1);
-            #[cfg(target_os = "macos")]
-            schedule_macos_application_menu_configuration(&ui);
         }
         if let Ok(app) = state_for_ui.lock() {
             app.clear_ui_refresh_pending();
@@ -141,4 +144,61 @@ pub(in crate::app) fn visible_workspace_tab_rows(
             connected: tab.connected,
         })
         .collect()
+}
+
+fn apply_workspace_tab_rows(ui: &AppWindow, tabs: Vec<WorkspaceTabRow>) {
+    let current = ui.get_workspace_tabs();
+    if current.row_count() == tabs.len()
+        && tabs.iter().enumerate().all(|(index, tab)| {
+            current.row_data(index).is_some_and(|existing| {
+                existing.id == tab.id
+                    && existing.title == tab.title
+                    && existing.kind == tab.kind
+                    && existing.connected == tab.connected
+            })
+        })
+    {
+        return;
+    }
+
+    if current.row_count() == tabs.len()
+        && tabs.iter().enumerate().all(|(index, tab)| {
+            current
+                .row_data(index)
+                .is_some_and(|existing| existing.id == tab.id)
+        })
+    {
+        for (index, tab) in tabs.into_iter().enumerate() {
+            let changed = current.row_data(index).is_none_or(|existing| {
+                existing.title != tab.title
+                    || existing.kind != tab.kind
+                    || existing.connected != tab.connected
+            });
+            if changed {
+                current.set_row_data(index, tab);
+            }
+        }
+        return;
+    }
+
+    ui.set_workspace_tabs(ModelRc::new(VecModel::from(tabs)));
+}
+
+fn apply_menu_workspace_state(
+    ui: &AppWindow,
+    active_kind: &str,
+    tab_count: usize,
+    has_active_tab: bool,
+) {
+    let terminal_active = active_kind == "terminal";
+    if ui.get_menu_terminal_active() != terminal_active {
+        ui.set_menu_terminal_active(terminal_active);
+    }
+    let has_multiple_tabs = tab_count > 1;
+    if ui.get_menu_has_multiple_tabs() != has_multiple_tabs {
+        ui.set_menu_has_multiple_tabs(has_multiple_tabs);
+    }
+    if ui.get_menu_has_active_tab() != has_active_tab {
+        ui.set_menu_has_active_tab(has_active_tab);
+    }
 }

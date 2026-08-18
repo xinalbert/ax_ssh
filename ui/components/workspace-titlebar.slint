@@ -421,6 +421,7 @@ export component WorkspaceTitlebar inherits Rectangle {
 
     private property <int> drag-source-index: -1;
     private property <int> drag-target-index: -1;
+    private property <string> drag-source-id;
     private property <length> drag-pointer-content-x: 0px;
     private property <length> drag-pointer-offset-x: 0px;
     private property <string> drag-title;
@@ -430,6 +431,12 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <length> add-glyph-height:
         add-glyph-height-probe.font-metrics.ascent
             - add-glyph-height-probe.font-metrics.descent;
+
+    changed tabs => {
+        if root.drag-source-index >= root.tabs.length {
+            root.clear-tab-drag();
+        }
+    }
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
@@ -450,8 +457,10 @@ export component WorkspaceTitlebar inherits Rectangle {
     }
 
     function begin-tab-drag(
-        index: int, title: string, kind: string, connected: bool, pointer-x: length,
+        id: string, index: int, title: string, kind: string, connected: bool,
+        pointer-x: length,
     ) {
+        root.drag-source-id = id;
         root.drag-source-index = index;
         root.drag-target-index = index;
         root.drag-pointer-content-x = index * root.tab-width * 1px + pointer-x;
@@ -467,16 +476,25 @@ export component WorkspaceTitlebar inherits Rectangle {
         root.drag-target-index = root.tab-index-at(root.drag-pointer-content-x);
     }
 
+    function update-tab-drag-at-content(content-x: length) {
+        root.drag-pointer-content-x = content-x;
+        root.drag-target-index = root.tab-index-at(content-x);
+    }
+
     function clear-tab-drag() {
+        root.drag-source-id = "";
         root.drag-source-index = -1;
         root.drag-target-index = -1;
     }
 
-    function finish-tab-drag(id: string, source-index: int, pointer-x: length) {
-        let target-index = root.tab-index-at(
-            source-index * root.tab-width * 1px + pointer-x,
-        );
+    function finish-tab-drag-at-content(content-x: length) {
+        let id = root.drag-source-id;
+        let source-index = root.drag-source-index;
+        let target-index = root.tab-index-at(content-x);
         root.clear-tab-drag();
+        if source-index < 0 || id.is-empty {
+            return;
+        }
         if target-index == source-index {
             root.activate-tab(id);
         } else {
@@ -578,13 +596,16 @@ export component WorkspaceTitlebar inherits Rectangle {
                             if event.kind == PointerEventKind.down
                                     && event.button == PointerEventButton.left {
                                 root.begin-tab-drag(
-                                    index, tab.title, tab.kind, tab.connected, self.mouse-x,
+                                    tab.id, index, tab.title, tab.kind, tab.connected,
+                                    self.mouse-x,
                                 );
                             } else if event.kind == PointerEventKind.up
-                                    && root.drag-source-index == index {
-                                root.finish-tab-drag(tab.id, index, self.mouse-x);
+                                    && root.drag-source-index >= 0 {
+                                root.finish-tab-drag-at-content(
+                                    index * root.tab-width * 1px + self.mouse-x,
+                                );
                             } else if event.kind == PointerEventKind.cancel
-                                    && root.drag-source-index == index {
+                                    && root.drag-source-index >= 0 {
                                 root.clear-tab-drag();
                             }
                         }
@@ -621,6 +642,26 @@ export component WorkspaceTitlebar inherits Rectangle {
                     }
                 }
 
+            }
+
+            if root.drag-source-index >= 0 : TouchArea {
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.up {
+                        root.finish-tab-drag-at-content(
+                            self.mouse-x - tabs-flick.viewport-x,
+                        );
+                    } else if event.kind == PointerEventKind.cancel {
+                        root.clear-tab-drag();
+                    }
+                }
+                moved => {
+                    root.update-tab-drag-at-content(
+                        self.mouse-x - tabs-flick.viewport-x,
+                    );
+                }
             }
 
             if root.drag-source-index >= 0 : Rectangle {

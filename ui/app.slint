@@ -240,6 +240,9 @@ export component AppWindow inherits Window {
     in property <string> app-version;
     private property <string> settings-section: "General";
     private property <int> settings-section-request-revision: 0;
+    in property <bool> menu-terminal-active: false;
+    in property <bool> menu-has-multiple-tabs: false;
+    in property <bool> menu-has-active-tab: false;
     out property <bool> menu-shortcuts-enabled:
         !workspace-shell.shortcut-recording
         && !root.host-key-dialog-open
@@ -511,6 +514,9 @@ export component AppWindow inherits Window {
     changed terminal-color-scheme => { root.schedule-terminal-appearance-refresh(); }
     changed terminal-appearance-revision => { root.schedule-terminal-appearance-refresh(); }
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
+    changed menu-terminal-active => { root.menu-state-changed(); }
+    changed menu-has-multiple-tabs => { root.menu-state-changed(); }
+    changed menu-has-active-tab => { root.menu-state-changed(); }
     Timer {
         running: root.terminal-appearance-refresh-pending;
         interval: 1ms;
@@ -552,7 +558,7 @@ export component AppWindow inherits Window {
             title: @tr("Edit");
             MenuItem {
                 title: @tr("Copy");
-                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.copy-selection-menu-shortcut;
                 activated => {
                     root.menu-action("copy-terminal");
@@ -561,7 +567,7 @@ export component AppWindow inherits Window {
             }
             MenuItem {
                 title: @tr("Paste");
-                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.paste-menu-shortcut;
                 activated => {
                     root.menu-action("paste-terminal");
@@ -571,7 +577,7 @@ export component AppWindow inherits Window {
             MenuSeparator { }
             MenuItem {
                 title: @tr("Select All");
-                enabled: root.menu-shortcuts-enabled && root.active-tab-kind == "terminal";
+                enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.select-all-menu-shortcut;
                 activated => {
                     root.menu-action("select-all-terminal");
@@ -622,13 +628,13 @@ export component AppWindow inherits Window {
             title: @tr("Window");
             MenuItem {
                 title: @tr("Previous Tab");
-                enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
+                enabled: root.menu-shortcuts-enabled && root.menu-has-multiple-tabs;
                 shortcut: root.previous-tab-menu-shortcut;
                 activated => { root.menu-action("previous-tab"); root.cycle-tab(false); }
             }
             MenuItem {
                 title: @tr("Next Tab");
-                enabled: root.menu-shortcuts-enabled && root.workspace-tabs.length > 1;
+                enabled: root.menu-shortcuts-enabled && root.menu-has-multiple-tabs;
                 shortcut: root.next-tab-menu-shortcut;
                 activated => { root.menu-action("next-tab"); root.cycle-tab(true); }
             }
@@ -637,7 +643,7 @@ export component AppWindow inherits Window {
                 title: @tr("Move Current Workspace to New Window");
                 enabled: root.menu-shortcuts-enabled
                     && !root.detached-window
-                    && !root.active-tab-id.is-empty;
+                    && root.menu-has-active-tab;
                 activated => {
                     root.menu-action("detach-workspace");
                     root.detach-workspace(root.active-tab-id);
@@ -661,7 +667,7 @@ export component AppWindow inherits Window {
             }
             if !root.apple-platform : MenuItem {
                 title: @tr("Close Current Tab");
-                enabled: !root.active-tab-id.is-empty;
+                enabled: root.menu-has-active-tab;
                 activated => {
                     root.menu-action("close-tab");
                     workspace-shell.request-close-tab(root.active-tab-id);

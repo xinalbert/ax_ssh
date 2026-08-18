@@ -209,8 +209,15 @@ export component TerminalPane inherits Rectangle {
     callback pane-focus(string);
     callback pane-command(string, string) -> bool;
 
+    // Measure the primary font and the registered fallback glyphs separately.
+    // The terminal grid uses one logical cell width for every script; using
+    // only Latin M can leave CJK and box-drawing glyphs on a fractional edge.
     private property <length> font-cell-width:
-        max(1px, cell-probe.preferred-width / 50);
+        max(
+            max(1px,
+                max(cell-probe.preferred-width / 50,
+                    wide-cell-probe.preferred-width / 50)),
+            symbol-cell-probe.preferred-width / 3);
     private property <length> font-cell-height: max(1px, cell-probe.preferred-height);
     private property <length> cell-width: root.font-cell-width;
     private property <length> cell-height:
@@ -351,6 +358,10 @@ export component TerminalPane inherits Rectangle {
         ime-input.focus();
     }
 
+    function forward-mouse-to-terminal(shift: bool, alt: bool) -> bool {
+        return root.view.mouse_reporting && alt && !shift;
+    }
+
     changed terminal-columns => { root.schedule-terminal-size-update(); }
     changed terminal-rows => { root.schedule-terminal-size-update(); }
     changed terminal-font-family => { root.schedule-terminal-size-update(); }
@@ -416,16 +427,44 @@ export component TerminalPane inherits Rectangle {
         opacity: 0;
     }
 
+    wide-cell-probe := Text {
+        x: -1000px;
+        y: -1000px;
+        width: 0px;
+        height: 0px;
+        text: "中中中中中中中中中中中中中中中中中中中中中中中中中";
+        font-family: root.terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400;
+        letter-spacing: 0px;
+        opacity: 0;
+    }
+
+    symbol-cell-probe := Text {
+        x: -1000px;
+        y: -1000px;
+        width: 0px;
+        height: 0px;
+        text: "┌─┐";
+        font-family: root.terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400;
+        letter-spacing: 0px;
+        opacity: 0;
+    }
+
     Timer {
         running: root.connected && ime-input.has-focus && root.cursor-visible;
         interval: 530ms;
         triggered => { root.cursor-blink = !root.cursor-blink; }
     }
 
-    // Let font measurement and layout settle before one coalesced PTY resize.
+    // Let font measurement and layout settle, then send at most one resize per
+    // display frame while the native window is being dragged. The terminal
+    // keeps its current snapshot between these bounded resize requests.
     Timer {
         running: root.terminal-resize-pending;
-        interval: 1ms;
+        interval: 16ms;
         triggered => {
             root.terminal-resize-pending = false;
             root.update-terminal-size();
@@ -603,7 +642,7 @@ export component TerminalPane inherits Rectangle {
                 pointer-down(row, column, button, shift, alt, control, meta) => {
                     let left = button == 0;
                     let right = button == 2;
-                    let report-mouse = root.view.mouse_reporting && !shift;
+                    let report-mouse = root.forward-mouse-to-terminal(shift, alt);
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-in-grid = true;
@@ -650,7 +689,7 @@ export component TerminalPane inherits Rectangle {
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
                         root.clear-terminal-target-highlight();
-                    } else if root.view.mouse_reporting && !shift {
+                    } else if root.forward-mouse-to-terminal(shift, alt) {
                         root.mouse-event(row, column, 5, 2,
                             shift, alt, control);
                     } else {

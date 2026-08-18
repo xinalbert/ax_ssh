@@ -340,6 +340,7 @@ pub(in crate::app) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalR
         italic: run.italic,
         underline: run.underline,
         strikethrough: run.strikethrough,
+        centered: run.centered,
     }
 }
 
