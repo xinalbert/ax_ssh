@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { ElidedButton } from "components/elided-controls.slint";
 import {
     TerminalGrid,
     TerminalGridView,
@@ -16,9 +17,21 @@ export struct TerminalCursorState {
     text: string,
 }
 
+export struct TerminalNoticeViewState {
+    visible: bool,
+    severity: string,
+    title: string,
+    message: string,
+    primary_action: string,
+    primary_label: string,
+    secondary_action: string,
+    secondary_label: string,
+}
+
 export struct TerminalViewState {
     terminal_id: string,
     connected: bool,
+    notice: TerminalNoticeViewState,
     render_lines: [TerminalRenderLine],
     cursor_state: [TerminalCursorState],
     content_columns: int,
@@ -93,6 +106,62 @@ component TerminalPaneCloseButton inherits FocusScope {
     }
 }
 
+component TerminalNoticeBanner inherits Rectangle {
+    in property <TerminalNoticeViewState> notice;
+    callback action(string);
+
+    height: Theme.terminal-pane-notice-height;
+    background: root.notice.severity == "error"
+        ? Theme.danger.with-alpha(0.14)
+        : Theme.accent.with-alpha(0.12);
+    border-width: Theme.hairline;
+    border-color: root.notice.severity == "error" ? Theme.danger : Theme.accent;
+    border-radius: Theme.radius-small;
+    clip: true;
+    accessible-role: text;
+    accessible-label: root.notice.title + ": " + root.notice.message;
+
+    HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        padding-top: Theme.space-sm;
+        padding-bottom: Theme.space-sm;
+        spacing: Theme.space-md;
+
+        VerticalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.space-xxs;
+
+            Text {
+                text: root.notice.title;
+                color: Theme.text;
+                font-size: Theme.font-small;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: root.notice.message;
+                color: Theme.text;
+                font-size: Theme.font-caption;
+                overflow: elide;
+            }
+        }
+
+        ElidedButton {
+            visible: !root.notice.primary_action.is-empty;
+            width: self.visible ? 88px : 0px;
+            text: root.notice.primary_label;
+            clicked => { root.action(root.notice.primary_action); }
+        }
+        ElidedButton {
+            visible: !root.notice.secondary_action.is-empty;
+            width: self.visible ? 76px : 0px;
+            text: root.notice.secondary_label;
+            clicked => { root.action(root.notice.secondary_action); }
+        }
+    }
+}
+
 export component TerminalPane inherits Rectangle {
     in property <TerminalViewState> view;
     in property <bool> focused: false;
@@ -101,6 +170,7 @@ export component TerminalPane inherits Rectangle {
     in property <int> edit-command-revision: 0;
     in property <int> focus-request-revision: 0;
     private property <bool> connected: root.view.connected;
+    private property <TerminalNoticeViewState> notice: root.view.notice;
     private property <string> terminal-id: root.view.terminal_id;
     private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
     private property <int> content-columns: root.view.content_columns;
@@ -502,6 +572,12 @@ export component TerminalPane inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 activated => { root.pane-command(root.terminal-id, "close"); }
             }
+        }
+
+        if root.notice.visible : TerminalNoticeBanner {
+            width: parent.width;
+            notice: root.notice;
+            action(command) => { root.pane-command(root.terminal-id, command); }
         }
 
         grid-clip := Rectangle {

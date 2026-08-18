@@ -44,6 +44,13 @@ impl TerminalTabState {
         self.reconnect_enabled = false;
     }
 
+    pub(in crate::app) fn prepare_manual_retry(&mut self) {
+        self.reconnect_generation = self.reconnect_generation.wrapping_add(1);
+        self.reconnect_attempt = 0;
+        self.reconnecting = false;
+        self.reconnect_enabled = !self.is_local();
+    }
+
     pub(in crate::app) fn enable_reconnect(&mut self) {
         self.reconnect_enabled = true;
     }
@@ -234,6 +241,65 @@ impl TerminalTabState {
 
     pub(in crate::app) fn is_sftp(&self) -> bool {
         matches!(self.backend, TerminalBackend::Sftp { .. })
+    }
+
+    pub(in crate::app) fn notice_snapshot(&self) -> TerminalNoticeSnapshot {
+        let status = self.status.trim();
+        if status.is_empty()
+            || self.connected
+            || self.worker_running
+            || self.security_prompt_pending()
+            || self.user_requested_disconnect_status(status)
+        {
+            return TerminalNoticeSnapshot::default();
+        }
+
+        if self.reconnecting || status.starts_with("Connection lost; reconnecting") {
+            return TerminalNoticeSnapshot::reconnecting(status);
+        }
+
+        let retry_label = if self.is_local() { "Restart" } else { "Retry" };
+        if self.failure_status(status) {
+            return TerminalNoticeSnapshot::failed(status, retry_label);
+        }
+        if self.ended_status(status) {
+            return TerminalNoticeSnapshot::ended(status, retry_label);
+        }
+
+        TerminalNoticeSnapshot::default()
+    }
+
+    fn security_prompt_pending(&self) -> bool {
+        matches!(
+            self.ssh_phase,
+            SshConnectionPhase::Probing(_)
+                | SshConnectionPhase::AwaitingHostKey(_)
+                | SshConnectionPhase::AwaitingAuthentication { .. }
+                | SshConnectionPhase::LoadingStoredCredential
+        )
+    }
+
+    fn user_requested_disconnect_status(&self, status: &str) -> bool {
+        !self.reconnect_enabled
+            && (status == "Disconnected"
+                || status == "Disconnecting..."
+                || status.ends_with(" worker stopped"))
+    }
+
+    fn failure_status(&self, status: &str) -> bool {
+        let status = status.to_ascii_lowercase();
+        status.contains("failed")
+            || status.contains("cannot ")
+            || status.contains("unavailable")
+            || status.contains("not found")
+            || status.contains("invalid")
+    }
+
+    fn ended_status(&self, status: &str) -> bool {
+        status == "Disconnected"
+            || status.ends_with("disconnected")
+            || status.ends_with("worker stopped")
+            || status.starts_with("Local shell exited:")
     }
 }
 

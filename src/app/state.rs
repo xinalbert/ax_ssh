@@ -302,6 +302,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) kind: &'static str,
     pub(super) title: String,
     pub(super) status: String,
+    pub(super) notice: TerminalNoticeSnapshot,
     pub(super) editor: Option<SessionEditorSnapshot>,
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
@@ -318,6 +319,7 @@ impl Default for ActiveTabSnapshot {
             kind: "empty",
             title: "Workspace".to_owned(),
             status: String::new(),
+            notice: TerminalNoticeSnapshot::default(),
             editor: None,
             terminal: None,
             connected: false,
@@ -325,6 +327,59 @@ impl Default for ActiveTabSnapshot {
             mouse_reporting: false,
             sftp: SftpBrowserSnapshot::default(),
             security_prompt: ActiveSecurityPrompt::None,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub(super) struct TerminalNoticeSnapshot {
+    pub(super) visible: bool,
+    pub(super) severity: &'static str,
+    pub(super) title: &'static str,
+    pub(super) message: String,
+    pub(super) primary_action: &'static str,
+    pub(super) primary_label: &'static str,
+    pub(super) secondary_action: &'static str,
+    pub(super) secondary_label: &'static str,
+}
+
+impl TerminalNoticeSnapshot {
+    pub(super) fn reconnecting(message: &str) -> Self {
+        Self {
+            visible: true,
+            severity: "warning",
+            title: "Connection lost",
+            message: message.to_owned(),
+            primary_action: "",
+            primary_label: "",
+            secondary_action: "close-tab",
+            secondary_label: "Close",
+        }
+    }
+
+    pub(super) fn ended(message: &str, retry_label: &'static str) -> Self {
+        Self {
+            visible: true,
+            severity: "warning",
+            title: "Session ended",
+            message: message.to_owned(),
+            primary_action: "retry",
+            primary_label: retry_label,
+            secondary_action: "close-tab",
+            secondary_label: "Close",
+        }
+    }
+
+    pub(super) fn failed(message: &str, retry_label: &'static str) -> Self {
+        Self {
+            visible: true,
+            severity: "error",
+            title: "Connection failed",
+            message: message.to_owned(),
+            primary_action: "retry",
+            primary_label: retry_label,
+            secondary_action: "close-tab",
+            secondary_label: "Close",
         }
     }
 }

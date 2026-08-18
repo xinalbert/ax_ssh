@@ -474,6 +474,28 @@ pub(super) fn wire_terminal(
                 &runtime_for_command,
             );
         }
+        if command.as_str() == "close-tab" {
+            return close_terminal_notice_tab(
+                &router_for_command,
+                window_id,
+                tab_id,
+                &state_for_command,
+                &ui_for_command,
+                &runtime_for_command,
+            );
+        }
+        if command.as_str() == "retry" {
+            return retry_terminal_notice_tab(
+                &router_for_command,
+                window_id,
+                tab_id,
+                &state_for_command,
+                &ui_for_command,
+                &runtime_for_command,
+                &font_registry_for_command,
+                &terminal_font_started_for_command,
+            );
+        }
         let Some((direction, action)) = PaneDirection::from_command(command.as_str()) else {
             return false;
         };
@@ -578,6 +600,103 @@ pub(super) fn wire_terminal(
             }
         }
     });
+}
+
+fn close_terminal_notice_tab(
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    runtime: &Handle,
+) -> bool {
+    if close_terminal_child_pane(router, Some(window_id), tab_id, state, ui, runtime) {
+        return true;
+    }
+    if !state.lock().ok().is_some_and(|app| {
+        router.owns_terminal_pane(window_id, tab_id, &app)
+            || router.tab_ids(window_id, &app).contains(&tab_id)
+    }) {
+        return false;
+    }
+    close_workspace_tab(tab_id, state, ui, runtime);
+    true
+}
+
+enum TerminalRetryRoute {
+    Local,
+    Profile {
+        profile_id: Uuid,
+        target: ConnectionTarget,
+    },
+}
+
+#[allow(clippy::too_many_arguments)]
+fn retry_terminal_notice_tab(
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    runtime: &Handle,
+    font_registry: &Arc<Mutex<FontRegistry>>,
+    terminal_font_started: &Arc<std::sync::atomic::AtomicBool>,
+) -> bool {
+    let route = match state.lock() {
+        Ok(mut app) => {
+            if !router.owns_terminal_pane(window_id, tab_id, &app) {
+                return false;
+            }
+            let Some(terminal) = app.terminal_mut(tab_id) else {
+                return false;
+            };
+            if terminal.worker.is_some() || terminal.worker_running {
+                return false;
+            }
+            terminal.prepare_manual_retry();
+            if terminal.is_local() {
+                TerminalRetryRoute::Local
+            } else if let Some(profile_id) = terminal.profile_id() {
+                TerminalRetryRoute::Profile {
+                    profile_id,
+                    target: terminal.connection_target(),
+                }
+            } else {
+                return false;
+            }
+        }
+        Err(_) => {
+            set_status(ui, "Cannot read workspace state");
+            return false;
+        }
+    };
+
+    match route {
+        TerminalRetryRoute::Local => {
+            if let Err(error) =
+                resume_existing_local_shell(runtime, state.clone(), ui.clone(), tab_id)
+            {
+                set_tab_status(
+                    state,
+                    ui,
+                    tab_id,
+                    &format!("Cannot restart terminal: {error}"),
+                );
+                return false;
+            }
+        }
+        TerminalRetryRoute::Profile { profile_id, target } => {
+            let connection = ConnectionContext::new(
+                ui.clone(),
+                state.clone(),
+                runtime.clone(),
+                font_registry.clone(),
+                terminal_font_started.clone(),
+            );
+            resume_existing_connection(&connection, tab_id, profile_id, target);
+        }
+    }
+    true
 }
 
 fn terminal_target_modifier_held(control: bool, _meta: bool) -> bool {

@@ -64,6 +64,14 @@ export component AppWindow inherits Window {
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
     in property <string> active-tab-status: "";
+    in property <bool> active-tab-notice-visible: false;
+    in property <string> active-tab-notice-severity: "";
+    in property <string> active-tab-notice-title: "";
+    in property <string> active-tab-notice-message: "";
+    in property <string> active-tab-notice-primary-action: "";
+    in property <string> active-tab-notice-primary-label: "";
+    in property <string> active-tab-notice-secondary-action: "";
+    in property <string> active-tab-notice-secondary-label: "";
     in property <bool> host-key-dialog-open: false;
     in property <string> host-key-endpoint: "";
     in property <string> host-key-fingerprint: "";
@@ -251,6 +259,16 @@ export component AppWindow inherits Window {
         terminal_background: root.terminal-background,
         terminal: {
             terminal_id: root.active-pane-id, connected: root.connected,
+            notice: {
+                visible: root.active-tab-notice-visible,
+                severity: root.active-tab-notice-severity,
+                title: root.active-tab-notice-title,
+                message: root.active-tab-notice-message,
+                primary_action: root.active-tab-notice-primary-action,
+                primary_label: root.active-tab-notice-primary-label,
+                secondary_action: root.active-tab-notice-secondary-action,
+                secondary_label: root.active-tab-notice-secondary-label,
+            },
             render_lines: root.terminal-render-lines, content_columns: root.terminal-content-columns,
             cursor_state: [],
             cursor_row: root.terminal-cursor-row, cursor_column: root.terminal-cursor-column,

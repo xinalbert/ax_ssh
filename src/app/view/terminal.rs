@@ -137,6 +137,15 @@ pub(in crate::app) fn apply_active_snapshot(
     ui.set_active_tab_kind(snapshot.kind.into());
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());
+    let notice = snapshot.notice;
+    ui.set_active_tab_notice_visible(notice.visible);
+    ui.set_active_tab_notice_severity(notice.severity.into());
+    ui.set_active_tab_notice_title(notice.title.into());
+    ui.set_active_tab_notice_message(notice.message.into());
+    ui.set_active_tab_notice_primary_action(notice.primary_action.into());
+    ui.set_active_tab_notice_primary_label(notice.primary_label.into());
+    ui.set_active_tab_notice_secondary_action(notice.secondary_action.into());
+    ui.set_active_tab_notice_secondary_label(notice.secondary_label.into());
     if let Some(editor) = snapshot.editor {
         ui.set_editor_credential_storage(editor.credential_storage.clone().into());
         ui.set_editor_default_credential_storage(editor.default_credential_storage.clone().into());
@@ -200,6 +209,7 @@ pub(super) fn apply_terminal_panes(
                 terminal: terminal_view_from_rendered(
                     pane.placement.tab_id,
                     pane.snapshot.connected,
+                    pane.snapshot.notice,
                     rendered,
                     ui,
                 ),
@@ -437,6 +447,7 @@ pub(super) fn update_terminal_pane_layout_models(
 pub(super) fn terminal_view_from_rendered(
     tab_id: Uuid,
     connected: bool,
+    notice: TerminalNoticeSnapshot,
     rendered: terminal_render::RenderedTerminal,
     ui: &AppWindow,
 ) -> TerminalViewState {
@@ -457,6 +468,7 @@ pub(super) fn terminal_view_from_rendered(
     TerminalViewState {
         terminal_id: tab_id.to_string().into(),
         connected,
+        notice: terminal_notice_view(notice),
         render_lines: ModelRc::new(VecModel::from(lines)),
         cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),
         content_columns: rendered.max_columns.min(i32::MAX as usize) as i32,
@@ -477,6 +489,19 @@ pub(super) fn terminal_view_from_rendered(
         copy_selection_shortcut: ui.get_copy_selection_shortcut(),
         paste_shortcut: ui.get_paste_shortcut(),
         select_all_shortcut: ui.get_select_all_shortcut(),
+    }
+}
+
+fn terminal_notice_view(notice: TerminalNoticeSnapshot) -> TerminalNoticeViewState {
+    TerminalNoticeViewState {
+        visible: notice.visible,
+        severity: notice.severity.into(),
+        title: notice.title.into(),
+        message: notice.message.into(),
+        primary_action: notice.primary_action.into(),
+        primary_label: notice.primary_label.into(),
+        secondary_action: notice.secondary_action.into(),
+        secondary_label: notice.secondary_label.into(),
     }
 }
 

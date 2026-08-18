@@ -56,11 +56,11 @@ use self::session_groups::{
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ClosedTab, ClosedTabKind, ConnectionStart,
     ConnectionTarget, PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation,
-    SftpTransferPhase, SshConnectionPhase, SshSftpNavigation, TerminalTabState, TerminalWorker,
-    WorkspaceTabSummary, WorkspaceTransfer, finish_stored_credential_retry,
-    prepare_authentication_retry, prepare_host_key_retry, prepare_stored_credential_retry,
-    retire_session_attempt, session_attempt_is_active, set_credential_storage,
-    set_credential_storage_while_loading,
+    SftpTransferPhase, SshConnectionPhase, SshSftpNavigation, TerminalNoticeSnapshot,
+    TerminalTabState, TerminalWorker, WorkspaceTabSummary, WorkspaceTransfer,
+    finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
+    prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
+    set_credential_storage, set_credential_storage_while_loading,
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, SemanticColorOverrides,

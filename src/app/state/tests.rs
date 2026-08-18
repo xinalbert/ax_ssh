@@ -34,6 +34,97 @@ fn same_profile_opens_independent_terminal_tabs() {
 }
 
 #[test]
+fn terminal_notice_shows_retry_for_exhausted_reconnects() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state
+        .terminal_mut(tab_id)
+        .expect("terminal tab should exist");
+    terminal.worker_running = false;
+    terminal.status = "Reconnect failed after 5 attempts; retry manually".to_owned();
+
+    let notice = terminal.notice_snapshot();
+
+    assert!(notice.visible);
+    assert_eq!(notice.severity, "error");
+    assert_eq!(notice.primary_action, "retry");
+    assert_eq!(notice.primary_label, "Retry");
+    assert_eq!(notice.secondary_action, "close-tab");
+}
+
+#[test]
+fn terminal_notice_hides_security_prompt_phases() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state
+        .terminal_mut(tab_id)
+        .expect("terminal tab should exist");
+    terminal.status = "Cannot start password connection: missing password".to_owned();
+    assert!(
+        terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+            vault_unlock_only: false,
+        })
+    );
+
+    assert!(!terminal.notice_snapshot().visible);
+}
+
+#[test]
+fn terminal_notice_hides_user_requested_disconnect() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state
+        .terminal_mut(tab_id)
+        .expect("terminal tab should exist");
+    terminal.cancel_reconnect();
+    terminal.status = "Disconnected".to_owned();
+
+    assert!(!terminal.notice_snapshot().visible);
+}
+
+#[test]
+fn terminal_notice_allows_local_shell_restart_after_failure() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+    let terminal = state
+        .terminal_mut(tab_id)
+        .expect("local terminal tab should exist");
+    terminal.worker_running = false;
+    terminal.status = "Local shell failed: process exited before startup".to_owned();
+
+    let notice = terminal.notice_snapshot();
+
+    assert!(notice.visible);
+    assert_eq!(notice.primary_action, "retry");
+    assert_eq!(notice.primary_label, "Restart");
+    assert_eq!(notice.secondary_action, "close-tab");
+}
+
+#[test]
+fn terminal_notice_stays_with_its_tab_when_switching_tabs() {
+    let mut state = test_state();
+    let first = state.open_local_shell_tab();
+    let second = state.open_local_shell_tab();
+    let first_terminal = state
+        .terminal_mut(first)
+        .expect("first terminal tab should exist");
+    first_terminal.worker_running = false;
+    first_terminal.status = "Local shell failed: process exited".to_owned();
+
+    assert!(state.activate_tab(first));
+    assert!(state.active_snapshot().notice.visible);
+
+    assert!(state.activate_tab(second));
+    assert!(!state.active_snapshot().notice.visible);
+
+    assert!(state.activate_tab(first));
+    assert_eq!(state.active_snapshot().notice.primary_label, "Restart");
+}
+
+#[test]
 fn workspace_transfer_keeps_ssh_and_sftp_companion_together() {
     let mut state = test_state();
     let profile = SessionProfile::new("remote", "remote.example", "alice");
