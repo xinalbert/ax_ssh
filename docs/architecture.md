@@ -125,7 +125,13 @@ clipped before crossing the application callback. `TerminalPane` keeps an
 explicit local-valid bit so a one-cell word remains copyable even when its
 anchor and focus coordinates are equal. Slint's `double-clicked` event then
 overrides the preceding ordinary click state, and the existing copy-on-select
-preference applies once to the semantic range.
+preference applies once to the semantic range. A third left click in the same
+short sequence requests a second bounded DTO computed with
+`alacritty_terminal::SelectionType::Lines`; it selects the complete logical
+line across soft wraps. `TerminalGrid` owns only a bounded, same-cell click
+sequence and expires it at the platform double-click interval. Four or more
+clicks do not repeat the line action, and reporting, Shift, target activation,
+focus, refresh, and Copy retain the same priority rules.
 Terminal panes intentionally have no visual frame, and `AppWindow` does not add
 an additional client-area frame around the application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection
@@ -209,7 +215,7 @@ connection, authentication, or transport failures remain visible; closing the
 visible Terminal Tab still owns whole-tree shutdown.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
-pointer, semantic double-click, scroll, and context-menu gestures into callbacks, while `TerminalPane`
+pointer, semantic double-click, logical-line triple-click, scroll, and context-menu gestures into callbacks, while `TerminalPane`
 retains the focus, IME input, selection draft, and resize lifecycle.
 Terminal target activation follows the same boundary. While the platform primary
 modifier is held (`Cmd` on macOS and `Ctrl` elsewhere), a pointer move or primary

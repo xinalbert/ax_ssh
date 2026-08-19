@@ -365,7 +365,10 @@ characters, soft-wrapped cells, and matching brackets. The range stays local to
 the pane and is not sent to the remote program. Shift bypasses this behavior,
 and Cmd/Ctrl target activation and remote mouse reporting retain priority. The
 existing copy-on-select preference also applies to the resulting semantic
-selection.
+selection. A third left click in the same short click sequence selects the
+complete logical terminal line, including soft-wrapped cells; the terminal core
+provides the line boundaries. The line selection remains local and uses the same
+reporting, modifier, focus, refresh, and copy rules as the semantic selection.
 Mode 1007 enables only alternate-screen wheel translation and never takes
 ownership of button gestures. Moving focus to another pane, a divider, or another window
 control clears a terminal selection; an actual grid resize or an effective local

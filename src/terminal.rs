@@ -443,15 +443,11 @@ impl TerminalModel {
         contents
     }
 
-    /// Returns the visible cell range for a semantic double-click selection.
-    ///
-    /// The temporary alacritty selection is used only for its boundary
-    /// semantics. It is never stored in the terminal model, so local Slint
-    /// selection state remains the sole owner of highlighting and copying.
-    pub fn semantic_selection_range(
+    fn selection_range(
         &self,
         row: usize,
         column: usize,
+        selection_type: SelectionType,
     ) -> Option<TerminalSelectionRange> {
         let grid = self.term.grid();
         let rows = grid.screen_lines();
@@ -463,7 +459,7 @@ impl TerminalModel {
         let display_offset = grid.display_offset() as i32;
         let line = Line(row as i32 - display_offset);
         let point = Point::new(line, Column(column));
-        let selection = Selection::new(SelectionType::Semantic, point, Side::Left);
+        let selection = Selection::new(selection_type, point, Side::Left);
         let range = selection.to_range(&self.term)?;
 
         let visible_top = -display_offset;
@@ -492,6 +488,32 @@ impl TerminalModel {
             end_row: (end_line - visible_top) as usize,
             end_column,
         })
+    }
+
+    /// Returns the visible cell range for a semantic double-click selection.
+    ///
+    /// The temporary alacritty selection is used only for its boundary
+    /// semantics. It is never stored in the terminal model, so local Slint
+    /// selection state remains the sole owner of highlighting and copying.
+    pub fn semantic_selection_range(
+        &self,
+        row: usize,
+        column: usize,
+    ) -> Option<TerminalSelectionRange> {
+        self.selection_range(row, column, SelectionType::Semantic)
+    }
+
+    /// Returns the visible cell range for a triple-click line selection.
+    ///
+    /// Alacritty's line search follows logical lines across soft wraps and
+    /// keeps hard line boundaries intact. The range is clipped to the current
+    /// viewport before it crosses the UI boundary.
+    pub fn line_selection_range(
+        &self,
+        row: usize,
+        column: usize,
+    ) -> Option<TerminalSelectionRange> {
+        self.selection_range(row, column, SelectionType::Lines)
     }
 
     /// Returns a bounded visible row and the text position at a terminal cell.
@@ -1466,6 +1488,78 @@ mod tests {
                 range.end_column,
             ),
             "abcdefghijk"
+        );
+    }
+
+    #[test]
+    fn line_selection_uses_logical_lines_and_preserves_hard_breaks() {
+        let mut terminal = TerminalModel::new(10, 4, 10);
+        terminal.process(b"0123456789A\r\nnext");
+
+        assert_eq!(
+            terminal.line_selection_range(0, 1),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 1,
+                end_column: 9,
+            })
+        );
+        assert_eq!(terminal.selection_text(0, 0, 1, 9), "0123456789A");
+        assert_eq!(terminal.selection_text(0, 0, 2, 9), "0123456789A\nnext");
+        assert_eq!(
+            terminal.line_selection_range(2, 1),
+            Some(TerminalSelectionRange {
+                start_row: 2,
+                start_column: 0,
+                end_row: 2,
+                end_column: 9,
+            })
+        );
+    }
+
+    #[test]
+    fn line_selection_preserves_soft_wrapped_lines() {
+        let mut terminal = TerminalModel::new(10, 3, 10);
+        terminal.process(b"abcdefghijk");
+
+        let range = terminal
+            .line_selection_range(0, 1)
+            .expect("wrapped line should have a line range");
+        assert_eq!(
+            range,
+            TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 1,
+                end_column: 9,
+            }
+        );
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            "abcdefghijk"
+        );
+    }
+
+    #[test]
+    fn line_selection_is_clipped_to_scrolled_viewport() {
+        let mut terminal = TerminalModel::new(10, 2, 10);
+        terminal.process(b"abcdefghijKLMNOPQRSTuvwxyz\r\nlast\r\n");
+        assert!(terminal.scroll(1));
+
+        assert_eq!(
+            terminal.line_selection_range(0, 1),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 1,
+                end_column: 9,
+            })
         );
     }
 

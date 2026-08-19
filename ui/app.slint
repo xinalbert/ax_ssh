@@ -489,6 +489,7 @@ export component AppWindow inherits Window {
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
+    callback terminal-line-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -855,6 +856,9 @@ export component AppWindow inherits Window {
             }
             terminal-semantic-selection-range(id, row, column) => {
                 return root.terminal-semantic-selection-range(id, row, column);
+            }
+            terminal-line-selection-range(id, row, column) => {
+                return root.terminal-line-selection-range(id, row, column);
             }
             terminal-target-at-cell(id, row, column, control, meta) => {
                 return root.terminal-target-at-cell(id, row, column, control, meta);

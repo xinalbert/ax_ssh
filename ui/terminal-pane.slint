@@ -218,6 +218,7 @@ export component TerminalPane inherits Rectangle {
     callback mouse-event(int, int, int, int, bool, bool, bool);
     callback selection-text(int, int, int, int) -> string;
     callback semantic-selection-range(int, int) -> TerminalSemanticSelection;
+    callback line-selection-range(int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(int, int, bool, bool) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
@@ -393,13 +394,7 @@ export component TerminalPane inherits Rectangle {
             && (!root.mouse-local-selection-priority || alt);
     }
 
-    function apply-semantic-selection(row: int, column: int) {
-        if root.last-pointer-shift
-            || root.last-primary-target-activated
-            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
-            return;
-        }
-        let selection = root.semantic-selection-range(row, column);
+    function apply-selection-range(selection: TerminalSemanticSelection) {
         if !selection.active {
             return;
         }
@@ -414,6 +409,24 @@ export component TerminalPane inherits Rectangle {
             root.copy-selection();
         }
         root.focus-input();
+    }
+
+    function apply-semantic-selection(row: int, column: int) {
+        if root.last-pointer-shift
+            || root.last-primary-target-activated
+            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
+            return;
+        }
+        root.apply-selection-range(root.semantic-selection-range(row, column));
+    }
+
+    function apply-line-selection(row: int, column: int) {
+        if root.last-pointer-shift
+            || root.last-primary-target-activated
+            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
+            return;
+        }
+        root.apply-selection-range(root.line-selection-range(row, column));
     }
 
     function queue-mouse-motion(
@@ -866,6 +879,9 @@ export component TerminalPane inherits Rectangle {
                 }
                 semantic-selection-request(row, column) => {
                     root.apply-semantic-selection(row, column);
+                }
+                line-selection-request(row, column) => {
+                    root.apply-line-selection(row, column);
                 }
                 scrolled(row, column, lines, shift, alt, control) => {
                     if root.view.mouse_wheel_reporting && !shift {

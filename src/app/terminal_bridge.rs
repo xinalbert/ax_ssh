@@ -383,6 +383,37 @@ pub(super) fn wire_terminal(
             .unwrap_or_default()
     });
 
+    let ui_for_line_selection = ui.as_weak();
+    let state_for_line_selection = state.clone();
+    let router_for_line_selection = window_router.clone();
+    ui.on_terminal_line_selection_range(move |tab_id, row, column| {
+        log_ui_action("terminal.line-selection-read");
+        let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_line_selection) else {
+            return TerminalSemanticSelection::default();
+        };
+        state_for_line_selection
+            .lock()
+            .ok()
+            .and_then(|app| {
+                if !router_for_line_selection.owns_terminal_pane(window_id, tab_id, &app) {
+                    return None;
+                }
+                app.terminal(tab_id)
+                    .and_then(|terminal| terminal.terminal.as_ref())
+                    .and_then(|terminal| {
+                        terminal.line_selection_range(row.max(0) as usize, column.max(0) as usize)
+                    })
+            })
+            .map(|range| TerminalSemanticSelection {
+                active: true,
+                anchor_row: range.start_row as i32,
+                anchor_column: range.start_column as i32,
+                focus_row: range.end_row as i32,
+                focus_column: range.end_column as i32,
+            })
+            .unwrap_or_default()
+    });
+
     let ui_for_target_hover = ui.as_weak();
     let state_for_target_hover = state.clone();
     let router_for_target_hover = window_router.clone();

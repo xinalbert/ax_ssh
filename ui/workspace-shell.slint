@@ -200,6 +200,7 @@ component TerminalPaneGroup inherits Rectangle {
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
+    callback terminal-line-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -242,6 +243,11 @@ component TerminalPaneGroup inherits Rectangle {
         }
         semantic-selection-range(row, column) => {
             return root.terminal-semantic-selection-range(
+                pane.terminal.terminal_id, row, column,
+            );
+        }
+        line-selection-range(row, column) => {
+            return root.terminal-line-selection-range(
                 pane.terminal.terminal_id, row, column,
             );
         }
@@ -332,6 +338,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
+    callback terminal-line-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -384,6 +391,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             }
             terminal-semantic-selection-range(id, row, column) => {
                 return root.terminal-semantic-selection-range(id, row, column);
+            }
+            terminal-line-selection-range(id, row, column) => {
+                return root.terminal-line-selection-range(id, row, column);
             }
             terminal-target-at-cell(id, row, column, control, meta) => {
                 return root.terminal-target-at-cell(id, row, column, control, meta);
@@ -533,6 +543,7 @@ export component WorkspaceShell inherits Rectangle {
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
+    callback terminal-line-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -627,6 +638,9 @@ export component WorkspaceShell inherits Rectangle {
         }
         terminal-semantic-selection-range(id, row, column) => {
             return root.terminal-semantic-selection-range(id, row, column);
+        }
+        terminal-line-selection-range(id, row, column) => {
+            return root.terminal-line-selection-range(id, row, column);
         }
         terminal-target-at-cell(id, row, column, control, meta) => {
             return root.terminal-target-at-cell(id, row, column, control, meta);
@@ -755,6 +769,9 @@ export component WorkspaceShell inherits Rectangle {
                         }
                         terminal-semantic-selection-range(id, row, column) => {
                             return root.terminal-semantic-selection-range(id, row, column);
+                        }
+                        terminal-line-selection-range(id, row, column) => {
+                            return root.terminal-line-selection-range(id, row, column);
                         }
                         terminal-target-at-cell(id, row, column, control, meta) => {
                             return root.terminal-target-at-cell(id, row, column, control, meta);

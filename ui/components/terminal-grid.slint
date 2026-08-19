@@ -72,10 +72,17 @@ export component TerminalGrid inherits Rectangle {
     callback pointer-up(int, int, int, bool, bool, bool);
     callback pointer-cancel();
     callback semantic-selection-request(int, int);
+    callback line-selection-request(int, int);
     callback scrolled(int, int, int, bool, bool, bool);
     callback copy-request();
     callback paste-request();
     callback select-all-request();
+
+    private property <int> click-sequence: 0;
+    private property <int> click-timeout-ticks: 0;
+    private property <int> click-cell-row: -1;
+    private property <int> click-cell-column: -1;
+    private property <bool> click-pressed: false;
 
     background: root.view.background;
     clip: true;
@@ -214,6 +221,23 @@ export component TerminalGrid inherits Rectangle {
         changed has-hover => { root.pointer-hovered(self.has-hover); }
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
+                let row = max(0, min(root.view.render_lines.length - 1,
+                    floor((self.mouse-y - root.top-offset) / root.cell-height)));
+                let column = max(0, min(root.view.content_columns - 1,
+                    floor(self.mouse-x / root.cell-width)));
+                if event.button == PointerEventButton.left {
+                    root.click-pressed = true;
+                    if root.click-sequence > 0
+                        && (root.click-cell-row != row || root.click-cell-column != column) {
+                        root.click-sequence = 0;
+                        root.click-timeout-ticks = 0;
+                    }
+                    root.click-cell-row = row;
+                    root.click-cell-column = column;
+                } else {
+                    root.click-sequence = 0;
+                    root.click-timeout-ticks = 0;
+                }
                 if event.button == PointerEventButton.right
                     && root.view.mouse_button_reporting
                     && !root.right-click-pastes
@@ -222,10 +246,8 @@ export component TerminalGrid inherits Rectangle {
                     terminal-context-menu.show({ x: self.mouse-x, y: self.mouse-y });
                 }
                 root.pointer-down(
-                    max(0, min(root.view.render_lines.length - 1,
-                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
-                    max(0, min(root.view.content_columns - 1,
-                        floor(self.mouse-x / root.cell-width))),
+                    row,
+                    column,
                     event.button == PointerEventButton.left ? 0
                         : event.button == PointerEventButton.middle ? 1
                         : event.button == PointerEventButton.right ? 2 : 5,
@@ -235,39 +257,66 @@ export component TerminalGrid inherits Rectangle {
                     event.modifiers.meta,
                 );
             } else if event.kind == PointerEventKind.up {
+                let row = max(0, min(root.view.render_lines.length - 1,
+                    floor((self.mouse-y - root.top-offset) / root.cell-height)));
+                let column = max(0, min(root.view.content_columns - 1,
+                    floor(self.mouse-x / root.cell-width)));
                 root.pointer-up(
-                    max(0, min(root.view.render_lines.length - 1,
-                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
-                    max(0, min(root.view.content_columns - 1,
-                        floor(self.mouse-x / root.cell-width))),
+                    row,
+                    column,
                     event.button == PointerEventButton.left ? 0
                     : event.button == PointerEventButton.middle ? 1
                     : event.button == PointerEventButton.right ? 2 : 5,
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control);
+                if event.button == PointerEventButton.left {
+                    root.click-pressed = false;
+                }
             } else if event.kind == PointerEventKind.move {
+                let row = max(0, min(root.view.render_lines.length - 1,
+                    floor((self.mouse-y - root.top-offset) / root.cell-height)));
+                let column = max(0, min(root.view.content_columns - 1,
+                    floor(self.mouse-x / root.cell-width)));
+                if root.click-pressed
+                    && (root.click-cell-row != row || root.click-cell-column != column) {
+                    root.click-sequence = 0;
+                    root.click-timeout-ticks = 0;
+                }
                 root.pointer-moved(
-                    max(0, min(root.view.render_lines.length - 1,
-                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
-                    max(0, min(root.view.content_columns - 1,
-                        floor(self.mouse-x / root.cell-width))),
+                    row,
+                    column,
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control,
                     event.modifiers.meta,
                 );
             } else if event.kind == PointerEventKind.cancel {
+                root.click-pressed = false;
+                root.click-sequence = 0;
+                root.click-timeout-ticks = 0;
                 root.pointer-cancel();
             }
         }
+        clicked => {
+            // Slint emits clicked before double-clicked, so the third click
+            // can replace the ordinary selection with a logical line range.
+            root.click-sequence = root.click-sequence >= 3
+                ? 4 : root.click-sequence + 1;
+            root.click-timeout-ticks = 5;
+            if root.click-sequence == 3 {
+                root.line-selection-request(root.click-cell-row, root.click-cell-column);
+            }
+        }
         double-clicked => {
-            root.semantic-selection-request(
-                max(0, min(root.view.render_lines.length - 1,
-                    floor((self.mouse-y - root.top-offset) / root.cell-height))),
-                max(0, min(root.view.content_columns - 1,
-                    floor(self.mouse-x / root.cell-width))),
-            );
+            if root.click-sequence == 2 {
+                root.semantic-selection-request(
+                    max(0, min(root.view.render_lines.length - 1,
+                        floor((self.mouse-y - root.top-offset) / root.cell-height))),
+                    max(0, min(root.view.content_columns - 1,
+                        floor(self.mouse-x / root.cell-width))),
+                );
+            }
         }
         scroll-event(event) => {
             root.scrolled(
@@ -278,6 +327,21 @@ export component TerminalGrid inherits Rectangle {
                 event.delta-y > 0 ? 3 : -3,
                 event.modifiers.shift, event.modifiers.alt, event.modifiers.control);
             accept
+        }
+    }
+
+    // Match Slint's 500ms platform double-click interval without exposing a
+    // framework-specific click counter to the rest of the selection chain.
+    Timer {
+        running: root.click-timeout-ticks > 0;
+        interval: 100ms;
+        triggered => {
+            if root.click-timeout-ticks <= 1 {
+                root.click-timeout-ticks = 0;
+                root.click-sequence = 0;
+            } else {
+                root.click-timeout-ticks -= 1;
+            }
         }
     }
 
