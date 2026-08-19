@@ -3,6 +3,14 @@ use super::*;
 impl TerminalTabState {
     pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 
+    pub(in crate::app) fn invalidate_selection(&mut self) {
+        self.selection_revision = if self.selection_revision == i32::MAX {
+            1
+        } else {
+            self.selection_revision + 1
+        };
+    }
+
     pub(in crate::app) fn begin_reconnect(&mut self) -> Option<(u64, u8)> {
         if !self.reconnect_enabled || self.reconnecting || self.worker.is_some() {
             return None;

@@ -129,6 +129,7 @@ export component AppWindow inherits Window {
     in property <int> terminal-cursor-column: 0;
     in property <bool> terminal-cursor-visible: false;
     in property <string> terminal-cursor-text: " ";
+    in property <int> terminal-selection-revision: 0;
     in property <bool> terminal-mouse-button-reporting: false;
     in property <bool> terminal-mouse-wheel-reporting: false;
     in property <bool> terminal-mouse-local-selection-priority: true;
@@ -264,6 +265,7 @@ export component AppWindow inherits Window {
         terminal_background: root.terminal-background,
         terminal: {
             terminal_id: root.active-pane-id, connected: root.connected,
+            selection_revision: root.terminal-selection-revision,
             notice: {
                 visible: root.active-tab-notice-visible,
                 severity: root.active-tab-notice-severity,

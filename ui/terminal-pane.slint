@@ -31,6 +31,7 @@ export struct TerminalNoticeViewState {
 export struct TerminalViewState {
     terminal_id: string,
     connected: bool,
+    selection_revision: int,
     notice: TerminalNoticeViewState,
     render_lines: [TerminalRenderLine],
     cursor_state: [TerminalCursorState],
@@ -175,6 +176,7 @@ export component TerminalPane inherits Rectangle {
     private property <TerminalNoticeViewState> notice: root.view.notice;
     private property <string> terminal-id: root.view.terminal_id;
     private property <[TerminalRenderLine]> render-lines: root.view.render_lines;
+    private property <int> selection-revision: root.view.selection_revision;
     private property <int> content-columns: root.view.content_columns;
     private property <int> cursor-row: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].row : root.view.cursor_row;
@@ -423,6 +425,7 @@ export component TerminalPane inherits Rectangle {
     changed terminal-id => {
         root.mouse-motion-pending = false;
         root.pressed-button = -1;
+        root.clear-selection();
         root.schedule-terminal-size-update();
         if root.focused && root.connected {
             root.focus-input();
@@ -432,6 +435,7 @@ export component TerminalPane inherits Rectangle {
         if !root.connected {
             root.mouse-motion-pending = false;
             root.pressed-button = -1;
+            root.clear-selection();
         }
         root.schedule-terminal-size-update();
         if root.connected && root.focused {
@@ -445,6 +449,7 @@ export component TerminalPane inherits Rectangle {
             root.clear-selection();
         }
     }
+    changed selection-revision => { root.clear-selection(); }
     changed edit-command-revision => {
         if root.focused {
             if root.edit-command == "copy" {

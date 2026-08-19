@@ -311,9 +311,14 @@ impl TerminalModel {
         Some(output)
     }
 
-    pub fn resize(&mut self, columns: usize, rows: usize) {
+    pub fn resize(&mut self, columns: usize, rows: usize) -> bool {
         let dimensions = TerminalDimensions::from_size(TerminalSize::model(columns, rows));
+        let grid = self.term.grid();
+        if grid.columns() == dimensions.columns && grid.screen_lines() == dimensions.rows {
+            return false;
+        }
         self.term.resize(dimensions);
+        true
     }
 
     pub fn set_scrollback_lines(&mut self, scrollback_lines: usize) {
@@ -1270,6 +1275,22 @@ mod tests {
         terminal.process("one\r\nt中ree".as_bytes());
 
         assert_eq!(terminal.selection_text(0, 1, 1, 2), "ne\nt中");
+    }
+
+    #[test]
+    fn selection_preserves_hard_breaks_after_a_soft_wrap() {
+        let mut terminal = TerminalModel::new(10, 4, 10);
+        terminal.process(b"0123456789A\r\n\r\nlast");
+
+        assert_eq!(terminal.selection_text(0, 0, 3, 3), "0123456789A\n\nlast");
+    }
+
+    #[test]
+    fn selection_does_not_insert_newline_between_soft_wrapped_rows() {
+        let mut terminal = TerminalModel::new(10, 3, 10);
+        terminal.process(b"0123456789A");
+
+        assert_eq!(terminal.selection_text(0, 0, 1, 0), "0123456789A");
     }
 
     #[test]

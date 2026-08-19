@@ -845,6 +845,55 @@ fn resizing_a_terminal_by_id_does_not_resize_another_pane() {
 }
 
 #[test]
+fn terminal_resize_invalidates_local_selection_revision() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+    let before = state.snapshot_for(Some(tab_id)).selection_revision;
+
+    state
+        .resize_terminal(tab_id, 12, 4)
+        .expect("terminal should resize");
+
+    let after = state.snapshot_for(Some(tab_id)).selection_revision;
+    assert_eq!(after, before + 1);
+
+    state
+        .resize_terminal(tab_id, 12, 4)
+        .expect("duplicate terminal resize should be accepted");
+
+    assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, after);
+}
+
+#[test]
+fn terminal_scroll_invalidates_selection_only_when_the_viewport_changes() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+    let terminal = state
+        .terminal_mut(tab_id)
+        .and_then(|terminal| terminal.terminal.as_mut())
+        .expect("local terminal should have a model");
+    terminal.resize(10, 3);
+    for index in 0..32 {
+        terminal.process(format!("line-{index}\r\n").as_bytes());
+    }
+    let before = state.snapshot_for(Some(tab_id)).selection_revision;
+
+    assert!(state.scroll_terminal(tab_id, 1));
+    let after = state.snapshot_for(Some(tab_id)).selection_revision;
+    assert_eq!(after, before + 1);
+
+    assert!(!state.scroll_terminal(tab_id, 0));
+    assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, after);
+
+    assert!(state.scroll_terminal_to_bottom(tab_id));
+    let bottom = state.snapshot_for(Some(tab_id)).selection_revision;
+    assert_eq!(bottom, after + 1);
+
+    assert!(!state.scroll_terminal_to_bottom(tab_id));
+    assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, bottom);
+}
+
+#[test]
 fn sftp_snapshots_require_connected_sftp_tabs_and_remain_isolated() {
     let mut state = test_state();
     let first_profile = SessionProfile::new("first", "first.example", "alice");

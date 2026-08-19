@@ -148,6 +148,7 @@ impl AppState {
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
+                selection_revision: 0,
                 sftp: SftpBrowserState::default(),
                 sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
@@ -205,6 +206,7 @@ impl AppState {
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
                 worker_running: false,
+                selection_revision: 0,
                 sftp: SftpBrowserState::for_standalone_tab(local_path),
                 sftp_initial_path: initial_path,
                 ssh_phase: SshConnectionPhase::Idle,
@@ -237,6 +239,7 @@ impl AppState {
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
+                selection_revision: 0,
                 sftp: SftpBrowserState::default(),
                 sftp_initial_path: None,
                 ssh_phase: SshConnectionPhase::Idle,
@@ -532,6 +535,7 @@ impl AppState {
                     terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
                     connected: terminal.connected,
                     worker_running: terminal.worker_running,
+                    selection_revision: terminal.selection_revision,
                     mouse_button_reporting: terminal
                         .terminal
                         .as_ref()
@@ -749,6 +753,7 @@ impl AppState {
                             },
                             connected: false,
                             worker_running: false,
+                            selection_revision: 0,
                             sftp,
                             sftp_initial_path: (!snapshot.sftp_remote_path.is_empty())
                                 .then(|| snapshot.sftp_remote_path.clone()),
@@ -773,6 +778,7 @@ impl AppState {
                             status: snapshot.status.clone(),
                             connected: false,
                             worker_running: false,
+                            selection_revision: 0,
                             sftp: SftpBrowserState::default(),
                             sftp_initial_path: None,
                             ssh_phase: SshConnectionPhase::Idle,
@@ -913,8 +919,38 @@ impl AppState {
         if let Some(worker) = terminal.worker.as_ref() {
             worker.request_resize(size.columns(), size.rows())?;
         }
-        model.resize(size.columns() as usize, size.rows() as usize);
+        if model.resize(size.columns() as usize, size.rows() as usize) {
+            terminal.invalidate_selection();
+        }
         Ok(())
+    }
+
+    pub(in crate::app) fn scroll_terminal(&mut self, tab_id: Uuid, lines: i32) -> bool {
+        let Some(terminal) = self.terminal_mut(tab_id) else {
+            return false;
+        };
+        let changed = terminal
+            .terminal
+            .as_mut()
+            .is_some_and(|model| model.scroll(lines));
+        if changed {
+            terminal.invalidate_selection();
+        }
+        changed
+    }
+
+    pub(in crate::app) fn scroll_terminal_to_bottom(&mut self, tab_id: Uuid) -> bool {
+        let Some(terminal) = self.terminal_mut(tab_id) else {
+            return false;
+        };
+        let changed = terminal
+            .terminal
+            .as_mut()
+            .is_some_and(TerminalModel::scroll_to_bottom);
+        if changed {
+            terminal.invalidate_selection();
+        }
+        changed
     }
 
     pub(in crate::app) fn pane_session_source(&self, tab_id: Uuid) -> Option<PaneSessionSource> {

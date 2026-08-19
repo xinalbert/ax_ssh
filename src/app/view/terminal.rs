@@ -185,6 +185,7 @@ pub(in crate::app) fn apply_active_snapshot(
     apply_rendered_terminal(ui, rendered);
     ui.set_connected(snapshot.connected);
     ui.set_worker_running(snapshot.worker_running);
+    ui.set_terminal_selection_revision(snapshot.selection_revision);
     ui.set_terminal_mouse_button_reporting(snapshot.mouse_button_reporting);
     ui.set_terminal_mouse_wheel_reporting(snapshot.mouse_wheel_reporting);
     apply_sftp_snapshot(ui, snapshot.sftp);
@@ -210,6 +211,7 @@ pub(super) fn apply_terminal_panes(
                 terminal: terminal_view_from_rendered(
                     pane.placement.tab_id,
                     pane.snapshot.connected,
+                    pane.snapshot.selection_revision,
                     pane.snapshot.notice,
                     rendered,
                     ui,
@@ -448,6 +450,7 @@ pub(super) fn update_terminal_pane_layout_models(
 pub(super) fn terminal_view_from_rendered(
     tab_id: Uuid,
     connected: bool,
+    selection_revision: i32,
     notice: TerminalNoticeSnapshot,
     rendered: terminal_render::RenderedTerminal,
     ui: &AppWindow,
@@ -469,6 +472,7 @@ pub(super) fn terminal_view_from_rendered(
     TerminalViewState {
         terminal_id: tab_id.to_string().into(),
         connected,
+        selection_revision,
         notice: terminal_notice_view(notice),
         render_lines: ModelRc::new(VecModel::from(lines)),
         cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),

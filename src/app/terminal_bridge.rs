@@ -128,14 +128,9 @@ pub(super) fn wire_terminal(
                     else {
                         return Ok((false, false));
                     };
-                    let viewport_changed = {
-                        let terminal =
-                            app.terminal_mut(tab_id).context("terminal tab not found")?;
-                        let viewport_changed = terminal
-                            .terminal
-                            .as_mut()
-                            .context("active tab has no terminal model")?
-                            .scroll_to_bottom();
+                    let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
+                    {
+                        let terminal = app.terminal(tab_id).context("terminal tab not found")?;
                         let worker_request_started_at = std::time::Instant::now();
                         let request_result = terminal
                             .worker
@@ -144,8 +139,7 @@ pub(super) fn wire_terminal(
                             .request_send(data);
                         worker_request_elapsed = Some(worker_request_started_at.elapsed());
                         request_result?;
-                        viewport_changed
-                    };
+                    }
                     Ok((true, viewport_changed))
                 });
             match result {
@@ -236,9 +230,7 @@ pub(super) fn wire_terminal(
                 if !router_for_scroll.owns_terminal_pane(window_id, tab_id, &app) {
                     return None;
                 }
-                app.terminal_mut(tab_id)
-                    .and_then(|terminal| terminal.terminal.as_mut())
-                    .map(|terminal| terminal.scroll(lines))
+                Some(app.scroll_terminal(tab_id, lines))
             })
             .unwrap_or(false);
         if changed {
@@ -991,6 +983,9 @@ pub(super) fn process_terminal_output(terminal: &mut TerminalTabState, data: &[u
         .as_mut()
         .context("terminal tab has no terminal model")?
         .process_with_responses(data);
+    if !data.is_empty() {
+        terminal.invalidate_selection();
+    }
     if responses.is_empty() {
         return Ok(());
     }
@@ -1049,6 +1044,29 @@ mod tests {
     fn terminal_target_uses_slint_primary_shortcut_modifier() {
         assert!(terminal_target_modifier_held(true, false));
         assert!(!terminal_target_modifier_held(false, true));
+    }
+
+    #[test]
+    fn terminal_output_invalidates_local_selection_revision() {
+        let mut app = AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("axssh-output-revision-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        );
+        let tab_id = app.open_local_shell_tab();
+        let terminal = app
+            .terminal_mut(tab_id)
+            .expect("local terminal should exist");
+        let before = terminal.selection_revision;
+
+        process_terminal_output(terminal, b"output").expect("terminal output should be processed");
+
+        assert_eq!(terminal.selection_revision, before + 1);
+
+        process_terminal_output(terminal, b"").expect("empty output should be accepted");
+
+        assert_eq!(terminal.selection_revision, before + 1);
     }
 
     #[cfg(not(windows))]
