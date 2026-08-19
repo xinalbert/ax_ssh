@@ -104,7 +104,7 @@ Rust
 不保留上游 `Selection`；宽字符、软换行和括号配对语义由终端核心处理，范围在进入 application callback 前裁剪。
 `TerminalPane` 另持有显式的局部有效位，因此单字符选区即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
 `double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好只对该语义范围执行一次。
-Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
+Terminal pane 不绘制自身框线；`AppWindow` 也不在整个应用窗口客户区额外绘制框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
 重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。
 其中的 Retry 与 Close 意图会把 pane UUID 交回 application；application 在重新启动既有 worker 路由或关闭对应

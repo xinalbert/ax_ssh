@@ -336,7 +336,7 @@ not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
 connected terminal pane; keyboard and accessibility divider actions retain
 divider focus.
-The application uses one thin frame around the whole window client area;
+The window client area has no additional application-drawn outer frame;
 individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native

@@ -126,8 +126,8 @@ explicit local-valid bit so a one-cell word remains copyable even when its
 anchor and focus coordinates are equal. Slint's `double-clicked` event then
 overrides the preceding ordinary click state, and the existing copy-on-select
 preference applies once to the semantic range.
-Terminal panes intentionally have no visual frame;
-`AppWindow` draws the one client-area frame around the whole application window.
+Terminal panes intentionally have no visual frame, and `AppWindow` does not add
+an additional client-area frame around the application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection
 notice. A failed connection, unexpected disconnect, reconnect countdown, or
 exhausted retry budget appears as a non-blocking banner in that terminal pane,

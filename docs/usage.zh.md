@@ -208,7 +208,7 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
 输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
-应用只在整个窗口客户区绘制一条细框线；单个 Terminal pane（包括分屏 pane）不再绘制自己的框线。
+窗口客户区不再额外绘制应用框线；单个 Terminal pane（包括分屏 pane）也不绘制自己的框线。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
 控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
