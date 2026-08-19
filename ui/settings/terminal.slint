@@ -148,21 +148,9 @@ export component TerminalSettingsPage inherits Rectangle {
                 SettingsSectionHeading { label: @tr("SEMANTIC HIGHLIGHTING"); }
                 SettingsToggleRow {
                     label: @tr("Enable semantic highlighting");
-                    description: @tr("Highlight links, paths, statuses, and log levels");
+                    description: @tr("Highlight statuses and log levels");
                     checked <=> root.draft-semantic-highlighting;
                     show-divider: root.draft-semantic-highlighting;
-                }
-                if root.draft-semantic-highlighting : SettingsRow {
-                    label: @tr("Link and path");
-                    description: @tr("URL and remote path targets");
-                    SettingsField {
-                        FlatTextInput {
-                            text <=> root.draft-semantic-link-color;
-                            height: Theme.settings-control-height;
-                            placeholder-text: @tr("Theme default");
-                            accessible-label: @tr("Terminal link and path highlight color");
-                        }
-                    }
                 }
                 if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Success");

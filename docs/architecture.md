@@ -238,11 +238,13 @@ ready. A new SFTP Tab carries the path as tab-local initial state until its
 normal, independent SSH authentication starts. Neither target text nor that
 initial path is persisted, logged, or sent through Slint as a terminal buffer.
 The private terminal render mapper can add bounded semantic color to plain
-visible cells only when that option is enabled: URLs and actionable Unix paths use the link color; HTTP
-`2xx`/`3xx`/`4xx`/`5xx` and common success, informational, warning, and error
-tokens use their corresponding semantic colors. Each category uses the selected
-terminal palette by default; an optional normalized `#RRGGBB` Settings override
-can replace it. Explicit ANSI 16/256/true-color foregrounds are not replaced by
+visible cells only when that option is enabled: HTTP `2xx`/`3xx`/`4xx`/`5xx` and
+common success, informational, warning, and error tokens use their corresponding
+semantic colors. URLs and actionable Unix paths are intentionally excluded from
+this persistent overlay; the separate Cmd/Ctrl target interaction owns their
+temporary accent underline. Each status category uses the selected terminal
+palette by default; an optional normalized `#RRGGBB` Settings override can
+replace it. Explicit ANSI 16/256/true-color foregrounds are not replaced by
 semantic highlighting. The renderer resolves program colors and inverse first,
 selects an optional semantic foreground, and then applies one HSL-lightness
 adjustment to the final visible foreground. `dim` is folded into that adjustment;
@@ -1047,7 +1049,7 @@ remain on Tokio blocking tasks. The UI applies the candidate immediately, then
 reapplies the current in-memory settings after registration so a delayed font
 read cannot restore stale choices. Appearance
 owns the application font, display mode, and palette; Terminal owns its font, size, line height,
-text brightness, bold-color behavior, optional semantic highlighting and its five color overrides, and terminal interactions. Both font lists
+text brightness, bold-color behavior, optional semantic highlighting and its status color overrides, and terminal interactions. Both font lists
 place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
@@ -1132,7 +1134,7 @@ body prefix while GitHub-generated notes retain the full commit list.
 `SessionStore` writes versioned profiles, non-secret group names, and a
 `settings` object to the existing private `sessions.json`. It contains
 separate normalized application and Terminal fonts, terminal size, line height,
-text brightness, bold-color, optional semantic highlighting and its color overrides, and mouse copy/paste preferences, scrollback, default PTY
+text brightness, bold-color, optional semantic highlighting and its status color overrides, and mouse copy/paste preferences, scrollback, default PTY
     dimensions, local-shell choice and bounded discovered-shell cache, the macOS
     Option-as-Meta preference, sidebar/tab widths, session mask character,
     collapsed group-label character count, shortcuts, `ThemeSettings`, the
@@ -1151,11 +1153,13 @@ text brightness, bold-color, optional semantic highlighting and its color overri
     minimum-contrast field and migrate to 100 because there is no safe numeric
     mapping; saved semantic override colors remain available but inactive until
     enabled. Schema version 21 adds the system-aware interface-language policy;
-    missing or invalid values follow the system. Schema version 19 adds the SSH SFTP default-directory fields;
-    missing remote values default to `~` and an empty local value means the
-    platform home directory. Schema version 20 adds five optional Terminal semantic
-    color overrides. Empty or invalid values follow the active ANSI palette; non-empty
-    values normalize to opaque `#RRGGBB`. Schema version 18 adds the default-disabled
+missing or invalid values follow the system. Schema version 20 adds five optional
+Terminal semantic color fields. Empty or invalid values follow the active ANSI
+palette; non-empty values normalize to opaque `#RRGGBB`. The historical link/path
+field remains persisted for configuration compatibility but is ignored by the
+current renderer and Settings surface. Schema version 19 adds the SSH SFTP default-directory fields;
+missing remote values default to `~` and an empty local value means the
+platform home directory. Schema version 18 adds the default-disabled
     `copy_selection_on_select` preference; older files preserve their existing
     right-click behavior. Schema version 16 adds the collapsed
     group-label character count; `0` means Full name and missing values retain
@@ -1275,8 +1279,10 @@ re-renders only the active terminal snapshot when its resolved colors change. Te
 uses the resolved default foreground, background, and selection colors while
 retaining ANSI 16/256/true-color semantics. When explicitly enabled, its bounded
 semantic overlay only changes eligible plain visible cells and derives distinct
-link, success, information, warning, and error colors from the active terminal
-palette unless a normalized Settings override is present. The single foreground
+success, information, warning, and error colors from the active terminal palette
+unless a normalized Settings override is present. URL/path targets remain at
+their terminal foreground and are indicated only by the transient Cmd/Ctrl
+underline. The single foreground
 pipeline resolves ANSI/indexed/true color, bold-color selection and inverse,
 chooses the optional semantic foreground, and finally applies the configured
 0.60-1.20 HSL-lightness factor once. Factor 1.00 preserves every non-dim resolved

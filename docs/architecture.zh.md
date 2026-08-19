@@ -165,9 +165,10 @@ resize 生命周期仍由 `TerminalPane` 保留。
 SFTP browser 启动阶段的 companion 会把有界路径保留在该运行时 Tab，待正常流程就绪后处理；没有
 companion 时，新 SFTP Tab 只在运行期保存初始路径，随后仍执行独立且正常的 SSH 认证。目标文本和该
 初始路径都不会持久化、写日志，或作为完整终端缓冲传给 Slint。
-私有终端渲染映射只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色：URL 和可操作的 Unix 路径使用链接色；
-HTTP `2xx`/`3xx`/`4xx`/`5xx` 及常见的成功、信息、警告和错误状态词使用对应语义色。默认颜色从当前 Terminal
-色表派生；Settings 中的规范化 `#RRGGBB` 可按类别覆盖。语义高亮不会替换显式 ANSI 16/256/真彩色前景。
+私有终端渲染映射只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色：HTTP
+`2xx`/`3xx`/`4xx`/`5xx` 及常见的成功、信息、警告和错误状态词使用对应语义色。URL 和可操作的 Unix
+路径不参与常驻覆盖，而由独立的 Cmd/Ctrl 目标交互负责短暂 accent 下划线。默认颜色从当前 Terminal
+色表派生；Settings 中的规范化 `#RRGGBB` 可按状态类别覆盖。语义高亮不会替换显式 ANSI 16/256/真彩色前景。
 渲染器先解析程序颜色和反色，再选择可选语义前景，最后只对最终可见前景执行一次 HSL lightness 调整；
 `dim` 合并进同一次调整，背景、选区和光标保持不变。
 它的 `key-pressed` 只把特殊键和终端控制组合键发送给 Rust；可打印字符、Shift 文字和已提交的
@@ -667,7 +668,7 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 自带字体也经同一 registry 按需加载。候选设置先立即应用，注册
 完成后再读取当前内存设置重新应用，避免迟到字体读取恢复旧选择。Appearance 只拥有应用字体、显示模式与配色；Terminal
 拥有自己的字体、字号、行高、
-文字亮度、粗体亮色、可选语义高亮及其五项颜色覆盖和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
+文字亮度、粗体亮色、可选语义高亮及其状态颜色覆盖和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
 Tokio blocking task 中发现、按大小写无关去重并按字母排序且有数量上限的系统等宽字体。
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
 `TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一主字体来源；唯一的 `Hani`
@@ -717,7 +718,7 @@ macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标
 GitHub 自动生成的 notes 继续保留完整提交列表。
 
 `SessionStore` 在现有私有 `sessions.json` 中写入版本化 profile、非敏感 Group 名称和
-`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、文字亮度、粗体亮色、可选语义高亮及其颜色覆盖和鼠标复制/粘贴偏好、
+`settings` 对象，包括分别经过约束的应用字体与 Terminal 字体、终端字号、行高、文字亮度、粗体亮色、可选语义高亮及其状态颜色覆盖和鼠标复制/粘贴偏好、
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
     非秘密的 X11 provider/path/启动/兼容设置、SSH 认证方式（可选择 agent，但不包含 agent 端点或
@@ -726,7 +727,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     schema 版本 22 新增
     `terminal_text_brightness_percent`，保存范围为 60-120、默认 100，并新增默认关闭的
     `terminal_semantic_highlighting`。版本 21 及更早文件会丢弃旧最小对比度字段并迁移为 100，
-    因为二者不存在安全数值映射；已保存的语义覆盖色会保留，但启用前不生效。schema 版本 21 新增跟随系统的界面语言策略；缺失或无效值默认跟随系统。schema 版本 20 增加五项可选 Terminal 语义色覆盖；空值或无效值跟随活动 ANSI 色表，非空值规范化为不透明 `#RRGGBB`。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值
+因为二者不存在安全数值映射；已保存的语义覆盖色会保留，但启用前不生效。schema 版本 21 新增跟随系统的界面语言策略；缺失或无效值默认跟随系统。schema 版本 20 增加五项可选 Terminal 语义色字段；空值或无效值跟随活动 ANSI 色表，非空值规范化为不透明 `#RRGGBB`。历史版本中的 link/path 字段仍保留以兼容配置，但不再参与 renderer 或 Settings 表面。schema 版本 19 增加 SSH SFTP 默认目录字段；缺失远端值
     默认为 `~`，本地值为空表示平台 home 目录。schema 版本 18 增加默认关闭的
     `copy_selection_on_select` 偏好；旧配置保持既有右键行为。
     应用调用方通过 `AppSettingsInput` 提交原始值，并按 Appearance、Terminal、Workspace 和
@@ -806,7 +807,7 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 `ThemePaletteEditor` 组件渲染 Custom Light/Dark 字段，避免两套编辑器结构漂移。
 `src/app/view.rs` 将当前内存设置的主题映射进 Slint global，并在解析色变化时只重新渲染当前终端
 快照。终端渲染使用解析后的默认前景、背景和选区色，同时保留 ANSI 16/256/真彩色语义。
-显式启用时，有界语义覆盖层只改变符合条件的可见默认样式 cell，并从当前终端色表派生不同的链接、成功、信息、警告和错误色；存在规范化的 Settings 覆盖时使用该颜色。
+显式启用时，有界语义覆盖层只改变符合条件的可见默认样式 cell，并从当前终端色表派生不同的成功、信息、警告和错误色；存在规范化的 Settings 覆盖时使用该颜色。URL/路径保持终端原有前景色，只在按住 Cmd/Ctrl 时显示临时下划线。
 唯一前景链路依次解析 ANSI/索引/真彩色、粗体亮色与反色，选择可选语义前景，最后只应用一次
 0.60-1.20 的 HSL lightness 系数。1.00 会逐值保留所有非 dim 的解析前景；`dim` 乘入同一个最终系数；
 背景、选区和光标绕过该调整。全部 Slint 设置属性应用后，只调度一次合并的外观刷新。

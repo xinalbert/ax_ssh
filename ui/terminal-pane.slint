@@ -630,7 +630,7 @@ export component TerminalPane inherits Rectangle {
         key-pressed(event) => {
             if root.target-pointer-in-grid
                 && !root.selecting
-                && (event.modifiers.control || event.modifiers.meta) {
+                && event.modifiers.control {
                 root.terminal-target-highlight = root.terminal-target-at-cell(
                     root.target-pointer-row,
                     root.target-pointer-column,

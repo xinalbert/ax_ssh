@@ -454,8 +454,8 @@ msgstr "帮助"
 msgid "Hidden"
 msgstr "隐藏"
 
-msgid "Highlight links, paths, statuses, and log levels"
-msgstr "高亮链接、路径、状态和日志级别"
+msgid "Highlight statuses and log levels"
+msgstr "高亮状态和日志级别"
 
 msgid "Host"
 msgstr "主机"
@@ -519,9 +519,6 @@ msgstr "浅色"
 
 msgid "Line height"
 msgstr "行高"
-
-msgid "Link and path"
-msgstr "链接和路径"
 
 msgid "Loading"
 msgstr "正在加载"
@@ -1081,9 +1078,6 @@ msgstr "终端信息高亮颜色"
 msgid "Terminal line height percentage"
 msgstr "终端行高百分比"
 
-msgid "Terminal link and path highlight color"
-msgstr "终端链接和路径高亮颜色"
-
 msgid "Terminal pane heights"
 msgstr "终端窗格高度"
 
@@ -1128,9 +1122,6 @@ msgstr "信任并继续"
 
 msgid "Trust new key"
 msgstr "信任新密钥"
-
-msgid "URL and remote path targets"
-msgstr "URL 和远端路径目标"
 
 msgid "Unknown SSH host key"
 msgstr "未知 SSH 主机密钥"

@@ -244,8 +244,9 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 没有 companion 时，AxSSH 会以该位置作为初始目录新建独立 SFTP Tab，仍执行常规 SSH host-key 与
 认证流程。已有 companion 时，相对路径相对于当前 SFTP 目录解释；如果 companion 仍在主机密钥确认、
 认证或 browser 启动阶段，路径只保留在该运行时 Tab，正常流程就绪后再处理。
-可选语义高亮可为 URL 和路径、HTTP 响应类别，以及常见成功、信息、警告和错误状态词使用
-不同颜色；该功能默认关闭。开启后，颜色默认跟随所选 Terminal 色表，Settings 可分别覆盖每一类；
+可选语义高亮可为 HTTP 响应类别，以及常见成功、信息、警告和错误状态词使用不同颜色；该功能默认
+关闭。URL 和路径仍由上面的 Cmd/Ctrl 目标交互处理：它们保持原有前景色，仅在按住平台主修饰键时
+短暂显示下划线。开启语义高亮后，状态颜色默认跟随所选 Terminal 色表，Settings 可分别覆盖各类颜色；
 已经指定 ANSI 或真彩色前景的输出不会被语义高亮替换。
 **Settings > Terminal** 的 **Local selection priority** 用于选择默认的本地选区优先交互或标准 xterm
 鼠标路由。**Copy selection on select** 默认关闭。开启后，完成鼠标选区和
@@ -291,8 +292,9 @@ Light/Dark 两套语义色。即时预览和持久化时，
 scrollback、鼠标行为以及平台相关的 Option-as-Meta。文字亮度范围为 60%-120%，步长 5%，默认
 100%；100% 会逐值保留解析后的 ANSI/256/真彩色前景。渲染先解析程序颜色和反色状态，再选择已启用的
 语义前景，最后只对可见文字应用一次亮度调整；`dim` 也合并在这一次最终调整中。背景、选区和光标不调整。
-启用语义高亮后，Link and path、Success、Information、Warning 与 Error 都可填入不透明
-`#RRGGBB`；留空时跟随当前 Terminal 色表。两个字体列表都先显示软件自带字体，
+启用语义高亮后，Success、Information、Warning 与 Error 都可填入不透明
+`#RRGGBB`；留空时跟随当前 Terminal 色表。URL/路径目标不提供颜色设置，因为提示只使用交互时的
+下划线。两个字体列表都先显示软件自带字体，
 再显示自动发现的系统等宽字体。选中的 Terminal 字体始终是主字体；当它缺少汉字字形时，
 AxSSH 只使用自带的 Maple Mono NF CN 作为唯一汉字回退。切换 Terminal 字体不会改写已保存的
 选择，也不会增加第二条回退链路。

@@ -402,11 +402,13 @@ directory when an already-open companion is available. If the companion is
 still completing host-key confirmation, authentication, or browser startup,
 the path is held only on that runtime Tab and applied when the normal flow is
 ready.
-Optional semantic highlighting can color URLs and paths, HTTP response classes,
-and familiar success, informational, warning, and error words. It is disabled
-by default. When enabled, the colors follow the selected terminal palette unless
-Settings overrides a category; explicit ANSI or true-color foregrounds are never
-replaced by semantic highlighting.
+Optional semantic highlighting can color HTTP response classes and familiar
+success, informational, warning, and error words. It is disabled by default.
+URLs and paths use the separate Cmd/Ctrl target interaction above: they stay at
+their normal foreground and receive only a temporary underline while the
+platform primary modifier is held. When semantic highlighting is enabled, its
+status colors follow the selected terminal palette unless Settings overrides a
+category; explicit ANSI or true-color foregrounds are never replaced.
 In **Settings > Terminal**, **Local selection priority** chooses between the
 default selection-first interaction and standard xterm mouse routing.
 **Copy selection on select** is disabled by default.
@@ -474,9 +476,10 @@ first resolves the program color and inverse state, then an enabled semantic
 foreground, and finally applies the brightness once to the visible text. `dim`
 participates in that same final adjustment. Backgrounds, selection, and the cursor
 are not adjusted. When semantic highlighting is enabled, enter an opaque `#RRGGBB`
-for Link and path, Success, Information, Warning, or Error; leave a field empty to
-follow the active terminal palette. Bundled fonts appear before discovered system
-monospace fonts in both font lists. The selected Terminal font remains the
+for Success, Information, Warning, or Error; leave a field empty to follow the
+active terminal palette. URL/path target colors are not configurable because the
+target indication is an interaction-only underline. Bundled fonts appear before
+discovered system monospace fonts in both font lists. The selected Terminal font remains the
 primary family. When it does not contain a Han glyph, AxSSH uses bundled Maple
 Mono NF CN as the single Han fallback; choosing another Terminal font does not
 replace the saved selection or add another fallback route.

@@ -5,8 +5,6 @@ use ax_ssh::terminal::{
     TerminalColor, TerminalSnapshot, TerminalStyle, TerminalStyledLine, TerminalStyledRun,
 };
 
-use super::terminal_targets::terminal_target_span_at_cell;
-
 const MAX_SEMANTIC_HIGHLIGHT_CHARS: usize = 512;
 const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
 const MAX_TEXT_BRIGHTNESS: f64 = 1.20;
@@ -27,7 +25,6 @@ impl RgbColor {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SemanticHighlight {
-    Link,
     Success,
     Info,
     Warning,
@@ -35,7 +32,6 @@ enum SemanticHighlight {
 }
 
 struct SemanticPalette {
-    link: RgbColor,
     success: RgbColor,
     info: RgbColor,
     warning: RgbColor,
@@ -44,7 +40,6 @@ struct SemanticPalette {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct SemanticColorOverrides {
-    pub(super) link: Option<RgbColor>,
     pub(super) success: Option<RgbColor>,
     pub(super) info: Option<RgbColor>,
     pub(super) warning: Option<RgbColor>,
@@ -54,7 +49,6 @@ pub(super) struct SemanticColorOverrides {
 impl SemanticPalette {
     fn for_terminal(palette: &TerminalPalette, overrides: SemanticColorOverrides) -> Self {
         Self {
-            link: overrides.link.unwrap_or(palette.ansi[14]),
             success: overrides.success.unwrap_or(palette.ansi[10]),
             info: overrides.info.unwrap_or(palette.ansi[12]),
             warning: overrides.warning.unwrap_or(palette.ansi[11]),
@@ -64,7 +58,6 @@ impl SemanticPalette {
 
     fn color_for(&self, highlight: SemanticHighlight) -> RgbColor {
         match highlight {
-            SemanticHighlight::Link => self.link,
             SemanticHighlight::Success => self.success,
             SemanticHighlight::Info => self.info,
             SemanticHighlight::Warning => self.warning,
@@ -221,7 +214,6 @@ fn semantic_highlights(
     }
 
     let mut highlights = vec![None; text.len()];
-    highlight_terminal_targets(text, &mut highlights);
     highlight_http_statuses(text, &mut highlights);
     highlight_keywords(
         text,
@@ -317,21 +309,6 @@ fn semantic_highlights(
     highlights.iter().any(Option::is_some).then_some(highlights)
 }
 
-fn highlight_terminal_targets(text: &str, highlights: &mut [Option<SemanticHighlight>]) {
-    let bytes = text.as_bytes();
-    let mut column = 0;
-    while column < bytes.len() {
-        if matches!(bytes[column], b'h' | b'/' | b'.')
-            && let Some(span) = terminal_target_span_at_cell(text, column)
-        {
-            mark_highlight(highlights, span.start, span.end, SemanticHighlight::Link);
-            column = span.end.max(column + 1);
-            continue;
-        }
-        column += 1;
-    }
-}
-
 fn highlight_http_statuses(text: &str, highlights: &mut [Option<SemanticHighlight>]) {
     let bytes = text.as_bytes();
     for start in 0..bytes.len().saturating_sub(2) {
@@ -347,7 +324,7 @@ fn highlight_http_statuses(text: &str, highlights: &mut [Option<SemanticHighligh
             + u16::from(bytes[start + 2] - b'0');
         let highlight = match status {
             200..=299 => SemanticHighlight::Success,
-            300..=399 => SemanticHighlight::Link,
+            300..=399 => SemanticHighlight::Info,
             400..=499 => SemanticHighlight::Warning,
             500..=599 => SemanticHighlight::Error,
             _ => continue,
@@ -744,8 +721,8 @@ mod tests {
     }
 
     #[test]
-    fn semantic_highlights_cover_targets_statuses_and_bounded_keywords() {
-        let text = "INFO 200 OK https://example.test 404 WARN 503 ERROR /srv/log";
+    fn semantic_highlights_cover_statuses_and_bounded_keywords() {
+        let text = "INFO 200 OK https://example.test 302 404 WARN 503 ERROR /srv/log";
         let rendered =
             render_terminal(snapshot_line(vec![plain_run(text, 0)]), semantic_settings());
         let runs = &rendered.lines[0].runs;
@@ -754,16 +731,28 @@ mod tests {
                 .find(|run| run.text == text)
                 .unwrap_or_else(|| panic!("missing semantic run {text:?}"))
         };
+        let run_containing = |text: &str| {
+            runs.iter()
+                .find(|run| run.text.contains(text))
+                .unwrap_or_else(|| panic!("missing semantic text {text:?}"))
+        };
         let palette = SemanticPalette::for_terminal(
             &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
             SemanticColorOverrides::default(),
         );
 
-        assert_eq!(run_for("https://example.test").foreground, palette.link);
-        assert_eq!(run_for("/srv/log").foreground, palette.link);
+        assert_eq!(
+            run_containing("https://example.test").foreground,
+            settings().default_foreground
+        );
+        assert_eq!(
+            run_containing("/srv/log").foreground,
+            settings().default_foreground
+        );
         assert_eq!(run_for("INFO").foreground, palette.info);
         assert_eq!(run_for("200").foreground, palette.success);
         assert_eq!(run_for("OK").foreground, palette.success);
+        assert_eq!(run_for("302").foreground, palette.info);
         assert_eq!(run_for("404").foreground, palette.warning);
         assert_eq!(run_for("WARN").foreground, palette.warning);
         assert_eq!(run_for("503").foreground, palette.error);
@@ -786,6 +775,11 @@ mod tests {
                 .find(|run| run.text == text)
                 .unwrap_or_else(|| panic!("missing rendered run {text:?}"))
         };
+        let run_containing = |text: &str| {
+            runs.iter()
+                .find(|run| run.text.contains(text))
+                .unwrap_or_else(|| panic!("missing rendered text {text:?}"))
+        };
         let palette = SemanticPalette::for_terminal(
             &TerminalPalette::for_scheme(TerminalColorScheme::Dark),
             SemanticColorOverrides::default(),
@@ -795,8 +789,14 @@ mod tests {
         assert_eq!(run_for("200").foreground, palette.success);
         assert_eq!(run_for("OK").foreground, palette.success);
         assert_eq!(run_for("ERROR").foreground, palette.error);
-        assert_eq!(run_for("https://example.test").foreground, palette.link);
-        assert_eq!(run_for("/srv/log").foreground, palette.link);
+        assert_eq!(
+            run_containing("https://example.test").foreground,
+            settings().default_foreground
+        );
+        assert_eq!(
+            run_containing("/srv/log").foreground,
+            settings().default_foreground
+        );
     }
 
     #[test]
@@ -873,7 +873,6 @@ mod tests {
     #[test]
     fn configured_semantic_colors_are_brightened_after_selection() {
         let overrides = SemanticColorOverrides {
-            link: Some(RgbColor::new(28, 202, 238)),
             success: Some(RgbColor::new(37, 211, 139)),
             info: Some(RgbColor::new(116, 177, 255)),
             warning: Some(RgbColor::new(255, 210, 77)),
@@ -881,7 +880,7 @@ mod tests {
         };
         let rendered = render_terminal(
             snapshot_line(vec![plain_run(
-                "INFO 200 OK https://example.test 404 WARN 503 ERROR",
+                "INFO 200 OK https://example.test 302 404 WARN 503 ERROR /srv/log",
                 0,
             )]),
             TerminalRenderSettings {
@@ -897,10 +896,15 @@ mod tests {
                 .find(|run| run.text == text)
                 .unwrap_or_else(|| panic!("missing semantic run {text:?}"))
         };
+        let run_containing = |text: &str| {
+            runs.iter()
+                .find(|run| run.text.contains(text))
+                .unwrap_or_else(|| panic!("missing semantic text {text:?}"))
+        };
 
         assert_eq!(
-            run_for("https://example.test").foreground,
-            adjust_text_foreground(overrides.link.unwrap(), 1.20, false)
+            run_containing("https://example.test").foreground,
+            adjust_text_foreground(settings().default_foreground, 1.20, false)
         );
         assert_eq!(
             run_for("INFO").foreground,
@@ -909,6 +913,10 @@ mod tests {
         assert_eq!(
             run_for("200").foreground,
             adjust_text_foreground(overrides.success.unwrap(), 1.20, false)
+        );
+        assert_eq!(
+            run_for("302").foreground,
+            adjust_text_foreground(overrides.info.unwrap(), 1.20, false)
         );
         assert_eq!(
             run_for("WARN").foreground,

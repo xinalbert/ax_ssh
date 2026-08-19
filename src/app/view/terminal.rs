@@ -259,7 +259,6 @@ fn terminal_render_settings(ui: &AppWindow) -> TerminalRenderSettings {
         bright_bold_text: ui.get_bright_bold_text(),
         semantic_highlighting: ui.get_terminal_semantic_highlighting(),
         semantic_colors: SemanticColorOverrides {
-            link: semantic_color_override(ui.get_terminal_semantic_link_color().as_str()),
             success: semantic_color_override(ui.get_terminal_semantic_success_color().as_str()),
             info: semantic_color_override(ui.get_terminal_semantic_info_color().as_str()),
             warning: semantic_color_override(ui.get_terminal_semantic_warning_color().as_str()),

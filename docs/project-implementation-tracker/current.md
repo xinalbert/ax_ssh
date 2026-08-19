@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260819-terminal-multi-click-selection
-- 目标：基于 `alacritty_terminal::SelectionType::{Semantic,Lines}` 支持终端双击选词和同序列三击选逻辑行，并保持本地选区、远端鼠标 reporting、目标激活和 Copy 链路边界清晰。
-- 交付物：语义/逻辑行范围 DTO、主窗口/分屏/Detached callback 转发、单字符有效选区、双击/三击自动 Copy 兼容、模型与 UI 回归、双语契约和离线门禁。
+- 目标 ID：20260819-terminal-target-underline-only
+- 目标：让 URL/路径只在按住平台主修饰键时显示临时下划线，默认保持终端原有前景色，并清理常驻语义 Link 颜色对渲染和 Settings 的覆盖。
+- 交付物：renderer 状态语义色收窄、主修饰键目标提示链路核对、兼容旧配置字段、Settings/双语契约同步、渲染回归和完整离线门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal.rs`、`src/app/terminal_bridge.rs`、`ui/{app,workspace-shell,terminal-pane,components/terminal-grid}.slint`、双语使用/架构文档和 tracker。
-- 不在本轮范围内：把选区坐标或文字提升到 AppState、修改 clipboard/transport 协议、SSH trust、凭据、worker 生命周期、配置 schema、依赖、锁文件或参考工程代码。
+- 当前范围：`src/app/terminal_render.rs`、`src/app/view/terminal.rs`、`ui/{settings/terminal,terminal-pane}.slint`、`scripts/build_zh_catalog.py`、双语使用/架构文档、项目地图和 tracker。
+- 不在本轮范围内：修改目标 parser、目标 DTO、selection/copy/reporting 链路、配置 schema/迁移、依赖、锁文件、SSH trust、凭据、worker 生命周期或参考工程代码。
 
 ## 当前状态
 
@@ -23,10 +23,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| SD1 | completed | `TerminalModel` 使用 alacritty 语义/逻辑行搜索返回可见、有界选区 DTO | semantic/line selection focused tests | 不写入 Term 持久 selection，不携带文字或 worker。 |
-| SD2 | completed | Slint 双击/三击事件与主窗口/分屏/Detached callback 链路 | Slint compile、callback wiring review | 同一 cell 序列、超时和第四次点击行为明确；远端 reporting、Shift、Cmd/Ctrl 目标激活优先。 |
-| SD3 | completed | 显式本地选区有效位、自动 Copy 兼容与回归 | focused/full Cargo tests | 单字符、ASCII 标点、CJK、括号、软换行、逻辑行和滚动边界。 |
-| SD4 | completed | 双语契约、项目地图、完整离线门禁 | fmt/check/Clippy/test/translation/Markdown/tracker/diff | 真实双击和远端 TUI 仍需用户平台验收。 |
+| TU1 | completed | URL/路径从常驻语义 renderer 和 Link 颜色覆盖中移除，3xx 归入 Information | terminal_render focused tests | 旧 config link/path 字段保留但不再参与渲染。 |
+| TU2 | completed | Settings、主修饰键 gate 和双语使用/架构契约同步 | Slint compile、translation/catalog review | Cmd/Ctrl 目标提示仍由既有 TerminalTargetHighlight 下划线链路负责。 |
+| TU3 | completed | tracker、环境记录与完整离线门禁 | fmt/check/Clippy/test/translation/tracker/diff | tracker validator 仅报告本轮未触及的历史时间字段；目标平台 Cmd/Ctrl 下划线 hover/click 仍需用户验收。 |
 
 ## 已完成
 
@@ -37,11 +36,13 @@
 - 本轮已决定语义选词只由 `alacritty_terminal` 计算；Slint 不按 `render_lines` 字符串扫描。
 - `TerminalModel` 已增加临时 `SelectionType::Semantic` 范围计算并裁剪到可见 viewport；Slint 已增加双击 callback 和显式局部选区有效位。
 - `TerminalModel` 也通过临时 `SelectionType::Lines` 返回裁剪到可见 viewport 的逻辑行范围；`TerminalGrid` 仅维护同一 cell 的有界点击序列，第三击触发行选区，第四击及以后不重复该动作。
+- URL/路径识别不参与常驻语义着色；renderer 只保留 HTTP 状态和成功/信息/警告/错误词的可选颜色，3xx 使用 Information。
+- Settings 不再显示 Link and path 颜色输入；旧配置字段仍经过兼容 DTO 传递，但 renderer 忽略该值。
 
 ## 验证
 
-- 已完成：上轮输出刷新/选区解耦的完整门禁；本轮仓库/技能/架构审阅、callback 冲突分析、语义/逻辑行范围 focused tests、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 195、应用 176、Doc tests 0）和 `git diff --check`。
-- 未完成：目标平台双击手感验收、真实远端 TUI reporting 验收，以及 tracker validator 的历史时间字段告警复核。
+- 已完成：Rust/Slint/架构边界审阅、renderer 与 Settings 目标收窄、双语文档和项目地图同步；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 195、应用 176、Doc tests 0）、中文 catalog 生成/检查、相对 Markdown 链接和 `git diff --check`。
+- 未完成：tracker validator 仍报告 40 条本轮未触及的历史时间字段/状态转换格式问题；新建 TU 条目不在错误列表中。
 
 ## 风险与阻塞
 
@@ -49,12 +50,12 @@
 - revision 只能表达“清除”，不能包含坐标、文字、clipboard 内容或 worker handle。
 - 语义搜索可能跨软换行或滚动历史，返回 UI 前必须裁剪到当前可见 viewport；单 cell 语义范围需要独立的有效位，否则现有坐标判定会把它当空选区。
 - Slint 双击 callback 在普通 click 后触发；自动 Copy、目标激活和远端 reporting 的覆盖顺序必须保持可观察且不重复发送鼠标事件。
-- Slint 不暴露原生 click count；三击由 `TerminalGrid` 用同一 cell、500ms 有界计数器组合 `clicked`/`double-clicked`，因此目标平台仍需验收不同系统双击速度和连续点击手感。
+- 旧 Settings link/path 配置值仍存在于 schema，必须继续保持可读取和可保存；它不应重新进入 renderer 或可见颜色输入。
 
 ## 下一步
 
-- 完成 SD1-SD4 后，由用户在目标平台验收双击选词、持续输出期间 Copy、远端 reporting 和 resize/scroll 清除。
+- 由用户在目标平台验收 Cmd/Ctrl 按下和释放时 URL/路径下划线的出现、消失、pointer cursor 及与远端 reporting/本地选区的优先级。
 
 ## 最后更新时间
 
-- 2026-08-19 16:26 +0800
+- 2026-08-19 18:12 +0800
