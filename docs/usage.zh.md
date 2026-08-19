@@ -222,7 +222,8 @@ xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`
 一次指针手势从按下到释放或 cancel 始终沿用按下时确定的 owner，指针移出 grid 后也不会切换链路。release
 上报当时的修饰键状态，cancel 使用最近一次 pointer 状态；高频 motion 每个显示帧只保留最新 cell，并在 release
 前刷新最后一帧。1007 只启用备用屏滚轮转换，绝不会接管 button 手势。焦点移到另一 pane、
-分隔条或其他窗口控件时会清除终端选区；终端上下文菜单会保留选区至 **Copy** 动作完成。reporting 开启时，
+分隔条或其他窗口控件时会清除终端选区；新的终端输出、真实字符格 resize 或实际本地滚动也会清除选区，
+避免高亮 cell 在视口变化后指向其他文字。视口稳定时，终端上下文菜单会保留选区至 **Copy** 动作完成。reporting 开启时，
 标准模式使用 `Shift` + 右键打开本地菜单；本地选区优先模式使用普通右键，`Alt`/`Option` + 右键仍转发远端。
 `Ctrl+C` 会作为中断信号发送给活动终端。Terminal Tab 活动时，**Edit > Copy**、**Paste**、
 **Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
