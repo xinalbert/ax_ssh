@@ -28,6 +28,16 @@ export struct TerminalNoticeViewState {
     secondary_label: string,
 }
 
+// Rust computes only this bounded viewport-relative range. TerminalPane keeps
+// it as local interaction state, including the single-cell active case.
+export struct TerminalSemanticSelection {
+    active: bool,
+    anchor_row: int,
+    anchor_column: int,
+    focus_row: int,
+    focus_column: int,
+}
+
 export struct TerminalViewState {
     terminal_id: string,
     connected: bool,
@@ -207,6 +217,7 @@ export component TerminalPane inherits Rectangle {
     callback scrolled(int);
     callback mouse-event(int, int, int, int, bool, bool, bool);
     callback selection-text(int, int, int, int) -> string;
+    callback semantic-selection-range(int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(int, int, bool, bool) -> bool;
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
@@ -249,10 +260,12 @@ export component TerminalPane inherits Rectangle {
     private property <bool> initial-input-focus-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
+    private property <bool> selection-valid: false;
     private property <int> pressed-button: -1;
     private property <bool> last-pointer-shift: false;
     private property <bool> last-pointer-alt: false;
     private property <bool> last-pointer-control: false;
+    private property <bool> last-primary-target-activated: false;
     private property <bool> mouse-motion-pending: false;
     private property <int> mouse-motion-row: 0;
     private property <int> mouse-motion-column: 0;
@@ -270,9 +283,7 @@ export component TerminalPane inherits Rectangle {
     private property <TerminalTargetHighlight> terminal-target-highlight: {
         active: false, row: 0, start_column: 0, end_column: 0,
     };
-    private property <bool> selection-active:
-        root.selection-anchor-row != root.selection-focus-row
-        || root.selection-anchor-column != root.selection-focus-column;
+    private property <bool> selection-active: root.selection-valid;
     private property <bool> anchor-first:
         root.selection-anchor-row < root.selection-focus-row
         || (root.selection-anchor-row == root.selection-focus-row
@@ -338,6 +349,7 @@ export component TerminalPane inherits Rectangle {
 
     function clear-selection() {
         root.selecting = false;
+        root.selection-valid = false;
         root.clear-terminal-target-highlight();
         root.selection-focus-row = root.selection-anchor-row;
         root.selection-focus-column = root.selection-anchor-column;
@@ -360,6 +372,7 @@ export component TerminalPane inherits Rectangle {
         root.selection-anchor-column = 0;
         root.selection-focus-row = max(0, root.render-lines.length - 1);
         root.selection-focus-column = max(0, root.content-columns - 1);
+        root.selection-valid = true;
         if root.copy-selection-on-select {
             root.copy-selection();
         }
@@ -378,6 +391,29 @@ export component TerminalPane inherits Rectangle {
         return root.view.mouse_button_reporting
             && !shift
             && (!root.mouse-local-selection-priority || alt);
+    }
+
+    function apply-semantic-selection(row: int, column: int) {
+        if root.last-pointer-shift
+            || root.last-primary-target-activated
+            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
+            return;
+        }
+        let selection = root.semantic-selection-range(row, column);
+        if !selection.active {
+            return;
+        }
+        root.selection-anchor-row = selection.anchor_row;
+        root.selection-anchor-column = selection.anchor_column;
+        root.selection-focus-row = selection.focus_row;
+        root.selection-focus-column = selection.focus_column;
+        root.selection-valid = true;
+        root.selecting = false;
+        root.clear-terminal-target-highlight();
+        if root.copy-selection-on-select {
+            root.copy-selection();
+        }
+        root.focus-input();
     }
 
     function queue-mouse-motion(
@@ -723,6 +759,7 @@ export component TerminalPane inherits Rectangle {
                     root.last-pointer-shift = shift;
                     root.last-pointer-alt = alt;
                     root.last-pointer-control = control;
+                    root.last-primary-target-activated = false;
                     root.focus-terminal();
                     root.pressed-button = -1;
                     if report-mouse {
@@ -735,12 +772,14 @@ export component TerminalPane inherits Rectangle {
                     }
                     if !report-mouse && left && !shift
                         && root.activate-terminal-target(row, column, control, meta) {
+                        root.last-primary-target-activated = true;
                         root.clear-selection();
                     } else if !report-mouse && left {
                         root.selection-anchor-row = row;
                         root.selection-anchor-column = column;
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
+                        root.selection-valid = false;
                         root.selecting = true;
                         root.clear-terminal-target-highlight();
                     } else if !report-mouse && right
@@ -769,6 +808,8 @@ export component TerminalPane inherits Rectangle {
                     } else if root.selecting {
                         root.selection-focus-row = row;
                         root.selection-focus-column = column;
+                        root.selection-valid = root.selection-anchor-row != row
+                            || root.selection-anchor-column != column;
                         root.clear-terminal-target-highlight();
                     } else if root.forward-mouse-to-terminal(shift, alt) {
                         root.queue-mouse-motion(row, column, 5, shift, alt, control);
@@ -795,6 +836,12 @@ export component TerminalPane inherits Rectangle {
                             shift, alt, control);
                         root.pressed-button = -1;
                     }
+                    if root.selecting {
+                        root.selection-focus-row = row;
+                        root.selection-focus-column = column;
+                        root.selection-valid = root.selection-anchor-row != row
+                            || root.selection-anchor-column != column;
+                    }
                     if root.selecting && root.copy-selection-on-select && root.selection-active {
                         root.copy-selection();
                     }
@@ -816,6 +863,9 @@ export component TerminalPane inherits Rectangle {
                     root.pressed-button = -1;
                     root.mouse-motion-pending = false;
                     root.selecting = false;
+                }
+                semantic-selection-request(row, column) => {
+                    root.apply-semantic-selection(row, column);
                 }
                 scrolled(row, column, lines, shift, alt, control) => {
                     if root.view.mouse_wheel_reporting && !shift {

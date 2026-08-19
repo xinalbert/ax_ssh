@@ -6,6 +6,7 @@ import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-tit
 import { TerminalRenderLine, TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
+import { TerminalSemanticSelection } from "terminal-pane.slint";
 import {
     TerminalPaneDividerView,
     TerminalPaneView,
@@ -487,6 +488,7 @@ export component AppWindow inherits Window {
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -850,6 +852,9 @@ export component AppWindow inherits Window {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,
                 );
+            }
+            terminal-semantic-selection-range(id, row, column) => {
+                return root.terminal-semantic-selection-range(id, row, column);
             }
             terminal-target-at-cell(id, row, column, control, meta) => {
                 return root.terminal-target-at-cell(id, row, column, control, meta);

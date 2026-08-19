@@ -218,7 +218,9 @@ SGR、UTF-8 或传统格式发送。默认开启 **Local selection priority**：
 `Alt`（macOS 为 `Option`）才把 button 手势交给 TUI。在 **Settings > Terminal** 关闭该选项后进入标准
 xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`Shift` 绕过 reporting 进入本地选区，
 `Alt`/`Option` 只作为上报的 modifier bit。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
-滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。
+滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。手势没有交给 reporting 时，左键双击会按终端核心语义选中一个词，
+包括宽字符、软换行 cell 和匹配括号；范围只留在 pane，不会发送给远端程序。Shift 绕过该行为，Cmd/Ctrl 目标激活
+和远端 mouse reporting 保持优先；既有 copy-on-select 偏好也会对语义选区生效。
 一次指针手势从按下到释放或 cancel 始终沿用按下时确定的 owner，指针移出 grid 后也不会切换链路。release
 上报当时的修饰键状态，cancel 使用最近一次 pointer 状态；高频 motion 每个显示帧只保留最新 cell，并在 release
 前刷新最后一帧。1007 只启用备用屏滚轮转换，绝不会接管 button 手势。焦点移到另一 pane、

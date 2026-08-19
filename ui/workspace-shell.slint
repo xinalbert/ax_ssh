@@ -1,7 +1,11 @@
 import { Theme } from "theme.slint";
 import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
 import { SettingsPane, SettingsSearchEntry, SettingsViewState } from "settings.slint";
-import { TerminalPane, TerminalViewState } from "terminal-pane.slint";
+import {
+    TerminalPane,
+    TerminalSemanticSelection,
+    TerminalViewState,
+} from "terminal-pane.slint";
 import { SftpPane, SftpViewState } from "sftp-pane.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { SessionGroupRow, SessionNavigation } from "components/session-navigation.slint";
@@ -195,6 +199,7 @@ component TerminalPaneGroup inherits Rectangle {
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -233,6 +238,11 @@ component TerminalPaneGroup inherits Rectangle {
         selection-text(anchor-row, anchor-column, focus-row, focus-column) => {
             return root.terminal-selection-text(
                 pane.terminal.terminal_id, anchor-row, anchor-column, focus-row, focus-column,
+            );
+        }
+        semantic-selection-range(row, column) => {
+            return root.terminal-semantic-selection-range(
+                pane.terminal.terminal_id, row, column,
             );
         }
         terminal-target-at-cell(row, column, control, meta) => {
@@ -321,6 +331,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -370,6 +381,9 @@ component DetachedWorkspaceContent inherits Rectangle {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,
                 );
+            }
+            terminal-semantic-selection-range(id, row, column) => {
+                return root.terminal-semantic-selection-range(id, row, column);
             }
             terminal-target-at-cell(id, row, column, control, meta) => {
                 return root.terminal-target-at-cell(id, row, column, control, meta);
@@ -518,6 +532,7 @@ export component WorkspaceShell inherits Rectangle {
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
+    callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(string, int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(string, int, int, bool, bool) -> bool;
     callback terminal-pane-focus(string);
@@ -609,6 +624,9 @@ export component WorkspaceShell inherits Rectangle {
             return root.terminal-selection-text(
                 id, anchor-row, anchor-column, focus-row, focus-column,
             );
+        }
+        terminal-semantic-selection-range(id, row, column) => {
+            return root.terminal-semantic-selection-range(id, row, column);
         }
         terminal-target-at-cell(id, row, column, control, meta) => {
             return root.terminal-target-at-cell(id, row, column, control, meta);
@@ -734,6 +752,9 @@ export component WorkspaceShell inherits Rectangle {
                             return root.terminal-selection-text(
                                 id, anchor-row, anchor-column, focus-row, focus-column,
                             );
+                        }
+                        terminal-semantic-selection-range(id, row, column) => {
+                            return root.terminal-semantic-selection-range(id, row, column);
                         }
                         terminal-target-at-cell(id, row, column, control, meta) => {
                             return root.terminal-target-at-cell(id, row, column, control, meta);

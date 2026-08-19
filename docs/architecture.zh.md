@@ -99,6 +99,11 @@ Rust
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
 不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
+第一版本地语义选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
+`TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
+不保留上游 `Selection`；宽字符、软换行和括号配对语义由终端核心处理，范围在进入 application callback 前裁剪。
+`TerminalPane` 另持有显式的局部有效位，因此单字符选区即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
+`double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好只对该语义范围执行一次。
 Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
 重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。
@@ -144,7 +149,7 @@ identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多
 正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态
 继续可见；关闭可见 Terminal Tab 仍负责关闭整棵树。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
-有界 snapshot，并把指针、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
+有界 snapshot，并把指针、语义双击、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。
 终端目标激活遵循相同边界。按住平台主修饰键时（macOS 为 `Cmd`，其它平台为 `Ctrl`），指针移动或
 按下主修饰键都会让 application bridge 检查当前可见行和单元格。私有 parser 返回完整、有界目标的

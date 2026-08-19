@@ -2,14 +2,14 @@
 
 ## 当前目标
 
-- 目标 ID：20260819-terminal-selection-refresh-semantics
-- 目标：让终端输出刷新与局部选区解耦，刷新网格时保留选区，并在 Copy 时读取选区坐标对应的最新 cell。
-- 交付物：输出不推进 selection revision、最新 cell 复制回归、resize/scroll 失效边界、双语契约和完整离线门禁。
+- 目标 ID：20260819-terminal-semantic-double-click-selection
+- 目标：基于 `alacritty_terminal::SelectionType::Semantic` 增加第一版终端双击选词，并保持本地选区、远端鼠标 reporting、目标激活和 Copy 链路边界清晰。
+- 交付物：语义范围 DTO、主窗口/分屏/Detached callback 转发、单字符有效选区、双击自动 Copy 兼容、模型与 UI 回归、双语契约和离线门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal.rs`、`src/app/{state,state/tabs,state/terminal,state/tests,terminal_bridge,view/terminal}.rs`、`ui/{app,terminal-pane}.slint`、双语使用/架构文档和 tracker。
+- 当前范围：`src/terminal.rs`、`src/app/terminal_bridge.rs`、`ui/{app,workspace-shell,terminal-pane,components/terminal-grid}.slint`、双语使用/架构文档和 tracker。
 - 不在本轮范围内：把选区坐标或文字提升到 AppState、修改 clipboard/transport 协议、SSH trust、凭据、worker 生命周期、配置 schema、依赖、锁文件或参考工程代码。
 
 ## 当前状态
@@ -23,9 +23,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| SR1 | completed | 输出刷新不再推进 selection revision，Copy 读取最新 cell | output/selection focused tests、Cargo check | 选区坐标仍只属于 Slint。 |
-| SR2 | completed | 双语契约、项目地图和跟踪记录 | translation/Markdown/tracker/diff | resize/scroll/identity/focus 失效边界保持不变。 |
-| SR3 | completed | 完整离线门禁与最终边界审阅 | fmt/check/Clippy/test | GUI 交互留目标平台验收。 |
+| SD1 | completed | `TerminalModel` 使用 alacritty 语义搜索返回可见、有界选区 DTO | semantic selection focused tests | 不写入 Term 持久 selection，不携带文字或 worker。 |
+| SD2 | completed | Slint 双击事件与主窗口/分屏/Detached callback 链路 | Slint compile、callback wiring review | 远端 reporting、Shift、Cmd/Ctrl 目标激活优先。 |
+| SD3 | completed | 显式本地选区有效位、自动 Copy 兼容与回归 | focused/full Cargo tests | 单字符、ASCII 标点、CJK、括号、软换行、滚动边界。 |
+| SD4 | completed | 双语契约、项目地图、完整离线门禁 | fmt/check/Clippy/test/translation/Markdown/tracker/diff | 真实双击和远端 TUI 仍需用户平台验收。 |
 
 ## 已完成
 
@@ -33,22 +34,25 @@
 - 输出 snapshot 只刷新网格，不推进 `selection_revision`；局部选区可在持续输出期间保持，Copy 读取最新 cell。
 - `TerminalTabState` 的 revision 仍经 active/split snapshots 和 `TerminalViewState` 传入 Slint；terminal identity、断开、失焦、真实 resize 和有效 scroll 继续清除局部选区。
 - 复制回归覆盖 soft wrap 不插入换行、hard break/空白行保留换行，以及输出刷新后读取最新 cell。
+- 本轮已决定语义选词只由 `alacritty_terminal` 计算；Slint 不按 `render_lines` 字符串扫描。
+- `TerminalModel` 已增加临时 `SelectionType::Semantic` 范围计算并裁剪到可见 viewport；Slint 已增加双击 callback 和显式局部选区有效位。
 
 ## 验证
 
-- 已完成：仓库/技能/架构审阅；输出/selection focused tests、真实/no-op resize、有效/no-op scroll 和 scroll-to-bottom 回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 188、应用 176、Doc tests 0）、415 条翻译校验、Markdown 相对链接、tracker validator 和 `git diff --check`。
-- 未完成：目标平台持续输出期间拖选、刷新后 Copy、resize/scroll 失效和真实 GUI 手感验收；tracker validator 的 37 条既有历史时间字段问题仍未修复。
+- 已完成：上轮输出刷新/选区解耦的完整门禁；本轮仓库/技能/架构审阅、callback 冲突分析、4 项语义范围 focused tests、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 192、应用 176、Doc tests 0）、`python3 scripts/check_translations.py`（415 条）和 `git diff --check`。
+- 未完成：目标平台双击手感验收、真实远端 TUI reporting 验收，以及 tracker validator 的历史时间字段告警复核。
 
 ## 风险与阻塞
 
 - 输出可能改变选区坐标下的 cell 内容；当前契约是保留坐标并在 Copy 时读取最新内容，不承诺追踪原始文本 identity。
 - revision 只能表达“清除”，不能包含坐标、文字、clipboard 内容或 worker handle。
-- Slint 局部高亮与真实右键 Copy、输出、resize 和 scroll 的交互仍需目标平台确认。
+- 语义搜索可能跨软换行或滚动历史，返回 UI 前必须裁剪到当前可见 viewport；单 cell 语义范围需要独立的有效位，否则现有坐标判定会把它当空选区。
+- Slint 双击 callback 在普通 click 后触发；自动 Copy、目标激活和远端 reporting 的覆盖顺序必须保持可观察且不重复发送鼠标事件。
 
 ## 下一步
 
-- 由用户在目标平台验收持续输出期间拖选、刷新后 Copy，以及 resize/scroll 后的选区清除。
+- 完成 SD1-SD4 后，由用户在目标平台验收双击选词、持续输出期间 Copy、远端 reporting 和 resize/scroll 清除。
 
 ## 最后更新时间
 
-- 2026-08-19 09:01 +0800
+- 2026-08-19 10:43 +0800

@@ -8,7 +8,8 @@ use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
@@ -87,6 +88,14 @@ pub struct TerminalSnapshot {
     pub mouse_reporting: TerminalMouseReporting,
     pub mouse_button_reporting_active: bool,
     pub mouse_wheel_reporting_active: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalSelectionRange {
+    pub start_row: usize,
+    pub start_column: usize,
+    pub end_row: usize,
+    pub end_column: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -432,6 +441,57 @@ impl TerminalModel {
             }
         }
         contents
+    }
+
+    /// Returns the visible cell range for a semantic double-click selection.
+    ///
+    /// The temporary alacritty selection is used only for its boundary
+    /// semantics. It is never stored in the terminal model, so local Slint
+    /// selection state remains the sole owner of highlighting and copying.
+    pub fn semantic_selection_range(
+        &self,
+        row: usize,
+        column: usize,
+    ) -> Option<TerminalSelectionRange> {
+        let grid = self.term.grid();
+        let rows = grid.screen_lines();
+        let columns = grid.columns();
+        if rows == 0 || columns == 0 || row >= rows || column >= columns {
+            return None;
+        }
+
+        let display_offset = grid.display_offset() as i32;
+        let line = Line(row as i32 - display_offset);
+        let point = Point::new(line, Column(column));
+        let selection = Selection::new(SelectionType::Semantic, point, Side::Left);
+        let range = selection.to_range(&self.term)?;
+
+        let visible_top = -display_offset;
+        let visible_bottom = visible_top + rows as i32 - 1;
+        let start_line = range.start.line.0.max(visible_top);
+        let end_line = range.end.line.0.min(visible_bottom);
+        if start_line > end_line {
+            return None;
+        }
+
+        let last_column = columns - 1;
+        let start_column = if range.start.line.0 < visible_top {
+            0
+        } else {
+            range.start.column.0.min(last_column)
+        };
+        let end_column = if range.end.line.0 > visible_bottom {
+            last_column
+        } else {
+            range.end.column.0.min(last_column)
+        };
+
+        Some(TerminalSelectionRange {
+            start_row: (start_line - visible_top) as usize,
+            start_column,
+            end_row: (end_line - visible_top) as usize,
+            end_column,
+        })
     }
 
     /// Returns a bounded visible row and the text position at a terminal cell.
@@ -1300,6 +1360,113 @@ mod tests {
         terminal.process(b"\rworld");
 
         assert_eq!(terminal.selection_text(0, 0, 0, 4), "world");
+    }
+
+    #[test]
+    fn semantic_selection_uses_terminal_punctuation_boundaries() {
+        let mut terminal = TerminalModel::new(20, 3, 10);
+        terminal.process(b"foo'bar");
+
+        assert_eq!(
+            terminal.semantic_selection_range(0, 1),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 0,
+                end_column: 2,
+            })
+        );
+        assert_eq!(
+            terminal.semantic_selection_range(0, 5),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 4,
+                end_row: 0,
+                end_column: 6,
+            })
+        );
+    }
+
+    #[test]
+    fn semantic_selection_handles_cjk_cells_and_matching_brackets() {
+        let mut terminal = TerminalModel::new(20, 3, 10);
+        terminal.process("中中文 (value)".as_bytes());
+
+        assert_eq!(
+            terminal.semantic_selection_range(0, 1),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 0,
+                end_column: 5,
+            })
+        );
+        assert_eq!(
+            terminal.semantic_selection_range(0, 7),
+            Some(TerminalSelectionRange {
+                start_row: 0,
+                start_column: 7,
+                end_row: 0,
+                end_column: 13,
+            })
+        );
+    }
+
+    #[test]
+    fn semantic_selection_is_clipped_to_scrolled_viewport() {
+        let mut terminal = TerminalModel::new(10, 2, 10);
+        terminal.process(b"abcdefghijKLMNOPQRSTuvwxyz\r\nlast\r\n");
+        assert!(terminal.scroll(1));
+
+        let range = terminal
+            .semantic_selection_range(0, 1)
+            .expect("visible word should have a semantic range");
+        assert_eq!(
+            range,
+            TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 1,
+                end_column: 5,
+            }
+        );
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            "KLMNOPQRSTuvwxyz"
+        );
+    }
+
+    #[test]
+    fn semantic_selection_preserves_soft_wrapped_words() {
+        let mut terminal = TerminalModel::new(10, 3, 10);
+        terminal.process(b"abcdefghijk");
+
+        let range = terminal
+            .semantic_selection_range(0, 1)
+            .expect("wrapped word should have a semantic range");
+        assert_eq!(
+            range,
+            TerminalSelectionRange {
+                start_row: 0,
+                start_column: 0,
+                end_row: 1,
+                end_column: 0,
+            }
+        );
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            "abcdefghijk"
+        );
     }
 
     #[test]

@@ -115,6 +115,17 @@ selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
 and empty output do not advance it. The revision carries no selection
 coordinates or text. The pane never owns a worker, a terminal buffer, or
 connection state.
+The first local semantic-selection gesture is a left-button double-click when
+the gesture is not owned by mouse reporting, a Shift bypass, or primary-modifier
+target activation. `TerminalModel` creates a temporary
+`alacritty_terminal::SelectionType::Semantic` and returns only a bounded,
+viewport-relative range DTO; it does not retain the upstream `Selection`.
+The range preserves wide cells, soft-wrap and bracket-pair semantics and is
+clipped before crossing the application callback. `TerminalPane` keeps an
+explicit local-valid bit so a one-cell word remains copyable even when its
+anchor and focus coordinates are equal. Slint's `double-clicked` event then
+overrides the preceding ordinary click state, and the existing copy-on-select
+preference applies once to the semantic range.
 Terminal panes intentionally have no visual frame;
 `AppWindow` draws the one client-area frame around the whole application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection
@@ -198,7 +209,7 @@ connection, authentication, or transport failures remain visible; closing the
 visible Terminal Tab still owns whole-tree shutdown.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
-pointer, scroll, and context-menu gestures into callbacks, while `TerminalPane`
+pointer, semantic double-click, scroll, and context-menu gestures into callbacks, while `TerminalPane`
 retains the focus, IME input, selection draft, and resize lifecycle.
 Terminal target activation follows the same boundary. While the platform primary
 modifier is held (`Cmd` on macOS and `Ctrl` elsewhere), a pointer move or primary
