@@ -361,10 +361,11 @@ the last observed pointer state. High-frequency motion keeps only the newest
 cell per display frame, while the final motion is flushed before release.
 Mode 1007 enables only alternate-screen wheel translation and never takes
 ownership of button gestures. Moving focus to another pane, a divider, or another window
-control clears a terminal selection; new terminal output, an actual grid resize,
-or an effective local scroll also clears it so highlighted cells never refer to a
-different viewport. The terminal context menu keeps a stable selection long
-enough to use **Copy**. While reporting is active, standard mode uses
+control clears a terminal selection; an actual grid resize or an effective local
+scroll clears it when the coordinates no longer describe the same viewport.
+Screen output refreshes update the grid without cancelling the selection, and
+**Copy** reads the latest cells under the selected coordinates. The terminal
+context menu keeps a stable selection long enough to use **Copy**. While reporting is active, standard mode uses
 `Shift` + right-click for that local menu; Local selection priority uses an
 ordinary right-click, while `Alt`/`Option` + right-click remains remote.
 Home and End follow application-cursor mode in full-screen programs. Plain

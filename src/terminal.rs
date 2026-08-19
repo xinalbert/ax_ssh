@@ -1294,6 +1294,15 @@ mod tests {
     }
 
     #[test]
+    fn selection_text_reads_latest_cells_after_output_refresh() {
+        let mut terminal = TerminalModel::new(10, 3, 10);
+        terminal.process(b"hello");
+        terminal.process(b"\rworld");
+
+        assert_eq!(terminal.selection_text(0, 0, 0, 4), "world");
+    }
+
+    #[test]
     fn scrollback_is_bounded_and_scrollable() {
         let mut terminal = TerminalModel::new(80, 5, 2);
         for index in 0..12 {

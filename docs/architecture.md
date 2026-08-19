@@ -106,12 +106,15 @@ callback. `TerminalPaneGroup` renders bounded per-window lists of normalized
 cursor blink, and measured sizing. Its selection clears when the logical pane or
 transparent native input loses focus, while the terminal context menu retains it
 through a Copy action. `AppState` also publishes a bounded selection revision
-when non-empty terminal output, a real normalized resize, an effective local
-scroll, or an input-driven return to the bottom changes the viewport identity;
-`TerminalPane` clears its local coordinates
-when that revision changes. Duplicate resize callbacks, zero or clamped scrolling,
-and empty output do not advance it. The revision carries no selection coordinates
-or text. The pane never owns a worker, a terminal buffer, or connection state.
+when a real normalized resize, an effective local scroll, or an input-driven
+return to the bottom changes the viewport identity; `TerminalPane` clears its
+local coordinates when that revision changes. Output snapshots update the grid
+without advancing the revision, so a selection can remain active while the
+screen refreshes. Copy then extracts the latest cells under the unchanged local
+selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
+and empty output do not advance it. The revision carries no selection
+coordinates or text. The pane never owns a worker, a terminal buffer, or
+connection state.
 Terminal panes intentionally have no visual frame;
 `AppWindow` draws the one client-area frame around the whole application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection

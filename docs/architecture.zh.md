@@ -94,10 +94,11 @@ Rust
 激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
 `TerminalPane` placement 与内部 split divider 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；逻辑 pane 或透明原生输入失焦时其选区会清除，
-但终端上下文菜单会将选区保留至 Copy 动作完成。非空终端输出、真实的标准化 resize、实际本地滚动或
-输入前回到底部改变视口身份时，`AppState` 还会发布一个有界 selection revision，`TerminalPane` 在它变化时清除局部坐标；
-重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision 不携带选区坐标或文字，
-pane 也不拥有 worker、终端缓冲区或连接状态。
+但终端上下文菜单会将选区保留至 Copy 动作完成。真实的标准化 resize、实际本地滚动或输入前回到底部改变
+视口身份时，`AppState` 会发布一个有界 selection revision，`TerminalPane` 在它变化时清除局部坐标。
+终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
+选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
+不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
 Terminal pane 不绘制自身框线；`AppWindow` 只在整个应用窗口客户区绘制唯一的一条框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
 重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。

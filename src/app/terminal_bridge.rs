@@ -983,9 +983,6 @@ pub(super) fn process_terminal_output(terminal: &mut TerminalTabState, data: &[u
         .as_mut()
         .context("terminal tab has no terminal model")?
         .process_with_responses(data);
-    if !data.is_empty() {
-        terminal.invalidate_selection();
-    }
     if responses.is_empty() {
         return Ok(());
     }
@@ -1047,7 +1044,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_output_invalidates_local_selection_revision() {
+    fn terminal_output_preserves_local_selection_revision() {
         let mut app = AppState::new(
             ConfigStore::new(
                 std::env::temp_dir().join(format!("axssh-output-revision-{}.json", Uuid::new_v4())),
@@ -1062,11 +1059,11 @@ mod tests {
 
         process_terminal_output(terminal, b"output").expect("terminal output should be processed");
 
-        assert_eq!(terminal.selection_revision, before + 1);
+        assert_eq!(terminal.selection_revision, before);
 
         process_terminal_output(terminal, b"").expect("empty output should be accepted");
 
-        assert_eq!(terminal.selection_revision, before + 1);
+        assert_eq!(terminal.selection_revision, before);
     }
 
     #[cfg(not(windows))]
