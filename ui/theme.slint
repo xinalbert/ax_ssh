@@ -71,11 +71,13 @@ export global Theme {
         : (palette == "forest" && resolved-dark ? "forest-dark"
         : (resolved-dark ? "dark" : "light")))));
 
-    // Shared state tokens keep borders, dividers, focus rings and selected rows
-    // on the same contrast-safe semantic surface across all components.
-    out property <color> divider: border;
+    // Keep the frame as the strongest static boundary. Internal separators use
+    // composited neutral tones, while active interaction states may use accent.
+    out property <color> divider: border.with-alpha(0.68);
     out property <color> frame-border: border;
     out property <color> control-border: border;
+    out property <color> tab-divider: border.with-alpha(0.46);
+    out property <color> sidebar-divider: divider;
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
     out property <color> selected: accent.with-alpha(0.16);

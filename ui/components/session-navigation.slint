@@ -654,9 +654,6 @@ export component SessionNavigation inherits Rectangle {
 
     if !root.expanded : Rectangle {
         background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: Theme.frame-border;
-
         VerticalLayout {
             padding-top: Theme.space-xs;
             padding-bottom: Theme.space-xs;
@@ -735,13 +732,18 @@ export component SessionNavigation inherits Rectangle {
                 }
             }
         }
+        // The application frame owns the outer edge; the sidebar contributes
+        // only one internal divider on its content side.
+        Rectangle {
+            x: parent.width - Theme.hairline;
+            width: Theme.hairline;
+            height: parent.height;
+            background: Theme.sidebar-divider;
+        }
     }
 
     if root.expanded : Rectangle {
         background: Theme.panel;
-        border-width: Theme.hairline;
-        border-color: Theme.frame-border;
-
         VerticalLayout {
             padding-left: Theme.space-md;
             padding-right: Theme.space-md;
@@ -871,6 +873,13 @@ export component SessionNavigation inherits Rectangle {
                     wrap: word-wrap;
                 }
             }
+        }
+        // Avoid a second top/left/bottom frame inside the application frame.
+        Rectangle {
+            x: parent.width - Theme.hairline;
+            width: Theme.hairline;
+            height: parent.height;
+            background: Theme.sidebar-divider;
         }
     }
 }
