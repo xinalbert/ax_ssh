@@ -92,7 +92,6 @@ export component TerminalGrid inherits Rectangle {
         y: root.top-offset + line-index * root.cell-height;
         width: parent.width;
         height: root.cell-height;
-        background: root.view.background;
 
         for run in line.runs : Rectangle {
             x: run.column * root.cell-width;
@@ -116,28 +115,29 @@ export component TerminalGrid inherits Rectangle {
             background: root.view.selection_background.with-alpha(0.72);
         }
 
-        for run in line.runs : Text {
-            x: run.column * root.cell-width;
-            y: (root.cell-height - root.font-cell-height) / 2;
-            width: run.cells * root.cell-width;
-            height: root.font-cell-height;
-            text: run.text;
-            color: run.foreground;
-            font-family: root.view.font_family;
-            font-size: root.view.font_size;
-            font-weight: run.bold ? 700 : 400;
-            font-italic: run.italic;
-            letter-spacing: 0px;
-            horizontal-alignment: run.centered ? center : left;
-            vertical-alignment: center;
-            overflow: clip;
-        }
-
+        // Keep text and its decorations in one repeater. The run background
+        // stays above the line background while this group remains below the
+        // selection rectangle, preserving the terminal paint order.
         for run in line.runs : Rectangle {
             x: run.column * root.cell-width;
             width: run.cells * root.cell-width;
             height: root.cell-height;
             background: transparent;
+            Text {
+                y: (parent.height - root.font-cell-height) / 2;
+                width: parent.width;
+                height: root.font-cell-height;
+                text: run.text;
+                color: run.foreground;
+                font-family: root.view.font_family;
+                font-size: root.view.font_size;
+                font-weight: run.bold ? 700 : 400;
+                font-italic: run.italic;
+                letter-spacing: 0px;
+                horizontal-alignment: run.centered ? center : left;
+                vertical-alignment: center;
+                overflow: clip;
+            }
             if run.underline : Rectangle {
                 y: parent.height - Theme.terminal-underline-offset;
                 width: parent.width;
