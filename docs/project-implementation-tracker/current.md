@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260820-terminal-renderer-selection
-- 目标：根据 macOS `sample` 证据把持续整帧软件栅格化从默认路径移到平台合适的 GPU-backed renderer，同时保留明确的软件回退和既有终端语义。
-- 交付物：编译 Slint Skia 与 software renderer；macOS 默认选择 Metal-backed `winit-skia`，其它桌面平台保持 `winit-software`；尊重 `SLINT_BACKEND` 覆盖，更新双语契约并完成离线门禁。
+- 目标 ID：20260820-renderer-preference
+- 目标：让用户在 Settings > Appearance 持久化选择自动、GPU 或软件渲染，并只在重启时于首个窗口创建前应用该偏好。
+- 交付物：schema v24 的规范化 renderer 偏好、启动选择、Settings 草稿/保存链路、双语说明和离线门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`src/app.rs`、双语开发/架构说明、项目地图和 tracker。
-- 不在本轮范围内：修改终端 parser/snapshot DTO、selection/copy/reporting 链路、终端 model、配置 schema/迁移、SSH trust、凭据、worker 生命周期或参考工程代码。
+- 当前范围：`src/{app,config}.rs`、`ui/{app,settings,workspace-shell,settings/appearance}.slint`、翻译目录、双语开发/架构/使用说明，以及项目地图和 tracker。
+- 不在本轮范围内：运行时热切换 renderer、修改终端 parser/snapshot DTO、selection/copy/reporting 链路、终端 model、SSH trust、凭据、worker 生命周期或参考工程代码。
 
 ## 当前状态
 
@@ -23,9 +23,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| PR1 | completed | 审计新旧 sample 结论与 Slint 1.17.1 renderer/fallback 源码 | sample call graph、依赖源码审计 | 既有 sample 的主线程热点集中在 DisplayLink/software renderer；新路径当前在工作区不可读，不能伪造对其内容的分析。 |
-| PR2 | completed | 启用 Skia，按平台在首个 `AppWindow` 前选择 renderer，并保留环境覆盖 | Cargo feature resolution、启动选择代码审计 | macOS 选择 `winit-skia`（Metal + softbuffer fallback），Windows/Linux 选择 `winit-software`。 |
-| PR3 | completed | 完成双语文档、Cargo 门禁和差异审计 | repository verification commands | 目标 macOS 负载下仍需重新采样，确认 `SoftwareRenderer::render_buffer_impl` 不再是默认主路径。 |
+| RP1 | completed | 定义 renderer 偏好、默认/覆盖优先级和启动所有权 | config/UI/`src/app.rs` 边界审阅 | `SLINT_BACKEND` 始终最高优先级；偏好不在运行中的 Slint window 上应用。 |
+| RP2 | completed | 配置 schema、启动选择和 Settings 草稿/保存链路 | 配置回归与 `cargo check` | Automatic：macOS GPU，Windows/Linux software；GPU/Software 显式选择对应 backend。 |
+| RP3 | completed | 双语文档、翻译目录与项目地图 | 翻译/Markdown/tracker 检查 | 已明确重启生效及环境变量覆盖规则。 |
+| RP4 | completed | 完整离线门禁与差异审计 | repository verification commands | GUI renderer 的实际效果留给用户平台验收。 |
 
 ## 已完成
 
@@ -41,26 +42,29 @@
 - macOS sample 显示 CPU 主要集中于主线程 DisplayLink 的 Slint software renderer，而非 Tokio/SSH worker；主终端路径原先每个 snapshot 都替换整个 `render_lines` model。
 - `apply_rendered_terminal` 现在复用已有 `VecModel<TerminalRenderLine>`，按行比较嵌套 runs，只对实际变化的行发通知；通用 nested model 更新也跳过相等 cursor/run。
 - 启动时先处理 `SLINT_BACKEND`；无显式覆盖时 macOS 选择 Skia/Metal，Windows/Linux 选择 software，避免把诊断回退和平台默认策略混在一起。
+- `AppearanceSettings` 现以 schema v24 保存 `RendererPreference::{Automatic,Gpu,Software}`；缺失或无效值规范化为 Automatic。
+- Settings > Appearance 的 Renderer 草稿沿既有预览/保存通路写入偏好，但不重建或切换活动 renderer；界面明确显示重启后生效，并支持中英文搜索与翻译。
 
 ## 验证
 
-- 已完成：既有 sample call graph 与 Slint 1.17.1 fallback 源码审计、启动 renderer 选择实现、双语契约更新。
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 195、应用 177、Doc tests 0）、`python3 scripts/check_translations.py` 和 `git diff --check`；目标 macOS 仍需在相同终端输出负载下重新采样，量化 Skia 对 software renderer 热点的替换收益。
+- 已完成：配置/Settings/启动选择、config 与应用定向回归、翻译/双语文档和项目地图。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 196、应用 178、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py` 和 `git diff --check`。
+- 未完成：目标平台重启后的 GUI/renderer 人工验收；tracker validator 已执行，但被月度历史中既存的多项时间/状态字段格式问题阻断，本轮新增 `current.md` 和变更条目均已通过其结构检查。
 
 ## 风险与阻塞
 
-- 新 renderer 选择不能替代用户平台验收：Metal/Skia 初始化失败时应观察 softbuffer 回退；`SLINT_BACKEND=winit-software` 可用于建立同负载基线。即使 renderer 切换成功，`TerminalModel::snapshot()` 的可见网格扫描和文本布局仍可能成为下一热点。
+- GPU/Skia 初始化失败时仍依赖 Slint softbuffer 回退；`SLINT_BACKEND=winit-software` 可建立同负载基线。即使 renderer 切换成功，`TerminalModel::snapshot()` 的可见网格扫描和文本布局仍可能成为下一热点。
 - 输出可能改变选区坐标下的 cell 内容；当前契约是保留坐标并在 Copy 时读取最新内容，不承诺追踪原始文本 identity。
 - revision 只能表达“清除”，不能包含坐标、文字、clipboard 内容或 worker handle。
 - 语义搜索可能跨软换行或滚动历史，返回 UI 前必须裁剪到当前可见 viewport；单 cell 语义范围需要独立的有效位，否则现有坐标判定会把它当空选区。
 - Slint 双击 callback 在普通 click 后触发；自动 Copy、目标激活和远端 reporting 的覆盖顺序必须保持可观察且不重复发送鼠标事件。
 - 旧 Settings link/path 配置值仍存在于 schema，必须继续保持可读取和可保存；它不应重新进入 renderer 或可见颜色输入。
-- 该优化只降低 Slint model churn，不减少 `TerminalModel::snapshot()` 的可见网格扫描，也不改变 software renderer 的选择；若 sample 仍显示持续整帧栅格化，需要下一轮单独评估 GPU backend 或更细粒度 dirty-row 设计。
+- 配置在窗口创建前才能读取并调用 `BackendSelector`，因此无法热切换；设置页必须明确重启生效，且预览不得调用 renderer 选择。
 
 ## 下一步
 
-- 完成离线门禁后，用户在同一输出负载下分别采集默认 macOS 与 `SLINT_BACKEND=winit-software` sample，比较 `render_buffer_impl`、Skia/Metal 栈、`render_component_items` 和主线程占用；随后确认终端刷新、选区和 Copy 未回归。
+- 用户在目标平台打开 Settings > Appearance > Renderer，保存并重启后确认 Automatic/GPU/Software；需要诊断时用 `SLINT_BACKEND=winit-software` 覆盖当前进程并与默认路径对照采样。
 
 ## 最后更新时间
 
-- 2026-08-20 10:30 +0800
+- 2026-08-20 13:12 +0800
