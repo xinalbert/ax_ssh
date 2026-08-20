@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260820-terminal-render-model-reuse
-- 目标：根据 macOS `sample` 证据降低终端输出期间的主线程软件渲染压力，避免每次 snapshot 替换整棵 `render_lines` 动态模型树。
-- 交付物：主终端 render-line/run model 原地复用、未变化行不发通知、focused model 回归和完整离线门禁；不改变终端内容、选区、worker 或 transport 语义。
+- 目标 ID：20260820-terminal-renderer-selection
+- 目标：根据 macOS `sample` 证据把持续整帧软件栅格化从默认路径移到平台合适的 GPU-backed renderer，同时保留明确的软件回退和既有终端语义。
+- 交付物：编译 Slint Skia 与 software renderer；macOS 默认选择 Metal-backed `winit-skia`，其它桌面平台保持 `winit-software`；尊重 `SLINT_BACKEND` 覆盖，更新双语契约并完成离线门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/view.rs`、`src/app/view/settings.rs`、`src/app/view/terminal.rs`、`src/app/view/tests.rs`、双语架构说明、项目地图和 tracker。
-- 不在本轮范围内：替换 Slint renderer backend、修改终端 parser/snapshot DTO、selection/copy/reporting 链路、配置 schema/迁移、依赖、锁文件、SSH trust、凭据、worker 生命周期或参考工程代码。
+- 当前范围：`Cargo.toml`、`src/app.rs`、双语开发/架构说明、项目地图和 tracker。
+- 不在本轮范围内：修改终端 parser/snapshot DTO、selection/copy/reporting 链路、终端 model、配置 schema/迁移、SSH trust、凭据、worker 生命周期或参考工程代码。
 
 ## 当前状态
 
@@ -23,9 +23,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| PR1 | completed | 读取 sample 证据并定位主线程 software renderer 与整模型替换热点 | sample call graph、源码路径审计 | 141 个 1ms 样本中 116 个位于 DisplayLink，69 个进入 `SoftwareRenderer::render_buffer_impl`。 |
-| PR2 | completed | 主终端 render-lines model 原地复用，行/run 内容未变化时跳过通知 | focused view tests、Slint compile | 外层 `VecModel` identity 保持；行数变化只 reset 同一 model。 |
-| PR3 | completed | 完成格式、Clippy、全量测试、diff/tracker 门禁并记录残余风险 | repository verification commands | 未替换 software renderer backend；目标平台仍需在同一输出负载下重新采样确认收益。 |
+| PR1 | completed | 审计新旧 sample 结论与 Slint 1.17.1 renderer/fallback 源码 | sample call graph、依赖源码审计 | 既有 sample 的主线程热点集中在 DisplayLink/software renderer；新路径当前在工作区不可读，不能伪造对其内容的分析。 |
+| PR2 | completed | 启用 Skia，按平台在首个 `AppWindow` 前选择 renderer，并保留环境覆盖 | Cargo feature resolution、启动选择代码审计 | macOS 选择 `winit-skia`（Metal + softbuffer fallback），Windows/Linux 选择 `winit-software`。 |
+| PR3 | completed | 完成双语文档、Cargo 门禁和差异审计 | repository verification commands | 目标 macOS 负载下仍需重新采样，确认 `SoftwareRenderer::render_buffer_impl` 不再是默认主路径。 |
 
 ## 已完成
 
@@ -40,14 +40,16 @@
 - Settings 不再显示 Link and path 颜色输入；旧配置字段仍经过兼容 DTO 传递，但 renderer 忽略该值。
 - macOS sample 显示 CPU 主要集中于主线程 DisplayLink 的 Slint software renderer，而非 Tokio/SSH worker；主终端路径原先每个 snapshot 都替换整个 `render_lines` model。
 - `apply_rendered_terminal` 现在复用已有 `VecModel<TerminalRenderLine>`，按行比较嵌套 runs，只对实际变化的行发通知；通用 nested model 更新也跳过相等 cursor/run。
+- 启动时先处理 `SLINT_BACKEND`；无显式覆盖时 macOS 选择 Skia/Metal，Windows/Linux 选择 software，避免把诊断回退和平台默认策略混在一起。
 
 ## 验证
 
-- 已完成：sample call graph 与源码热点审计、`cargo fmt --all -- --check`、直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 195、应用 177、Doc tests 0）、view focused tests、`git diff --check`。tracker validator 可运行但仍报告既有历史条目的时间/状态格式问题；本轮新增条目未触发错误。
-- 未完成：在相同终端输出负载下重新生成目标平台 macOS `sample`，因此尚未量化 model 复用对 software renderer 的收益；GUI 选区、刷新和 Copy 仍需用户在目标平台验收。
+- 已完成：既有 sample call graph 与 Slint 1.17.1 fallback 源码审计、启动 renderer 选择实现、双语契约更新。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 195、应用 177、Doc tests 0）、`python3 scripts/check_translations.py` 和 `git diff --check`；目标 macOS 仍需在相同终端输出负载下重新采样，量化 Skia 对 software renderer 热点的替换收益。
 
 ## 风险与阻塞
 
+- 新 renderer 选择不能替代用户平台验收：Metal/Skia 初始化失败时应观察 softbuffer 回退；`SLINT_BACKEND=winit-software` 可用于建立同负载基线。即使 renderer 切换成功，`TerminalModel::snapshot()` 的可见网格扫描和文本布局仍可能成为下一热点。
 - 输出可能改变选区坐标下的 cell 内容；当前契约是保留坐标并在 Copy 时读取最新内容，不承诺追踪原始文本 identity。
 - revision 只能表达“清除”，不能包含坐标、文字、clipboard 内容或 worker handle。
 - 语义搜索可能跨软换行或滚动历史，返回 UI 前必须裁剪到当前可见 viewport；单 cell 语义范围需要独立的有效位，否则现有坐标判定会把它当空选区。
@@ -57,8 +59,8 @@
 
 ## 下一步
 
-- 用户在同一输出负载下重新采样，比较 `render_buffer_impl`、`render_component_items` 和主线程占用；随后确认终端刷新、选区和 Copy 未回归。
+- 完成离线门禁后，用户在同一输出负载下分别采集默认 macOS 与 `SLINT_BACKEND=winit-software` sample，比较 `render_buffer_impl`、Skia/Metal 栈、`render_component_items` 和主线程占用；随后确认终端刷新、选区和 Copy 未回归。
 
 ## 最后更新时间
 
-- 2026-08-20 10:05 +0800
+- 2026-08-20 10:30 +0800

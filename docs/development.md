@@ -28,6 +28,21 @@ Offline commands require the dependencies in `Cargo.lock` to be present in the
 local Cargo cache. Remove `--offline` when the cache must be populated from the
 registry.
 
+## Renderer selection
+
+AxSSH enables Slint's Skia and software renderers. macOS uses `winit-skia` by
+default, which is Metal-backed and retains Slint's softbuffer fallback. Windows
+and Linux use `winit-software` by default to preserve their existing behavior.
+Set `SLINT_BACKEND` to select a renderer explicitly; for example, this forces
+the software path on macOS when collecting a comparison sample:
+
+```bash
+SLINT_BACKEND=winit-software cargo run --locked
+```
+
+The environment override is consumed before the first `AppWindow` is created,
+so renderer initialization failures are reported during startup.
+
 The development profile disables rustc incremental code generation. AxSSH's
 large generated Slint application unit can otherwise accumulate incompatible
 code-generation objects across repeated macOS rebuilds and fail at the final

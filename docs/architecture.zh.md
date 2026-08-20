@@ -150,6 +150,10 @@ identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多
 因此可见 `TerminalGrid` 会在远端输出到达时立即收到 model 通知，不需要等待下一次焦点变化。
 光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
 行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
+进程同时编译 Slint 的 Skia 和 software renderer。macOS 启动时选择 `winit-skia`，其默认表面使用
+Metal，并由 Slint 的 softbuffer 提供回退；Windows 和 Linux 则显式保持 `winit-software`，不改变
+原有平台的默认渲染行为。若设置了 `SLINT_BACKEND`，选择权交给 Slint，因此仍可用
+`SLINT_BACKEND=winit-software` 做有界诊断回退，且不会改变终端 model 或 worker 链路。
 只有 `PaneTree` 的非根叶节点可以单独关闭。关闭意图会按所属窗口路由重新校验，随后折叠该叶节点、
 只移除对应运行时 Tab、取消 pending probe，并异步 shutdown 仍存在的 worker。子 pane 中 local shell
 正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态

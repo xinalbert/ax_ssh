@@ -212,6 +212,12 @@ The cursor uses a retained, bounded one-row model for the same reason. Each
 snapshot updates its row, column, visibility, and displayed cell through that
 model before publishing terminal rows, so cursor movement does not depend on a
 focus-triggered outer DTO refresh.
+The process enables both Slint's Skia and software renderers. On macOS startup
+selects `winit-skia`, whose default surface is Metal with Slint's softbuffer
+fallback; Windows and Linux explicitly keep `winit-software` as their default
+to preserve their existing rendering behavior. An explicit `SLINT_BACKEND`
+environment value is left to Slint, so `SLINT_BACKEND=winit-software` remains a
+bounded diagnostic fallback without changing terminal models or worker flow.
 Only non-root leaves of a `PaneTree` are independently closable. Their close
 intent is revalidated against the owning window route, collapses that leaf in
 the tree, removes exactly that runtime Tab, cancels a pending probe, and shuts

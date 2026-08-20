@@ -109,6 +109,7 @@ const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
+    select_slint_renderer().context("failed to select Slint renderer")?;
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let sessions = config.load().context("failed to load session profiles")?;
@@ -331,6 +332,20 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui_result?;
     info!("AxSSH UI stopped");
     Ok(())
+}
+
+fn select_slint_renderer() -> Result<()> {
+    let selector = if std::env::var_os("SLINT_BACKEND").is_some() {
+        // Keep the standard Slint environment override available for diagnostics
+        // and explicit software-renderer fallback runs.
+        slint::BackendSelector::new()
+    } else if cfg!(target_os = "macos") {
+        slint::BackendSelector::new().backend_name("winit-skia".into())
+    } else {
+        slint::BackendSelector::new().backend_name("winit-software".into())
+    };
+
+    selector.select().map_err(Into::into)
 }
 
 fn font_registry_for_restore(registry: &Arc<Mutex<FontRegistry>>) -> Arc<Mutex<FontRegistry>> {
