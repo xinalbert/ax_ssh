@@ -319,7 +319,10 @@ pub(in crate::app) fn apply_rendered_terminal(
         .into_iter()
         .map(terminal_render_line)
         .collect::<Vec<_>>();
-    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(lines)));
+    let current_lines = ui.get_terminal_render_lines();
+    if !update_terminal_render_lines(&current_lines, &lines) {
+        ui.set_terminal_render_lines(ModelRc::new(VecModel::from(lines)));
+    }
 }
 
 pub(in crate::app) fn terminal_render_line(line: RenderedTerminalLine) -> TerminalRenderLine {

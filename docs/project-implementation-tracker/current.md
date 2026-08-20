@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260819-terminal-target-underline-only
-- 目标：让 URL/路径只在按住平台主修饰键时显示临时下划线，默认保持终端原有前景色，并清理常驻语义 Link 颜色对渲染和 Settings 的覆盖。
-- 交付物：renderer 状态语义色收窄、主修饰键目标提示链路核对、兼容旧配置字段、Settings/双语契约同步、渲染回归和完整离线门禁。
+- 目标 ID：20260820-terminal-render-model-reuse
+- 目标：根据 macOS `sample` 证据降低终端输出期间的主线程软件渲染压力，避免每次 snapshot 替换整棵 `render_lines` 动态模型树。
+- 交付物：主终端 render-line/run model 原地复用、未变化行不发通知、focused model 回归和完整离线门禁；不改变终端内容、选区、worker 或 transport 语义。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/terminal_render.rs`、`src/app/view/terminal.rs`、`ui/{settings/terminal,terminal-pane}.slint`、`scripts/build_zh_catalog.py`、双语使用/架构文档、项目地图和 tracker。
-- 不在本轮范围内：修改目标 parser、目标 DTO、selection/copy/reporting 链路、配置 schema/迁移、依赖、锁文件、SSH trust、凭据、worker 生命周期或参考工程代码。
+- 当前范围：`src/app/view.rs`、`src/app/view/settings.rs`、`src/app/view/terminal.rs`、`src/app/view/tests.rs`、双语架构说明、项目地图和 tracker。
+- 不在本轮范围内：替换 Slint renderer backend、修改终端 parser/snapshot DTO、selection/copy/reporting 链路、配置 schema/迁移、依赖、锁文件、SSH trust、凭据、worker 生命周期或参考工程代码。
 
 ## 当前状态
 
@@ -23,9 +23,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| TU1 | completed | URL/路径从常驻语义 renderer 和 Link 颜色覆盖中移除，3xx 归入 Information | terminal_render focused tests | 旧 config link/path 字段保留但不再参与渲染。 |
-| TU2 | completed | Settings、主修饰键 gate 和双语使用/架构契约同步 | Slint compile、translation/catalog review | Cmd/Ctrl 目标提示仍由既有 TerminalTargetHighlight 下划线链路负责。 |
-| TU3 | completed | tracker、环境记录与完整离线门禁 | fmt/check/Clippy/test/translation/tracker/diff | tracker validator 仅报告本轮未触及的历史时间字段；目标平台 Cmd/Ctrl 下划线 hover/click 仍需用户验收。 |
+| PR1 | completed | 读取 sample 证据并定位主线程 software renderer 与整模型替换热点 | sample call graph、源码路径审计 | 141 个 1ms 样本中 116 个位于 DisplayLink，69 个进入 `SoftwareRenderer::render_buffer_impl`。 |
+| PR2 | completed | 主终端 render-lines model 原地复用，行/run 内容未变化时跳过通知 | focused view tests、Slint compile | 外层 `VecModel` identity 保持；行数变化只 reset 同一 model。 |
+| PR3 | completed | 完成格式、Clippy、全量测试、diff/tracker 门禁并记录残余风险 | repository verification commands | 未替换 software renderer backend；目标平台仍需在同一输出负载下重新采样确认收益。 |
 
 ## 已完成
 
@@ -38,11 +38,13 @@
 - `TerminalModel` 也通过临时 `SelectionType::Lines` 返回裁剪到可见 viewport 的逻辑行范围；`TerminalGrid` 仅维护同一 cell 的有界点击序列，第三击触发行选区，第四击及以后不重复该动作。
 - URL/路径识别不参与常驻语义着色；renderer 只保留 HTTP 状态和成功/信息/警告/错误词的可选颜色，3xx 使用 Information。
 - Settings 不再显示 Link and path 颜色输入；旧配置字段仍经过兼容 DTO 传递，但 renderer 忽略该值。
+- macOS sample 显示 CPU 主要集中于主线程 DisplayLink 的 Slint software renderer，而非 Tokio/SSH worker；主终端路径原先每个 snapshot 都替换整个 `render_lines` model。
+- `apply_rendered_terminal` 现在复用已有 `VecModel<TerminalRenderLine>`，按行比较嵌套 runs，只对实际变化的行发通知；通用 nested model 更新也跳过相等 cursor/run。
 
 ## 验证
 
-- 已完成：Rust/Slint/架构边界审阅、renderer 与 Settings 目标收窄、双语文档和项目地图同步；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 195、应用 176、Doc tests 0）、中文 catalog 生成/检查、相对 Markdown 链接和 `git diff --check`。
-- 未完成：tracker validator 仍报告 40 条本轮未触及的历史时间字段/状态转换格式问题；新建 TU 条目不在错误列表中。
+- 已完成：sample call graph 与源码热点审计、`cargo fmt --all -- --check`、直接 `rustfmt --edition 2024 --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 195、应用 177、Doc tests 0）、view focused tests、`git diff --check`。tracker validator 可运行但仍报告既有历史条目的时间/状态格式问题；本轮新增条目未触发错误。
+- 未完成：在相同终端输出负载下重新生成目标平台 macOS `sample`，因此尚未量化 model 复用对 software renderer 的收益；GUI 选区、刷新和 Copy 仍需用户在目标平台验收。
 
 ## 风险与阻塞
 
@@ -51,11 +53,12 @@
 - 语义搜索可能跨软换行或滚动历史，返回 UI 前必须裁剪到当前可见 viewport；单 cell 语义范围需要独立的有效位，否则现有坐标判定会把它当空选区。
 - Slint 双击 callback 在普通 click 后触发；自动 Copy、目标激活和远端 reporting 的覆盖顺序必须保持可观察且不重复发送鼠标事件。
 - 旧 Settings link/path 配置值仍存在于 schema，必须继续保持可读取和可保存；它不应重新进入 renderer 或可见颜色输入。
+- 该优化只降低 Slint model churn，不减少 `TerminalModel::snapshot()` 的可见网格扫描，也不改变 software renderer 的选择；若 sample 仍显示持续整帧栅格化，需要下一轮单独评估 GPU backend 或更细粒度 dirty-row 设计。
 
 ## 下一步
 
-- 由用户在目标平台验收 Cmd/Ctrl 按下和释放时 URL/路径下划线的出现、消失、pointer cursor 及与远端 reporting/本地选区的优先级。
+- 用户在同一输出负载下重新采样，比较 `render_buffer_impl`、`render_component_items` 和主线程占用；随后确认终端刷新、选区和 Copy 未回归。
 
 ## 最后更新时间
 
-- 2026-08-19 18:12 +0800
+- 2026-08-20 10:05 +0800

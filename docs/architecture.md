@@ -115,6 +115,12 @@ selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
 and empty output do not advance it. The revision carries no selection
 coordinates or text. The pane never owns a worker, a terminal buffer, or
 connection state.
+For an identity-preserving active terminal, the application reuses the existing
+outer `TerminalRenderLine` model and its nested run models. It updates only rows
+whose run values changed, and resets the same model only when the visible row
+count changes; it does not replace the dynamic line repeater on every output
+snapshot. This optimization is UI-model ownership only and does not change the
+terminal snapshot, selection, worker, or transport contracts.
 The first local semantic-selection gesture is a left-button double-click when
 the gesture is not owned by mouse reporting, a Shift bypass, or primary-modifier
 target activation. `TerminalModel` creates a temporary

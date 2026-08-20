@@ -166,6 +166,7 @@
 - 最近依据：2026-08-18 Terminal cell metric 同时测量 50 个 Latin `M`、25 个 Han 双宽字形和 3 个 box-drawing 字形，并取最大的单 cell advance；`TerminalModel` 保留逻辑列/宽字符占两格，非 ASCII cell 不再与 ASCII 合并到同一 Text shaping run，grid 在对应的一格或两格 span 内居中绘制。PTY resize、选区、指针和 cursor 继续消费同一 cell geometry，不改 SSH、tmux、worker 或 transport。
 - 最近依据：2026-08-12 Terminal target hover 以短生命周期 `TerminalTargetHighlight` 返回 active、row 和完整目标的半开 cell 区间；`TerminalPane` 在 Cmd/Ctrl hover、按键和 pointer 事件中本地管理提示，`TerminalGrid` 仅绘制下划线与鼠标指针。修饰键、选择、滚动或离开会清除它，不发布完整行、目标文本、worker 或终端 buffer。
 - 最近依据：2026-08-19 语义高亮继续默认关闭，并从常驻 renderer 移除 URL/路径 Link 类别；renderer 只对 HTTP 状态和成功/信息/警告/错误词使用可选状态色，`dim` 合并进最终系数，背景、选区和光标不调整。URL/路径保持默认前景，仅在按住 Cmd/Ctrl 时由 TerminalGrid 绘制临时下划线；旧配置中的 link/path 字段保留以兼容 schema 但不再生效。
+- 最近依据：2026-08-20 macOS `sample` 显示主线程大部分样本位于 DisplayLink，且大量进入 Slint `SoftwareRenderer::render_buffer_impl`；主终端 `apply_rendered_terminal` 现复用已有 `TerminalRenderLine`/nested run `VecModel`，只更新实际变化的行，行数变化时 reset 同一 model。该优化不替换 renderer backend，不改变 TerminalSnapshot、selection、worker、transport 或安全边界。
 - 最近依据：2026-08-12 `ElidedLabel` 统一测量自然宽度、绘制单行省略和仅溢出时的有界全文 Tooltip；`ElidedButton` 保留标准 Button 的 focus/keyboard/enabled/pressed/accessibility/click 所有权，并显式接收 text、tooltip 覆盖和无障碍名称。SFTP、Settings、Sidebar、认证、会话、工作区 Tab/连接行共用该呈现能力；纯图标和已有富详情 Tooltip 不重复包装。
 - 最近依据：2026-08-12 schema v21 增加 Follow system/English/简体中文界面语言策略；构建内嵌完整 `zh-CN` 静态 Slint 目录，独立保存成功后同步进程 locale 和全部窗口。生成/检查器覆盖 386 条非空翻译、陈旧项和编号占位符；技术错误详情保持原文。
 - 最近依据：2026-08-14 Release 支持不可变的 `YYYY-MM-DD[-N]` tag；Create 只创建新的日期/修订 tag，Retry 只能校验并重试已有 tag，revision 映射由单一 Python helper 派生，Highlights 可将同日修订与首发 tag 比较。
@@ -176,6 +177,7 @@
 
 ## 最后更新时间
 
+- 2026-08-20：根据 macOS sample 定位主线程 software renderer 与整模型替换热点；主终端 render-line/run model 改为 identity-preserving 原地更新，未变化行跳过通知。
 - 2026-08-19：URL/路径目标只由 Cmd/Ctrl 临时下划线提示；常驻 renderer 只保留 HTTP/状态词语义色，Settings 仅显示四项状态颜色并兼容读取旧 link/path 字段。
 - 2026-08-19：输出刷新与 Slint-local 选区解耦；刷新期间保留选区，Copy 读取选区坐标对应的最新 cell；resize/scroll/identity/focus 清理边界保持不变。
 - 2026-08-18：终端 viewport identity 变化通过有界 selection revision 清除 Slint-local 陈旧选区；soft wrap/hard break 复制和 output/resize/scroll 失效均有回归覆盖。

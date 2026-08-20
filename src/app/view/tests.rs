@@ -95,6 +95,66 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
 }
 
 #[test]
+fn terminal_render_lines_reuse_existing_rows_when_output_is_unchanged() {
+    let current = ModelRc::new(VecModel::from(vec![terminal_render_line_with_text("same")]));
+    let original_line = current.row_data(0).expect("current line should exist");
+    let original_runs = original_line.runs.clone();
+    let updated = vec![terminal_render_line_with_text("same")];
+
+    assert!(update_terminal_render_lines(&current, &updated));
+    assert_eq!(
+        current.row_data(0).expect("line should remain"),
+        original_line
+    );
+    assert_eq!(
+        current.row_data(0).expect("line should remain").runs,
+        original_runs
+    );
+
+    let changed = vec![terminal_render_line_with_text("changed")];
+    assert!(update_terminal_render_lines(&current, &changed));
+    assert_eq!(
+        current.row_data(0).expect("line should remain").runs,
+        original_runs
+    );
+    assert_eq!(
+        current
+            .row_data(0)
+            .expect("changed line should remain")
+            .runs
+            .row_data(0)
+            .expect("changed run should exist")
+            .text
+            .as_str(),
+        "changed"
+    );
+
+    let runs_after_change = current.row_data(0).expect("line should remain").runs;
+    let split_runs = vec![
+        terminal_render_run_with_text("left"),
+        terminal_render_run_with_text("right"),
+    ];
+    assert!(update_terminal_render_lines(
+        &current,
+        &[TerminalRenderLine {
+            runs: ModelRc::new(VecModel::from(split_runs)),
+        }],
+    ));
+    assert_eq!(
+        current.row_data(0).expect("line should remain").runs,
+        runs_after_change
+    );
+    assert_eq!(
+        current
+            .row_data(0)
+            .expect("line should remain")
+            .runs
+            .row_count(),
+        2
+    );
+}
+
+#[test]
 fn terminal_pane_snapshots_reset_existing_nested_models_when_row_counts_change() {
     let tab_id = Uuid::from_u128(1);
     let mut pane = terminal_pane_view(tab_id, 0.0, 1.0);

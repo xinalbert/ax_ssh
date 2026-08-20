@@ -362,13 +362,52 @@ pub(super) fn reuse_terminal_render_models(
     }
 }
 
-pub(super) fn replace_vec_model_rows<T: Clone + 'static>(model: &ModelRc<T>, rows: Vec<T>) -> bool {
+pub(in crate::app) fn update_terminal_render_lines(
+    current: &ModelRc<TerminalRenderLine>,
+    lines: &[TerminalRenderLine],
+) -> bool {
+    let Some(current_lines) = current
+        .as_any()
+        .downcast_ref::<VecModel<TerminalRenderLine>>()
+    else {
+        return false;
+    };
+    if current.row_count() != lines.len() {
+        current_lines.set_vec(lines.to_vec());
+        return true;
+    }
+    for (index, line) in lines.iter().cloned().enumerate() {
+        let Some(current_line) = current.row_data(index) else {
+            return false;
+        };
+        if update_terminal_render_runs(&current_line.runs, &line.runs) {
+            continue;
+        }
+        current_lines.set_row_data(index, line);
+    }
+    true
+}
+
+fn update_terminal_render_runs(
+    current: &ModelRc<TerminalRenderRun>,
+    updated: &ModelRc<TerminalRenderRun>,
+) -> bool {
+    let rows = updated.iter().collect::<Vec<_>>();
+    replace_vec_model_rows(current, rows)
+}
+
+pub(super) fn replace_vec_model_rows<T: Clone + PartialEq + 'static>(
+    model: &ModelRc<T>,
+    rows: Vec<T>,
+) -> bool {
     let Some(vec_model) = model.as_any().downcast_ref::<VecModel<T>>() else {
         return false;
     };
     if model.row_count() == rows.len() {
         for (index, row) in rows.into_iter().enumerate() {
-            model.set_row_data(index, row);
+            if model.row_data(index).as_ref() != Some(&row) {
+                vec_model.set_row_data(index, row);
+            }
         }
     } else {
         vec_model.set_vec(rows);

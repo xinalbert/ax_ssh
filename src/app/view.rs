@@ -49,7 +49,7 @@ pub(super) use self::sidebar::{
 };
 pub(super) use self::terminal::{
     apply_active_snapshot, apply_terminal_pane_layout, dispatch_active_snapshot,
-    dispatch_terminal_output_snapshot, set_tab_status,
+    dispatch_terminal_output_snapshot, set_tab_status, update_terminal_render_lines,
 };
 pub(super) use self::workspace::refresh_workspace;
 

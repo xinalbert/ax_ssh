@@ -99,6 +99,10 @@ Rust
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
 不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
+对于 identity 不变的活动终端，application 会复用已有外层 `TerminalRenderLine` model 及其嵌套
+run model，只对 run 值确实变化的行发送通知；只有可见行数变化时才 reset 同一个 model，不会在每次
+输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变终端 snapshot、选区、worker
+或 transport 契约。
 第一版本地语义选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
 `TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
 不保留上游 `Selection`；宽字符、软换行和括号配对语义由终端核心处理，范围在进入 application callback 前裁剪。
