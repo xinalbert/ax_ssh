@@ -405,7 +405,6 @@ export component WorkspaceTitlebar inherits Rectangle {
     in property <[WorkspaceTabRow]> tabs;
     in property <string> active-tab-id;
     in property <int> tab-width;
-    in property <color> terminal-background;
     in property <string> active-tab-kind;
     in property <bool> connection-picker-open;
     in property <bool> connection-picker-enabled: true;
@@ -428,10 +427,6 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <string> drag-kind;
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
-    private property <length> add-glyph-height:
-        add-glyph-height-probe.font-metrics.ascent
-            - add-glyph-height-probe.font-metrics.descent;
-
     changed tabs => {
         if root.drag-source-index >= root.tabs.length {
             root.clear-tab-drag();
@@ -502,43 +497,19 @@ export component WorkspaceTitlebar inherits Rectangle {
         }
     }
 
-    height: max(
-        tab-height-probe.preferred-height,
-        root.add-glyph-height + Theme.tab-content-padding-y * 2,
-    );
+    height: Theme.tab-height;
     background: Theme.panel;
     border-width: 0px;
-
-    tab-height-probe := WorkspaceTabContent {
-        visible: false;
-        width: 0px;
-        title: @tr("Tab");
-        kind: "terminal";
-        connected: true;
-        active: true;
-        order: 1;
-        window-action-enabled: true;
-    }
-    add-glyph-height-probe := Text {
-        visible: false;
-        text: @tr("+");
-        font-size: Theme.tab-add-font-size;
-    }
+    clip: true;
 
     HorizontalLayout {
+        width: parent.width;
+        height: parent.height;
         spacing: 0px;
 
         Rectangle {
             horizontal-stretch: 1;
             clip: true;
-
-            // The active tab paints over this separator to join its content pane.
-            Rectangle {
-                y: parent.height - Theme.hairline;
-                width: parent.width;
-                height: Theme.hairline;
-                background: Theme.tab-divider;
-            }
 
             tabs-flick := Flickable {
                 width: parent.width;
@@ -567,7 +538,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                         width: parent.width;
                         height: parent.height - self.y;
                         background: tab.kind == "terminal"
-                            ? root.terminal-background
+                            ? Theme.panel-alt
                             : Theme.background;
                     }
                     if tab.id == root.active-tab-id
@@ -578,7 +549,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                         height: parent.height - Theme.tab-surface-inset;
                         border-radius: Theme.tab-surface-radius;
                         background: tab.kind == "terminal"
-                            ? root.terminal-background
+                            ? Theme.panel-alt
                             : Theme.background;
                     }
                     if root.drag-source-index >= 0
@@ -620,6 +591,8 @@ export component WorkspaceTitlebar inherits Rectangle {
                         }
                     }
                     WorkspaceTabContent {
+                        width: parent.width;
+                        height: parent.height;
                         title: tab.title;
                         kind: tab.kind;
                         connected: tab.connected;
@@ -684,7 +657,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                     width: parent.width;
                     height: parent.height - self.y;
                     background: root.drag-kind == "terminal"
-                        ? root.terminal-background
+                        ? Theme.panel-alt
                         : Theme.background;
                 }
                 Rectangle {
@@ -693,7 +666,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                     height: parent.height - Theme.tab-surface-inset;
                     border-radius: Theme.tab-surface-radius;
                     background: root.drag-kind == "terminal"
-                        ? root.terminal-background
+                        ? Theme.panel-alt
                         : Theme.background;
                 }
                 Rectangle {
@@ -705,6 +678,8 @@ export component WorkspaceTitlebar inherits Rectangle {
                 }
 
                 WorkspaceTabContent {
+                    width: parent.width;
+                    height: parent.height;
                     title: root.drag-title;
                     kind: root.drag-kind;
                     connected: root.drag-connected;
@@ -716,12 +691,6 @@ export component WorkspaceTitlebar inherits Rectangle {
         if root.active-tab-kind == "terminal" : Rectangle {
             width: 2 * Theme.terminal-split-button-size + Theme.terminal-split-button-spacing;
             background: Theme.panel;
-            Rectangle {
-                y: parent.height - Theme.hairline;
-                width: parent.width;
-                height: Theme.hairline;
-                background: Theme.tab-divider;
-            }
             HorizontalLayout {
                 y: (parent.height - self.height) / 2;
                 height: Theme.terminal-split-button-size;
@@ -746,12 +715,6 @@ export component WorkspaceTitlebar inherits Rectangle {
             background: add-touch.has-hover || root.connection-picker-open
                 ? Theme.hover
                 : Theme.panel;
-            Rectangle {
-                y: parent.height - Theme.hairline;
-                width: parent.width;
-                height: Theme.hairline;
-                background: Theme.tab-divider;
-            }
             add-label := Text {
                 width: parent.width;
                 height: parent.height;
@@ -768,5 +731,16 @@ export component WorkspaceTitlebar inherits Rectangle {
                 clicked => { root.toggle-connection-picker(); }
             }
         }
+    }
+
+    // One separator owns the entire titlebar boundary. Keeping it outside the
+    // tab/tool segments prevents small segment layout changes from producing
+    // multiple adjacent lines or allowing a tab surface to cover the edge.
+    Rectangle {
+        x: 0px;
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.tab-divider;
     }
 }

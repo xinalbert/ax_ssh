@@ -50,7 +50,6 @@ export struct WorkspaceViewState {
     sidebar_width: int,
     tab_width: int,
     collapsed_group_label_chars: int,
-    terminal_background: color,
     terminal: TerminalViewState,
     terminal_panes: [TerminalPaneView],
     terminal_dividers: [TerminalPaneDividerView],
@@ -670,6 +669,7 @@ export component WorkspaceShell inherits Rectangle {
             sessions: root.view.sessions;
             sidebar-width: root.view.sidebar_width;
             collapsed-group-label-chars: root.view.collapsed_group_label_chars;
+            divider-top-offset: workspace-titlebar.height;
             collapsed <=> root.sidebar-collapsed;
             open-local-shell => { root.open-local-shell(); }
             new-session => { root.new-session(); }
@@ -706,7 +706,6 @@ export component WorkspaceShell inherits Rectangle {
                     active-tab-id: root.view.active_tab_id;
                     active-tab-kind: root.view.active_tab_kind;
                     tab-width: root.view.tab_width;
-                    terminal-background: root.view.terminal_background;
                     connection-picker-open: root.connection-picker-open;
                     detached-window: root.detached-window;
                     activate-tab(id) => {

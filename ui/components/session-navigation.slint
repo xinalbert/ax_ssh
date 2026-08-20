@@ -602,6 +602,7 @@ export component SessionNavigation inherits Rectangle {
     in property <[SessionGroupRow]> sessions;
     in property <int> sidebar-width;
     in property <int> collapsed-group-label-chars: 2;
+    in property <length> divider-top-offset: 0px;
     in-out property <bool> collapsed;
     in property <string> local-shell-title: @tr("Local Shell");
     in property <string> local-shell-description: @tr("Open a new local shell tab");
@@ -736,8 +737,9 @@ export component SessionNavigation inherits Rectangle {
         // only one internal divider on its content side.
         Rectangle {
             x: parent.width - Theme.hairline;
+            y: root.divider-top-offset;
             width: Theme.hairline;
-            height: parent.height;
+            height: max(0px, parent.height - root.divider-top-offset);
             background: Theme.sidebar-divider;
         }
     }
@@ -877,8 +879,9 @@ export component SessionNavigation inherits Rectangle {
         // Avoid a second top/left/bottom frame inside the application frame.
         Rectangle {
             x: parent.width - Theme.hairline;
+            y: root.divider-top-offset;
             width: Theme.hairline;
-            height: parent.height;
+            height: max(0px, parent.height - root.divider-top-offset);
             background: Theme.sidebar-divider;
         }
     }

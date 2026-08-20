@@ -139,6 +139,13 @@ export global Theme {
     out property <length> tab-content-spacing: 4px;
     out property <length> tab-surface-inset: 3px;
     out property <length> tab-surface-radius: 8px;
+    // Keep the titlebar on one stable layout track. The height follows the
+    // largest interactive control plus the tab surface breathing room, so
+    // changing those tokens cannot let tab content overlap the terminal.
+    out property <length> tab-height: max(
+        tab-close-min-size + 2 * tab-content-padding-y,
+        terminal-split-button-size + 2 * tab-surface-inset,
+    );
     out property <float> tab-drag-source-opacity: 0.32;
     out property <float> tab-drag-ghost-opacity: 0.96;
     out property <length> titlebar-connection-picker-width: 300px;
