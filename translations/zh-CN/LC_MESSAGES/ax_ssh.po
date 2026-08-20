@@ -124,6 +124,9 @@ msgstr "身份验证方式"
 msgid "Auto upload"
 msgstr "自动上传"
 
+msgid "Automatic"
+msgstr "自动"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -168,6 +171,9 @@ msgstr "取消所选"
 
 msgid "Cancel {0}"
 msgstr "取消 {0}"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "重启 AxSSH 后生效"
 
 msgid "Choose 1-4 characters or show the full group name"
 msgstr "选择 1-4 个字符或显示完整组名"
@@ -438,6 +444,9 @@ msgstr "转发 X11 应用"
 
 msgid "Full name"
 msgstr "完整名称"
+
+msgid "GPU"
+msgstr "GPU"
 
 msgid "General"
 msgstr "通用"
@@ -751,6 +760,9 @@ msgstr "协议"
 msgid "Provider"
 msgstr "提供程序"
 
+msgid "RENDERING"
+msgstr "渲染"
+
 msgid "Refresh"
 msgstr "刷新"
 
@@ -786,6 +798,12 @@ msgstr "重命名组"
 
 msgid "Rename selected remote entry"
 msgstr "重命名选中的远端条目"
+
+msgid "Renderer"
+msgstr "渲染器"
+
+msgid "Rendering backend"
+msgstr "渲染后端"
 
 msgid "Report a bug"
 msgstr "报告问题"
@@ -990,6 +1008,9 @@ msgstr "Simplified Chinese"
 
 msgid "Size"
 msgstr "大小"
+
+msgid "Software"
+msgstr "软件"
 
 msgid "Speed"
 msgstr "速度"

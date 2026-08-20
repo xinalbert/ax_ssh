@@ -231,6 +231,7 @@ fn global_default_does_not_change_an_existing_credential_reference() {
 fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
+            renderer_preference: "gpu",
             application_font_family: "  JetBrains Mono  ",
             terminal_font_family: "  Menlo  ",
             terminal_font_size: 18,
@@ -251,6 +252,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_mouse_local_selection_priority: true,
         }),
         AppearanceSettings {
+            renderer_preference: RendererPreference::Gpu,
             application_font_family: "JetBrains Mono".into(),
             terminal_font_family: "Menlo".into(),
             terminal_font_size: 18,
@@ -279,6 +281,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
     );
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
+            renderer_preference: "unsupported",
             application_font_family: "",
             terminal_font_family: "",
             terminal_font_size: 100,
@@ -299,6 +302,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_mouse_local_selection_priority: false,
         }),
         AppearanceSettings {
+            renderer_preference: RendererPreference::Automatic,
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
             terminal_font_size: MAX_TERMINAL_FONT_SIZE,
@@ -787,6 +791,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     let known_shells = [SYSTEM_DEFAULT_SHELL.into(), "zsh".into()];
     let settings = AppSettings::normalized(AppSettingsInput {
         appearance: AppearanceSettingsInput {
+            renderer_preference: "software",
             application_font_family: "Maple Mono NF CN",
             terminal_font_family: "",
             terminal_font_size: 100,
@@ -835,6 +840,10 @@ fn app_settings_clamp_all_persisted_dimensions() {
     });
 
     assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
+    assert_eq!(
+        settings.appearance.renderer_preference,
+        RendererPreference::Software
+    );
 
     assert_eq!(
         settings.appearance.application_font_family,
@@ -912,6 +921,37 @@ fn ui_language_defaults_to_system_and_serializes_stable_values() {
         serde_json::to_value(UiLanguage::SimplifiedChinese)
             .expect("Chinese language should serialize"),
         "simplified-chinese"
+    );
+}
+
+#[test]
+fn renderer_preference_defaults_and_serializes_stable_values() {
+    let legacy: SessionStore = serde_json::from_str(r#"{"version":23,"settings":{}}"#)
+        .expect("version twenty-three settings should migrate");
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(
+        legacy.settings.appearance.renderer_preference,
+        RendererPreference::Automatic
+    );
+
+    let invalid: AppearanceSettings =
+        serde_json::from_str(r#"{"renderer_preference":"unsupported"}"#)
+            .expect("unknown renderer preference should normalize");
+    assert_eq!(invalid.renderer_preference, RendererPreference::Automatic);
+    assert_eq!(
+        serde_json::to_value(RendererPreference::Automatic)
+            .expect("automatic renderer preference should serialize"),
+        "automatic"
+    );
+    assert_eq!(
+        serde_json::to_value(RendererPreference::Gpu)
+            .expect("GPU renderer preference should serialize"),
+        "gpu"
+    );
+    assert_eq!(
+        serde_json::to_value(RendererPreference::Software)
+            .expect("software renderer preference should serialize"),
+        "software"
     );
 }
 

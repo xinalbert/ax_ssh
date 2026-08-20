@@ -433,9 +433,10 @@ contains General, Appearance, Terminal, X11, Workspace, Shortcuts, and About pag
 The search field above the detail area finds category names, setting titles, and
 descriptions across all pages. Select a result to open its category. Every
 category detail area scrolls independently when its content exceeds the window.
-Changes take effect immediately in the current application; they are persisted
-when the Settings tab is closed with its tab `x` control. Using the Settings
-shortcut while that tab is already open activates the existing singleton Tab.
+Changes take effect immediately in the current application and are persisted
+when the Settings tab is closed with its tab `x` control, except renderer
+selection, which is applied only after restart. Using the Settings shortcut
+while that tab is already open activates the existing singleton Tab.
 About identifies
 AxSSH as `GPL-3.0-only` and includes Slint's standard, clickable attribution.
 The About page also provides **Report a bug**, **Open log folder**, and **Copy
@@ -454,7 +455,11 @@ application-owned Slint interface; remote terminal content, user-provided
 names/paths, logs, and runtime technical error details remain unchanged.
 
 In **Settings > Appearance**, Font family changes the application interface
-without changing terminal cell metrics. Display mode selects **Follow system**,
+without changing terminal cell metrics. Renderer selects **Automatic**, **GPU**,
+or **Software** for the next application launch: Automatic uses GPU/Skia on
+macOS and software on Windows/Linux; GPU uses Skia and Software uses the
+software renderer. `SLINT_BACKEND` overrides this saved choice for the current
+process. Display mode selects **Follow system**,
 **Light**, or **Dark**. Color palette independently selects **AxSSH**,
 **Solarized**, **Arctic**, **Tokyo**, **Ember**, **Forest**, or **Custom**, so
 every fixed palette can be used in both Light and Dark modes. Arctic is a cool

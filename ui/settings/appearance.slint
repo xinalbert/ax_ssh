@@ -100,6 +100,7 @@ export component AppearanceSettingsPage inherits Rectangle {
     in property <[string]> application-font-options;
     in-out property <string> draft-application-font-family;
     in-out property <int> draft-application-font-index;
+    in-out property <string> draft-renderer-preference;
     in-out property <string> draft-theme-mode;
     in-out property <string> draft-theme-palette;
     in-out property <string> draft-theme-light-background;
@@ -172,6 +173,26 @@ export component AppearanceSettingsPage inherits Rectangle {
                             current-index <=> root.draft-application-font-index;
                             accessible-label: @tr("Application font family");
                             selected(value, _index) => { root.draft-application-font-family = value; }
+                        }
+                    }
+                }
+
+                SettingsSectionHeading { label: @tr("RENDERING"); }
+                SettingsRow {
+                    label: @tr("Renderer");
+                    description: @tr("Changes take effect after restarting AxSSH");
+                    SettingsField {
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: [@tr("Automatic"), @tr("GPU"), @tr("Software")];
+                            current-index: root.draft-renderer-preference == "gpu" ? 1
+                                : (root.draft-renderer-preference == "software" ? 2 : 0);
+                            accessible-label: @tr("Rendering backend");
+                            selected(_value, index) => {
+                                root.draft-renderer-preference = index == 1 ? "gpu"
+                                    : (index == 2 ? "software" : "automatic");
+                            }
                         }
                     }
                 }

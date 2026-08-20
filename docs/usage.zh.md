@@ -265,8 +265,8 @@ macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会�
 Windows 和 Linux 分别在 Edit
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、
 Workspace、Shortcuts 和 About 页面。详情区顶部的搜索框可跨所有页面查找分类名、设置标题和说明，
-选择结果会打开对应分类；每个分类的详情内容超过窗口时都可独立滚动。修改会立即作用于当前应用，
-关闭 Settings Tab 的 `x` 后才会持久化。
+选择结果会打开对应分类；每个分类的详情内容超过窗口时都可独立滚动。除 renderer 外，修改会立即作用于
+当前应用，关闭 Settings Tab 的 `x` 后才会持久化；renderer 只在重启后生效。
 Settings Tab 已经打开时再次按其快捷键，只会激活这个单例 Tab。
 About 标明 AxSSH 使用 `GPL-3.0-only`，并包含 Slint 标准的可点击署名组件。
 About 还提供 **Report a bug**、**Open log folder** 和 **Copy diagnostics**：前者打开 AxSSH
@@ -278,8 +278,10 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 使用简体中文，其它 locale 使用英文。AxSSH 会翻译应用自有的 Slint 界面；远端终端内容、用户提供的
 名称/路径、日志和运行时技术错误详情保持原文。
 
-在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；
-Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
+在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；Renderer 可为
+下一次应用启动选择 **Automatic**、**GPU** 或 **Software**：Automatic 在 macOS 使用 GPU/Skia，在
+Windows/Linux 使用 software；GPU 使用 Skia，Software 使用 software renderer。当前进程设置
+`SLINT_BACKEND` 时会覆盖这个已保存选择。Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
 **AxSSH**、**Solarized**、**Arctic**、**Tokyo**、**Ember**、**Forest** 或 **Custom**，因此
 所有固定配色都能同时用于浅色和深色。Arctic 偏冷色技术感，Tokyo 偏夜间，Ember 偏暖色，
 Forest 使用绿色高对比。在 Dark 模式中，所有配色共用 axshell 的高饱和 ANSI-16 色，同时保留

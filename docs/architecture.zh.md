@@ -150,10 +150,13 @@ identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多
 因此可见 `TerminalGrid` 会在远端输出到达时立即收到 model 通知，不需要等待下一次焦点变化。
 光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
 行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
-进程同时编译 Slint 的 Skia 和 software renderer。macOS 启动时选择 `winit-skia`，其默认表面使用
-Metal，并由 Slint 的 softbuffer 提供回退；Windows 和 Linux 则显式保持 `winit-software`，不改变
-原有平台的默认渲染行为。若设置了 `SLINT_BACKEND`，选择权交给 Slint，因此仍可用
-`SLINT_BACKEND=winit-software` 做有界诊断回退，且不会改变终端 model 或 worker 链路。
+进程同时编译 Slint 的 Skia 和 software renderer。`AppearanceSettings` 拥有持久化的
+`RendererPreference` DTO：Automatic 在 macOS 选择 `winit-skia`、在 Windows/Linux 选择
+`winit-software`；GPU 选择 `winit-skia`，Software 选择 `winit-software`。配置读取与 renderer
+选择会在首个 `AppWindow` 创建前结束，因此 Settings 草稿可保存并显示偏好，但不能热切换已运行的
+renderer；它会在重启后生效。显式 `SLINT_BACKEND` 的优先级更高，选择权交给 Slint，因此仍可用
+`SLINT_BACKEND=winit-software` 做有界诊断回退，且不会改变终端 model 或 worker 链路。macOS 的
+Skia 默认表面使用 Metal，并由 Slint 的 softbuffer 提供回退。
 只有 `PaneTree` 的非根叶节点可以单独关闭。关闭意图会按所属窗口路由重新校验，随后折叠该叶节点、
 只移除对应运行时 Tab、取消 pending probe，并异步 shutdown 仍存在的 worker。子 pane 中 local shell
 正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态
@@ -740,8 +743,9 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `copy_selection_on_select` 偏好；旧配置保持既有右键行为。
     应用调用方通过 `AppSettingsInput` 提交原始值，并按 Appearance、Terminal、Workspace 和
     Shortcuts 所有权域分组。这些输入类型不包含 Slint 值，规范化后仍写入同一个持久化
-    `AppSettings`，不会给 JSON schema 增加字段或改变其结构。
-    schema 版本 16 新增
+    `AppSettings`，不会把 Slint 值泄露到 JSON schema。schema 版本 24 增加
+    `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
+    Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
     旧文件缺失时保持默认的两个字符。schema 版本 15 新增独立的应用字体；旧文件默认使用 JetBrains Mono，
 不会改变已有 Terminal 字体。schema 版本 14 把原有 SSH-only 平铺 profile 字段替换为显式带 tag 的

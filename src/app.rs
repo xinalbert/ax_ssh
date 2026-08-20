@@ -23,10 +23,11 @@ use uuid::Uuid;
 use ax_ssh::config::{
     AppSettings, AppSettingsInput, AppearanceSettingsInput, AuthMethod, ConfigStore,
     ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
-    MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialDataBits, SerialFlowControl, SerialParity,
-    SerialStopBits, SessionProfile, SessionStore, ShortcutSettings, TerminalColorScheme,
-    TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage,
-    WorkspaceSettingsInput, X11Settings, normalize_group_name,
+    MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, RendererPreference, SerialDataBits,
+    SerialFlowControl, SerialParity, SerialStopBits, SessionProfile, SessionStore,
+    ShortcutSettings, TerminalColorScheme, TerminalSemanticColorsInput, TerminalSettingsInput,
+    ThemePalette, ThemeSettings, UiLanguage, WorkspaceSettingsInput, X11Settings,
+    normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::serial::{
@@ -109,10 +110,11 @@ const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
-    select_slint_renderer().context("failed to select Slint renderer")?;
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let sessions = config.load().context("failed to load session profiles")?;
+    select_slint_renderer(sessions.settings.appearance.renderer_preference)
+        .context("failed to select Slint renderer")?;
     let workspace_snapshot = match config.load_workspace() {
         Ok(snapshot) => snapshot,
         Err(error) => {
@@ -334,18 +336,25 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn select_slint_renderer() -> Result<()> {
+fn select_slint_renderer(preference: RendererPreference) -> Result<()> {
     let selector = if std::env::var_os("SLINT_BACKEND").is_some() {
         // Keep the standard Slint environment override available for diagnostics
         // and explicit software-renderer fallback runs.
         slint::BackendSelector::new()
-    } else if cfg!(target_os = "macos") {
-        slint::BackendSelector::new().backend_name("winit-skia".into())
     } else {
-        slint::BackendSelector::new().backend_name("winit-software".into())
+        slint::BackendSelector::new().backend_name(renderer_backend_name(preference).into())
     };
 
     selector.select().map_err(Into::into)
+}
+
+fn renderer_backend_name(preference: RendererPreference) -> &'static str {
+    match preference {
+        RendererPreference::Gpu => "winit-skia",
+        RendererPreference::Software => "winit-software",
+        RendererPreference::Automatic if cfg!(target_os = "macos") => "winit-skia",
+        RendererPreference::Automatic => "winit-software",
+    }
 }
 
 fn font_registry_for_restore(registry: &Arc<Mutex<FontRegistry>>) -> Arc<Mutex<FontRegistry>> {
@@ -1137,6 +1146,23 @@ mod support_tests {
         for forbidden in ["host:", "password", "session-id", "sessions.json"] {
             assert!(!diagnostics.contains(forbidden));
         }
+    }
+
+    #[test]
+    fn renderer_preference_uses_platform_default_or_explicit_backend() {
+        assert_eq!(renderer_backend_name(RendererPreference::Gpu), "winit-skia");
+        assert_eq!(
+            renderer_backend_name(RendererPreference::Software),
+            "winit-software"
+        );
+        assert_eq!(
+            renderer_backend_name(RendererPreference::Automatic),
+            if cfg!(target_os = "macos") {
+                "winit-skia"
+            } else {
+                "winit-software"
+            }
+        );
     }
 
     #[cfg(target_os = "macos")]

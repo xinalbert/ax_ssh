@@ -28,16 +28,20 @@ git diff --check
 
 ## Renderer 选择
 
-AxSSH 同时启用 Slint 的 Skia 和 software renderer。macOS 默认使用
-`winit-skia`，底层走 Metal，并保留 Slint 的 softbuffer 回退；Windows 和 Linux 默认使用
-`winit-software`，保持现有平台行为。可通过 `SLINT_BACKEND` 显式选择 renderer；例如在 macOS
-采集对照 sample 时强制走 software：
+AxSSH 同时启用 Slint 的 Skia 和 software renderer。**Settings > Appearance >
+Renderer** 会为下一次启动保存 Automatic、GPU 或 Software。Automatic 在 macOS 使用
+`winit-skia`，底层走 Metal，并保留 Slint 的 softbuffer 回退；Windows 和 Linux 使用
+`winit-software`，保持现有平台行为。GPU 在受支持桌面平台选择 `winit-skia`，Software 选择
+`winit-software`。设置会在首个 `AppWindow` 创建前读取，因此仅在重启后生效。
+
+`SLINT_BACKEND` 的优先级高于已保存偏好，可显式选择 renderer；例如在 macOS 采集对照 sample 时
+强制走 software：
 
 ```bash
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
-环境变量会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
+环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
 
 开发 profile 禁用 rustc 增量代码生成。AxSSH 较大的 Slint 生成应用单元在 macOS 反复构建后，
 可能累积互不兼容的 code-generation 对象，并在最终 arm64 链接时报告内部

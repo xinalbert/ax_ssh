@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 39] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 40] = [
     (
         "General",
         "Language",
@@ -23,6 +23,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 39] = [
         "10-300 columns, 3-100 rows",
     ),
     ("Appearance", "Font family", "Application interface font"),
+    (
+        "Appearance",
+        "Renderer",
+        "Changes take effect after restarting AxSSH",
+    ),
     (
         "Appearance",
         "Display mode",
@@ -245,7 +250,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 39] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 40] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -275,6 +280,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 39] = [
         "Application interface font",
         "字体系列",
         "应用界面字体",
+    ),
+    (
+        "Renderer",
+        "Changes take effect after restarting AxSSH",
+        "渲染器",
+        "重启 AxSSH 后生效",
     ),
     (
         "Display mode",
@@ -534,6 +545,7 @@ pub(super) fn wire_settings(
     let font_registry_for_save = font_registry;
     ui.on_save_settings(
         move |application_font_family,
+              renderer_preference,
               terminal_font_family,
               font_size,
               line_height_percent,
@@ -647,6 +659,7 @@ pub(super) fn wire_settings(
             };
             let settings = AppSettings::normalized(AppSettingsInput {
                 appearance: AppearanceSettingsInput {
+                    renderer_preference: renderer_preference.as_str(),
                     application_font_family: application_font_family.as_str(),
                     terminal_font_family: terminal_font_family.as_str(),
                     terminal_font_size: font_size,
@@ -1108,6 +1121,11 @@ mod tests {
         assert!(section_matches.iter().any(|entry| {
             entry.section == "Workspace" && entry.title == "Session sidebar width"
         }));
+
+        let renderer_matches = settings_search_results("restarting", "english");
+        assert_eq!(renderer_matches.len(), 1);
+        assert_eq!(renderer_matches[0].section, "Appearance");
+        assert_eq!(renderer_matches[0].title, "Renderer");
     }
 
     #[test]
@@ -1125,5 +1143,10 @@ mod tests {
                 && entry.title == "字体系列"
                 && entry.description == "应用界面字体"
         }));
+
+        let renderer_matches = settings_search_results("重启", "simplified-chinese");
+        assert_eq!(renderer_matches.len(), 1);
+        assert_eq!(renderer_matches[0].section, "Appearance");
+        assert_eq!(renderer_matches[0].title, "渲染器");
     }
 }

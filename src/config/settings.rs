@@ -81,9 +81,47 @@ impl<'de> Deserialize<'de> for UiLanguage {
     }
 }
 
+/// Selects the renderer used when the next application process starts.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RendererPreference {
+    #[default]
+    Automatic,
+    Gpu,
+    Software,
+}
+
+impl RendererPreference {
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::Automatic => "automatic",
+            Self::Gpu => "gpu",
+            Self::Software => "software",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "gpu" => Self::Gpu,
+            "software" => Self::Software,
+            _ => Self::Automatic,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RendererPreference {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::from_setting(&String::deserialize(deserializer)?))
+    }
+}
+
 /// Raw appearance values supplied by an application settings surface.
 #[derive(Clone, Copy, Debug)]
 pub struct AppearanceSettingsInput<'a> {
+    pub renderer_preference: &'a str,
     pub application_font_family: &'a str,
     pub terminal_font_family: &'a str,
     pub terminal_font_size: i32,
@@ -141,6 +179,8 @@ impl TerminalSemanticColors {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppearanceSettings {
+    #[serde(default)]
+    pub renderer_preference: RendererPreference,
     #[serde(default = "default_application_font_family")]
     pub application_font_family: String,
     #[serde(default = "default_terminal_font_family")]
@@ -181,6 +221,7 @@ impl AppearanceSettings {
 
     fn normalized_with_theme(input: AppearanceSettingsInput<'_>, theme: ThemeSettings) -> Self {
         Self {
+            renderer_preference: RendererPreference::from_setting(input.renderer_preference),
             application_font_family: normalize_font_family(
                 input.application_font_family,
                 default_application_font_family,
@@ -221,6 +262,7 @@ impl AppearanceSettings {
             self.theme.custom_dark.clone(),
         );
         let input = AppearanceSettingsInput {
+            renderer_preference: self.renderer_preference.as_setting(),
             application_font_family: &self.application_font_family,
             terminal_font_family: &self.terminal_font_family,
             terminal_font_size: i32::from(self.terminal_font_size),
@@ -247,6 +289,7 @@ impl AppearanceSettings {
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
+            renderer_preference: RendererPreference::Automatic,
             application_font_family: default_application_font_family(),
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),

@@ -137,6 +137,7 @@ export component AppWindow inherits Window {
     in property <string> application-font-family: "JetBrains Mono";
     in property <[string]> application-font-options;
     in property <int> application-font-index: 0;
+    in property <string> renderer-preference: "automatic";
     in property <string> terminal-font-family: "JetBrains Mono";
     in property <[string]> terminal-font-options;
     in property <int> terminal-font-index: 0;
@@ -327,6 +328,7 @@ export component AppWindow inherits Window {
             application_font_family: root.application-font-family,
             application_font_options: root.application-font-options,
             application_font_index: root.application-font-index,
+            renderer_preference: root.renderer-preference,
             terminal_font_family: root.terminal-font-family,
             terminal_font_options: root.terminal-font-options, terminal_font_index: root.terminal-font-index,
             terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
@@ -429,7 +431,7 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
+        string, string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -752,7 +754,7 @@ export component AppWindow inherits Window {
             return-workspace(id) => {
                 root.return-workspace(id);
             }
-            save-settings(application-font, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
+            save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
                           semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                           theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -767,7 +769,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           settings-tab-id, close-after-save) => {
-                root.save-settings(application-font, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
+                root.save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                     theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,

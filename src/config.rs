@@ -28,9 +28,10 @@ pub use self::session::{
 #[cfg(test)]
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
-    AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, ShortcutSettings,
-    TerminalSemanticColors, TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput,
-    UiLanguage, WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
+    AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
+    ShortcutSettings, TerminalSemanticColors, TerminalSemanticColorsInput, TerminalSettings,
+    TerminalSettingsInput, UiLanguage, WorkspaceSettings, WorkspaceSettingsInput,
+    X11ServerProvider, X11Settings,
 };
 pub use self::theme::{
     TerminalColorScheme, ThemeMode, ThemePalette, ThemePaletteKind, ThemeSettings,
@@ -77,7 +78,7 @@ const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
 const DEFAULT_COLLAPSED_GROUP_LABEL_CHARS: u8 = 2;
-const CURRENT_SCHEMA_VERSION: u32 = 23;
+const CURRENT_SCHEMA_VERSION: u32 = 24;
 const TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION: u32 = 22;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;

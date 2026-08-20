@@ -8,6 +8,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         &ui.get_application_font_options(),
         &settings.appearance.application_font_family,
     ));
+    ui.set_renderer_preference(settings.appearance.renderer_preference.as_setting().into());
     ui.set_terminal_font_family(settings.appearance.terminal_font_family.clone().into());
     ui.set_terminal_font_index(font_option_index(
         &ui.get_terminal_font_options(),

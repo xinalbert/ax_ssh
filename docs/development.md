@@ -30,18 +30,25 @@ registry.
 
 ## Renderer selection
 
-AxSSH enables Slint's Skia and software renderers. macOS uses `winit-skia` by
-default, which is Metal-backed and retains Slint's softbuffer fallback. Windows
-and Linux use `winit-software` by default to preserve their existing behavior.
-Set `SLINT_BACKEND` to select a renderer explicitly; for example, this forces
-the software path on macOS when collecting a comparison sample:
+AxSSH enables Slint's Skia and software renderers. **Settings > Appearance >
+Renderer** persists Automatic, GPU, or Software for the next launch. Automatic
+uses `winit-skia` on macOS, which is Metal-backed and retains Slint's
+softbuffer fallback; Windows and Linux use `winit-software` to preserve their
+existing behavior. GPU selects `winit-skia` and Software selects
+`winit-software` on every supported desktop platform. The setting is read
+before the first `AppWindow` and takes effect only after restart.
+
+`SLINT_BACKEND` takes precedence over the saved preference and explicitly
+selects a renderer; for example, this forces the software path on macOS when
+collecting a comparison sample:
 
 ```bash
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
-The environment override is consumed before the first `AppWindow` is created,
-so renderer initialization failures are reported during startup.
+The environment override and saved preference are consumed before the first
+`AppWindow` is created, so renderer initialization failures are reported during
+startup.
 
 The development profile disables rustc incremental code generation. AxSSH's
 large generated Slint application unit can otherwise accumulate incompatible

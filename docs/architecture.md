@@ -212,12 +212,16 @@ The cursor uses a retained, bounded one-row model for the same reason. Each
 snapshot updates its row, column, visibility, and displayed cell through that
 model before publishing terminal rows, so cursor movement does not depend on a
 focus-triggered outer DTO refresh.
-The process enables both Slint's Skia and software renderers. On macOS startup
-selects `winit-skia`, whose default surface is Metal with Slint's softbuffer
-fallback; Windows and Linux explicitly keep `winit-software` as their default
-to preserve their existing rendering behavior. An explicit `SLINT_BACKEND`
-environment value is left to Slint, so `SLINT_BACKEND=winit-software` remains a
-bounded diagnostic fallback without changing terminal models or worker flow.
+The process enables both Slint's Skia and software renderers. `AppearanceSettings`
+owns the persisted `RendererPreference` DTO: Automatic selects `winit-skia` on
+macOS and `winit-software` on Windows/Linux, GPU selects `winit-skia`, and
+Software selects `winit-software`. Configuration loading and renderer selection
+finish before the first `AppWindow` exists, so the Settings draft may save and
+display the preference but cannot hot-switch an active renderer; it takes effect
+after restart. An explicit `SLINT_BACKEND` environment value takes priority and
+is left to Slint, so `SLINT_BACKEND=winit-software` remains a bounded diagnostic
+fallback without changing terminal models or worker flow. The macOS Skia default
+uses Metal and retains Slint's softbuffer fallback.
 Only non-root leaves of a `PaneTree` are independently closable. Their close
 intent is revalidated against the owning window route, collapses that leaf in
 the tree, removes exactly that runtime Tab, cancels a pending probe, and shuts
@@ -1156,7 +1160,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     `AppSettingsInput`, grouped into appearance, terminal, workspace, and shortcut
     ownership domains. These inputs contain no Slint values and normalize into the
     same persisted `AppSettings`; they do not leak Slint values into the JSON
-    schema. Schema version 23 adds the default-enabled
+    schema. Schema version 24 adds the `RendererPreference` field with stable
+    `automatic`, `gpu`, and `software` values; missing or invalid values select
+    Automatic. The preference is read before the first window and never switches
+    an active renderer. Schema version 23 adds the default-enabled
     `terminal_mouse_local_selection_priority` policy; disabling it selects standard
     xterm mouse routing, and older files preserve the prior local-selection-first
     behavior. Schema version 22 adds `terminal_text_brightness_percent`, stored from
