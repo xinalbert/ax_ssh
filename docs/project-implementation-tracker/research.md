@@ -186,3 +186,12 @@
 - 关键结论：DECSET 1007 只在备用屏将滚轮转换为 cursor up/down，不启用 button press/release/drag；1000/1002/1003 分别决定 button、drag 和 all-motion。xterm 的 `BtnCode` 直接读取当前 X event `state`，xterm.js 也从当前 `mouseup`/`mousemove` 读取 Shift/Alt/Ctrl。xterm.js 按协议暴露 DOWN/UP/WHEEL/DRAG/MOVE 独立事件位，而不是一个总布尔值。
 - 对实施计划的影响：Rust snapshot 拆分 button 与 wheel reporting；Slint 按 button capability 决定 owner/右键菜单、按 wheel capability 决定滚轮；release 使用 pointer-up modifier，cancel 使用最后 pointer motion modifier。高频 motion 采用最新值合并并允许背压丢弃，press/release 保持可观察。
 - 未解决问题：Slint 在三平台窗口失活时提供的 cancel modifier 完整性需要用户实机确认；xterm.js 的 DOM 监听实现只作事件能力参考，不复制其源码或引入依赖。
+## 2026-08-21 Slint 静态行缓存与终端节点削减
+
+- 时间：2026-08-21 15:25 +0800
+- 检索问题：Slint 1.17.1 的 `cache-rendering-hint` 能否由运行时配置控制、哪些 renderer 会实际缓存，以及终端行应缓存哪些内容。
+- 检索原因：用户要求把降低 item 数量和行级缓存同时实现为配置项；缓存范围和默认值会直接影响 CPU、GPU 内存、光标闪烁与选区正确性。
+- 来源列表：Slint 1.17.1 Skia `visit_layer`/`LayerRenderer` <https://github.com/slint-ui/slint/blob/v1.17.1/internal/renderers/skia/itemrenderer.rs>；Slint 1.17.1 FemtoVG item renderer <https://github.com/slint-ui/slint/blob/v1.17.1/internal/renderers/femtovg/itemrenderer.rs>；Slint 1.17.1 partial renderer 回归 <https://github.com/slint-ui/slint/blob/v1.17.1/api/rs/slint/tests/partial_renderer.rs>；本机锁定的 `i-slint-renderer-{skia,femtovg,software}` 与 `i-slint-core` 1.17.1 源码。
+- 关键结论：`cache-rendering-hint` 是可绑定的 bool 属性；Skia/FemtoVG 在启用时为该 Layer 创建并复用离屏图像，software renderer 没有等价 layer image cache。若整个终端行同时包含光标、选区或目标反馈，这些高频交互依赖会使缓存反复失效；缓存层应只包含行背景、文字和固定装饰。默认背景矩形和每 run 的透明包装 Rectangle 可以在不改变终端模型、字形内容或交互覆盖顺序的前提下省略。
+- 对实施计划的影响：增加两个独立且可预览的 Appearance 设置；紧凑节点默认开启，静态行缓存默认关闭。TerminalGrid 在紧凑分支只为非默认背景创建 Rectangle，并直接放置 Text/装饰；缓存只包住该静态分支，光标、选区、目标高亮和 IME 保持在层外。
+- 未解决问题：Skia cache 的实际 CPU 收益和 Retina 纹理 footprint 必须用相同窗口、pane 数和持续输出 A/B；software 模式不预期从 layer cache 获益，目标平台视觉一致性由用户验收。

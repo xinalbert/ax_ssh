@@ -203,8 +203,9 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
 两侧分别限制在该 split 的 10%-90%。比例在当前运行期的 Tab 切换和 detached 窗口往返中保留，
 应用重启后恢复等分。即使嵌套分屏让某一侧异常狭小，终端行、光标、预编辑文本和原生输入代理也会
-裁剪在各自 pane 内；每个 pane 的最后一行都贴住底边。高度不足一个完整字符格时会额外显示一行，
-只从顶部裁切该第一行；超过最大行数后的空间保留在网格上方。
+裁剪在各自 pane 内；每个 pane 的最后一个完整行都贴住底边。高度不足一个完整字符格的部分会保留在
+第一行上方而不裁切它；超过最大行数后的空间也保留在网格上方。只有高度低于三行保底的 pane 才会
+裁切较旧的顶部行。
 这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
 输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
@@ -289,6 +290,15 @@ Forest 使用绿色高对比。在 Dark 模式中，所有配色共用 axshell �
 Light/Dark 两套语义色。即时预览和持久化时，
 无效十六进制值或会让文字、必要边框、焦点/状态及终端文字看不清的颜色，会回退到对应明暗侧的
 可读默认。
+
+**Compact terminal rendering** 默认开启，会移除多余的 run 包装和默认背景 item；只在对照旧 item 树时关闭。
+**Cache unchanged terminal rows** 默认关闭；在 GPU/Skia 下可复用静态行图层，但会增加图形内存，Software
+模式没有等价缓存。两个选项都会立即预览，并在关闭 Settings Tab 时持久化。
+
+同一 RENDERING 分组中的 **Focused refresh rate** 和 **Unfocused refresh rate** 用帧率设置终端呈现上限，范围为
+1-120 FPS；聚焦窗格默认 60 FPS，可见但未聚焦窗格默认 4 FPS。聚焦终端的持续输出仍按 16/33/50 ms 自适应，
+更低的设置值会进一步限制这些阶段。隐藏 Tab 不发布终端帧，parser 应答、错误、断开和 shutdown 仍立即处理。
+修改会即时预览，并在关闭 Settings Tab 时持久化。
 
 **Settings > Terminal** 独立控制 Terminal 字体、字号、行高、文字亮度、粗体亮 ANSI 色、可选语义高亮、
 scrollback、鼠标行为以及平台相关的 Option-as-Meta。文字亮度范围为 60%-120%，步长 5%，默认

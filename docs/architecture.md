@@ -115,12 +115,17 @@ selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
 and empty output do not advance it. The revision carries no selection
 coordinates or text. The pane never owns a worker, a terminal buffer, or
 connection state.
-For an identity-preserving active terminal, the application reuses the existing
-outer `TerminalRenderLine` model and its nested run models. It updates only rows
-whose run values changed, and resets the same model only when the visible row
-count changes; it does not replace the dynamic line repeater on every output
-snapshot. This optimization is UI-model ownership only and does not change the
-terminal snapshot, selection, worker, or transport contracts.
+For an identity-preserving visible terminal, `TerminalModel` uses upstream
+`TermDamage` and stable `Arc<TerminalStyledLine>` identities to rebuild only
+damaged visible rows. Resize, scrollback-offset changes, and full upstream
+damage still inspect the complete bounded viewport and reuse a prior row only
+when its styled runs remain equal. The UI renderer caches each row by its 64-bit
+source revision and a 64-bit key covering every render setting, then reuses the
+existing outer `TerminalRenderLine` model and nested run models. It updates only
+rows whose source or settings changed and resets the same model only when the
+visible row count changes; it does not replace the dynamic line repeater on
+every output snapshot. This optimization is UI-model ownership only and does
+not change selection, worker, or transport contracts.
 The first local semantic-selection gesture is a left-button double-click when
 the gesture is not owned by mouse reporting, a Shift bypass, or primary-modifier
 target activation. `TerminalModel` creates a temporary
@@ -198,16 +203,40 @@ Pane focus callbacks use the same identity-checked in-place layout update, so
 clicking a split pane does not replace its repeater or transparent IME proxy
 before the next key event. A stale or structurally changed model falls back to
 the full snapshot refresh path.
-Worker-driven multi-window refreshes share the bounded `AppState` pending gate.
-One UI event resolves the latest routed views, updates identity-matched pane and
-divider model rows in place, and schedules at most one follow-up when requests
-arrived during that application. This prevents terminal output from building an
-unbounded Slint event queue or repeatedly replacing the focused IME proxy.
+Worker-driven multi-window refreshes share the bounded, generation-based
+`AppState` pending gate. Output requests carry dirty terminal UUIDs; one UI
+event snapshots only matching panes in currently visible pane trees, while a
+structural or non-terminal request falls back to a full routed view. Requests
+received before snapshot construction join the current batch, and only requests
+received after that snapshot schedule one follow-up. Hidden terminal output
+therefore remains in Rust state until a later full route refresh instead of
+entering the Slint event queue.
+`src/app/terminal_presentation.rs` owns a separate dirty-driven presentation
+deadline for each Local, Serial, SSH, or Telnet monitor. The current
+`WindowRouter` route classifies a terminal in an active `PaneTree` as focused or
+visible-unfocused; a terminal outside every active tree is hidden. Focused output
+presents its first dirty update immediately, then uses 16 ms for the first 500 ms
+of a continuous burst, 33 ms until two seconds, and 50 ms afterward. A 250 ms
+quiet period resets the burst to the immediate/16 ms path. `AppearanceSettings`
+also persists independent focused and visible-unfocused refresh caps as FPS,
+clamped to 1-120 FPS and defaulting to 60 FPS and 4 FPS. These caps are upper
+bounds: the focused 16/33/50 ms adaptive cadence remains in effect for sustained
+output, while the configured FPS can lower it further. A visible-unfocused split
+pane presents at most once per configured interval, while a hidden Tab has no
+presentation deadline. Settings preview and save publish the new policy through
+`WindowRouter`, waking monitors with pending output immediately. Route revisions
+wake only monitors with pending output, so a focus or Tab change applies the new
+policy without polling. A monitor with no dirty output has no timer wakeup.
+Parsing, protocol responses, worker errors, disconnect, and shutdown still run
+immediately; SSH retains the earliest worker receive timestamp across a
+coalesced presentation batch.
 For a matching pane, the bridge also retains the existing render-line and run
 `VecModel` identities. It writes new rows through those subscribed models, or
 resets the same model when its row count changes, before updating the outer pane
-row. The visible `TerminalGrid` therefore receives an immediate model
-notification for remote output without waiting for a later focus change.
+row. Unchanged pane/divider rows do not emit parent-model notifications, and a
+terminal-only batch does not rebuild SFTP or unrelated workspace properties.
+The visible `TerminalGrid` therefore receives a direct model notification for
+output without waiting for a later focus change.
 The cursor uses a retained, bounded one-row model for the same reason. Each
 snapshot updates its row, column, visibility, and displayed cell through that
 model before publishing terminal rows, so cursor movement does not depend on a
@@ -470,9 +499,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
    exposed blank rows stay below it; the model must not scroll content down or
    synthesize blank history to force the cursor to the new bottom edge. Shrinks,
    alternate screens, an active scroll region, a non-bottom cursor, and a user
-   viewing scrollback retain upstream resize semantics. Output for inactive
-   tabs stays in Rust state; each visible pane contributes only its bounded cell
-   snapshot across the Slint event loop. UI updates use
+   viewing scrollback retain upstream resize semantics. `TerminalSnapshot`
+   contains styled visible rows and cursor/mouse metadata only; it does not
+   duplicate a flattened text copy. Output for inactive tabs stays in Rust
+   state; each visible pane contributes only its bounded cell snapshot across
+   the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
    keep a window alive.
    The small-screen window floor is `520x360`; terminal layout, persisted
@@ -490,12 +521,13 @@ must not locally hide either dialog before the Rust state transition accepts it.
    that same coalesced update, so an already-connected pane reaches its settled
    initial grid without waiting for a later window or divider resize. This keeps
    a Settings font change and a later return to a connected terminal on the
-   same current-grid path as a window resize. Its vertical row count rounds up,
-   so the final terminal row always meets the pane bottom. A fractional cell
-   clips only the first row at the top; height beyond the maximum row count
-   remains above the grid. The same local origin is applied to grid cells,
-   cursor/IME preedit, and pointer row mapping, and that rounded row count is
-   the one sent through the existing PTY resize request.
+   same current-grid path as a window resize. Its vertical row count rounds down
+   to complete rows. Fractional height becomes a nonnegative top offset, so the
+   first row remains complete while the final row still meets the pane bottom;
+   only a pane below the three-row floor clips older top rows. Height beyond the
+   maximum row count also remains above the grid. The same local origin is
+   applied to grid cells, cursor/IME preedit, and pointer row mapping, and that
+   complete row count is sent through the existing PTY resize request.
    `AppState::resize_terminal(tab_id, ...)` is the single application entry for
    a UI grid change: it requests the specified visible pane's existing worker
    resize first and then immediately resizes that Tab's local `TerminalModel`.
@@ -513,6 +545,11 @@ must not locally hide either dialog before the Rust state transition accepts it.
    batches. The first output observed after terminal input flushes the current
    batch immediately, reducing interactive echo rendering delay without local
    prediction or duplicate echo; sustained unrelated output retains batching.
+   Local, Serial, SSH, and Telnet monitors parse every worker event and return
+   terminal protocol responses immediately. Only their UI publication is
+   coalesced by the focused adaptive, configured visible-unfocused FPS, or hidden
+   policy described above. Errors, disconnect, shutdown, and worker cleanup never
+   wait for a presentation deadline.
 9. On macOS, AxSSH keeps the standard native title bar and disables
    movable-window-background behavior. AppKit alone owns window movement from
    that title bar; the Slint workspace Tab strip is regular client content
@@ -1086,14 +1123,15 @@ preserves the terminal's logical columns, keeps ASCII text batched, and
 publishes non-ASCII cells as independent render runs. The grid centers each
 non-ASCII glyph inside its one- or two-cell span, so fallback shaping cannot
 move a following ASCII cell. This shared cell width and the configured
-line-height percentage drive rendering, selection, cursor, floor-based PTY
-columns, and ceiling-based PTY rows. `TerminalPane` computes one
+line-height percentage drive rendering, selection, cursor, and floor-based PTY
+dimensions. `TerminalPane` computes one
 content-space cursor-cell y position; the grid, pre-edit overlay, and native
 IME proxy all consume it, while the pane clip is the only vertical overflow
-boundary. Every pane bottom-aligns its final terminal row: a partial cell is
-clipped from the first row at the top, while space above the maximum row count
-remains above the grid. IME and pointer coordinates use that same
-origin. The pane group clips every terminal surface to its assigned split
+boundary. Every pane bottom-aligns its complete terminal rows: partial height
+stays above the first complete row, while space above the maximum row count
+also remains above the grid. Only a pane below the three-row floor clips older
+top rows. IME and pointer coordinates use that same origin. The pane group clips
+every terminal surface to its assigned split
 rectangle, and each pane also clips its grid, cursor, preedit overlay, and
 transparent IME proxy so an undersized nested split cannot paint into a
 neighbor or outside the workspace. The terminal batches the resulting resize
@@ -1160,7 +1198,13 @@ text brightness, bold-color, optional semantic highlighting and its status color
     `AppSettingsInput`, grouped into appearance, terminal, workspace, and shortcut
     ownership domains. These inputs contain no Slint values and normalize into the
     same persisted `AppSettings`; they do not leak Slint values into the JSON
-    schema. Schema version 24 adds the `RendererPreference` field with stable
+    schema. Schema version 25 adds the default-enabled
+    `terminal_compact_rendering` and default-disabled `terminal_row_render_cache`
+    fields. The former removes redundant per-run Slint items and default-background
+    rectangles; the latter enables renderer-owned static row layers and can increase
+    graphics memory. Schema version 26 adds independent focused and visible-unfocused terminal refresh caps as
+    `focused_terminal_refresh_fps` and `unfocused_terminal_refresh_fps`, stored as 1-120 FPS with defaults of 60 and 4;
+    missing or invalid values are clamped to that range. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
     an active renderer. Schema version 23 adds the default-enabled
@@ -1309,6 +1353,14 @@ foreground exactly. `dim` multiplies that final factor; backgrounds, selection,
 and cursor colors bypass the adjustment. A coalesced appearance refresh is
 scheduled after all Slint settings properties are applied. A theme refresh never
 resizes a PTY, sends worker commands, or changes SSH/local-shell lifetimes.
+The default compact terminal renderer publishes separate, merged non-default
+background and decoration spans, draws text without a transparent per-run wrapper,
+and retains the legacy item tree behind a Settings switch for A/B comparison. The
+independent row-cache switch applies `cache-rendering-hint` only to static row
+backgrounds, text, and decorations. Selection, cursor blink, target feedback, and
+IME/preedit remain outside that layer. Skia and FemtoVG can retain a row image;
+the software renderer has no equivalent layer cache, and the option is therefore
+disabled by default until CPU and graphics-memory measurements justify it.
 Runtime terminal geometry and user choices remain in versioned `AppSettings`;
 the Theme global remains a visual resolver rather than a persistence owner.
 

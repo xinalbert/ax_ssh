@@ -328,9 +328,10 @@ and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
 Terminal rows, the cursor, preedit text, and the native input proxy remain
 clipped to their pane even when nested splits make one side unusually small.
-Every pane keeps its final terminal row at the pane bottom. A height that is
-not a whole cell adds one visible row and clips only that first row at the top;
-space above the maximum row count remains above the grid.
+Every pane keeps its final complete terminal row at the pane bottom. Height
+that is not a whole cell stays above the first complete row instead of clipping
+it; space above the maximum row count also remains above the grid. Only a pane
+shorter than the three-row floor clips older top rows.
 This clipping and bottom alignment are established on the pane's initial layout,
 not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
@@ -472,9 +473,25 @@ preview and on persistence, invalid hex values or colors that would hide text,
 essential borders, focus/status states, or terminal text are replaced with
 readable defaults for that side.
 
+**Compact terminal rendering** is enabled by default and removes redundant run
+wrappers and default-background items. Disable it only to compare the legacy item
+tree. **Cache unchanged terminal rows** is disabled by default; on GPU/Skia it can
+reuse static row layers at the cost of additional graphics memory. It does not
+provide an equivalent cache in Software mode. Both choices preview immediately
+and are persisted when the Settings tab closes.
+
+**Focused refresh rate** and **Unfocused refresh rate** in the same Rendering
+section set terminal presentation caps in frames per second. They accept 1-120
+FPS and default to 60 FPS for the focused pane and 4 FPS for a visible pane that
+is not focused. The focused strategy still adapts sustained output through its
+16/33/50 ms stages; a lower configured cap limits those stages. Hidden tabs do
+not publish terminal frames, and parser responses, errors, disconnects, and
+shutdown remain immediate. Changes preview immediately and are persisted when
+the Settings tab closes.
+
 **Settings > Terminal** independently controls the Terminal font, font size,
-line height, text brightness, bright ANSI colors for bold text, optional semantic
-highlighting, scrollback, mouse behavior, and the platform-specific Option-as-Meta
+line height, text brightness, bright ANSI colors for bold text,
+optional semantic highlighting, scrollback, mouse behavior, and the platform-specific Option-as-Meta
 preference. Text brightness ranges from 60% to 120% in 5% steps and defaults to
 100%, which preserves resolved ANSI/256/true-color foregrounds exactly. Rendering
 first resolves the program color and inverse state, then an enabled semantic

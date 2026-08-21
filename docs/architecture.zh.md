@@ -99,10 +99,12 @@ Rust
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
 不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
-对于 identity 不变的活动终端，application 会复用已有外层 `TerminalRenderLine` model 及其嵌套
-run model，只对 run 值确实变化的行发送通知；只有可见行数变化时才 reset 同一个 model，不会在每次
-输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变终端 snapshot、选区、worker
-或 transport 契约。
+对于 identity 不变的可见终端，`TerminalModel` 使用上游 `TermDamage` 和稳定的
+`Arc<TerminalStyledLine>` identity，只重建受损的可见行。resize、scrollback offset 变化和上游 full
+damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复用旧行。UI renderer 按 64-bit 行
+revision 与覆盖全部渲染设置的 64-bit key 缓存结果，再复用已有外层 `TerminalRenderLine` model 及其
+嵌套 run model；只更新来源或设置确实变化的行，只有可见行数变化时才 reset 同一 model，不会在每次
+输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变选区、worker 或 transport 契约。
 第一版本地语义选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
 `TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
 不保留上游 `Selection`；宽字符、软换行和括号配对语义由终端核心处理，范围在进入 application callback 前裁剪。
@@ -142,12 +144,24 @@ divider 手势只携带稳定的前序 divider ID 和标准化比例；`WindowRo
 不匹配时才回退到常规全量 snapshot 刷新。
 pane 焦点 callback 也使用同一套 identity 重验的原地布局更新，因此点击分屏 pane 后不会在下一次
 按键前替换其 repeater 或透明 IME proxy；模型过期或结构变化时才回退到全量 snapshot 刷新。
-worker 驱动的多窗口刷新共用有界 `AppState` pending gate：一次 UI 事件读取最新路由视图，原地更新
-identity 匹配的 pane/divider model 行；若应用期间仍有请求，最多补排一次刷新。终端输出因此不会
-堆积无界 Slint event queue，也不会反复替换 focused IME proxy。
+worker 驱动的多窗口刷新共用有界、基于 generation 的 `AppState` pending gate。输出请求携带脏终端
+UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 snapshot，结构或非终端请求才回退到
+完整路由视图。snapshot 构造前到达的请求并入当前批次，只有构造后到达的请求补排一次。隐藏终端的
+输出因此留在 Rust 状态，直到后续完整路由刷新，而不会进入 Slint event queue。
+`src/app/terminal_presentation.rs` 为每个 Local、Serial、SSH 或 Telnet monitor 拥有独立、只由 dirty
+输出驱动的呈现 deadline。当前 `WindowRouter` 路由把活动 `PaneTree` 中的终端动态分类为 focused 或
+可见未聚焦；不属于任何活动 tree 的终端为 hidden。focused 终端的首个脏更新立即呈现，连续输出的
+前 500 ms 使用 16 ms，随后到 2 秒使用 33 ms，超过 2 秒使用 50 ms；安静 250 ms 后恢复立即首帧和
+16 ms。`AppearanceSettings` 还以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
+60 FPS 和 4 FPS。这些值是上限：聚焦持续输出仍按 16/33/50 ms 自适应，设置值可以进一步降低频率；可见未聚焦
+split pane 按设置后的周期最多呈现一次，隐藏 Tab 不设置呈现 deadline。Settings 预览和保存会通过
+`WindowRouter` 发布新策略，并立即唤醒仍有 pending 输出的 monitor。路由 revision 只唤醒仍有 pending 输出的
+monitor，使焦点或 Tab 变化立即采用新策略且无需轮询；没有脏输出时没有 timer 唤醒。parser、协议应答、worker
+错误、断开和 shutdown 仍立即处理；SSH 会在合并呈现批次中保留最早的 worker 接收时间。
 对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
-因此可见 `TerminalGrid` 会在远端输出到达时立即收到 model 通知，不需要等待下一次焦点变化。
+未变化的 pane/divider 行不会发送父 model 通知，terminal-only 批次也不会重建 SFTP 或无关 workspace
+属性。因此可见 `TerminalGrid` 会直接收到输出 model 通知，不需要等待下一次焦点变化。
 光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
 行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
 进程同时编译 Slint 的 Skia 和 software renderer。`AppearanceSettings` 拥有持久化的
@@ -307,7 +321,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。
    历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
    空白历史来强制将光标置于新底边。缩小时、备用屏、活动滚动区域、非底行光标和用户正在查看
-   scrollback 时保持上游 resize 语义。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
+   scrollback 时保持上游 resize 语义。`TerminalSnapshot` 只携带有样式的可见行及光标/mouse 元数据，
+   不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
@@ -318,10 +333,10 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
    下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
    pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
-   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。纵向行数向上取整，使最后一行
-   始终贴住 pane 底边；不足一格的高度只从顶部裁切第一行，超过最大行数后的高度保留在网格上方。
-   同一内容区原点同时用于字符格、光标/IME 预编辑和指针行映射，向上取整后的行数也会沿既有 PTY
-   resize 请求发送。
+   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。纵向行数向下取整为完整行，
+   不足一格的高度成为非负顶部偏移，因此第一行保持完整且最后一行仍贴住 pane 底边；只有 pane
+   低于三行保底时才裁切较旧的顶部行，超过最大行数后的高度也保留在网格上方。同一内容区原点
+   同时用于字符格、光标/IME 预编辑和指针行映射，完整行数也会沿既有 PTY resize 请求发送。
    `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
    对应 worker 的 resize，再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
    对端接受选项后发送 NAWS；Serial 没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口
@@ -331,7 +346,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
    SSH 输出通常以有界的 16 ms/16 KiB 批次跨越 worker 边界；终端输入后观察到的首个输出会
    立即刷新当前批次，降低交互回显的本地绘制等待，同时不做本地预测或重复回显；持续的无关
-   输出仍保留批处理。
+   输出仍保留批处理。Local、Serial、SSH 与 Telnet monitor 都会立即解析每个 worker 事件并回送终端
+   协议应答；只有 UI publication 按上述 focused 自适应、配置后的可见未聚焦 FPS 或 hidden 策略合并。
+   错误、断开、shutdown 和 worker 清理不会等待呈现 deadline。
 9. macOS 应用保留标准原生标题栏，并关闭 AppKit 的整窗背景拖动。窗口移动只由该原生
    标题栏处理；Slint 工作区 Tab 条作为其下方的普通客户端内容呈现，因此原生窗口拖动
    不会再与 Tab 重排手势竞争。
@@ -691,10 +708,10 @@ Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必
 取三者中最大的单 cell advance，使 Latin、Han 与盒线共用保守的一套 grid metric。Rust 保留终端逻辑列，
 继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
 span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
-光标、向下取整的 PTY 列数和向上取整的 PTY 行数；`TerminalPane` 只计算一个内容区光标 cell y 坐标，
+光标和向下取整的 PTY 尺寸；`TerminalPane` 只计算一个内容区光标 cell y 坐标，
 网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
-垂直溢出边界。每个 pane 的最后一行都贴住底边：不足一格的高度从顶部裁切第一行，超过最大行数后的空间保留在网格上方。
-IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
+垂直溢出边界。每个 pane 的完整行都向下对齐：不足一格的高度保留在第一行上方，超过最大行数后的空间也保留在网格上方；
+只有低于三行保底的 pane 才裁切较旧的顶部行。IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
 预编辑覆盖层和透明 IME proxy，确保尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外；终端只会在这些度量和布局稳定后合并发送 resize。
 
 首次打开 Settings 时才会在 blocking worker 中发现本地 shell、系统等宽字体和已知 X server
@@ -743,7 +760,11 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `copy_selection_on_select` 偏好；旧配置保持既有右键行为。
     应用调用方通过 `AppSettingsInput` 提交原始值，并按 Appearance、Terminal、Workspace 和
     Shortcuts 所有权域分组。这些输入类型不包含 Slint 值，规范化后仍写入同一个持久化
-    `AppSettings`，不会把 Slint 值泄露到 JSON schema。schema 版本 24 增加
+    `AppSettings`，不会把 Slint 值泄露到 JSON schema。schema 版本 25 增加默认开启的
+    `terminal_compact_rendering` 和默认关闭的 `terminal_row_render_cache`。前者移除多余的逐 run
+    Slint item 和默认背景矩形；后者启用 renderer 持有的静态行图层，并可能增加图形内存。旧文件缺失时采用这两个默认值。schema 版本 26 增加独立的聚焦和可见未聚焦终端刷新上限
+    `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
+    缺失或无效值会限制到该范围。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
@@ -823,8 +844,13 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 唯一前景链路依次解析 ANSI/索引/真彩色、粗体亮色与反色，选择可选语义前景，最后只应用一次
 0.60-1.20 的 HSL lightness 系数。1.00 会逐值保留所有非 dim 的解析前景；`dim` 乘入同一个最终系数；
 背景、选区和光标绕过该调整。全部 Slint 设置属性应用后，只调度一次合并的外观刷新。
-主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。运行时终端
-几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
+主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。
+默认的紧凑终端渲染会分别发布合并后的非默认背景 span 和装饰 span，直接绘制 Text，不再给每个 run
+增加透明包装 Rectangle；Settings 开关仍保留旧 item 树供 A/B。独立的行缓存开关只把静态行背景、文字和
+装饰放入 `cache-rendering-hint` layer，选区、光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
+Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
+CPU 和图形内存后再决定是否启用。
+运行时终端几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 
 ## 分阶段范围
 
