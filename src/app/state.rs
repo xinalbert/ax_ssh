@@ -1,7 +1,6 @@
 //! Application state, workspace tabs, and connection-attempt transitions.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -34,7 +33,25 @@ pub(super) struct AppState {
     profile_mutations: HashMap<Uuid, Uuid>,
     local_terminal_number: u32,
     serial_ports: Vec<SerialPortDescriptor>,
-    ui_refresh_pending: AtomicBool,
+    ui_refresh: UiRefreshState,
+}
+
+#[derive(Default)]
+struct UiRefreshState {
+    pending: bool,
+    generation: u64,
+    full: bool,
+    terminal_ids: HashSet<Uuid>,
+    earliest_output_received_at: Option<Instant>,
+    coalesced_requests: u64,
+}
+
+pub(super) struct UiRefreshBatch {
+    pub(super) generation: u64,
+    pub(super) full: bool,
+    pub(super) terminal_ids: HashSet<Uuid>,
+    pub(super) earliest_output_received_at: Option<Instant>,
+    pub(super) coalesced_requests: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -307,10 +324,7 @@ pub(super) struct ActiveTabSnapshot {
     pub(super) editor: Option<SessionEditorSnapshot>,
     pub(super) terminal: Option<TerminalSnapshot>,
     pub(super) connected: bool,
-    pub(super) worker_running: bool,
     pub(super) selection_revision: i32,
-    pub(super) mouse_button_reporting: bool,
-    pub(super) mouse_wheel_reporting: bool,
     pub(super) sftp: SftpBrowserSnapshot,
     pub(super) security_prompt: ActiveSecurityPrompt,
 }
@@ -326,10 +340,7 @@ impl Default for ActiveTabSnapshot {
             editor: None,
             terminal: None,
             connected: false,
-            worker_running: false,
             selection_revision: 0,
-            mouse_button_reporting: false,
-            mouse_wheel_reporting: false,
             sftp: SftpBrowserSnapshot::default(),
             security_prompt: ActiveSecurityPrompt::None,
         }

@@ -9,13 +9,43 @@ fn test_state() -> AppState {
 }
 
 #[test]
-fn ui_refresh_gate_coalesces_until_the_queued_snapshot_is_consumed() {
-    let state = test_state();
+fn ui_refresh_gate_includes_requests_that_arrive_before_the_snapshot() {
+    let mut state = test_state();
+    let tab_id = Uuid::new_v4();
 
-    assert!(state.try_schedule_ui_refresh());
-    assert!(!state.try_schedule_ui_refresh());
-    state.clear_ui_refresh_pending();
-    assert!(state.try_schedule_ui_refresh());
+    assert!(state.request_terminal_ui_refresh(tab_id, None));
+    assert!(!state.request_full_ui_refresh());
+    let batch = state
+        .take_ui_refresh_batch()
+        .expect("pending refresh batch");
+    assert!(batch.full);
+    assert!(batch.terminal_ids.is_empty());
+    assert_eq!(batch.coalesced_requests, 1);
+    assert!(!state.finish_ui_refresh(batch.generation));
+
+    assert!(state.request_terminal_ui_refresh(tab_id, None));
+}
+
+#[test]
+fn ui_refresh_gate_follows_up_only_for_requests_after_the_snapshot() {
+    let mut state = test_state();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+
+    assert!(state.request_terminal_ui_refresh(first, None));
+    let batch = state
+        .take_ui_refresh_batch()
+        .expect("pending refresh batch");
+    assert_eq!(batch.terminal_ids, HashSet::from([first]));
+    assert!(!state.request_terminal_ui_refresh(second, None));
+    assert!(state.finish_ui_refresh(batch.generation));
+
+    let follow_up = state
+        .take_ui_refresh_batch()
+        .expect("request after snapshot must remain pending");
+    assert_eq!(follow_up.terminal_ids, HashSet::from([second]));
+    assert_eq!(follow_up.coalesced_requests, 1);
+    assert!(!state.finish_ui_refresh(follow_up.generation));
 }
 
 #[test]
@@ -1351,9 +1381,9 @@ fn reconnect_does_not_replace_terminal_buffer() {
         .as_mut()
         .expect("terminal model should exist")
         .process(b"preserved output");
-    let before = terminal.terminal.as_ref().expect("model").snapshot();
+    let before = terminal.terminal.as_mut().expect("model").snapshot();
     terminal.begin_reconnect();
     terminal.finish_reconnect_attempt(terminal.reconnect_generation());
-    let after = terminal.terminal.as_ref().expect("model").snapshot();
+    let after = terminal.terminal.as_mut().expect("model").snapshot();
     assert_eq!(before.lines, after.lines);
 }

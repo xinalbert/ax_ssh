@@ -139,6 +139,11 @@ export global Theme {
     out property <length> tab-content-spacing: 4px;
     out property <length> tab-surface-inset: 3px;
     out property <length> tab-surface-radius: 8px;
+    // Keep one hairline below the Tab boundary and a slightly larger breathing
+    // space at the lower window edge. These affect only the outer surface;
+    // pane and cell geometry remain unchanged internally.
+    out property <length> terminal-top-gap: 1px;
+    out property <length> terminal-bottom-gap: 2px;
     // Keep the titlebar on one stable layout track. The height follows the
     // largest interactive control plus the tab surface breathing room, so
     // changing those tokens cannot let tab content overlap the terminal.

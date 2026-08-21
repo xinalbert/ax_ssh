@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
 import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
-import { TerminalRenderLine, TerminalTargetHighlight } from "components/terminal-grid.slint";
+import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
 import { TerminalSemanticSelection } from "terminal-pane.slint";
@@ -85,8 +85,6 @@ export component AppWindow inherits Window {
     in property <bool> password-vault-unlock-only: false;
     in property <string> password-key-path: "";
     in property <string> password-dialog-tab-id: "";
-    in property <bool> worker-running: false;
-    in property <bool> connected: false;
     in property <bool> sftp-available: false;
     in property <bool> sftp-open: false;
     in property <bool> sftp-loading: false;
@@ -122,17 +120,8 @@ export component AppWindow inherits Window {
     in property <bool> sftp-editor-remote-changed: false;
     in property <bool> sftp-editor-auto-upload: false;
     in property <int> sftp-editor-revision: 0;
-    in property <[TerminalRenderLine]> terminal-render-lines;
     in property <[TerminalPaneView]> terminal-panes;
     in property <[TerminalPaneDividerView]> terminal-dividers;
-    in property <int> terminal-content-columns: 0;
-    in property <int> terminal-cursor-row: 0;
-    in property <int> terminal-cursor-column: 0;
-    in property <bool> terminal-cursor-visible: false;
-    in property <string> terminal-cursor-text: " ";
-    in property <int> terminal-selection-revision: 0;
-    in property <bool> terminal-mouse-button-reporting: false;
-    in property <bool> terminal-mouse-wheel-reporting: false;
     in property <bool> terminal-mouse-local-selection-priority: true;
     in property <string> application-font-family: "JetBrains Mono";
     in property <[string]> application-font-options;
@@ -147,6 +136,10 @@ export component AppWindow inherits Window {
     in property <float> terminal-text-brightness: 1.0;
     in property <bool> bright-bold-text: true;
     in property <bool> terminal-semantic-highlighting: false;
+    in property <bool> terminal-compact-rendering: true;
+    in property <bool> terminal-row-render-cache: false;
+    in property <int> focused-terminal-refresh-fps: 60;
+    in property <int> unfocused-terminal-refresh-fps: 4;
     in property <string> terminal-semantic-link-color: "";
     in property <string> terminal-semantic-success-color: "";
     in property <string> terminal-semantic-info-color: "";
@@ -162,12 +155,6 @@ export component AppWindow inherits Window {
     in property <string> x11-server-app-path: "";
     in property <bool> x11-launch-on-connect: true;
     in property <bool> x11-allow-no-auth: false;
-    in property <color> terminal-render-foreground: Theme.terminal-foreground;
-    in property <color> terminal-render-background: Theme.terminal-background;
-    in property <color> terminal-render-selection-background: Theme.terminal-selection;
-    out property <color> terminal-foreground: terminal-render-foreground;
-    out property <color> terminal-background: terminal-render-background;
-    out property <color> terminal-selection-background: terminal-render-selection-background;
     out property <color> theme-terminal-foreground: Theme.terminal-foreground;
     out property <color> theme-terminal-background: Theme.terminal-background;
     out property <color> theme-terminal-selection: Theme.terminal-selection;
@@ -264,35 +251,6 @@ export component AppWindow inherits Window {
         sidebar_width: root.sidebar-width,
         tab_width: root.tab-width,
         collapsed_group_label_chars: root.collapsed-group-label-chars,
-        terminal: {
-            terminal_id: root.active-pane-id, connected: root.connected,
-            selection_revision: root.terminal-selection-revision,
-            notice: {
-                visible: root.active-tab-notice-visible,
-                severity: root.active-tab-notice-severity,
-                title: root.active-tab-notice-title,
-                message: root.active-tab-notice-message,
-                primary_action: root.active-tab-notice-primary-action,
-                primary_label: root.active-tab-notice-primary-label,
-                secondary_action: root.active-tab-notice-secondary-action,
-                secondary_label: root.active-tab-notice-secondary-label,
-            },
-            render_lines: root.terminal-render-lines, content_columns: root.terminal-content-columns,
-            cursor_state: [],
-            cursor_row: root.terminal-cursor-row, cursor_column: root.terminal-cursor-column,
-            cursor_visible: root.terminal-cursor-visible, cursor_text: root.terminal-cursor-text,
-            font_family: root.terminal-font-family, font_size: root.terminal-font-size * 1px,
-            line_height_percent: root.terminal-line-height-percent, foreground: root.terminal-foreground,
-            background: root.terminal-background, selection_background: root.terminal-selection-background,
-            right_click_copy_or_paste: root.right-click-copy-or-paste,
-            copy_selection_on_select: root.copy-selection-on-select,
-            option_as_meta: root.option-as-meta,
-            copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
-            select_all_shortcut: root.select-all-shortcut,
-            mouse_button_reporting: root.terminal-mouse-button-reporting,
-            mouse_wheel_reporting: root.terminal-mouse-wheel-reporting,
-            mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
-        },
         terminal_panes: root.terminal-panes,
         terminal_dividers: root.terminal-dividers,
         sftp: {
@@ -333,6 +291,10 @@ export component AppWindow inherits Window {
             terminal_font_size: root.terminal-font-size, terminal_line_height_percent: root.terminal-line-height-percent,
             terminal_text_brightness: root.terminal-text-brightness, bright_bold_text: root.bright-bold-text,
             terminal_semantic_highlighting: root.terminal-semantic-highlighting,
+            terminal_compact_rendering: root.terminal-compact-rendering,
+            terminal_row_render_cache: root.terminal-row-render-cache,
+            focused_terminal_refresh_fps: root.focused-terminal-refresh-fps,
+            unfocused_terminal_refresh_fps: root.unfocused-terminal-refresh-fps,
             terminal_semantic_link_color: root.terminal-semantic-link-color,
             terminal_semantic_success_color: root.terminal-semantic-success-color,
             terminal_semantic_info_color: root.terminal-semantic-info-color,
@@ -430,7 +392,7 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, string, int, int, float, bool, bool, string, string, string, string, string, string, string,
+        string, string, string, int, int, float, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -753,7 +715,7 @@ export component AppWindow inherits Window {
             return-workspace(id) => {
                 root.return-workspace(id);
             }
-            save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
+            save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, focused-refresh-fps, unfocused-refresh-fps,
                           semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                           theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -768,7 +730,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           settings-tab-id, close-after-save) => {
-                root.save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting,
+                root.save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, focused-refresh-fps, unfocused-refresh-fps,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                     theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,

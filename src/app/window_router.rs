@@ -1,12 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
+use super::terminal_presentation::TerminalPresentationPolicy;
 use super::*;
 use ax_ssh::config::{PaneNodeSnapshot, WorkspaceSnapshot, WorkspaceWindowSnapshot};
+use tokio::sync::watch;
 
 #[derive(Clone)]
 pub(super) struct WindowRouter {
     inner: Arc<Mutex<WindowRouterState>>,
+    terminal_presentation_changes: watch::Sender<u64>,
+    terminal_presentation_policy: watch::Sender<TerminalPresentationPolicy>,
 }
 
 struct WindowRouterState {
@@ -36,6 +40,11 @@ pub(super) struct WindowTerminalPane {
     pub(super) closable: bool,
 }
 
+pub(super) struct WindowTerminalUpdates {
+    pub(super) ui: slint::Weak<AppWindow>,
+    pub(super) panes: Vec<WindowTerminalPane>,
+}
+
 pub(super) struct DetachedRoute {
     pub(super) transfer: WorkspaceTransfer,
     pub(super) pane_tree: Option<PaneTree>,
@@ -45,6 +54,9 @@ pub(super) static GLOBAL_WINDOW_ROUTER: OnceLock<WindowRouter> = OnceLock::new()
 
 impl WindowRouter {
     pub(super) fn new(main_ui: slint::Weak<AppWindow>) -> Self {
+        let (terminal_presentation_changes, _) = watch::channel(0);
+        let (terminal_presentation_policy, _) =
+            watch::channel(TerminalPresentationPolicy::default());
         let mut routes = HashMap::new();
         routes.insert(
             MAIN_WINDOW_ID,
@@ -57,6 +69,8 @@ impl WindowRouter {
         );
         Self {
             inner: Arc::new(Mutex::new(WindowRouterState { routes })),
+            terminal_presentation_changes,
+            terminal_presentation_policy,
         }
     }
 
@@ -100,6 +114,7 @@ impl WindowRouter {
         }
         drop(router);
         app.set_active_tab_from_snapshot(snapshot.active_tab_id);
+        self.notify_terminal_presentation_change();
     }
 
     pub(super) fn snapshot(&self, app: &AppState) -> WorkspaceSnapshot {
@@ -141,6 +156,7 @@ impl WindowRouter {
         transfer: WorkspaceTransfer,
         pane_tree: Option<PaneTree>,
     ) {
+        let mut registered = false;
         if let Ok(mut router) = self.inner.lock() {
             let mut pane_trees = HashMap::new();
             if let Some(pane_tree) = pane_tree {
@@ -155,10 +171,15 @@ impl WindowRouter {
                     pane_trees,
                 },
             );
+            registered = true;
+        }
+        if registered {
+            self.notify_terminal_presentation_change();
         }
     }
 
     pub(super) fn set_active(&self, window_id: Uuid, tab_id: Uuid) {
+        let mut changed = false;
         if let Ok(mut router) = self.inner.lock()
             && let Some(route) = router.routes.get_mut(&window_id)
         {
@@ -174,6 +195,10 @@ impl WindowRouter {
             } else {
                 route.active_tab_id = Some(tab_id);
             }
+            changed = true;
+        }
+        if changed {
+            self.notify_terminal_presentation_change();
         }
     }
 
@@ -237,7 +262,12 @@ impl WindowRouter {
         } else {
             tab_id
         };
-        app.activate_tab(active_session_id)
+        let activated = app.activate_tab(active_session_id);
+        drop(router);
+        if activated {
+            self.notify_terminal_presentation_change();
+        }
+        activated
     }
 
     pub(super) fn focus_terminal_pane(
@@ -262,7 +292,12 @@ impl WindowRouter {
             .find(|(_, tree)| tree.contains(tab_id))?;
         let _ = tree.set_focused(tab_id);
         route.active_tab_id = Some(*workspace_tab_id);
-        app.activate_tab(tab_id).then(|| tree.layout())
+        let layout = app.activate_tab(tab_id).then(|| tree.layout());
+        drop(router);
+        if layout.is_some() {
+            self.notify_terminal_presentation_change();
+        }
+        layout
     }
 
     pub(super) fn focus_pane_direction(
@@ -281,7 +316,12 @@ impl WindowRouter {
             .get_mut(&workspace_tab_id)
             .and_then(|tree| tree.focus_direction(direction))?;
         let tree = route.pane_trees.get(&workspace_tab_id)?;
-        app.activate_tab(tab_id).then(|| tree.layout())
+        let layout = app.activate_tab(tab_id).then(|| tree.layout());
+        drop(router);
+        if layout.is_some() {
+            self.notify_terminal_presentation_change();
+        }
+        layout
     }
 
     pub(super) fn prepare_pane_split(
@@ -355,7 +395,12 @@ impl WindowRouter {
             transfer.tab_ids.push(new_tab_id);
         }
         route.active_tab_id = Some(workspace_tab_id);
-        app.activate_tab(new_tab_id)
+        let activated = app.activate_tab(new_tab_id);
+        drop(router);
+        if activated {
+            self.notify_terminal_presentation_change();
+        }
+        activated
     }
 
     pub(super) fn remove_terminal_child_pane(
@@ -410,7 +455,9 @@ impl WindowRouter {
             focused_tab_id
         };
         let activate_survivor = app.active_tab_id() == Some(tab_id);
-        let closed = app.close_tab(tab_id)?;
+        let closed = app.close_tab(tab_id);
+        self.notify_terminal_presentation_change();
+        let closed = closed?;
         if activate_survivor {
             let _ = app.activate_tab(focused_tab_id);
         }
@@ -482,7 +529,7 @@ impl WindowRouter {
         window_id: Uuid,
         tab_id: Uuid,
     ) -> Option<PaneTree> {
-        self.inner.lock().ok().and_then(|mut router| {
+        let pane_tree = self.inner.lock().ok().and_then(|mut router| {
             let route = router.routes.get_mut(&window_id)?;
             let workspace_tab_id =
                 route
@@ -492,7 +539,11 @@ impl WindowRouter {
                         tree.contains(tab_id).then_some(*workspace_tab_id)
                     })?;
             route.pane_trees.remove(&workspace_tab_id)
-        })
+        });
+        if pane_tree.is_some() {
+            self.notify_terminal_presentation_change();
+        }
+        pane_tree
     }
 
     pub(super) fn pane_tab_ids(&self, window_id: Uuid, tab_id: Uuid) -> Vec<Uuid> {
@@ -545,11 +596,14 @@ impl WindowRouter {
                 route.active_tab_id = None;
             }
         }
+        drop(router);
+        self.notify_terminal_presentation_change();
         removed
     }
 
     pub(super) fn remove_detached(&self, window_id: Uuid) -> Option<DetachedRoute> {
-        self.inner
+        let detached = self
+            .inner
             .lock()
             .ok()
             .and_then(|mut router| router.routes.remove(&window_id))
@@ -560,7 +614,11 @@ impl WindowRouter {
                     transfer,
                     pane_tree: route.pane_trees.into_values().next(),
                 })
-            })
+            });
+        if detached.is_some() {
+            self.notify_terminal_presentation_change();
+        }
+        detached
     }
 
     pub(super) fn restore_detached(&self, detached: &DetachedRoute) -> Option<Uuid> {
@@ -579,15 +637,18 @@ impl WindowRouter {
                 .insert(pane_tree.workspace_tab_id(), pane_tree);
         }
         let workspace_tab_id = main.active_tab_id?;
-        Some(
+        let active_tab_id = Some(
             main.pane_trees
                 .get(&workspace_tab_id)
                 .map(PaneTree::focused_tab_id)
                 .unwrap_or(workspace_tab_id),
-        )
+        );
+        drop(router);
+        self.notify_terminal_presentation_change();
+        active_tab_id
     }
 
-    pub(super) fn views(&self, app: &AppState) -> Vec<WindowView> {
+    pub(super) fn views(&self, app: &mut AppState) -> Vec<WindowView> {
         let Ok(mut router) = self.inner.lock() else {
             return Vec::new();
         };
@@ -671,7 +732,7 @@ impl WindowRouter {
                         .map(PaneTree::focused_tab_id)
                         .unwrap_or(tab_id)
                 });
-                let snapshot = app.snapshot_for(active_session_id);
+                let snapshot = app.snapshot_without_terminal_for(active_session_id);
                 route.active_tab_id = active_tab_id;
                 let (terminal_panes, terminal_dividers) = active_tab_id
                     .and_then(|tab_id| route.pane_trees.get(&tab_id))
@@ -702,6 +763,107 @@ impl WindowRouter {
                     terminal_panes,
                     terminal_dividers,
                 }
+            })
+            .collect()
+    }
+
+    pub(super) fn terminal_presentation_mode(
+        &self,
+        tab_id: Uuid,
+    ) -> terminal_presentation::TerminalPresentationMode {
+        self.inner.lock().map_or(
+            terminal_presentation::TerminalPresentationMode::Hidden,
+            |router| {
+                let mut mode = terminal_presentation::TerminalPresentationMode::Hidden;
+                for route in router.routes.values() {
+                    let Some(tree) = route
+                        .active_tab_id
+                        .and_then(|active_id| route.pane_trees.get(&active_id))
+                    else {
+                        continue;
+                    };
+                    if !tree.contains(tab_id) {
+                        continue;
+                    }
+                    if tree.focused_tab_id() == tab_id {
+                        return terminal_presentation::TerminalPresentationMode::Focused;
+                    }
+                    mode = terminal_presentation::TerminalPresentationMode::Unfocused;
+                }
+                mode
+            },
+        )
+    }
+
+    pub(super) fn terminal_is_visible(&self, tab_id: Uuid) -> bool {
+        self.terminal_presentation_mode(tab_id)
+            != terminal_presentation::TerminalPresentationMode::Hidden
+    }
+
+    pub(super) fn subscribe_terminal_presentation_changes(&self) -> watch::Receiver<u64> {
+        self.terminal_presentation_changes.subscribe()
+    }
+
+    pub(super) fn subscribe_terminal_presentation_policy(
+        &self,
+    ) -> watch::Receiver<TerminalPresentationPolicy> {
+        self.terminal_presentation_policy.subscribe()
+    }
+
+    pub(super) fn set_terminal_presentation_policy(&self, policy: TerminalPresentationPolicy) {
+        self.terminal_presentation_policy
+            .send_if_modified(|current| {
+                if *current == policy {
+                    false
+                } else {
+                    *current = policy;
+                    true
+                }
+            });
+    }
+
+    pub(super) fn terminal_presentation_policy(&self) -> TerminalPresentationPolicy {
+        *self.terminal_presentation_policy.borrow()
+    }
+
+    fn notify_terminal_presentation_change(&self) {
+        self.terminal_presentation_changes
+            .send_modify(|generation| *generation = generation.wrapping_add(1));
+    }
+
+    pub(super) fn terminal_updates(
+        &self,
+        app: &mut AppState,
+        terminal_ids: &HashSet<Uuid>,
+    ) -> Vec<WindowTerminalUpdates> {
+        let Ok(router) = self.inner.lock() else {
+            return Vec::new();
+        };
+        router
+            .routes
+            .values()
+            .filter_map(|route| {
+                let active_tab_id = route.active_tab_id?;
+                let tree = route.pane_trees.get(&active_tab_id)?;
+                let workspace_tab_id = tree.workspace_tab_id();
+                let panes = tree
+                    .layout()
+                    .panes
+                    .into_iter()
+                    .filter(|placement| terminal_ids.contains(&placement.tab_id))
+                    .filter_map(|placement| {
+                        let snapshot = app.snapshot_for(Some(placement.tab_id));
+                        (snapshot.kind == "terminal").then_some(WindowTerminalPane {
+                            closable: placement.tab_id != workspace_tab_id,
+                            placement,
+                            snapshot,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                (!panes.is_empty()).then(|| WindowTerminalUpdates {
+                    ui: route.ui.clone(),
+                    panes,
+                })
             })
             .collect()
     }

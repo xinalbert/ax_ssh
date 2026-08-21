@@ -65,7 +65,7 @@ use self::state::{
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, SemanticColorOverrides,
-    TerminalRenderSettings, render_terminal,
+    TerminalRenderSettings, TerminalRenderer,
 };
 
 mod connection;
@@ -85,6 +85,7 @@ mod settings_bridge;
 mod sftp_bridge;
 mod state;
 mod terminal_bridge;
+mod terminal_presentation;
 mod terminal_render;
 mod terminal_targets;
 mod view;
@@ -152,9 +153,6 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui.set_connection_options(ModelRc::new(VecModel::from(connection_options)));
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_serial_port_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
-    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
-        Vec::<TerminalRenderLine>::new(),
-    )));
     ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
     ui.set_terminal_dividers(ModelRc::new(VecModel::from(
         Vec::<TerminalPaneDividerView>::new(),
@@ -211,6 +209,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     }
     select_ui_language(settings.ui_language)?;
     apply_settings_to_component(&ui, &settings);
+    apply_terminal_presentation_policy(&window_router, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
     ui.set_status("".into());
@@ -661,7 +660,13 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         window_router.clone(),
         window_id,
     );
-    wire_settings(ui, state.clone(), runtime.clone(), font_registry.clone());
+    wire_settings(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        font_registry.clone(),
+        window_router.clone(),
+    );
     wire_sftp(
         ui,
         state.clone(),
@@ -712,9 +717,6 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
     drop(sessions);
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_serial_port_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
-    ui.set_terminal_render_lines(ModelRc::new(VecModel::from(
-        Vec::<TerminalRenderLine>::new(),
-    )));
     ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
     ui.set_terminal_dividers(ModelRc::new(VecModel::from(
         Vec::<TerminalPaneDividerView>::new(),

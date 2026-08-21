@@ -13,16 +13,75 @@ impl AppState {
             profile_mutations: HashMap::new(),
             local_terminal_number: 0,
             serial_ports: Vec::new(),
-            ui_refresh_pending: AtomicBool::new(false),
+            ui_refresh: UiRefreshState::default(),
         }
     }
 
-    pub(in crate::app) fn try_schedule_ui_refresh(&self) -> bool {
-        !self.ui_refresh_pending.swap(true, Ordering::AcqRel)
+    pub(in crate::app) fn request_full_ui_refresh(&mut self) -> bool {
+        self.request_ui_refresh(None, None)
     }
 
-    pub(in crate::app) fn clear_ui_refresh_pending(&self) {
-        self.ui_refresh_pending.store(false, Ordering::Release);
+    pub(in crate::app) fn request_terminal_ui_refresh(
+        &mut self,
+        tab_id: Uuid,
+        output_received_at: Option<Instant>,
+    ) -> bool {
+        self.request_ui_refresh(Some(tab_id), output_received_at)
+    }
+
+    fn request_ui_refresh(
+        &mut self,
+        terminal_id: Option<Uuid>,
+        output_received_at: Option<Instant>,
+    ) -> bool {
+        self.ui_refresh.generation = self.ui_refresh.generation.saturating_add(1);
+        if let Some(tab_id) = terminal_id {
+            if !self.ui_refresh.full {
+                self.ui_refresh.terminal_ids.insert(tab_id);
+            }
+        } else {
+            self.ui_refresh.full = true;
+            self.ui_refresh.terminal_ids.clear();
+        }
+        if let Some(received_at) = output_received_at {
+            self.ui_refresh.earliest_output_received_at = Some(
+                self.ui_refresh
+                    .earliest_output_received_at
+                    .map_or(received_at, |current| current.min(received_at)),
+            );
+        }
+
+        let should_schedule = !self.ui_refresh.pending;
+        if should_schedule {
+            self.ui_refresh.pending = true;
+        } else {
+            self.ui_refresh.coalesced_requests =
+                self.ui_refresh.coalesced_requests.saturating_add(1);
+        }
+        should_schedule
+    }
+
+    pub(in crate::app) fn take_ui_refresh_batch(&mut self) -> Option<UiRefreshBatch> {
+        self.ui_refresh.pending.then(|| UiRefreshBatch {
+            generation: self.ui_refresh.generation,
+            full: std::mem::take(&mut self.ui_refresh.full),
+            terminal_ids: std::mem::take(&mut self.ui_refresh.terminal_ids),
+            earliest_output_received_at: self.ui_refresh.earliest_output_received_at.take(),
+            coalesced_requests: std::mem::take(&mut self.ui_refresh.coalesced_requests),
+        })
+    }
+
+    pub(in crate::app) fn finish_ui_refresh(&mut self, generation: u64) -> bool {
+        if self.ui_refresh.generation == generation {
+            self.ui_refresh.pending = false;
+            false
+        } else {
+            true
+        }
+    }
+
+    pub(in crate::app) fn cancel_ui_refresh(&mut self) {
+        self.ui_refresh = UiRefreshState::default();
     }
 
     pub(in crate::app) fn open_settings_tab(&mut self) -> Uuid {
@@ -506,23 +565,43 @@ impl AppState {
             .collect()
     }
 
-    pub(in crate::app) fn active_snapshot(&self) -> ActiveTabSnapshot {
+    #[cfg(test)]
+    pub(in crate::app) fn active_snapshot(&mut self) -> ActiveTabSnapshot {
         self.snapshot_for(self.active_tab_id)
     }
 
-    pub(in crate::app) fn snapshot_for(&self, tab_id: Option<Uuid>) -> ActiveTabSnapshot {
+    pub(in crate::app) fn snapshot_for(&mut self, tab_id: Option<Uuid>) -> ActiveTabSnapshot {
+        self.snapshot_for_with_terminal(tab_id, true)
+    }
+
+    pub(in crate::app) fn snapshot_without_terminal_for(
+        &mut self,
+        tab_id: Option<Uuid>,
+    ) -> ActiveTabSnapshot {
+        self.snapshot_for_with_terminal(tab_id, false)
+    }
+
+    fn snapshot_for_with_terminal(
+        &mut self,
+        tab_id: Option<Uuid>,
+        include_terminal: bool,
+    ) -> ActiveTabSnapshot {
         let Some(active_id) = tab_id else {
             return ActiveTabSnapshot::default();
         };
-        let Some(tab) = self.tabs.iter().find(|tab| tab.id == active_id) else {
+        let security_prompt = self.security_prompt_for(Some(active_id));
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == active_id) else {
             return ActiveTabSnapshot::default();
         };
-        match &tab.kind {
+        match &mut tab.kind {
             WorkspaceTabKind::Terminal(terminal) => {
-                let mut sftp = terminal
-                    .sftp
-                    .snapshot(terminal.is_sftp() && terminal.connected);
-                if terminal.is_sftp() && sftp.status.is_empty() {
+                let is_sftp = terminal.is_sftp();
+                let mut sftp = if is_sftp {
+                    terminal.sftp.snapshot(terminal.connected)
+                } else {
+                    SftpBrowserSnapshot::default()
+                };
+                if is_sftp && sftp.status.is_empty() {
                     sftp.status = terminal.status.clone();
                 }
                 ActiveTabSnapshot {
@@ -532,20 +611,13 @@ impl AppState {
                     status: terminal.status.clone(),
                     notice: terminal.notice_snapshot(),
                     editor: None,
-                    terminal: terminal.terminal.as_ref().map(TerminalModel::snapshot),
+                    terminal: include_terminal
+                        .then(|| terminal.terminal.as_mut().map(TerminalModel::snapshot))
+                        .flatten(),
                     connected: terminal.connected,
-                    worker_running: terminal.worker_running,
                     selection_revision: terminal.selection_revision,
-                    mouse_button_reporting: terminal
-                        .terminal
-                        .as_ref()
-                        .is_some_and(TerminalModel::mouse_button_reporting_active),
-                    mouse_wheel_reporting: terminal
-                        .terminal
-                        .as_ref()
-                        .is_some_and(TerminalModel::mouse_wheel_reporting_active),
                     sftp,
-                    security_prompt: self.security_prompt_for(Some(active_id)),
+                    security_prompt,
                 }
             }
             WorkspaceTabKind::Settings => ActiveTabSnapshot {

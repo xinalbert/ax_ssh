@@ -21,7 +21,25 @@ pub(super) fn spawn_session_monitor(
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
-        while let Some(event) = events.recv().await {
+        let mut presentation =
+            crate::app::terminal_presentation::TerminalPresentation::new();
+        loop {
+            let event = tokio::select! {
+                event = events.recv() => {
+                    let Some(event) = event else {
+                        break;
+                    };
+                    event
+                }
+                ready = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                    if let Some(received_at) = ready.output_received_at {
+                        dispatch_terminal_output_snapshot(&ui, &state, tab_id, received_at);
+                    } else {
+                        dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    }
+                    continue;
+                }
+            };
             match event {
                 SshSessionEvent::Connected => {
                     let Some(active) = mutate_terminal_attempt(
@@ -58,7 +76,7 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::Output { data, received_at } => {
                     let mut response_error = None;
-                    if let Some(true) = mutate_terminal_attempt(
+                    if mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
@@ -68,8 +86,11 @@ pub(super) fn spawn_session_monitor(
                                 response_error = Some(error);
                             }
                         },
-                    ) {
-                        dispatch_terminal_output_snapshot(&ui, &state, received_at);
+                    )
+                    .is_some()
+                        && !data.is_empty()
+                    {
+                        presentation.record_output(Some(received_at));
                     }
                     if let Some(error) = response_error {
                         warn!(
@@ -586,8 +607,12 @@ pub(super) fn spawn_session_monitor(
                     }
                 }
             }
+            if terminal_event {
+                presentation.clear_pending_output();
+            }
         }
 
+        presentation.clear_pending_output();
         let retired = retire_session_attempt(&state, tab_id, profile.id, attempt_id);
         if !terminal_event && retired {
             schedule_reconnect(

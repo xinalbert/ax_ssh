@@ -955,7 +955,21 @@ pub(super) fn spawn_local_shell_monitor(
     runtime.spawn(async move {
         let mut terminal_event = false;
         let mut finished_worker = None;
-        while let Some(event) = events.recv().await {
+        let mut presentation =
+            crate::app::terminal_presentation::TerminalPresentation::new();
+        loop {
+            let event = tokio::select! {
+                event = events.recv() => {
+                    let Some(event) = event else {
+                        break;
+                    };
+                    event
+                }
+                _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                    dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    continue;
+                }
+            };
             match event {
                 LocalShellEvent::Started { shell } => {
                     let Some(active) = mutate_local_terminal(&state, tab_id, |terminal| {
@@ -973,12 +987,15 @@ pub(super) fn spawn_local_shell_monitor(
                 }
                 LocalShellEvent::Output(data) => {
                     let mut response_error = None;
-                    if let Some(true) = mutate_local_terminal(&state, tab_id, |terminal| {
+                    if mutate_local_terminal(&state, tab_id, |terminal| {
                         if let Err(error) = process_terminal_output(terminal, &data) {
                             response_error = Some(error);
                         }
-                    }) {
-                        dispatch_active_snapshot(&ui, &state);
+                    })
+                    .is_some()
+                        && !data.is_empty()
+                    {
+                        presentation.record_output(None);
                     }
                     if let Some(error) = response_error {
                         warn!(tab_id = %tab_id, %error, "failed to send local terminal protocol response");
@@ -989,6 +1006,7 @@ pub(super) fn spawn_local_shell_monitor(
                 LocalShellEvent::Resized { .. } => {}
                 LocalShellEvent::Exited { status } => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     if let Some(finished) = finish_local_terminal(
                         &state,
                         tab_id,
@@ -1012,6 +1030,7 @@ pub(super) fn spawn_local_shell_monitor(
                 }
                 LocalShellEvent::Failed(message) => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     warn!(tab_id = %tab_id, error = %message, "local shell worker failed");
                     if let Some(finished) = finish_local_terminal(
                         &state,
@@ -1025,6 +1044,7 @@ pub(super) fn spawn_local_shell_monitor(
                 }
             }
         }
+        presentation.clear_pending_output();
         if !terminal_event
             && let Some(finished) =
                 finish_local_terminal(&state, tab_id, "Local shell worker stopped")

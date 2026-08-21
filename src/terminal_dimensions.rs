@@ -57,14 +57,13 @@ pub fn validate_backend_size(columns: u32, rows: u32) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Mirrors the Slint bottom-anchored content-origin rule for geometry tests.
+    /// Mirrors the Slint complete-row bottom anchor for geometry tests.
     const fn grid_top_offset(height: i32, rows: i32, cell_height: i32) -> i32 {
         height.saturating_sub(rows.saturating_mul(cell_height))
     }
 
     fn visible_rows(height: i32, cell_height: i32) -> i32 {
         height
-            .saturating_add(cell_height.saturating_sub(1))
             .saturating_div(cell_height)
             .clamp(i32::from(MIN_TERMINAL_ROWS), i32::from(MAX_TERMINAL_ROWS))
     }
@@ -85,11 +84,14 @@ mod tests {
     }
 
     #[test]
-    fn bottom_anchored_grid_clips_only_from_the_top() {
+    fn bottom_anchored_grid_keeps_normal_rows_complete() {
         assert_eq!(grid_top_offset(60, 3, 20), 0);
-        assert_eq!(visible_rows(61, 20), 4);
-        assert_eq!(grid_top_offset(61, 4, 20), -19);
-        assert_eq!(grid_top_offset(61, 4, 20) + 4 * 20, 61);
+        assert_eq!(visible_rows(61, 20), 3);
+        assert_eq!(grid_top_offset(61, 3, 20), 1);
+        assert_eq!(grid_top_offset(61, 3, 20) + 3 * 20, 61);
+
+        assert_eq!(visible_rows(59, 20), 3);
+        assert_eq!(grid_top_offset(59, 3, 20), -1);
 
         assert_eq!(visible_rows(2_001, 20), i32::from(MAX_TERMINAL_ROWS));
         assert_eq!(grid_top_offset(2_001, 100, 20), 1);

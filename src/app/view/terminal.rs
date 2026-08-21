@@ -29,28 +29,17 @@ pub(in crate::app) fn dispatch_active_snapshot(
     state: &Arc<Mutex<AppState>>,
 ) {
     if let Some(router) = global_window_router() {
-        refresh_workspace_multi_window(ui, state, &router, None);
-        return;
-    }
-    let should_schedule = match state.lock() {
-        Ok(app) => app.try_schedule_ui_refresh(),
-        Err(_) => {
-            set_status(ui, "State lock poisoned");
-            return;
-        }
-    };
-    if !should_schedule {
+        refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
         return;
     }
     let state = Arc::clone(state);
-    let state_for_ui = Arc::clone(&state);
-    if !dispatch_ui_result(ui, move |ui| {
+    dispatch_ui(ui, move |ui| {
         // Worker output and resize events can queue faster than the UI event loop runs.
         // Resolve the snapshot here so an older queued event cannot restore stale dimensions.
-        let snapshot = match state_for_ui.lock() {
-            Ok(app) => {
-                app.clear_ui_refresh_pending();
-                app.active_snapshot()
+        let snapshot = match state.lock() {
+            Ok(mut app) => {
+                let active_tab_id = app.active_tab_id();
+                app.snapshot_without_terminal_for(active_tab_id)
             }
             Err(_) => {
                 ui.set_status("State lock poisoned".into());
@@ -58,65 +47,47 @@ pub(in crate::app) fn dispatch_active_snapshot(
             }
         };
         apply_active_snapshot(ui, snapshot, None);
-    }) && let Ok(app) = state.lock()
-    {
-        app.clear_ui_refresh_pending();
-    }
+    });
 }
 
 pub(in crate::app) fn dispatch_terminal_output_snapshot(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
     output_received_at: std::time::Instant,
 ) {
+    dispatch_terminal_snapshot_at(ui, state, tab_id, Some(output_received_at));
+}
+
+pub(in crate::app) fn dispatch_terminal_snapshot(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+) {
+    dispatch_terminal_snapshot_at(ui, state, tab_id, None);
+}
+
+fn dispatch_terminal_snapshot_at(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    output_received_at: Option<std::time::Instant>,
+) {
     if let Some(router) = global_window_router() {
-        refresh_workspace_multi_window(ui, state, &router, Some(output_received_at));
-        return;
-    }
-    let should_schedule = match state.lock() {
-        Ok(app) => app.try_schedule_ui_refresh(),
-        Err(_) => {
-            set_status(ui, "State lock poisoned");
-            return;
+        if router.terminal_is_visible(tab_id) {
+            refresh_workspace_multi_window(
+                ui,
+                state,
+                &router,
+                WorkspaceRefreshRequest::Terminal {
+                    tab_id,
+                    output_received_at,
+                },
+            );
         }
-    };
-    if !should_schedule {
         return;
     }
-    let state = Arc::clone(state);
-    let state_for_ui = Arc::clone(&state);
-    let dispatch_requested_at = std::time::Instant::now();
-    if !dispatch_ui_result(ui, move |ui| {
-        let ui_started_at = std::time::Instant::now();
-        let snapshot = match state_for_ui.lock() {
-            Ok(app) => {
-                app.clear_ui_refresh_pending();
-                app.active_snapshot()
-            }
-            Err(_) => {
-                ui.set_status("State lock poisoned".into());
-                return;
-            }
-        };
-        apply_active_snapshot(ui, snapshot, None);
-        tracing::debug!(
-            target: "ax_ssh::latency",
-            event = "ssh-output",
-            stage = "ui-applied",
-            output_to_dispatch_us = duration_micros(
-                dispatch_requested_at.saturating_duration_since(output_received_at),
-            ),
-            ui_queue_us = duration_micros(
-                ui_started_at.saturating_duration_since(dispatch_requested_at),
-            ),
-            ui_apply_us = duration_micros(ui_started_at.elapsed()),
-            output_to_ui_us = duration_micros(output_received_at.elapsed()),
-            "SSH terminal output applied to UI"
-        );
-    }) && let Ok(app) = state.lock()
-    {
-        app.clear_ui_refresh_pending();
-    }
+    dispatch_active_snapshot(ui, state);
 }
 
 pub(super) fn duration_micros(duration: std::time::Duration) -> u64 {
@@ -128,6 +99,7 @@ pub(in crate::app) fn apply_active_snapshot(
     snapshot: ActiveTabSnapshot,
     workspace_tab_id: Option<Uuid>,
 ) {
+    let active_kind = snapshot.kind;
     let active_pane_id = snapshot.id.map(|id| id.to_string()).unwrap_or_default();
     let active_tab_id = workspace_tab_id
         .map(|id| id.to_string())
@@ -180,15 +152,9 @@ pub(in crate::app) fn apply_active_snapshot(
             ui.set_editor_draft_id(draft_id.into());
         }
     }
-    let terminal = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
-    let rendered = render_terminal(terminal, terminal_render_settings(ui));
-    apply_rendered_terminal(ui, rendered);
-    ui.set_connected(snapshot.connected);
-    ui.set_worker_running(snapshot.worker_running);
-    ui.set_terminal_selection_revision(snapshot.selection_revision);
-    ui.set_terminal_mouse_button_reporting(snapshot.mouse_button_reporting);
-    ui.set_terminal_mouse_wheel_reporting(snapshot.mouse_wheel_reporting);
-    apply_sftp_snapshot(ui, snapshot.sftp);
+    if active_kind == "sftp" {
+        apply_sftp_snapshot(ui, snapshot.sftp);
+    }
     apply_security_prompt(ui, snapshot.security_prompt);
 }
 
@@ -199,30 +165,15 @@ pub(super) fn apply_terminal_panes(
 ) {
     let settings = terminal_render_settings(ui);
 
+    let current_panes = ui.get_terminal_panes();
     let panes = panes
         .into_iter()
-        .map(|pane| {
-            let terminal = pane
-                .snapshot
-                .terminal
-                .unwrap_or_else(empty_terminal_snapshot);
-            let rendered = render_terminal(terminal, settings);
-            TerminalPaneView {
-                terminal: terminal_view_from_rendered(
-                    pane.placement.tab_id,
-                    pane.snapshot.connected,
-                    pane.snapshot.selection_revision,
-                    pane.snapshot.notice,
-                    rendered,
-                    ui,
-                ),
-                x: pane.placement.x,
-                y: pane.placement.y,
-                width: pane.placement.width,
-                height: pane.placement.height,
-                focused: pane.placement.focused,
-                closable: pane.closable,
-            }
+        .enumerate()
+        .map(|(index, pane)| {
+            let current = current_panes.row_data(index).filter(|current| {
+                current.terminal.terminal_id.as_str() == pane.placement.tab_id.to_string()
+            });
+            terminal_pane_view(ui, settings, pane, current.as_ref())
         })
         .collect::<Vec<_>>();
     let dividers = dividers
@@ -247,6 +198,55 @@ pub(super) fn apply_terminal_panes(
     }
     ui.set_terminal_panes(ModelRc::new(VecModel::from(panes)));
     ui.set_terminal_dividers(ModelRc::new(VecModel::from(dividers)));
+}
+
+pub(super) fn apply_terminal_pane_updates(ui: &AppWindow, panes: Vec<WindowTerminalPane>) -> usize {
+    let current_panes = ui.get_terminal_panes();
+    let settings = terminal_render_settings(ui);
+    let mut applied = 0usize;
+    for pane in panes {
+        let terminal_id = pane.placement.tab_id.to_string();
+        let Some(index) = (0..current_panes.row_count()).find(|index| {
+            current_panes.row_data(*index).is_some_and(|current| {
+                current.terminal.terminal_id.as_str() == terminal_id.as_str()
+            })
+        }) else {
+            continue;
+        };
+        let Some(current) = current_panes.row_data(index) else {
+            continue;
+        };
+        let mut updated = terminal_pane_view(ui, settings, pane, Some(&current));
+        let models_reused = reuse_terminal_render_models(&current.terminal, &mut updated.terminal);
+        if !models_reused || !terminal_pane_shallow_eq(&current, &updated) {
+            current_panes.set_row_data(index, updated);
+        }
+        applied = applied.saturating_add(1);
+    }
+    applied
+}
+
+fn terminal_pane_view(
+    ui: &AppWindow,
+    settings: TerminalRenderSettings,
+    pane: WindowTerminalPane,
+    current: Option<&TerminalPaneView>,
+) -> TerminalPaneView {
+    TerminalPaneView {
+        terminal: terminal_view_from_snapshot(
+            pane.placement.tab_id,
+            pane.snapshot,
+            settings,
+            current.map(|current| &current.terminal),
+            ui,
+        ),
+        x: pane.placement.x,
+        y: pane.placement.y,
+        width: pane.placement.width,
+        height: pane.placement.height,
+        focused: pane.placement.focused,
+        closable: pane.closable,
+    }
 }
 
 fn terminal_render_settings(ui: &AppWindow) -> TerminalRenderSettings {
@@ -317,12 +317,17 @@ pub(super) fn update_terminal_pane_snapshot_models(
     }
     for (index, mut pane) in panes.iter().cloned().enumerate() {
         if let Some(current) = current_panes.row_data(index) {
-            reuse_terminal_render_models(&current.terminal, &mut pane.terminal);
+            let models_reused = reuse_terminal_render_models(&current.terminal, &mut pane.terminal);
+            if models_reused && terminal_pane_shallow_eq(&current, &pane) {
+                continue;
+            }
         }
         current_panes.set_row_data(index, pane);
     }
     for (index, divider) in dividers.iter().cloned().enumerate() {
-        current_dividers.set_row_data(index, divider);
+        if current_dividers.row_data(index).as_ref() != Some(&divider) {
+            current_dividers.set_row_data(index, divider);
+        }
     }
     true
 }
@@ -330,7 +335,7 @@ pub(super) fn update_terminal_pane_snapshot_models(
 pub(super) fn reuse_terminal_render_models(
     current: &TerminalViewState,
     updated: &mut TerminalViewState,
-) {
+) -> bool {
     // TerminalGrid already observes these nested models. Reuse them so output
     // emits a direct row notification without replacing the focused pane.
     if current
@@ -339,11 +344,12 @@ pub(super) fn reuse_terminal_render_models(
         .downcast_ref::<VecModel<TerminalRenderLine>>()
         .is_none()
     {
-        return;
+        return false;
     }
 
     let updated_cursor = updated.cursor_state.iter().collect::<Vec<_>>();
-    if replace_vec_model_rows(&current.cursor_state, updated_cursor) {
+    let cursor_reused = replace_vec_model_rows(&current.cursor_state, updated_cursor);
+    if cursor_reused {
         updated.cursor_state = current.cursor_state.clone();
     }
 
@@ -352,16 +358,65 @@ pub(super) fn reuse_terminal_render_models(
         let Some(current_line) = current.render_lines.row_data(index) else {
             continue;
         };
+        let updated_backgrounds = updated_line.backgrounds.iter().collect::<Vec<_>>();
+        let backgrounds_reused =
+            replace_vec_model_rows(&current_line.backgrounds, updated_backgrounds);
+        if backgrounds_reused {
+            updated_line.backgrounds = current_line.backgrounds.clone();
+        }
+        let updated_decorations = updated_line.decorations.iter().collect::<Vec<_>>();
+        let decorations_reused =
+            replace_vec_model_rows(&current_line.decorations, updated_decorations);
+        if decorations_reused {
+            updated_line.decorations = current_line.decorations.clone();
+        }
         let updated_runs = updated_line.runs.iter().collect::<Vec<_>>();
         if replace_vec_model_rows(&current_line.runs, updated_runs) {
             updated_line.runs = current_line.runs;
         }
     }
-    if replace_vec_model_rows(&current.render_lines, updated_lines) {
+    let lines_reused = replace_vec_model_rows(&current.render_lines, updated_lines);
+    if lines_reused {
         updated.render_lines = current.render_lines.clone();
     }
+    cursor_reused && lines_reused
 }
 
+fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneView) -> bool {
+    let current_terminal = &current.terminal;
+    let updated_terminal = &updated.terminal;
+    current.x == updated.x
+        && current.y == updated.y
+        && current.width == updated.width
+        && current.height == updated.height
+        && current.focused == updated.focused
+        && current.closable == updated.closable
+        && current_terminal.terminal_id == updated_terminal.terminal_id
+        && current_terminal.connected == updated_terminal.connected
+        && current_terminal.selection_revision == updated_terminal.selection_revision
+        && current_terminal.notice == updated_terminal.notice
+        && current_terminal.content_columns == updated_terminal.content_columns
+        && current_terminal.font_family == updated_terminal.font_family
+        && current_terminal.font_size == updated_terminal.font_size
+        && current_terminal.line_height_percent == updated_terminal.line_height_percent
+        && current_terminal.foreground == updated_terminal.foreground
+        && current_terminal.background == updated_terminal.background
+        && current_terminal.selection_background == updated_terminal.selection_background
+        && current_terminal.compact_rendering == updated_terminal.compact_rendering
+        && current_terminal.row_render_cache == updated_terminal.row_render_cache
+        && current_terminal.mouse_button_reporting == updated_terminal.mouse_button_reporting
+        && current_terminal.mouse_wheel_reporting == updated_terminal.mouse_wheel_reporting
+        && current_terminal.right_click_copy_or_paste == updated_terminal.right_click_copy_or_paste
+        && current_terminal.copy_selection_on_select == updated_terminal.copy_selection_on_select
+        && current_terminal.option_as_meta == updated_terminal.option_as_meta
+        && current_terminal.copy_selection_shortcut == updated_terminal.copy_selection_shortcut
+        && current_terminal.paste_shortcut == updated_terminal.paste_shortcut
+        && current_terminal.select_all_shortcut == updated_terminal.select_all_shortcut
+        && current_terminal.mouse_local_selection_priority
+            == updated_terminal.mouse_local_selection_priority
+}
+
+#[cfg(test)]
 pub(in crate::app) fn update_terminal_render_lines(
     current: &ModelRc<TerminalRenderLine>,
     lines: &[TerminalRenderLine],
@@ -380,7 +435,10 @@ pub(in crate::app) fn update_terminal_render_lines(
         let Some(current_line) = current.row_data(index) else {
             return false;
         };
-        if update_terminal_render_runs(&current_line.runs, &line.runs) {
+        if update_terminal_render_backgrounds(&current_line.backgrounds, &line.backgrounds)
+            && update_terminal_render_decorations(&current_line.decorations, &line.decorations)
+            && update_terminal_render_runs(&current_line.runs, &line.runs)
+        {
             continue;
         }
         current_lines.set_row_data(index, line);
@@ -388,9 +446,28 @@ pub(in crate::app) fn update_terminal_render_lines(
     true
 }
 
+#[cfg(test)]
 fn update_terminal_render_runs(
     current: &ModelRc<TerminalRenderRun>,
     updated: &ModelRc<TerminalRenderRun>,
+) -> bool {
+    let rows = updated.iter().collect::<Vec<_>>();
+    replace_vec_model_rows(current, rows)
+}
+
+#[cfg(test)]
+fn update_terminal_render_backgrounds(
+    current: &ModelRc<TerminalBackgroundRun>,
+    updated: &ModelRc<TerminalBackgroundRun>,
+) -> bool {
+    let rows = updated.iter().collect::<Vec<_>>();
+    replace_vec_model_rows(current, rows)
+}
+
+#[cfg(test)]
+fn update_terminal_render_decorations(
+    current: &ModelRc<TerminalDecorationRun>,
+    updated: &ModelRc<TerminalDecorationRun>,
 ) -> bool {
     let rows = updated.iter().collect::<Vec<_>>();
     replace_vec_model_rows(current, rows)
@@ -441,12 +518,17 @@ pub(super) fn update_terminal_pane_layout_models(
             if pane.terminal.terminal_id.as_str() != placement.tab_id.to_string() {
                 return None;
             }
+            let changed = pane.x != placement.x
+                || pane.y != placement.y
+                || pane.width != placement.width
+                || pane.height != placement.height
+                || pane.focused != placement.focused;
             pane.x = placement.x;
             pane.y = placement.y;
             pane.width = placement.width;
             pane.height = placement.height;
             pane.focused = placement.focused;
-            Some((index, pane))
+            Some(changed.then_some((index, pane)))
         })
         .collect::<Option<Vec<_>>>();
     let divider_updates = layout
@@ -458,53 +540,52 @@ pub(super) fn update_terminal_pane_layout_models(
             if divider.id != placement.id || divider.vertical != placement.vertical {
                 return None;
             }
-            Some((
-                index,
-                TerminalPaneDividerView {
-                    id: placement.id,
-                    x: placement.x,
-                    y: placement.y,
-                    width: placement.width,
-                    height: placement.height,
-                    ratio: placement.ratio,
-                    vertical: placement.vertical,
-                },
-            ))
+            let updated = TerminalPaneDividerView {
+                id: placement.id,
+                x: placement.x,
+                y: placement.y,
+                width: placement.width,
+                height: placement.height,
+                ratio: placement.ratio,
+                vertical: placement.vertical,
+            };
+            Some((divider != updated).then_some((index, updated)))
         })
         .collect::<Option<Vec<_>>>();
     let (Some(pane_updates), Some(divider_updates)) = (pane_updates, divider_updates) else {
         return false;
     };
 
-    for (index, pane) in pane_updates {
+    for (index, pane) in pane_updates.into_iter().flatten() {
         panes.set_row_data(index, pane);
     }
-    for (index, divider) in divider_updates {
+    for (index, divider) in divider_updates.into_iter().flatten() {
         dividers.set_row_data(index, divider);
     }
     true
 }
 
-pub(super) fn terminal_view_from_rendered(
+pub(super) fn terminal_view_from_snapshot(
     tab_id: Uuid,
-    connected: bool,
-    selection_revision: i32,
-    notice: TerminalNoticeSnapshot,
-    rendered: terminal_render::RenderedTerminal,
+    snapshot: ActiveTabSnapshot,
+    settings: TerminalRenderSettings,
+    current: Option<&TerminalViewState>,
     ui: &AppWindow,
 ) -> TerminalViewState {
-    let lines = rendered
-        .lines
-        .into_iter()
-        .map(terminal_render_line)
-        .collect::<Vec<_>>();
-    let cursor_text: SharedString = rendered.cursor_text.into();
-    let cursor_row = rendered.cursor_row.min(i32::MAX as usize) as i32;
-    let cursor_column = rendered.cursor_column.min(i32::MAX as usize) as i32;
+    let connected = snapshot.connected;
+    let selection_revision = snapshot.selection_revision;
+    let notice = snapshot.notice;
+    let snapshot = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
+    let renderer = TerminalRenderer::new(settings);
+    let current_lines = current.map(|current| &current.render_lines);
+    let lines = render_snapshot_lines(&snapshot, &renderer, current_lines);
+    let cursor_text: SharedString = snapshot.cursor_text.into();
+    let cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
+    let cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
     let cursor_state = TerminalCursorState {
         row: cursor_row,
         column: cursor_column,
-        visible: rendered.cursor_visible,
+        visible: snapshot.cursor_visible,
         text: cursor_text.clone(),
     };
     TerminalViewState {
@@ -514,19 +595,21 @@ pub(super) fn terminal_view_from_rendered(
         notice: terminal_notice_view(notice),
         render_lines: ModelRc::new(VecModel::from(lines)),
         cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),
-        content_columns: rendered.max_columns.min(i32::MAX as usize) as i32,
+        content_columns: snapshot.max_columns.min(i32::MAX as usize) as i32,
         cursor_row,
         cursor_column,
-        cursor_visible: rendered.cursor_visible,
+        cursor_visible: snapshot.cursor_visible,
         cursor_text,
         font_family: ui.get_terminal_font_family(),
         font_size: ui.get_terminal_font_size() as f32,
         line_height_percent: ui.get_terminal_line_height_percent(),
-        foreground: to_slint_color(rendered.foreground),
-        background: to_slint_color(rendered.background),
-        selection_background: to_slint_color(rendered.selection_background),
-        mouse_button_reporting: rendered.mouse_button_reporting_active,
-        mouse_wheel_reporting: rendered.mouse_wheel_reporting_active,
+        foreground: to_slint_color(renderer.foreground()),
+        background: to_slint_color(renderer.background()),
+        selection_background: to_slint_color(renderer.selection_background()),
+        compact_rendering: ui.get_terminal_compact_rendering(),
+        row_render_cache: ui.get_terminal_row_render_cache(),
+        mouse_button_reporting: snapshot.mouse_button_reporting_active,
+        mouse_wheel_reporting: snapshot.mouse_wheel_reporting_active,
         right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
         copy_selection_on_select: ui.get_copy_selection_on_select(),
         option_as_meta: ui.get_option_as_meta(),
@@ -535,6 +618,32 @@ pub(super) fn terminal_view_from_rendered(
         select_all_shortcut: ui.get_select_all_shortcut(),
         mouse_local_selection_priority: ui.get_terminal_mouse_local_selection_priority(),
     }
+}
+
+pub(super) fn render_snapshot_lines(
+    snapshot: &TerminalSnapshot,
+    renderer: &TerminalRenderer,
+    current: Option<&ModelRc<TerminalRenderLine>>,
+) -> Vec<TerminalRenderLine> {
+    let render_cache_key = renderer.cache_key();
+    let render_cache_key_low = render_cache_key as u32 as i32;
+    let render_cache_key_high = (render_cache_key >> 32) as u32 as i32;
+    snapshot
+        .lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            current
+                .and_then(|current| current.row_data(index))
+                .filter(|current| {
+                    current.source_revision_low == line.revision as u32 as i32
+                        && current.source_revision_high == (line.revision >> 32) as u32 as i32
+                        && current.render_cache_key_low == render_cache_key_low
+                        && current.render_cache_key_high == render_cache_key_high
+                })
+                .unwrap_or_else(|| terminal_render_line(renderer.render_line(line)))
+        })
+        .collect()
 }
 
 fn terminal_notice_view(notice: TerminalNoticeSnapshot) -> TerminalNoticeViewState {

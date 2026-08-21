@@ -4,6 +4,7 @@ pub use self::input::{TerminalKey, TerminalModifiers, encode_key};
 
 mod input;
 
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 
 use alacritty_terminal::event::{Event, EventListener};
@@ -11,7 +12,7 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::{Cell, Flags};
-use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
+use alacritty_terminal::term::{Config as TermConfig, Term, TermDamage, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 
 use crate::terminal_dimensions::TerminalSize;
@@ -73,13 +74,13 @@ pub struct TerminalStyledRun {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TerminalStyledLine {
+    pub revision: u64,
     pub runs: Vec<TerminalStyledRun>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalSnapshot {
-    pub text: String,
-    pub lines: Vec<TerminalStyledLine>,
+    pub lines: Vec<Arc<TerminalStyledLine>>,
     pub max_columns: usize,
     pub cursor_row: usize,
     pub cursor_column: usize,
@@ -152,6 +153,10 @@ pub struct TerminalModel {
     processor: Processor,
     protocol_responses: Receiver<Vec<u8>>,
     scrollback_lines: usize,
+    snapshot_lines: Vec<Arc<TerminalStyledLine>>,
+    snapshot_columns: usize,
+    snapshot_display_offset: usize,
+    next_line_revision: u64,
 }
 
 impl TerminalModel {
@@ -170,6 +175,10 @@ impl TerminalModel {
             processor: Processor::new(),
             protocol_responses,
             scrollback_lines,
+            snapshot_lines: Vec::new(),
+            snapshot_columns: 0,
+            snapshot_display_offset: 0,
+            next_line_revision: 0,
         }
     }
 
@@ -343,9 +352,9 @@ impl TerminalModel {
         visible_contents(&self.term)
     }
 
-    pub fn snapshot(&self) -> TerminalSnapshot {
+    pub fn snapshot(&mut self) -> TerminalSnapshot {
+        self.refresh_snapshot_lines();
         let grid = self.term.grid();
-        let rows = grid.screen_lines();
         let columns = grid.columns();
         let cursor = grid.cursor.point;
         let cursor_visible =
@@ -358,10 +367,7 @@ impl TerminalModel {
             .unwrap_or_else(|| " ".to_owned());
 
         TerminalSnapshot {
-            text: visible_contents(&self.term),
-            lines: (0..rows)
-                .map(|row| styled_line(&self.term, row, columns))
-                .collect(),
+            lines: self.snapshot_lines.clone(),
             max_columns: columns,
             cursor_row: cursor.line.0.max(0) as usize,
             cursor_column: cursor.column.0,
@@ -371,6 +377,68 @@ impl TerminalModel {
             mouse_button_reporting_active: self.mouse_button_reporting_active(),
             mouse_wheel_reporting_active: self.mouse_wheel_reporting_active(),
         }
+    }
+
+    fn refresh_snapshot_lines(&mut self) {
+        let grid = self.term.grid();
+        let rows = grid.screen_lines();
+        let columns = grid.columns();
+        let display_offset = grid.display_offset();
+        let dimensions_changed = self.snapshot_lines.len() != rows
+            || self.snapshot_columns != columns
+            || self.snapshot_display_offset != display_offset;
+        let damaged_rows = if dimensions_changed {
+            None
+        } else {
+            match self.term.damage() {
+                TermDamage::Full => None,
+                TermDamage::Partial(damage) => {
+                    Some(damage.map(|bounds| bounds.line).collect::<Vec<_>>())
+                }
+            }
+        };
+
+        if let Some(damaged_rows) = damaged_rows {
+            for row in damaged_rows {
+                if row >= rows {
+                    continue;
+                }
+                let mut line = styled_line(&self.term, row, columns);
+                if self
+                    .snapshot_lines
+                    .get(row)
+                    .is_some_and(|current| current.runs == line.runs)
+                {
+                    continue;
+                }
+                line.revision = self.take_line_revision();
+                self.snapshot_lines[row] = Arc::new(line);
+            }
+        } else {
+            let mut lines = Vec::with_capacity(rows);
+            for row in 0..rows {
+                let mut line = styled_line(&self.term, row, columns);
+                if let Some(current) = self
+                    .snapshot_lines
+                    .get(row)
+                    .filter(|current| current.runs == line.runs)
+                {
+                    lines.push(Arc::clone(current));
+                } else {
+                    line.revision = self.take_line_revision();
+                    lines.push(Arc::new(line));
+                }
+            }
+            self.snapshot_lines = lines;
+        }
+        self.snapshot_columns = columns;
+        self.snapshot_display_offset = display_offset;
+        self.term.reset_damage();
+    }
+
+    fn take_line_revision(&mut self) -> u64 {
+        self.next_line_revision = self.next_line_revision.wrapping_add(1).max(1);
+        self.next_line_revision
     }
 
     /// Moves the visible terminal viewport. Positive values reveal older rows.
@@ -532,6 +600,7 @@ impl TerminalModel {
             return None;
         }
         let mut contents = String::new();
+        let mut character = 0usize;
         let mut target_character = None;
         for cell_column in 0..=last_column {
             let cell = &grid[line][Column(cell_column)];
@@ -542,9 +611,10 @@ impl TerminalModel {
                 continue;
             }
             if cell_column == column {
-                target_character = Some(contents.chars().count());
+                target_character = Some(character);
             }
-            contents.push_str(&cell_text(cell));
+            append_cell_text(&mut contents, cell);
+            character = character.saturating_add(cell_character_count(cell));
         }
         target_character.map(|target_character| (contents, target_character))
     }
@@ -573,7 +643,7 @@ impl TerminalModel {
             if is_wide_continuation(cell) {
                 continue;
             }
-            let cell_characters = cell_text(cell).chars().count();
+            let cell_characters = cell_character_count(cell);
             let next_character = character.saturating_add(cell_characters);
             if start_column.is_none() && start >= character && start < next_character {
                 start_column = Some(cell_column);
@@ -673,7 +743,7 @@ fn append_occupied_cells(
         if is_wide_continuation(cell) {
             continue;
         }
-        contents.push_str(&cell_text(cell));
+        append_cell_text(contents, cell);
     }
 }
 
@@ -729,15 +799,26 @@ fn is_wide_continuation(cell: &Cell) -> bool {
 }
 
 fn cell_text(cell: &Cell) -> String {
-    if is_wide_continuation(cell) {
-        return String::new();
-    }
     let mut text = String::new();
+    append_cell_text(&mut text, cell);
+    text
+}
+
+fn append_cell_text(text: &mut String, cell: &Cell) {
+    if is_wide_continuation(cell) {
+        return;
+    }
     text.push(cell.c);
     for character in cell.zerowidth().into_iter().flatten() {
         text.push(*character);
     }
-    text
+}
+
+fn cell_character_count(cell: &Cell) -> usize {
+    if is_wide_continuation(cell) {
+        return 0;
+    }
+    1usize.saturating_add(cell.zerowidth().map_or(0, |characters| characters.len()))
 }
 
 fn cell_contains_non_ascii(cell: &Cell) -> bool {
@@ -767,7 +848,8 @@ fn styled_line(
         let style = terminal_style(cell);
         let start_column = column;
         let is_wide = cell.flags.contains(Flags::WIDE_CHAR);
-        let mut text = cell_text(cell);
+        let mut text = String::new();
+        append_cell_text(&mut text, cell);
         let mut cells = if is_wide { 2 } else { 1 };
         column = column.saturating_add(cells).min(columns);
 
@@ -782,7 +864,7 @@ fn styled_line(
                 {
                     break;
                 }
-                text.push_str(&cell_text(next));
+                append_cell_text(&mut text, next);
                 cells += 1;
                 column += 1;
             }
@@ -801,7 +883,7 @@ fn styled_line(
             });
         }
     }
-    TerminalStyledLine { runs }
+    TerminalStyledLine { revision: 0, runs }
 }
 
 #[cfg(test)]
@@ -814,7 +896,7 @@ mod tests {
         terminal.process(b"\x1b[32mready\x1b[0m\rbusy\r\nnext");
         let snapshot = terminal.snapshot();
 
-        assert_eq!(snapshot.text, "busyy\nnext");
+        assert_eq!(terminal.contents(), "busyy\nnext");
         assert_eq!((snapshot.cursor_row, snapshot.cursor_column), (1, 4));
         assert_eq!(snapshot.lines[0].runs.len(), 2);
         assert_eq!(snapshot.lines[0].runs[0].text, "busy");
@@ -826,10 +908,52 @@ mod tests {
     }
 
     #[test]
+    fn snapshots_reuse_undamaged_visible_line_identities() {
+        let mut terminal = TerminalModel::new(20, 3, 10);
+        terminal.process(b"first\r\nsecond");
+        let first = terminal.snapshot();
+        let second = terminal.snapshot();
+
+        assert!(
+            first
+                .lines
+                .iter()
+                .zip(&second.lines)
+                .all(|(first, second)| Arc::ptr_eq(first, second))
+        );
+
+        terminal.process(b"\rupdated");
+        let updated = terminal.snapshot();
+        assert!(Arc::ptr_eq(&second.lines[0], &updated.lines[0]));
+        assert!(!Arc::ptr_eq(&second.lines[1], &updated.lines[1]));
+        assert!(Arc::ptr_eq(&second.lines[2], &updated.lines[2]));
+    }
+
+    #[test]
+    fn snapshots_rebuild_rows_when_the_visible_scrollback_offset_changes() {
+        let mut terminal = TerminalModel::new(10, 3, 10);
+        terminal.process(b"one\r\ntwo\r\nthree\r\nfour");
+        let live = terminal.snapshot();
+        assert_eq!(snapshot_line_text(&live, 0), "two");
+        assert_eq!(snapshot_line_text(&live, 2), "four");
+
+        assert!(terminal.scroll(1));
+        let history = terminal.snapshot();
+        assert_eq!(snapshot_line_text(&history, 0), "one");
+        assert_eq!(snapshot_line_text(&history, 2), "three");
+        assert!(
+            live.lines
+                .iter()
+                .zip(&history.lines)
+                .all(|(live, history)| !Arc::ptr_eq(live, history))
+        );
+    }
+
+    #[test]
     fn parses_standard_extended_truecolor_and_attributes() {
         let mut terminal = TerminalModel::new(80, 24, 10);
         terminal.process(b"\x1b[1;3;4;31mred\x1b[22;23;24;38;5;208mindex\x1b[48;2;1;2;3;7mflip");
-        let runs = terminal.snapshot().lines.remove(0).runs;
+        let runs = terminal.snapshot().lines[0].runs.clone();
 
         assert_eq!(runs.len(), 3);
         assert!(runs[0].style.bold);
@@ -874,7 +998,7 @@ mod tests {
         terminal.process("A中B".as_bytes());
         let snapshot = terminal.snapshot();
 
-        assert_eq!(snapshot.text, "A中B");
+        assert_eq!(terminal.contents(), "A中B");
         assert_eq!(snapshot.lines[0].runs.len(), 3);
         assert_eq!(snapshot.lines[0].runs[1].text, "中");
         assert_eq!(snapshot.lines[0].runs[1].column, 1);
@@ -1069,7 +1193,7 @@ mod tests {
         terminal.resize(10, 5);
         terminal.resize(20, 5);
 
-        assert_eq!(terminal.snapshot().text, "first中line\nsecond中line");
+        assert_eq!(terminal.contents(), "first中line\nsecond中line");
     }
 
     #[test]
@@ -1080,7 +1204,7 @@ mod tests {
         terminal.resize(10, 5);
         terminal.resize(20, 5);
 
-        assert_ne!(terminal.snapshot().text, "0123456789abcdefghij");
+        assert_ne!(terminal.contents(), "0123456789abcdefghij");
     }
 
     #[test]

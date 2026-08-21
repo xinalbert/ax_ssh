@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 40] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 44] = [
     (
         "General",
         "Language",
@@ -27,6 +27,26 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 40] = [
         "Appearance",
         "Renderer",
         "Changes take effect after restarting AxSSH",
+    ),
+    (
+        "Appearance",
+        "Compact terminal rendering",
+        "Reduce terminal items and omit default background rectangles",
+    ),
+    (
+        "Appearance",
+        "Cache unchanged terminal rows",
+        "Reuse GPU row layers; may increase graphics memory",
+    ),
+    (
+        "Appearance",
+        "Focused refresh rate",
+        "Terminal updates while the pane is focused",
+    ),
+    (
+        "Appearance",
+        "Unfocused refresh rate",
+        "Visible terminal updates while another pane is focused",
     ),
     (
         "Appearance",
@@ -250,7 +270,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 40] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 44] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -336,6 +356,30 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 40] = [
         "Optional link, path, status, and log-level colors",
         "语义高亮",
         "可选的链接、路径、状态和日志级别颜色",
+    ),
+    (
+        "Compact terminal rendering",
+        "Reduce terminal items and omit default background rectangles",
+        "紧凑终端渲染",
+        "减少终端绘制项并省略默认背景矩形",
+    ),
+    (
+        "Cache unchanged terminal rows",
+        "Reuse GPU row layers; may increase graphics memory",
+        "缓存未变化的终端行",
+        "复用 GPU 行图层；可能增加图形内存",
+    ),
+    (
+        "Focused refresh rate",
+        "Terminal updates while the pane is focused",
+        "聚焦刷新率",
+        "终端窗格聚焦时的刷新帧率",
+    ),
+    (
+        "Unfocused refresh rate",
+        "Visible terminal updates while another pane is focused",
+        "非聚焦刷新率",
+        "其他窗格聚焦时可见终端的刷新帧率",
     ),
     (
         "Scrollback",
@@ -488,6 +532,7 @@ pub(super) fn wire_settings(
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
+    window_router: WindowRouter,
 ) {
     ui.on_settings_search_results(|query, language| {
         ModelRc::new(VecModel::from(settings_search_results(
@@ -552,6 +597,10 @@ pub(super) fn wire_settings(
               text_brightness,
               bright_bold_text,
               terminal_semantic_highlighting,
+              terminal_compact_rendering,
+              terminal_row_render_cache,
+              focused_terminal_refresh_fps,
+              unfocused_terminal_refresh_fps,
               terminal_semantic_link_color,
               terminal_semantic_success_color,
               terminal_semantic_info_color,
@@ -670,6 +719,10 @@ pub(super) fn wire_settings(
                     ),
                     text_brightness,
                     semantic_highlighting: terminal_semantic_highlighting,
+                    terminal_compact_rendering,
+                    terminal_row_render_cache,
+                    focused_terminal_refresh_fps,
+                    unfocused_terminal_refresh_fps,
                     terminal_semantic_colors: TerminalSemanticColorsInput {
                         link: terminal_semantic_link_color.as_str(),
                         success: terminal_semantic_success_color.as_str(),
@@ -755,6 +808,7 @@ pub(super) fn wire_settings(
                 if let Some(ui) = ui_for_save.upgrade() {
                     apply_settings_to_open_windows(&ui, &settings);
                 }
+                apply_terminal_presentation_policy(&window_router, &settings);
                 refresh_session_models(&ui_for_save, &state);
                 load_preview_bundled_fonts(
                     runtime.clone(),
@@ -767,6 +821,7 @@ pub(super) fn wire_settings(
             }
             let state = state.clone();
             let ui = ui_for_save.clone();
+            let window_router_for_save = window_router.clone();
             let font_registry = font_registry_for_save.clone();
             let runtime_for_save = runtime.clone();
             let runtime_for_close = runtime_for_save.clone();
@@ -825,6 +880,10 @@ pub(super) fn wire_settings(
                         match save_result {
                             Ok(Ok(saved_settings)) => dispatch_ui(&ui_for_result, move |ui| {
                                 apply_settings_to_open_windows(ui, &saved_settings);
+                                apply_terminal_presentation_policy(
+                                    &window_router_for_save,
+                                    &saved_settings,
+                                );
                                 refresh_session_models(&ui_for_refresh, &state_for_refresh);
                                 ui.set_status("".into());
                                 if let Some(tab_id) = close_tab_id {
@@ -1126,6 +1185,11 @@ mod tests {
         assert_eq!(renderer_matches.len(), 1);
         assert_eq!(renderer_matches[0].section, "Appearance");
         assert_eq!(renderer_matches[0].title, "Renderer");
+
+        let cache_matches = settings_search_results("graphics memory", "english");
+        assert_eq!(cache_matches.len(), 1);
+        assert_eq!(cache_matches[0].section, "Appearance");
+        assert_eq!(cache_matches[0].title, "Cache unchanged terminal rows");
     }
 
     #[test]
@@ -1148,5 +1212,10 @@ mod tests {
         assert_eq!(renderer_matches.len(), 1);
         assert_eq!(renderer_matches[0].section, "Appearance");
         assert_eq!(renderer_matches[0].title, "渲染器");
+
+        let compact_matches = settings_search_results("省略默认背景", "simplified-chinese");
+        assert_eq!(compact_matches.len(), 1);
+        assert_eq!(compact_matches[0].section, "Appearance");
+        assert_eq!(compact_matches[0].title, "紧凑终端渲染");
     }
 }

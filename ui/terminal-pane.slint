@@ -56,6 +56,8 @@ export struct TerminalViewState {
     foreground: color,
     background: color,
     selection_background: color,
+    compact_rendering: bool,
+    row_render_cache: bool,
     right_click_copy_or_paste: bool,
     copy_selection_on_select: bool,
     option_as_meta: bool,
@@ -246,9 +248,9 @@ export component TerminalPane inherits Rectangle {
             min(Theme.terminal-grid-max-columns, floor(grid-clip.width / root.cell-width)));
     private property <int> terminal-rows:
         max(Theme.terminal-grid-min-rows,
-            min(Theme.terminal-grid-max-rows, ceil(grid-clip.height / root.cell-height)));
-    // The terminal's current row always meets the pane bottom. A partial cell
-    // is clipped at the top; space beyond the maximum grid stays above it.
+            min(Theme.terminal-grid-max-rows, floor(grid-clip.height / root.cell-height)));
+    // Complete rows meet the pane bottom and any fractional height stays above
+    // them. Only panes below the minimum row floor clip older top rows.
     private property <length> grid-top-offset:
         grid-clip.height - root.terminal-rows * root.cell-height;
     // The grid, pre-edit overlay, and native IME proxy share this one
@@ -305,6 +307,8 @@ export component TerminalPane inherits Rectangle {
         font_family: root.terminal-font-family, font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,
         selection_background: root.terminal-selection-background,
+        compact_rendering: root.view.compact_rendering,
+        row_render_cache: root.view.row_render_cache,
         mouse_button_reporting: root.view.mouse_button_reporting,
     };
     private property <TerminalSelectionView> grid-selection: {

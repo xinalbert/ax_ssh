@@ -235,7 +235,20 @@ fn spawn_telnet_monitor(
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
-        while let Some(event) = events.recv().await {
+        let mut presentation = crate::app::terminal_presentation::TerminalPresentation::new();
+        loop {
+            let event = tokio::select! {
+                event = events.recv() => {
+                    let Some(event) = event else {
+                        break;
+                    };
+                    event
+                }
+                _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                    dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    continue;
+                }
+            };
             match event {
                 TelnetSessionEvent::Connected => {
                     let Some(active) = mutate_direct_attempt(
@@ -262,7 +275,7 @@ fn spawn_telnet_monitor(
                 }
                 TelnetSessionEvent::Output(data) => {
                     let mut response_error = None;
-                    if let Some(true) = mutate_direct_attempt(
+                    if mutate_direct_attempt(
                         &state,
                         tab_id,
                         profile.id,
@@ -273,8 +286,11 @@ fn spawn_telnet_monitor(
                                 response_error = Some(error);
                             }
                         },
-                    ) {
-                        dispatch_active_snapshot(&ui, &state);
+                    )
+                    .is_some()
+                        && !data.is_empty()
+                    {
+                        presentation.record_output(None);
                     }
                     if let Some(error) = response_error {
                         warn!(
@@ -287,6 +303,7 @@ fn spawn_telnet_monitor(
                 }
                 TelnetSessionEvent::Disconnected => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     if finish_direct_attempt(
                         &state,
                         tab_id,
@@ -309,6 +326,7 @@ fn spawn_telnet_monitor(
                 }
                 TelnetSessionEvent::Failed(message) => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     if finish_direct_attempt(
                         &state,
                         tab_id,
@@ -331,6 +349,7 @@ fn spawn_telnet_monitor(
                 }
             }
         }
+        presentation.clear_pending_output();
         if !terminal_event
             && finish_direct_attempt(
                 &state,
@@ -368,7 +387,20 @@ fn spawn_serial_monitor(
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
-        while let Some(event) = events.recv().await {
+        let mut presentation = crate::app::terminal_presentation::TerminalPresentation::new();
+        loop {
+            let event = tokio::select! {
+                event = events.recv() => {
+                    let Some(event) = event else {
+                        break;
+                    };
+                    event
+                }
+                _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                    dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    continue;
+                }
+            };
             match event {
                 SerialSessionEvent::Connected { port_name } => {
                     let Some(active) = mutate_direct_attempt(
@@ -394,7 +426,7 @@ fn spawn_serial_monitor(
                 }
                 SerialSessionEvent::Output(data) => {
                     let mut response_error = None;
-                    if let Some(true) = mutate_direct_attempt(
+                    if mutate_direct_attempt(
                         &state,
                         tab_id,
                         profile.id,
@@ -405,8 +437,11 @@ fn spawn_serial_monitor(
                                 response_error = Some(error);
                             }
                         },
-                    ) {
-                        dispatch_active_snapshot(&ui, &state);
+                    )
+                    .is_some()
+                        && !data.is_empty()
+                    {
+                        presentation.record_output(None);
                     }
                     if let Some(error) = response_error {
                         warn!(
@@ -419,6 +454,7 @@ fn spawn_serial_monitor(
                 }
                 SerialSessionEvent::Disconnected => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     if finish_direct_attempt(
                         &state,
                         tab_id,
@@ -441,6 +477,7 @@ fn spawn_serial_monitor(
                 }
                 SerialSessionEvent::Failed(message) => {
                     terminal_event = true;
+                    presentation.clear_pending_output();
                     if finish_direct_attempt(
                         &state,
                         tab_id,
@@ -463,6 +500,7 @@ fn spawn_serial_monitor(
                 }
             }
         }
+        presentation.clear_pending_output();
         if !terminal_event
             && finish_direct_attempt(
                 &state,

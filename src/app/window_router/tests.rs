@@ -28,14 +28,34 @@ fn split_sessions_share_one_visible_workspace_tab() {
         &mut app,
     ));
 
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(
         view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
         vec![root_tab_id]
     );
     assert_eq!(view.active_tab_id, Some(root_tab_id));
     assert_eq!(view.snapshot.id, Some(child_tab_id));
+    assert!(view.snapshot.terminal.is_none());
     assert_eq!(view.terminal_panes.len(), 2);
+    assert!(
+        view.terminal_panes
+            .iter()
+            .all(|pane| pane.snapshot.terminal.is_some())
+    );
+    assert!(router.terminal_is_visible(root_tab_id));
+    assert!(router.terminal_is_visible(child_tab_id));
+    assert_eq!(
+        router.terminal_presentation_mode(root_tab_id),
+        terminal_presentation::TerminalPresentationMode::Unfocused
+    );
+    assert_eq!(
+        router.terminal_presentation_mode(child_tab_id),
+        terminal_presentation::TerminalPresentationMode::Focused
+    );
+    let updates = router.terminal_updates(&mut app, &HashSet::from([root_tab_id]));
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].panes.len(), 1);
+    assert_eq!(updates[0].panes[0].placement.tab_id, root_tab_id);
     assert!(
         view.terminal_panes
             .iter()
@@ -84,6 +104,33 @@ fn focusing_split_pane_returns_the_updated_layout() {
             .find(|pane| pane.tab_id == child_tab_id)
             .is_some_and(|pane| !pane.focused)
     );
+    assert_eq!(
+        router.terminal_presentation_mode(root_tab_id),
+        terminal_presentation::TerminalPresentationMode::Focused
+    );
+    assert_eq!(
+        router.terminal_presentation_mode(child_tab_id),
+        terminal_presentation::TerminalPresentationMode::Unfocused
+    );
+}
+
+#[test]
+fn inactive_workspace_terminal_is_hidden_from_presentation() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let first_tab_id = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, first_tab_id, &mut app));
+    let second_tab_id = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, second_tab_id, &mut app));
+
+    assert_eq!(
+        router.terminal_presentation_mode(first_tab_id),
+        terminal_presentation::TerminalPresentationMode::Hidden
+    );
+    assert_eq!(
+        router.terminal_presentation_mode(second_tab_id),
+        terminal_presentation::TerminalPresentationMode::Focused
+    );
 }
 
 #[test]
@@ -122,7 +169,7 @@ fn closing_a_child_pane_collapses_only_that_session() {
     assert!(app.terminal(child_tab_id).is_none());
     assert_eq!(app.active_tab_id(), Some(root_tab_id));
 
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(view.terminal_panes.len(), 1);
     assert_eq!(view.terminal_panes[0].placement.tab_id, root_tab_id);
     assert!(!view.terminal_panes[0].closable);
@@ -206,7 +253,7 @@ fn switching_workspace_tabs_restores_the_group_focus_and_layout() {
     ));
     assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
 
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(
         view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
         vec![root_tab_id, other_tab_id]
@@ -217,7 +264,7 @@ fn switching_workspace_tabs_restores_the_group_focus_and_layout() {
     assert_eq!(app.active_tab_id(), Some(child_tab_id));
 
     assert!(router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(view.active_tab_id, Some(other_tab_id));
     assert_eq!(view.snapshot.id, Some(other_child_tab_id));
     assert_eq!(view.terminal_panes.len(), 2);
@@ -251,7 +298,7 @@ fn resized_terminal_layout_survives_tab_switch_and_detach_return() {
             .is_none()
     );
     assert!(router.activate_tab(MAIN_WINDOW_ID, root_tab_id, &mut app));
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert!((view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);
     assert!((view.terminal_panes[0].placement.width - 0.7).abs() < f32::EPSILON);
 
@@ -270,7 +317,7 @@ fn resized_terminal_layout_survives_tab_switch_and_detach_return() {
         Some(pane_tree),
     );
     let detached_view = router
-        .views(&app)
+        .views(&mut app)
         .into_iter()
         .find(|view| view.active_tab_id == Some(root_tab_id))
         .expect("detached window view");
@@ -281,7 +328,7 @@ fn resized_terminal_layout_survives_tab_switch_and_detach_return() {
         .expect("detached route should return");
     assert_eq!(router.restore_detached(&detached), Some(child_tab_id));
     let main_view = router
-        .views(&app)
+        .views(&mut app)
         .into_iter()
         .find(|view| view.active_tab_id == Some(root_tab_id))
         .expect("returned main window view");
@@ -355,7 +402,7 @@ fn child_pane_sftp_companion_stays_visible_and_returns_to_the_group() {
     assert!(router.include_tab(MAIN_WINDOW_ID, sftp_tab_id));
     assert!(router.activate_tab(MAIN_WINDOW_ID, sftp_tab_id, &mut app));
 
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(
         view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
         vec![root_tab_id, sftp_tab_id]
@@ -367,7 +414,7 @@ fn child_pane_sftp_companion_stays_visible_and_returns_to_the_group() {
     );
     router.set_active(MAIN_WINDOW_ID, child_tab_id);
 
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(view.active_tab_id, Some(root_tab_id));
     assert_eq!(view.snapshot.id, Some(child_tab_id));
     assert_eq!(view.terminal_panes.len(), 2);
@@ -376,7 +423,7 @@ fn child_pane_sftp_companion_stays_visible_and_returns_to_the_group() {
     for tab_id in closed_tab_ids {
         assert!(app.close_tab(tab_id).is_some());
     }
-    let view = router.views(&app).pop().expect("main window view");
+    let view = router.views(&mut app).pop().expect("main window view");
     assert_eq!(
         view.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
         vec![sftp_tab_id]

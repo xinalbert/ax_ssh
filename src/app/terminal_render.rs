@@ -1,14 +1,84 @@
 //! UI-independent terminal palette resolution.
 
 use ax_ssh::config::TerminalColorScheme;
-use ax_ssh::terminal::{
-    TerminalColor, TerminalSnapshot, TerminalStyle, TerminalStyledLine, TerminalStyledRun,
-};
+#[cfg(test)]
+use ax_ssh::terminal::TerminalSnapshot;
+use ax_ssh::terminal::{TerminalColor, TerminalStyle, TerminalStyledLine, TerminalStyledRun};
 
 const MAX_SEMANTIC_HIGHLIGHT_CHARS: usize = 512;
 const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
 const MAX_TEXT_BRIGHTNESS: f64 = 1.20;
 const DIM_TEXT_BRIGHTNESS_FACTOR: f64 = 0.70;
+const ERROR_KEYWORDS: &[&[u8]] = &[
+    b"error",
+    b"err",
+    b"fatal",
+    b"panic",
+    b"fail",
+    b"failed",
+    b"failure",
+    b"exception",
+    b"traceback",
+    b"critical",
+    b"crash",
+    b"crashed",
+    b"sigsegv",
+];
+const WARNING_KEYWORDS: &[&[u8]] = &[
+    b"warn",
+    b"warning",
+    b"deprecated",
+    b"todo",
+    b"fixme",
+    b"timeout",
+    b"refused",
+    b"denied",
+    b"rejected",
+    b"unreachable",
+    b"offline",
+    b"pending",
+    b"waiting",
+    b"processing",
+];
+const SUCCESS_KEYWORDS: &[&[u8]] = &[
+    b"ok",
+    b"success",
+    b"pass",
+    b"passed",
+    b"done",
+    b"completed",
+    b"ready",
+    b"connected",
+    b"online",
+    b"up",
+    b"running",
+    b"deployed",
+    b"authenticated",
+    b"authorized",
+];
+const INFO_KEYWORDS: &[&[u8]] = &[
+    b"info",
+    b"notice",
+    b"debug",
+    b"trace",
+    b"dbg",
+    b"ssh",
+    b"ssl",
+    b"tls",
+    b"certificate",
+    b"auth",
+    b"login",
+    b"start",
+    b"started",
+    b"starting",
+    b"boot",
+    b"restart",
+    b"restarting",
+    b"deploy",
+    b"deploying",
+    b"active",
+    b"executing",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RgbColor {
@@ -38,7 +108,7 @@ struct SemanticPalette {
     error: RgbColor,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct SemanticColorOverrides {
     pub(super) success: Option<RgbColor>,
     pub(super) info: Option<RgbColor>,
@@ -66,7 +136,7 @@ impl SemanticPalette {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) struct TerminalRenderSettings {
     pub(super) color_scheme: TerminalColorScheme,
     pub(super) default_foreground: RgbColor,
@@ -78,22 +148,35 @@ pub(super) struct TerminalRenderSettings {
     pub(super) semantic_colors: SemanticColorOverrides,
 }
 
+#[cfg(test)]
 pub(super) struct RenderedTerminal {
     pub(super) lines: Vec<RenderedTerminalLine>,
-    pub(super) max_columns: usize,
-    pub(super) cursor_row: usize,
-    pub(super) cursor_column: usize,
-    pub(super) cursor_visible: bool,
-    pub(super) cursor_text: String,
     pub(super) foreground: RgbColor,
     pub(super) background: RgbColor,
     pub(super) selection_background: RgbColor,
-    pub(super) mouse_button_reporting_active: bool,
-    pub(super) mouse_wheel_reporting_active: bool,
 }
 
 pub(super) struct RenderedTerminalLine {
+    pub(super) source_revision: u64,
+    pub(super) render_cache_key: u64,
+    pub(super) backgrounds: Vec<RenderedTerminalBackgroundRun>,
+    pub(super) decorations: Vec<RenderedTerminalDecorationRun>,
     pub(super) runs: Vec<RenderedTerminalRun>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RenderedTerminalBackgroundRun {
+    pub(super) column: usize,
+    pub(super) cells: usize,
+    pub(super) background: RgbColor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RenderedTerminalDecorationRun {
+    pub(super) column: usize,
+    pub(super) cells: usize,
+    pub(super) foreground: RgbColor,
+    pub(super) strikethrough: bool,
 }
 
 pub(super) struct RenderedTerminalRun {
@@ -109,62 +192,165 @@ pub(super) struct RenderedTerminalRun {
     pub(super) centered: bool,
 }
 
+pub(super) struct TerminalRenderer {
+    palette: TerminalPalette,
+    settings: TerminalRenderSettings,
+    semantic_palette: Option<SemanticPalette>,
+    cache_key: u64,
+}
+
+impl TerminalRenderer {
+    pub(super) fn new(settings: TerminalRenderSettings) -> Self {
+        let mut palette = TerminalPalette::for_scheme(settings.color_scheme);
+        palette.foreground = settings.default_foreground;
+        palette.background = settings.default_background;
+        palette.selection_background = settings.selection_background;
+        let semantic_palette = settings
+            .semantic_highlighting
+            .then(|| SemanticPalette::for_terminal(&palette, settings.semantic_colors));
+        let cache_key = terminal_render_cache_key(settings);
+        Self {
+            palette,
+            settings,
+            semantic_palette,
+            cache_key,
+        }
+    }
+
+    pub(super) fn render_line(&self, line: &TerminalStyledLine) -> RenderedTerminalLine {
+        render_line(
+            line,
+            &self.palette,
+            &self.settings,
+            self.semantic_palette.as_ref(),
+            self.cache_key,
+        )
+    }
+
+    pub(super) fn cache_key(&self) -> u64 {
+        self.cache_key
+    }
+
+    pub(super) fn foreground(&self) -> RgbColor {
+        self.palette.foreground
+    }
+
+    pub(super) fn background(&self) -> RgbColor {
+        self.palette.background
+    }
+
+    pub(super) fn selection_background(&self) -> RgbColor {
+        self.palette.selection_background
+    }
+}
+
+#[cfg(test)]
 pub(super) fn render_terminal(
     snapshot: TerminalSnapshot,
     settings: TerminalRenderSettings,
 ) -> RenderedTerminal {
-    let mut palette = TerminalPalette::for_scheme(settings.color_scheme);
-    palette.foreground = settings.default_foreground;
-    palette.background = settings.default_background;
-    palette.selection_background = settings.selection_background;
+    let renderer = TerminalRenderer::new(settings);
     let lines = snapshot
         .lines
-        .into_iter()
-        .map(|line| render_line(line, &palette, &settings))
+        .iter()
+        .map(|line| renderer.render_line(line))
         .collect();
     RenderedTerminal {
         lines,
-        max_columns: snapshot.max_columns,
-        cursor_row: snapshot.cursor_row,
-        cursor_column: snapshot.cursor_column,
-        cursor_visible: snapshot.cursor_visible,
-        cursor_text: snapshot.cursor_text,
-        foreground: palette.foreground,
-        background: palette.background,
-        selection_background: palette.selection_background,
-        mouse_button_reporting_active: snapshot.mouse_button_reporting_active,
-        mouse_wheel_reporting_active: snapshot.mouse_wheel_reporting_active,
+        foreground: renderer.foreground(),
+        background: renderer.background(),
+        selection_background: renderer.selection_background(),
     }
 }
 
 fn render_line(
-    line: TerminalStyledLine,
+    line: &TerminalStyledLine,
     palette: &TerminalPalette,
     settings: &TerminalRenderSettings,
+    semantic_palette: Option<&SemanticPalette>,
+    render_cache_key: u64,
 ) -> RenderedTerminalLine {
-    let semantic_palette = settings
-        .semantic_highlighting
-        .then(|| SemanticPalette::for_terminal(palette, settings.semantic_colors));
     let runs = line
         .runs
-        .into_iter()
-        .flat_map(|run| render_run(run, palette, settings, semantic_palette.as_ref()))
-        .collect();
-    RenderedTerminalLine { runs }
+        .iter()
+        .flat_map(|run| render_run(run, palette, settings, semantic_palette))
+        .collect::<Vec<_>>();
+    let backgrounds = compact_background_runs(&runs, palette.background);
+    let decorations = compact_decoration_runs(&runs);
+    RenderedTerminalLine {
+        source_revision: line.revision,
+        render_cache_key,
+        backgrounds,
+        decorations,
+        runs,
+    }
+}
+
+fn compact_decoration_runs(runs: &[RenderedTerminalRun]) -> Vec<RenderedTerminalDecorationRun> {
+    let mut decorations: Vec<RenderedTerminalDecorationRun> = Vec::new();
+    for strikethrough in [false, true] {
+        for run in runs.iter().filter(|run| {
+            run.cells > 0
+                && if strikethrough {
+                    run.strikethrough
+                } else {
+                    run.underline
+                }
+        }) {
+            if let Some(previous) = decorations.last_mut()
+                && previous.strikethrough == strikethrough
+                && previous.foreground == run.foreground
+                && previous.column.saturating_add(previous.cells) == run.column
+            {
+                previous.cells = previous.cells.saturating_add(run.cells);
+                continue;
+            }
+            decorations.push(RenderedTerminalDecorationRun {
+                column: run.column,
+                cells: run.cells,
+                foreground: run.foreground,
+                strikethrough,
+            });
+        }
+    }
+    decorations
+}
+
+fn compact_background_runs(
+    runs: &[RenderedTerminalRun],
+    default_background: RgbColor,
+) -> Vec<RenderedTerminalBackgroundRun> {
+    let mut backgrounds: Vec<RenderedTerminalBackgroundRun> = Vec::new();
+    for run in runs
+        .iter()
+        .filter(|run| run.cells > 0 && run.background != default_background)
+    {
+        if let Some(previous) = backgrounds.last_mut()
+            && previous.background == run.background
+            && previous.column.saturating_add(previous.cells) == run.column
+        {
+            previous.cells = previous.cells.saturating_add(run.cells);
+            continue;
+        }
+        backgrounds.push(RenderedTerminalBackgroundRun {
+            column: run.column,
+            cells: run.cells,
+            background: run.background,
+        });
+    }
+    backgrounds
 }
 
 fn render_run(
-    run: TerminalStyledRun,
+    run: &TerminalStyledRun,
     palette: &TerminalPalette,
     settings: &TerminalRenderSettings,
     semantic_palette: Option<&SemanticPalette>,
 ) -> Vec<RenderedTerminalRun> {
-    let TerminalStyledRun {
-        text,
-        column,
-        cells,
-        style,
-    } = run;
+    let text = run.text.clone();
+    let column = run.column;
+    let cells = run.cells;
+    let style = run.style;
     let centered = !text.is_ascii();
     let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
@@ -193,6 +379,48 @@ fn render_run(
     rendered_runs
 }
 
+fn terminal_render_cache_key(settings: TerminalRenderSettings) -> u64 {
+    let mut hash = 14_695_981_039_346_656_037_u64;
+    let mut mix = |byte: u8| {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(1_099_511_628_211);
+    };
+    for byte in settings.color_scheme.as_setting().bytes() {
+        mix(byte);
+    }
+    for color in [
+        settings.default_foreground,
+        settings.default_background,
+        settings.selection_background,
+    ] {
+        mix(color.red);
+        mix(color.green);
+        mix(color.blue);
+    }
+    for byte in settings.text_brightness.to_bits().to_le_bytes() {
+        mix(byte);
+    }
+    mix(u8::from(settings.bright_bold_text));
+    mix(u8::from(settings.semantic_highlighting));
+    for color in [
+        settings.semantic_colors.success,
+        settings.semantic_colors.info,
+        settings.semantic_colors.warning,
+        settings.semantic_colors.error,
+    ] {
+        match color {
+            Some(color) => {
+                mix(1);
+                mix(color.red);
+                mix(color.green);
+                mix(color.blue);
+            }
+            None => mix(0),
+        }
+    }
+    hash
+}
+
 fn semantic_highlights(
     text: &str,
     cells: usize,
@@ -215,96 +443,12 @@ fn semantic_highlights(
 
     let mut highlights = vec![None; text.len()];
     highlight_http_statuses(text, &mut highlights);
-    highlight_keywords(
-        text,
-        &mut highlights,
-        SemanticHighlight::Error,
-        &[
-            "error",
-            "err",
-            "fatal",
-            "panic",
-            "fail",
-            "failed",
-            "failure",
-            "exception",
-            "traceback",
-            "critical",
-            "crash",
-            "crashed",
-            "sigsegv",
-        ],
-    );
-    highlight_keywords(
+    highlight_keyword_tokens(text, &mut highlights);
+    highlight_phrase(
         text,
         &mut highlights,
         SemanticHighlight::Warning,
-        &[
-            "warn",
-            "warning",
-            "deprecated",
-            "todo",
-            "fixme",
-            "timeout",
-            "timed out",
-            "refused",
-            "denied",
-            "rejected",
-            "unreachable",
-            "offline",
-            "pending",
-            "waiting",
-            "processing",
-        ],
-    );
-    highlight_keywords(
-        text,
-        &mut highlights,
-        SemanticHighlight::Success,
-        &[
-            "ok",
-            "success",
-            "pass",
-            "passed",
-            "done",
-            "completed",
-            "ready",
-            "connected",
-            "online",
-            "up",
-            "running",
-            "deployed",
-            "authenticated",
-            "authorized",
-        ],
-    );
-    highlight_keywords(
-        text,
-        &mut highlights,
-        SemanticHighlight::Info,
-        &[
-            "info",
-            "notice",
-            "debug",
-            "trace",
-            "dbg",
-            "ssh",
-            "ssl",
-            "tls",
-            "certificate",
-            "auth",
-            "login",
-            "start",
-            "started",
-            "starting",
-            "boot",
-            "restart",
-            "restarting",
-            "deploy",
-            "deploying",
-            "active",
-            "executing",
-        ],
+        b"timed out",
     );
     highlights.iter().any(Option::is_some).then_some(highlights)
 }
@@ -333,25 +477,61 @@ fn highlight_http_statuses(text: &str, highlights: &mut [Option<SemanticHighligh
     }
 }
 
-fn highlight_keywords(
+fn highlight_keyword_tokens(text: &str, highlights: &mut [Option<SemanticHighlight>]) {
+    let bytes = text.as_bytes();
+    let mut start = 0usize;
+    while start < bytes.len() {
+        while start < bytes.len() && !is_semantic_token_byte(bytes[start]) {
+            start += 1;
+        }
+        let mut end = start;
+        while end < bytes.len() && is_semantic_token_byte(bytes[end]) {
+            end += 1;
+        }
+        if start == end {
+            break;
+        }
+        let token = &bytes[start..end];
+        let highlight = if keyword_matches(token, ERROR_KEYWORDS) {
+            Some(SemanticHighlight::Error)
+        } else if keyword_matches(token, WARNING_KEYWORDS) {
+            Some(SemanticHighlight::Warning)
+        } else if keyword_matches(token, SUCCESS_KEYWORDS) {
+            Some(SemanticHighlight::Success)
+        } else if keyword_matches(token, INFO_KEYWORDS) {
+            Some(SemanticHighlight::Info)
+        } else {
+            None
+        };
+        if let Some(highlight) = highlight {
+            mark_highlight(highlights, start, end, highlight);
+        }
+        start = end;
+    }
+}
+
+fn keyword_matches(token: &[u8], keywords: &[&[u8]]) -> bool {
+    keywords
+        .iter()
+        .any(|keyword| token.eq_ignore_ascii_case(keyword))
+}
+
+fn highlight_phrase(
     text: &str,
     highlights: &mut [Option<SemanticHighlight>],
     highlight: SemanticHighlight,
-    keywords: &[&str],
+    phrase: &[u8],
 ) {
     let bytes = text.as_bytes();
-    for keyword in keywords {
-        let keyword = keyword.as_bytes();
-        if keyword.len() > bytes.len() {
-            continue;
-        }
-        for start in 0..=bytes.len() - keyword.len() {
-            let end = start + keyword.len();
-            if bytes[start..end].eq_ignore_ascii_case(keyword)
-                && semantic_token_boundaries(bytes, start, end)
-            {
-                mark_highlight(highlights, start, end, highlight);
-            }
+    if phrase.len() > bytes.len() {
+        return;
+    }
+    for start in 0..=bytes.len() - phrase.len() {
+        let end = start + phrase.len();
+        if bytes[start..end].eq_ignore_ascii_case(phrase)
+            && semantic_token_boundaries(bytes, start, end)
+        {
+            mark_highlight(highlights, start, end, highlight);
         }
     }
 }
@@ -624,19 +804,21 @@ impl TerminalPalette {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     fn snapshot(style: TerminalStyle) -> TerminalSnapshot {
         TerminalSnapshot {
-            text: "x".into(),
-            lines: vec![TerminalStyledLine {
+            lines: vec![Arc::new(TerminalStyledLine {
+                revision: 1,
                 runs: vec![TerminalStyledRun {
                     text: "x".into(),
                     column: 0,
                     cells: 1,
                     style,
                 }],
-            }],
+            })],
             max_columns: 1,
             cursor_row: 0,
             cursor_column: 1,
@@ -669,10 +851,8 @@ mod tests {
     }
 
     fn snapshot_line(runs: Vec<TerminalStyledRun>) -> TerminalSnapshot {
-        let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
         TerminalSnapshot {
-            text,
-            lines: vec![TerminalStyledLine { runs }],
+            lines: vec![Arc::new(TerminalStyledLine { revision: 1, runs })],
             max_columns: 128,
             cursor_row: 0,
             cursor_column: 0,
@@ -709,6 +889,64 @@ mod tests {
         assert!(runs[0].centered);
         assert!(runs[1].centered);
         assert!(!runs[2].centered);
+    }
+
+    #[test]
+    fn compact_spans_omit_default_backgrounds_and_merge_adjacent_decorations() {
+        let default_background = settings().default_background;
+        let accent_background = RgbColor::new(80, 30, 20);
+        let foreground = settings().default_foreground;
+        let run = |column, background, underline, strikethrough| RenderedTerminalRun {
+            text: "x".into(),
+            column,
+            cells: 1,
+            foreground,
+            background,
+            bold: false,
+            italic: false,
+            underline,
+            strikethrough,
+            centered: false,
+        };
+        let runs = [
+            run(0, default_background, false, false),
+            run(1, accent_background, true, false),
+            run(2, accent_background, true, false),
+            run(4, accent_background, false, true),
+        ];
+
+        assert_eq!(
+            compact_background_runs(&runs, default_background),
+            vec![
+                RenderedTerminalBackgroundRun {
+                    column: 1,
+                    cells: 2,
+                    background: accent_background,
+                },
+                RenderedTerminalBackgroundRun {
+                    column: 4,
+                    cells: 1,
+                    background: accent_background,
+                },
+            ]
+        );
+        assert_eq!(
+            compact_decoration_runs(&runs),
+            vec![
+                RenderedTerminalDecorationRun {
+                    column: 1,
+                    cells: 2,
+                    foreground,
+                    strikethrough: false,
+                },
+                RenderedTerminalDecorationRun {
+                    column: 4,
+                    cells: 1,
+                    foreground,
+                    strikethrough: true,
+                },
+            ]
+        );
     }
 
     fn plain_run(text: &str, column: usize) -> TerminalStyledRun {

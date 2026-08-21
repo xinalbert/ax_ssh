@@ -120,6 +120,10 @@ TRANSLATIONS = {
     "RENDERING": "渲染",
     "Renderer": "渲染器",
     "Rendering backend": "渲染后端",
+    "Compact terminal rendering": "紧凑终端渲染",
+    "Reduce terminal items and omit default background rectangles": "减少终端绘制项并省略默认背景矩形",
+    "Cache unchanged terminal rows": "缓存未变化的终端行",
+    "Reuse GPU row layers; may increase graphics memory": "复用 GPU 行图层；可能增加图形内存",
     "Monitoring": "监控中",
     "Remote changed": "远端已更改",
     "Rename": "重命名",
@@ -151,6 +155,12 @@ TRANSLATIONS = {
     "Files and transfers area sizes": "文件和传输区域大小",
     "Flow control": "流控制",
     "Focus rings, selection, and active indicators": "焦点环、选择和活动状态指示",
+    "Focused refresh rate": "聚焦刷新率",
+    "Focused terminal refresh rate": "聚焦终端刷新率",
+    "Terminal updates while the pane is focused": "终端窗格聚焦时的刷新帧率",
+    "Unfocused refresh rate": "非聚焦刷新率",
+    "Unfocused terminal refresh rate": "非聚焦终端刷新率",
+    "Visible terminal updates while another pane is focused": "其他窗格聚焦时可见终端的刷新帧率",
     "Follow system": "跟随系统",
     "Font family": "字体系列",
     "Font size": "字体大小",
@@ -348,7 +358,6 @@ TRANSLATIONS = {
     "TERMINAL": "终端",
     "TERMINAL DEFAULTS": "终端默认设置",
     "TYPOGRAPHY": "字体",
-    "Tab": "标签页",
     "Telnet protocol": "Telnet 协议",
     "Telnet sends terminal traffic without encryption or host identity verification.": "Telnet 传输终端流量时不加密，也不验证主机身份。",
     "Terminal": "终端",
@@ -412,7 +421,7 @@ TRANSLATIONS = {
 
 UNCHANGED = {
     "%", "+", "<", ">", ">_", "115200", "22", "AxSSH", "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
-    "root", "server.example.com", "x", "{0}: {1}", "~", "~/.ssh/id_ed25519",
+    "root", "server.example.com", "x", "FPS", "{0}: {1}", "~", "~/.ssh/id_ed25519",
     "/dev/cu.usbserial or COM3", "English", "Simplified Chinese", "SSH", "SFTP", "SLINT", "Telnet", "X11",
 }
 

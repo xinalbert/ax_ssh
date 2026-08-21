@@ -2,16 +2,18 @@ use super::*;
 
 pub(in crate::app) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
     if let Some(router) = global_window_router() {
-        refresh_workspace_multi_window(ui, state, &router, None);
+        refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
         return;
     }
     let state = Arc::clone(state);
     dispatch_ui(ui, move |ui| {
         let (tabs, snapshot) = match state.lock() {
-            Ok(app) => (
-                visible_workspace_tab_rows(app.tab_summaries()),
-                app.active_snapshot(),
-            ),
+            Ok(mut app) => {
+                let tabs = visible_workspace_tab_rows(app.tab_summaries());
+                let active_tab_id = app.active_tab_id();
+                let snapshot = app.snapshot_without_terminal_for(active_tab_id);
+                (tabs, snapshot)
+            }
             Err(_) => {
                 ui.set_status("State lock poisoned".into());
                 return;
@@ -34,28 +36,45 @@ pub(in crate::app) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc
     });
 }
 
+pub(super) enum WorkspaceRefreshRequest {
+    Full,
+    Terminal {
+        tab_id: Uuid,
+        output_received_at: Option<Instant>,
+    },
+}
+
 pub(super) fn refresh_workspace_multi_window(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
     router: &WindowRouter,
-    output_received_at: Option<Instant>,
+    request: WorkspaceRefreshRequest,
 ) {
     let should_schedule = match state.lock() {
-        Ok(app) => app.try_schedule_ui_refresh(),
+        Ok(mut app) => match request {
+            WorkspaceRefreshRequest::Full => app.request_full_ui_refresh(),
+            WorkspaceRefreshRequest::Terminal {
+                tab_id,
+                output_received_at,
+            } => app.request_terminal_ui_refresh(tab_id, output_received_at),
+        },
         Err(_) => {
             set_status(ui, "State lock poisoned");
             return;
         }
     };
     if !should_schedule {
-        let _ = COALESCED_WORKSPACE_REFRESHES.fetch_update(
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-            |count| Some(count.saturating_add(1)),
-        );
         return;
     }
 
+    schedule_pending_ui_refresh(ui, state, router);
+}
+
+fn schedule_pending_ui_refresh(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+) {
     let state = Arc::clone(state);
     let router = router.clone();
     let ui_for_follow_up = ui.clone();
@@ -64,16 +83,28 @@ pub(super) fn refresh_workspace_multi_window(
     if slint::invoke_from_event_loop(move || {
         let ui_started_at = Instant::now();
         let views_started_at = Instant::now();
-        let views = match state_for_ui.lock() {
-            Ok(app) => router.views(&app),
+        let (batch, full_views, terminal_updates) = match state_for_ui.lock() {
+            Ok(mut app) => {
+                let Some(batch) = app.take_ui_refresh_batch() else {
+                    return;
+                };
+                if batch.full {
+                    let views = router.views(&mut app);
+                    (batch, views, Vec::new())
+                } else {
+                    let updates = router.terminal_updates(&mut app, &batch.terminal_ids);
+                    (batch, Vec::new(), updates)
+                }
+            }
             Err(poisoned) => {
-                poisoned.into_inner().clear_ui_refresh_pending();
+                poisoned.into_inner().cancel_ui_refresh();
                 return;
             }
         };
         let views_built_us = duration_micros(views_started_at.elapsed());
         let mut applied_view_count = 0usize;
-        for view in views {
+        let mut applied_pane_count = 0usize;
+        for view in full_views {
             let Some(ui) = view.ui.upgrade() else {
                 continue;
             };
@@ -96,33 +127,44 @@ pub(super) fn refresh_workspace_multi_window(
             apply_terminal_panes(&ui, view.terminal_panes, view.terminal_dividers);
             applied_view_count = applied_view_count.saturating_add(1);
         }
-        if let Ok(app) = state_for_ui.lock() {
-            app.clear_ui_refresh_pending();
+        for update in terminal_updates {
+            let Some(ui) = update.ui.upgrade() else {
+                continue;
+            };
+            applied_pane_count =
+                applied_pane_count.saturating_add(apply_terminal_pane_updates(&ui, update.panes));
         }
-        let coalesced_refreshes = COALESCED_WORKSPACE_REFRESHES.swap(0, Ordering::AcqRel);
+        let follow_up = state_for_ui
+            .lock()
+            .map(|mut app| app.finish_ui_refresh(batch.generation))
+            .unwrap_or(false);
         tracing::debug!(
             target: "ax_ssh::latency",
             event = "workspace-refresh",
             stage = "ui-applied",
+            full = batch.full,
             view_count = applied_view_count,
-            coalesced_refreshes,
+            pane_count = applied_pane_count,
+            dirty_terminal_count = batch.terminal_ids.len(),
+            coalesced_refreshes = batch.coalesced_requests,
             views_built_us,
             ui_queue_us = duration_micros(
                 ui_started_at.saturating_duration_since(dispatch_requested_at),
             ),
             ui_apply_us = duration_micros(ui_started_at.elapsed()),
-            output_to_ui_us = output_received_at
+            output_to_ui_us = batch
+                .earliest_output_received_at
                 .map(|received_at| duration_micros(received_at.elapsed())),
             "multi-window workspace views applied to UI"
         );
-        if coalesced_refreshes > 0 {
-            refresh_workspace_multi_window(&ui_for_follow_up, &state_for_ui, &router, None);
+        if follow_up {
+            schedule_pending_ui_refresh(&ui_for_follow_up, &state_for_ui, &router);
         }
     })
     .is_err()
     {
-        if let Ok(app) = state.lock() {
-            app.clear_ui_refresh_pending();
+        if let Ok(mut app) = state.lock() {
+            app.cancel_ui_refresh();
         }
         tracing::debug!(
             target: "ax_ssh::latency",

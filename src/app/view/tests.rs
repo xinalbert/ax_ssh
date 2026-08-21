@@ -98,6 +98,8 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
 fn terminal_render_lines_reuse_existing_rows_when_output_is_unchanged() {
     let current = ModelRc::new(VecModel::from(vec![terminal_render_line_with_text("same")]));
     let original_line = current.row_data(0).expect("current line should exist");
+    let original_backgrounds = original_line.backgrounds.clone();
+    let original_decorations = original_line.decorations.clone();
     let original_runs = original_line.runs.clone();
     let updated = vec![terminal_render_line_with_text("same")];
 
@@ -110,12 +112,28 @@ fn terminal_render_lines_reuse_existing_rows_when_output_is_unchanged() {
         current.row_data(0).expect("line should remain").runs,
         original_runs
     );
+    assert_eq!(
+        current.row_data(0).expect("line should remain").backgrounds,
+        original_backgrounds
+    );
+    assert_eq!(
+        current.row_data(0).expect("line should remain").decorations,
+        original_decorations
+    );
 
     let changed = vec![terminal_render_line_with_text("changed")];
     assert!(update_terminal_render_lines(&current, &changed));
     assert_eq!(
         current.row_data(0).expect("line should remain").runs,
         original_runs
+    );
+    assert_eq!(
+        current.row_data(0).expect("line should remain").backgrounds,
+        original_backgrounds
+    );
+    assert_eq!(
+        current.row_data(0).expect("line should remain").decorations,
+        original_decorations
     );
     assert_eq!(
         current
@@ -137,6 +155,12 @@ fn terminal_render_lines_reuse_existing_rows_when_output_is_unchanged() {
     assert!(update_terminal_render_lines(
         &current,
         &[TerminalRenderLine {
+            source_revision_low: 0,
+            source_revision_high: 0,
+            render_cache_key_low: 0,
+            render_cache_key_high: 0,
+            backgrounds: ModelRc::new(VecModel::from(Vec::<TerminalBackgroundRun>::new())),
+            decorations: ModelRc::new(VecModel::from(Vec::<TerminalDecorationRun>::new())),
             runs: ModelRc::new(VecModel::from(split_runs)),
         }],
     ));
@@ -169,6 +193,12 @@ fn terminal_pane_snapshots_reset_existing_nested_models_when_row_counts_change()
     let mut updated_pane = terminal_pane_view(tab_id, 0.0, 1.0);
     updated_pane.terminal.render_lines = ModelRc::new(VecModel::from(vec![
         TerminalRenderLine {
+            source_revision_low: 0,
+            source_revision_high: 0,
+            render_cache_key_low: 0,
+            render_cache_key_high: 0,
+            backgrounds: ModelRc::new(VecModel::from(Vec::<TerminalBackgroundRun>::new())),
+            decorations: ModelRc::new(VecModel::from(Vec::<TerminalDecorationRun>::new())),
             runs: ModelRc::new(VecModel::from(vec![
                 terminal_render_run_with_text("after"),
                 terminal_render_run_with_text("-suffix"),
@@ -204,8 +234,134 @@ fn terminal_pane_snapshots_reset_existing_nested_models_when_row_counts_change()
     );
 }
 
+#[test]
+fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
+    let tab_id = Uuid::from_u128(1);
+    let mut pane = terminal_pane_view(tab_id, 0.0, 1.0);
+    pane.terminal.render_lines =
+        ModelRc::new(VecModel::from(vec![terminal_render_line_with_text(
+            "before",
+        )]));
+    pane.terminal.cursor_state = ModelRc::new(VecModel::from(vec![TerminalCursorState {
+        row: 0,
+        column: 0,
+        visible: true,
+        text: "b".into(),
+    }]));
+    let panes = ModelRc::new(VecModel::from(vec![pane]));
+    let dividers = ModelRc::new(VecModel::from(Vec::<TerminalPaneDividerView>::new()));
+    let mut updated = terminal_pane_view(tab_id, 0.0, 1.0);
+    updated.terminal.render_lines =
+        ModelRc::new(VecModel::from(vec![terminal_render_line_with_text(
+            "after",
+        )]));
+    updated.terminal.cursor_state = ModelRc::new(VecModel::from(vec![TerminalCursorState {
+        row: 3,
+        column: 7,
+        visible: true,
+        text: "a".into(),
+    }]));
+    updated.terminal.cursor_row = 3;
+    updated.terminal.cursor_column = 7;
+    updated.terminal.cursor_text = "a".into();
+
+    assert!(update_terminal_pane_snapshot_models(
+        &panes,
+        &dividers,
+        &[updated],
+        &[],
+    ));
+    let current = panes.row_data(0).expect("pane row");
+    assert_eq!(current.terminal.cursor_row, 0);
+    assert_eq!(current.terminal.cursor_column, 0);
+    assert_eq!(
+        current
+            .terminal
+            .cursor_state
+            .row_data(0)
+            .expect("cursor row")
+            .row,
+        3
+    );
+    assert_eq!(
+        current
+            .terminal
+            .render_lines
+            .row_data(0)
+            .expect("render line")
+            .runs
+            .row_data(0)
+            .expect("render run")
+            .text
+            .as_str(),
+        "after"
+    );
+}
+
+#[test]
+fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
+    let snapshot = TerminalSnapshot {
+        lines: vec![Arc::new(ax_ssh::terminal::TerminalStyledLine {
+            revision: 7,
+            runs: vec![ax_ssh::terminal::TerminalStyledRun {
+                text: "ready".to_owned(),
+                column: 0,
+                cells: 5,
+                style: Default::default(),
+            }],
+        })],
+        max_columns: 10,
+        cursor_row: 0,
+        cursor_column: 5,
+        cursor_visible: true,
+        cursor_text: " ".to_owned(),
+        mouse_reporting: Default::default(),
+        mouse_button_reporting_active: false,
+        mouse_wheel_reporting_active: false,
+    };
+    let settings = TerminalRenderSettings {
+        color_scheme: TerminalColorScheme::Dark,
+        default_foreground: RgbColor::new(204, 204, 204),
+        default_background: RgbColor::new(30, 30, 30),
+        selection_background: RgbColor::new(38, 79, 120),
+        text_brightness: 1.0,
+        bright_bold_text: true,
+        semantic_highlighting: true,
+        semantic_colors: SemanticColorOverrides::default(),
+    };
+    let renderer = TerminalRenderer::new(settings);
+    let first = render_snapshot_lines(&snapshot, &renderer, None);
+    let first_runs = first[0].runs.clone();
+    let current = ModelRc::new(VecModel::from(first));
+
+    let cached = render_snapshot_lines(&snapshot, &renderer, Some(&current));
+    assert_eq!(cached[0].runs, first_runs);
+
+    let changed_renderer = TerminalRenderer::new(TerminalRenderSettings {
+        text_brightness: 0.9,
+        ..settings
+    });
+    let settings_changed = render_snapshot_lines(&snapshot, &changed_renderer, Some(&current));
+    assert_ne!(settings_changed[0].runs, first_runs);
+
+    let mut changed_line = snapshot.lines[0].as_ref().clone();
+    changed_line.revision = u64::from(u32::MAX) + 8;
+    let changed_snapshot = TerminalSnapshot {
+        lines: vec![Arc::new(changed_line)],
+        ..snapshot
+    };
+    let line_changed = render_snapshot_lines(&changed_snapshot, &renderer, Some(&current));
+    assert_ne!(line_changed[0].runs, first_runs);
+}
+
 fn terminal_render_line_with_text(text: &str) -> TerminalRenderLine {
     TerminalRenderLine {
+        source_revision_low: 0,
+        source_revision_high: 0,
+        render_cache_key_low: 0,
+        render_cache_key_high: 0,
+        backgrounds: ModelRc::new(VecModel::from(Vec::<TerminalBackgroundRun>::new())),
+        decorations: ModelRc::new(VecModel::from(Vec::<TerminalDecorationRun>::new())),
         runs: ModelRc::new(VecModel::from(vec![terminal_render_run_with_text(text)])),
     }
 }

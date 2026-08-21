@@ -13,7 +13,26 @@ export struct TerminalRenderRun {
     centered: bool,
 }
 
+export struct TerminalBackgroundRun {
+    column: int,
+    cells: int,
+    background: color,
+}
+
+export struct TerminalDecorationRun {
+    column: int,
+    cells: int,
+    foreground: color,
+    strikethrough: bool,
+}
+
 export struct TerminalRenderLine {
+    source_revision_low: int,
+    source_revision_high: int,
+    render_cache_key_low: int,
+    render_cache_key_high: int,
+    backgrounds: [TerminalBackgroundRun],
+    decorations: [TerminalDecorationRun],
     runs: [TerminalRenderRun],
 }
 
@@ -33,6 +52,8 @@ export struct TerminalGridView {
     foreground: color,
     background: color,
     selection_background: color,
+    compact_rendering: bool,
+    row_render_cache: bool,
 }
 
 // TerminalPane owns this local selection state and passes only its derived
@@ -93,11 +114,98 @@ export component TerminalGrid inherits Rectangle {
         width: parent.width;
         height: root.cell-height;
 
-        for run in line.runs : Rectangle {
-            x: run.column * root.cell-width;
-            width: run.cells * root.cell-width;
-            height: root.cell-height;
-            background: run.background;
+        static-content := Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: transparent;
+            cache-rendering-hint: root.view.row_render_cache;
+
+            if !root.view.compact_rendering : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: transparent;
+
+                for run in line.runs : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: run.background;
+                }
+
+                for run in line.runs : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: transparent;
+                    Text {
+                        y: (parent.height - root.font-cell-height) / 2;
+                        width: parent.width;
+                        height: root.font-cell-height;
+                        text: run.text;
+                        color: run.foreground;
+                        font-family: root.view.font_family;
+                        font-size: root.view.font_size;
+                        font-weight: run.bold ? 700 : 400;
+                        font-italic: run.italic;
+                        letter-spacing: 0px;
+                        horizontal-alignment: run.centered ? center : left;
+                        vertical-alignment: center;
+                        overflow: clip;
+                    }
+                    if run.underline : Rectangle {
+                        y: parent.height - Theme.terminal-underline-offset;
+                        width: parent.width;
+                        height: Theme.hairline;
+                        background: run.foreground;
+                    }
+                    if run.strikethrough : Rectangle {
+                        y: parent.height / 2;
+                        width: parent.width;
+                        height: Theme.hairline;
+                        background: run.foreground;
+                    }
+                }
+            }
+
+            if root.view.compact_rendering : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: transparent;
+
+                for run in line.backgrounds : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: run.background;
+                }
+
+                for run in line.runs : Text {
+                    x: run.column * root.cell-width;
+                    y: (root.cell-height - root.font-cell-height) / 2;
+                    width: run.cells * root.cell-width;
+                    height: root.font-cell-height;
+                    text: run.text;
+                    color: run.foreground;
+                    font-family: root.view.font_family;
+                    font-size: root.view.font_size;
+                    font-weight: run.bold ? 700 : 400;
+                    font-italic: run.italic;
+                    letter-spacing: 0px;
+                    horizontal-alignment: run.centered ? center : left;
+                    vertical-alignment: center;
+                    overflow: clip;
+                }
+
+                for run in line.decorations : Rectangle {
+                    x: run.column * root.cell-width;
+                    y: run.strikethrough
+                        ? parent.height / 2
+                        : parent.height - Theme.terminal-underline-offset;
+                    width: run.cells * root.cell-width;
+                    height: Theme.hairline;
+                    background: run.foreground;
+                }
+            }
         }
 
         if root.selection.active
@@ -113,43 +221,6 @@ export component TerminalGrid inherits Rectangle {
             width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
             height: root.cell-height;
             background: root.view.selection_background.with-alpha(0.72);
-        }
-
-        // Keep text and its decorations in one repeater. The run background
-        // stays above the line background while this group remains below the
-        // selection rectangle, preserving the terminal paint order.
-        for run in line.runs : Rectangle {
-            x: run.column * root.cell-width;
-            width: run.cells * root.cell-width;
-            height: root.cell-height;
-            background: transparent;
-            Text {
-                y: (parent.height - root.font-cell-height) / 2;
-                width: parent.width;
-                height: root.font-cell-height;
-                text: run.text;
-                color: run.foreground;
-                font-family: root.view.font_family;
-                font-size: root.view.font_size;
-                font-weight: run.bold ? 700 : 400;
-                font-italic: run.italic;
-                letter-spacing: 0px;
-                horizontal-alignment: run.centered ? center : left;
-                vertical-alignment: center;
-                overflow: clip;
-            }
-            if run.underline : Rectangle {
-                y: parent.height - Theme.terminal-underline-offset;
-                width: parent.width;
-                height: Theme.hairline;
-                background: run.foreground;
-            }
-            if run.strikethrough : Rectangle {
-                y: parent.height / 2;
-                width: parent.width;
-                height: Theme.hairline;
-                background: run.foreground;
-            }
         }
 
         if root.target-highlight.active

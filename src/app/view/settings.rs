@@ -1,3 +1,4 @@
+use super::super::terminal_presentation::TerminalPresentationPolicy;
 use super::*;
 
 pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
@@ -23,6 +24,14 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     );
     ui.set_bright_bold_text(settings.appearance.bright_bold_text);
     ui.set_terminal_semantic_highlighting(settings.appearance.terminal_semantic_highlighting);
+    ui.set_terminal_compact_rendering(settings.appearance.terminal_compact_rendering);
+    ui.set_terminal_row_render_cache(settings.appearance.terminal_row_render_cache);
+    ui.set_focused_terminal_refresh_fps(i32::from(
+        settings.appearance.focused_terminal_refresh_fps,
+    ));
+    ui.set_unfocused_terminal_refresh_fps(i32::from(
+        settings.appearance.unfocused_terminal_refresh_fps,
+    ));
     ui.set_terminal_semantic_link_color(
         settings
             .appearance
@@ -152,6 +161,16 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_terminal_appearance_revision(ui.get_terminal_appearance_revision().wrapping_add(1));
     #[cfg(target_os = "macos")]
     schedule_macos_application_menu_configuration(ui);
+}
+
+pub(in crate::app) fn apply_terminal_presentation_policy(
+    router: &WindowRouter,
+    settings: &AppSettings,
+) {
+    router.set_terminal_presentation_policy(TerminalPresentationPolicy::new(
+        settings.appearance.focused_terminal_refresh_fps,
+        settings.appearance.unfocused_terminal_refresh_fps,
+    ));
 }
 
 pub(in crate::app) fn select_ui_language(language: UiLanguage) -> Result<()> {
@@ -290,8 +309,7 @@ pub(super) fn set_ui_theme_palette(ui: &AppWindow, palette: &ThemePalette, light
 
 pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
     TerminalSnapshot {
-        text: String::new(),
-        lines: vec![Default::default()],
+        lines: vec![Arc::new(Default::default())],
         max_columns: 0,
         cursor_row: 0,
         cursor_column: 0,
@@ -303,36 +321,38 @@ pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
     }
 }
 
-pub(in crate::app) fn apply_rendered_terminal(
-    ui: &AppWindow,
-    rendered: terminal_render::RenderedTerminal,
-) {
-    ui.set_terminal_content_columns(rendered.max_columns.min(i32::MAX as usize) as i32);
-    ui.set_terminal_cursor_row(rendered.cursor_row.min(i32::MAX as usize) as i32);
-    ui.set_terminal_cursor_column(rendered.cursor_column.min(i32::MAX as usize) as i32);
-    ui.set_terminal_cursor_visible(rendered.cursor_visible);
-    ui.set_terminal_cursor_text(rendered.cursor_text.into());
-    ui.set_terminal_render_foreground(to_slint_color(rendered.foreground));
-    ui.set_terminal_render_background(to_slint_color(rendered.background));
-    ui.set_terminal_render_selection_background(to_slint_color(rendered.selection_background));
-    let lines = rendered
-        .lines
-        .into_iter()
-        .map(terminal_render_line)
-        .collect::<Vec<_>>();
-    let current_lines = ui.get_terminal_render_lines();
-    if !update_terminal_render_lines(&current_lines, &lines) {
-        ui.set_terminal_render_lines(ModelRc::new(VecModel::from(lines)));
-    }
-}
-
 pub(in crate::app) fn terminal_render_line(line: RenderedTerminalLine) -> TerminalRenderLine {
+    let backgrounds = line
+        .backgrounds
+        .into_iter()
+        .map(|run| TerminalBackgroundRun {
+            column: run.column.min(i32::MAX as usize) as i32,
+            cells: run.cells.min(i32::MAX as usize) as i32,
+            background: to_slint_color(run.background),
+        })
+        .collect::<Vec<_>>();
+    let decorations = line
+        .decorations
+        .into_iter()
+        .map(|run| TerminalDecorationRun {
+            column: run.column.min(i32::MAX as usize) as i32,
+            cells: run.cells.min(i32::MAX as usize) as i32,
+            foreground: to_slint_color(run.foreground),
+            strikethrough: run.strikethrough,
+        })
+        .collect::<Vec<_>>();
     let runs = line
         .runs
         .into_iter()
         .map(terminal_render_run)
         .collect::<Vec<_>>();
     TerminalRenderLine {
+        source_revision_low: line.source_revision as u32 as i32,
+        source_revision_high: (line.source_revision >> 32) as u32 as i32,
+        render_cache_key_low: line.render_cache_key as u32 as i32,
+        render_cache_key_high: (line.render_cache_key >> 32) as u32 as i32,
+        backgrounds: ModelRc::new(VecModel::from(backgrounds)),
+        decorations: ModelRc::new(VecModel::from(decorations)),
         runs: ModelRc::new(VecModel::from(runs)),
     }
 }

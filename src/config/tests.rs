@@ -239,6 +239,10 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             color_scheme: "light",
             text_brightness: 1.13,
             semantic_highlighting: true,
+            terminal_compact_rendering: false,
+            terminal_row_render_cache: true,
+            focused_terminal_refresh_fps: 60,
+            unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "#17a8cd",
                 success: " #21cd8b ",
@@ -266,6 +270,10 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             },
             terminal_text_brightness_percent: 115,
             terminal_semantic_highlighting: true,
+            terminal_compact_rendering: false,
+            terminal_row_render_cache: true,
+            focused_terminal_refresh_fps: 60,
+            unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors {
                 link: "#17A8CD".into(),
                 success: "#21CD8B".into(),
@@ -289,6 +297,10 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             color_scheme: "unknown",
             text_brightness: 1_000.0,
             semantic_highlighting: false,
+            terminal_compact_rendering: true,
+            terminal_row_render_cache: false,
+            focused_terminal_refresh_fps: 60,
+            unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "blue",
                 success: "#FFF",
@@ -311,12 +323,74 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             theme: ThemeSettings::default(),
             terminal_text_brightness_percent: MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
             terminal_semantic_highlighting: false,
+            terminal_compact_rendering: true,
+            terminal_row_render_cache: false,
+            focused_terminal_refresh_fps: 60,
+            unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
             terminal_mouse_local_selection_priority: false,
         }
+    );
+}
+
+#[test]
+fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
+    let known_shells = [SYSTEM_DEFAULT_SHELL.to_owned()];
+    let settings = AppSettings::normalized(AppSettingsInput {
+        appearance: AppearanceSettingsInput {
+            renderer_preference: "automatic",
+            application_font_family: "",
+            terminal_font_family: "",
+            terminal_font_size: 14,
+            terminal_line_height_percent: 120,
+            color_scheme: "dark",
+            text_brightness: 1.0,
+            semantic_highlighting: false,
+            terminal_compact_rendering: true,
+            terminal_row_render_cache: false,
+            focused_terminal_refresh_fps: -10,
+            unfocused_terminal_refresh_fps: 999,
+            terminal_semantic_colors: TerminalSemanticColorsInput {
+                link: "",
+                success: "",
+                info: "",
+                warning: "",
+                error: "",
+            },
+            bright_bold_text: true,
+            right_click_copy_or_paste: false,
+            copy_selection_on_select: false,
+            terminal_mouse_local_selection_priority: true,
+        },
+        terminal: TerminalSettingsInput {
+            scrollback_lines: 2_000,
+            default_columns: 120,
+            default_rows: 36,
+            local_shell: SYSTEM_DEFAULT_SHELL,
+            known_shells: &known_shells,
+            option_as_meta: false,
+        },
+        workspace: WorkspaceSettingsInput {
+            sidebar_width: 220,
+            tab_width: 172,
+            session_mask_character: "*",
+            collapsed_group_label_chars: 2,
+        },
+        shortcuts: ShortcutSettings::default(),
+        credential_storage: "system-keyring",
+        ui_language: "english",
+    });
+
+    assert_eq!(
+        settings.appearance.focused_terminal_refresh_fps,
+        MIN_TERMINAL_REFRESH_FPS
+    );
+    assert_eq!(
+        settings.appearance.unfocused_terminal_refresh_fps,
+        MAX_TERMINAL_REFRESH_FPS
     );
 }
 
@@ -352,6 +426,8 @@ fn legacy_appearance_migrates_into_versioned_settings() {
         DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
     assert!(!store.settings.appearance.terminal_semantic_highlighting);
+    assert!(store.settings.appearance.terminal_compact_rendering);
+    assert!(!store.settings.appearance.terminal_row_render_cache);
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
     assert!(!store.settings.appearance.copy_selection_on_select);
@@ -409,10 +485,12 @@ fn version_twenty_one_contrast_migrates_to_default_text_brightness() {
 }
 
 #[test]
-fn terminal_text_brightness_and_semantic_highlighting_round_trip() {
+fn terminal_render_preferences_round_trip() {
     let mut store = SessionStore::default();
     store.settings.appearance.terminal_text_brightness_percent = 115;
     store.settings.appearance.terminal_semantic_highlighting = true;
+    store.settings.appearance.terminal_compact_rendering = false;
+    store.settings.appearance.terminal_row_render_cache = true;
 
     let encoded = serde_json::to_string(&store).expect("settings should serialize");
     let decoded: SessionStore =
@@ -423,6 +501,8 @@ fn terminal_text_brightness_and_semantic_highlighting_round_trip() {
         115
     );
     assert!(decoded.settings.appearance.terminal_semantic_highlighting);
+    assert!(!decoded.settings.appearance.terminal_compact_rendering);
+    assert!(decoded.settings.appearance.terminal_row_render_cache);
 }
 
 #[test]
@@ -799,6 +879,10 @@ fn app_settings_clamp_all_persisted_dimensions() {
             color_scheme: "solarized-dark",
             text_brightness: -1.0,
             semantic_highlighting: true,
+            terminal_compact_rendering: false,
+            terminal_row_render_cache: true,
+            focused_terminal_refresh_fps: 60,
+            unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: "#17A8CD",
                 success: "#21CD8B",
@@ -870,6 +954,8 @@ fn app_settings_clamp_all_persisted_dimensions() {
         MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT
     );
     assert!(settings.appearance.terminal_semantic_highlighting);
+    assert!(!settings.appearance.terminal_compact_rendering);
+    assert!(settings.appearance.terminal_row_render_cache);
     assert!(!settings.appearance.bright_bold_text);
     assert!(settings.appearance.right_click_copy_or_paste);
     assert!(settings.appearance.copy_selection_on_select);

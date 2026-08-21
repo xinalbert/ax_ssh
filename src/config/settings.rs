@@ -3,17 +3,18 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
-    DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER, DEFAULT_SIDEBAR_WIDTH,
-    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY,
-    DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS,
-    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MAX_COLLAPSED_GROUP_LABEL_CHARS,
-    MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS,
-    MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS,
-    MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_ROWS,
+    DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
+    DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS,
+    DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
+    DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
+    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS,
+    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE,
+    MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS,
     MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES,
     MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
-    MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
-    SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
+    MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS,
+    MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
 };
 
 /// The language-selection policy for AxSSH's fully translated UI locales.
@@ -129,6 +130,10 @@ pub struct AppearanceSettingsInput<'a> {
     pub color_scheme: &'a str,
     pub text_brightness: f32,
     pub semantic_highlighting: bool,
+    pub terminal_compact_rendering: bool,
+    pub terminal_row_render_cache: bool,
+    pub focused_terminal_refresh_fps: i32,
+    pub unfocused_terminal_refresh_fps: i32,
     pub terminal_semantic_colors: TerminalSemanticColorsInput<'a>,
     pub bright_bold_text: bool,
     pub right_click_copy_or_paste: bool,
@@ -197,6 +202,14 @@ pub struct AppearanceSettings {
     pub terminal_text_brightness_percent: u16,
     #[serde(default)]
     pub terminal_semantic_highlighting: bool,
+    #[serde(default = "default_true")]
+    pub terminal_compact_rendering: bool,
+    #[serde(default)]
+    pub terminal_row_render_cache: bool,
+    #[serde(default = "default_focused_terminal_refresh_fps")]
+    pub focused_terminal_refresh_fps: u16,
+    #[serde(default = "default_unfocused_terminal_refresh_fps")]
+    pub unfocused_terminal_refresh_fps: u16,
     #[serde(default)]
     pub terminal_semantic_colors: TerminalSemanticColors,
     #[serde(default = "default_true")]
@@ -244,6 +257,16 @@ impl AppearanceSettings {
                 input.text_brightness,
             ),
             terminal_semantic_highlighting: input.semantic_highlighting,
+            terminal_compact_rendering: input.terminal_compact_rendering,
+            terminal_row_render_cache: input.terminal_row_render_cache,
+            focused_terminal_refresh_fps: normalize_terminal_refresh_fps(
+                input.focused_terminal_refresh_fps,
+                default_focused_terminal_refresh_fps,
+            ),
+            unfocused_terminal_refresh_fps: normalize_terminal_refresh_fps(
+                input.unfocused_terminal_refresh_fps,
+                default_unfocused_terminal_refresh_fps,
+            ),
             terminal_semantic_colors: TerminalSemanticColors::normalized(
                 input.terminal_semantic_colors,
             ),
@@ -270,6 +293,10 @@ impl AppearanceSettings {
             color_scheme: self.terminal_color_scheme.as_setting(),
             text_brightness: f32::from(self.terminal_text_brightness_percent) / 100.0,
             semantic_highlighting: self.terminal_semantic_highlighting,
+            terminal_compact_rendering: self.terminal_compact_rendering,
+            terminal_row_render_cache: self.terminal_row_render_cache,
+            focused_terminal_refresh_fps: i32::from(self.focused_terminal_refresh_fps),
+            unfocused_terminal_refresh_fps: i32::from(self.unfocused_terminal_refresh_fps),
             terminal_semantic_colors: TerminalSemanticColorsInput {
                 link: &self.terminal_semantic_colors.link,
                 success: &self.terminal_semantic_colors.success,
@@ -298,6 +325,10 @@ impl Default for AppearanceSettings {
             theme: ThemeSettings::default(),
             terminal_text_brightness_percent: default_terminal_text_brightness_percent(),
             terminal_semantic_highlighting: false,
+            terminal_compact_rendering: true,
+            terminal_row_render_cache: false,
+            focused_terminal_refresh_fps: default_focused_terminal_refresh_fps(),
+            unfocused_terminal_refresh_fps: default_unfocused_terminal_refresh_fps(),
             terminal_semantic_colors: TerminalSemanticColors::default(),
             bright_bold_text: true,
             right_click_copy_or_paste: false,
@@ -793,6 +824,24 @@ const fn default_terminal_line_height() -> u16 {
 
 const fn default_terminal_text_brightness_percent() -> u16 {
     DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT
+}
+
+const fn default_focused_terminal_refresh_fps() -> u16 {
+    DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS
+}
+
+const fn default_unfocused_terminal_refresh_fps() -> u16 {
+    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS
+}
+
+fn normalize_terminal_refresh_fps(value: i32, fallback: fn() -> u16) -> u16 {
+    value
+        .clamp(
+            i32::from(MIN_TERMINAL_REFRESH_FPS),
+            i32::from(MAX_TERMINAL_REFRESH_FPS),
+        )
+        .try_into()
+        .unwrap_or_else(|_| fallback())
 }
 
 fn normalize_terminal_text_brightness(value: f32) -> u16 {

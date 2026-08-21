@@ -163,6 +163,9 @@ msgstr "自定义深色配色"
 msgid "CUSTOM LIGHT PALETTE"
 msgstr "自定义浅色配色"
 
+msgid "Cache unchanged terminal rows"
+msgstr "缓存未变化的终端行"
+
 msgid "Cancel"
 msgstr "取消"
 
@@ -219,6 +222,9 @@ msgstr "折叠组标签长度"
 
 msgid "Color palette"
 msgstr "配色方案"
+
+msgid "Compact terminal rendering"
+msgstr "紧凑终端渲染"
 
 msgid "Connect"
 msgstr "连接"
@@ -406,6 +412,9 @@ msgstr "导出所选项快捷键"
 msgid "Export Selected to Clipboard"
 msgstr "将所选项导出到剪贴板"
 
+msgid "FPS"
+msgstr "FPS"
+
 msgid "Failed ({0})"
 msgstr "失败 ({0})"
 
@@ -423,6 +432,12 @@ msgstr "流控制"
 
 msgid "Focus rings, selection, and active indicators"
 msgstr "焦点环、选择和活动状态指示"
+
+msgid "Focused refresh rate"
+msgstr "聚焦刷新率"
+
+msgid "Focused terminal refresh rate"
+msgstr "聚焦终端刷新率"
 
 msgid "Follow system"
 msgstr "跟随系统"
@@ -763,6 +778,9 @@ msgstr "提供程序"
 msgid "RENDERING"
 msgstr "渲染"
 
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "减少终端绘制项并省略默认背景矩形"
+
 msgid "Refresh"
 msgstr "刷新"
 
@@ -825,6 +843,9 @@ msgstr "将工作区返回主窗口"
 
 msgid "Return workspace to main window"
 msgstr "将工作区返回主窗口"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "复用 GPU 行图层；可能增加图形内存"
 
 msgid "Review before sharing"
 msgstr "分享前请检查内容"
@@ -1063,9 +1084,6 @@ msgstr "终端默认设置"
 msgid "TYPOGRAPHY"
 msgstr "字体"
 
-msgid "Tab"
-msgstr "标签页"
-
 msgid "Telnet"
 msgstr "Telnet"
 
@@ -1117,6 +1135,9 @@ msgstr "终端文字亮度"
 msgid "Terminal text selection background"
 msgstr "终端文字选择背景"
 
+msgid "Terminal updates while the pane is focused"
+msgstr "终端窗格聚焦时的刷新帧率"
+
 msgid "Terminal warning highlight color"
 msgstr "终端警告高亮颜色"
 
@@ -1143,6 +1164,12 @@ msgstr "信任并继续"
 
 msgid "Trust new key"
 msgstr "信任新密钥"
+
+msgid "Unfocused refresh rate"
+msgstr "非聚焦刷新率"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "非聚焦终端刷新率"
 
 msgid "Unknown SSH host key"
 msgstr "未知 SSH 主机密钥"
@@ -1176,6 +1203,9 @@ msgstr "版本 {0}"
 
 msgid "View"
 msgstr "视图"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "其他窗格聚焦时可见终端的刷新帧率"
 
 msgid "WORKSPACE"
 msgstr "工作区"
