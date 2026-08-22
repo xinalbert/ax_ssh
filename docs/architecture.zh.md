@@ -680,6 +680,12 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 离开 Serial 模式或关闭编辑器会同时清空 descriptor 和 Slint 选项 model；代次检查会丢弃迟到
 的发现结果。
 
+## Runtime 与资源生命周期
+
+`src/app.rs` 在应用生命周期内创建一个 Tokio runtime，但 worker 池是显式有界的：按主机并行度使用 2 至 4 个异步 worker，最多 8 个 blocking worker，blocking 线程空闲 2 秒后允许退出。这样不会按逻辑 CPU 数使用 runtime 默认的异步线程数，也不会让短暂的文件、字体、图标或平台任务留下无界的 blocking 池。Session worker、SFTP transfer 和本地 PTY 线程仍由各自 Tab 或 worker 独占，并在应用退出前取消、join 或按超时终止。
+
+SFTP 图标预热只在需要时运行，每批最多 64 个唯一 key，进程内最多保留 128 项。关闭最后一个 SFTP Tab 会清除扩展图标、使排队代次失效；预热目标只保存 `AppState` 的弱引用，因此迟到任务不会延长状态生命周期。Rust 会丢弃缓存中的 RGBA buffer，但 provider、Slint image、Fontique collection、CoreAnimation surface 和 macOS allocator 仍可能保留进程级缓存。已注册的 Fontique 字体没有可靠的运行时卸载 API，不能把 RSS 立即下降当作契约。排查泄漏时，应在相同 Settings、Terminal、SFTP 打开/关闭流程后重复采集 `footprint`/`vmmap -summary`；单次 sample 或峰值不能证明泄漏。
+
 ## 日志生命周期
 
 `src/main.rs` 在创建 UI 前建立唯一的 `LoggingGuard`，并保持到 Slint 与 Tokio 生命周期

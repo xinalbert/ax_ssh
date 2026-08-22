@@ -113,10 +113,10 @@ pub(super) fn global_provider() -> Arc<FileIconProvider> {
         .clone()
 }
 
-pub(super) fn clear_global_cache() {
-    if let Some(provider) = GLOBAL_FILE_ICON_PROVIDER.get() {
-        provider.clear_cache();
-    }
+pub(super) fn clear_global_cache() -> usize {
+    GLOBAL_FILE_ICON_PROVIDER
+        .get()
+        .map_or(0, |provider| provider.clear_cache())
 }
 
 pub(super) fn prewarm_async(
@@ -210,9 +210,13 @@ impl FileIconProvider {
         report
     }
 
-    pub(super) fn clear_cache(&self) {
+    pub(super) fn clear_cache(&self) -> usize {
         if let Ok(mut cache) = self.cache.lock() {
+            let released = cache.extension_lru.len();
             *cache = IconCache::new(CacheIdentity::new("uninitialized"), &self.fallbacks);
+            released
+        } else {
+            0
         }
     }
 
@@ -645,7 +649,7 @@ mod tests {
             FileIconKey::Extension("json".to_owned()),
         ]);
 
-        provider.clear_cache();
+        assert_eq!(provider.clear_cache(), 2);
 
         assert_eq!(provider.cache_len(), 3);
         assert_eq!(

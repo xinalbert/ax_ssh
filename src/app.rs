@@ -18,7 +18,7 @@ use i_slint_core::platform::WindowEvent;
 use slint::TimerMode;
 use slint::platform::Clipboard;
 use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -113,6 +113,10 @@ slint::include_modules!();
 const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 
 const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
+const MIN_TOKIO_WORKER_THREADS: usize = 2;
+const MAX_TOKIO_WORKER_THREADS: usize = 4;
+const MAX_TOKIO_BLOCKING_THREADS: usize = 8;
+const TOKIO_BLOCKING_THREAD_KEEP_ALIVE: Duration = Duration::from_secs(2);
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
     let config_path = ConfigStore::default_path()?;
@@ -127,7 +131,15 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             None
         }
     };
-    let runtime = Runtime::new().context("failed to start Tokio runtime")?;
+    let tokio_worker_threads = tokio_worker_thread_count();
+    let runtime = build_tokio_runtime(tokio_worker_threads)
+        .context("failed to start bounded Tokio runtime")?;
+    info!(
+        worker_threads = tokio_worker_threads,
+        max_blocking_threads = MAX_TOKIO_BLOCKING_THREADS,
+        blocking_thread_keep_alive_ms = TOKIO_BLOCKING_THREAD_KEEP_ALIVE.as_millis(),
+        "Tokio runtime initialized with bounded worker pools"
+    );
     let initial_font_families = vec![sessions.settings.appearance.application_font_family.clone()];
     let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
     let initial_fonts =
@@ -343,6 +355,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
 
     clear_file_icon_cache();
     drop(ui);
+    info!("shutting down Tokio runtime");
     runtime.shutdown_timeout(Duration::from_secs(3));
     ui_result?;
     info!("AxSSH UI stopped");
@@ -359,6 +372,30 @@ fn select_slint_renderer(preference: RendererPreference) -> Result<()> {
     };
 
     selector.select().map_err(Into::into)
+}
+
+fn tokio_worker_thread_count() -> usize {
+    std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get())
+        .map_or(
+            MIN_TOKIO_WORKER_THREADS,
+            tokio_worker_thread_count_for_parallelism,
+        )
+}
+
+fn tokio_worker_thread_count_for_parallelism(parallelism: usize) -> usize {
+    parallelism.clamp(MIN_TOKIO_WORKER_THREADS, MAX_TOKIO_WORKER_THREADS)
+}
+
+fn build_tokio_runtime(worker_threads: usize) -> Result<Runtime> {
+    Builder::new_multi_thread()
+        .worker_threads(worker_threads)
+        .max_blocking_threads(MAX_TOKIO_BLOCKING_THREADS)
+        .thread_keep_alive(TOKIO_BLOCKING_THREAD_KEEP_ALIVE)
+        .thread_name("axssh-tokio")
+        .enable_all()
+        .build()
+        .context("failed to build Tokio runtime")
 }
 
 fn renderer_backend_name(preference: RendererPreference) -> &'static str {
@@ -1190,6 +1227,17 @@ mod support_tests {
                 "winit-software"
             }
         );
+    }
+
+    #[test]
+    fn tokio_worker_thread_count_is_bounded_and_has_a_minimum() {
+        assert_eq!(
+            super::MIN_TOKIO_WORKER_THREADS,
+            super::tokio_worker_thread_count_for_parallelism(1)
+        );
+        assert_eq!(2, super::tokio_worker_thread_count_for_parallelism(2));
+        assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(4));
+        assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(32));
     }
 
     #[cfg(target_os = "macos")]

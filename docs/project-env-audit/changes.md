@@ -556,3 +556,11 @@
 - 环境变化：无。
 - 验证结果：两个 YAML、现有 `2026-08-17` tag/metadata、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、30 份非参考子模块 Markdown 相对链接和差异检查通过。tracker validator 只保留 39 条既有历史时间字段错误，本轮记录没有新增 validator 报告。
 - 风险/待办：下一枚有效 annotated 日期 tag 仍须在 GitHub-hosted Windows、Linux x86_64/aarch64、macOS arm64/x86_64 以及 GitHub Release 权限下执行验证。
+
+## 2026-08-22 内存与线程生命周期优化环境验证
+
+- 日期：2026-08-22
+- 变化摘要：应用 runtime 改为显式 2-4 个 Tokio async worker、最多 8 个 blocking worker，blocking 线程空闲 2 秒后允许退出；SFTP 图标预热目标改为 `Weak<AppState>`，扩展图标清理返回释放数量。Fontique/Slint、CoreAnimation 和 allocator 的进程级缓存边界保持不变。
+- 受影响文件：`src/app.rs`、`src/app/file_icons.rs`、`src/app/view/sftp.rs`、`docs/{architecture,architecture.zh}.md` 和 `docs/project-{implementation-tracker,env-audit}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1 和 Cargo.lock；未新增 crate、未联网、未修改 SSH trust/凭据/transport。
+- 验证结果：runtime/file-icon 定向测试、`cargo check --locked --offline`、`cargo fmt --all -- --check`、严格 Clippy 和完整 `cargo test --locked --offline`（库 199、应用 193、Doc tests 0）通过；重复 `footprint`/`vmmap -summary` 与目标平台 GUI 资源验收仍需用户执行。

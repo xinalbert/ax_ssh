@@ -109,7 +109,7 @@ pub(in crate::app) fn prewarm_file_icons(
         }
         pending.target = Some(IconPrewarmTarget {
             ui: ui.clone(),
-            state: Arc::clone(state),
+            state: Arc::downgrade(state),
         });
         if pending.running {
             false
@@ -130,7 +130,7 @@ pub(in crate::app) fn prewarm_file_icons(
 
 struct IconPrewarmTarget {
     ui: slint::Weak<AppWindow>,
-    state: Arc<Mutex<AppState>>,
+    state: std::sync::Weak<Mutex<AppState>>,
 }
 
 struct IconPrewarmCoordinator {
@@ -184,7 +184,7 @@ async fn run_icon_prewarm_worker(
                 keys,
                 pending.target.as_ref().map(|target| IconPrewarmTarget {
                     ui: target.ui.clone(),
-                    state: Arc::clone(&target.state),
+                    state: target.state.clone(),
                 }),
                 pending.generation,
             )
@@ -201,8 +201,10 @@ async fn run_icon_prewarm_worker(
             clear_global_cache();
             continue;
         }
-        if let Some(target) = target {
-            dispatch_active_snapshot(&target.ui, &target.state);
+        if let Some(target) = target
+            && let Some(state) = target.state.upgrade()
+        {
+            dispatch_active_snapshot(&target.ui, &state);
         }
     }
 }
@@ -216,7 +218,11 @@ pub(in crate::app) fn clear_file_icon_cache() {
         pending.target = None;
         pending.generation = pending.generation.wrapping_add(1);
     }
-    clear_global_cache();
+    let released = clear_global_cache();
+    tracing::debug!(
+        released_extension_icons = released,
+        "cleared SFTP file-icon cache"
+    );
 }
 
 pub(in crate::app) fn sftp_icon_keys(entries: &[SftpEntry]) -> Vec<FileIconKey> {

@@ -1,5 +1,15 @@
 # 项目环境当前态
 
+## 2026-08-22 内存与线程生命周期优化施工预检
+
+- 项目边界：`src/app.rs`、`src/app/file_icons.rs`、`src/app/view/sftp.rs`、双语架构、环境审计和项目跟踪；不修改 Slint/Cargo 依赖版本、SSH trust、凭据、transport 或 `third_package/axshell`。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1，现有 runtime 由 `Runtime::new()` 创建，文件图标 provider 为进程级 `OnceLock`，字体注册进入共享 Fontique collection 后没有可靠卸载 API。
+- 运行环境：本机 Rust/Cargo 1.97.1、rustfmt 1.9.0、Clippy 0.1.97、Python 3.14.3 可用；Cargo.lock 可离线解析，未联网。
+- 测试环境：本轮施工前已确认完整命令为 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline`、翻译/Markdown/tracker 检查和 `git diff --check`。
+- 可重复资源复核：macOS 目标平台应在相同负载下记录启动、打开/关闭 Settings、Terminal、SFTP 后的 `footprint -p <pid>`、`vmmap -summary <pid>` 和线程数；至少重复三轮并对照当前 footprint、peak、CoreAnimation、MALLOC_LARGE 与 Tokio/PTY 线程状态。
+- 环境变化检查：是；应用拥有的 Tokio worker/blocking 线程上限与空闲回收策略将变化，平台 PTY/Fontique/CoreAnimation/allocator 生命周期保持现状并在文档中标注边界。
+- 开工判定：允许开工。
+
 ## 2026-08-22 原生窗口激活刷新环境验证
 
 - 项目边界：`Cargo.toml`、`Cargo.lock`、`src/app.rs`、`src/app/{macos_window,window_router}.rs`、`src/app/window_router/tests.rs`、双语架构/usage 和项目跟踪；只增加 Slint/AppKit 窗口激活到终端呈现路由的状态同步，不改变 SSH trust、凭据、worker 或 transport。
@@ -198,6 +208,7 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-08-22 19:10 +0800：内存/线程生命周期实现和完整离线 Cargo 门禁已完成；目标平台重复 `footprint`/`vmmap -summary` 采样、GUI 和真实 transport 仍待用户验收。
 - 2026-08-17 14:28 +0800：Release 现在仅由外部推送的 annotated 日期 tag 直接启动；Create/Retry、tag CI dispatch/wait 与 GitHub Script action 已删除。两个 YAML、现有 tag/元数据、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、Markdown 相对链接和差异检查通过；tracker validator 仅保留 39 条既有历史时间字段错误。下一枚新 tag 仍需 GitHub-hosted 平台/发布验收。
 - 2026-08-15 17:38 CST：SFTP 远端文件行右键菜单继续使用 Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1 和既有 `FlatActionMenu`/选择/下载/删除 callbacks；未新增 crate、配置 schema、工具链、CI、worker、SSH trust、凭据或本地文件删除能力。fmt、locked/offline check、严格 Clippy、完整测试（库 179、应用 172、Doc tests 0）、413 条中文目录、tracker、Markdown 相对链接和差异检查通过；真实右键菜单视觉与手感留用户验收。
 - 2026-08-12 09:00 CST

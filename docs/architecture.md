@@ -1068,6 +1068,29 @@ device handles and traffic never are. Leaving Serial mode or closing the editor
 clears both descriptors and the Slint option model; generation checks discard
 late discovery results.
 
+## Runtime and resource lifecycle
+
+`src/app.rs` builds one Tokio runtime for the application lifetime, but its
+worker pools are explicit and bounded: two to four asynchronous workers based
+on host parallelism, at most eight blocking workers, and a two-second idle
+keep-alive for blocking threads. This avoids the default runtime creating one
+async worker per logical CPU and prevents short-lived filesystem, font, icon,
+or platform tasks from leaving an unbounded blocking pool behind. Session
+workers, SFTP transfers, and local PTY threads remain owned by their Tab or
+worker and are cancelled, joined, or timed out before application shutdown.
+
+SFTP icon prewarming is demand-driven and capped at 64 unique keys per batch;
+the process-local provider retains at most 128 entries. Closing the final SFTP
+Tab clears extension icons, invalidates queued generations, and the prewarm
+target keeps only a weak `AppState` reference so a stale task cannot extend the
+state lifetime. Rust drops the cache's resolved RGBA buffers, but the provider,
+Slint image resources, Fontique collection, CoreAnimation surfaces, and the
+macOS allocator may retain process-level caches. Registered Fontique families
+have no reliable runtime unload API, so an immediate RSS decrease is not a
+contract. Compare repeated `footprint`/`vmmap -summary` samples after opening
+and closing the same Settings, Terminal, and SFTP surfaces when investigating
+leaks; a single sample or peak value is not proof of a leak.
+
 ## Logging lifecycle
 
 `src/main.rs` creates exactly one `LoggingGuard` before constructing the UI and
