@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 use super::terminal_presentation::TerminalPresentationPolicy;
 use super::*;
 use ax_ssh::config::{PaneNodeSnapshot, WorkspaceSnapshot, WorkspaceWindowSnapshot};
+use raw_window_handle::HasWindowHandle as _;
 use tokio::sync::watch;
 
 #[derive(Clone)]
@@ -20,6 +21,8 @@ struct WindowRouterState {
 struct WindowRoute {
     ui: slint::Weak<AppWindow>,
     transfer: Option<WorkspaceTransfer>,
+    /// Native window activation is runtime-only and is never persisted.
+    window_active: bool,
     /// The stable identity shown in the workspace Tab strip.
     active_tab_id: Option<Uuid>,
     pane_trees: HashMap<Uuid, PaneTree>,
@@ -63,6 +66,7 @@ impl WindowRouter {
             WindowRoute {
                 ui: main_ui,
                 transfer: None,
+                window_active: true,
                 active_tab_id: None,
                 pane_trees: HashMap::new(),
             },
@@ -168,6 +172,7 @@ impl WindowRouter {
                     active_tab_id: transfer.active_tab_id,
                     ui,
                     transfer: Some(transfer),
+                    window_active: true,
                     pane_trees,
                 },
             );
@@ -196,6 +201,76 @@ impl WindowRouter {
                 route.active_tab_id = Some(tab_id);
             }
             changed = true;
+        }
+        if changed {
+            self.notify_terminal_presentation_change();
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_window_active(&self, window_id: Uuid, active: bool) {
+        let mut changed = false;
+        if let Ok(mut router) = self.inner.lock()
+            && let Some(route) = router.routes.get_mut(&window_id)
+            && route.window_active != active
+        {
+            route.window_active = active;
+            changed = true;
+        }
+        if changed {
+            self.notify_terminal_presentation_change();
+        }
+    }
+
+    pub(super) fn set_window_active_for_adapter(
+        &self,
+        adapter: &Rc<dyn slint::platform::WindowAdapter>,
+        active: bool,
+    ) {
+        let Ok(adapter_handle) = adapter.window_handle_06() else {
+            return;
+        };
+        let adapter_handle = adapter_handle.as_raw();
+        let mut changed = false;
+        if let Ok(mut router) = self.inner.lock() {
+            for route in router.routes.values_mut() {
+                let Some(ui) = route.ui.upgrade() else {
+                    continue;
+                };
+                let handle = ui.window().window_handle();
+                let Ok(window_handle) = handle.window_handle() else {
+                    continue;
+                };
+                if window_handle.as_raw() == adapter_handle && route.window_active != active {
+                    route.window_active = active;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if changed {
+            self.notify_terminal_presentation_change();
+        }
+    }
+
+    /// Refresh native activation state from AppKit on the UI thread. The event
+    /// hook is the fast path, while this poll covers macOS focus transitions
+    /// that do not deliver a matching Slint activation event consistently.
+    #[cfg(target_os = "macos")]
+    pub(super) fn sync_window_activation_from_native(&self) {
+        let mut changed = false;
+        if let Ok(mut router) = self.inner.lock() {
+            for route in router.routes.values_mut() {
+                let Some(ui) = route.ui.upgrade() else {
+                    continue;
+                };
+                let active =
+                    super::macos_window::is_key_window(ui.window()).unwrap_or(route.window_active);
+                if route.window_active != active {
+                    route.window_active = active;
+                    changed = true;
+                }
+            }
         }
         if changed {
             self.notify_terminal_presentation_change();
@@ -785,7 +860,7 @@ impl WindowRouter {
                     if !tree.contains(tab_id) {
                         continue;
                     }
-                    if tree.focused_tab_id() == tab_id {
+                    if route.window_active && tree.focused_tab_id() == tab_id {
                         return terminal_presentation::TerminalPresentationMode::Focused;
                     }
                     mode = terminal_presentation::TerminalPresentationMode::Unfocused;

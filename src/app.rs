@@ -12,6 +12,10 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use i_slint_core::context::set_window_event_hook;
+use i_slint_core::platform::WindowEvent;
+#[cfg(target_os = "macos")]
+use slint::TimerMode;
 use slint::platform::Clipboard;
 use slint::{Color, ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
@@ -134,6 +138,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let ui = AppWindow::new().context("failed to create Slint window")?;
     let window_router = WindowRouter::new(ui.as_weak());
     let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
+    install_window_activation_hook(&window_router)?;
     let detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>> =
         Rc::new(RefCell::new(HashMap::new()));
 
@@ -281,6 +286,15 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             &detached_windows,
         );
     }
+    #[cfg(target_os = "macos")]
+    let _window_activation_poll = {
+        let timer = slint::Timer::default();
+        let router_for_activation_poll = window_router.clone();
+        timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
+            router_for_activation_poll.sync_window_activation_from_native();
+        });
+        timer
+    };
     #[cfg(target_os = "macos")]
     {
         let ui_for_window = ui.as_weak();
@@ -693,6 +707,17 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         window_id,
         detached_windows,
     );
+}
+
+fn install_window_activation_hook(window_router: &WindowRouter) -> Result<()> {
+    let router = window_router.clone();
+    set_window_event_hook(Some(Box::new(move |adapter, event, _dispatch_result| {
+        if let WindowEvent::WindowActiveChanged(active) = event {
+            router.set_window_active_for_adapter(adapter, *active);
+        }
+    })))
+    .map(|_| ())
+    .context("failed to install Slint window activation hook")
 }
 
 fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -> Result<()> {

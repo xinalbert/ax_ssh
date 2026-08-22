@@ -134,6 +134,30 @@ fn inactive_workspace_terminal_is_hidden_from_presentation() {
 }
 
 #[test]
+fn inactive_native_window_uses_the_visible_unfocused_refresh_mode() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let tab_id = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, tab_id, &mut app));
+    assert_eq!(
+        router.terminal_presentation_mode(tab_id),
+        terminal_presentation::TerminalPresentationMode::Focused
+    );
+
+    router.set_window_active(MAIN_WINDOW_ID, false);
+    assert_eq!(
+        router.terminal_presentation_mode(tab_id),
+        terminal_presentation::TerminalPresentationMode::Unfocused
+    );
+
+    router.set_window_active(MAIN_WINDOW_ID, true);
+    assert_eq!(
+        router.terminal_presentation_mode(tab_id),
+        terminal_presentation::TerminalPresentationMode::Focused
+    );
+}
+
+#[test]
 fn closing_a_child_pane_collapses_only_that_session() {
     let router = test_router();
     let mut app = router_test_state();

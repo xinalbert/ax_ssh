@@ -441,6 +441,10 @@ fn with_native_window<T>(
     operation(&native_window)
 }
 
+pub(super) fn is_key_window(window: &slint::Window) -> Result<bool> {
+    with_native_window(window, |native_window| Ok(native_window.isKeyWindow()))
+}
+
 fn bind_menu_item(item: &NSMenuItem, target: &NativeMenuTarget, action: Sel) {
     // SAFETY: The selectors passed here are implemented by NativeMenuTarget.
     // NSMenuItem keeps a weak target, so representedObject retains the same

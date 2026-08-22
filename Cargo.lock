@@ -526,6 +526,7 @@ dependencies = [
  "fontdb",
  "freedesktop-icons",
  "hmac 0.13.0",
+ "i-slint-core",
  "image",
  "keyring",
  "libmudtelnet-rs",
