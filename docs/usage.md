@@ -484,10 +484,17 @@ and are persisted when the Settings tab closes.
 section set terminal presentation caps in frames per second. They accept 1-120
 FPS and default to 60 FPS for the focused pane and 4 FPS for a visible pane that
 is not focused. The focused strategy still adapts sustained output through its
-16/33/50 ms stages; a lower configured cap limits those stages. Hidden tabs do
+16/33/50 ms stages; a lower configured cap limits those stages. When an AxSSH
+window loses native activation, all visible panes in that window use the
+Unfocused refresh cap, including the pane that was last focused. Hidden tabs do
 not publish terminal frames, and parser responses, errors, disconnects, and
 shutdown remain immediate. Changes preview immediately and are persisted when
 the Settings tab closes.
+
+**Blink terminal cursor** in the same Rendering section is enabled by default.
+Disable it to keep the focused terminal cursor continuously visible; this does
+not change terminal cursor visibility, IME input, or selection behavior. The
+choice previews immediately and is persisted when the Settings tab closes.
 
 **Settings > Terminal** independently controls the Terminal font, font size,
 line height, text brightness, bright ANSI colors for bold text,

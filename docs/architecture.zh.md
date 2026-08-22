@@ -156,7 +156,12 @@ UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 sna
 60 FPS 和 4 FPS。这些值是上限：聚焦持续输出仍按 16/33/50 ms 自适应，设置值可以进一步降低频率；可见未聚焦
 split pane 按设置后的周期最多呈现一次，隐藏 Tab 不设置呈现 deadline。Settings 预览和保存会通过
 `WindowRouter` 发布新策略，并立即唤醒仍有 pending 输出的 monitor。路由 revision 只唤醒仍有 pending 输出的
-monitor，使焦点或 Tab 变化立即采用新策略且无需轮询；没有脏输出时没有 timer 唤醒。parser、协议应答、worker
+monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。原生窗口激活状态只在运行时维护：Slint
+`WindowActiveChanged` 事件钩子通过 native window handle 将事件精确匹配到对应 `AppWindow` 路由，并通过同一路由
+revision 发布变化；macOS UI 线程另以 100ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
+时遗漏激活变化。窗口失去激活时，该窗口内所有可见终端
+（包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限；隐藏终端仍没有呈现 deadline。没有脏输出时没有
+timer 唤醒。parser、协议应答、worker
 错误、断开和 shutdown 仍立即处理；SSH 会在合并呈现批次中保留最早的 worker 接收时间。
 对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
@@ -764,7 +769,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `terminal_compact_rendering` 和默认关闭的 `terminal_row_render_cache`。前者移除多余的逐 run
     Slint item 和默认背景矩形；后者启用 renderer 持有的静态行图层，并可能增加图形内存。旧文件缺失时采用这两个默认值。schema 版本 26 增加独立的聚焦和可见未聚焦终端刷新上限
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
-    缺失或无效值会限制到该范围。schema 版本 24 增加
+    缺失或无效值会限制到该范围。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，

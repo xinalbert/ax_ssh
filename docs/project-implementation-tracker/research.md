@@ -1,5 +1,14 @@
 # 项目研究记录
 
+## 2026-08-22 Slint 脏区域/脏行刷新上游状态
+
+- 检索问题：Slint 对单行 model 更新、partial rendering 和多矩形 dirty region 的处理是否仍有已知问题，相关修复是否已合并，以及当前锁定版本是否包含修复。
+- 检索原因：AxSSH 依赖 Slint 1.17.1，终端输出已在应用层按脏 terminal 和稳定行 model 做增量更新；需要确认上游 renderer 是否仍会扩大脏区域，避免把应用层优化误判为 Slint 已支持按行提交。
+- 来源列表：Issue/PR [#2143](https://github.com/slint-ui/slint/issues/2143)、PR [#4268](https://github.com/slint-ui/slint/pull/4268)、PR [#9467](https://github.com/slint-ui/slint/pull/9467)、PR [#9743](https://github.com/slint-ui/slint/pull/9743)、PR [#10725](https://github.com/slint-ui/slint/pull/10725)、PR [#11441](https://github.com/slint-ui/slint/pull/11441)、Issue [#12752](https://github.com/slint-ui/slint/issues/12752)、已合并 PR [#12758](https://github.com/slint-ui/slint/pull/12758)、仍开放 PR [#12656](https://github.com/slint-ui/slint/pull/12656)、仍开放 PR [#12806](https://github.com/slint-ui/slint/pull/12806)、Slint [v1.17.1](https://github.com/slint-ui/slint/releases/tag/v1.17.1)。
+- 关键结论：#2143（`set_row_data` 单行更新导致整个布局变脏）已于 2024-02-06 关闭，维护者表示现状已不再复现并指向 partial-renderer 回归测试，但没有一个可单独追踪的修复 PR；#4268、#9467、#9743、#10725、#11441 分别改善 model 依赖追踪、几何/渲染 dirty 分离、可见性、不可见项几何和变换裁剪。更直接的近期 damage bug 是 #12752：多块脏矩形被错误地以 bounding box 提交；其修复 PR #12758 已于 2026-08-03 合并，merge commit 为 `9ea33fdd4c091da7bc670f725f8f5fbaa95c858f`，实际修复 commit 为 `33033ceb103483d4a030a97417a1d371db5809b8`，改为提交 `PhysicalRegion::iter()` 的实际矩形。该修复解决 stale gap，不等于 macOS software renderer 获得按行/按矩形的高效呈现。#12656（对齐 dirty region）和 #12806（model predicate 依赖 O(1)）截至检索时仍未合并。
+- 对实施计划的影响：继续保留 AxSSH 自有的 dirty terminal UUID、稳定 nested `VecModel` identity、行 revision 和呈现节流；不能把 Slint #12758 当作 macOS software surface 的整帧成本修复。升级 Slint 前必须先确认 release/changelog 是否包含 #12758，再在目标 renderer 上复测实际 damage 行为。
+- 未解决问题：#12758 合并时点晚于 v1.17.1（2026-07-07），当前锁定 v1.17.1 的 `internal/backends/winit/renderer/sw.rs` 仍使用 `bounding_box_size()`；需要在后续 Slint patch/nightly 发布后重新检查源码或锁定 commit，并在 macOS GPU/software 与 Linux Wayland 分别验证。下次复查可用 `curl` 查询 PR `merged_at`、release tag 和 `raw.githubusercontent.com/slint-ui/slint/<ref>/internal/backends/winit/renderer/sw.rs` 是否已改为 `region.iter()`。
+
 ## 2026-08-14 终端纵向扩容与 scrollback 语义
 
 - 检索问题：普通 shell 终端在纵向放大、光标位于原底行且没有可恢复历史时，新增的空行应位于顶部还是底部？

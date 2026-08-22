@@ -225,8 +225,16 @@ output, while the configured FPS can lower it further. A visible-unfocused split
 pane presents at most once per configured interval, while a hidden Tab has no
 presentation deadline. Settings preview and save publish the new policy through
 `WindowRouter`, waking monitors with pending output immediately. Route revisions
-wake only monitors with pending output, so a focus or Tab change applies the new
-policy without polling. A monitor with no dirty output has no timer wakeup.
+wake only monitors with pending output, so a pane focus or Tab change applies the
+new policy without polling. Native window activation is runtime-only: the
+Slint `WindowActiveChanged` event hook matches each event's native window handle
+to its `AppWindow` route and publishes changes through the same route revision.
+On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 100 ms
+as a fallback when a platform activation event or native handle is unavailable.
+While a window is inactive, every
+visible terminal in that window uses the configured visible-unfocused FPS cap,
+including the pane that was last focused; hidden terminals still have no
+presentation deadline. A monitor with no dirty output has no timer wakeup.
 Parsing, protocol responses, worker errors, disconnect, and shutdown still run
 immediately; SSH retains the earliest worker receive timestamp across a
 coalesced presentation batch.
@@ -1204,7 +1212,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     rectangles; the latter enables renderer-owned static row layers and can increase
     graphics memory. Schema version 26 adds independent focused and visible-unfocused terminal refresh caps as
     `focused_terminal_refresh_fps` and `unfocused_terminal_refresh_fps`, stored as 1-120 FPS with defaults of 60 and 4;
-    missing or invalid values are clamped to that range. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
+    missing or invalid values are clamped to that range. The appearance field
+    `terminal_cursor_blink` is default-enabled and remains backward-compatible
+    when absent; disabling it keeps the focused cursor visible while leaving
+    terminal/IME cursor state unchanged. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
     an active renderer. Schema version 23 adds the default-enabled

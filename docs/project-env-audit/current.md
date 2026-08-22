@@ -1,5 +1,23 @@
 # 项目环境当前态
 
+## 2026-08-22 原生窗口激活刷新环境验证
+
+- 项目边界：`Cargo.toml`、`Cargo.lock`、`src/app.rs`、`src/app/{macos_window,window_router}.rs`、`src/app/window_router/tests.rs`、双语架构/usage 和项目跟踪；只增加 Slint/AppKit 窗口激活到终端呈现路由的状态同步，不改变 SSH trust、凭据、worker 或 transport。
+- 环境记忆状态：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1；`WindowActiveChanged` 事件钩子保留为快速路径，macOS 另以 `NSWindow.isKeyWindow()` 100ms UI 轮询兜底，`raw-window-handle 0.6.2` 已是现有依赖。
+- 运行环境：本机 Rust/Cargo 1.97.1、rustfmt 1.9.0、Clippy 0.1.97、Python 3.14.3 可用；Cargo.lock 通过 offline 解析更新，未联网。
+- 测试环境：窗口路由定向测试 1 项通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 199、应用 192、Doc tests 0）、431 条翻译、46 个仓库 Markdown 相对链接和 `git diff --check` 均通过。tracker validator 仍仅报告 5 条既有历史格式问题。
+- 环境变化检查：是；增加 macOS AppKit 激活状态读取和 UI 定时器兜底，但不改变 renderer、工具链、配置 schema、运行时安全边界或平台构建矩阵。
+- 开工判定：实现和离线门禁已完成；主窗口、detached 窗口及跨应用切换的真实激活事件和低帧率视觉仍待用户在目标平台人工验收。
+
+## 2026-08-22 Terminal 光标闪烁设置环境验证
+
+- 项目边界：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings}.rs`、`ui/{app,settings,settings/appearance,workspace-shell,terminal-pane,components/terminal-grid}.slint`、翻译、双语 usage/architecture 和项目跟踪；不修改 Cargo 依赖、锁文件、Rust/Slint 版本、SSH trust、凭据或 transport。
+- 环境记忆状态：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo.lock 和既有 Settings 长 callback；`terminal_cursor_blink` 通过 serde default 向后兼容，不需要 schema bump。
+- 运行环境：本机 Rust/Cargo 1.97.1、rustfmt 1.9.0、Clippy 0.1.97、Python 3.14.3 可用；无新增依赖或工具链。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 199、应用 191、Doc tests 0）、定向 config/app 测试、中文 catalog 构建/检查和 `git diff --check` 均通过；tracker validator 仅报告既有历史格式问题。
+- 环境变化检查：否；仅增加 Appearance 设置和 Slint 光标呈现逻辑，不改变运行时边界或平台依赖。
+- 开工判定：实现已完成；目标平台 GUI 验收仍待用户确认。
+
 ## 2026-08-17 直接日期 Tag 发布环境预检
 
 - 项目边界：`.github/workflows/{ci,release}.yml`、删除 `create-dated-release.yml` 与 `retry-existing-release.yml`、发布双语说明、`README.md` 及项目跟踪；不修改 Rust/Slint 运行时、SSH trust、凭据、依赖、锁文件、缓存键或 Release build matrix。

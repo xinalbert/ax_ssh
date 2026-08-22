@@ -42,6 +42,9 @@
 | PERF17 | completed | 双语契约、翻译、完整离线门禁和新 release A/B 候选 | fmt、check、Clippy、test、translation、Markdown/tracker、release build、`git diff --check` | 不升级 renderer 或引入参考工程耦合。 |
 | PERF18 | completed | 把两个终端渲染性能开关从 Terminal 页移到 Appearance 页 RENDERING 分组 | Slint 编译、Settings 搜索路由回归、完整 Cargo 门禁、翻译/链接/`git diff --check` | 配置 schema、字段名、默认值和持久化不变；只调整展示分组与搜索归属。 |
 | PERF19 | completed | 将聚焦/可见未聚焦终端刷新周期改为可配置 FPS，并接入设置预览、持久化和热更新 | FPS 归一化/serde、Slint callback、policy watch、四协议呈现状态机和完整门禁 | 范围 1-120 FPS；默认聚焦 60、未聚焦 4；聚焦 16/33/50 ms 自适应仍作为上限策略。 |
+| CURSOR1 | completed | 可配置 Terminal 光标闪烁开关、Settings 预览/持久化和默认兼容 | config serde、Slint 编译、定向测试、完整 Cargo 门禁 | 默认开启；关闭后光标保持显示，不影响输入/IME |
+| FOCUS1 | completed | 原生窗口失焦时将所有可见终端切换到 Unfocused FPS 上限，重新激活后恢复 pane 聚焦策略 | WindowActiveChanged、AppKit 激活同步、WindowRouter 路由回归、Slint/Cargo 门禁和双语契约 | 激活状态只在运行时维护；隐藏 Tab 仍不刷新，parser/协议应答/错误/断开/shutdown 不延迟 |
+| FOCUS4 | completed | 修正 macOS 原生窗口激活状态同步，增加 `NSWindow.isKeyWindow()` 100ms UI 轮询兜底 | macOS AppKit bridge、WindowRouter 路由回归、Cargo/Slint 门禁 | 事件钩子保留为快速路径；不改变 parser、协议应答或终止路径 |
 
 ## 已完成
 
@@ -71,11 +74,13 @@
 - 已生成可配置渲染优化的 ARM64 release 候选（36,492,784 bytes，inode `16358516`，SHA-256 `ca1cffe72761baa1c481e9601ff8e07b6f18d5c7f749eaa5c910ad2bcc9a09b6`，Mach-O UUID `8ECE3718-6E3D-370B-94F5-193A455BE533`）。检查时没有运行中的 AxSSH 进程，下一轮可直接启动该候选。
 - 已将 `terminal_compact_rendering` 与 `terminal_row_render_cache` 两个开关从 Settings > Terminal 移到 Settings > Appearance 的 RENDERING 分组，与 Renderer 选择同区；Settings 搜索目录和双语 usage 文档同步改为 Appearance 归属，配置字段与默认值不变。
 - 已将聚焦与可见未聚焦终端呈现周期改为 `focused_terminal_refresh_fps` / `unfocused_terminal_refresh_fps`，schema v26 默认分别为 60/4 FPS，范围限制为 1-120；Appearance > Rendering 使用 SpinBox，Settings preview/save 同步所有窗口并通过 `WindowRouter` policy watch 立即唤醒 pending monitor，聚焦连续输出的 16/33/50 ms 自适应仍保留。
+- 已新增默认开启的 `terminal_cursor_blink` Appearance 设置，贯通 serde、Settings 预览/保存、主窗口与 detached 窗口；关闭后停止光标闪烁 Timer 并保持光标显示，重新开启时立即恢复可见，不影响终端 cursor visibility、IME 或选区。
+- 已将原生窗口激活纳入终端呈现路由：Slint `WindowActiveChanged` 事件作为快速路径，macOS UI 线程每 100ms 读取每个 `NSWindow.isKeyWindow()` 兜底，并通过 `WindowRouter` route revision 唤醒 pending monitor；窗口失焦时该窗口所有可见 pane（包括最后保持焦点的 pane）使用 `unfocused_terminal_refresh_fps`，重新激活后恢复 focused/unfocused pane 分类，隐藏终端和 parser/协议即时路径不变。
 
 ## 验证
 
-- 已完成：sample/环境基线、PERF2-PERF6 focused 回归、PERF8 debug 结构性对照、PERF9 release 10 秒 sample/CPU meter、PERF10 33 ms paused-time 回归、PERF11 software 短样本归因、双策略状态机与四协议接线、紧凑 span/配置 round-trip/Settings 搜索/nested model identity 定向测试；本轮 FPS 配置的定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 191、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（429 条翻译）和 `git diff --check` 均已通过。tracker validator 可执行，但报告 45 条既有旧历史/research 格式问题；本轮新增条目未增加报错。
-- 未完成：同一新 release 的旧 item 树/GPU 紧凑/GPU 紧凑+行缓存/Software 紧凑 10 秒 sample/CPU meter，以及目标平台 GUI/Local/SSH/Telnet/Serial 验收。
+- 已完成：sample/环境基线、PERF2-PERF6 focused 回归、PERF8 debug 结构性对照、PERF9 release 10 秒 sample/CPU meter、PERF10 33 ms paused-time 回归、PERF11 software 短样本归因、双策略状态机与四协议接线、紧凑 span/配置 round-trip/Settings 搜索/nested model identity 定向测试、FOCUS1/FOCUS4 原生窗口激活路由回归；本轮 FPS 配置的定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 192、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（431 条翻译）、46 个仓库 Markdown 相对链接和 `git diff --check` 均已通过。tracker validator 仅报告既有历史格式问题，本轮新增记录未新增报错。
+- 未完成：目标平台 GUI 的真实闪烁/常显体验验收；既有 PERF14 release A/B 及 Local/SSH/Telnet/Serial 验收仍待用户执行。
 
 ## 风险与阻塞
 
@@ -96,4 +101,4 @@
 
 ## 最后更新时间
 
-- 2026-08-21 16:40 +0800
+- 2026-08-22 17:25 +0800

@@ -1,5 +1,23 @@
 # 项目环境变化记录
 
+## 2026-08-22 原生窗口激活刷新环境验证
+
+- 日期：2026-08-22
+- 变化摘要：保留锁定 `i-slint-core 1.17.1` 的 `WindowActiveChanged` hook 作为快速路径，并增加 macOS UI 线程每 100ms 读取 `NSWindow.isKeyWindow()` 的兜底；窗口失焦时将该窗口可见终端切换到 `unfocused_terminal_refresh_fps`，重新激活后恢复 pane focused/unfocused 策略。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`src/app.rs`、`src/app/{macos_window,window_router}.rs`、`src/app/window_router/tests.rs`、双语架构/usage 和项目跟踪。
+- 更新后的命令或环境：仍使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo locked/offline 门禁；`raw-window-handle 0.6.2` 已存在，AppKit 读取复用既有 `objc2-app-kit` 依赖。
+- 验证结果：窗口路由定向测试 1 项通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 199、应用 192、Doc tests 0）、431 条翻译、46 个仓库 Markdown 相对链接和 `git diff --check` 通过；tracker validator 仍仅报告 5 条既有历史格式问题。未联网、未使用 multi-agent、未自行截图。
+- 风险/待办：事件钩子仍依赖 Slint backend，但 macOS 已有 `isKeyWindow()` 轮询兜底；主窗口、detached 窗口及跨应用切换仍需用户在目标平台人工确认低帧率和恢复 focused FPS。
+
+## 2026-08-22 Terminal 光标闪烁设置环境验证
+
+- 日期：2026-08-22
+- 变化摘要：新增默认开启的 `terminal_cursor_blink` 外观设置，Settings > Appearance > Rendering 可预览和持久化；关闭时停止 UI 闪烁 Timer 并保持光标显示。
+- 受影响文件：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings}.rs`、`ui/{app,settings,settings/appearance,workspace-shell,terminal-pane,components/terminal-grid}.slint`、翻译、双语 usage/architecture 和项目跟踪。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo.lock、既有 Cargo locked/offline 门禁和 Python 翻译脚本；未新增依赖或工具链。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 199、应用 191、Doc tests 0）、`cargo test --lib config`（54 项）、`cargo test --bin ax_ssh`（191 项）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（431 条）、tracker validator 和 `git diff --check` 已完成；validator 仅报告既有历史条目格式问题。
+- 风险/待办：真实光标闪烁/常显、IME、选区和 detached 窗口体验仍需用户在目标平台确认；不自动截图作为 GUI 证据。
+
 ## 2026-08-14 日期化 Release 重试与元数据施工预检
 
 - 日期：2026-08-14
