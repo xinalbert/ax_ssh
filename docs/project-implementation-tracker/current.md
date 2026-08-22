@@ -84,6 +84,7 @@
 - 已复核用户 2026-08-22 22:24 sample：PID 89392 的 Mach-O UUID `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC` 与当前 debug 二进制一致；physical footprint/peak 为 229.4/267.2 MiB。主线程 2,254 个样本中约 1,952 个在 CoreFoundation 等待，272 个进入 DisplayLink，271 个进入 Slint Skia `MetalSurface::render`，223 个执行 dirty-region `draw_contents`；4 个 `axssh-tokio` 线程均主要阻塞或等待任务。该样本确认当前运行的是 GPU/Skia/Metal renderer，不是 SoftwareRenderer。
 - 内存/线程生命周期机制不按 renderer 分支：Tokio async/blocking 上限、blocking 空闲回收、SFTP 图标缓存清理、`Weak<AppState>`、session/PTY/SSH/SFTP worker shutdown 以及 Rust/Slint 对象 drop 都应对所有 renderer 生效。区分 Software 与 GPU/Skia/Metal 仅用于解释 renderer 自身的 framebuffer、Skia surface、CAMetalLayer drawable、Metal command buffer、Fontique、CoreAnimation 和 allocator 缓存；这些平台级缓存即使 Rust 对象已 drop，也不保证 RSS 立即下降。
 - 最新 sample 的 footprint 高于旧 Software sample，不能直接归因于生命周期失效：两者运行时长、负载、renderer 和可见线程条件不同；最新 sample 还是 debug 构建。单次 footprint/peak 不能证明泄漏，必须用同一 release、同一 renderer、同一窗口/pane/负载重复至少三轮，并结合 `vmmap -summary`、线程数和打开/关闭 Settings/Terminal/SFTP 前后对照。
+- 已复核用户 2026-08-22 22:38 Software sample：PID 90375 的 UUID 仍为 `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC`；physical footprint/peak 为 120.4/175.1 MiB。主线程 2,033 个样本中约 1,322 个进入 CoreFoundation source、1,320 个 DisplayLink、1,185 个 `WinitSoftwareRenderer`、1,172 个 `draw_contents`，966 个进入 software `render_buffer_impl` 的 buffer 遍历；4 个 `axssh-tokio` 仍存在，且样本也包含 SSH session/monitor 与 UI refresh 调度。与 22:24 GPU sample 相比，Software 的 CPU 整帧路径明显更热、footprint 反而更低；由于启动时长、窗口/pane 和输出量未完全固定，这只能确认 renderer 行为差异，不能作为严格内存 A/B 或泄漏结论。
 
 ## 验证
 
@@ -110,4 +111,4 @@
 
 ## 最后更新时间
 
-- 2026-08-22 22:24 +0800
+- 2026-08-22 22:38 +0800

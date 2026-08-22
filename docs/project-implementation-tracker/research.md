@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-08-22 macOS Software renderer 对照复核
+
+- 时间：2026-08-22 22:38 +0800
+- 检索问题：新的 macOS sample 是否确实使用 SoftwareRenderer，以及它与上一份 GPU/Skia/Metal sample 对内存、线程和刷新成本有什么可比结论。
+- 检索原因：用户明确指出新 sample 是 soft renderer，要求继续核对；需要把 renderer 路径差异与应用自有生命周期机制分开。
+- 来源列表：用户提供的 2026-08-22 22:38 macOS `/usr/bin/sample` 输出；同日 22:24 GPU sample；两份 sample 的 Mach-O UUID、线程栈和 Slint 1.17.1 backend 符号。
+- 关键结论：PID 90375 的 UUID `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC` 与 GPU sample 相同。22:38 sample 的主线程 2,033 个样本中约 1,320 个 DisplayLink、1,185 个 `WinitSoftwareRenderer`、1,172 个 `draw_contents`、966 个 software `render_buffer_impl` buffer 遍历，确认 SoftwareRenderer 仍走 CPU/softbuffer 整帧热点；约 687 个样本在 CoreFoundation wait。4 个 `axssh-tokio` 线程仍在，且 sample 中同时出现 SSH session/monitor 和 UI refresh 调度。footprint/peak 为 120.4/175.1 MiB，低于 22:24 GPU sample 的 229.4/267.2 MiB，但两次启动时长、窗口/pane、输出量和运行期缓存没有完全固定，不能把差值当作严格 renderer 内存基准或泄漏证据。
+- 对实施计划的影响：确认 Software/GPU 的 renderer 区分只影响呈现资源和 CPU/GPU surface 成本，不改变 MEM1-MEM3 的线程、任务、缓存和 drop 生命周期机制。PERF14 仍需同一 release、同一窗口/pane/负载和相同 renderer 的重复采样；Software 侧应单独记录 DisplayLink、`render_buffer_impl`、`vmmap -summary` 与 footprint。
+- 未解决问题：当前两份 sample 不是严格同条件 A/B，无法量化 GPU surface 的长期缓存成本、软件 framebuffer 复用和应用缓存释放；后续仅在用户主动要求时复查。
+
 ## 2026-08-22 macOS GPU renderer 下的内存与线程生命周期复核
 
 - 时间：2026-08-22 22:24 +0800
