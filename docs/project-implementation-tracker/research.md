@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-08-22 macOS GPU renderer 下的内存与线程生命周期复核
+
+- 时间：2026-08-22 22:24 +0800
+- 检索问题：用户提供的 macOS sample 是否证明内存/线程生命周期机制没有生效；这些机制是否应按 Software 或 GPU renderer 分别实现。
+- 检索原因：用户要求只在主动提出时复查记录；本次 sample 的 footprint 高于之前 Software sample，需要防止把 renderer 的平台资源误判为应用生命周期失效或泄漏。
+- 来源列表：用户提供的 2026-08-22 22:24 macOS `/usr/bin/sample` 输出；当前 `target/debug/ax_ssh` 的 Mach-O UUID；`src/app.rs` 的有界 Tokio runtime 配置；Slint 1.17.1 锁定 GPU/Skia backend 栈。
+- 关键结论：PID 89392 的 UUID 为 `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC`，与当前 debug 二进制一致。physical footprint/peak 为 229.4/267.2 MiB；主线程 2,254 个样本中约 1,952 个在 CoreFoundation 等待、272 个进入 DisplayLink、271 个进入 Skia `MetalSurface::render`、223 个进入 dirty-region `draw_contents`，确认当前为 GPU/Skia/Metal renderer。4 个 `axssh-tokio` 线程仍受 runtime 上限控制且主要等待。Tokio async/blocking 上限、blocking 空闲回收、SFTP 图标缓存清理、`Weak<AppState>`、session/PTY/SSH/SFTP worker shutdown 与 Rust/Slint 对象 drop 都跨 renderer 适用；按 renderer 区分只用于解释 Software framebuffer/softbuffer 与 GPU Skia surface、CAMetalLayer drawable、Metal command buffer、Fontique、CoreAnimation、allocator 等不同的缓存和呈现资源。应用 drop 不承诺这些平台缓存立即降低 RSS。
+- 对实施计划的影响：MEM1-MEM3 维持完成，不为不同 renderer 重复实现生命周期逻辑。PERF14 的内存验证必须固定同一 release、renderer、窗口尺寸、pane 数和负载，至少三轮记录 footprint、`vmmap -summary`、线程数以及打开/关闭 Settings、Terminal、SFTP 前后差异；不以单次 footprint/peak 或跨 renderer 对照判断泄漏。
+- 未解决问题：该 sample 是 debug 构建且没有同负载 release A/B，尚不能量化应用缓存、Skia/Metal 资源和 macOS allocator 各自的 footprint；后续仅在用户主动要求时按上述条件复查。
+
 ## 2026-08-22 Slint 脏区域/脏行刷新上游状态
 
 - 检索问题：Slint 对单行 model 更新、partial rendering 和多矩形 dirty region 的处理是否仍有已知问题，相关修复是否已合并，以及当前锁定版本是否包含修复。

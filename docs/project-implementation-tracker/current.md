@@ -81,6 +81,9 @@
 - 已将原生窗口激活纳入终端呈现路由：Slint `WindowActiveChanged` 事件作为快速路径，macOS UI 线程每 100ms 读取每个 `NSWindow.isKeyWindow()` 兜底，并通过 `WindowRouter` route revision 唤醒 pending monitor；窗口失焦时该窗口所有可见 pane（包括最后保持焦点的 pane）使用 `unfocused_terminal_refresh_fps`，重新激活后恢复 focused/unfocused pane 分类，隐藏终端和 parser/协议即时路径不变。
 - 已将 Tokio runtime 改为显式有界配置：按 `available_parallelism` 取 2-4 个 async worker，blocking 池最多 8 个，blocking 线程空闲 2 秒后允许退出；启动日志记录实际 worker 上限。SFTP 图标预热目标改为 `Weak<AppState>`，最后一个 SFTP Tab 清理扩展 icon 时记录释放数量，迟到 generation 不再持有强状态引用。
 - 已复核用户 2026-08-22 19:40 sample：PID 83798 的 Mach-O UUID `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC` 与当前 `target/debug/ax_ssh` 一致，启动日志确认 `worker_threads=4`、`max_blocking_threads=8`；旧样本的 10 个 `tokio-rt-worker` 降为新样本的 4 个 `axssh-tokio`（栈显示为 Tokio blocking pool）。但新样本仍是 `WinitSoftwareRenderer`，本机配置为 `renderer_preference=software`、`terminal_compact_rendering=false`、`terminal_row_render_cache=false`，且旧样本包含本地 PTY 线程、新样本没有，不能作为同负载 renderer/刷新 A/B。新旧 footprint/peak 分别为 128.0/176.7 MiB 与 150.2/183.2 MiB；新样本主线程仍出现 42 个 DisplayLink、35 个 software render 样本，说明软件 surface 整帧路径仍是主要瓶颈，不表示 runtime 生命周期优化未生效。
+- 已复核用户 2026-08-22 22:24 sample：PID 89392 的 Mach-O UUID `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC` 与当前 debug 二进制一致；physical footprint/peak 为 229.4/267.2 MiB。主线程 2,254 个样本中约 1,952 个在 CoreFoundation 等待，272 个进入 DisplayLink，271 个进入 Slint Skia `MetalSurface::render`，223 个执行 dirty-region `draw_contents`；4 个 `axssh-tokio` 线程均主要阻塞或等待任务。该样本确认当前运行的是 GPU/Skia/Metal renderer，不是 SoftwareRenderer。
+- 内存/线程生命周期机制不按 renderer 分支：Tokio async/blocking 上限、blocking 空闲回收、SFTP 图标缓存清理、`Weak<AppState>`、session/PTY/SSH/SFTP worker shutdown 以及 Rust/Slint 对象 drop 都应对所有 renderer 生效。区分 Software 与 GPU/Skia/Metal 仅用于解释 renderer 自身的 framebuffer、Skia surface、CAMetalLayer drawable、Metal command buffer、Fontique、CoreAnimation 和 allocator 缓存；这些平台级缓存即使 Rust 对象已 drop，也不保证 RSS 立即下降。
+- 最新 sample 的 footprint 高于旧 Software sample，不能直接归因于生命周期失效：两者运行时长、负载、renderer 和可见线程条件不同；最新 sample 还是 debug 构建。单次 footprint/peak 不能证明泄漏，必须用同一 release、同一 renderer、同一窗口/pane/负载重复至少三轮，并结合 `vmmap -summary`、线程数和打开/关闭 Settings/Terminal/SFTP 前后对照。
 
 ## 验证
 
@@ -107,4 +110,4 @@
 
 ## 最后更新时间
 
-- 2026-08-22 19:40 +0800
+- 2026-08-22 22:24 +0800
