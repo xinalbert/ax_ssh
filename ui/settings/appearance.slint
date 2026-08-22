@@ -103,6 +103,7 @@ export component AppearanceSettingsPage inherits Rectangle {
     in-out property <string> draft-renderer-preference;
     in-out property <bool> draft-terminal-compact-rendering;
     in-out property <bool> draft-terminal-row-render-cache;
+    in-out property <bool> draft-terminal-cursor-blink;
     in-out property <int> draft-focused-terminal-refresh-fps;
     in-out property <int> draft-unfocused-terminal-refresh-fps;
     in-out property <string> draft-theme-mode;
@@ -199,6 +200,11 @@ export component AppearanceSettingsPage inherits Rectangle {
                             }
                         }
                     }
+                }
+                SettingsToggleRow {
+                    label: @tr("Blink terminal cursor");
+                    description: @tr("Show a blinking cursor while the terminal is focused");
+                    checked <=> root.draft-terminal-cursor-blink;
                 }
                 SettingsRow {
                     label: @tr("Focused refresh rate");

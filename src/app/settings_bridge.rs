@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 44] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 45] = [
     (
         "General",
         "Language",
@@ -37,6 +37,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 44] = [
         "Appearance",
         "Cache unchanged terminal rows",
         "Reuse GPU row layers; may increase graphics memory",
+    ),
+    (
+        "Appearance",
+        "Blink terminal cursor",
+        "Show a blinking cursor while the terminal is focused",
     ),
     (
         "Appearance",
@@ -270,7 +275,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 44] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 45] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -368,6 +373,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 44] = [
         "Reuse GPU row layers; may increase graphics memory",
         "缓存未变化的终端行",
         "复用 GPU 行图层；可能增加图形内存",
+    ),
+    (
+        "Blink terminal cursor",
+        "Show a blinking cursor while the terminal is focused",
+        "终端光标闪烁",
+        "终端聚焦时显示闪烁光标",
     ),
     (
         "Focused refresh rate",
@@ -599,6 +610,7 @@ pub(super) fn wire_settings(
               terminal_semantic_highlighting,
               terminal_compact_rendering,
               terminal_row_render_cache,
+              terminal_cursor_blink,
               focused_terminal_refresh_fps,
               unfocused_terminal_refresh_fps,
               terminal_semantic_link_color,
@@ -721,6 +733,7 @@ pub(super) fn wire_settings(
                     semantic_highlighting: terminal_semantic_highlighting,
                     terminal_compact_rendering,
                     terminal_row_render_cache,
+                    terminal_cursor_blink,
                     focused_terminal_refresh_fps,
                     unfocused_terminal_refresh_fps,
                     terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -1190,6 +1203,11 @@ mod tests {
         assert_eq!(cache_matches.len(), 1);
         assert_eq!(cache_matches[0].section, "Appearance");
         assert_eq!(cache_matches[0].title, "Cache unchanged terminal rows");
+
+        let blink_matches = settings_search_results("blinking cursor", "english");
+        assert_eq!(blink_matches.len(), 1);
+        assert_eq!(blink_matches[0].section, "Appearance");
+        assert_eq!(blink_matches[0].title, "Blink terminal cursor");
     }
 
     #[test]
@@ -1217,5 +1235,10 @@ mod tests {
         assert_eq!(compact_matches.len(), 1);
         assert_eq!(compact_matches[0].section, "Appearance");
         assert_eq!(compact_matches[0].title, "紧凑终端渲染");
+
+        let blink_matches = settings_search_results("终端光标", "simplified-chinese");
+        assert_eq!(blink_matches.len(), 1);
+        assert_eq!(blink_matches[0].section, "Appearance");
+        assert_eq!(blink_matches[0].title, "终端光标闪烁");
     }
 }

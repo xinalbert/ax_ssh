@@ -241,6 +241,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -272,6 +273,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors {
@@ -299,6 +301,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_cursor_blink: true,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -325,6 +328,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_cursor_blink: true,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors::default(),
@@ -351,6 +355,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
             semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_cursor_blink: true,
             focused_terminal_refresh_fps: -10,
             unfocused_terminal_refresh_fps: 999,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -428,6 +433,7 @@ fn legacy_appearance_migrates_into_versioned_settings() {
     assert!(!store.settings.appearance.terminal_semantic_highlighting);
     assert!(store.settings.appearance.terminal_compact_rendering);
     assert!(!store.settings.appearance.terminal_row_render_cache);
+    assert!(store.settings.appearance.terminal_cursor_blink);
     assert!(store.settings.appearance.bright_bold_text);
     assert!(!store.settings.appearance.right_click_copy_or_paste);
     assert!(!store.settings.appearance.copy_selection_on_select);
@@ -491,6 +497,7 @@ fn terminal_render_preferences_round_trip() {
     store.settings.appearance.terminal_semantic_highlighting = true;
     store.settings.appearance.terminal_compact_rendering = false;
     store.settings.appearance.terminal_row_render_cache = true;
+    store.settings.appearance.terminal_cursor_blink = false;
 
     let encoded = serde_json::to_string(&store).expect("settings should serialize");
     let decoded: SessionStore =
@@ -503,6 +510,7 @@ fn terminal_render_preferences_round_trip() {
     assert!(decoded.settings.appearance.terminal_semantic_highlighting);
     assert!(!decoded.settings.appearance.terminal_compact_rendering);
     assert!(decoded.settings.appearance.terminal_row_render_cache);
+    assert!(!decoded.settings.appearance.terminal_cursor_blink);
 }
 
 #[test]
@@ -881,6 +889,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {

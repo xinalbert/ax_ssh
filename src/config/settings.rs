@@ -132,6 +132,7 @@ pub struct AppearanceSettingsInput<'a> {
     pub semantic_highlighting: bool,
     pub terminal_compact_rendering: bool,
     pub terminal_row_render_cache: bool,
+    pub terminal_cursor_blink: bool,
     pub focused_terminal_refresh_fps: i32,
     pub unfocused_terminal_refresh_fps: i32,
     pub terminal_semantic_colors: TerminalSemanticColorsInput<'a>,
@@ -206,6 +207,8 @@ pub struct AppearanceSettings {
     pub terminal_compact_rendering: bool,
     #[serde(default)]
     pub terminal_row_render_cache: bool,
+    #[serde(default = "default_true")]
+    pub terminal_cursor_blink: bool,
     #[serde(default = "default_focused_terminal_refresh_fps")]
     pub focused_terminal_refresh_fps: u16,
     #[serde(default = "default_unfocused_terminal_refresh_fps")]
@@ -259,6 +262,7 @@ impl AppearanceSettings {
             terminal_semantic_highlighting: input.semantic_highlighting,
             terminal_compact_rendering: input.terminal_compact_rendering,
             terminal_row_render_cache: input.terminal_row_render_cache,
+            terminal_cursor_blink: input.terminal_cursor_blink,
             focused_terminal_refresh_fps: normalize_terminal_refresh_fps(
                 input.focused_terminal_refresh_fps,
                 default_focused_terminal_refresh_fps,
@@ -295,6 +299,7 @@ impl AppearanceSettings {
             semantic_highlighting: self.terminal_semantic_highlighting,
             terminal_compact_rendering: self.terminal_compact_rendering,
             terminal_row_render_cache: self.terminal_row_render_cache,
+            terminal_cursor_blink: self.terminal_cursor_blink,
             focused_terminal_refresh_fps: i32::from(self.focused_terminal_refresh_fps),
             unfocused_terminal_refresh_fps: i32::from(self.unfocused_terminal_refresh_fps),
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -327,6 +332,7 @@ impl Default for AppearanceSettings {
             terminal_semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_cursor_blink: true,
             focused_terminal_refresh_fps: default_focused_terminal_refresh_fps(),
             unfocused_terminal_refresh_fps: default_unfocused_terminal_refresh_fps(),
             terminal_semantic_colors: TerminalSemanticColors::default(),

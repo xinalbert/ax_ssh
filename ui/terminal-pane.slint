@@ -181,6 +181,7 @@ export component TerminalPane inherits Rectangle {
     in property <TerminalViewState> view;
     in property <bool> focused: false;
     in property <bool> closable: false;
+    in property <bool> cursor-blink-enabled: true;
     in property <string> edit-command;
     in property <int> edit-command-revision: 0;
     in property <int> focus-request-revision: 0;
@@ -571,10 +572,13 @@ export component TerminalPane inherits Rectangle {
     }
 
     Timer {
-        running: root.connected && ime-input.has-focus && root.cursor-visible;
+        running: root.cursor-blink-enabled
+            && root.connected && ime-input.has-focus && root.cursor-visible;
         interval: 530ms;
         triggered => { root.cursor-blink = !root.cursor-blink; }
     }
+
+    changed cursor-blink-enabled => { root.cursor-blink = true; }
 
     // Let font measurement and layout settle, then send at most one resize per
     // display frame while the native window is being dragged. The terminal
@@ -760,6 +764,7 @@ export component TerminalPane inherits Rectangle {
                 top-offset: root.grid-top-offset;
                 cursor-y: root.cursor-cell-y;
                 cursor-blink: root.cursor-blink;
+                cursor-blink-enabled: root.cursor-blink-enabled;
                 preedit-text: ime-input.preedit-text;
                 right-click-pastes:
                     root.right-click-copy-or-paste || root.copy-selection-on-select;

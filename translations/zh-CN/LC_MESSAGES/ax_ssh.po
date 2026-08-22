@@ -142,6 +142,9 @@ msgstr "背景"
 msgid "Baud rate"
 msgstr "波特率"
 
+msgid "Blink terminal cursor"
+msgstr "终端光标闪烁"
+
 msgid "Border"
 msgstr "边框"
 
@@ -1023,6 +1026,9 @@ msgstr "设置..."
 
 msgid "Shortcuts"
 msgstr "快捷键"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "终端聚焦时显示闪烁光标"
 
 msgid "Simplified Chinese"
 msgstr "Simplified Chinese"

@@ -82,6 +82,7 @@ export component TerminalGrid inherits Rectangle {
     in property <length> top-offset;
     in property <length> cursor-y;
     in property <bool> cursor-blink;
+    in property <bool> cursor-blink-enabled: true;
     in property <string> preedit-text;
     in property <bool> right-click-pastes;
     in property <bool> mouse-local-selection-priority;
@@ -235,7 +236,8 @@ export component TerminalGrid inherits Rectangle {
             background: Theme.accent;
         }
 
-        if root.view.connected && root.view.cursor_visible && root.cursor-blink
+        if root.view.connected && root.view.cursor_visible
+            && (!root.cursor-blink-enabled || root.cursor-blink)
             && line-index == root.view.cursor_row : Rectangle {
             x: root.view.cursor_column * root.cell-width;
             width: root.cell-width;
