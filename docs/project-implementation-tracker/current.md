@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260821-terminal-render-performance
-- 目标：降低高吞吐终端输出期间的主线程 CPU 占用，优先消除重复快照、重复渲染和无差别工作区刷新，再逐步引入有界批处理、增量渲染缓存和可配置的 focused/unfocused FPS 呈现上限。
-- 交付物：可复现 release 基线、单一路径 Terminal pane 呈现、按脏终端调度的刷新门控、稳定 Slint pane/model 通知、聚焦自适应/未聚焦低频双呈现策略、增量终端渲染缓存、可配置的紧凑终端节点树与静态行 layer cache，以及完整离线门禁和前后采样记录。
+- 目标 ID：20260823-terminal-dirty-region-backend-bypass
+- 目标：绕过 Slint 1.17.1/winit-software/macOS softbuffer 的 dirty-region 提交限制，让现有终端分区真正进入持久 framebuffer 和分块 CoreAnimation 提交路径。
+- 交付物：本地锁定 backend patch、持久 macOS framebuffer、实际多矩形 damage 提交、非 macOS 行为保持兼容、backend focused 回归和完整离线门禁。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/{font_bridge,runtime,window_bridge}.rs`、Slint window models、字体资源、双语架构/使用说明、`docs/project-env-audit/` 和 `docs/project-implementation-tracker/`；本轮继续降低运行时字体的应用侧常驻内存。
-- 不在本轮范围内：SSH host-key/认证/凭据契约、russh transport 选择、UI framework/renderer 依赖升级、专用 GPU surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
+- 当前范围：`vendor/{softbuffer,i-slint-backend-winit}`、`Cargo.toml`、`Cargo.lock`、第三方许可说明、renderer/backend 研究和本轮实施跟踪记录。
+- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker/transport、Slint UI 业务组件、终端模型/设置 schema、专用 Metal 终端 surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：实现已完成，待目标平台验收
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -55,13 +55,45 @@
 | MEM4 | completed | 统一释放主窗口和 detached 窗口的 Slint models、文本、图标行与敏感 UI 字段，并在退出前丢弃窗口强引用 | 生命周期 focused tests（如适用）、fmt、check、Clippy、test、tracker、`git diff --check` | Software/GPU 共用同一路径；不承诺平台 allocator/Fontique/CoreAnimation/Metal RSS 立即下降。 |
 | MEM5 | completed | 减少 detached 窗口重复持有的 sidebar/settings/editor/font option models，并记录 bundled Fontique 字体的常驻边界 | Slint/Cargo 门禁、tracker/Markdown 检查、静态生命周期审阅 | Terminal/SFTP surface 所需 model 保留；不伪造 Fontique 动态卸载，不改变字体字重或 fallback 行为。 |
 | MEM6 | completed | Maple/Iosevka/Monaspace 改用 Fontique 路径源，避免 worker 长期持有完整字体 `Vec<u8>`；JetBrains 保留嵌入 | font_bridge 定向测试、完整 Rust/Slint 离线门禁、同负载 macOS footprint/vmmap 复核 | 代码与离线门禁已通过；保留现有字体选择和 Maple Hani fallback；目标平台仍需确认 Fontique cache 与 RSS 变化。 |
+| RZ1 | completed | 记录 resize 根因、外部依据和低风险实施边界 | tracker 规范、现有 resize 路径审计、research 记录 | 采用 resize 前沿尺寸合并与 resize-only 刷新；暂缓平台专用 live-resize surface hold。 |
+| RZ2 | completed | resize 成功后只调度当前 terminal pane snapshot | focused 路由/刷新 gate 回归、Slint/Cargo check | 不改变非 resize 的 full refresh 语义。 |
+| RZ3 | completed | AppState 在真实模型尺寸变化前去重模型、选区 revision 和 worker 请求 | state resize focused tests | worker 请求失败时保持现有错误优先级。 |
+| RZ4 | completed | SSH/Telnet watch 与 Local pending resize 对相同尺寸不发通知/唤醒 | worker/local focused tests | latest-value 合并仍保留，Serial 无 PTY resize 通道。 |
+| RZ5 | completed | 完整 Rust/Slint、tracker 和差异门禁并记录平台验收边界 | fmt、check、Clippy、test、tracker、`git diff --check` | macOS 实际拖动流畅度由用户验收。 |
+| TILE1 | completed | 设计固定 8 行 tile DTO、行模型所有权和稳定 identity | 现有 view/Slint 边界审阅 | 保留 bounded visible rows；交互覆盖层不进入静态 tile。 |
+| TILE2 | completed | 实现 tile 分组、变化 tile 原地更新和 Slint tile 内行绘制 | focused model identity 回归、Slint 编译 | 不改变 terminal parser、worker 或 renderer 依赖。 |
+| TILE3 | completed | 补 tile 边界、跨 tile dirty 和行数变化回归 | focused Rust tests | 覆盖最后不足 8 行尾部 tile、tile identity 和 nested row identity。 |
+| TILE4 | completed | 完整离线门禁并记录 sample/A-B 验收边界 | fmt、check、Clippy、test、`git diff --check` | tile 不能绕过 macOS software surface 的整帧 present；A/B 留目标平台验收。 |
+| DIRTY1 | completed | 增加 tile 级 source/render revision，未变化 tile 跳过行扫描并保持 tile model identity | focused tile revision/model identity 回归 | revision 只作为复用提示；未知/零 revision 回退保守比较。 |
+| DIRTY2 | completed | 变化 tile 内只更新变化行，保持光标/选区/IME/目标高亮的全局行坐标和窗口动态几何 | Slint 编译、行坐标/resize focused 回归 | 不改变 terminal parser、worker、transport 或 renderer 依赖。 |
+| DIRTY3 | completed | 完整离线门禁并记录 17:32 sample 的可比性与 software full-frame 残余成本 | fmt、check、Clippy、test、tracker、Markdown、`git diff --check` | 短 sample 只能作热点定位，不能宣称 CPU 降幅。 |
+| PARTITION1 | completed | 终端分区策略枚举、默认值和 serde/normalize 兼容 | config focused tests | 缺失或非法值回退 `tile-8`，不升级 schema。 |
+| PARTITION2 | completed | 分区策略配置/运行时兼容接线 | Slint compile、配置与映射回归 | 预览、保存和持久化链路保留；逐行/8 行/16 行选择器暂时不在 Settings 展示。 |
+| PARTITION3 | completed | 运行时 tile-size 接线和回归 | tile-size focused test、Cargo check | 逐行、8 行、16 行保持全局 `start_row` 和 dirty-row 复用。 |
+| PARTITION4 | completed | 完整门禁 | fmt/check/Clippy/test/tracker/diff | 全量 Rust/Slint、翻译和 tracking 检查通过。 |
 
 ## 本轮实施计划
 
-- 先把 `LoadedBundledFont` 的外部资源改为经过大小校验的 `PathBuf` 列表，注册时调用 Fontique `load_fonts_from_paths`；嵌入式 JetBrains Mono 继续通过 `register_fonts`。
-- 保留 Maple 作为唯一 Hani fallback，并通过注册后的 family ID 设置 fallback，避免路径扫描改变 fallback 集合。
-- 补充外部资源/嵌入资源测试，随后执行 Cargo/Slint、Clippy、翻译、tracker、Markdown 相对链接和 `git diff --check` 门禁。
-- 施工完成后由用户在相同 macOS renderer、窗口尺寸、字体负载下重新采样 `footprint`、`vmmap -summary` 和 `heap`；静态实现不把字体 cache 释放等同于 RSS 下降。
+- `BACKEND1`：固定上游证据和本地补丁边界，确认 1.17.1 的 `region.iter()` 与 macOS softbuffer age/present 行为。
+- `BACKEND2`：引入本地 `i-slint-backend-winit` patch，提交实际多矩形 damage，而不是 bounding box。
+- `BACKEND3`：引入本地 `softbuffer` CoreGraphics patch，复用持久 framebuffer，并按 damage 影响的分块 CALayer 更新；resize/首帧/全量 damage 回退整帧。
+- `BACKEND4`：补 backend focused 回归、第三方许可和双语架构说明，执行 locked/offline 完整门禁并记录平台验收边界。
+
+| Step | Status | Deliverable | Verification | Notes |
+| --- | --- | --- | --- | --- |
+| BACKEND1 | completed | 锁定 Slint/winit/softbuffer 证据与 patch 边界 | 本机 crate 源码、PR #12758、macOS sample 对照 | Slint 1.17.1 的 winit bbox 与 macOS softbuffer age=0/full CGImage 已确认。 |
+| BACKEND2 | completed | winit software 多矩形 damage forwarding | vendored backend compile、locked check | `PhysicalRegion::iter()` 逐项映射为 softbuffer Rect。 |
+| BACKEND3 | completed | macOS 持久 framebuffer 与 tiled CoreAnimation present | macOS 条件编译、locked check | 首帧/resize/full damage 全量；后续只更新相交 512x64 tile。 |
+| BACKEND4 | completed | 文档、许可、focused/完整门禁和平台验收说明 | fmt/check/Clippy/test/translation/diff、vendor rustfmt | 代码和静态门禁已完成；GUI sample、CPU/footprint A/B、DPI/resize/残影仍待用户目标平台执行。 |
+
+- `PARTITION1`：增加终端分区策略枚举、默认值和 serde/normalize 兼容。
+- `PARTITION2`：保留策略在配置、预览、保存和运行时的兼容接线；逐行/8 行/16 行选择器暂时不在 Appearance 展示。
+- `PARTITION3`：按设置选择 1/8/16 行 tile，保持 dirty-row 更新和动态行位置契约。
+- `PARTITION4`：执行 focused、翻译、tracker 和完整离线门禁。
+
+- `DIRTY1`：为 tile 保存有界的 source/render revision 摘要；revision 一致时直接复用现有 tile，不扫描其行模型；历史或未知 revision 保守回退。
+- `DIRTY2`：revision 变化时仅在对应 tile 内按行更新，继续由 Slint 根据 pane 高度、字体行高和 `start_row` 计算每行位置；交互覆盖层保持全局行语义。
+- `DIRTY3`：执行 focused 与完整离线门禁，记录 17:32 sample 仍属于 software renderer 整帧绘制的证据边界。
 
 ## 已完成
 
@@ -83,7 +115,7 @@
 - 已将 application-owned Local/Serial 持续输出呈现节拍从 16 ms 改为 33 ms；Tokio interval 仍保留立即首 tick 和 `MissedTickBehavior::Skip`。paused-time 回归确认 32 ms 时第二 tick 未完成、33 ms 时完成。SSH/Telnet 16 ms/16 KiB worker 批次、parser、协议应答、错误、断开和 shutdown 路径不变。
 - 已生成 33 ms ARM64 release 候选（36,360,352 bytes，SHA-256 `b46058c2c03224449c06ee45a038cc69100d6e665579a70213f59856fb48889d`）。构建时 PID 91806 仍映射旧 inode 16352449，新文件是 inode 16354239；必须重启才会进入新候选。
 - 已确认用户 `13:33` software sample 的 Mach-O UUID `9EDF8F81-7062-35AC-820A-221B3CAFEA06` 与当前 33 ms release 完全一致。2,248 个主线程样本中 DisplayLink 占约 67.7%、run-loop 空闲约 31.9%、Core Animation 提交约 36.8%、其中 vImage 颜色转换约 24.9%，Slint software 绘制分支约 25.8%、组件遍历约 24.6%；physical footprint 为 130.3 MiB、峰值 191.3 MiB。日志、Tokio、7 个 PTY 和 reader 线程仍主要阻塞。
-- 已从锁定依赖源码确认 macOS `softbuffer` 0.4.8 每帧报告 buffer age 0，`present_with_damage` 忽略 damage 并将完整 `CGImage` 设置为 `CALayer.contents`；因此 Slint 1.17.1 software renderer 每次呈现都走 `NewBuffer` 全窗口重绘/提交。当前 dirty terminal、稳定 model 和增量行缓存仍减少应用快照工作，但不能绕过该 macOS software surface 的整帧成本。
+- 已从锁定依赖源码确认原版 macOS `softbuffer` 0.4.8 每帧报告 buffer age 0，`present_with_damage` 忽略 damage 并将完整 `CGImage` 设置为 `CALayer.contents`；本轮本地 patch 已改为持久 framebuffer，首帧/resize/失效缓冲全量更新，后续只替换相交的 512x64 CoreAnimation tile layer。winit patch 同时保留 Slint 产生的每个独立 damage rectangle，不再先合并 bounding box。
 - 已用统一 `TerminalPresentation` 接入 Local、Serial、SSH 与 Telnet monitor：无 dirty 输出时不创建 timer deadline；focused 首个脏更新立即呈现，连续输出前 500 ms/到 2 秒/超过 2 秒分别采用 16/33/50 ms，安静 250 ms 后重置；活动 split tree 中未聚焦 pane 按 Appearance 的 FPS 上限呈现（默认 4 FPS，范围 1-120），隐藏 Tab 无 deadline。`WindowRouter` route revision 和 policy watch 会唤醒有 pending 输出的 monitor，焦点、Tab 或设置变化后立即按新策略重算；SSH 合并批次保留最早 `received_at`，parser、协议应答、错误、断开和 shutdown 仍走即时路径。
 - 已生成双策略 ARM64 release 候选（36,376,960 bytes，inode `16356094`，SHA-256 `f419bfbcf7b50e3431062b7b78d5b3053e238265dd6133b5c5a23814ec8d291f`，Mach-O UUID `792FB118-6118-31F4-9359-CA56B5692B8D`）。检查时运行中的 PID 94454 仍映射旧 inode `16354239`，必须退出并重启后才会运行新候选。
 - 已将 schema 提升到 25，并贯通默认开启的 `terminal_compact_rendering` 与默认关闭的 `terminal_row_render_cache`：Settings 草稿可即时预览并在关闭时保存，所有存活窗口同步更新；旧文件缺字段时采用默认值。
@@ -103,11 +135,17 @@
 - 已实现 `release_window_resources`、`release_detached_windows` 和退出前显式 drop：Return/Close 立即清空 detached UI 并移除 map 强引用；退出先停止 worker，再清理 detached/main window、图标缓存和 UI callback 引用，最后 shutdown Tokio。
 - 已完成字体资源审计：JetBrains Mono 四字重约 1.1 MiB 且内嵌；Iosevka Term 四字重约 18.8 MiB、Maple Mono NF CN 两字重约 40 MiB、Monaspace Neon Variable 约 1.6 MiB，均按选中 family 懒加载。Fontique shared collection 没有可靠的运行时卸载契约，已将其视为进程级缓存边界，不做伪释放。
 - 已将外部自带字体从 `fs::read`/memory `Blob` 改为经过大小校验的 `PathBuf` source；Fontique 注册阶段使用 mmap，字体数据按需由路径 source/cache 提供，JetBrains Mono 仍使用嵌入 bytes。Maple 注册后通过 family ID 保持唯一 Hani fallback，避免约 39.3 MiB Maple heap 副本由应用加载任务长期持有。
+- 已完成本轮 resize 路径审计：Slint pane 已有 16ms latest-size timer，但 resize callback 仍触发完整 active/workspace snapshot；AppState 与 SSH/Telnet/Local worker 对同一尺寸缺少统一入口去重。
+- 已完成 resize-only 刷新：成功的 `resize-terminal` callback 通过 `dispatch_terminal_snapshot` 进入现有 dirty terminal gate，只更新当前可见 pane；结构变化仍走 full refresh，隐藏 pane 不进入 UI event loop。
+- 已完成尺寸去重：`TerminalModel::size()` 提供当前规范化尺寸，AppState 在 worker 请求前短路同尺寸请求；selection revision 只在真实模型变化时推进，worker 请求失败不改变本地模型。
+- 已完成 worker 去重：SSH/Telnet 使用 `watch::Sender::send_if_modified`，Local 使用请求尺寸与 pending latest-value 合并并只在有效变化时唤醒 PTY worker；Serial 继续没有 PTY resize 通道。
+- 已完成终端 tile 分组：Rust 以固定 8 行构造 `TerminalRenderTile`，Slint 顶层 repeater 只遍历 tile，tile 内保留有界行绘制；未变化 tile 和 nested row/run model 原地复用，光标、选区、IME/preedit 和目标高亮仍在 tile 外覆盖。
+- 已完成 tile dirty-row 精确更新：tile DTO 携带 source/render revision 摘要；已知 revision 相同时直接复用 tile 和行模型，变化 tile 才按行更新，零/未知 revision 保守回退到模型比较。
 
 ## 验证
 
-- 已完成：sample/环境基线、PERF2-PERF6 focused 回归、PERF8 debug 结构性对照、PERF9 release 10 秒 sample/CPU meter、PERF10 33 ms paused-time 回归、PERF11 software 短样本归因、双策略状态机与四协议接线、紧凑 span/配置 round-trip/Settings 搜索/nested model identity 定向测试、FOCUS1/FOCUS4 原生窗口激活路由回归；本轮 detached model/字体审计、8 项 `font_bridge` 定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 193、Doc tests 0）、翻译检查（431 条）和 `git diff --check` 均已通过。tracker validator 仍只报告既有历史条目的格式问题。
-- 未完成：目标平台 GUI 的真实闪烁/常显体验验收；既有 PERF14 release A/B 及 Local/SSH/Telnet/Serial 验收仍待用户执行；本轮 detached 内存收益和 Fontique/CoreAnimation/allocator 是否归还 RSS 仍需目标 macOS 重复采样。
+- 已完成：TILE1-TILE4、DIRTY1-DIRTY3、BACKEND1-BACKEND4；`cargo fmt --all -- --check`、vendor backend rustfmt、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`cargo build --locked --offline`、翻译检查和 `git diff --check` 均通过。最终 debug 候选 UUID 为 `C3D69932-5675-3AFB-80F3-775D77935230`，SHA-256 为 `a8e42c04a519874f96ef73e67f1bed04eeb80a30dd3512948989cd31cc61249d`。
+- 未完成：目标平台 GUI sample/A-B 和视觉验收；需要确认持续输出下 CPU 是否下降，以及 tile layer 是否存在闪烁、残影、resize 花屏或 Retina 坐标偏移。
 
 ## 风险与阻塞
 
@@ -116,19 +154,27 @@
 - 脏终端路由必须在 pane 转移、split、关闭和 detached/return 结构变化时回退到完整刷新，避免更新错误窗口或陈旧 UUID。
 - release 为 strip-symbols 产物，系统级 DisplayLink/Metal 和线程阻塞结论可靠，但不能从该二进制的 sample 进一步精确拆分应用内部 Rust 函数。
 - 双策略候选会让 focused 持续输出在 16/33/50 ms 间逐级降低呈现频率，并按 Appearance 设置限制可见未聚焦 pane（默认 4 FPS）；预期减少实际文字绘制，但聚焦平滑度与后台可读性仍须通过同负载 A/B 和用户视觉验收确认。
-- macOS software surface 当前不支持 damage presentation，窗口像素面积、可见 pane 数和呈现频率都会直接放大整帧 CPU 成本；继续降低 software cadence 或尝试另一 CPU renderer 都会引入平滑度、文本质量或依赖行为取舍，必须单独 A/B，不能替代 GPU 推荐路径。
+- macOS software surface 现在通过本地 softbuffer patch 支持有界 tile damage presentation，但每个相交 tile 仍需复制和创建 `CGImage`，不能等同于硬件 overlay 或任意像素级提交。窗口像素面积、可见 pane 数和呈现频率仍会影响成本；GPU/Skia 路径仍按普通 CAMetalLayer drawable present，需分别 A/B。
 - 双呈现策略必须按当前 `WindowRouter`/`PaneTree` 动态读取焦点，不能在 worker 中缓存 pane 归属；切换焦点后旧后台输出必须在新 deadline 内追上，但隐藏 Tab 仍不应进入 Slint event queue。
 - 窗口资源清理必须先停止应用 worker，再清空 detached/main 的 Slint model 并移除强引用；不能把清理延迟到 timer 或依赖函数作用域自然 drop，否则窗口 renderer surface 和 model 可能继续存活。
 - rust-skia release build script 在 release cache 缺失时会绕过 Cargo offline 语义尝试下载预编译包；本轮最终构建复用了本机同名、同 SHA-256 的 debug cache，未把该缓存加入 Git 或项目依赖。
-- 当前没有运行中的 AxSSH 进程；下一次采样必须先核对 Mach-O UUID `8ECE3718-6E3D-370B-94F5-193A455BE533`，避免使用旧 release 或其它构建类型。
+- resize-only 刷新仍必须在 pane 转移、split、关闭和 detached/return 结构变化时由 WindowRouter 回退到 full refresh；本轮不改变该结构变化语义。
+- 应用层 tile/row 更新与本地 backend tile present 现在串联起来，但每个 tile 仍是 512x64 的完整图像更新；不能把它描述为任意像素级零拷贝。升级 Slint/softbuffer 后必须重新核对上游 damage、buffer age、CoreAnimation layer 和 DPI 语义。
 - Slint 1.17.1 的 `cache-rendering-hint` 只在 Skia/FemtoVG layer renderer 中保留离屏图像；software renderer 不提供等价 layer cache。缓存必须只包住静态终端行内容并默认关闭，避免光标闪烁或选区变化使所有行缓存失效，也避免未测量的 Retina 纹理占用成为默认成本。
 
 ## 下一步
 
-- 执行 PERF14：启动 UUID `8ECE3718-6E3D-370B-94F5-193A455BE533` 的 release，在相同窗口、7 pane 和持续负载下依次测量 GPU 旧 item 树（两项关闭）、GPU 紧凑节点、GPU 紧凑节点+静态行缓存，以及 Software 紧凑节点；同时验收光标、选区、IME、彩色背景、underline/strikethrough、focused 响应和后台 4 Hz 可读性。
-- 在目标 macOS 上按环境审计记录重复三轮资源复核：相同流程打开/关闭 Settings、Terminal、SFTP，记录 `footprint`、`vmmap -summary` 和线程数，区分 runtime/应用缓存释放与 Fontique/CoreAnimation/allocator 的进程级保留。
+- 用相同窗口、pane 数、renderer 和持续输出对照旧行模型、8 行 tile、8 行 tile + dirty revision、16 行 tile 与 GPU/Skia。
+- 在目标 macOS 上验收光标、选区、IME、彩色背景、underline/strikethrough、focused 响应和后台 FPS；若热点仍是 `WinitSoftwareRenderer`/CoreAnimation，再单独立项评估 GPU 或平台 backend。
 
 ## 最后更新时间
 
-- 2026-08-23 10:20 +0800
-- 计划切换：MEM6 已完成；Fontique 路径 source 代码与全量离线门禁通过，目标平台字体 cache/RSS 复核等待用户；性能 A/B 和目标平台资源验收仍等待用户；APP1-APP4 的 `src/app.rs` 功能拆分已完成。
+- 2026-08-24：暂时隐藏 Appearance 中的逐行/8 行/16 行分区选择器；配置字段、预览/保存接线和运行时默认 `tile-8` 保持兼容，目标平台 software/GPU A/B、连续拖动和 GUI 视觉仍待用户验收。
+- 2026-08-23 22:50 +0800
+- 计划状态变更：BACKEND1: pending -> completed; BACKEND2: pending -> completed; BACKEND3: pending -> completed; BACKEND4: in_progress -> completed
+- 验证结果：本地 backend patch 已清理死代码并通过 vendor rustfmt、locked/offline Cargo 全量门禁、翻译检查和 `git diff --check`；实际 macOS GUI/A-B 仍待用户执行。
+- 计划切换：PARTITION1-PARTITION4 已完成；分区策略运行时仍默认使用 `tile-8`，选择器暂时隐藏，目标平台 GUI/A-B 仍留用户执行。
+- 影响文件：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings,view/terminal,view/tests}.rs`、`ui/{app,settings,settings/appearance,workspace-shell}.slint`、`translations/zh-CN/LC_MESSAGES/ax_ssh.po`、双语架构/使用文档和 tracker。
+- 计划状态变更：PARTITION1: pending -> completed; PARTITION2: pending -> completed; PARTITION3: pending -> completed; PARTITION4: in_progress -> completed
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`、tracker validator 和 `git diff --check` 通过。
+- 对 plan 的更新：设置默认 `tile-8`；逐行/8 行/16 行只改变 UI tile 分组，保留 dirty-row revision、动态 `start_row` 几何以及终端 parser/worker/输入边界。

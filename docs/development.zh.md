@@ -41,6 +41,12 @@ Renderer** 会为下一次启动保存 Automatic、GPU 或 Software。Automatic 
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
+仓库在 `vendor/` 下维护锁定 `i-slint-backend-winit` 和 `softbuffer` 的本地补丁。winit 补丁转发
+renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留持久 framebuffer，只更新相交的
+512x64 CoreAnimation tile layer，首帧和每次 resize 仍走全量更新。补丁位于 Slint 应用 API 之下，因此
+终端 model 和 UI 契约不依赖 backend 专用类型。升级 Slint 或 softbuffer 时必须重新核对并重新采样，且
+继续保留这些补丁的上游许可证和源码。
+
 环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
 
 开发 profile 禁用 rustc 增量代码生成。AxSSH 较大的 Slint 生成应用单元在 macOS 反复构建后，

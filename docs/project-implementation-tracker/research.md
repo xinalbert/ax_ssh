@@ -1,5 +1,13 @@
 # 项目研究记录
 
+## 2026-08-23 绕过 Slint 1.17.1 dirty-present 限制
+
+- 检索问题：终端已有 dirty row/tile model 更新后，如何绕过 Slint/winit/softbuffer 的限制，把脏区真正提交到窗口 framebuffer。
+- 来源列表：本机锁定的 Slint 1.17.1 `i-slint-renderer-software` partial renderer、`i-slint-backend-winit` software renderer、`i-slint-renderer-skia` software surface、`softbuffer` 0.4.8 CoreGraphics backend；上游 PR [#12758](https://github.com/slint-ui/slint/pull/12758) 及其修复 commit `33033ceb103483d4a030a97417a1d371db5809b8`；Softbuffer API 文档和本仓库 macOS sample。
+- 关键结论：Slint partial renderer 已经计算多个 dirty rectangles，但锁定的 winit software 代码只提交 `bounding_box_*`；#12758 已在 2026-08-03 合并却晚于 v1.17.1，因此本地 patch 将 `PhysicalRegion::iter()` 逐项转换为 `softbuffer::Rect`。macOS softbuffer 0.4.8 的 `age()` 固定为 0，`present_with_damage` 等价于 `present()`，每帧把完整 `CGImage` 设置到一个 CALayer；仅修 winit 不能改变该行为。
+- 实施决策：在 `vendor/softbuffer` 保留同尺寸的持久像素缓冲，首帧后返回 age=1 让 Slint software renderer 选择 `ReusedBuffer`，并以 512x64 的有界 child CALayer 网格承载图像。每次提交先校验 damage，更新相交 tile；首次、resize、空 damage 或失效缓冲更新全部 tile。GPU/Metal 路径仍由 Skia partial renderer 裁剪绘制，但 CAMetalLayer drawable 仍正常 present，不假称为 partial present。
+- 风险与边界：本地 patch 触及第三方 backend 的 renderer/surface 所有权，不触及 AxSSH 的 Slint UI、终端 parser、worker、transport、SSH trust 或凭据；tile 尺寸、scale factor、CoreAnimation layer 数量和窗口 resize 必须在 macOS 目标机用 Software renderer 真实采样。升级 Slint/softbuffer 时必须重新对照上游实现和锁文件。
+
 ## 2026-08-23 Fontique 路径字体源与内存占用
 
 - 检索问题：Maple/Iosevka/Monaspace 是否需要把完整 TTF 读入 `Vec<u8>`，以及改用路径源后能否降低应用侧常驻内存。
@@ -236,3 +244,20 @@
 - 关键结论：`cache-rendering-hint` 是可绑定的 bool 属性；Skia/FemtoVG 在启用时为该 Layer 创建并复用离屏图像，software renderer 没有等价 layer image cache。若整个终端行同时包含光标、选区或目标反馈，这些高频交互依赖会使缓存反复失效；缓存层应只包含行背景、文字和固定装饰。默认背景矩形和每 run 的透明包装 Rectangle 可以在不改变终端模型、字形内容或交互覆盖顺序的前提下省略。
 - 对实施计划的影响：增加两个独立且可预览的 Appearance 设置；紧凑节点默认开启，静态行缓存默认关闭。TerminalGrid 在紧凑分支只为非默认背景创建 Rectangle，并直接放置 Text/装饰；缓存只包住该静态分支，光标、选区、目标高亮和 IME 保持在层外。
 - 未解决问题：Skia cache 的实际 CPU 收益和 Retina 纹理 footprint 必须用相同窗口、pane 数和持续输出 A/B；software 模式不预期从 layer cache 获益，目标平台视觉一致性由用户验收。
+
+## 2026-08-23 连续窗口 resize 的合并与刷新范围
+
+- 检索问题：Slint/Winit 及成熟终端在连续窗口 resize 期间如何避免重复 surface/model 重排和闪烁？
+- 检索原因：用户观察到改变窗口大小时画面闪烁、不流畅，需要确认应用层 resize 请求与 renderer surface 重配置的低风险处理顺序。
+- 来源列表：Winit `WindowEvent::Resized` 与 `RedrawRequested` 文档 <https://docs.rs/winit/latest/winit/event/enum.WindowEvent.html>；Slint issue #12730 <https://github.com/slint-ui/slint/issues/12730>；Slint PR #12733 <https://github.com/slint-ui/slint/pull/12733>；Slint PR #12490 <https://github.com/slint-ui/slint/pull/12490>；WezTerm resize 路径 <https://github.com/wezterm/wezterm/blob/main/wezterm-gui/src/termwindow/resize.rs>；Kitty `pause_resize_notifications_to_child` <https://github.com/kovidgoyal/kitty/blob/master/kitty/window.py>；Alacritty display resize <https://github.com/alacritty/alacritty/blob/master/alacritty/src/display/mod.rs>；Alacritty issue #7898 <https://github.com/alacritty/alacritty/issues/7898>；Slint issue #6259 <https://github.com/slint-ui/slint/issues/6259>。
+- 关键结论：窗口 resize 事件会连续到达，Winit 的 redraw 合并不会自动合并应用层 PTY/model resize；成熟终端保存最新尺寸并只在行列实际变化时提交。Slint 的 surface hold/150ms settle 方案仍未形成已合并、跨 renderer 的稳定 API，相关 PR 已关闭或未解决全部 lag，因此先修正 AxSSH 自身的 full workspace refresh 和重复 worker resize。
+- 对实施计划的影响：RZ2 将 resize 成功后的刷新改成当前 terminal-only 请求；RZ3/RZ4 在模型与 worker watch/pending 层去重相同行列。平台原生 live-resize 状态、暂停 PTY reflow 和 renderer surface hold 暂不引入，待同负载测量后再决定。
+- 未解决问题：Alacritty 的 macOS compositor/vsync 闪烁问题仍开放；目标 macOS 需要人工确认 Software/GPU renderer 下连续拖动、IME、选区、焦点和真实 PTY NAWS/窗口变更表现。
+## 2026-08-23 终端按区更新与 macOS software present
+
+- 检索问题：Slint software renderer 的终端内容是否适合按固定行区分组更新，应用层 tile 优化能否避免 macOS 最终整帧 surface 提交？
+- 检索原因：现有终端已经做了可见行级增量 model 更新，但用户仍观察到 dirty/repaint 时 CPU 较高，需要区分 Slint item/model/glyph 成本与平台 surface present 成本。
+- 来源列表：Slint issue #7432 <https://github.com/slint-ui/slint/issues/7432>、#8737 <https://github.com/slint-ui/slint/issues/8737>、#10370 <https://github.com/slint-ui/slint/issues/10370>、#12173 <https://github.com/slint-ui/slint/issues/12173>、#12752 <https://github.com/slint-ui/slint/issues/12752>；Slint PR #12758 <https://github.com/slint-ui/slint/pull/12758>；softbuffer PR #99 <https://github.com/rust-windowing/softbuffer/pull/99>；锁定依赖 `softbuffer 0.4.8` macOS CoreGraphics backend。
+- 关键结论：固定 8/16 行 tile 可以减少顶层重复项树遍历、model/property 通知和静态行文字绘制的重复成本；但锁定的 macOS softbuffer backend 报告 `age=0`，`present_with_damage` 忽略 damage 并设置完整尺寸 `CGImage`，所以 tile 不能单独解决最终整帧提交。不能只把 buffer age 改为 1，因为当前 buffer 没有持久 framebuffer，可能产生脏数据。
+- 对实施计划的影响：本轮采用固定 `TILE_ROWS = 8`，保持 Slint/Cargo/renderer 依赖不变；只重用未变化 tile 的 model identity，交互覆盖层留在 tile cache 外；不修改 softbuffer、GPU surface、parser、worker 或 SSH 边界。
+- 未解决问题：目标 macOS 上 tile 对 glyph 绘制和总 CPU 的实际收益需要相同窗口、pane 数、renderer 和持续输出负载的 A/B sample；若热点仍集中在 `WinitSoftwareRenderer`/CoreAnimation，则下一步应评估 GPU/Skia 或平台 backend，而不是继续增大应用层 tile。

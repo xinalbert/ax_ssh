@@ -46,6 +46,15 @@ collecting a comparison sample:
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
+The repository patches the locked `i-slint-backend-winit` and `softbuffer`
+sources under `vendor/`. The winit patch forwards the renderer's individual
+damage rectangles. On macOS, the softbuffer patch keeps a persistent
+framebuffer and updates only the intersecting 512x64 CoreAnimation tile layers;
+the first frame and every resize still use a full update. This is intentionally
+kept below the Slint application API so the terminal model and UI contracts do
+not depend on backend-specific types. Keep these patches source-available and
+recheck them when upgrading Slint or softbuffer.
+
 The environment override and saved preference are consumed before the first
 `AppWindow` is created, so renderer initialization failures are reported during
 startup.

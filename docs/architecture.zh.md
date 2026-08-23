@@ -793,7 +793,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `terminal_compact_rendering` 和默认关闭的 `terminal_row_render_cache`。前者移除多余的逐 run
     Slint item 和默认背景矩形；后者启用 renderer 持有的静态行图层，并可能增加图形内存。旧文件缺失时采用这两个默认值。schema 版本 26 增加独立的聚焦和可见未聚焦终端刷新上限
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
-    缺失或无效值会限制到该范围。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。schema 版本 24 增加
+    缺失或无效值会限制到该范围。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
+    `terminal_partition_strategy` 向后兼容且不增加 schema 版本；Appearance 中的选择器暂时隐藏，但已有配置值仍继续生效；缺失或无效值规范化为 `tile-8`。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
@@ -879,6 +880,18 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 装饰放入 `cache-rendering-hint` layer，选区、光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
+内部的 `terminal_partition_strategy` 选择逐行、8 行或 16 行的
+`TerminalRenderTile` 分组，默认使用 8 行。为先验证分区实现，Appearance 中的选择器暂时隐藏，已有配置值仍保持兼容。
+每个 tile 保留全局 `start_row`，resize 或字体变化后行位置仍由当前 pane 几何计算；parser、scrollback、输入、选区和
+IME 契约保持不变。分区首先用于有界 Rust/Slint model 增量更新，再把脏区域交给 renderer；不能把设置本身误称为所有
+backend 都支持 partial present。
+
+锁定的 Slint 1.17.1 winit software backend 在 `vendor/i-slint-backend-winit/` 中携带本地补丁，把每个物理
+脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 在
+`vendor/softbuffer/` 中携带本地补丁：保留持久像素缓冲，首帧之后报告可复用的 buffer age，并只更新与
+damage 相交的 512x64 CoreAnimation tile layer。首帧、resize 和失效缓冲路径会更新全部 tile。这是
+`winit-software` 的实际 framebuffer 脏区提交路径，不改变 Slint API、终端所有权或 SSH 边界。GPU/Metal
+仍只把 Skia 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
 运行时终端几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 
 ## 分阶段范围

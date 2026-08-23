@@ -564,6 +564,7 @@
 - 受影响文件：`src/app.rs`、`src/app/file_icons.rs`、`src/app/view/sftp.rs`、`docs/{architecture,architecture.zh}.md` 和 `docs/project-{implementation-tracker,env-audit}/`。
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1 和 Cargo.lock；未新增 crate、未联网、未修改 SSH trust/凭据/transport。
 - 验证结果：runtime/file-icon 定向测试、`cargo check --locked --offline`、`cargo fmt --all -- --check`、严格 Clippy 和完整 `cargo test --locked --offline`（库 199、应用 193、Doc tests 0）通过；重复 `footprint`/`vmmap -summary` 与目标平台 GUI 资源验收仍需用户执行。
+
 ## 2026-08-22 app 聚合模块拆分施工预检
 
 - 目的：为按功能拆分 `src/app.rs` 建立实现前的环境与边界基线。
@@ -602,3 +603,19 @@
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Fontique 0.10.0、Tokio 1、Cargo.lock 和 locked/offline 门禁；不新增依赖、不改变 renderer、配置 schema、SSH trust、凭据或 transport。
 - 验证结果：已确认锁定 Fontique 源码在路径扫描和按需数据访问阶段使用 mmap/SourceCache；`cargo test --bin ax_ssh app::font_bridge --locked --offline` 通过（8 项），完整 fmt/check/严格 Clippy/Cargo test（库 199、应用 193、Doc tests 0）、431 条翻译、tracker validator 和 `git diff --check` 通过。validator 仍报告旧月度记录的历史格式问题。
 - 风险/待办：字体首次渲染仍可能产生 mmap、解析和 glyph cache；Fontique shared collection 没有本轮可靠的动态注销 API。目标 macOS 需相同字体负载重新采样 `MALLOC_LARGE`、`footprint` 和 `vmmap -summary`。
+
+## 2026-08-23 连续窗口 resize 环境验证
+
+- 变化摘要：resize callback 现在只调度当前可见 terminal pane；AppState 先比较规范化模型尺寸，再请求指定 worker 并推进 selection revision；SSH/Telnet watch 和 Local pending latest-value 对同尺寸请求去重。
+- 受影响文件：`src/app/terminal_bridge.rs`、`src/app/state/tabs.rs`、`src/terminal.rs`、`src/{local_shell,telnet,ssh/worker}.rs`、`docs/project-implementation-tracker/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、russh 0.62.2、Cargo.lock 和 locked/offline 门禁；未新增依赖、线程或 renderer surface API。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 201、应用 193、Doc tests 0）、resize focused tests 和 `git diff --check` 通过。
+- 人工验收：目标 macOS Software/GPU renderer 的连续拖动闪烁、焦点/IME/选区和真实 SSH/Telnet/Local 行列同步仍需用户确认；不把静态门禁等同于平台 GUI 流畅度证明。
+
+## 2026-08-23 dirty-region backend patch 环境验证
+
+- 变化摘要：新增本地 crates.io patch，绕过锁定 Slint 1.17.1 winit software backend 的 bounding-box damage 和 macOS softbuffer 0.4.8 的 `age=0`/整帧 `CGImage` 提交限制。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`vendor/{i-slint-backend-winit,softbuffer}/`、第三方许可、双语架构/开发说明和项目跟踪。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、softbuffer 0.4.8 和 locked/offline Cargo 门禁；不新增运行时 crate，不改变 SSH trust、凭据或 transport。
+- 验证结果：全量 fmt/check/严格 Clippy/test/build、vendor rustfmt、中文 catalog/check 和 `git diff --check` 通过；仓库未提供 `scripts/validate_tracking_docs.py`，该命令未执行。目标平台软件 renderer 的持续输出、resize、隐藏恢复、DPI、闪烁/残影和同负载 sample/A-B 仍待用户验收。
+- 环境变化检查：是；仅 macOS CoreGraphics backend 的 surface presentation 从单层整帧改为持久 framebuffer + 512x64 tile layer，非 Apple backend dispatch 未改行为。

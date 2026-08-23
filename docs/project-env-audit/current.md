@@ -242,8 +242,18 @@ git diff --check
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1 和 locked/offline Cargo 门禁；未新增 crate、配置 schema、工具链、CI、Rust callback、worker、SSH trust 或凭据边界。
 - 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、完整 `cargo test --locked --offline`（库 148、应用 147、Doc tests 0）和 `git diff --check` 通过。严格 Clippy 被范围外 `src/ssh/x11.rs` 的两项 byte-slice lint 与 `src/app/{terminal_bridge,view/terminal}.rs` 的两项测试模块顺序 lint 阻断；目标平台 Tab 首次输入、分屏点击焦点和主/独立窗口框线留用户验收。
 
+## 2026-08-23 连续窗口 resize 环境验证
+
+- 项目边界：`src/app/terminal_bridge.rs`、`src/app/state/tabs.rs`、`src/terminal.rs`、`src/{local_shell,telnet,ssh/worker}.rs` 及 resize 路由测试；不修改 Cargo 依赖、Slint/Cargo 版本、SSH trust、凭据或 transport 选择。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、russh 0.62.2；本机 `rustc/cargo 1.97.1`、rustfmt 1.9.0、Clippy 0.1.97 可用，Cargo.lock 未改变。
+- 运行环境：Slint `TerminalPane` 继续使用 16ms latest-size timer；WindowRouter 的 terminal-only dirty gate 只更新可见 pane，Serial worker 没有 PTY resize 通道。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 201、应用 193、Doc tests 0）、resize focused tests、翻译检查和 `git diff --check` 通过；tracker validator 已执行但仍报告既有历史条目格式错误，本轮新增记录未引入错误；本轮 Markdown diff 未新增链接。
+- 环境变化检查：否；本轮只改变应用层刷新范围、尺寸比较和 worker resize 通知去重，不增加线程、surface、依赖或持久化字段。
+- 开工判定：施工完成；目标 macOS Software/GPU renderer 的实际拖动闪烁、IME/选区/焦点和真实 SSH/Telnet/Local 行列同步仍需用户验收。
+
 ## 最后确认时间
 
+- 2026-08-23 11:30 +0800：连续窗口 resize 的 pane-only snapshot、尺寸/worker 去重和完整 locked/offline Cargo 门禁已通过；tracker validator 仍只报告旧历史条目格式错误，目标平台 GUI/真实 transport 仍待用户验收。
 - 2026-08-23 09:40 +0800：MEM5 detached model 与字体审计已通过 locked/offline fmt/check/Clippy/test、翻译和差异门禁；目标平台仍需验证 Software/GPU 窗口关闭后 footprint、vmmap 和线程回收，平台 allocator/Fontique/CoreAnimation/Metal RSS 不作即时归还承诺。
 - 2026-08-22 19:10 +0800：内存/线程生命周期实现和完整离线 Cargo 门禁已完成；目标平台重复 `footprint`/`vmmap -summary` 采样、GUI 和真实 transport 仍待用户验收。
 - 2026-08-17 14:28 +0800：Release 现在仅由外部推送的 annotated 日期 tag 直接启动；Create/Retry、tag CI dispatch/wait 与 GitHub Script action 已删除。两个 YAML、现有 tag/元数据、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、Markdown 相对链接和差异检查通过；tracker validator 仅保留 39 条既有历史时间字段错误。下一枚新 tag 仍需 GitHub-hosted 平台/发布验收。
@@ -266,3 +276,12 @@ git diff --check
 - 受影响文件：`Cargo.{toml,lock}`、`build.rs`、`src/config/`、`src/app/`、`ui/`、`translations/`、翻译检查脚本和双语文档。
 - 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0 和 locked/offline Cargo 门禁；`sys-locale` 已存在本地锁定依赖缓存，目录额外使用 Python 3 检查，并在可用时执行 `msgfmt --check --check-format`。
 - 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 150、应用 152、Doc tests 0）、386 条目录覆盖/占位符检查、`msgfmt`、Python 编译、46 项 Markdown 相对链接和差异检查通过。新增请求代次回归证明迟到语言保存不能覆盖最新选择；tracker validator 只剩 16 条旧月度记录时间字段错误。目标平台 locale 检测、即时切换和多窗口视觉由用户验收。
+
+## 2026-08-23 dirty-region backend patch 环境验证
+
+- 项目边界：`vendor/i-slint-backend-winit/`、`vendor/softbuffer/`、`Cargo.toml`/`Cargo.lock` 和 backend 文档；不修改 Slint UI 业务组件、terminal parser/worker、SSH trust、凭据或 transport。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1、softbuffer 0.4.8；本机 rustc/cargo 1.97.1，Cargo 可离线解析本地 patch。两个 vendor 目录保留上游许可和最小行为差异。
+- 运行环境：winit software renderer 将每个 Slint dirty rectangle 转换为 `softbuffer::Rect`；macOS CoreGraphics surface 使用持久物理像素 buffer 与 512x64 child layer 网格，tile frame 使用 root `contentsScale` 的逻辑坐标换算。
+- 测试环境：`cargo fmt --all -- --check`、vendor backend rustfmt、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`cargo build --locked --offline`、中文 catalog/check 和 `git diff --check` 通过。仓库未提供 `scripts/validate_tracking_docs.py`，该命令未执行。
+- 环境变化检查：是；新增两个本地 crates.io patch 和 macOS CoreAnimation tile surface 行为，非 macOS backend dispatch 保持原实现；升级 Slint/softbuffer 必须重新核对 damage、buffer age 和 layer 坐标契约。
+- 开工判定：代码施工完成；目标 macOS Software renderer 的持续输出、resize、窗口隐藏/恢复、Retina DPI、光标/选区/IME 和同负载 sample/A-B 仍需人工验收。
