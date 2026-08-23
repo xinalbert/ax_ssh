@@ -194,10 +194,19 @@ impl TelnetSessionHandle {
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
+        if self.task.is_finished() || self.resize_tx.receiver_count() == 0 {
+            anyhow::bail!("cannot resize after Telnet worker stopped");
+        }
         let size = terminal_size(columns, rows);
-        self.resize_tx
-            .send(size)
-            .map_err(|_| anyhow::anyhow!("cannot resize after Telnet worker stopped"))
+        self.resize_tx.send_if_modified(|current| {
+            if *current == size {
+                false
+            } else {
+                *current = size;
+                true
+            }
+        });
+        Ok(())
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
@@ -575,6 +584,40 @@ mod tests {
         assert_eq!(output, b"A\r\n\xffB");
         assert!(saw_nop);
         assert!(sent.windows(3).any(|window| window == [IAC, DONT, 99]));
+    }
+
+    #[test]
+    fn repeated_resize_does_not_notify_telnet_watch_receiver() {
+        let initial = terminal_size(80, 24);
+        let (sender, receiver) = watch::channel(initial);
+        assert!(!sender.send_if_modified(|current| {
+            if *current == initial {
+                false
+            } else {
+                *current = initial;
+                true
+            }
+        }));
+        assert!(
+            !receiver
+                .has_changed()
+                .expect("watch receiver should be open")
+        );
+
+        let changed = terminal_size(100, 30);
+        assert!(sender.send_if_modified(|current| {
+            if *current == changed {
+                false
+            } else {
+                *current = changed;
+                true
+            }
+        }));
+        assert!(
+            receiver
+                .has_changed()
+                .expect("watch receiver should be open")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -328,9 +328,19 @@ impl SshSessionHandle {
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
         validate_terminal_size(columns, rows)?;
-        self.resize_tx
-            .send(TerminalSize::backend(columns, rows))
-            .map_err(|_| anyhow::anyhow!("cannot update terminal size after SSH worker stopped"))
+        if self.task.is_finished() || self.resize_tx.receiver_count() == 0 {
+            anyhow::bail!("cannot update terminal size after SSH worker stopped");
+        }
+        let size = TerminalSize::backend(columns, rows);
+        self.resize_tx.send_if_modified(|current| {
+            if *current == size {
+                false
+            } else {
+                *current = size;
+                true
+            }
+        });
+        Ok(())
     }
 
     pub fn request_open_sftp(&self, path: String) -> Result<()> {
@@ -643,6 +653,40 @@ mod tests {
                 u32::from(crate::terminal_dimensions::MAX_TERMINAL_ROWS) + 1
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn repeated_resize_does_not_notify_ssh_watch_receiver() {
+        let initial = TerminalSize::backend(80, 24);
+        let (sender, receiver) = watch::channel(initial);
+        assert!(!sender.send_if_modified(|current| {
+            if *current == initial {
+                false
+            } else {
+                *current = initial;
+                true
+            }
+        }));
+        assert!(
+            !receiver
+                .has_changed()
+                .expect("watch receiver should be open")
+        );
+
+        let changed = TerminalSize::backend(100, 30);
+        assert!(sender.send_if_modified(|current| {
+            if *current == changed {
+                false
+            } else {
+                *current = changed;
+                true
+            }
+        }));
+        assert!(
+            receiver
+                .has_changed()
+                .expect("watch receiver should be open")
         );
     }
 

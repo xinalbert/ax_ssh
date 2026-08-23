@@ -28,6 +28,13 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_terminal_semantic_highlighting(settings.appearance.terminal_semantic_highlighting);
     ui.set_terminal_compact_rendering(settings.appearance.terminal_compact_rendering);
     ui.set_terminal_row_render_cache(settings.appearance.terminal_row_render_cache);
+    ui.set_terminal_partition_strategy(
+        settings
+            .appearance
+            .terminal_partition_strategy
+            .as_setting()
+            .into(),
+    );
     ui.set_terminal_cursor_blink(settings.appearance.terminal_cursor_blink);
     ui.set_focused_terminal_refresh_fps(i32::from(
         settings.appearance.focused_terminal_refresh_fps,

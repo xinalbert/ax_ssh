@@ -49,6 +49,10 @@ pub(super) use self::terminal::{
     apply_active_snapshot, apply_terminal_pane_layout, dispatch_active_snapshot,
     dispatch_terminal_output_snapshot, dispatch_terminal_snapshot, set_tab_status,
 };
+#[cfg(test)]
+pub(in crate::app) use self::terminal::{
+    reuse_terminal_render_tiles, terminal_render_tiles, terminal_render_tiles_with_rows,
+};
 pub(super) use self::workspace::refresh_workspace;
 
 #[cfg(test)]

@@ -241,6 +241,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_partition_strategy: "tile-16",
             terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
@@ -273,6 +274,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_partition_strategy: TerminalPartitionStrategy::Tile16,
             terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
@@ -301,6 +303,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_partition_strategy: "unsupported",
             terminal_cursor_blink: true,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
@@ -328,6 +331,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_partition_strategy: TerminalPartitionStrategy::Tile8,
             terminal_cursor_blink: true,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
@@ -355,6 +359,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
             semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
+            terminal_partition_strategy: "tile-8",
             terminal_cursor_blink: true,
             focused_terminal_refresh_fps: -10,
             unfocused_terminal_refresh_fps: 999,
@@ -889,6 +894,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             semantic_highlighting: true,
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
+            terminal_partition_strategy: "tile-16",
             terminal_cursor_blink: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
@@ -1047,6 +1053,39 @@ fn renderer_preference_defaults_and_serializes_stable_values() {
         serde_json::to_value(RendererPreference::Software)
             .expect("software renderer preference should serialize"),
         "software"
+    );
+}
+
+#[test]
+fn terminal_partition_strategy_defaults_and_serializes_stable_values() {
+    assert_eq!(
+        TerminalPartitionStrategy::default(),
+        TerminalPartitionStrategy::Tile8
+    );
+    assert_eq!(
+        TerminalPartitionStrategy::from_setting("rows"),
+        TerminalPartitionStrategy::Rows
+    );
+    assert_eq!(
+        TerminalPartitionStrategy::from_setting("tile-16"),
+        TerminalPartitionStrategy::Tile16
+    );
+    assert_eq!(
+        TerminalPartitionStrategy::from_setting("invalid"),
+        TerminalPartitionStrategy::Tile8
+    );
+    assert_eq!(TerminalPartitionStrategy::Rows.as_setting(), "rows");
+    assert_eq!(TerminalPartitionStrategy::Tile8.as_setting(), "tile-8");
+    assert_eq!(TerminalPartitionStrategy::Tile16.as_setting(), "tile-16");
+    assert_eq!(
+        serde_json::to_value(TerminalPartitionStrategy::Tile16).unwrap(),
+        "tile-16"
+    );
+    let legacy: AppearanceSettings =
+        serde_json::from_str("{}").expect("missing strategy should default");
+    assert_eq!(
+        legacy.terminal_partition_strategy,
+        TerminalPartitionStrategy::Tile8
     );
 }
 

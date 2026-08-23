@@ -36,11 +36,21 @@ export struct TerminalRenderLine {
     runs: [TerminalRenderRun],
 }
 
+export struct TerminalRenderTile {
+    start_row: int,
+    source_revision_low: int,
+    source_revision_high: int,
+    render_cache_key_low: int,
+    render_cache_key_high: int,
+    rows: [TerminalRenderLine],
+}
+
 // Rust owns this snapshot. It contains only the bounded visible grid and no
 // local interaction state.
 export struct TerminalGridView {
     connected: bool,
-    render_lines: [TerminalRenderLine],
+    render_tiles: [TerminalRenderTile],
+    row_count: int,
     content_columns: int,
     cursor_row: int,
     cursor_column: int,
@@ -109,38 +119,89 @@ export component TerminalGrid inherits Rectangle {
     background: root.view.background;
     clip: true;
 
-    for line[line-index] in root.view.render_lines : Rectangle {
+    // Keep the repeater shallow: each tile owns a small, stable group of rows.
+    // Cursor and selection remain per-row overlays and do not enter the tile's
+    // static rendering cache.
+    for tile in root.view.render_tiles : Rectangle {
         x: 0px;
-        y: root.top-offset + line-index * root.cell-height;
+        y: root.top-offset + tile.start_row * root.cell-height;
         width: parent.width;
-        height: root.cell-height;
+        height: tile.rows.length * root.cell-height;
 
-        static-content := Rectangle {
+        for line[line-index] in tile.rows : Rectangle {
+            x: 0px;
+            y: line-index * root.cell-height;
             width: parent.width;
-            height: parent.height;
-            background: transparent;
-            cache-rendering-hint: root.view.row_render_cache;
-
-            if !root.view.compact_rendering : Rectangle {
+            height: root.cell-height;
+            static-content := Rectangle {
                 width: parent.width;
                 height: parent.height;
                 background: transparent;
+                cache-rendering-hint: root.view.row_render_cache;
 
-                for run in line.runs : Rectangle {
-                    x: run.column * root.cell-width;
-                    width: run.cells * root.cell-width;
-                    height: root.cell-height;
-                    background: run.background;
+                if !root.view.compact_rendering : Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    background: transparent;
+
+                    for run in line.runs : Rectangle {
+                        x: run.column * root.cell-width;
+                        width: run.cells * root.cell-width;
+                        height: root.cell-height;
+                        background: run.background;
+                    }
+
+                    for run in line.runs : Rectangle {
+                        x: run.column * root.cell-width;
+                        width: run.cells * root.cell-width;
+                        height: root.cell-height;
+                        background: transparent;
+                        Text {
+                            y: (parent.height - root.font-cell-height) / 2;
+                            width: parent.width;
+                            height: root.font-cell-height;
+                            text: run.text;
+                            color: run.foreground;
+                            font-family: root.view.font_family;
+                            font-size: root.view.font_size;
+                            font-weight: run.bold ? 700 : 400;
+                            font-italic: run.italic;
+                            letter-spacing: 0px;
+                            horizontal-alignment: run.centered ? center : left;
+                            vertical-alignment: center;
+                            overflow: clip;
+                        }
+                        if run.underline : Rectangle {
+                            y: parent.height - Theme.terminal-underline-offset;
+                            width: parent.width;
+                            height: Theme.hairline;
+                            background: run.foreground;
+                        }
+                        if run.strikethrough : Rectangle {
+                            y: parent.height / 2;
+                            width: parent.width;
+                            height: Theme.hairline;
+                            background: run.foreground;
+                        }
+                    }
                 }
 
-                for run in line.runs : Rectangle {
-                    x: run.column * root.cell-width;
-                    width: run.cells * root.cell-width;
-                    height: root.cell-height;
+                if root.view.compact_rendering : Rectangle {
+                    width: parent.width;
+                    height: parent.height;
                     background: transparent;
-                    Text {
-                        y: (parent.height - root.font-cell-height) / 2;
-                        width: parent.width;
+
+                    for run in line.backgrounds : Rectangle {
+                        x: run.column * root.cell-width;
+                        width: run.cells * root.cell-width;
+                        height: root.cell-height;
+                        background: run.background;
+                    }
+
+                    for run in line.runs : Text {
+                        x: run.column * root.cell-width;
+                        y: (root.cell-height - root.font-cell-height) / 2;
+                        width: run.cells * root.cell-width;
                         height: root.font-cell-height;
                         text: run.text;
                         color: run.foreground;
@@ -153,108 +214,66 @@ export component TerminalGrid inherits Rectangle {
                         vertical-alignment: center;
                         overflow: clip;
                     }
-                    if run.underline : Rectangle {
-                        y: parent.height - Theme.terminal-underline-offset;
-                        width: parent.width;
-                        height: Theme.hairline;
-                        background: run.foreground;
-                    }
-                    if run.strikethrough : Rectangle {
-                        y: parent.height / 2;
-                        width: parent.width;
+
+                    for run in line.decorations : Rectangle {
+                        x: run.column * root.cell-width;
+                        y: run.strikethrough
+                            ? parent.height / 2
+                            : parent.height - Theme.terminal-underline-offset;
+                        width: run.cells * root.cell-width;
                         height: Theme.hairline;
                         background: run.foreground;
                     }
                 }
             }
 
-            if root.view.compact_rendering : Rectangle {
-                width: parent.width;
-                height: parent.height;
-                background: transparent;
+            if root.selection.active
+                && tile.start_row + line-index >= root.selection.first_row
+                && tile.start_row + line-index <= root.selection.last_row : Rectangle {
+                property <int> first-column:
+                    tile.start_row + line-index == root.selection.first_row
+                        ? root.selection.first_column : 0;
+                property <int> last-column:
+                    tile.start_row + line-index == root.selection.last_row
+                        ? root.selection.last_column : root.view.content_columns - 1;
+                x: max(0, self.first-column) * root.cell-width;
+                width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
+                height: root.cell-height;
+                background: root.view.selection_background.with-alpha(0.72);
+            }
 
-                for run in line.backgrounds : Rectangle {
-                    x: run.column * root.cell-width;
-                    width: run.cells * root.cell-width;
-                    height: root.cell-height;
-                    background: run.background;
-                }
+            if root.target-highlight.active
+                && tile.start_row + line-index == root.target-highlight.row : Rectangle {
+                x: max(0, root.target-highlight.start_column) * root.cell-width;
+                width: max(
+                    1,
+                    root.target-highlight.end_column - root.target-highlight.start_column,
+                ) * root.cell-width;
+                y: parent.height - Theme.terminal-underline-offset;
+                height: Theme.hairline;
+                background: Theme.accent;
+            }
 
-                for run in line.runs : Text {
-                    x: run.column * root.cell-width;
-                    y: (root.cell-height - root.font-cell-height) / 2;
-                    width: run.cells * root.cell-width;
+            if root.view.connected && root.view.cursor_visible
+                && (!root.cursor-blink-enabled || root.cursor-blink)
+                && tile.start_row + line-index == root.view.cursor_row : Rectangle {
+                x: root.view.cursor_column * root.cell-width;
+                width: root.cell-width;
+                height: root.cell-height;
+                background: root.view.foreground;
+                Text {
+                    y: (parent.height - root.font-cell-height) / 2;
+                    width: parent.width;
                     height: root.font-cell-height;
-                    text: run.text;
-                    color: run.foreground;
+                    text: root.view.cursor_text;
+                    color: root.view.background;
                     font-family: root.view.font_family;
                     font-size: root.view.font_size;
-                    font-weight: run.bold ? 700 : 400;
-                    font-italic: run.italic;
                     letter-spacing: 0px;
-                    horizontal-alignment: run.centered ? center : left;
+                    horizontal-alignment: left;
                     vertical-alignment: center;
                     overflow: clip;
                 }
-
-                for run in line.decorations : Rectangle {
-                    x: run.column * root.cell-width;
-                    y: run.strikethrough
-                        ? parent.height / 2
-                        : parent.height - Theme.terminal-underline-offset;
-                    width: run.cells * root.cell-width;
-                    height: Theme.hairline;
-                    background: run.foreground;
-                }
-            }
-        }
-
-        if root.selection.active
-            && line-index >= root.selection.first_row
-            && line-index <= root.selection.last_row : Rectangle {
-            property <int> first-column:
-                line-index == root.selection.first_row
-                    ? root.selection.first_column : 0;
-            property <int> last-column:
-                line-index == root.selection.last_row
-                    ? root.selection.last_column : root.view.content_columns - 1;
-            x: max(0, self.first-column) * root.cell-width;
-            width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
-            height: root.cell-height;
-            background: root.view.selection_background.with-alpha(0.72);
-        }
-
-        if root.target-highlight.active
-            && line-index == root.target-highlight.row : Rectangle {
-            x: max(0, root.target-highlight.start_column) * root.cell-width;
-            width: max(
-                1,
-                root.target-highlight.end_column - root.target-highlight.start_column,
-            ) * root.cell-width;
-            y: parent.height - Theme.terminal-underline-offset;
-            height: Theme.hairline;
-            background: Theme.accent;
-        }
-
-        if root.view.connected && root.view.cursor_visible
-            && (!root.cursor-blink-enabled || root.cursor-blink)
-            && line-index == root.view.cursor_row : Rectangle {
-            x: root.view.cursor_column * root.cell-width;
-            width: root.cell-width;
-            height: root.cell-height;
-            background: root.view.foreground;
-            Text {
-                y: (parent.height - root.font-cell-height) / 2;
-                width: parent.width;
-                height: root.font-cell-height;
-                text: root.view.cursor_text;
-                color: root.view.background;
-                font-family: root.view.font_family;
-                font-size: root.view.font_size;
-                letter-spacing: 0px;
-                horizontal-alignment: left;
-                vertical-alignment: center;
-                overflow: clip;
             }
         }
     }
@@ -294,7 +313,7 @@ export component TerminalGrid inherits Rectangle {
         changed has-hover => { root.pointer-hovered(self.has-hover); }
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
-                let row = max(0, min(root.view.render_lines.length - 1,
+                let row = max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
@@ -330,7 +349,7 @@ export component TerminalGrid inherits Rectangle {
                     event.modifiers.meta,
                 );
             } else if event.kind == PointerEventKind.up {
-                let row = max(0, min(root.view.render_lines.length - 1,
+                let row = max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
@@ -347,7 +366,7 @@ export component TerminalGrid inherits Rectangle {
                     root.click-pressed = false;
                 }
             } else if event.kind == PointerEventKind.move {
-                let row = max(0, min(root.view.render_lines.length - 1,
+                let row = max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
@@ -384,7 +403,7 @@ export component TerminalGrid inherits Rectangle {
         double-clicked => {
             if root.click-sequence == 2 {
                 root.semantic-selection-request(
-                    max(0, min(root.view.render_lines.length - 1,
+                    max(0, min(root.view.row_count - 1,
                         floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,
                         floor(self.mouse-x / root.cell-width))),
@@ -393,7 +412,7 @@ export component TerminalGrid inherits Rectangle {
         }
         scroll-event(event) => {
             root.scrolled(
-                max(0, min(root.view.render_lines.length - 1,
+                max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height))),
                 max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width))),
@@ -435,7 +454,7 @@ export component TerminalGrid inherits Rectangle {
             }
             MenuItem {
                 title: @tr("Select All");
-                enabled: root.view.render_lines.length > 0;
+                enabled: root.view.row_count > 0;
                 activated => { root.select-all-request(); }
             }
         }

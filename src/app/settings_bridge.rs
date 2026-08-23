@@ -610,6 +610,7 @@ pub(super) fn wire_settings(
               terminal_semantic_highlighting,
               terminal_compact_rendering,
               terminal_row_render_cache,
+              terminal_partition_strategy,
               terminal_cursor_blink,
               focused_terminal_refresh_fps,
               unfocused_terminal_refresh_fps,
@@ -733,6 +734,7 @@ pub(super) fn wire_settings(
                     semantic_highlighting: terminal_semantic_highlighting,
                     terminal_compact_rendering,
                     terminal_row_render_cache,
+                    terminal_partition_strategy: terminal_partition_strategy.as_str(),
                     terminal_cursor_blink,
                     focused_terminal_refresh_fps,
                     unfocused_terminal_refresh_fps,
@@ -823,6 +825,9 @@ pub(super) fn wire_settings(
                 }
                 apply_terminal_presentation_policy(&window_router, &settings);
                 refresh_session_models(&ui_for_save, &state);
+                // Tile grouping is part of the terminal snapshot model, so a
+                // settings preview must rebuild visible terminal views once.
+                refresh_workspace(&ui_for_save, &state);
                 load_preview_bundled_fonts(
                     runtime.clone(),
                     state.clone(),

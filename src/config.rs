@@ -29,9 +29,9 @@ pub use self::session::{
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
     AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
-    ShortcutSettings, TerminalSemanticColors, TerminalSemanticColorsInput, TerminalSettings,
-    TerminalSettingsInput, UiLanguage, WorkspaceSettings, WorkspaceSettingsInput,
-    X11ServerProvider, X11Settings,
+    ShortcutSettings, TerminalPartitionStrategy, TerminalSemanticColors,
+    TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, UiLanguage,
+    WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
 };
 pub use self::theme::{
     TerminalColorScheme, ThemeMode, ThemePalette, ThemePaletteKind, ThemeSettings,

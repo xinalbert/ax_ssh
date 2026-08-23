@@ -58,6 +58,7 @@ struct LocalShellTask {
 pub struct LocalShellHandle {
     command_tx: SyncSender<LocalShellCommand>,
     pending_resize: Arc<Mutex<Option<TerminalSize>>>,
+    requested_resize: Arc<Mutex<TerminalSize>>,
     shutdown_requested: Arc<AtomicBool>,
     child_killer: Arc<Mutex<Option<Box<dyn ChildKiller + Send + Sync>>>>,
     process_group: Arc<AtomicI32>,
@@ -74,6 +75,7 @@ impl LocalShellHandle {
         let (command_tx, command_rx) = sync_channel(COMMAND_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let pending_resize = Arc::new(Mutex::new(None));
+        let requested_resize = Arc::new(Mutex::new(initial_size));
         let shutdown_requested = Arc::new(AtomicBool::new(false));
         let child_killer = Arc::new(Mutex::new(None));
         let process_group = Arc::new(AtomicI32::new(0));
@@ -114,6 +116,7 @@ impl LocalShellHandle {
             Self {
                 command_tx,
                 pending_resize,
+                requested_resize,
                 shutdown_requested,
                 child_killer,
                 process_group,
@@ -161,11 +164,20 @@ impl LocalShellHandle {
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
         validate_terminal_size(columns, rows)?;
+        let size = TerminalSize::backend(columns, rows);
+        let mut requested = self
+            .requested_resize
+            .lock()
+            .map_err(|_| anyhow::anyhow!("local terminal resize state lock poisoned"))?;
+        if *requested == size {
+            return Ok(());
+        }
+        *requested = size;
         *self
             .pending_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("local terminal resize state lock poisoned"))? =
-            Some(TerminalSize::backend(columns, rows));
+            Some(size);
         wake_worker(&self.command_tx)
     }
 

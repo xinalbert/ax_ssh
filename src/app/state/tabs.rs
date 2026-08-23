@@ -971,7 +971,7 @@ impl AppState {
     #[cfg(test)]
     pub(in crate::app) fn resize_active_terminal(&mut self, columns: u32, rows: u32) -> Result<()> {
         let tab_id = self.active_tab_id.context("no active terminal")?;
-        self.resize_terminal(tab_id, columns, rows)
+        self.resize_terminal(tab_id, columns, rows).map(|_| ())
     }
 
     pub(in crate::app) fn resize_terminal(
@@ -979,22 +979,29 @@ impl AppState {
         tab_id: Uuid,
         columns: u32,
         rows: u32,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let terminal = self
             .terminal_mut(tab_id)
             .context("terminal tab not found")?;
+        let current_size = terminal
+            .terminal
+            .as_ref()
+            .context("terminal tab has no terminal model")?;
+        let size = TerminalSize::model(columns as usize, rows as usize);
+        if current_size.size() == size {
+            return Ok(false);
+        }
+        if let Some(worker) = terminal.worker.as_ref() {
+            worker.request_resize(size.columns(), size.rows())?;
+        }
         let model = terminal
             .terminal
             .as_mut()
             .context("terminal tab has no terminal model")?;
-        let size = TerminalSize::model(columns as usize, rows as usize);
-        if let Some(worker) = terminal.worker.as_ref() {
-            worker.request_resize(size.columns(), size.rows())?;
-        }
         if model.resize(size.columns() as usize, size.rows() as usize) {
             terminal.invalidate_selection();
         }
-        Ok(())
+        Ok(true)
     }
 
     pub(in crate::app) fn scroll_terminal(&mut self, tab_id: Uuid, lines: i32) -> bool {

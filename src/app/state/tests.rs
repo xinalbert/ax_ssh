@@ -880,16 +880,20 @@ fn terminal_resize_invalidates_local_selection_revision() {
     let tab_id = state.open_local_shell_tab();
     let before = state.snapshot_for(Some(tab_id)).selection_revision;
 
-    state
-        .resize_terminal(tab_id, 12, 4)
-        .expect("terminal should resize");
+    assert!(
+        state
+            .resize_terminal(tab_id, 12, 4)
+            .expect("terminal should resize")
+    );
 
     let after = state.snapshot_for(Some(tab_id)).selection_revision;
     assert_eq!(after, before + 1);
 
-    state
-        .resize_terminal(tab_id, 12, 4)
-        .expect("duplicate terminal resize should be accepted");
+    assert!(
+        !state
+            .resize_terminal(tab_id, 12, 4)
+            .expect("duplicate terminal resize should be ignored")
+    );
 
     assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, after);
 }

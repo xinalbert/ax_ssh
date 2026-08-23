@@ -339,6 +339,12 @@ impl TerminalModel {
         true
     }
 
+    /// Returns the model-normalized viewport size used by the terminal grid.
+    pub fn size(&self) -> TerminalSize {
+        let grid = self.term.grid();
+        TerminalSize::model(grid.columns(), grid.screen_lines())
+    }
+
     pub fn set_scrollback_lines(&mut self, scrollback_lines: usize) {
         if scrollback_lines == self.scrollback_lines {
             return;

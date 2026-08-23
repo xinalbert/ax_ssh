@@ -203,9 +203,12 @@ pub(super) fn wire_terminal(
                 app.resize_terminal(tab_id, columns, rows)
             });
         match result {
-            Ok(()) => {
+            Ok(true) => {
                 log_ui_action_outcome("terminal.resize", "accepted");
-                dispatch_active_snapshot(&ui_for_resize, &state_for_resize);
+                dispatch_terminal_snapshot(&ui_for_resize, &state_for_resize, tab_id);
+            }
+            Ok(false) => {
+                log_ui_action_outcome("terminal.resize", "unchanged");
             }
             Err(error) => {
                 log_ui_action_outcome("terminal.resize", "ignored");
