@@ -59,6 +59,14 @@ raw-window-handle = "0.6.2"
 embed-resource = "3.0.9"
 slint-build = "1.17.1"
 
+[patch.crates-io]
+# Keep the application on Slint 1.17.1's public contracts while carrying the
+# two small backend fixes needed for real multi-rectangle presentation. The
+# patches are limited to winit damage forwarding and the macOS softbuffer
+# surface; SSH, terminal, and Slint UI ownership remain application-owned.
+i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
+softbuffer = { path = "vendor/softbuffer" }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 

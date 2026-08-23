@@ -17,6 +17,13 @@ Copyright SixtyFPS GmbH and the Slint contributors.
 The AxSSH About page also displays Slint's standard `AboutSlint` attribution
 component.
 
+AxSSH carries small, source-available local patches for the locked Slint winit
+backend and `softbuffer` 0.4.8 under `vendor/i-slint-backend-winit/` and
+`vendor/softbuffer/`. The patches preserve their upstream licenses and limit
+the behavior change to forwarding multiple damage rectangles and making the
+macOS CoreGraphics surface use a persistent tiled framebuffer. They do not
+change Slint's UI language or application APIs.
+
 ## Bundled Fonts
 
 The font files under `assets/fonts/` are distributed under the SIL Open Font
