@@ -137,7 +137,13 @@ pub(super) fn load_terminal_font_on_demand(
 #[derive(Debug)]
 pub(super) struct LoadedBundledFont {
     family: &'static str,
-    files: Vec<Vec<u8>>,
+    source: BundledFontSource,
+}
+
+#[derive(Debug)]
+enum BundledFontSource {
+    Embedded,
+    Paths(Vec<PathBuf>),
 }
 
 impl FontResources {
@@ -151,23 +157,25 @@ impl FontResources {
         let Some(font) = bundled_font(family) else {
             return Ok(None);
         };
-        let files = if font.family == BUNDLED_UI_FONT_FAMILY {
-            EMBEDDED_UI_FONT_FILES
-                .iter()
-                .map(|bytes| bytes.to_vec())
-                .collect()
+        let source = if font.family == BUNDLED_UI_FONT_FAMILY {
+            BundledFontSource::Embedded
         } else {
             let directory = self.find_font_directory(font).with_context(|| {
                 format!("bundled font resources are unavailable for {}", font.family)
             })?;
-            font.files
+            let paths = font
+                .files
                 .iter()
-                .map(|file_name| read_bundled_font_file(&directory.join(file_name)))
-                .collect::<Result<Vec<_>>>()?
+                .map(|file_name| directory.join(file_name))
+                .collect::<Vec<_>>();
+            for path in &paths {
+                validate_bundled_font_file(path)?;
+            }
+            BundledFontSource::Paths(paths)
         };
         Ok(Some(LoadedBundledFont {
             family: font.family,
-            files,
+            source,
         }))
     }
 
@@ -245,18 +253,28 @@ fn register_loaded_font_in_collection(
     collection: &mut fontique::Collection,
     font: LoadedBundledFont,
 ) -> Result<()> {
-    let mut registered_family_ids = BTreeSet::new();
-    for bytes in font.files {
-        let registered = collection.register_fonts(fontique::Blob::new(Arc::new(bytes)), None);
-        if registered.is_empty() {
-            anyhow::bail!("bundled font data could not be registered");
+    match font.source {
+        BundledFontSource::Embedded => {
+            for bytes in EMBEDDED_UI_FONT_FILES {
+                let registered =
+                    collection.register_fonts(fontique::Blob::new(Arc::new(bytes.to_vec())), None);
+                if registered.is_empty() {
+                    anyhow::bail!("bundled font data could not be registered");
+                }
+            }
         }
-        registered_family_ids.extend(registered.into_iter().map(|(family_id, _)| family_id));
+        BundledFontSource::Paths(paths) => {
+            collection.load_fonts_from_paths(paths);
+        }
     }
+
+    let family_id = collection
+        .family_id(font.family)
+        .ok_or_else(|| anyhow::anyhow!("bundled font family was not registered"))?;
     if font.family == TERMINAL_CJK_FALLBACK_FONT_FAMILY
         && !collection.set_fallbacks(
             fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Hani"), None),
-            registered_family_ids.into_iter(),
+            std::iter::once(family_id),
         )
     {
         anyhow::bail!("bundled CJK fallback could not be configured");
@@ -377,13 +395,13 @@ fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
     }
 }
 
-fn read_bundled_font_file(path: &Path) -> Result<Vec<u8>> {
+fn validate_bundled_font_file(path: &Path) -> Result<()> {
     let metadata = fs::metadata(path)
         .with_context(|| format!("cannot inspect bundled terminal font {}", path.display()))?;
     if metadata.len() == 0 || metadata.len() > MAX_BUNDLED_FONT_FILE_BYTES {
         anyhow::bail!("bundled terminal font file size is invalid");
     }
-    fs::read(path).with_context(|| format!("cannot read bundled terminal font {}", path.display()))
+    Ok(())
 }
 
 fn valid_font_family(value: &str) -> Option<String> {
@@ -481,8 +499,7 @@ mod tests {
             .expect("default UI font should be bundled");
 
         assert_eq!(loaded.family, BUNDLED_UI_FONT_FAMILY);
-        assert_eq!(loaded.files.len(), EMBEDDED_UI_FONT_FILES.len());
-        assert!(loaded.files.iter().all(|bytes| !bytes.is_empty()));
+        assert!(matches!(loaded.source, BundledFontSource::Embedded));
     }
 
     #[test]
@@ -510,6 +527,7 @@ mod tests {
             .load_bundled_font(TERMINAL_CJK_FALLBACK_FONT_FAMILY)
             .expect("Maple font resources should load")
             .expect("Maple should be a bundled font");
+        assert!(matches!(&maple.source, BundledFontSource::Paths(_)));
         let mut collection = fontique::Collection::new(fontique::CollectionOptions {
             shared: false,
             system_fonts: false,

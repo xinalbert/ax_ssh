@@ -1,3 +1,39 @@
+# 2026-08-23 Fontique 路径字体源环境验证
+
+- 项目边界：`src/app/font_bridge.rs`、`src/app/runtime.rs` 及运行时字体资源；目标是移除外部 TTF 的完整 `Vec<u8>` 常驻副本，保留嵌入式 JetBrains UI 字体和 Maple Hani fallback，不改变 renderer、配置 schema、SSH trust、凭据或 transport。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1，锁定 Fontique 0.10.0 API；`Collection::load_fonts_from_paths` 使用路径源，Fontique 源缓存按需加载文件数据。
+- 运行环境：本机 `rustc 1.97.1`、`cargo 1.97.1`、rustfmt 1.9.0、Clippy 0.1.97 可用；不新增依赖、不修改 `Cargo.lock`。外部自带字体继续从发行包 `assets/fonts/` 路径发现，JetBrains Mono 继续由 `include_bytes!` 提供。
+- 测试环境：`cargo test --bin ax_ssh app::font_bridge --locked --offline` 通过（8 项）；完整 fmt/check/Clippy/test、431 条翻译、tracker validator 和 `git diff --check` 通过。validator 仍报告旧月度记录的历史格式问题；本轮新增记录无错误。
+- 环境变化检查：是；字体加载的应用侧所有权从完整 heap buffer 改为路径列表，渲染期 Fontique/Slint glyph cache、mmap、CoreAnimation/Metal/software surface 和 allocator 的生命周期不改变。
+- 开工判定：施工完成；目标 macOS 仍需同 renderer/字体负载重复 footprint、`vmmap -summary` 和 heap 采样。
+
+# 2026-08-23 renderer 无关窗口资源释放环境验证
+
+- 项目边界：`src/app.rs`、`src/app/window_bridge.rs`、Slint `AppWindow` model 和窗口 adapter；目标是清理应用拥有的对象，不改变 renderer 选择、SSH trust、凭据或 transport。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1；`Cargo.toml`/`Cargo.lock` 和现有锁定离线命令保持不变。
+- 运行环境：本机 `rustc 1.97.1`、`cargo 1.97.1`、rustfmt 1.9.0、clippy 0.1.97 可用；没有联网或新增依赖。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`git diff --check` 已通过；tracker validator 只保留历史条目错误。
+- 环境变化检查：否；Software/GPU 只共用应用清理路径，Slint/Fontique/CoreAnimation/Metal/allocator 的平台缓存不承诺即时 RSS 归还。
+- 开工判定：施工完成；目标 macOS 的重复 footprint、`vmmap -summary`、线程数和窗口视觉仍需人工验收。
+
+## 2026-08-23 detached model 与字体常驻边界环境验证
+
+- 项目边界：`src/app/window_bridge.rs`、`src/app/font_bridge.rs`、detached Slint workspace；目标是删除不会显示的重复 model，并记录 bundled Fontique 字体的真实常驻边界。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Fontique 0.2 系列 API；不新增依赖、不改变 renderer、配置 schema、SSH trust、凭据或 transport。
+- 运行环境：`assets/fonts/` 中 JetBrains Mono 四字重约 1.1 MiB、Iosevka Term 四字重约 18.8 MiB、Maple Mono NF CN 两字重约 40 MiB、Monaspace Neon Variable 约 1.6 MiB；JetBrains 仍由 `include_bytes!` 提供，其他 family 仍按选中项从资源路径读取。
+- 变化摘要：detached 初始化保留 Terminal/SFTP 所需 model，sidebar/session/editor/options/font-option model 为空；Fontique shared collection 继续按 family 注册且不伪造动态卸载。
+- 测试环境：本轮代码修改后执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 193、Doc tests 0）、431 条翻译检查和 `git diff --check`；tracker validator 仍只报告历史条目的格式错误，目标平台资源采样仍需用户用同 renderer/负载重复三轮。
+- 开工判定：施工完成；平台字体缓存和 allocator 是否归还 RSS 仍不能从静态检查推断。
+
+# 2026-08-22 app 聚合模块拆分环境验证
+
+- 项目边界：`src/app.rs` 与 `src/app/` 私有应用 bridge 模块；按功能拆分 runtime、窗口恢复/actions 和平台辅助，保持 Slint 生成类型只在 app 层，且不改变 config、SSH trust、凭据、transport 或 `third_package/axshell` 边界。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1；`Cargo.toml`/`Cargo.lock` 是依赖和版本事实，CI 使用 locked Cargo 命令。
+- 运行环境：本机 `rustc 1.97.1`、`cargo 1.97.1`、`rustfmt 1.9.0`、`clippy 0.1.97`、Python 3.10.20 可用；本轮不联网、不新增依赖。
+- 测试环境：按 `AGENTS.md` 执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、tracker/Markdown 检查和 `git diff --check`；本轮 `cargo fmt --all`、`cargo check --locked --offline` 已通过。
+- 环境变化检查：否；只移动私有 Rust 模块和更新路由文档，不改变工具链、依赖、构建入口或测试命令。
+- 开工判定：施工完成；完整 Clippy、全量测试、tracker/Markdown 和差异门禁已完成，目标平台窗口行为仍待人工验收。
+
 # 项目环境当前态
 
 ## 2026-08-22 内存与线程生命周期优化施工预检
@@ -208,6 +244,7 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-08-23 09:40 +0800：MEM5 detached model 与字体审计已通过 locked/offline fmt/check/Clippy/test、翻译和差异门禁；目标平台仍需验证 Software/GPU 窗口关闭后 footprint、vmmap 和线程回收，平台 allocator/Fontique/CoreAnimation/Metal RSS 不作即时归还承诺。
 - 2026-08-22 19:10 +0800：内存/线程生命周期实现和完整离线 Cargo 门禁已完成；目标平台重复 `footprint`/`vmmap -summary` 采样、GUI 和真实 transport 仍待用户验收。
 - 2026-08-17 14:28 +0800：Release 现在仅由外部推送的 annotated 日期 tag 直接启动；Create/Retry、tag CI dispatch/wait 与 GitHub Script action 已删除。两个 YAML、现有 tag/元数据、12 项 Python、413 条翻译、fmt/check/严格 Clippy、完整 Cargo 测试（库 179、应用 167、Doc tests 0）、Markdown 相对链接和差异检查通过；tracker validator 仅保留 39 条既有历史时间字段错误。下一枚新 tag 仍需 GitHub-hosted 平台/发布验收。
 - 2026-08-15 17:38 CST：SFTP 远端文件行右键菜单继续使用 Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1 和既有 `FlatActionMenu`/选择/下载/删除 callbacks；未新增 crate、配置 schema、工具链、CI、worker、SSH trust、凭据或本地文件删除能力。fmt、locked/offline check、严格 Clippy、完整测试（库 179、应用 172、Doc tests 0）、413 条中文目录、tracker、Markdown 相对链接和差异检查通过；真实右键菜单视觉与手感留用户验收。

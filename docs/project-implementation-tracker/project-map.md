@@ -43,10 +43,13 @@
 | `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
 | `src/main.rs` | 进程入口 | `LoggingGuard`、`app::run` | 启动、退出和进程级生命周期 |
 | `src/lib.rs` | 可测试库入口 | `config`、`credentials`、`logging`、`ssh`、`sftp`、`telnet`、`serial` | 领域、系统服务、进程服务和传输公共边界 |
-| `src/app.rs` | Slint/Rust bridge 入口与顶层 callback 组装 | `slint::include_modules!`、`run`、`build_tokio_runtime`、`tokio_worker_thread_count`、`wire_callbacks` | 生成类型声明、共享 event loop、启动级资源边界；Tokio async/blocking 池上限和空闲线程回收；无 SFTP 启动扫描 |
+| `src/app.rs` | Slint/Rust bridge 入口与顶层 callback 组装 | `slint::include_modules!`、`run`、`wire_callbacks` | 生成类型声明、共享 event loop、应用状态组装和 callback 接线；不承载 renderer/runtime、窗口生命周期或平台辅助实现 |
+| `src/app/runtime.rs` | renderer 选择、Tokio runtime/thread 边界和启动字体读取 | `select_slint_renderer`、`build_tokio_runtime`、`tokio_worker_thread_count`、`load_startup_bundled_fonts` | 根据设置选择 renderer，显式限制 async/blocking 池并保留启动字体加载；不承载 Slint generated component 或 feature callback |
+| `src/app/window_bridge.rs` | detached workspace 创建、恢复、返回/关闭、窗口激活 hook、原生标题栏动作和窗口资源释放 | `restore_detached_workspaces`、`wire_window_actions`、`release_window_resources`、`release_detached_windows`、`install_window_activation_hook` | 只编排 `AppWindow`、`WindowRouter` 和 `AppState` 的 owned DTO；不拥有 transport、持久化 schema 或 worker handle |
+| `src/app/platform_support.rs` | 平台剪贴板、诊断信息、外部打开器和 macOS application menu | `set_platform_clipboard_text`、`diagnostic_info`、`configure_macos_application_menu` | cfg 隔离平台 API；诊断只输出构建元数据，不输出 host/path/password/session 内容 |
 | `src/app/window_router.rs` | 私有多窗口 workspace 路由 | `WindowRouter`、`WindowView`、`WindowTerminalUpdates`、`terminal_presentation_mode`、`terminal_updates`、`GLOBAL_WINDOW_ROUTER` | 多 `AppWindow` 生命周期、可见 Tab/focused pane、每窗口 PaneTree、detached/main route 与 Return/close；按活动 tree 动态分类 Focused/Unfocused/Hidden 并发布轻量 route revision，按脏 UUID 只为当前活动 pane tree 构造 terminal snapshot；不持有 transport、Slint 强引用或秘密 |
 | `src/app/panes.rs` | 有界 Terminal Tab 内 pane 布局 | `PaneTree`、`PaneLayout`、`PaneDividerPlacement`、`PaneDirection`、`MAX_TERMINAL_PANES` | 稳定 workspace Tab UUID、0.1-0.9 split ratio、前序 divider、终端分行/分列、相邻方向焦点和最多 8 pane 限制；只保存 UUID、volatile 布局和焦点，不保存 Slint、worker、buffer 或秘密 |
-| `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts`、`load_terminal_font_on_demand` | UI 线程注册应用字体和首次终端使用时读取的自带 TTF；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
+| `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts`、`load_terminal_font_on_demand` | UI 线程注册应用字体；JetBrains Mono 保留嵌入 source，Maple/Iosevka/Monaspace 以经过大小校验的路径 source 交给 Fontique 按需加载；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
 | `src/app/workspace.rs` | 工作区 application bridge 私有 facade | `ProfileMutationCoordinator`、`SessionEditorContext`、`wire_workspace_tabs`、`wire_session_editor`、`wire_session_management`、`close_workspace_tab`、`close_terminal_child_pane` 的窄 re-export | 只声明现代子模块和维持 `src/app.rs` 既有调用面；不承载 callback 实现 |
 | `src/app/workspace/tabs.rs` | 工作区 Tab 与子 pane 生命周期 bridge | `wire_workspace_tabs`、`close_workspace_tab`、`close_terminal_child_pane` | 可见 Tab 激活/循环/内存排序、Terminal pane group/子 pane 关闭、pending probe 取消、worker shutdown 和 settings/editor/icon 资源回收 |
 | `src/app/workspace/session_editor.rs` | Session Editor 与 profile mutation bridge | `ProfileMutationCoordinator`、`SessionEditorContext`、`wire_session_editor`、profile 构造与 mutation commit | 编辑器 callback、逐 profile 最新 mutation token、SFTP 远端/本地默认目录、串行凭据副作用与失败回滚、一次性密码/显式保存分流和保存后 SSH 连接 |
@@ -180,13 +183,16 @@
 
 ## 最近依据
 
-- 2026-08-22：内存/线程生命周期施工涉及 `src/app.rs` 的有界 Tokio runtime、`src/app/file_icons.rs` 的可观测缓存清理和 `src/app/view/sftp.rs` 的弱 AppState 预热目标；Fontique、Slint、CoreAnimation 与 allocator 的进程级缓存仍需重复 `footprint`/`vmmap -summary` 采样判断。
+- 2026-08-22：完成 `src/app.rs` 按功能拆分：`runtime.rs` 负责 renderer/Tokio/启动字体，`window_bridge.rs` 负责窗口生命周期，`platform_support.rs` 负责 clipboard/diagnostics/menu；生成 Slint 类型和 callback 组装仍留在 app 层。此前内存/线程生命周期逻辑的有界 Tokio runtime、图标缓存和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
 
 - 2026-08-21：四协议终端 UI publication 统一采用 dirty-only 双策略；focused 首帧立即并按连续时长使用 16/33/50 ms（受 Appearance focused FPS 上限约束），可见未聚焦 pane 按 Appearance unfocused FPS 刷新（默认 4 FPS，范围 1-120），hidden 无 deadline，route revision/policy watch 使 pending 输出在焦点、Tab 或设置变化后重算。
 - 2026-08-21：Terminal surface 顶部/底部分别保留 1px/2px 外间距；终端完整行向下取整并把零散高度放在首行上方，消除顶部首行裁切，同时保持末行底部锚定和所有输入坐标共用原点。
 - 2026-08-22：内存/线程生命周期施工完成：Tokio runtime 使用 2-4 个 async worker、最多 8 个 blocking worker，blocking 空闲 2 秒后允许退出；SFTP 图标预热目标改用 `Weak<AppState>`，清理扩展 icon 返回释放数量；Fontique/平台缓存仍须通过重复 footprint/vmmap 采样判断。
+- 2026-08-23：新增 renderer 无关的 AppWindow 显式资源释放入口；Return/Close 和进程退出都会清空 Slint models、编辑器/SFTP/安全字段并在 Tokio shutdown 前移除 detached/main 窗口强引用。
+- 2026-08-23：detached 初始化只保留 Terminal/SFTP surface 所需 model，sidebar、connection、Settings、session-editor、shell/X11 与 font-option model 为空；字体资源按选中 family 懒加载，Fontique shared collection 不承诺运行时卸载。
+- 2026-08-22：完成 `src/app.rs` 功能拆分，新增 `src/app/{runtime,window_bridge,platform_support}.rs`；完整 locked/offline fmt/check/Clippy/test、tracker、相对 Markdown 链接和 diff 检查通过，窗口视觉/原生激活仍由目标平台用户验收。
 - 2026-08-20：根据 macOS sample 定位主线程 software renderer 与整模型替换热点；主终端 render-line/run model 改为 identity-preserving 原地更新，未变化行跳过通知；启用 Skia feature 并增加 Appearance > Renderer 的持久化 Automatic/GPU/Software 选择，启动在首个 AppWindow 前读取，macOS Automatic 默认选择 Metal-backed `winit-skia`，其它桌面平台 Automatic 默认保持 software renderer，保留 `SLINT_BACKEND` 显式覆盖。
 - 2026-08-19：URL/路径目标只由 Cmd/Ctrl 临时下划线提示；常驻 renderer 只保留 HTTP/状态词语义色，Settings 仅显示四项状态颜色并兼容读取旧 link/path 字段。
 - 2026-08-19：输出刷新与 Slint-local 选区解耦；刷新期间保留选区，Copy 读取选区坐标对应的最新 cell；resize/scroll/identity/focus 清理边界保持不变。

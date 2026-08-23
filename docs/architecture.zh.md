@@ -43,7 +43,11 @@ Slint UI（.slint）
 | 区域 | 负责 | 不得负责 |
 | --- | --- | --- |
 | `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
-| `src/app.rs` 与 `src/app/window_router.rs` | 生成 Slint 类型的声明、进程级 UI 启动和 callback 编排；私有多窗口路由、detached transfer 与 pane tree 所有权 | 功能实现、SSH 协议细节或 JSON schema 细节 |
+| `src/app.rs` | 生成 Slint 类型声明、进程级 UI 启动和 callback 编排 | renderer/runtime 配置、窗口生命周期、平台辅助、功能实现、SSH 协议细节或 JSON schema 细节 |
+| `src/app/runtime.rs` | renderer 选择、有界 Tokio runtime/thread 配置和启动自带字体读取 | 生成 Slint 类型、功能 callback、传输或持久化 |
+| `src/app/window_bridge.rs` | detached workspace 创建/恢复/返回/关闭、窗口激活 hook、原生标题栏动作和显式 Slint 窗口资源释放 | transport 所有权、持久化 schema 或 worker 内部实现 |
+| `src/app/platform_support.rs` | 剪贴板、仅构建元数据诊断、外部打开器和 macOS application menu 接线 | 秘密、session 持久化或 SSH/worker 状态 |
+| `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
@@ -478,6 +482,12 @@ detached 窗口会把 transfer 返回主路由并隐藏原生窗口，不会断�
 但不会进入 Tab 条。关闭这个可见 Terminal Tab 会关闭树中的全部 terminal 会话，SFTP companion 则
 继续作为独立可见 Tab。detached 窗口 Return 或关闭时，会把同一份 pane tree 和子 pane 焦点恢复到
 主窗口，不会重连或停止 worker。
+detached component 隐藏并从强引用 map 移除前，应用会清空其 Slint model（包括 Terminal、SFTP
+和 transfer 行）、编辑器文本、状态/提示字符串和安全提示字段。进程退出时所有 detached 窗口也走
+同一条释放路径。
+detached 初始化时不再填充 sidebar、连接选择器、Settings、会话编辑器以及两套字体选项 model，
+因为这些 surface 不会出现在 detached 组件中；只有当前 Terminal/SFTP model 会由路由刷新填充。
+主题和选中的字体属性仍会同步到 detached 窗口，但不会在那里保留重复的 Settings 选项列表。
 
 每个内部 split 只发布一个 divider overlay。普通态使用语义 divider 色的 hairline，hover、拖拽和
 键盘焦点使用 accent 色与较粗线条，但不改变命中区域尺寸。鼠标拖动、对应方向键、Home/End、
@@ -580,7 +590,8 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
   存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
 - 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
-- 窗口退出对所有剩余 worker 请求断开，在超时边界内逐个等待 join，最后再关闭 Tokio。
+- 窗口退出对所有剩余 worker 请求断开，在超时边界内逐个等待 join，显式释放所有 detached/主窗口
+  Slint model 和窗口强引用，最后再关闭 Tokio。
 
 ## SFTP 浏览与写操作契约
 
@@ -682,9 +693,15 @@ Serial 参数和可选的非敏感 USB 身份元数据可以持久化，设备 h
 
 ## Runtime 与资源生命周期
 
-`src/app.rs` 在应用生命周期内创建一个 Tokio runtime，但 worker 池是显式有界的：按主机并行度使用 2 至 4 个异步 worker，最多 8 个 blocking worker，blocking 线程空闲 2 秒后允许退出。这样不会按逻辑 CPU 数使用 runtime 默认的异步线程数，也不会让短暂的文件、字体、图标或平台任务留下无界的 blocking 池。Session worker、SFTP transfer 和本地 PTY 线程仍由各自 Tab 或 worker 独占，并在应用退出前取消、join 或按超时终止。
+`src/app/runtime.rs` 在应用生命周期内创建一个 Tokio runtime，但 worker 池是显式有界的：按主机并行度使用 2 至 4 个异步 worker，最多 8 个 blocking worker，blocking 线程空闲 2 秒后允许退出。这样不会按逻辑 CPU 数使用 runtime 默认的异步线程数，也不会让短暂的文件、字体、图标或平台任务留下无界的 blocking 池。Session worker、SFTP transfer 和本地 PTY 线程仍由各自 Tab 或 worker 独占，并在应用退出前取消、join 或按超时终止。
 
 SFTP 图标预热只在需要时运行，每批最多 64 个唯一 key，进程内最多保留 128 项。关闭最后一个 SFTP Tab 会清除扩展图标、使排队代次失效；预热目标只保存 `AppState` 的弱引用，因此迟到任务不会延长状态生命周期。Rust 会丢弃缓存中的 RGBA buffer，但 provider、Slint image、Fontique collection、CoreAnimation surface 和 macOS allocator 仍可能保留进程级缓存。已注册的 Fontique 字体没有可靠的运行时卸载 API，不能把 RSS 立即下降当作契约。排查泄漏时，应在相同 Settings、Terminal、SFTP 打开/关闭流程后重复采集 `footprint`/`vmmap -summary`；单次 sample 或峰值不能证明泄漏。
+
+应用拥有的窗口资源与 renderer 无关。在 detached 返回、detached 关闭和进程退出时，
+`release_window_resources` 将所有有界 Slint model 替换为空 model，清空编辑器/SFTP/安全提示文本
+和计数，隐藏原生窗口，并在 Tokio shutdown 前丢弃 `AppWindow` 强引用。因此 Software 与
+GPU/Skia/Metal 使用相同的应用清理顺序；差异只在 renderer surface 和平台级缓存。Slint、Fontique、
+CoreAnimation、Metal 以及 macOS allocator 都没有保证把每个 RSS 字节立即归还系统的接口。
 
 ## 日志生命周期
 
@@ -699,8 +716,9 @@ SFTP 图标预热只在需要时运行，每批最多 64 个唯一 key，进程�
 
 `assets/fonts/` 保存 AxSSH 自有的 Maple Mono NF CN、Iosevka Term、JetBrains Mono
 和 Monaspace Neon 文件及各自许可证/声明。它们不是 Slint import；JetBrains Mono 四个字重会编译进
-可执行文件，作为始终可用的应用和 Terminal 默认字体。Tokio blocking task 只从 AxSSH 资源路径读取
-已选中的其他自带字体，再由 Slint UI 线程统一把字节注册到共享 collection。第一个 Terminal 或
+可执行文件，作为始终可用的应用和 Terminal 默认字体。Tokio blocking task 只解析并校验 AxSSH 资源路径中
+已选中的其他自带字体，再由 Slint UI 线程把嵌入字节或 Fontique 路径 source 注册到共享 collection；外部
+TTF 不再由应用长期持有完整 `Vec<u8>`。第一个 Terminal 或
 本地 shell Tab 只通过一条应用层加载路径，确保已选的自带主字体（如适用）和 Maple Mono NF CN
 已注册。`FontRegistry::register_loaded_font` 是唯一注册边界；Maple 注册时会把共享 Fontique 的
 `Hani` 回退列表替换为该字体一项，不存在渲染器侧字体替换路径。之后在 Settings 即时预览中首次选到的

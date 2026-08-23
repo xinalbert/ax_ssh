@@ -9,14 +9,14 @@
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app.rs`、`src/app/{file_icons,view/sftp}.rs` 以及既有终端呈现模块、双语架构/使用说明、`docs/project-env-audit/` 和 `docs/project-implementation-tracker/`；本轮聚焦 runtime 线程池配置、图标预热强引用和缓存清理边界。
+- 当前范围：`src/app/{font_bridge,runtime,window_bridge}.rs`、Slint window models、字体资源、双语架构/使用说明、`docs/project-env-audit/` 和 `docs/project-implementation-tracker/`；本轮继续降低运行时字体的应用侧常驻内存。
 - 不在本轮范围内：SSH host-key/认证/凭据契约、russh transport 选择、UI framework/renderer 依赖升级、专用 GPU surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
 
 ## 当前状态
 
-- 阶段：实施中
+- 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
@@ -36,7 +36,7 @@
 | PERF11 | completed | 聚焦 16/33/50 ms 自适应与可见未聚焦低频双呈现策略 | pure 状态机、焦点路由和 no-output 回归 | 首次脏输出立即呈现；隐藏 Tab 不进入 UI，parser/协议/终止路径不延迟。 |
 | PERF12 | completed | Local、Serial、SSH、Telnet monitor 统一接入呈现状态 | 四协议编译、状态机/路由 focused tests | 保留 SSH/Telnet 的 16 ms/16 KiB transport batching，只统一 UI publication。 |
 | PERF13 | completed | 双语架构、项目地图、完整离线门禁和 release 候选 | fmt、check、Clippy、test、Markdown/tracker、release build | 不改 renderer 依赖、配置 schema、trust 或 credential 边界。 |
-| PERF14 | in_progress | 同一 release 的 Software/GPU/行缓存 10 秒 A/B 和目标平台 GUI/真实 transport 验收 | 相同窗口、7 pane、负载和 sample/CPU meter | 依次对照旧 item 树、紧凑节点和紧凑节点+静态行缓存。 |
+| PERF14 | blocked | 同一 release 的 Software/GPU/行缓存 10 秒 A/B 和目标平台 GUI/真实 transport 验收 | 相同窗口、7 pane、负载和 sample/CPU meter | 依次对照旧 item 树、紧凑节点和紧凑节点+静态行缓存；等待用户目标平台验收。 |
 | PERF15 | completed | 两项独立、向后兼容的终端渲染性能设置及 Settings 预览/持久化链路 | config normalization/serde 与 Rust/Slint 映射回归 | 紧凑节点默认开启；静态行 layer cache 默认关闭。 |
 | PERF16 | completed | 可切换的紧凑 run 节点树与只覆盖静态行内容的 layer cache | Slint 编译、model identity 与终端交互回归 | 光标、选区、IME 和目标高亮保持在缓存层外。 |
 | PERF17 | completed | 双语契约、翻译、完整离线门禁和新 release A/B 候选 | fmt、check、Clippy、test、translation、Markdown/tracker、release build、`git diff --check` | 不升级 renderer 或引入参考工程耦合。 |
@@ -48,6 +48,20 @@
 | MEM1 | completed | 显式限制 Tokio worker/blocking 线程并缩短空闲 blocking 线程保留时间 | runtime 配置单测、完整 Cargo 离线门禁、线程数复核 | 保留至少 2 个 async worker、最多 4 个；blocking 池最多 8 个，空闲 2 秒后允许退出。 |
 | MEM2 | completed | 断开 SFTP 后不让图标预热任务强持有 AppState，并记录图标缓存释放数量 | file-icon 生命周期 focused tests、完整 Cargo 离线门禁 | 预热目标使用 `Weak<AppState>`；Fontique、Slint、CoreAnimation 与 macOS allocator 的进程级缓存不承诺立即归还 RSS。 |
 | MEM3 | completed | 更新双语架构、环境审计和可重复资源验证说明 | 文档相对链接、tracker/env-audit validator、`git diff --check` | 说明 Rust drop、线程池回收和平台缓存之间的边界，不把单次 sample 当作泄漏证明。 |
+| APP1 | completed | 按职责拆出 renderer/Tokio runtime 与启动字体辅助模块 | Rust module check、Cargo check、runtime tests | `src/app/runtime.rs` 负责 renderer、Tokio worker 上限/回收和启动字体读取；生成类型仍留在 app 层。 |
+| APP2 | completed | 拆出 detached workspace、窗口激活和窗口动作处理 | Cargo check、workspace/window focused tests | `src/app/window_bridge.rs` 只编排 AppWindow、WindowRouter 和 AppState DTO，不改变 pane transfer、worker shutdown 或窗口生命周期。 |
+| APP3 | completed | 拆出平台剪贴板、诊断和 macOS 菜单辅助 | Cargo check、diagnostic/menu tests | `src/app/platform_support.rs` 保持 cfg 隔离；诊断不增加 host/path/password/session 内容。 |
+| APP4 | completed | 更新项目地图、架构说明并完成完整离线门禁 | fmt、check、Clippy、test、tracker、`git diff --check` | 不改变 Slint/Cargo/SSH/renderer 行为契约。 |
+| MEM4 | completed | 统一释放主窗口和 detached 窗口的 Slint models、文本、图标行与敏感 UI 字段，并在退出前丢弃窗口强引用 | 生命周期 focused tests（如适用）、fmt、check、Clippy、test、tracker、`git diff --check` | Software/GPU 共用同一路径；不承诺平台 allocator/Fontique/CoreAnimation/Metal RSS 立即下降。 |
+| MEM5 | completed | 减少 detached 窗口重复持有的 sidebar/settings/editor/font option models，并记录 bundled Fontique 字体的常驻边界 | Slint/Cargo 门禁、tracker/Markdown 检查、静态生命周期审阅 | Terminal/SFTP surface 所需 model 保留；不伪造 Fontique 动态卸载，不改变字体字重或 fallback 行为。 |
+| MEM6 | completed | Maple/Iosevka/Monaspace 改用 Fontique 路径源，避免 worker 长期持有完整字体 `Vec<u8>`；JetBrains 保留嵌入 | font_bridge 定向测试、完整 Rust/Slint 离线门禁、同负载 macOS footprint/vmmap 复核 | 代码与离线门禁已通过；保留现有字体选择和 Maple Hani fallback；目标平台仍需确认 Fontique cache 与 RSS 变化。 |
+
+## 本轮实施计划
+
+- 先把 `LoadedBundledFont` 的外部资源改为经过大小校验的 `PathBuf` 列表，注册时调用 Fontique `load_fonts_from_paths`；嵌入式 JetBrains Mono 继续通过 `register_fonts`。
+- 保留 Maple 作为唯一 Hani fallback，并通过注册后的 family ID 设置 fallback，避免路径扫描改变 fallback 集合。
+- 补充外部资源/嵌入资源测试，随后执行 Cargo/Slint、Clippy、翻译、tracker、Markdown 相对链接和 `git diff --check` 门禁。
+- 施工完成后由用户在相同 macOS renderer、窗口尺寸、字体负载下重新采样 `footprint`、`vmmap -summary` 和 `heap`；静态实现不把字体 cache 释放等同于 RSS 下降。
 
 ## 已完成
 
@@ -85,11 +99,15 @@
 - 内存/线程生命周期机制不按 renderer 分支：Tokio async/blocking 上限、blocking 空闲回收、SFTP 图标缓存清理、`Weak<AppState>`、session/PTY/SSH/SFTP worker shutdown 以及 Rust/Slint 对象 drop 都应对所有 renderer 生效。区分 Software 与 GPU/Skia/Metal 仅用于解释 renderer 自身的 framebuffer、Skia surface、CAMetalLayer drawable、Metal command buffer、Fontique、CoreAnimation 和 allocator 缓存；这些平台级缓存即使 Rust 对象已 drop，也不保证 RSS 立即下降。
 - 最新 sample 的 footprint 高于旧 Software sample，不能直接归因于生命周期失效：两者运行时长、负载、renderer 和可见线程条件不同；最新 sample 还是 debug 构建。单次 footprint/peak 不能证明泄漏，必须用同一 release、同一 renderer、同一窗口/pane/负载重复至少三轮，并结合 `vmmap -summary`、线程数和打开/关闭 Settings/Terminal/SFTP 前后对照。
 - 已复核用户 2026-08-22 22:38 Software sample：PID 90375 的 UUID 仍为 `8178A1BD-6EA8-39C3-94A9-0A12E9AE24AC`；physical footprint/peak 为 120.4/175.1 MiB。主线程 2,033 个样本中约 1,322 个进入 CoreFoundation source、1,320 个 DisplayLink、1,185 个 `WinitSoftwareRenderer`、1,172 个 `draw_contents`，966 个进入 software `render_buffer_impl` 的 buffer 遍历；4 个 `axssh-tokio` 仍存在，且样本也包含 SSH session/monitor 与 UI refresh 调度。与 22:24 GPU sample 相比，Software 的 CPU 整帧路径明显更热、footprint 反而更低；由于启动时长、窗口/pane 和输出量未完全固定，这只能确认 renderer 行为差异，不能作为严格内存 A/B 或泄漏结论。
+- 已确认应用退出与 detached 窗口关闭前需要显式清空 Slint model、编辑器文本、SFTP/Terminal 行和安全提示字段；这些应用拥有对象由 Software/GPU 共用的窗口清理函数释放，renderer surface 随 window adapter drop 释放，平台级缓存的 RSS 归还仍不作即时承诺。
+- 已实现 `release_window_resources`、`release_detached_windows` 和退出前显式 drop：Return/Close 立即清空 detached UI 并移除 map 强引用；退出先停止 worker，再清理 detached/main window、图标缓存和 UI callback 引用，最后 shutdown Tokio。
+- 已完成字体资源审计：JetBrains Mono 四字重约 1.1 MiB 且内嵌；Iosevka Term 四字重约 18.8 MiB、Maple Mono NF CN 两字重约 40 MiB、Monaspace Neon Variable 约 1.6 MiB，均按选中 family 懒加载。Fontique shared collection 没有可靠的运行时卸载契约，已将其视为进程级缓存边界，不做伪释放。
+- 已将外部自带字体从 `fs::read`/memory `Blob` 改为经过大小校验的 `PathBuf` source；Fontique 注册阶段使用 mmap，字体数据按需由路径 source/cache 提供，JetBrains Mono 仍使用嵌入 bytes。Maple 注册后通过 family ID 保持唯一 Hani fallback，避免约 39.3 MiB Maple heap 副本由应用加载任务长期持有。
 
 ## 验证
 
-- 已完成：sample/环境基线、PERF2-PERF6 focused 回归、PERF8 debug 结构性对照、PERF9 release 10 秒 sample/CPU meter、PERF10 33 ms paused-time 回归、PERF11 software 短样本归因、双策略状态机与四协议接线、紧凑 span/配置 round-trip/Settings 搜索/nested model identity 定向测试、FOCUS1/FOCUS4 原生窗口激活路由回归；本轮 runtime/file-icon 定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 193、Doc tests 0）、最终 `cargo build --release --locked --offline` 和 `git diff --check` 均已通过。tracker validator 仍报告既有历史条目的格式问题。
-- 未完成：目标平台 GUI 的真实闪烁/常显体验验收；既有 PERF14 release A/B 及 Local/SSH/Telnet/Serial 验收仍待用户执行。
+- 已完成：sample/环境基线、PERF2-PERF6 focused 回归、PERF8 debug 结构性对照、PERF9 release 10 秒 sample/CPU meter、PERF10 33 ms paused-time 回归、PERF11 software 短样本归因、双策略状态机与四协议接线、紧凑 span/配置 round-trip/Settings 搜索/nested model identity 定向测试、FOCUS1/FOCUS4 原生窗口激活路由回归；本轮 detached model/字体审计、8 项 `font_bridge` 定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 199、应用 193、Doc tests 0）、翻译检查（431 条）和 `git diff --check` 均已通过。tracker validator 仍只报告既有历史条目的格式问题。
+- 未完成：目标平台 GUI 的真实闪烁/常显体验验收；既有 PERF14 release A/B 及 Local/SSH/Telnet/Serial 验收仍待用户执行；本轮 detached 内存收益和 Fontique/CoreAnimation/allocator 是否归还 RSS 仍需目标 macOS 重复采样。
 
 ## 风险与阻塞
 
@@ -100,6 +118,7 @@
 - 双策略候选会让 focused 持续输出在 16/33/50 ms 间逐级降低呈现频率，并按 Appearance 设置限制可见未聚焦 pane（默认 4 FPS）；预期减少实际文字绘制，但聚焦平滑度与后台可读性仍须通过同负载 A/B 和用户视觉验收确认。
 - macOS software surface 当前不支持 damage presentation，窗口像素面积、可见 pane 数和呈现频率都会直接放大整帧 CPU 成本；继续降低 software cadence 或尝试另一 CPU renderer 都会引入平滑度、文本质量或依赖行为取舍，必须单独 A/B，不能替代 GPU 推荐路径。
 - 双呈现策略必须按当前 `WindowRouter`/`PaneTree` 动态读取焦点，不能在 worker 中缓存 pane 归属；切换焦点后旧后台输出必须在新 deadline 内追上，但隐藏 Tab 仍不应进入 Slint event queue。
+- 窗口资源清理必须先停止应用 worker，再清空 detached/main 的 Slint model 并移除强引用；不能把清理延迟到 timer 或依赖函数作用域自然 drop，否则窗口 renderer surface 和 model 可能继续存活。
 - rust-skia release build script 在 release cache 缺失时会绕过 Cargo offline 语义尝试下载预编译包；本轮最终构建复用了本机同名、同 SHA-256 的 debug cache，未把该缓存加入 Git 或项目依赖。
 - 当前没有运行中的 AxSSH 进程；下一次采样必须先核对 Mach-O UUID `8ECE3718-6E3D-370B-94F5-193A455BE533`，避免使用旧 release 或其它构建类型。
 - Slint 1.17.1 的 `cache-rendering-hint` 只在 Skia/FemtoVG layer renderer 中保留离屏图像；software renderer 不提供等价 layer cache。缓存必须只包住静态终端行内容并默认关闭，避免光标闪烁或选区变化使所有行缓存失效，也避免未测量的 Retina 纹理占用成为默认成本。
@@ -111,4 +130,5 @@
 
 ## 最后更新时间
 
-- 2026-08-22 22:38 +0800
+- 2026-08-23 10:20 +0800
+- 计划切换：MEM6 已完成；Fontique 路径 source 代码与全量离线门禁通过，目标平台字体 cache/RSS 复核等待用户；性能 A/B 和目标平台资源验收仍等待用户；APP1-APP4 的 `src/app.rs` 功能拆分已完成。

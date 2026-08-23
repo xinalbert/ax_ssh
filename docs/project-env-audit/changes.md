@@ -564,3 +564,41 @@
 - 受影响文件：`src/app.rs`、`src/app/file_icons.rs`、`src/app/view/sftp.rs`、`docs/{architecture,architecture.zh}.md` 和 `docs/project-{implementation-tracker,env-audit}/`。
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1 和 Cargo.lock；未新增 crate、未联网、未修改 SSH trust/凭据/transport。
 - 验证结果：runtime/file-icon 定向测试、`cargo check --locked --offline`、`cargo fmt --all -- --check`、严格 Clippy 和完整 `cargo test --locked --offline`（库 199、应用 193、Doc tests 0）通过；重复 `footprint`/`vmmap -summary` 与目标平台 GUI 资源验收仍需用户执行。
+## 2026-08-22 app 聚合模块拆分施工预检
+
+- 目的：为按功能拆分 `src/app.rs` 建立实现前的环境与边界基线。
+- 改动范围：`src/app.rs`、`src/app/` 及项目跟踪文档；不改依赖、Cargo.lock、Slint/Cargo 入口、SSH trust、凭据或 transport。
+- 执行内容：复核 `AGENTS.md`、AxSSH Rust/Slint skill、`project-map.md`、`Cargo.toml`、`Cargo.lock`、CI workflow；确认 Rust 2024/MSRV 1.92、Slint 1.17.1、Tokio 1、locked/offline Cargo 命令和本机工具链。
+- 验证结果：`rustc --version`、`cargo --version`、`cargo fmt --version`、`cargo clippy --version`、`python3 --version` 已确认；代码迁移尚未开始，完整 Cargo 门禁在每批拆分完成后执行。
+- 风险/待办：生成 Slint 类型必须留在 app 层；模块拆分不能形成 callback 强引用循环、跨 `.await` 锁或参考工程耦合；需要保留既有 focused tests 并在收口运行完整离线门禁。
+
+## 2026-08-22 app 聚合模块拆分环境验证
+
+- 变化摘要：完成 `src/app.rs` 的功能拆分，新增 `runtime.rs`、`window_bridge.rs` 和 `platform_support.rs`；保留生成 Slint 类型、`run` 和 callback 组装在 app 层。
+- 受影响文件：`src/app.rs`、`src/app/{runtime,window_bridge,platform_support}.rs`、双语架构、项目地图和实施跟踪。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、Cargo.lock 和 locked/offline 门禁；未新增依赖、未联网。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、全量 Cargo 测试（库 199、应用 193、Doc tests 0）、tracker、相对 Markdown 链接和 `git diff --check` 已完成；tracker 仅报告既有历史格式问题。平台窗口视觉与激活行为仍需用户在目标平台验收。
+- 环境变化检查：否；只移动私有模块和更新文档，不改变工具链、依赖、构建入口、配置、SSH trust、凭据或 transport。
+
+## 2026-08-23 renderer 无关窗口资源释放施工预检
+
+- 变化摘要：确认 Slint 1.17.1 没有公开的全局 renderer cache flush 或 RSS 归还 API；本轮只补应用拥有的 AppWindow model、文本、图片行、敏感 UI 字段和 detached 强引用的显式释放路径。
+- 受影响文件：`src/app.rs`、`src/app/window_bridge.rs`、`docs/{architecture,architecture.zh}.md`、`docs/project-implementation-tracker/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、Cargo.lock 和 locked/offline 门禁；不新增依赖、不修改 renderer/SSH trust/凭据/transport。
+- 验证结果：施工前已核对主窗口、detached 窗口和 Slint models 的所有权；代码和最终门禁尚未完成。目标平台仍需以同 renderer/负载重复 footprint、vmmap 和线程数复核平台缓存边界。
+
+## 2026-08-23 detached model 与字体内存审计
+
+- 变化摘要：detached 初始化只保留 Terminal/SFTP surface 所需的 Slint model，sidebar、连接选择器、Settings、session-editor、shell/X11 和 font-option model 不再为每个 detached 窗口复制；字体审计确认 JetBrains Mono 约 1.1 MiB、Iosevka Term 约 18.8 MiB、Maple Mono NF CN 约 40 MiB、Monaspace Neon 约 1.6 MiB，仍按选中 family 懒加载。
+- 受影响文件：`src/app/window_bridge.rs`、`src/app/font_bridge.rs`、`docs/{architecture,architecture.zh}.md`、`docs/project-env-audit/current.md` 和 `docs/project-implementation-tracker/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1 和 locked/offline Cargo 门禁；不新增依赖、不改变 renderer、配置 schema、SSH trust、凭据或 transport。Fontique shared collection 没有可靠动态卸载 API。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 199、应用 193、Doc tests 0）、431 条翻译检查和 `git diff --check` 通过；tracker validator 只报告既有历史格式错误。
+- 风险/待办：字体注册后的 Fontique、Slint、CoreAnimation/Metal、平台图标数据库和 allocator 可能保留进程级缓存；目标 macOS 仍需同 renderer/负载重复三轮 `footprint`、`vmmap -summary` 和线程数采样。
+
+## 2026-08-23 Fontique 路径字体源内存优化
+
+- 变化摘要：Maple/Iosevka/Monaspace 的自带字体加载从完整 `fs::read` buffer 改为大小校验后的路径列表，由 Fontique `load_fonts_from_paths` 建立路径 source；JetBrains Mono 继续使用嵌入 bytes。Maple Hani fallback 仍只包含 Maple family。
+- 受影响文件：`src/app/font_bridge.rs`、`docs/{architecture,architecture.zh}.md`、`docs/project-implementation-tracker/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、Fontique 0.10.0、Tokio 1、Cargo.lock 和 locked/offline 门禁；不新增依赖、不改变 renderer、配置 schema、SSH trust、凭据或 transport。
+- 验证结果：已确认锁定 Fontique 源码在路径扫描和按需数据访问阶段使用 mmap/SourceCache；`cargo test --bin ax_ssh app::font_bridge --locked --offline` 通过（8 项），完整 fmt/check/严格 Clippy/Cargo test（库 199、应用 193、Doc tests 0）、431 条翻译、tracker validator 和 `git diff --check` 通过。validator 仍报告旧月度记录的历史格式问题。
+- 风险/待办：字体首次渲染仍可能产生 mmap、解析和 glyph cache；Fontique shared collection 没有本轮可靠的动态注销 API。目标 macOS 需相同字体负载重新采样 `MALLOC_LARGE`、`footprint` 和 `vmmap -summary`。

@@ -1,4 +1,6 @@
 use super::super::terminal_presentation::TerminalPresentationPolicy;
+use slint::Color;
+
 use super::*;
 
 pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {

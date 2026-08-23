@@ -45,7 +45,11 @@ Process startup (src/main.rs)
 | Area | Owns | Must not own |
 | --- | --- | --- |
 | `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
-| `src/app.rs` and `src/app/window_router.rs` | Generated Slint type declaration, process-level UI startup and callback composition; private multi-window route, detached-transfer and pane-tree ownership | Feature implementations, SSH protocol details, or JSON schema details |
+| `src/app.rs` | Generated Slint type declaration, process-level UI startup, and callback composition | Renderer/runtime configuration, window lifecycle, platform helpers, feature implementations, SSH protocol details, or JSON schema details |
+| `src/app/runtime.rs` | Renderer selection, bounded Tokio runtime/thread configuration, and startup bundled-font loading | Generated Slint types, feature callbacks, transport, or persistence |
+| `src/app/window_bridge.rs` | Detached workspace creation/restore/return/close, window activation hook, native titlebar actions, and explicit Slint window-resource release | Transport ownership, persistence schema, or worker internals |
+| `src/app/platform_support.rs` | Clipboard access, build-only diagnostics, external opener calls, and macOS application-menu wiring | Secrets, session state persistence, or SSH/worker state |
+| `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
@@ -734,6 +738,15 @@ but are filtered from the Tab strip. Closing that visible Terminal Tab closes
 every terminal session in its tree, while an SFTP companion remains a separate
 visible Tab. Detached return or close restores the same pane tree and focused
 child to the main route without reconnecting or stopping workers.
+Before the detached component is hidden and removed from the strong-handle map,
+the application clears its Slint models (including terminal, SFTP, and transfer
+rows), editor text, status/notice strings, and security prompt fields. The same
+release path is used for every detached window during process shutdown.
+Detached initialization leaves sidebar, connection-picker, Settings, session-editor,
+and both font-option models empty because those surfaces are not present in the
+detached component; only the active Terminal/SFTP models are populated by route
+refreshes. Theme and selected font properties still propagate to detached windows,
+but no duplicate Settings option list is retained there.
 The inline and menu controls pass their selected Tab UUID directly to the Rust
 route handler, which validates that it belongs to the invoking window and makes
 it active before creating or returning the native window. Detaching and
@@ -906,7 +919,8 @@ Authenticated connections follow this lifecycle:
   channel is valid and never has its own output timeout;
 - tab close invalidates the tab/attempt route before requesting worker shutdown;
 - window shutdown requests disconnect for every remaining worker, waits for
-  each join with a timeout, and only then shuts down Tokio.
+  each join with a timeout, explicitly releases all detached and main-window
+  Slint models and window handles, and only then shuts down Tokio.
 
 ## SFTP browsing and write contract
 
@@ -1070,7 +1084,7 @@ late discovery results.
 
 ## Runtime and resource lifecycle
 
-`src/app.rs` builds one Tokio runtime for the application lifetime, but its
+`src/app/runtime.rs` builds one Tokio runtime for the application lifetime, but its
 worker pools are explicit and bounded: two to four asynchronous workers based
 on host parallelism, at most eight blocking workers, and a two-second idle
 keep-alive for blocking threads. This avoids the default runtime creating one
@@ -1090,6 +1104,16 @@ have no reliable runtime unload API, so an immediate RSS decrease is not a
 contract. Compare repeated `footprint`/`vmmap -summary` samples after opening
 and closing the same Settings, Terminal, and SFTP surfaces when investigating
 leaks; a single sample or peak value is not proof of a leak.
+
+Application-owned window resources are renderer-independent. On detached return,
+detached close, and process shutdown, `release_window_resources` replaces all
+bounded Slint models with empty models, clears editor/SFTP/security strings and
+counts, hides the native window, and drops the strong `AppWindow` handle before
+Tokio shutdown. The selected Software or GPU/Skia/Metal renderer therefore gets
+the same application cleanup order; only the renderer's own surface and
+platform-level caches differ. Slint, Fontique, CoreAnimation, Metal and the
+macOS allocator do not expose a contract that immediately returns every byte of
+RSS to the operating system.
 
 ## Logging lifecycle
 
@@ -1120,8 +1144,10 @@ profiles are skipped while the remaining workspace is restored.
 JetBrains Mono, and Monaspace Neon files with their family-specific notices.
 They are not Slint imports. The four JetBrains Mono faces are compiled into the
 executable as the always-available application and Terminal default; a Tokio
-blocking task reads any selected external bundled family from the AxSSH resource
-path. The Slint UI thread registers all bytes with its shared collection. The
+blocking task resolves any selected external bundled family to validated AxSSH
+resource paths. The Slint UI thread registers embedded bytes with its shared
+collection and registers external families through Fontique's path source, so
+the complete TTF is not retained in an application-owned `Vec<u8>`. The
 first Terminal or local shell Tab uses one application-owned loading path to
 ensure that its selected bundled primary family, when applicable, and Maple Mono
 NF CN are registered. `FontRegistry::register_loaded_font` is the sole

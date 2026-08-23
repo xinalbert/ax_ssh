@@ -1,5 +1,17 @@
 # 项目研究记录
 
+## 2026-08-23 Fontique 路径字体源与内存占用
+
+- 检索问题：Maple/Iosevka/Monaspace 是否需要把完整 TTF 读入 `Vec<u8>`，以及改用路径源后能否降低应用侧常驻内存。
+- 检索原因：用户提供的 SoftwareRenderer sample 中，Maple Regular/Bold 两个 anonymous malloc 合计约 39.3 MiB，与资源文件大小相符；当前 `src/app/font_bridge.rs` 先 `fs::read` 再通过 Fontique `Blob` 注册。
+- 来源列表：锁定 Fontique 0.10.0 的 `Collection::load_fonts_from_paths`、`SourceKind::Path`、`SourceCache`、`font::FontInfo` 实现；Slint 1.17.1 `fontique_010::shared_collection` 文档；用户提供的 2026-08-23 10:04 sample 及 `assets/fonts/` 文件大小。
+- 关键结论：Fontique 路径扫描阶段使用 mmap 读取字体元数据，注册结果只保留路径源；字体实际数据在查询时由 `SourceCache` 按路径加载并以共享 `Blob` 复用。把外部 TTF 改为路径列表可以移除 `FontResources` worker 返回的完整 `Vec<u8>` 和其 `Arc<Blob>` 长期持有。JetBrains Mono 仍是 Rust `include_bytes!` 的嵌入式 UI 字体，继续使用 memory source，避免改变启动可靠性。
+- 实施边界：只校验路径存在、常规文件和 0 < size <= 24 MiB；只传入 manifest 中声明的字体文件，不扫描整个目录。Maple 注册后通过 `family_id` 设置唯一 Hani fallback；不添加系统 CJK fallback、不做动态注销、不调整字体字重或 renderer。
+- 预期收益与风险：Maple 当前约 39.3 MiB 的完整文件副本不再由应用加载任务持有，渲染期间仍可能出现 mmap/字体解析/glyph cache，且 Fontique/Slint shared collection 没有本轮可靠的运行时 family 注销契约；需同条件 macOS sample 验证 `MALLOC_LARGE`、anonymous malloc、footprint 和 `vmmap` 变化，不能仅凭单次 RSS 下结论。
+- 对实施计划的影响：MEM6 采用路径 source 作为外部字体的唯一注册方式，保留 JetBrains 嵌入 source；不扩大到系统 CJK fallback、动态字体注销或 renderer 分支。
+- 未解决问题：真实 macOS 运行中 Fontique source cache、glyph cache、mmap 和 allocator 的峰值/驻留比例仍需同 renderer、窗口和字体负载复测；软件 renderer 的 framebuffer 仍是独立内存热点。
+- 外部链接：<https://docs.rs/fontique/0.10.0/fontique/struct.Collection.html>、<https://docs.rs/fontique/0.10.0/fontique/enum.SourceKind.html>、<https://docs.rs/slint/1.17.1/slint/fontique_010/fn.shared_collection.html>。
+
 ## 2026-08-22 macOS Software renderer 对照复核
 
 - 时间：2026-08-22 22:38 +0800
