@@ -1439,8 +1439,10 @@ The default compact terminal renderer publishes separate, merged non-default
 background and decoration spans, draws text without a transparent per-run wrapper,
 and retains the legacy item tree behind a Settings switch for A/B comparison. The
 independent row-cache switch applies `cache-rendering-hint` only to static row
-backgrounds, text, and decorations. Selection, cursor blink, target feedback, and
-IME/preedit remain outside that layer. Skia and FemtoVG can retain a row image;
+backgrounds, text, and decorations. Selection uses a stable per-row overlay whose
+children remain cell-aligned, while visibility and range change without recreating
+the row container. Cursor blink, target feedback, and IME/preedit remain outside
+that layer. Skia and FemtoVG can retain a row image;
 the software renderer has no equivalent layer cache, and the option is therefore
 disabled by default until CPU and graphics-memory measurements justify it.
 The terminal grid uses one bounded Slint repeater over `TerminalRenderLine`

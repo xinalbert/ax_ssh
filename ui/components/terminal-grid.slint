@@ -120,55 +120,34 @@ export component TerminalGrid inherits Rectangle {
         width: parent.width;
         height: root.cell-height;
         background: transparent;
-        cache-rendering-hint: root.view.row_render_cache;
+        static-content := Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: transparent;
+            cache-rendering-hint: root.view.row_render_cache;
 
-                // The renderer omits default-background spans and merges
-                // adjacent equal colors, so one stable background model serves
-                // both text rendering modes.
-                for run in line.backgrounds : Rectangle {
+            // The renderer omits default-background spans and merges adjacent
+            // equal colors, so one stable background model serves both text modes.
+            for run in line.backgrounds : Rectangle {
+                x: run.column * root.cell-width;
+                width: run.cells * root.cell-width;
+                height: root.cell-height;
+                background: run.background;
+            }
+
+            if !root.view.compact_rendering : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: transparent;
+
+                for run in line.runs : Rectangle {
                     x: run.column * root.cell-width;
                     width: run.cells * root.cell-width;
                     height: root.cell-height;
-                    background: run.background;
-                }
-
-                if !root.view.compact_rendering : Rectangle {
-                    width: parent.width;
-                    height: parent.height;
                     background: transparent;
-
-                    for run in line.runs : Rectangle {
-                        x: run.column * root.cell-width;
-                        width: run.cells * root.cell-width;
-                        height: root.cell-height;
-                        background: transparent;
-                        Text {
-                            y: (parent.height - root.font-cell-height) / 2;
-                            width: parent.width;
-                            height: root.font-cell-height;
-                            text: run.text;
-                            color: run.foreground;
-                            font-family: root.view.font_family;
-                            font-size: root.view.font_size;
-                            font-weight: run.bold ? 700 : 400;
-                            font-italic: run.italic;
-                            letter-spacing: 0px;
-                            horizontal-alignment: run.centered ? center : left;
-                            vertical-alignment: center;
-                            overflow: clip;
-                        }
-                    }
-                }
-
-                if root.view.compact_rendering : Rectangle {
-                    width: parent.width;
-                    height: parent.height;
-                    background: transparent;
-
-                    for run in line.runs : Text {
-                        x: run.column * root.cell-width;
-                        y: (root.cell-height - root.font-cell-height) / 2;
-                        width: run.cells * root.cell-width;
+                    Text {
+                        y: (parent.height - root.font-cell-height) / 2;
+                        width: parent.width;
                         height: root.font-cell-height;
                         text: run.text;
                         color: run.foreground;
@@ -181,48 +160,73 @@ export component TerminalGrid inherits Rectangle {
                         vertical-alignment: center;
                         overflow: clip;
                     }
-
-                }
-
-                // Decorations use one shared, merged model in both rendering
-                // modes. This avoids per-run conditional children while
-                // preserving the original text-then-decoration draw order.
-                for run in line.decorations : Rectangle {
-                    x: run.column * root.cell-width;
-                    y: run.strikethrough
-                        ? parent.height / 2
-                        : parent.height - Theme.terminal-underline-offset;
-                    width: run.cells * root.cell-width;
-                    height: Theme.hairline;
-                    background: run.foreground;
-                }
-
-        if root.selection.active
-            && line-index >= root.selection.first_row
-            && line-index <= root.selection.last_row : Rectangle {
-                property <int> first-column:
-                    line-index == root.selection.first_row
-                        ? root.selection.first_column : 0;
-                property <int> last-column:
-                    line-index == root.selection.last_row
-                        ? root.selection.last_column : root.view.content_columns - 1;
-
-                // Keep selection geometry in terminal cells. A single span can
-                // expose fractional boundary errors when CJK and Latin runs
-                // share a row, while one fixed-width rectangle cannot drift.
-                for _[selection-column] in max(
-                    0, self.last-column - self.first-column + 1
-                ) : Rectangle {
-                    x: max(
-                        0,
-                        (line-index == root.selection.first_row
-                            ? root.selection.first_column : 0) + selection-column
-                    ) * root.cell-width;
-                    width: root.cell-width;
-                    height: root.cell-height;
-                    background: root.view.selection_background.with-alpha(0.72);
                 }
             }
+
+            if root.view.compact_rendering : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: transparent;
+
+                for run in line.runs : Text {
+                    x: run.column * root.cell-width;
+                    y: (root.cell-height - root.font-cell-height) / 2;
+                    width: run.cells * root.cell-width;
+                    height: root.font-cell-height;
+                    text: run.text;
+                    color: run.foreground;
+                    font-family: root.view.font_family;
+                    font-size: root.view.font_size;
+                    font-weight: run.bold ? 700 : 400;
+                    font-italic: run.italic;
+                    letter-spacing: 0px;
+                    horizontal-alignment: run.centered ? center : left;
+                    vertical-alignment: center;
+                    overflow: clip;
+                }
+            }
+
+            // Decorations use one shared, merged model in both rendering modes.
+            // This avoids per-run conditional children while preserving the
+            // original text-then-decoration draw order.
+            for run in line.decorations : Rectangle {
+                x: run.column * root.cell-width;
+                y: run.strikethrough
+                    ? parent.height / 2
+                    : parent.height - Theme.terminal-underline-offset;
+                width: run.cells * root.cell-width;
+                height: Theme.hairline;
+                background: run.foreground;
+            }
+        }
+
+        // Keep one selection container per row so starting/ending a drag only
+        // changes visibility. Its children remain cell-sized and cell-aligned;
+        // this is important when CJK and Latin runs share a row.
+        selection-overlay := Rectangle {
+            visible: root.selection.active
+                && line-index >= root.selection.first_row
+                && line-index <= root.selection.last_row;
+            property <int> first-column:
+                line-index == root.selection.first_row
+                    ? root.selection.first_column : 0;
+            property <int> last-column:
+                line-index == root.selection.last_row
+                    ? root.selection.last_column : root.view.content_columns - 1;
+
+            for _[selection-column] in max(
+                0, self.last-column - self.first-column + 1
+            ) : Rectangle {
+                x: max(
+                    0,
+                    (line-index == root.selection.first_row
+                        ? root.selection.first_column : 0) + selection-column
+                ) * root.cell-width;
+                width: root.cell-width;
+                height: root.cell-height;
+                background: root.view.selection_background.with-alpha(0.72);
+            }
+        }
 
     }
 
