@@ -8,8 +8,6 @@ export struct TerminalRenderRun {
     background: color,
     bold: bool,
     italic: bool,
-    underline: bool,
-    strikethrough: bool,
     centered: bool,
 }
 
@@ -114,8 +112,9 @@ export component TerminalGrid inherits Rectangle {
     background: root.view.background;
     clip: true;
 
-    // Keep the terminal grid as one bounded row model. Cursor and selection
-    // remain per-row overlays and do not enter the static row cache.
+    // Keep the terminal grid as one bounded row model. Selection remains
+    // cell-accurate per-row geometry, while the other interaction overlays
+    // below stay outside the row cache with stable item identity.
     for line[line-index] in root.view.render_lines : Rectangle {
         x: 0px;
         y: root.top-offset + line-index * root.cell-height;
@@ -159,18 +158,6 @@ export component TerminalGrid inherits Rectangle {
                             vertical-alignment: center;
                             overflow: clip;
                         }
-                        if run.underline : Rectangle {
-                            y: parent.height - Theme.terminal-underline-offset;
-                            width: parent.width;
-                            height: Theme.hairline;
-                            background: run.foreground;
-                        }
-                        if run.strikethrough : Rectangle {
-                            y: parent.height / 2;
-                            width: parent.width;
-                            height: Theme.hairline;
-                            background: run.foreground;
-                        }
                     }
                 }
 
@@ -203,15 +190,19 @@ export component TerminalGrid inherits Rectangle {
                         overflow: clip;
                     }
 
-                    for run in line.decorations : Rectangle {
-                        x: run.column * root.cell-width;
-                        y: run.strikethrough
-                            ? parent.height / 2
-                            : parent.height - Theme.terminal-underline-offset;
-                        width: run.cells * root.cell-width;
-                        height: Theme.hairline;
-                        background: run.foreground;
-                    }
+                }
+
+                // Decorations use one shared, merged model in both rendering
+                // modes. This avoids per-run conditional children while
+                // preserving the original text-then-decoration draw order.
+                for run in line.decorations : Rectangle {
+                    x: run.column * root.cell-width;
+                    y: run.strikethrough
+                        ? parent.height / 2
+                        : parent.height - Theme.terminal-underline-offset;
+                    width: run.cells * root.cell-width;
+                    height: Theme.hairline;
+                    background: run.foreground;
                 }
             }
 
@@ -242,48 +233,58 @@ export component TerminalGrid inherits Rectangle {
                 }
             }
 
-        if root.target-highlight.active
-            && line-index == root.target-highlight.row : Rectangle {
-                x: max(0, root.target-highlight.start_column) * root.cell-width;
-                width: max(
-                    1,
-                    root.target-highlight.end_column - root.target-highlight.start_column,
-                ) * root.cell-width;
-                y: parent.height - Theme.terminal-underline-offset;
-                height: Theme.hairline;
-                background: Theme.accent;
-            }
+    }
 
-        if root.view.connected && root.view.cursor_visible
-            && (!root.cursor-blink-enabled || root.cursor-blink)
-            && line-index == root.view.cursor_row : Rectangle {
-                x: root.view.cursor_column * root.cell-width;
-                width: max(1, root.view.cursor_cells) * root.cell-width;
-                height: root.cell-height;
-                background: root.view.foreground;
-                Text {
-                    y: (parent.height - root.font-cell-height) / 2;
-                    width: parent.width;
-                    height: root.font-cell-height;
-                    text: root.view.cursor_text;
-                    color: root.view.background;
-                    font-family: root.view.font_family;
-                    font-size: root.view.font_size;
-                    letter-spacing: 0px;
-                    horizontal-alignment: root.view.cursor_cells > 1 ? center : left;
-                    vertical-alignment: center;
-                    overflow: clip;
-                }
+    // Keep interaction overlays outside the row repeater. Their identity stays
+    // stable while the cursor/target moves between rows, so movement updates
+    // geometry and visibility without creating or destroying row children.
+    target-overlay := Rectangle {
+        x: max(0, root.target-highlight.start_column) * root.cell-width;
+        y: root.top-offset + root.target-highlight.row * root.cell-height
+            + root.cell-height - Theme.terminal-underline-offset;
+        width: max(
+            1,
+            root.target-highlight.end_column - root.target-highlight.start_column,
+        ) * root.cell-width;
+        height: Theme.hairline;
+        visible: root.target-highlight.active;
+        background: Theme.accent;
+    }
+
+    cursor-overlay := Rectangle {
+        x: root.view.cursor_column * root.cell-width;
+        y: root.top-offset + root.view.cursor_row * root.cell-height;
+        width: max(1, root.view.cursor_cells) * root.cell-width;
+        height: root.cell-height;
+        visible: root.view.connected && root.view.cursor_visible
+            && (!root.cursor-blink-enabled || root.cursor-blink);
+        background: root.view.foreground;
+        Text {
+            y: (parent.height - root.font-cell-height) / 2;
+            width: parent.width;
+            height: root.font-cell-height;
+            text: root.view.cursor_text;
+            color: root.view.background;
+            font-family: root.view.font_family;
+            font-size: root.view.font_size;
+            letter-spacing: 0px;
+            horizontal-alignment: root.view.cursor_cells > 1 ? center : left;
+            vertical-alignment: center;
+            overflow: clip;
         }
     }
 
-    if root.view.connected && root.view.cursor_visible && root.preedit-text != "" : preedit-overlay := Rectangle {
+    preedit-overlay := Rectangle {
         x: max(0px, min(parent.width - root.cell-width,
             root.view.cursor_column * root.cell-width));
         y: root.cursor-y;
-        width: min(parent.width - self.x,
-            max(root.cell-width, preedit-value.preferred-width));
+        width: self.visible
+            ? min(parent.width - self.x,
+                max(root.cell-width, preedit-value.preferred-width))
+            : 0px;
         height: root.cell-height;
+        visible: root.view.connected && root.view.cursor_visible
+            && root.preedit-text != "";
         background: root.view.background;
 
         preedit-value := Text {

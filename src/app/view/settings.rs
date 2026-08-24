@@ -372,8 +372,6 @@ pub(in crate::app) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalR
         background: to_slint_color(run.background),
         bold: run.bold,
         italic: run.italic,
-        underline: run.underline,
-        strikethrough: run.strikethrough,
         centered: run.centered,
     }
 }
