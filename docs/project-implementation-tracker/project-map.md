@@ -185,6 +185,7 @@
 
 ## 最近依据
 
+- 2026-08-25：TerminalGrid 非紧凑文字 run 直接使用定位到 cell span 的 `Text`，移除仅用于透明背景/定位的 per-run `Rectangle`；中文/非 ASCII 仍在一格或两格逻辑跨度内居中，英文保持左对齐，选区与静态缓存边界不变。
 - 2026-08-25：TerminalGrid 的紧凑/非紧凑文字子树改为固定保留并仅切换 `visible`；模式设置变化不再销毁和重建每行文字 item。选区仍使用逐行固定容器和 cell-sized 子项，静态行缓存只覆盖背景、文字和装饰；应用层 tile/partition 链路保持删除。
 - 2026-08-24：撤回应用层终端 tile/partition model；当前单层 `TerminalRenderLine` 仍按 source/render revision 复用干净行，`TermDamage` 和 Slint 内部 dirty region 保留。此前 tile 候选仅作为历史审计记录，不再作为当前实现或 A/B 选项。
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
