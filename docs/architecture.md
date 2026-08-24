@@ -1442,7 +1442,9 @@ independent row-cache switch applies `cache-rendering-hint` only to static row
 backgrounds, text, and decorations. Selection uses a stable per-row overlay whose
 children remain cell-aligned, while visibility and range change without recreating
 the row container. Cursor blink, target feedback, and IME/preedit remain outside
-that layer. Skia and FemtoVG can retain a row image;
+that layer. Compact and non-compact text content also keeps both fixed subtrees
+allocated and toggles visibility when the setting changes, avoiding a full row
+item-tree rebuild. Skia and FemtoVG can retain a row image;
 the software renderer has no equivalent layer cache, and the option is therefore
 disabled by default until CPU and graphics-memory measurements justify it.
 The terminal grid uses one bounded Slint repeater over `TerminalRenderLine`

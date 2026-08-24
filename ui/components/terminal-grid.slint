@@ -135,7 +135,11 @@ export component TerminalGrid inherits Rectangle {
                 background: run.background;
             }
 
-            if !root.view.compact_rendering : Rectangle {
+            // Keep both text-mode subtrees allocated. Switching the compact
+            // renderer only changes visibility, so a settings change does not
+            // rebuild every row's item tree.
+            noncompact-content := Rectangle {
+                visible: !root.view.compact_rendering;
                 width: parent.width;
                 height: parent.height;
                 background: transparent;
@@ -163,7 +167,8 @@ export component TerminalGrid inherits Rectangle {
                 }
             }
 
-            if root.view.compact_rendering : Rectangle {
+            compact-content := Rectangle {
+                visible: root.view.compact_rendering;
                 width: parent.width;
                 height: parent.height;
                 background: transparent;

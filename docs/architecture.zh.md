@@ -889,6 +889,7 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 增加透明包装 Rectangle；Settings 开关仍保留旧 item 树供 A/B。独立的行缓存开关只把静态行背景、文字和
 装饰放入 `cache-rendering-hint` layer；选区使用固定的逐行 overlay，子项仍按 cell 对齐，
 只更新可见性和范围而不重建行容器；光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
+紧凑与非紧凑文字内容也固定保留两套子树，设置切换时只改变可见性，避免重建整行 item tree。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
 终端网格现在只使用一个有界的 Slint repeater，直接遍历 `TerminalRenderLine`。
