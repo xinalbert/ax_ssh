@@ -58,7 +58,7 @@ Slint UI（.slint）
 | `src/app/diagnostics.rs` | 脱敏键盘分类、固定 diagnostics route/action 字段和专用 tracing target | 原始终端/剪贴板文本、路径、profile 标签、主机、凭据或传输状态 |
 | `src/config.rs` 与 `src/config/` | 稳定的 config 入口和显式导出；session/profile 领域、设置、主题规范化、旧配置迁移、私有 JSON 持久化和原子替换 | Slint 类型、网络连接、明文密码存储 |
 | `src/credentials.rs` | 按 profile 访问系统凭据库和加密保险库记录 | UI 状态、明文配置、SSH 传输 handle |
-| `src/terminal.rs`、`src/terminal_dimensions.rs` 与 `src/terminal/input.rs` | 有界终端网格、共享尺寸契约、字符格样式、光标/scrollback 状态、选区提取和终端按键编码 | Slint 类型、网络 handle、凭据 |
+| `src/terminal.rs`、`src/terminal/model.rs`、`src/terminal/render.rs`、`src/terminal/selection.rs`、`src/terminal/input.rs` 与 `src/terminal_dimensions.rs` | 有界终端 DTO 与模型、共享尺寸契约、字符格样式/快照、视口与选区行为以及终端按键编码 | Slint 类型、网络 handle、凭据 |
 | `src/local_shell.rs` | 跨平台 shell 发现，以及每个 Tab 一个由有界 worker 独占的本地 PTY 子进程 | Slint 状态、SSH 信任、持久化终端内容 |
 | `src/x_server.rs` | 平台 X server provider 选项、系统应用发现与标准路径兜底、本机 display 候选和有界进程启动 | SSH channel、UI 状态、cookie、profile 修改或远端服务器配置 |
 | `src/ssh.rs` | russh handler、主机密钥决策、密码/私钥/运行时 agent 认证、shell 与服务端发起的 X11 channel 边界 | 窗口更新、持久化会话修改、UI 格式化、agent identity 管理 |
