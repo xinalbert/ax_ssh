@@ -119,11 +119,8 @@ export component TerminalGrid inherits Rectangle {
         y: root.top-offset + line-index * root.cell-height;
         width: parent.width;
         height: root.cell-height;
-        static-content := Rectangle {
-                width: parent.width;
-                height: parent.height;
-                background: transparent;
-                cache-rendering-hint: root.view.row_render_cache;
+        background: transparent;
+        cache-rendering-hint: root.view.row_render_cache;
 
                 // The renderer omits default-background spans and merges
                 // adjacent equal colors, so one stable background model serves
@@ -199,7 +196,6 @@ export component TerminalGrid inherits Rectangle {
                     height: Theme.hairline;
                     background: run.foreground;
                 }
-            }
 
         if root.selection.active
             && line-index >= root.selection.first_row
