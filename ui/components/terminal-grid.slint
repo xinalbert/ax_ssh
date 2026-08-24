@@ -136,13 +136,6 @@ export component TerminalGrid inherits Rectangle {
                         width: run.cells * root.cell-width;
                         height: root.cell-height;
                         background: run.background;
-                    }
-
-                    for run in line.runs : Rectangle {
-                        x: run.column * root.cell-width;
-                        width: run.cells * root.cell-width;
-                        height: root.cell-height;
-                        background: transparent;
                         Text {
                             y: (parent.height - root.font-cell-height) / 2;
                             width: parent.width;
