@@ -36,20 +36,11 @@ export struct TerminalRenderLine {
     runs: [TerminalRenderRun],
 }
 
-export struct TerminalRenderTile {
-    start_row: int,
-    source_revision_low: int,
-    source_revision_high: int,
-    render_cache_key_low: int,
-    render_cache_key_high: int,
-    rows: [TerminalRenderLine],
-}
-
 // Rust owns this snapshot. It contains only the bounded visible grid and no
 // local interaction state.
 export struct TerminalGridView {
     connected: bool,
-    render_tiles: [TerminalRenderTile],
+    render_lines: [TerminalRenderLine],
     row_count: int,
     content_columns: int,
     cursor_row: int,
@@ -119,21 +110,14 @@ export component TerminalGrid inherits Rectangle {
     background: root.view.background;
     clip: true;
 
-    // Keep the repeater shallow: each tile owns a small, stable group of rows.
-    // Cursor and selection remain per-row overlays and do not enter the tile's
-    // static rendering cache.
-    for tile in root.view.render_tiles : Rectangle {
+    // Keep the terminal grid as one bounded row model. Cursor and selection
+    // remain per-row overlays and do not enter the static row cache.
+    for line[line-index] in root.view.render_lines : Rectangle {
         x: 0px;
-        y: root.top-offset + tile.start_row * root.cell-height;
+        y: root.top-offset + line-index * root.cell-height;
         width: parent.width;
-        height: tile.rows.length * root.cell-height;
-
-        for line[line-index] in tile.rows : Rectangle {
-            x: 0px;
-            y: line-index * root.cell-height;
-            width: parent.width;
-            height: root.cell-height;
-            static-content := Rectangle {
+        height: root.cell-height;
+        static-content := Rectangle {
                 width: parent.width;
                 height: parent.height;
                 background: transparent;
@@ -227,14 +211,14 @@ export component TerminalGrid inherits Rectangle {
                 }
             }
 
-            if root.selection.active
-                && tile.start_row + line-index >= root.selection.first_row
-                && tile.start_row + line-index <= root.selection.last_row : Rectangle {
+        if root.selection.active
+            && line-index >= root.selection.first_row
+            && line-index <= root.selection.last_row : Rectangle {
                 property <int> first-column:
-                    tile.start_row + line-index == root.selection.first_row
+                    line-index == root.selection.first_row
                         ? root.selection.first_column : 0;
                 property <int> last-column:
-                    tile.start_row + line-index == root.selection.last_row
+                    line-index == root.selection.last_row
                         ? root.selection.last_column : root.view.content_columns - 1;
                 x: max(0, self.first-column) * root.cell-width;
                 width: max(0, self.last-column - self.first-column + 1) * root.cell-width;
@@ -242,8 +226,8 @@ export component TerminalGrid inherits Rectangle {
                 background: root.view.selection_background.with-alpha(0.72);
             }
 
-            if root.target-highlight.active
-                && tile.start_row + line-index == root.target-highlight.row : Rectangle {
+        if root.target-highlight.active
+            && line-index == root.target-highlight.row : Rectangle {
                 x: max(0, root.target-highlight.start_column) * root.cell-width;
                 width: max(
                     1,
@@ -254,9 +238,9 @@ export component TerminalGrid inherits Rectangle {
                 background: Theme.accent;
             }
 
-            if root.view.connected && root.view.cursor_visible
-                && (!root.cursor-blink-enabled || root.cursor-blink)
-                && tile.start_row + line-index == root.view.cursor_row : Rectangle {
+        if root.view.connected && root.view.cursor_visible
+            && (!root.cursor-blink-enabled || root.cursor-blink)
+            && line-index == root.view.cursor_row : Rectangle {
                 x: root.view.cursor_column * root.cell-width;
                 width: root.cell-width;
                 height: root.cell-height;
@@ -274,7 +258,6 @@ export component TerminalGrid inherits Rectangle {
                     vertical-alignment: center;
                     overflow: clip;
                 }
-            }
         }
     }
 

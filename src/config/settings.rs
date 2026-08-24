@@ -92,62 +92,6 @@ pub enum RendererPreference {
     Software,
 }
 
-/// Controls how visible terminal rows are grouped into render tiles.
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum TerminalPartitionStrategy {
-    #[serde(rename = "rows")]
-    Rows,
-    #[default]
-    #[serde(rename = "tile-8")]
-    Tile8,
-    #[serde(rename = "tile-16")]
-    Tile16,
-}
-
-impl TerminalPartitionStrategy {
-    pub const fn as_setting(self) -> &'static str {
-        match self {
-            Self::Rows => "rows",
-            Self::Tile8 => "tile-8",
-            Self::Tile16 => "tile-16",
-        }
-    }
-
-    pub fn from_setting(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "rows" | "row" | "1" => Self::Rows,
-            "tile-16" | "16" => Self::Tile16,
-            _ => Self::Tile8,
-        }
-    }
-
-    pub const fn selector_index(self) -> i32 {
-        match self {
-            Self::Rows => 0,
-            Self::Tile8 => 1,
-            Self::Tile16 => 2,
-        }
-    }
-
-    pub const fn from_selector_index(index: i32) -> Self {
-        match index {
-            0 => Self::Rows,
-            2 => Self::Tile16,
-            _ => Self::Tile8,
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for TerminalPartitionStrategy {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(Self::from_setting(&String::deserialize(deserializer)?))
-    }
-}
-
 impl RendererPreference {
     pub const fn as_setting(self) -> &'static str {
         match self {
@@ -188,7 +132,6 @@ pub struct AppearanceSettingsInput<'a> {
     pub semantic_highlighting: bool,
     pub terminal_compact_rendering: bool,
     pub terminal_row_render_cache: bool,
-    pub terminal_partition_strategy: &'a str,
     pub terminal_cursor_blink: bool,
     pub focused_terminal_refresh_fps: i32,
     pub unfocused_terminal_refresh_fps: i32,
@@ -264,8 +207,6 @@ pub struct AppearanceSettings {
     pub terminal_compact_rendering: bool,
     #[serde(default)]
     pub terminal_row_render_cache: bool,
-    #[serde(default)]
-    pub terminal_partition_strategy: TerminalPartitionStrategy,
     #[serde(default = "default_true")]
     pub terminal_cursor_blink: bool,
     #[serde(default = "default_focused_terminal_refresh_fps")]
@@ -321,9 +262,6 @@ impl AppearanceSettings {
             terminal_semantic_highlighting: input.semantic_highlighting,
             terminal_compact_rendering: input.terminal_compact_rendering,
             terminal_row_render_cache: input.terminal_row_render_cache,
-            terminal_partition_strategy: TerminalPartitionStrategy::from_setting(
-                input.terminal_partition_strategy,
-            ),
             terminal_cursor_blink: input.terminal_cursor_blink,
             focused_terminal_refresh_fps: normalize_terminal_refresh_fps(
                 input.focused_terminal_refresh_fps,
@@ -361,7 +299,6 @@ impl AppearanceSettings {
             semantic_highlighting: self.terminal_semantic_highlighting,
             terminal_compact_rendering: self.terminal_compact_rendering,
             terminal_row_render_cache: self.terminal_row_render_cache,
-            terminal_partition_strategy: self.terminal_partition_strategy.as_setting(),
             terminal_cursor_blink: self.terminal_cursor_blink,
             focused_terminal_refresh_fps: i32::from(self.focused_terminal_refresh_fps),
             unfocused_terminal_refresh_fps: i32::from(self.unfocused_terminal_refresh_fps),
@@ -395,7 +332,6 @@ impl Default for AppearanceSettings {
             terminal_semantic_highlighting: false,
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
-            terminal_partition_strategy: TerminalPartitionStrategy::Tile8,
             terminal_cursor_blink: true,
             focused_terminal_refresh_fps: default_focused_terminal_refresh_fps(),
             unfocused_terminal_refresh_fps: default_unfocused_terminal_refresh_fps(),

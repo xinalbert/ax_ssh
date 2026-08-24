@@ -34,7 +34,6 @@ export struct SettingsViewState {
     terminal_semantic_highlighting: bool,
     terminal_compact_rendering: bool,
     terminal_row_render_cache: bool,
-    terminal_partition_strategy: string,
     terminal_cursor_blink: bool,
     focused_terminal_refresh_fps: int,
     unfocused_terminal_refresh_fps: int,
@@ -140,7 +139,6 @@ export component SettingsPane inherits Rectangle {
     private property <bool> terminal-semantic-highlighting: root.source.terminal_semantic_highlighting;
     private property <bool> terminal-compact-rendering: root.source.terminal_compact_rendering;
     private property <bool> terminal-row-render-cache: root.source.terminal_row_render_cache;
-    private property <string> terminal-partition-strategy: root.source.terminal_partition_strategy;
     private property <bool> terminal-cursor-blink: root.source.terminal_cursor_blink;
     private property <int> focused-terminal-refresh-fps: root.source.focused_terminal_refresh_fps;
     private property <int> unfocused-terminal-refresh-fps: root.source.unfocused_terminal_refresh_fps;
@@ -219,7 +217,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> app-version: root.source.app_version;
 
     callback save(
-        string, string, string, int, int, float, bool, bool, bool, bool, string, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -251,7 +249,6 @@ export component SettingsPane inherits Rectangle {
     private property <bool> draft-semantic-highlighting: root.terminal-semantic-highlighting;
     private property <bool> draft-terminal-compact-rendering: root.terminal-compact-rendering;
     private property <bool> draft-terminal-row-render-cache: root.terminal-row-render-cache;
-    private property <string> draft-terminal-partition-strategy: root.terminal-partition-strategy;
     private property <bool> draft-terminal-cursor-blink: root.terminal-cursor-blink;
     private property <int> draft-focused-terminal-refresh-fps: root.focused-terminal-refresh-fps;
     private property <int> draft-unfocused-terminal-refresh-fps: root.unfocused-terminal-refresh-fps;
@@ -366,7 +363,6 @@ export component SettingsPane inherits Rectangle {
             root.draft-semantic-highlighting,
             root.draft-terminal-compact-rendering,
             root.draft-terminal-row-render-cache,
-            root.draft-terminal-partition-strategy,
             root.draft-terminal-cursor-blink,
             root.draft-focused-terminal-refresh-fps,
             root.draft-unfocused-terminal-refresh-fps,
@@ -446,7 +442,6 @@ export component SettingsPane inherits Rectangle {
             root.draft-semantic-highlighting,
             root.draft-terminal-compact-rendering,
             root.draft-terminal-row-render-cache,
-            root.draft-terminal-partition-strategy,
             root.draft-terminal-cursor-blink,
             root.draft-focused-terminal-refresh-fps,
             root.draft-unfocused-terminal-refresh-fps,
@@ -523,7 +518,6 @@ export component SettingsPane inherits Rectangle {
     changed draft-semantic-highlighting => { root.schedule-preview(); }
     changed draft-terminal-compact-rendering => { root.schedule-preview(); }
     changed draft-terminal-row-render-cache => { root.schedule-preview(); }
-    changed draft-terminal-partition-strategy => { root.schedule-preview(); }
     changed draft-terminal-cursor-blink => { root.schedule-preview(); }
     changed draft-focused-terminal-refresh-fps => { root.schedule-preview(); }
     changed draft-unfocused-terminal-refresh-fps => { root.schedule-preview(); }
@@ -773,7 +767,6 @@ export component SettingsPane inherits Rectangle {
                         draft-renderer-preference <=> root.draft-renderer-preference;
                         draft-terminal-compact-rendering <=> root.draft-terminal-compact-rendering;
                         draft-terminal-row-render-cache <=> root.draft-terminal-row-render-cache;
-                        draft-terminal-partition-strategy <=> root.draft-terminal-partition-strategy;
                         draft-terminal-cursor-blink <=> root.draft-terminal-cursor-blink;
                         draft-focused-terminal-refresh-fps <=> root.draft-focused-terminal-refresh-fps;
                         draft-unfocused-terminal-refresh-fps <=> root.draft-unfocused-terminal-refresh-fps;

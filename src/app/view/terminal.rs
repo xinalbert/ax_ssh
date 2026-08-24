@@ -1,9 +1,4 @@
 use super::*;
-use ax_ssh::config::TerminalPartitionStrategy;
-
-#[cfg(test)]
-const DEFAULT_TERMINAL_TILE_ROWS: usize = 8;
-
 pub(in crate::app) fn set_tab_status(
     state: &Arc<Mutex<AppState>>,
     ui: &slint::Weak<AppWindow>,
@@ -362,21 +357,8 @@ pub(super) fn reuse_terminal_render_models(
         let Some(current_line) = current.render_lines.row_data(index) else {
             continue;
         };
-        if render_tile_index_for_row(&current.render_tiles, index)
-            .zip(render_tile_index_for_row(&updated.render_tiles, index))
-            .and_then(|(current_index, updated_index)| {
-                current
-                    .render_tiles
-                    .row_data(current_index)
-                    .zip(updated.render_tiles.row_data(updated_index))
-            })
-            .is_some_and(|(current_tile, updated_tile)| {
-                terminal_render_tile_revision_matches(&current_tile, &updated_tile)
-            })
-        {
-            // The tile summary is derived from monotonically increasing line
-            // revisions and the current render settings. Reuse the line
-            // value directly instead of walking its run/background models.
+        if terminal_render_line_revision_matches(&current_line, updated_line) {
+            // Reuse unchanged rows without touching their nested run models.
             *updated_line = current_line;
             continue;
         }
@@ -401,107 +383,24 @@ pub(super) fn reuse_terminal_render_models(
     if lines_reused {
         updated.render_lines = current.render_lines.clone();
     }
-    let tiles_reused = reuse_terminal_render_tiles(
-        &current.render_tiles,
-        &mut updated.render_tiles,
-        &updated.render_lines,
-    );
-    cursor_reused && lines_reused && tiles_reused
+    cursor_reused && lines_reused
 }
 
-pub(in crate::app) fn reuse_terminal_render_tiles(
-    current: &ModelRc<TerminalRenderTile>,
-    updated: &mut ModelRc<TerminalRenderTile>,
-    lines: &ModelRc<TerminalRenderLine>,
+fn terminal_render_line_revision_matches(
+    current: &TerminalRenderLine,
+    updated: &TerminalRenderLine,
 ) -> bool {
-    let Some(current_tiles) = current
-        .as_any()
-        .downcast_ref::<VecModel<TerminalRenderTile>>()
-    else {
-        return current.row_count() == 0 && updated.row_count() == 0;
-    };
-    let Some(updated_tiles) = updated
-        .as_any()
-        .downcast_ref::<VecModel<TerminalRenderTile>>()
-    else {
-        return current.row_count() == 0 && updated.row_count() == 0;
-    };
-
-    let mut merged = Vec::with_capacity(updated_tiles.row_count());
-    let mut shape_changed = current_tiles.row_count() != updated_tiles.row_count();
-    for index in 0..updated_tiles.row_count() {
-        let Some(mut tile) = updated_tiles.row_data(index) else {
-            return false;
-        };
-        let Some(current_tile) = current_tiles.row_data(index) else {
-            merged.push(tile);
-            shape_changed = true;
-            continue;
-        };
-        if current_tile.start_row != tile.start_row {
-            merged.push(tile);
-            shape_changed = true;
-            continue;
-        }
-        if terminal_render_tile_revision_matches(&current_tile, &tile) {
-            merged.push(current_tile);
-            continue;
-        }
-        let start_row = usize::try_from(tile.start_row).unwrap_or(0);
-        let rows = (0..tile.rows.row_count())
-            .filter_map(|offset| {
-                let row = start_row.saturating_add(offset);
-                lines.row_data(row)
-            })
-            .collect::<Vec<_>>();
-        if rows.len() != tile.rows.row_count() || !replace_vec_model_rows(&current_tile.rows, rows)
-        {
-            return false;
-        }
-        tile.rows = current_tile.rows;
-        merged.push(tile);
-    }
-
-    if shape_changed {
-        current_tiles.set_vec(merged);
-    } else {
-        for (index, tile) in merged.iter().cloned().enumerate() {
-            if current_tiles.row_data(index).as_ref() != Some(&tile) {
-                current_tiles.set_row_data(index, tile);
-            }
-        }
-    }
-    *updated = current.clone();
-    true
-}
-
-fn terminal_render_tile_revision_matches(
-    current: &TerminalRenderTile,
-    updated: &TerminalRenderTile,
-) -> bool {
-    current.start_row == updated.start_row
-        && current.rows.row_count() == updated.rows.row_count()
-        && tile_revision_is_known(current)
-        && tile_revision_is_known(updated)
+    terminal_render_line_revision_is_known(current)
+        && terminal_render_line_revision_is_known(updated)
         && current.source_revision_low == updated.source_revision_low
         && current.source_revision_high == updated.source_revision_high
         && current.render_cache_key_low == updated.render_cache_key_low
         && current.render_cache_key_high == updated.render_cache_key_high
 }
 
-fn tile_revision_is_known(tile: &TerminalRenderTile) -> bool {
-    (tile.source_revision_low != 0 || tile.source_revision_high != 0)
-        && (tile.render_cache_key_low != 0 || tile.render_cache_key_high != 0)
-}
-
-fn render_tile_index_for_row(tiles: &ModelRc<TerminalRenderTile>, row: usize) -> Option<usize> {
-    (0..tiles.row_count()).find(|index| {
-        let Some(tile) = tiles.row_data(*index) else {
-            return false;
-        };
-        let start_row = usize::try_from(tile.start_row).unwrap_or(0);
-        row >= start_row && row.saturating_sub(start_row) < tile.rows.row_count()
-    })
+fn terminal_render_line_revision_is_known(line: &TerminalRenderLine) -> bool {
+    (line.source_revision_low != 0 || line.source_revision_high != 0)
+        && (line.render_cache_key_low != 0 || line.render_cache_key_high != 0)
 }
 
 fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneView) -> bool {
@@ -701,7 +600,6 @@ pub(super) fn terminal_view_from_snapshot(
     let renderer = TerminalRenderer::new(settings);
     let current_lines = current.map(|current| &current.render_lines);
     let lines = render_snapshot_lines(&snapshot, &renderer, current_lines);
-    let tiles = terminal_render_tiles_with_rows(lines.clone(), terminal_partition_rows(ui));
     let cursor_text: SharedString = snapshot.cursor_text.into();
     let cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
     let cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
@@ -717,7 +615,6 @@ pub(super) fn terminal_view_from_snapshot(
         selection_revision,
         notice: terminal_notice_view(notice),
         render_lines: ModelRc::new(VecModel::from(lines)),
-        render_tiles: ModelRc::new(VecModel::from(tiles)),
         cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),
         content_columns: snapshot.max_columns.min(i32::MAX as usize) as i32,
         cursor_row,
@@ -742,67 +639,6 @@ pub(super) fn terminal_view_from_snapshot(
         select_all_shortcut: ui.get_select_all_shortcut(),
         mouse_local_selection_priority: ui.get_terminal_mouse_local_selection_priority(),
     }
-}
-
-#[cfg(test)]
-pub(in crate::app) fn terminal_render_tiles(
-    lines: Vec<TerminalRenderLine>,
-) -> Vec<TerminalRenderTile> {
-    terminal_render_tiles_with_rows(lines, DEFAULT_TERMINAL_TILE_ROWS)
-}
-
-pub(in crate::app) fn terminal_render_tiles_with_rows(
-    lines: Vec<TerminalRenderLine>,
-    tile_rows: usize,
-) -> Vec<TerminalRenderTile> {
-    let tile_rows = tile_rows.max(1);
-    lines
-        .chunks(tile_rows)
-        .enumerate()
-        .map(|(index, rows)| {
-            let (source_revision, render_cache_key, all_source_revisions_known) = rows.iter().fold(
-                (0_u64, 0_u64, true),
-                |(source_revision, render_cache_key, all_source_revisions_known), line| {
-                    let line_source_revision = render_line_source_revision(line);
-                    (
-                        source_revision.max(line_source_revision),
-                        render_cache_key.max(render_line_cache_key(line)),
-                        all_source_revisions_known && line_source_revision != 0,
-                    )
-                },
-            );
-            let source_revision = if all_source_revisions_known {
-                source_revision
-            } else {
-                0
-            };
-            TerminalRenderTile {
-                start_row: index.saturating_mul(tile_rows).min(i32::MAX as usize) as i32,
-                source_revision_low: source_revision as u32 as i32,
-                source_revision_high: (source_revision >> 32) as u32 as i32,
-                render_cache_key_low: render_cache_key as u32 as i32,
-                render_cache_key_high: (render_cache_key >> 32) as u32 as i32,
-                rows: ModelRc::new(VecModel::from(rows.to_vec())),
-            }
-        })
-        .collect()
-}
-
-fn terminal_partition_rows(ui: &AppWindow) -> usize {
-    match TerminalPartitionStrategy::from_setting(ui.get_terminal_partition_strategy().as_str()) {
-        TerminalPartitionStrategy::Rows => 1,
-        TerminalPartitionStrategy::Tile8 => 8,
-        TerminalPartitionStrategy::Tile16 => 16,
-    }
-}
-
-fn render_line_source_revision(line: &TerminalRenderLine) -> u64 {
-    u64::from(line.source_revision_low as u32) | (u64::from(line.source_revision_high as u32) << 32)
-}
-
-fn render_line_cache_key(line: &TerminalRenderLine) -> u64 {
-    u64::from(line.render_cache_key_low as u32)
-        | (u64::from(line.render_cache_key_high as u32) << 32)
 }
 
 pub(super) fn render_snapshot_lines(

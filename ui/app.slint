@@ -138,7 +138,6 @@ export component AppWindow inherits Window {
     in property <bool> terminal-semantic-highlighting: false;
     in property <bool> terminal-compact-rendering: true;
     in property <bool> terminal-row-render-cache: false;
-    in property <string> terminal-partition-strategy: "tile-8";
     in property <bool> terminal-cursor-blink: true;
     in property <int> focused-terminal-refresh-fps: 60;
     in property <int> unfocused-terminal-refresh-fps: 4;
@@ -295,7 +294,6 @@ export component AppWindow inherits Window {
             terminal_semantic_highlighting: root.terminal-semantic-highlighting,
             terminal_compact_rendering: root.terminal-compact-rendering,
             terminal_row_render_cache: root.terminal-row-render-cache,
-            terminal_partition_strategy: root.terminal-partition-strategy,
             terminal_cursor_blink: root.terminal-cursor-blink,
             focused_terminal_refresh_fps: root.focused-terminal-refresh-fps,
             unfocused_terminal_refresh_fps: root.unfocused-terminal-refresh-fps,
@@ -396,7 +394,7 @@ export component AppWindow inherits Window {
     callback close-tab(string);
     callback move-tab(string, int);
     callback save-settings(
-        string, string, string, int, int, float, bool, bool, bool, bool, string, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -720,7 +718,7 @@ export component AppWindow inherits Window {
             return-workspace(id) => {
                 root.return-workspace(id);
             }
-            save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, partition-strategy, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+            save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                           semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                           theme-mode, theme-palette,
                           theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -735,7 +733,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           settings-tab-id, close-after-save) => {
-                root.save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, partition-strategy, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+                root.save-settings(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                     theme-mode, theme-palette,
                     theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
