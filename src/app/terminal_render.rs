@@ -275,7 +275,7 @@ fn render_line(
         .iter()
         .flat_map(|run| render_run(run, palette, settings, semantic_palette))
         .collect::<Vec<_>>();
-    let backgrounds = compact_background_runs(&runs, palette.background);
+    let backgrounds = merged_background_runs(&runs, palette.background);
     let decorations = compact_decoration_runs(&runs);
     RenderedTerminalLine {
         source_revision: line.revision,
@@ -316,7 +316,7 @@ fn compact_decoration_runs(runs: &[RenderedTerminalRun]) -> Vec<RenderedTerminal
     decorations
 }
 
-fn compact_background_runs(
+fn merged_background_runs(
     runs: &[RenderedTerminalRun],
     default_background: RgbColor,
 ) -> Vec<RenderedTerminalBackgroundRun> {
@@ -922,7 +922,7 @@ mod tests {
         ];
 
         assert_eq!(
-            compact_background_runs(&runs, default_background),
+            merged_background_runs(&runs, default_background),
             vec![
                 RenderedTerminalBackgroundRun {
                     column: 1,

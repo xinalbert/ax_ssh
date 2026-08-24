@@ -369,7 +369,6 @@ pub(in crate::app) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalR
         column: run.column.min(i32::MAX as usize) as i32,
         cells: run.cells.min(i32::MAX as usize) as i32,
         foreground: to_slint_color(run.foreground),
-        background: to_slint_color(run.background),
         bold: run.bold,
         italic: run.italic,
         centered: run.centered,

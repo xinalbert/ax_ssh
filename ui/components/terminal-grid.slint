@@ -5,7 +5,6 @@ export struct TerminalRenderRun {
     column: int,
     cells: int,
     foreground: color,
-    background: color,
     bold: bool,
     italic: bool,
     centered: bool,
@@ -126,6 +125,16 @@ export component TerminalGrid inherits Rectangle {
                 background: transparent;
                 cache-rendering-hint: root.view.row_render_cache;
 
+                // The renderer omits default-background spans and merges
+                // adjacent equal colors, so one stable background model serves
+                // both text rendering modes.
+                for run in line.backgrounds : Rectangle {
+                    x: run.column * root.cell-width;
+                    width: run.cells * root.cell-width;
+                    height: root.cell-height;
+                    background: run.background;
+                }
+
                 if !root.view.compact_rendering : Rectangle {
                     width: parent.width;
                     height: parent.height;
@@ -135,7 +144,7 @@ export component TerminalGrid inherits Rectangle {
                         x: run.column * root.cell-width;
                         width: run.cells * root.cell-width;
                         height: root.cell-height;
-                        background: run.background;
+                        background: transparent;
                         Text {
                             y: (parent.height - root.font-cell-height) / 2;
                             width: parent.width;
@@ -158,13 +167,6 @@ export component TerminalGrid inherits Rectangle {
                     width: parent.width;
                     height: parent.height;
                     background: transparent;
-
-                    for run in line.backgrounds : Rectangle {
-                        x: run.column * root.cell-width;
-                        width: run.cells * root.cell-width;
-                        height: root.cell-height;
-                        background: run.background;
-                    }
 
                     for run in line.runs : Text {
                         x: run.column * root.cell-width;
