@@ -1198,7 +1198,9 @@ move a following ASCII cell. This shared cell width and the configured
 line-height percentage drive rendering, selection, cursor, and floor-based PTY
 dimensions. Cursor snapshots normalize a cursor that lands on a wide-character
 spacer back to the leading cell and carry a one- or two-cell cursor span, so a
-Chinese glyph is not clipped by a one-cell overlay. `TerminalPane` computes one
+Chinese glyph is not clipped by a one-cell overlay. Selection backgrounds are
+published as fixed one-cell rectangles for the selected logical columns, rather
+than deriving one span from mixed Unicode run widths. `TerminalPane` computes one
 content-space cursor-cell y position; the grid, pre-edit overlay, and native
 IME proxy all consume it, while the pane clip is the only vertical overflow
 boundary. Every pane bottom-aligns its complete terminal rows: partial height

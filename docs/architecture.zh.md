@@ -746,7 +746,8 @@ Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必
 继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
 span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
 光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
-避免中文 glyph 被单格覆盖层裁剪。`TerminalPane` 只计算一个内容区光标 cell y 坐标，
+避免中文 glyph 被单格覆盖层裁剪。选区背景按选中的逻辑列逐个绘制固定单 cell 矩形，不从混合 Unicode
+run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区光标 cell y 坐标，
 网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
 垂直溢出边界。每个 pane 的完整行都向下对齐：不足一格的高度保留在第一行上方，超过最大行数后的空间也保留在网格上方；
 只有低于三行保底的 pane 才裁切较旧的顶部行。IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
