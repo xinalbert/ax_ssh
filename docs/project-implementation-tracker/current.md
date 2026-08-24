@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-- 阶段：实现已完成，待目标平台验收
+- 阶段：验证中
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -141,11 +141,12 @@
 - 已完成 worker 去重：SSH/Telnet 使用 `watch::Sender::send_if_modified`，Local 使用请求尺寸与 pending latest-value 合并并只在有效变化时唤醒 PTY worker；Serial 继续没有 PTY resize 通道。
 - 已完成终端 tile 分组：Rust 以固定 8 行构造 `TerminalRenderTile`，Slint 顶层 repeater 只遍历 tile，tile 内保留有界行绘制；未变化 tile 和 nested row/run model 原地复用，光标、选区、IME/preedit 和目标高亮仍在 tile 外覆盖。
 - 已完成 tile dirty-row 精确更新：tile DTO 携带 source/render revision 摘要；已知 revision 相同时直接复用 tile 和行模型，变化 tile 才按行更新，零/未知 revision 保守回退到模型比较。
+- 已修正 macOS CoreAnimation tile 方向：父 softbuffer layer 保留唯一的 `geometryFlipped`，移除 tile 子层的重复翻转，避免 Software renderer 下 Settings 内容上下倒置。
 
 ## 验证
 
 - 已完成：TILE1-TILE4、DIRTY1-DIRTY3、BACKEND1-BACKEND4；`cargo fmt --all -- --check`、vendor backend rustfmt、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`cargo build --locked --offline`、翻译检查和 `git diff --check` 均通过。最终 debug 候选 UUID 为 `C3D69932-5675-3AFB-80F3-775D77935230`，SHA-256 为 `a8e42c04a519874f96ef73e67f1bed04eeb80a30dd3512948989cd31cc61249d`。
-- 未完成：目标平台 GUI sample/A-B 和视觉验收；需要确认持续输出下 CPU 是否下降，以及 tile layer 是否存在闪烁、残影、resize 花屏或 Retina 坐标偏移。
+- 未完成：目标平台 GUI sample/A-B 和视觉验收；需要重启 Software renderer 确认 Settings 顺序、字体方向、tile layer 是否闪烁/残影、resize 花屏或 Retina 坐标偏移。
 
 ## 风险与阻塞
 
@@ -165,11 +166,12 @@
 ## 下一步
 
 - 用相同窗口、pane 数、renderer 和持续输出对照旧行模型、8 行 tile、8 行 tile + dirty revision、16 行 tile 与 GPU/Skia。
-- 在目标 macOS 上验收光标、选区、IME、彩色背景、underline/strikethrough、focused 响应和后台 FPS；若热点仍是 `WinitSoftwareRenderer`/CoreAnimation，再单独立项评估 GPU 或平台 backend。
+- 在目标 macOS 上重启 Software renderer，确认 Settings 方向恢复后，再验收光标、选区、IME、彩色背景、underline/strikethrough、focused 响应和后台 FPS；若热点仍是 `WinitSoftwareRenderer`/CoreAnimation，再单独立项评估 GPU 或平台 backend。
 
 ## 最后更新时间
 
 - 2026-08-24：暂时隐藏 Appearance 中的逐行/8 行/16 行分区选择器；配置字段、预览/保存接线和运行时默认 `tile-8` 保持兼容，目标平台 software/GPU A/B、连续拖动和 GUI 视觉仍待用户验收。
+- 2026-08-24：修正 macOS softbuffer tile 子层重复 `geometryFlipped` 导致的 Settings 上下倒置；Rust/Slint 离线门禁通过，目标机重启 Software renderer 后仍需视觉确认。
 - 2026-08-23 22:50 +0800
 - 计划状态变更：BACKEND1: pending -> completed; BACKEND2: pending -> completed; BACKEND3: pending -> completed; BACKEND4: in_progress -> completed
 - 验证结果：本地 backend patch 已清理死代码并通过 vendor rustfmt、locked/offline Cargo 全量门禁、翻译检查和 `git diff --check`；实际 macOS GUI/A-B 仍待用户执行。

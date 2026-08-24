@@ -7,6 +7,9 @@
 - 关键结论：Slint partial renderer 已经计算多个 dirty rectangles，但锁定的 winit software 代码只提交 `bounding_box_*`；#12758 已在 2026-08-03 合并却晚于 v1.17.1，因此本地 patch 将 `PhysicalRegion::iter()` 逐项转换为 `softbuffer::Rect`。macOS softbuffer 0.4.8 的 `age()` 固定为 0，`present_with_damage` 等价于 `present()`，每帧把完整 `CGImage` 设置到一个 CALayer；仅修 winit 不能改变该行为。
 - 实施决策：在 `vendor/softbuffer` 保留同尺寸的持久像素缓冲，首帧后返回 age=1 让 Slint software renderer 选择 `ReusedBuffer`，并以 512x64 的有界 child CALayer 网格承载图像。每次提交先校验 damage，更新相交 tile；首次、resize、空 damage 或失效缓冲更新全部 tile。GPU/Metal 路径仍由 Skia partial renderer 裁剪绘制，但 CAMetalLayer drawable 仍正常 present，不假称为 partial present。
 - 风险与边界：本地 patch 触及第三方 backend 的 renderer/surface 所有权，不触及 AxSSH 的 Slint UI、终端 parser、worker、transport、SSH trust 或凭据；tile 尺寸、scale factor、CoreAnimation layer 数量和窗口 resize 必须在 macOS 目标机用 Software renderer 真实采样。升级 Slint/softbuffer 时必须重新对照上游实现和锁文件。
+- 检索原因：该 backend 方案需要确认锁定版本的 dirty-region、buffer age 和 CoreAnimation layer 行为，避免把应用层 tile 更新误认为最终 surface 局部提交。
+- 对实施计划的影响：保留本地 winit/softbuffer patch，并将目标平台 Software renderer 的 DPI、resize、闪烁、残影和方向复验列为未完成验收项。
+- 未解决问题：目标 macOS 上的真实 GUI/A-B、CoreAnimation tile 方向和 Retina 坐标仍需用户重启修复后的 Software renderer 后确认。
 
 ## 2026-08-23 Fontique 路径字体源与内存占用
 
