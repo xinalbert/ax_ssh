@@ -86,7 +86,20 @@ fn dispatch_terminal_snapshot_at(
         }
         return;
     }
-    dispatch_active_snapshot(ui, state);
+    let state = Arc::clone(state);
+    dispatch_ui(ui, move |ui| {
+        let snapshot = match state.lock() {
+            Ok(mut app) => {
+                let active_tab_id = app.active_tab_id();
+                app.snapshot_for(active_tab_id)
+            }
+            Err(_) => {
+                ui.set_status("State lock poisoned".into());
+                return;
+            }
+        };
+        apply_active_snapshot(ui, snapshot, None);
+    });
 }
 
 pub(super) fn duration_micros(duration: std::time::Duration) -> u64 {

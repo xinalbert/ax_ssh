@@ -107,6 +107,9 @@ export component TerminalGrid inherits Rectangle {
     private property <int> click-cell-row: -1;
     private property <int> click-cell-column: -1;
     private property <bool> click-pressed: false;
+    // Trackpad scroll events arrive as small pixel deltas. Keep the residual
+    // in the grid so a complete terminal row is dispatched as one command.
+    private property <length> scroll-accumulator-y: 0px;
 
     background: root.view.background;
     clip: true;
@@ -407,12 +410,21 @@ export component TerminalGrid inherits Rectangle {
             }
         }
         scroll-event(event) => {
+            if event.delta-y == 0px {
+                return EventResult.reject;
+            }
+            root.scroll-accumulator-y += event.delta-y;
+            let lines = round(root.scroll-accumulator-y / max(1px, root.cell-height));
+            if lines == 0 {
+                return EventResult.accept;
+            }
+            root.scroll-accumulator-y -= lines * root.cell-height;
             root.scrolled(
                 max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height))),
                 max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width))),
-                event.delta-y > 0 ? 3 : -3,
+                lines,
                 event.modifiers.shift, event.modifiers.alt, event.modifiers.control);
             accept
         }

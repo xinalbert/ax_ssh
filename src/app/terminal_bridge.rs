@@ -4,7 +4,8 @@ use crate::app::terminal_targets::{
     TerminalTarget, terminal_target_at_cell, terminal_target_span_at_cell,
 };
 use ax_ssh::terminal::{
-    TerminalMouseButton, TerminalMouseEvent, TerminalMouseEventKind, TerminalMouseModifiers,
+    TerminalModel, TerminalMouseButton, TerminalMouseEvent, TerminalMouseEventKind,
+    TerminalMouseModifiers,
 };
 
 pub(super) fn start_local_shell(
@@ -226,16 +227,39 @@ pub(super) fn wire_terminal(
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_scroll) else {
             return;
         };
+        let mut before_offset = None;
+        let mut after_offset = None;
+        let mut owned = false;
         let changed = state_for_scroll
             .lock()
             .ok()
             .and_then(|mut app| {
-                if !router_for_scroll.owns_terminal_pane(window_id, tab_id, &app) {
+                owned = router_for_scroll.owns_terminal_pane(window_id, tab_id, &app);
+                if !owned {
                     return None;
                 }
-                Some(app.scroll_terminal(tab_id, lines))
+                before_offset = app
+                    .terminal(tab_id)
+                    .and_then(|terminal| terminal.terminal.as_ref())
+                    .map(TerminalModel::display_offset);
+                let changed = app.scroll_terminal(tab_id, lines);
+                after_offset = app
+                    .terminal(tab_id)
+                    .and_then(|terminal| terminal.terminal.as_ref())
+                    .map(TerminalModel::display_offset);
+                Some(changed)
             })
             .unwrap_or(false);
+        tracing::debug!(
+            target: "ax_ssh::terminal_scroll",
+            tab_id = %tab_id,
+            lines,
+            owned,
+            changed,
+            before_offset = ?before_offset,
+            after_offset = ?after_offset,
+            "terminal scroll callback processed"
+        );
         if changed {
             log_ui_action_outcome("terminal.scroll", "changed");
             dispatch_terminal_snapshot(&ui_for_scroll, &state_for_scroll, tab_id);
