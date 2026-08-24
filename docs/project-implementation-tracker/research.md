@@ -1,15 +1,31 @@
 # 项目研究记录
 
+## 2026-08-24 macOS Software 持久 framebuffer 与单 layer 提交
+
+- 时间：2026-08-24 14:30 +0800
+- 检索问题：撤销 CoreAnimation child-layer slicing 后，macOS Software backend 应保留哪些 buffer 生命周期和 damage 接口行为？
+- 检索原因：用户反馈切片路径造成终端、Tab、Settings 坐标错位和空白区域，需要把最终 surface 提交恢复到单 layer，同时保留持久 framebuffer 的正确性前提。
+- 来源列表：本地 `vendor/softbuffer/src/backends/cg.rs`、`vendor/i-slint-backend-winit/renderer/sw.rs`、锁定 `softbuffer 0.4.8` 与 Slint 1.17.1 源码，以及用户目标 macOS 验收反馈。
+- 实施结论：为修复 Software renderer 的 buffer 生命周期，同时避免坐标错位，macOS `softbuffer` backend 持有持久 CPU framebuffer；有效帧报告 `age() == 1`，首帧、resize、Retina scale 变化、surface invalidate 或窗口恢复后重新建立有效帧状态。不创建 CoreAnimation child-layer tile 网格。
+- 提交方式：CoreAnimation backend 每次从持久 framebuffer 创建独立拥有的完整 `CGImage`，设置到唯一的完整 `CALayer.contents`；`present_with_damage` 忽略 damage 参数并走同一完整提交路径。这样不会把 dirty rectangle 误解释成 layer slicing，也保留了已验证的上游坐标和 Retina 几何语义。
+- 失效链路：softbuffer 增加跨平台 no-op `Surface::invalidate()`；winit `occluded` 同步使 surface age 失效。若 age 为 0 且本帧 region 为空，winit 仍调用完整 present，保证首帧和窗口恢复后的空白区域不会漏提交。
+- 测试：保留 buffer age、resize、失效传播和完整 present 的 focused 覆盖；不再维护 tile 去重、tile 图像或切片坐标测试。vendor 单独 manifest 的测试若缺少离线 dev-dependency 仍不能启动时，以根 workspace 的 locked/offline 生产检查为准并记录原因。
+- 兼容性边界：macOS 默认仍优先 Skia/Metal；本 backend 只服务明确选择 Software 的路径。应用层继续使用单层 `TerminalRenderLine` model、`TermDamage` 和 Slint 内部 dirty region，不重新引入应用 tile/partition；winit 的多矩形 forwarding 只保留为跨平台提交接口能力。
+- 关键结论：macOS 不再创建 child layer，也不按 dirty rectangle 切片；`age() == 1` 只建立在持久 framebuffer 已由 Slint 绘制完成的前提上，`present_with_damage` 在该 backend 仍是完整 present。
+- 对实施计划的影响：BACKEND3 改为持久 framebuffer + 单 CoreAnimation layer 完整提交；应用层保持单层 `TerminalRenderLine`，不恢复 tile/partition；winit 多矩形 forwarding 作为独立跨平台接口保留，但不宣称 macOS 局部提交。
+- 未解决问题：Software 仍可能承担完整 framebuffer 的 CPU 拷贝和 `CGImage` 创建成本；需要目标 macOS 在持续输出、resize、Retina、隐藏/恢复、滚动和光标动画下继续做视觉与 CPU A/B 验收。
+
 ## 2026-08-23 绕过 Slint 1.17.1 dirty-present 限制
 
+- 时间：2026-08-23 19:20 +0800
 - 检索问题：终端已有 dirty row/tile model 更新后，如何绕过 Slint/winit/softbuffer 的限制，把脏区真正提交到窗口 framebuffer。
 - 来源列表：本机锁定的 Slint 1.17.1 `i-slint-renderer-software` partial renderer、`i-slint-backend-winit` software renderer、`i-slint-renderer-skia` software surface、`softbuffer` 0.4.8 CoreGraphics backend；上游 PR [#12758](https://github.com/slint-ui/slint/pull/12758) 及其修复 commit `33033ceb103483d4a030a97417a1d371db5809b8`；Softbuffer API 文档和本仓库 macOS sample。
 - 关键结论：Slint partial renderer 已经计算多个 dirty rectangles，但锁定的 winit software 代码只提交 `bounding_box_*`；#12758 已在 2026-08-03 合并却晚于 v1.17.1，因此本地 patch 将 `PhysicalRegion::iter()` 逐项转换为 `softbuffer::Rect`。macOS softbuffer 0.4.8 的 `age()` 固定为 0，`present_with_damage` 等价于 `present()`，每帧把完整 `CGImage` 设置到一个 CALayer；仅修 winit 不能改变该行为。
-- 实施决策：在 `vendor/softbuffer` 保留同尺寸的持久像素缓冲，首帧后返回 age=1 让 Slint software renderer 选择 `ReusedBuffer`，并以 512x64 的有界 child CALayer 网格承载图像。每次提交先校验 damage，更新相交 tile；首次、resize、空 damage 或失效缓冲更新全部 tile。GPU/Metal 路径仍由 Skia partial renderer 裁剪绘制，但 CAMetalLayer drawable 仍正常 present，不假称为 partial present。
-- 风险与边界：本地 patch 触及第三方 backend 的 renderer/surface 所有权，不触及 AxSSH 的 Slint UI、终端 parser、worker、transport、SSH trust 或凭据；tile 尺寸、scale factor、CoreAnimation layer 数量和窗口 resize 必须在 macOS 目标机用 Software renderer 真实采样。升级 Slint/softbuffer 时必须重新对照上游实现和锁文件。
+- 复核结论：上游 `softbuffer 0.4.8` 在 macOS 上每帧分配新 buffer、返回 `age() == 0`，并把完整 buffer 作为一张 `CGImage` 设置到单个 `CALayer`；`present_with_damage` 明确等价于 `present()`。Slint 官方 software backend 也把多块 dirty region 合并为 bounding box 后提交。此前新增的 512x64 child layer 网格不是上游契约，可能把旧像素、坐标翻转和 Retina layer 几何问题引入显示链，因此已撤回；当前 macOS patch 仅保留持久 framebuffer、`age() == 1`、失效传播和单 layer 完整 present。保留 winit 的 `PhysicalRegion::iter()` forwarding，因为这是 Slint 后续独立修复，且只影响真正支持 damage 的平台。GPU/Metal 路径仍由 Skia partial renderer 裁剪绘制，但 CAMetalLayer drawable 仍正常 present，不假称为 partial present。
+- 风险与边界：本地 patch 只触及 winit 的 damage forwarding；macOS surface 保持锁定上游实现，不触及 AxSSH 的 Slint UI、终端 parser、worker、transport、SSH trust 或凭据。升级 Slint/softbuffer 时必须重新对照上游实现和锁文件。
 - 检索原因：该 backend 方案需要确认锁定版本的 dirty-region、buffer age 和 CoreAnimation layer 行为，避免把应用层 tile 更新误认为最终 surface 局部提交。
 - 对实施计划的影响：保留本地 winit/softbuffer patch，并将目标平台 Software renderer 的 DPI、resize、闪烁、残影和方向复验列为未完成验收项。
-- 未解决问题：目标 macOS 上的真实 GUI/A-B、CoreAnimation tile 方向和 Retina 坐标仍需用户重启修复后的 Software renderer 后确认。
+- 未解决问题：目标 macOS 上仍需用户重启当前候选，确认上游兼容的 Software renderer 完整 present 已消除 Settings、Tab、空白区域和终端旧帧错位；GPU/Skia 与 Software 的同负载 A/B 仍待确认。
 
 ## 2026-08-23 Fontique 路径字体源与内存占用
 
@@ -258,9 +274,10 @@
 - 未解决问题：Alacritty 的 macOS compositor/vsync 闪烁问题仍开放；目标 macOS 需要人工确认 Software/GPU renderer 下连续拖动、IME、选区、焦点和真实 PTY NAWS/窗口变更表现。
 ## 2026-08-23 终端按区更新与 macOS software present
 
+- 时间：2026-08-24 12:10 +0800
 - 检索问题：Slint software renderer 的终端内容是否适合按固定行区分组更新，应用层 tile 优化能否避免 macOS 最终整帧 surface 提交？
 - 检索原因：现有终端已经做了可见行级增量 model 更新，但用户仍观察到 dirty/repaint 时 CPU 较高，需要区分 Slint item/model/glyph 成本与平台 surface present 成本。
 - 来源列表：Slint issue #7432 <https://github.com/slint-ui/slint/issues/7432>、#8737 <https://github.com/slint-ui/slint/issues/8737>、#10370 <https://github.com/slint-ui/slint/issues/10370>、#12173 <https://github.com/slint-ui/slint/issues/12173>、#12752 <https://github.com/slint-ui/slint/issues/12752>；Slint PR #12758 <https://github.com/slint-ui/slint/pull/12758>；softbuffer PR #99 <https://github.com/rust-windowing/softbuffer/pull/99>；锁定依赖 `softbuffer 0.4.8` macOS CoreGraphics backend。
 - 关键结论：固定 8/16 行 tile 可以减少顶层重复项树遍历、model/property 通知和静态行文字绘制的重复成本；但锁定的 macOS softbuffer backend 报告 `age=0`，`present_with_damage` 忽略 damage 并设置完整尺寸 `CGImage`，所以 tile 不能单独解决最终整帧提交。不能只把 buffer age 改为 1，因为当前 buffer 没有持久 framebuffer，可能产生脏数据。
-- 对实施计划的影响：本轮采用固定 `TILE_ROWS = 8`，保持 Slint/Cargo/renderer 依赖不变；只重用未变化 tile 的 model identity，交互覆盖层留在 tile cache 外；不修改 softbuffer、GPU surface、parser、worker 或 SSH 边界。
-- 未解决问题：目标 macOS 上 tile 对 glyph 绘制和总 CPU 的实际收益需要相同窗口、pane 数、renderer 和持续输出负载的 A/B sample；若热点仍集中在 `WinitSoftwareRenderer`/CoreAnimation，则下一步应评估 GPU/Skia 或平台 backend，而不是继续增大应用层 tile。
+- 对实施计划的影响：固定 8/16 行 tile 方案已撤回；当前只保留单层 `TerminalRenderLine` model 的 source/render revision 复用、上游 `TermDamage` 和 Slint 自身 dirty-region 追踪。macOS surface 仍按上游完整单 layer present，不把应用层行更新当作 framebuffer partial present。
+- 未解决问题：同负载 GPU/Skia 与 Software 的 CPU/footprint A/B 仍需目标平台采样；若热点仍集中在 `WinitSoftwareRenderer`/CoreAnimation，应单独评估 renderer/backend，而不是重新引入应用层 tile。

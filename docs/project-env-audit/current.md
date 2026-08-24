@@ -281,7 +281,7 @@ git diff --check
 
 - 项目边界：`vendor/i-slint-backend-winit/`、`vendor/softbuffer/`、`Cargo.toml`/`Cargo.lock` 和 backend 文档；不修改 Slint UI 业务组件、terminal parser/worker、SSH trust、凭据或 transport。
 - 环境记忆状态：Rust 2024、MSRV 1.92.0、锁定 Slint 1.17.1、softbuffer 0.4.8；本机 rustc/cargo 1.97.1，Cargo 可离线解析本地 patch。两个 vendor 目录保留上游许可和最小行为差异。
-- 运行环境：winit software renderer 将每个 Slint dirty rectangle 转换为 `softbuffer::Rect`；macOS CoreGraphics surface 使用持久物理像素 buffer 与 512x64 child layer 网格，tile frame 使用 root `contentsScale` 的逻辑坐标换算。
+- 运行环境：winit software renderer 将每个 Slint dirty rectangle 转换为 `softbuffer::Rect`；macOS CoreGraphics surface 使用持久物理像素 buffer，并通过单个完整 CoreAnimation layer 提交，不使用 child-layer tile/slicing。
 - 测试环境：`cargo fmt --all -- --check`、vendor backend rustfmt、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`cargo build --locked --offline`、中文 catalog/check 和 `git diff --check` 通过。仓库未提供 `scripts/validate_tracking_docs.py`，该命令未执行。
-- 环境变化检查：是；新增两个本地 crates.io patch 和 macOS CoreAnimation tile surface 行为，非 macOS backend dispatch 保持原实现；升级 Slint/softbuffer 必须重新核对 damage、buffer age 和 layer 坐标契约。
+- 环境变化检查：是；新增两个本地 crates.io patch 和 macOS 持久 framebuffer/full-layer surface 行为，非 macOS backend dispatch 未改行为；升级 Slint/softbuffer 必须重新核对 damage、buffer age 和 layer 坐标契约。
 - 开工判定：代码施工完成；目标 macOS Software renderer 的持续输出、resize、窗口隐藏/恢复、Retina DPI、光标/选区/IME 和同负载 sample/A-B 仍需人工验收。

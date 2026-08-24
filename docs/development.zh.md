@@ -42,10 +42,10 @@ SLINT_BACKEND=winit-software cargo run --locked
 ```
 
 仓库在 `vendor/` 下维护锁定 `i-slint-backend-winit` 和 `softbuffer` 的本地补丁。winit 补丁转发
-renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留持久 framebuffer，只更新相交的
-512x64 CoreAnimation tile layer，首帧和每次 resize 仍走全量更新。补丁位于 Slint 应用 API 之下，因此
-终端 model 和 UI 契约不依赖 backend 专用类型。升级 Slint 或 softbuffer 时必须重新核对并重新采样，且
-继续保留这些补丁的上游许可证和源码。
+renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留一个持久 framebuffer，并通过单个完整的
+CoreAnimation layer 提交。首帧、resize、Retina scale、occlusion 和恢复会重置 buffer age。补丁位于 Slint
+应用 API 之下，因此终端 model 和 UI 契约不依赖 backend 专用类型。升级 Slint 或 softbuffer 时必须重新核对
+并重新采样，且继续保留这些补丁的上游许可证和源码。
 
 环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
 

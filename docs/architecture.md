@@ -1264,10 +1264,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     missing or invalid values are clamped to that range. The appearance field
     `terminal_cursor_blink` is default-enabled and remains backward-compatible
     when absent; disabling it keeps the focused cursor visible while leaving
-    terminal/IME cursor state unchanged. The `terminal_partition_strategy` field
-    is backward-compatible without a schema bump; its Appearance selector is
-    temporarily hidden while existing persisted values remain honored. Missing
-    or invalid values normalize to `tile-8`. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
+    terminal/IME cursor state unchanged. The retired
+    `terminal_partition_strategy` JSON field is ignored as an unknown field when
+    older settings are loaded; it is no longer part of the settings schema or
+    runtime state. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
     an active renderer. Schema version 23 adds the default-enabled
@@ -1424,26 +1424,31 @@ backgrounds, text, and decorations. Selection, cursor blink, target feedback, an
 IME/preedit remain outside that layer. Skia and FemtoVG can retain a row image;
 the software renderer has no equivalent layer cache, and the option is therefore
 disabled by default until CPU and graphics-memory measurements justify it.
-The internal `terminal_partition_strategy` value selects one-row, 8-row, or
-16-row `TerminalRenderTile` groups and defaults to 8 rows. Its Appearance
-selector is temporarily hidden while the partition implementation is being
-validated; existing persisted values remain compatible. Each tile keeps its
-global `start_row`, so current pane geometry still determines row positions
-after resize or font changes, while parser, scrollback, input, selection, and
-IME contracts remain unchanged. The tile strategy first updates the bounded
-Rust/Slint model and then supplies the renderer's dirty region; it is not itself
-a claim that every backend can perform a partial present.
+The terminal grid uses one bounded Slint repeater over `TerminalRenderLine`
+values. Rust keeps the outer line model and nested run/background/decoration
+models stable, reusing a line when its source revision and render key still
+match and updating only changed rows otherwise. There is no application-owned
+tile or partition model, no tile-size setting, and no second row repeater. This
+keeps the UI geometry and interaction overlays on one row coordinate system;
+it does not claim that a row model update becomes a framebuffer partial present.
+The upstream `TermDamage` path in `TerminalModel` remains responsible for
+avoiding unnecessary terminal-row reconstruction, while Slint's own renderer
+continues to track its internal dirty regions.
 
 The locked Slint 1.17.1 winit software backend is patched under
 `vendor/i-slint-backend-winit/` to forward every physical dirty rectangle
 instead of collapsing them into one bounding box. The macOS `softbuffer`
-CoreGraphics backend is patched under `vendor/softbuffer/`: it retains a
-persistent pixel buffer, reports a reusable buffer age after the first frame,
-and presents only the intersecting 512x64 CoreAnimation tile layers. First
-frame, resize, and invalidated-buffer paths update all tiles. This is the
-application's actual framebuffer damage path for `winit-software`; the Slint
-API and terminal ownership boundaries remain unchanged. GPU/Metal still clips
-Skia drawing to dirty regions but presents its drawable as a normal full
+CoreGraphics backend keeps one persistent CPU framebuffer but intentionally
+uses one complete Core Animation layer. A valid surface reports `age() == 1`,
+and each present snapshots the complete framebuffer into an owned `CGImage`;
+`present_with_damage` does not create application or backend tiles. This keeps
+the macOS coordinate system identical to the known-good upstream path while
+still allowing Slint to limit CPU drawing to its internal dirty regions. First
+frame, resize, Retina scale change, surface invalidation, and restore reset the
+buffer age. The winit bridge invalidates the surface on occlusion and submits
+an empty-damage frame when a new buffer still needs its first present. The
+Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
+clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.
 Runtime terminal geometry and user choices remain in versioned `AppSettings`;
 the Theme global remains a visual resolver rather than a persistence owner.
