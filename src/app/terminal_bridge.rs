@@ -151,7 +151,7 @@ pub(super) fn wire_terminal(
                         worker_request_elapsed,
                     );
                     log_ui_action_outcome("terminal.send-input", "handled-and-scrolled");
-                    dispatch_active_snapshot(&ui_for_key, &state_for_key);
+                    dispatch_terminal_snapshot(&ui_for_key, &state_for_key, tab_id);
                     handled
                 }
                 Ok((handled, false)) => {
@@ -238,7 +238,7 @@ pub(super) fn wire_terminal(
             .unwrap_or(false);
         if changed {
             log_ui_action_outcome("terminal.scroll", "changed");
-            dispatch_active_snapshot(&ui_for_scroll, &state_for_scroll);
+            dispatch_terminal_snapshot(&ui_for_scroll, &state_for_scroll, tab_id);
         } else {
             log_ui_action_outcome("terminal.scroll", "unchanged");
         }
