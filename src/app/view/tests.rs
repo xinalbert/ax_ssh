@@ -28,6 +28,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
     first_pane.terminal.cursor_state = ModelRc::new(VecModel::from(vec![TerminalCursorState {
         row: 1,
         column: 2,
+        cells: 1,
         visible: true,
         text: "b".into(),
     }]));
@@ -60,6 +61,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
         ModelRc::new(VecModel::from(vec![TerminalCursorState {
             row: 3,
             column: 7,
+            cells: 1,
             visible: true,
             text: "a".into(),
         }]));
@@ -245,6 +247,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
     pane.terminal.cursor_state = ModelRc::new(VecModel::from(vec![TerminalCursorState {
         row: 0,
         column: 0,
+        cells: 1,
         visible: true,
         text: "b".into(),
     }]));
@@ -258,6 +261,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
     updated.terminal.cursor_state = ModelRc::new(VecModel::from(vec![TerminalCursorState {
         row: 3,
         column: 7,
+        cells: 1,
         visible: true,
         text: "a".into(),
     }]));
@@ -313,8 +317,11 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
         max_columns: 10,
         cursor_row: 0,
         cursor_column: 5,
+        cursor_cells: 1,
         cursor_visible: true,
         cursor_text: " ".to_owned(),
+        display_offset: 0,
+        viewport_mode: ax_ssh::terminal::TerminalViewportMode::Follow,
         mouse_reporting: Default::default(),
         mouse_button_reporting_active: false,
         mouse_wheel_reporting_active: false,

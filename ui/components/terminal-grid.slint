@@ -45,6 +45,7 @@ export struct TerminalGridView {
     content_columns: int,
     cursor_row: int,
     cursor_column: int,
+    cursor_cells: int,
     cursor_visible: bool,
     cursor_text: string,
     mouse_button_reporting: bool,
@@ -242,7 +243,7 @@ export component TerminalGrid inherits Rectangle {
             && (!root.cursor-blink-enabled || root.cursor-blink)
             && line-index == root.view.cursor_row : Rectangle {
                 x: root.view.cursor_column * root.cell-width;
-                width: root.cell-width;
+                width: max(1, root.view.cursor_cells) * root.cell-width;
                 height: root.cell-height;
                 background: root.view.foreground;
                 Text {
@@ -254,7 +255,7 @@ export component TerminalGrid inherits Rectangle {
                     font-family: root.view.font_family;
                     font-size: root.view.font_size;
                     letter-spacing: 0px;
-                    horizontal-alignment: left;
+                    horizontal-alignment: root.view.cursor_cells > 1 ? center : left;
                     vertical-alignment: center;
                     overflow: clip;
                 }

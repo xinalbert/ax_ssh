@@ -427,6 +427,9 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current_terminal.row_render_cache == updated_terminal.row_render_cache
         && current_terminal.mouse_button_reporting == updated_terminal.mouse_button_reporting
         && current_terminal.mouse_wheel_reporting == updated_terminal.mouse_wheel_reporting
+        && current_terminal.display_offset == updated_terminal.display_offset
+        && current_terminal.viewport_detached == updated_terminal.viewport_detached
+        && current_terminal.alternate_screen == updated_terminal.alternate_screen
         && current_terminal.right_click_copy_or_paste == updated_terminal.right_click_copy_or_paste
         && current_terminal.copy_selection_on_select == updated_terminal.copy_selection_on_select
         && current_terminal.option_as_meta == updated_terminal.option_as_meta
@@ -603,9 +606,11 @@ pub(super) fn terminal_view_from_snapshot(
     let cursor_text: SharedString = snapshot.cursor_text.into();
     let cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
     let cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
+    let cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
     let cursor_state = TerminalCursorState {
         row: cursor_row,
         column: cursor_column,
+        cells: cursor_cells,
         visible: snapshot.cursor_visible,
         text: cursor_text.clone(),
     };
@@ -619,6 +624,7 @@ pub(super) fn terminal_view_from_snapshot(
         content_columns: snapshot.max_columns.min(i32::MAX as usize) as i32,
         cursor_row,
         cursor_column,
+        cursor_cells,
         cursor_visible: snapshot.cursor_visible,
         cursor_text,
         font_family: ui.get_terminal_font_family(),
@@ -631,6 +637,15 @@ pub(super) fn terminal_view_from_snapshot(
         row_render_cache: ui.get_terminal_row_render_cache(),
         mouse_button_reporting: snapshot.mouse_button_reporting_active,
         mouse_wheel_reporting: snapshot.mouse_wheel_reporting_active,
+        display_offset: snapshot.display_offset.min(i32::MAX as usize) as i32,
+        viewport_detached: matches!(
+            snapshot.viewport_mode,
+            ax_ssh::terminal::TerminalViewportMode::Detached
+        ),
+        alternate_screen: matches!(
+            snapshot.viewport_mode,
+            ax_ssh::terminal::TerminalViewportMode::AlternateScreen
+        ),
         right_click_copy_or_paste: ui.get_right_click_copy_or_paste(),
         copy_selection_on_select: ui.get_copy_selection_on_select(),
         option_as_meta: ui.get_option_as_meta(),

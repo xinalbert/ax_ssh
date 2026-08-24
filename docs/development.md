@@ -333,6 +333,11 @@ subdirectory of the platform-local AxSSH application data directory. The
 default filter is `ax_ssh=info,russh=warn`; `RUST_LOG` overrides it.
 The About page receives this already-created directory from the process boundary
 and can open it without performing filesystem work on the Slint thread.
+The same directory contains `ax_ssh-crash.log`, a private append-only report
+written synchronously by the process panic hook. It records the panic message,
+source location, process/thread/platform metadata, `SLINT_BACKEND`, and a forced
+Rust backtrace. Check this file first for an abort that follows a macOS
+Objective-C callback panic; it is separate from the buffered daily logs.
 
 Enable redacted keyboard/UI diagnostics and SSH latency stages for one run with:
 

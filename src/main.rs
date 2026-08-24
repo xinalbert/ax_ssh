@@ -7,6 +7,7 @@ fn main() -> anyhow::Result<()> {
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         log_directory = %logging.directory().display(),
+        crash_log = %logging.crash_log_path().display(),
         "AxSSH process started"
     );
 

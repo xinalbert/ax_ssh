@@ -119,6 +119,14 @@ selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
 and empty output do not advance it. The revision carries no selection
 coordinates or text. The pane never owns a worker, a terminal buffer, or
 connection state.
+`TerminalModel` keeps the viewport policy explicit alongside the upstream
+`display_offset`: `Follow` is the live bottom, `Detached` is user scrollback,
+and `AlternateScreen` is the remote full-screen buffer. Output preserves a
+detached offset, keyboard input/paste returns to the bottom, entering or
+leaving alternate screen clears local scrollback follow state, and mouse
+reporting does not change the local viewport. The snapshot exposes bounded
+offset and mode metadata so the UI can add return-to-bottom or unread-output
+affordances without inferring user intent from geometry alone.
 For an identity-preserving visible terminal, `TerminalModel` uses upstream
 `TermDamage` and stable `Arc<TerminalStyledLine>` identities to rebuild only
 damaged visible rows. Resize, scrollback-offset changes, and full upstream
@@ -1126,6 +1134,13 @@ writer thread. Operational fields may include session ID, host, port, and host
 fingerprint; credentials and terminal contents are forbidden. About receives
 the guard's already-created log directory as an owned path and can open it
 through the application bridge without changing the logging owner.
+In the same directory, `LoggingGuard` creates a private `ax_ssh-crash.log` and
+installs a process panic hook. The hook writes panic payload, source location,
+thread/process/platform metadata, selected renderer environment, and a forced
+Rust backtrace synchronously before delegating to Rust's normal panic hook. This
+file is separate from the buffered rolling writer so an abort from an
+Objective-C callback can still retain the first panic report; it must not be
+used for credentials or terminal contents.
 
 ## Persistent settings and font resources
 
@@ -1181,7 +1196,9 @@ publishes non-ASCII cells as independent render runs. The grid centers each
 non-ASCII glyph inside its one- or two-cell span, so fallback shaping cannot
 move a following ASCII cell. This shared cell width and the configured
 line-height percentage drive rendering, selection, cursor, and floor-based PTY
-dimensions. `TerminalPane` computes one
+dimensions. Cursor snapshots normalize a cursor that lands on a wide-character
+spacer back to the leading cell and carry a one- or two-cell cursor span, so a
+Chinese glyph is not clipped by a one-cell overlay. `TerminalPane` computes one
 content-space cursor-cell y position; the grid, pre-edit overlay, and native
 IME proxy all consume it, while the pane clip is the only vertical overflow
 boundary. Every pane bottom-aligns its complete terminal rows: partial height

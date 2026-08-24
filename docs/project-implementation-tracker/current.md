@@ -129,6 +129,7 @@
 - 已删除应用层终端 tile/partition 链路：`TerminalGrid` 恢复单层 `render_lines` repeater，Rust 只保留按行 revision/render-key 的 outer line 与 nested run/background/decoration model 复用。
 - `TerminalModel` 的 `TermDamage` 仍只负责终端 snapshot 的受损行重建；Slint renderer 的内部 dirty region 仍由框架负责，二者不再被包装成应用层 tile partial-present 链路。
 - 已实现 macOS Software 持久 framebuffer 与单 CoreAnimation layer 完整 present：有效帧返回 `age() == 1`，每次 present 都从持久 framebuffer 创建独立拥有的完整 `CGImage`；`present_with_damage` 不做 tile/slicing。首帧、resize、Retina scale、occluded/restore 和 surface invalidate 强制全量更新。
+- 已新增独立的 `ax_ssh-crash.log`：进程 panic hook 同步记录 panic 消息、位置、线程/进程/平台元数据、renderer 环境和强制 Rust backtrace，随后仍调用默认 panic hook；文件使用私有权限，与缓冲滚动运行日志分离，以保留 Objective-C callback abort 前的首段报告。
 
 ## 验证
 
@@ -152,6 +153,7 @@
 
 ## 下一步
 
+- 已完成终端显式 `Follow`/`Detached`/`AlternateScreen` 视口策略和双宽光标跨度快照；Detached 输出保持历史位置，输入回底，alternate screen 清理本地滚动状态。中文续格光标归一化到首格并按两格绘制。返回底部/未读输出 UI 尚未增加，目标平台视觉验收待用户执行。
 - 用相同窗口、pane 数、renderer 和持续输出对照当前单层行模型与 GPU/Skia；不再维护旧 tile/partition A/B 组合。
 - 在目标 macOS 上继续进行同负载 GPU/Skia 与 Software 对照；Software renderer 的 Settings、Tab、终端行位置和空白区域已由用户确认正常。若热点仍是 `WinitSoftwareRenderer`/CoreAnimation，再单独立项评估 GPU 或平台 backend。
 
@@ -159,6 +161,7 @@
 
 - 2026-08-24：删除应用层终端 tile/partition 链路及配置接线；旧 JSON 字段作为未知字段忽略，当前 UI 使用单层 `TerminalRenderLine` model，保留 `TermDamage`、行 revision 复用和 Slint 内部 dirty region。
 - 2026-08-24：撤销 macOS softbuffer 的 512x64 CoreAnimation tile/slicing；保留持久 framebuffer、`Surface::invalidate()`、`age() == 1` 和 age 0 首帧/恢复后的完整 layer present。生产代码通过 vendor/backend Cargo check；目标机仍需按首帧、resize、Retina、隐藏/恢复、滚动、光标和动画清单进行视觉验收。
+- 2026-08-24：为 macOS 偶发键盘/IME abort 增加独立 `ax_ssh-crash.log` 同步 panic 报告，覆盖 panic 消息、源码位置、线程/平台元数据和 backtrace；不改变 renderer、终端、SSH 或凭据边界。
 - 2026-08-23 22:50 +0800
 - 计划状态变更：BACKEND1: pending -> completed; BACKEND2: pending -> completed; BACKEND3: pending -> completed; BACKEND4: in_progress -> completed
 - 验证结果：本地 backend patch 已清理死代码并通过 vendor rustfmt、locked/offline Cargo 全量门禁、翻译检查和 `git diff --check`；实际 macOS GUI/A-B 仍待用户执行。

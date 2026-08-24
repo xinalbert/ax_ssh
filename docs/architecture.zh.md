@@ -103,6 +103,10 @@ Rust
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
 不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
+`TerminalModel` 在上游 `display_offset` 旁维护显式的 `Follow`、`Detached` 和
+`AlternateScreen` 视口策略。输出在 Detached 时保持用户查看的历史位置，键盘输入/粘贴回到底部，进入或
+退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
+和 mode，UI 不需要从几何值猜测用户意图，也可以据此提供返回底部或未读输出提示。
 对于 identity 不变的可见终端，`TerminalModel` 使用上游 `TermDamage` 和稳定的
 `Arc<TerminalStyledLine>` identity，只重建受损的可见行。resize、scrollback offset 变化和上游 full
 damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复用旧行。UI renderer 按 64-bit 行
@@ -711,6 +715,10 @@ CoreAnimation、Metal 以及 macOS allocator 都没有保证把每个 RSS 字节
 队列、刷新当前文件并 join writer 线程。运行字段可以包含 session ID、host、port 和
 主机指纹；禁止记录凭据和终端内容。About 只接收 guard 已创建的日志目录 owned path，
 通过应用 bridge 打开它，不改变日志模块的所有权。
+同一目录还由 `LoggingGuard` 创建私有的 `ax_ssh-crash.log` 并安装进程级 panic hook。
+hook 会在转交 Rust 默认 panic hook 前同步写入 panic 内容、源码位置、线程/进程/平台元数据、
+renderer 环境变量和强制采集的 Rust backtrace。它与有缓冲的滚动 writer 分离，因而 Objective-C
+回调触发 abort 时仍尽量保留第一段 panic；该文件同样禁止记录凭据和终端内容。
 
 ## 持久化设置与字体资源
 
@@ -737,7 +745,8 @@ Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必
 取三者中最大的单 cell advance，使 Latin、Han 与盒线共用保守的一套 grid metric。Rust 保留终端逻辑列，
 继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
 span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
-光标和向下取整的 PTY 尺寸；`TerminalPane` 只计算一个内容区光标 cell y 坐标，
+光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
+避免中文 glyph 被单格覆盖层裁剪。`TerminalPane` 只计算一个内容区光标 cell y 坐标，
 网格、预编辑覆盖层和原生 IME proxy 共同使用它，pane clip 是唯一的
 垂直溢出边界。每个 pane 的完整行都向下对齐：不足一格的高度保留在第一行上方，超过最大行数后的空间也保留在网格上方；
 只有低于三行保底的 pane 才裁切较旧的顶部行。IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、

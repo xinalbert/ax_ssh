@@ -13,7 +13,7 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::{Config as TermConfig, Term, TermDamage, TermMode};
-use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
+use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Processor};
 
 use crate::terminal_dimensions::TerminalSize;
 
@@ -78,14 +78,25 @@ pub struct TerminalStyledLine {
     pub runs: Vec<TerminalStyledRun>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TerminalViewportMode {
+    #[default]
+    Follow,
+    Detached,
+    AlternateScreen,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalSnapshot {
     pub lines: Vec<Arc<TerminalStyledLine>>,
     pub max_columns: usize,
     pub cursor_row: usize,
     pub cursor_column: usize,
+    pub cursor_cells: usize,
     pub cursor_visible: bool,
     pub cursor_text: String,
+    pub display_offset: usize,
+    pub viewport_mode: TerminalViewportMode,
     pub mouse_reporting: TerminalMouseReporting,
     pub mouse_button_reporting_active: bool,
     pub mouse_wheel_reporting_active: bool,
@@ -157,6 +168,7 @@ pub struct TerminalModel {
     snapshot_columns: usize,
     snapshot_display_offset: usize,
     next_line_revision: u64,
+    viewport_detached: bool,
 }
 
 impl TerminalModel {
@@ -179,6 +191,7 @@ impl TerminalModel {
             snapshot_columns: 0,
             snapshot_display_offset: 0,
             next_line_revision: 0,
+            viewport_detached: false,
         }
     }
 
@@ -188,7 +201,18 @@ impl TerminalModel {
 
     /// Parse live output and return bounded protocol responses for the same transport.
     pub fn process_with_responses(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
+        let was_alternate_screen = self.is_alternate_screen();
         self.processor.advance(&mut self.term, bytes);
+        let is_alternate_screen = self.is_alternate_screen();
+        if was_alternate_screen && !is_alternate_screen {
+            self.term.scroll_display(Scroll::Bottom);
+        }
+        if is_alternate_screen
+            || was_alternate_screen != is_alternate_screen
+            || self.term.grid().display_offset() == 0
+        {
+            self.viewport_detached = false;
+        }
         self.protocol_responses.try_iter().collect()
     }
 
@@ -352,6 +376,9 @@ impl TerminalModel {
 
         self.term.set_options(terminal_config(scrollback_lines));
         self.scrollback_lines = scrollback_lines;
+        if self.term.grid().display_offset() == 0 {
+            self.viewport_detached = false;
+        }
     }
 
     pub fn contents(&self) -> String {
@@ -360,11 +387,13 @@ impl TerminalModel {
 
     pub fn snapshot(&mut self) -> TerminalSnapshot {
         self.refresh_snapshot_lines();
+        let content = self.term.renderable_content();
         let grid = self.term.grid();
         let columns = grid.columns();
-        let cursor = grid.cursor.point;
+        let (cursor, cursor_cells) = cursor_geometry(grid, content.cursor.point);
+        let cursor_column = cursor.column.0;
         let cursor_visible =
-            grid.display_offset() == 0 && self.term.mode().contains(TermMode::SHOW_CURSOR);
+            content.display_offset == 0 && !matches!(content.cursor.shape, CursorShape::Hidden);
         let cursor_text = cursor_visible
             .then(|| &grid[cursor])
             .filter(|cell| !is_wide_continuation(cell))
@@ -376,9 +405,12 @@ impl TerminalModel {
             lines: self.snapshot_lines.clone(),
             max_columns: columns,
             cursor_row: cursor.line.0.max(0) as usize,
-            cursor_column: cursor.column.0,
+            cursor_column,
+            cursor_cells,
             cursor_visible,
             cursor_text,
+            display_offset: content.display_offset,
+            viewport_mode: self.viewport_mode(),
             mouse_reporting: self.mouse_reporting(),
             mouse_button_reporting_active: self.mouse_button_reporting_active(),
             mouse_wheel_reporting_active: self.mouse_wheel_reporting_active(),
@@ -471,15 +503,39 @@ impl TerminalModel {
         }
         self.term
             .scroll_display(Scroll::Delta(requested as i32 - current as i32));
+        if requested == 0 {
+            self.viewport_detached = false;
+        } else if requested > current {
+            self.viewport_detached = true;
+        }
         true
     }
 
     pub fn scroll_to_bottom(&mut self) -> bool {
+        self.viewport_detached = false;
         if self.term.grid().display_offset() == 0 {
             return false;
         }
         self.term.scroll_display(Scroll::Bottom);
         true
+    }
+
+    pub fn viewport_mode(&self) -> TerminalViewportMode {
+        if self.is_alternate_screen() {
+            TerminalViewportMode::AlternateScreen
+        } else if self.viewport_detached || self.term.grid().display_offset() > 0 {
+            TerminalViewportMode::Detached
+        } else {
+            TerminalViewportMode::Follow
+        }
+    }
+
+    pub fn display_offset(&self) -> usize {
+        self.term.grid().display_offset()
+    }
+
+    fn is_alternate_screen(&self) -> bool {
+        self.term.mode().contains(TermMode::ALT_SCREEN)
     }
 
     /// Returns text for an inclusive, viewport-relative cell selection.
@@ -804,6 +860,26 @@ fn is_wide_continuation(cell: &Cell) -> bool {
         .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
 }
 
+fn cursor_geometry(grid: &alacritty_terminal::Grid<Cell>, mut cursor: Point) -> (Point, usize) {
+    let cell = &grid[cursor];
+    if cell.flags.contains(Flags::WIDE_CHAR) {
+        return (cursor, 2);
+    }
+    if cell.flags.contains(Flags::WIDE_CHAR_SPACER) && cursor.column.0 > 0 {
+        cursor.column -= 1;
+        return (cursor, 2);
+    }
+    if cell.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER)
+        && cursor.line.0 + 1 < grid.screen_lines() as i32
+    {
+        let next_line = Line(cursor.line.0 + 1);
+        if grid[next_line][Column(0)].flags.contains(Flags::WIDE_CHAR) {
+            return (Point::new(next_line, Column(0)), 2);
+        }
+    }
+    (cursor, 1)
+}
+
 fn cell_text(cell: &Cell) -> String {
     let mut text = String::new();
     append_cell_text(&mut text, cell);
@@ -1011,6 +1087,22 @@ mod tests {
         assert_eq!(snapshot.lines[0].runs[1].cells, 2);
         assert_eq!(snapshot.lines[0].runs[2].column, 3);
         assert_eq!(snapshot.cursor_column, 4);
+    }
+
+    #[test]
+    fn cursor_on_a_wide_cell_uses_its_leading_column_and_width() {
+        let mut terminal = TerminalModel::new(20, 3, 10);
+        terminal.process("中\x1b[1G".as_bytes());
+        let leading = terminal.snapshot();
+        assert_eq!(leading.cursor_column, 0);
+        assert_eq!(leading.cursor_cells, 2);
+        assert_eq!(leading.cursor_text, "中");
+
+        terminal.process(b"\x1b[2G");
+        let spacer = terminal.snapshot();
+        assert_eq!(spacer.cursor_column, 0);
+        assert_eq!(spacer.cursor_cells, 2);
+        assert_eq!(spacer.cursor_text, "中");
     }
 
     #[test]
@@ -1706,6 +1798,51 @@ mod tests {
         assert!(terminal.contents().contains("line-8"));
         assert!(!terminal.snapshot().cursor_visible);
         assert!(terminal.scroll_to_bottom());
+    }
+
+    #[test]
+    fn detached_view_preserves_its_position_while_output_arrives() {
+        let mut terminal = TerminalModel::new(20, 3, 20);
+        terminal.process(b"one\r\ntwo\r\nthree\r\nfour");
+        assert!(terminal.scroll(1));
+        let before = terminal.snapshot();
+        assert_eq!(before.viewport_mode, TerminalViewportMode::Detached);
+        assert!(before.display_offset > 0);
+        let before_top = snapshot_line_text(&before, 0);
+
+        terminal.process(b"\r\nfive");
+        let after = terminal.snapshot();
+        assert_eq!(after.viewport_mode, TerminalViewportMode::Detached);
+        assert_eq!(snapshot_line_text(&after, 0), before_top);
+
+        assert!(terminal.scroll_to_bottom());
+        assert_eq!(
+            terminal.snapshot().viewport_mode,
+            TerminalViewportMode::Follow
+        );
+    }
+
+    #[test]
+    fn alternate_screen_resets_local_viewport_state() {
+        let mut terminal = TerminalModel::new(20, 3, 20);
+        terminal.process(b"one\r\ntwo\r\nthree\r\nfour");
+        assert!(terminal.scroll(1));
+        assert_eq!(terminal.viewport_mode(), TerminalViewportMode::Detached);
+
+        terminal.process(b"\x1b[?1049h");
+        let alternate = terminal.snapshot();
+        assert_eq!(
+            alternate.viewport_mode,
+            TerminalViewportMode::AlternateScreen
+        );
+        assert_eq!(alternate.display_offset, 0);
+        assert!(!terminal.scroll(1));
+
+        terminal.process(b"\x1b[?1049l");
+        assert_eq!(
+            terminal.snapshot().viewport_mode,
+            TerminalViewportMode::Follow
+        );
     }
 
     #[test]

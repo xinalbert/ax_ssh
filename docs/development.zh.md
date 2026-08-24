@@ -254,6 +254,9 @@ writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 
 日志位于平台本地 AxSSH 应用数据目录的 `logs` 子目录。默认过滤规则为
 `ax_ssh=info,russh=warn`，可由 `RUST_LOG` 覆盖。
 About 从进程边界接收已经创建的目录，并通过 bridge 打开；Slint 线程不执行文件系统操作。
+同一目录包含私有的追加写入 `ax_ssh-crash.log`，由进程 panic hook 同步写入。它记录 panic
+消息、源码位置、进程/线程/平台元数据、`SLINT_BACKEND` 和强制采集的 Rust backtrace。
+若 macOS Objective-C 回调之后发生 abort，应先检查这个文件；它与有缓冲的每日运行日志分开。
 
 单次运行中可用以下命令开启脱敏键盘/UI diagnostics 和 SSH latency 阶段：
 

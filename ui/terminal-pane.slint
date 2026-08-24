@@ -13,6 +13,7 @@ import {
 export struct TerminalCursorState {
     row: int,
     column: int,
+    cells: int,
     visible: bool,
     text: string,
 }
@@ -48,6 +49,7 @@ export struct TerminalViewState {
     content_columns: int,
     cursor_row: int,
     cursor_column: int,
+    cursor_cells: int,
     cursor_visible: bool,
     cursor_text: string,
     font_family: string,
@@ -67,6 +69,9 @@ export struct TerminalViewState {
     mouse_button_reporting: bool,
     mouse_wheel_reporting: bool,
     mouse_local_selection_priority: bool,
+    display_offset: int,
+    viewport_detached: bool,
+    alternate_screen: bool,
 }
 
 component TerminalPaneCloseButton inherits FocusScope {
@@ -195,6 +200,8 @@ export component TerminalPane inherits Rectangle {
         ? root.view.cursor_state[0].row : root.view.cursor_row;
     private property <int> cursor-column: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].column : root.view.cursor_column;
+    private property <int> cursor-cells: root.view.cursor_state.length > 0
+        ? root.view.cursor_state[0].cells : root.view.cursor_cells;
     private property <bool> cursor-visible: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].visible : root.view.cursor_visible;
     private property <string> cursor-text: root.view.cursor_state.length > 0
@@ -305,6 +312,7 @@ export component TerminalPane inherits Rectangle {
         row_count: root.render-lines.length,
         content_columns: root.content-columns,
         cursor_row: root.cursor-row, cursor_column: root.cursor-column,
+        cursor_cells: root.cursor-cells,
         cursor_visible: root.cursor-visible, cursor_text: root.cursor-text,
         font_family: root.terminal-font-family, font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,
