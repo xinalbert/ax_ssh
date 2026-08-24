@@ -115,6 +115,15 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> Surface<D, W> {
         self.surface_impl.resize(width, height)
     }
 
+    /// Mark the contents of the surface as invalid.
+    ///
+    /// The next [`Surface::buffer_mut`] call reports a new buffer through
+    /// [`Buffer::age`]. This is required after a window is hidden or its
+    /// native backing surface is recreated.
+    pub fn invalidate(&mut self) {
+        self.surface_impl.invalidate();
+    }
+
     /// Copies the window contents into a buffer.
     ///
     /// ## Platform Dependent Behavior

@@ -26,6 +26,12 @@ pub(crate) trait SurfaceInterface<D: HasDisplayHandle + ?Sized, W: HasWindowHand
     fn window(&self) -> &W;
     /// Resize the internal buffer to the given width and height.
     fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) -> Result<(), SoftBufferError>;
+    /// Mark the surface contents as invalid.
+    ///
+    /// Backends with persistent buffers must discard their buffer age after a
+    /// window is hidden, restored, or otherwise loses its backing surface.
+    /// Other backends can keep the default no-op implementation.
+    fn invalidate(&mut self) {}
     /// Get a mutable reference to the buffer.
     fn buffer_mut(&mut self) -> Result<Self::Buffer<'_>, SoftBufferError>;
     /// Fetch the buffer from the window.

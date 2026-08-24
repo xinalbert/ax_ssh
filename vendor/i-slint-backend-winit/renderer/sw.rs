@@ -149,25 +149,37 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
             })
         };
 
-        // Preserve the actual dirty rectangles produced by Slint. Using the
-        // bounding box here turns separated terminal row updates into one
-        // large upload and can repaint unchanged gaps between them.
+        // Preserve the actual dirty rectangles produced by Slint for backends
+        // that support damage-aware presentation. The macOS CoreGraphics
+        // backend intentionally ignores these rectangles and submits its
+        // complete layer; this list is not a CoreAnimation slicing operation.
         let damage = region
             .iter()
             .filter_map(|(pos, size)| {
+                let x = u32::try_from(pos.x).ok()?;
+                let y = u32::try_from(pos.y).ok()?;
                 Some(softbuffer::Rect {
-                    x: pos.x as u32,
-                    y: pos.y as u32,
+                    x,
+                    y,
                     width: NonZeroU32::new(size.width)?,
                     height: NonZeroU32::new(size.height)?,
                 })
             })
             .collect::<Vec<_>>();
-        if !damage.is_empty() {
+        // A new/invalid buffer must be submitted even when the renderer did
+        // not report a non-empty region (for example after restore). A valid
+        // persistent buffer can skip an empty frame entirely.
+        if !damage.is_empty() || age == 0 {
             winit_window.pre_present_notify();
-            target_buffer
-                .present_with_damage(&damage)
-                .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;
+            if damage.is_empty() {
+                target_buffer
+                    .present()
+                    .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;
+            } else {
+                target_buffer
+                    .present_with_damage(&damage)
+                    .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;
+            }
         }
         Ok(DrawOutcome::Success)
     }
@@ -181,6 +193,9 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
         // and the buffer age doesn't respect that, so clean the partial rendering cache
         self.renderer
             .set_repaint_buffer_type(RepaintBufferType::NewBuffer);
+        if let Some(surface) = self.surface.borrow_mut().as_mut() {
+            surface.invalidate();
+        }
     }
 
     fn resume(

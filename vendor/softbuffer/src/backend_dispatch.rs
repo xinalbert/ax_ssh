@@ -108,6 +108,15 @@ macro_rules! make_dispatch {
                 }
             }
 
+            fn invalidate(&mut self) {
+                match self {
+                    $(
+                        $(#[$attr])*
+                        Self::$name(inner) => inner.invalidate(),
+                    )*
+                }
+            }
+
             fn buffer_mut(&mut self) -> Result<BufferDispatch<'_, D, W>, SoftBufferError> {
                 match self {
                     $(
