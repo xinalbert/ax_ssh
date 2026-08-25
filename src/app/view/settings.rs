@@ -313,6 +313,8 @@ pub(super) fn set_ui_theme_palette(ui: &AppWindow, palette: &ThemePalette, light
 pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
     TerminalSnapshot {
         lines: vec![Arc::new(Default::default())],
+        dirty_rows: vec![0],
+        full_refresh: true,
         max_columns: 0,
         cursor_row: 0,
         cursor_column: 0,

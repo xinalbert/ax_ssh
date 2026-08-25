@@ -181,6 +181,21 @@ fn terminal_render_lines_reuse_existing_rows_when_output_is_unchanged() {
 }
 
 #[test]
+fn terminal_render_lines_refresh_render_key_without_replacing_nested_models() {
+    let current = ModelRc::new(VecModel::from(vec![terminal_render_line_with_revision(
+        "same", 7, 11,
+    )]));
+    let original_runs = current.row_data(0).expect("current line").runs;
+    let updated = vec![terminal_render_line_with_revision("same", 7, 12)];
+
+    assert!(update_terminal_render_lines(&current, &updated));
+
+    let line = current.row_data(0).expect("updated line");
+    assert_eq!(line.render_cache_key_low, 12);
+    assert_eq!(line.runs, original_runs);
+}
+
+#[test]
 fn terminal_pane_snapshots_reset_existing_nested_models_when_row_counts_change() {
     let tab_id = Uuid::from_u128(1);
     let mut pane = terminal_pane_view(tab_id, 0.0, 1.0);
@@ -303,6 +318,59 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
 }
 
 #[test]
+fn terminal_pane_snapshot_reuses_unchanged_rows_when_one_row_changes() {
+    let tab_id = Uuid::from_u128(1);
+    let mut pane = terminal_pane_view(tab_id, 0.0, 1.0);
+    pane.terminal.render_lines = ModelRc::new(VecModel::from(vec![
+        terminal_render_line_with_revision("stable", 11, 1),
+        terminal_render_line_with_revision("before", 12, 1),
+    ]));
+    let panes = ModelRc::new(VecModel::from(vec![pane]));
+    let current_pane = panes.row_data(0).expect("current pane");
+    let current_lines = current_pane.terminal.render_lines;
+    let stable_line = current_lines.row_data(0).expect("stable line");
+    let stable_runs = stable_line.runs.clone();
+    let changed_runs = current_lines.row_data(1).expect("changed line").runs;
+    let dividers = ModelRc::new(VecModel::from(Vec::<TerminalPaneDividerView>::new()));
+
+    let mut updated = terminal_pane_view(tab_id, 0.0, 1.0);
+    updated.terminal.render_lines = ModelRc::new(VecModel::from(vec![
+        terminal_render_line_with_revision("stable", 11, 1),
+        terminal_render_line_with_revision("after", 13, 1),
+    ]));
+
+    assert!(update_terminal_pane_snapshot_models(
+        &panes,
+        &dividers,
+        &[updated],
+        &[],
+    ));
+
+    let updated_pane = panes.row_data(0).expect("updated pane");
+    assert_eq!(updated_pane.terminal.render_lines, current_lines);
+    assert_eq!(current_lines.row_data(0).expect("stable line"), stable_line);
+    assert_eq!(
+        current_lines.row_data(0).expect("stable line").runs,
+        stable_runs
+    );
+    assert_eq!(
+        current_lines.row_data(1).expect("changed line").runs,
+        changed_runs
+    );
+    assert_eq!(
+        current_lines
+            .row_data(1)
+            .expect("changed line")
+            .runs
+            .row_data(0)
+            .expect("changed run")
+            .text
+            .as_str(),
+        "after"
+    );
+}
+
+#[test]
 fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
     let snapshot = TerminalSnapshot {
         lines: vec![Arc::new(ax_ssh::terminal::TerminalStyledLine {
@@ -314,6 +382,8 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
                 style: Default::default(),
             }],
         })],
+        dirty_rows: vec![0],
+        full_refresh: true,
         max_columns: 10,
         cursor_row: 0,
         cursor_column: 5,
@@ -362,11 +432,19 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
 }
 
 fn terminal_render_line_with_text(text: &str) -> TerminalRenderLine {
+    terminal_render_line_with_revision(text, 0, 0)
+}
+
+fn terminal_render_line_with_revision(
+    text: &str,
+    source_revision: u64,
+    render_cache_key: u64,
+) -> TerminalRenderLine {
     TerminalRenderLine {
-        source_revision_low: 0,
-        source_revision_high: 0,
-        render_cache_key_low: 0,
-        render_cache_key_high: 0,
+        source_revision_low: source_revision as u32 as i32,
+        source_revision_high: (source_revision >> 32) as u32 as i32,
+        render_cache_key_low: render_cache_key as u32 as i32,
+        render_cache_key_high: (render_cache_key >> 32) as u32 as i32,
         backgrounds: ModelRc::new(VecModel::from(Vec::<TerminalBackgroundRun>::new())),
         decorations: ModelRc::new(VecModel::from(Vec::<TerminalDecorationRun>::new())),
         runs: ModelRc::new(VecModel::from(vec![terminal_render_run_with_text(text)])),

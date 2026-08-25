@@ -10,7 +10,7 @@ use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor};
 
 impl TerminalModel {
     pub fn snapshot(&mut self) -> TerminalSnapshot {
-        self.refresh_snapshot_lines();
+        let damage = self.refresh_snapshot_lines();
         let content = self.term.renderable_content();
         let grid = self.term.grid();
         let columns = grid.columns();
@@ -27,6 +27,8 @@ impl TerminalModel {
 
         TerminalSnapshot {
             lines: self.snapshot_lines.clone(),
+            dirty_rows: damage.dirty_rows,
+            full_refresh: damage.full_refresh,
             max_columns: columns,
             cursor_row: cursor.line.0.max(0) as usize,
             cursor_column,
@@ -41,25 +43,28 @@ impl TerminalModel {
         }
     }
 
-    fn refresh_snapshot_lines(&mut self) {
+    fn refresh_snapshot_lines(&mut self) -> SnapshotDamage {
         let grid = self.term.grid();
         let rows = grid.screen_lines();
         let columns = grid.columns();
         let display_offset = grid.display_offset();
-        let dimensions_changed = self.snapshot_lines.len() != rows
+        let row_count_changed = self.snapshot_lines.len() != rows;
+        let dimensions_changed = row_count_changed
             || self.snapshot_columns != columns
             || self.snapshot_display_offset != display_offset;
-        let damaged_rows = if dimensions_changed {
-            None
+        let (damaged_rows, full_damage) = if dimensions_changed {
+            (None, true)
         } else {
             match self.term.damage() {
-                TermDamage::Full => None,
-                TermDamage::Partial(damage) => {
-                    Some(damage.map(|bounds| bounds.line).collect::<Vec<_>>())
-                }
+                TermDamage::Full => (None, true),
+                TermDamage::Partial(damage) => (
+                    Some(damage.map(|bounds| bounds.line).collect::<Vec<_>>()),
+                    false,
+                ),
             }
         };
 
+        let mut dirty_rows = Vec::new();
         if let Some(damaged_rows) = damaged_rows {
             for row in damaged_rows {
                 if row >= rows {
@@ -75,6 +80,7 @@ impl TerminalModel {
                 }
                 line.revision = self.take_line_revision();
                 self.snapshot_lines[row] = Arc::new(line);
+                dirty_rows.push(row);
             }
         } else {
             let mut lines = Vec::with_capacity(rows);
@@ -89,6 +95,7 @@ impl TerminalModel {
                 } else {
                     line.revision = self.take_line_revision();
                     lines.push(Arc::new(line));
+                    dirty_rows.push(row);
                 }
             }
             self.snapshot_lines = lines;
@@ -96,12 +103,24 @@ impl TerminalModel {
         self.snapshot_columns = columns;
         self.snapshot_display_offset = display_offset;
         self.term.reset_damage();
+        dirty_rows.sort_unstable();
+        dirty_rows.dedup();
+        SnapshotDamage {
+            dirty_rows,
+            full_refresh: dimensions_changed || full_damage,
+        }
     }
 
     fn take_line_revision(&mut self) -> u64 {
         self.next_line_revision = self.next_line_revision.wrapping_add(1).max(1);
         self.next_line_revision
     }
+}
+
+#[derive(Default)]
+struct SnapshotDamage {
+    dirty_rows: Vec<usize>,
+    full_refresh: bool,
 }
 
 pub(super) fn visible_contents(term: &Term<TerminalEventListener>) -> String {

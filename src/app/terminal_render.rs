@@ -819,6 +819,8 @@ mod tests {
                     style,
                 }],
             })],
+            dirty_rows: vec![0],
+            full_refresh: true,
             max_columns: 1,
             cursor_row: 0,
             cursor_column: 1,
@@ -856,6 +858,8 @@ mod tests {
     fn snapshot_line(runs: Vec<TerminalStyledRun>) -> TerminalSnapshot {
         TerminalSnapshot {
             lines: vec![Arc::new(TerminalStyledLine { revision: 1, runs })],
+            dirty_rows: vec![0],
+            full_refresh: true,
             max_columns: 128,
             cursor_row: 0,
             cursor_column: 0,

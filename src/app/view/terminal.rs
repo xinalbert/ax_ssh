@@ -228,9 +228,8 @@ pub(super) fn apply_terminal_pane_updates(ui: &AppWindow, panes: Vec<WindowTermi
         let Some(current) = current_panes.row_data(index) else {
             continue;
         };
-        let mut updated = terminal_pane_view(ui, settings, pane, Some(&current));
-        let models_reused = reuse_terminal_render_models(&current.terminal, &mut updated.terminal);
-        if !models_reused || !terminal_pane_shallow_eq(&current, &updated) {
+        let updated = terminal_pane_view_incremental(ui, settings, pane, Some(&current));
+        if !terminal_pane_shallow_eq(&current, &updated) {
             current_panes.set_row_data(index, updated);
         }
         applied = applied.saturating_add(1);
@@ -252,6 +251,33 @@ fn terminal_pane_view(
             current.map(|current| &current.terminal),
             ui,
         ),
+        x: pane.placement.x,
+        y: pane.placement.y,
+        width: pane.placement.width,
+        height: pane.placement.height,
+        focused: pane.placement.focused,
+        closable: pane.closable,
+    }
+}
+
+fn terminal_pane_view_incremental(
+    ui: &AppWindow,
+    settings: TerminalRenderSettings,
+    pane: WindowTerminalPane,
+    current: Option<&TerminalPaneView>,
+) -> TerminalPaneView {
+    let Some(current) = current else {
+        return terminal_pane_view(ui, settings, pane, None);
+    };
+    let terminal = terminal_view_from_snapshot_incremental(
+        pane.placement.tab_id,
+        pane.snapshot,
+        settings,
+        &current.terminal,
+        ui,
+    );
+    TerminalPaneView {
+        terminal,
         x: pane.placement.x,
         y: pane.placement.y,
         width: pane.placement.width,
@@ -375,28 +401,36 @@ pub(super) fn reuse_terminal_render_models(
             *updated_line = current_line;
             continue;
         }
-        let updated_backgrounds = updated_line.backgrounds.iter().collect::<Vec<_>>();
-        let backgrounds_reused =
-            replace_vec_model_rows(&current_line.backgrounds, updated_backgrounds);
-        if backgrounds_reused {
-            updated_line.backgrounds = current_line.backgrounds.clone();
-        }
-        let updated_decorations = updated_line.decorations.iter().collect::<Vec<_>>();
-        let decorations_reused =
-            replace_vec_model_rows(&current_line.decorations, updated_decorations);
-        if decorations_reused {
-            updated_line.decorations = current_line.decorations.clone();
-        }
-        let updated_runs = updated_line.runs.iter().collect::<Vec<_>>();
-        if replace_vec_model_rows(&current_line.runs, updated_runs) {
-            updated_line.runs = current_line.runs;
-        }
+        reuse_terminal_render_line_models(&current_line, updated_line);
     }
     let lines_reused = replace_vec_model_rows(&current.render_lines, updated_lines);
     if lines_reused {
         updated.render_lines = current.render_lines.clone();
     }
     cursor_reused && lines_reused
+}
+
+/// Keep the Slint row item identity stable while updating only its nested
+/// background, decoration, and text models. Both Skia and software consume
+/// this same model contract; renderer-specific caching happens afterwards.
+fn reuse_terminal_render_line_models(
+    current: &TerminalRenderLine,
+    updated: &mut TerminalRenderLine,
+) {
+    let updated_backgrounds = updated.backgrounds.iter().collect::<Vec<_>>();
+    if replace_vec_model_rows(&current.backgrounds, updated_backgrounds) {
+        updated.backgrounds = current.backgrounds.clone();
+    }
+
+    let updated_decorations = updated.decorations.iter().collect::<Vec<_>>();
+    if replace_vec_model_rows(&current.decorations, updated_decorations) {
+        updated.decorations = current.decorations.clone();
+    }
+
+    let updated_runs = updated.runs.iter().collect::<Vec<_>>();
+    if replace_vec_model_rows(&current.runs, updated_runs) {
+        updated.runs = current.runs.clone();
+    }
 }
 
 fn terminal_render_line_revision_matches(
@@ -453,7 +487,6 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
             == updated_terminal.mouse_local_selection_priority
 }
 
-#[cfg(test)]
 pub(in crate::app) fn update_terminal_render_lines(
     current: &ModelRc<TerminalRenderLine>,
     lines: &[TerminalRenderLine],
@@ -472,18 +505,30 @@ pub(in crate::app) fn update_terminal_render_lines(
         let Some(current_line) = current.row_data(index) else {
             return false;
         };
-        if update_terminal_render_backgrounds(&current_line.backgrounds, &line.backgrounds)
-            && update_terminal_render_decorations(&current_line.decorations, &line.decorations)
-            && update_terminal_render_runs(&current_line.runs, &line.runs)
-        {
-            continue;
+        let nested_models_reused =
+            update_terminal_render_backgrounds(&current_line.backgrounds, &line.backgrounds)
+                && update_terminal_render_decorations(&current_line.decorations, &line.decorations)
+                && update_terminal_render_runs(&current_line.runs, &line.runs);
+        if nested_models_reused {
+            let mut line = line;
+            line.backgrounds = current_line.backgrounds.clone();
+            line.decorations = current_line.decorations.clone();
+            line.runs = current_line.runs.clone();
+            if current_line.source_revision_low == line.source_revision_low
+                && current_line.source_revision_high == line.source_revision_high
+                && current_line.render_cache_key_low == line.render_cache_key_low
+                && current_line.render_cache_key_high == line.render_cache_key_high
+            {
+                continue;
+            }
+            current_lines.set_row_data(index, line);
+        } else {
+            current_lines.set_row_data(index, line);
         }
-        current_lines.set_row_data(index, line);
     }
     true
 }
 
-#[cfg(test)]
 fn update_terminal_render_runs(
     current: &ModelRc<TerminalRenderRun>,
     updated: &ModelRc<TerminalRenderRun>,
@@ -492,7 +537,6 @@ fn update_terminal_render_runs(
     replace_vec_model_rows(current, rows)
 }
 
-#[cfg(test)]
 fn update_terminal_render_backgrounds(
     current: &ModelRc<TerminalBackgroundRun>,
     updated: &ModelRc<TerminalBackgroundRun>,
@@ -501,7 +545,6 @@ fn update_terminal_render_backgrounds(
     replace_vec_model_rows(current, rows)
 }
 
-#[cfg(test)]
 fn update_terminal_render_decorations(
     current: &ModelRc<TerminalDecorationRun>,
     updated: &ModelRc<TerminalDecorationRun>,
@@ -693,6 +736,120 @@ pub(super) fn render_snapshot_lines(
                 .unwrap_or_else(|| terminal_render_line(renderer.render_line(line)))
         })
         .collect()
+}
+
+fn terminal_view_from_snapshot_incremental(
+    tab_id: Uuid,
+    snapshot: ActiveTabSnapshot,
+    settings: TerminalRenderSettings,
+    current: &TerminalViewState,
+    ui: &AppWindow,
+) -> TerminalViewState {
+    let connected = snapshot.connected;
+    let selection_revision = snapshot.selection_revision;
+    let notice = snapshot.notice;
+    let snapshot = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
+    let renderer = TerminalRenderer::new(settings);
+    let render_cache_key = renderer.cache_key();
+    let cache_key_matches = current.render_lines.row_data(0).is_some_and(|line| {
+        line.render_cache_key_low == render_cache_key as u32 as i32
+            && line.render_cache_key_high == (render_cache_key >> 32) as u32 as i32
+    });
+    let row_count_matches = current.render_lines.row_count() == snapshot.lines.len();
+    let full_refresh = snapshot.full_refresh || !row_count_matches || !cache_key_matches;
+
+    let mut terminal = current.clone();
+    if full_refresh {
+        let lines = render_snapshot_lines(&snapshot, &renderer, Some(&current.render_lines));
+        if !update_terminal_render_lines(&terminal.render_lines, &lines) {
+            terminal.render_lines = ModelRc::new(VecModel::from(lines));
+        }
+    } else if !update_terminal_render_lines_dirty(
+        &terminal.render_lines,
+        &snapshot.lines,
+        &snapshot.dirty_rows,
+        &renderer,
+    ) {
+        // A non-VecModel is not expected on the production path, but falling
+        // back here keeps a custom model implementation correct.
+        let lines = render_snapshot_lines(&snapshot, &renderer, None);
+        terminal.render_lines = ModelRc::new(VecModel::from(lines));
+    }
+
+    let cursor_text: SharedString = snapshot.cursor_text.into();
+    let cursor_state = TerminalCursorState {
+        row: snapshot.cursor_row.min(i32::MAX as usize) as i32,
+        column: snapshot.cursor_column.min(i32::MAX as usize) as i32,
+        cells: snapshot.cursor_cells.clamp(1, 2) as i32,
+        visible: snapshot.cursor_visible,
+        text: cursor_text.clone(),
+    };
+    if !replace_vec_model_rows(&terminal.cursor_state, vec![cursor_state.clone()]) {
+        terminal.cursor_state = ModelRc::new(VecModel::from(vec![cursor_state]));
+    }
+
+    terminal.terminal_id = tab_id.to_string().into();
+    terminal.connected = connected;
+    terminal.selection_revision = selection_revision;
+    terminal.notice = terminal_notice_view(notice);
+    terminal.content_columns = snapshot.max_columns.min(i32::MAX as usize) as i32;
+    terminal.cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
+    terminal.cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
+    terminal.cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
+    terminal.cursor_visible = snapshot.cursor_visible;
+    terminal.cursor_text = cursor_text;
+    terminal.font_family = ui.get_terminal_font_family();
+    terminal.font_size = ui.get_terminal_font_size() as f32;
+    terminal.line_height_percent = ui.get_terminal_line_height_percent();
+    terminal.foreground = to_slint_color(renderer.foreground());
+    terminal.background = to_slint_color(renderer.background());
+    terminal.selection_background = to_slint_color(renderer.selection_background());
+    terminal.compact_rendering = ui.get_terminal_compact_rendering();
+    terminal.row_render_cache = ui.get_terminal_row_render_cache();
+    terminal.mouse_button_reporting = snapshot.mouse_button_reporting_active;
+    terminal.mouse_wheel_reporting = snapshot.mouse_wheel_reporting_active;
+    terminal.display_offset = snapshot.display_offset.min(i32::MAX as usize) as i32;
+    terminal.viewport_detached = matches!(
+        snapshot.viewport_mode,
+        ax_ssh::terminal::TerminalViewportMode::Detached
+    );
+    terminal.alternate_screen = matches!(
+        snapshot.viewport_mode,
+        ax_ssh::terminal::TerminalViewportMode::AlternateScreen
+    );
+    terminal.right_click_copy_or_paste = ui.get_right_click_copy_or_paste();
+    terminal.copy_selection_on_select = ui.get_copy_selection_on_select();
+    terminal.option_as_meta = ui.get_option_as_meta();
+    terminal.copy_selection_shortcut = ui.get_copy_selection_shortcut();
+    terminal.paste_shortcut = ui.get_paste_shortcut();
+    terminal.select_all_shortcut = ui.get_select_all_shortcut();
+    terminal.mouse_local_selection_priority = ui.get_terminal_mouse_local_selection_priority();
+    terminal
+}
+
+fn update_terminal_render_lines_dirty(
+    current: &ModelRc<TerminalRenderLine>,
+    lines: &[Arc<ax_ssh::terminal::TerminalStyledLine>],
+    dirty_rows: &[usize],
+    renderer: &TerminalRenderer,
+) -> bool {
+    let Some(current_lines) = current
+        .as_any()
+        .downcast_ref::<VecModel<TerminalRenderLine>>()
+    else {
+        return false;
+    };
+    for &index in dirty_rows {
+        let Some(line) = lines.get(index) else {
+            continue;
+        };
+        let mut updated = terminal_render_line(renderer.render_line(line));
+        if let Some(current_line) = current.row_data(index) {
+            reuse_terminal_render_line_models(&current_line, &mut updated);
+        }
+        current_lines.set_row_data(index, updated);
+    }
+    true
 }
 
 fn terminal_notice_view(notice: TerminalNoticeSnapshot) -> TerminalNoticeViewState {

@@ -42,6 +42,36 @@ fn snapshots_reuse_undamaged_visible_line_identities() {
 }
 
 #[test]
+fn snapshots_report_only_changed_rows_for_partial_damage() {
+    let mut terminal = TerminalModel::new(20, 3, 10);
+    terminal.process(b"first\r\nsecond");
+    let first = terminal.snapshot();
+    assert!(first.full_refresh);
+    assert_eq!(first.dirty_rows, vec![0, 1, 2]);
+
+    let idle = terminal.snapshot();
+    assert!(!idle.full_refresh);
+    assert!(idle.dirty_rows.is_empty());
+
+    terminal.process(b"\x1b[3;1Hthird");
+    let changed = terminal.snapshot();
+    assert!(!changed.full_refresh);
+    assert_eq!(changed.dirty_rows, vec![2]);
+}
+
+#[test]
+fn snapshots_mark_full_damage_after_viewport_shift() {
+    let mut terminal = TerminalModel::new(20, 3, 10);
+    terminal.process(b"one\r\ntwo\r\nthree\r\nfour");
+    let _ = terminal.snapshot();
+
+    assert!(terminal.scroll(1));
+    let history = terminal.snapshot();
+    assert!(history.full_refresh);
+    assert_eq!(history.dirty_rows.len(), history.lines.len());
+}
+
+#[test]
 fn snapshots_rebuild_rows_when_the_visible_scrollback_offset_changes() {
     let mut terminal = TerminalModel::new(10, 3, 10);
     terminal.process(b"one\r\ntwo\r\nthree\r\nfour");

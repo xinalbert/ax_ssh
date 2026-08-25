@@ -90,6 +90,12 @@ pub enum TerminalViewportMode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalSnapshot {
     pub lines: Vec<Arc<TerminalStyledLine>>,
+    /// Rows whose styled content changed since the previous snapshot. The UI
+    /// uses this bounded list for incremental model updates; the full `lines`
+    /// vector remains available for callers that need a complete snapshot.
+    pub dirty_rows: Vec<usize>,
+    /// True when the visible row model must be rebuilt (first frame or geometry change).
+    pub full_refresh: bool,
     pub max_columns: usize,
     pub cursor_row: usize,
     pub cursor_column: usize,
