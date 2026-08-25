@@ -27,6 +27,22 @@ fn ui_refresh_gate_includes_requests_that_arrive_before_the_snapshot() {
 }
 
 #[test]
+fn ui_refresh_gate_coalesces_terminal_output_before_snapshot_without_a_follow_up() {
+    let mut state = test_state();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+
+    assert!(state.request_terminal_ui_refresh(first, None));
+    assert!(!state.request_terminal_ui_refresh(second, None));
+    let batch = state
+        .take_ui_refresh_batch()
+        .expect("coalesced refresh batch");
+    assert_eq!(batch.terminal_ids, HashSet::from([first, second]));
+    assert_eq!(batch.coalesced_requests, 1);
+    assert!(!state.finish_ui_refresh(batch.generation));
+}
+
+#[test]
 fn ui_refresh_gate_follows_up_only_for_requests_after_the_snapshot() {
     let mut state = test_state();
     let first = Uuid::new_v4();
@@ -1390,4 +1406,94 @@ fn reconnect_does_not_replace_terminal_buffer() {
     terminal.finish_reconnect_attempt(terminal.reconnect_generation());
     let after = terminal.terminal.as_mut().expect("model").snapshot();
     assert_eq!(before.lines, after.lines);
+}
+
+#[test]
+fn control_only_terminal_output_skips_ui_publication_but_cursor_changes_do_not() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+
+    assert!(terminal.terminal_snapshot_for_ui().is_some());
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[31m");
+    assert!(
+        !terminal.prepare_terminal_output_snapshot(),
+        "an attribute-only control sequence must not schedule a redraw"
+    );
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[2C");
+    assert!(
+        terminal.prepare_terminal_output_snapshot(),
+        "cursor movement remains a visible update"
+    );
+    let snapshot = terminal
+        .terminal_snapshot_for_ui()
+        .expect("pending cursor snapshot should be retained for the UI");
+    assert_eq!(snapshot.cursor_column, 2);
+}
+
+#[test]
+fn pending_terminal_snapshot_merges_later_dirty_rows_before_ui_consumes_it() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+
+    assert!(terminal.terminal_snapshot_for_ui().is_some());
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[1;1Hfirst");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[2;1Hsecond");
+
+    let snapshot = terminal
+        .terminal_snapshot_for_ui()
+        .expect("latest coalesced snapshot should be available");
+    assert!(snapshot.dirty_rows.contains(&0));
+    assert!(snapshot.dirty_rows.contains(&1));
+}
+
+#[test]
+fn terminal_resize_discards_a_stale_pending_output_snapshot() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    {
+        let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+        assert!(terminal.terminal_snapshot_for_ui().is_some());
+        terminal
+            .terminal
+            .as_mut()
+            .expect("terminal model should exist")
+            .process(b"before resize");
+        assert!(terminal.prepare_terminal_output_snapshot());
+    }
+
+    assert!(
+        state
+            .resize_terminal(tab_id, 96, 30)
+            .expect("resize should work")
+    );
+    let snapshot = state
+        .terminal_mut(tab_id)
+        .expect("terminal should exist")
+        .terminal_snapshot_for_ui()
+        .expect("resized snapshot should be available");
+    assert_eq!(snapshot.max_columns, 96);
+    assert_eq!(snapshot.lines.len(), 30);
 }

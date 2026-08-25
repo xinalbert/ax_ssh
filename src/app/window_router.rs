@@ -888,6 +888,7 @@ impl WindowRouter {
     pub(super) fn set_terminal_presentation_policy(&self, policy: TerminalPresentationPolicy) {
         self.terminal_presentation_policy
             .send_if_modified(|current| {
+                let policy = policy.with_software_renderer(current.software_renderer());
                 if *current == policy {
                     false
                 } else {
@@ -899,6 +900,19 @@ impl WindowRouter {
 
     pub(super) fn terminal_presentation_policy(&self) -> TerminalPresentationPolicy {
         *self.terminal_presentation_policy.borrow()
+    }
+
+    pub(super) fn set_terminal_presentation_software_renderer(&self, software_renderer: bool) {
+        self.terminal_presentation_policy
+            .send_if_modified(|current| {
+                let updated = current.with_software_renderer(software_renderer);
+                if *current == updated {
+                    false
+                } else {
+                    *current = updated;
+                    true
+                }
+            });
     }
 
     fn notify_terminal_presentation_change(&self) {

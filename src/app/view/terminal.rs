@@ -58,6 +58,21 @@ pub(in crate::app) fn dispatch_terminal_output_snapshot(
     dispatch_terminal_snapshot_at(ui, state, tab_id, Some(output_received_at));
 }
 
+/// Create a bounded terminal snapshot at the presentation deadline and retain
+/// it for the UI callback. Returning `false` means the parser consumed output
+/// but it produced neither changed rows nor changed visible terminal state, so
+/// scheduling a Slint redraw would be redundant.
+pub(in crate::app) fn prepare_terminal_output_snapshot(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+) -> bool {
+    let Ok(mut app) = state.lock() else {
+        return false;
+    };
+    app.terminal_mut(tab_id)
+        .is_some_and(TerminalTabState::prepare_terminal_output_snapshot)
+}
+
 pub(in crate::app) fn dispatch_terminal_snapshot(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,

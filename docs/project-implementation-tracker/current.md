@@ -3,18 +3,18 @@
 ## 当前目标
 
 - 目标 ID：20260823-terminal-dirty-region-backend-bypass
-- 目标：在保留 Slint 终端 dirty-row/model 优化的同时，保证明确选择 Software 的 macOS 路径使用坐标稳定的持久 framebuffer 与单 layer 完整提交。
-- 交付物：本地锁定 winit 多矩形 damage forwarding patch、macOS softbuffer 持久 framebuffer/失效补丁、backend focused tests 和完整离线验证；不维护 CoreAnimation tile/slicing 链路。
+- 目标：在保留 Slint 终端 dirty-row/model 优化的同时，让实际选择 Software 的可见输出不受固定 FPS timer 限制，而通过单槽最新快照背压避免 UI 队列积压，并保留 macOS 单 layer CoreGraphics surface 的安全完整提交。
+- 交付物：本地锁定 winit 多矩形 damage forwarding patch、macOS softbuffer 持久 framebuffer/失效补丁、Software 无固定 FPS 最新快照提交、无可见 snapshot 跳过、focused tests 和完整离线验证；不维护 CoreAnimation tile/slicing 链路。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`vendor/{softbuffer,i-slint-backend-winit}`、`Cargo.toml`、`Cargo.lock`、第三方许可说明、renderer/backend 研究和本轮实施跟踪记录。
-- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker/transport、Slint UI 业务组件、终端模型/设置 schema、专用 Metal 终端 surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
+- 当前范围：`src/app/{runtime,terminal_presentation,window_router,state,view,connection_monitor,connection/direct,terminal_bridge}.rs`、`vendor/{softbuffer,i-slint-backend-winit}`、双语架构说明和本轮实施跟踪记录。
+- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker transport 协议、Slint UI 业务组件、终端模型/设置 schema、专用 Metal/IOSurface terminal surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -42,6 +42,8 @@
 | PERF17 | completed | 双语契约、翻译、完整离线门禁和新 release A/B 候选 | fmt、check、Clippy、test、translation、Markdown/tracker、release build、`git diff --check` | 不升级 renderer 或引入参考工程耦合。 |
 | PERF18 | completed | 把两个终端渲染性能开关从 Terminal 页移到 Appearance 页 RENDERING 分组 | Slint 编译、Settings 搜索路由回归、完整 Cargo 门禁、翻译/链接/`git diff --check` | 配置 schema、字段名、默认值和持久化不变；只调整展示分组与搜索归属。 |
 | PERF19 | completed | 将聚焦/可见未聚焦终端刷新周期改为可配置 FPS，并接入设置预览、持久化和热更新 | FPS 归一化/serde、Slint callback、policy watch、四协议呈现状态机和完整门禁 | 范围 1-120 FPS；默认聚焦 60、未聚焦 4；聚焦 16/33/50 ms 自适应仍作为上限策略。 |
+| PERF20 | completed | Software 专属持续输出 20/15/10 FPS 自适应，以及无可见 terminal snapshot 的 UI publication 抑制 | 呈现状态机、控制序列/cursor 回归、完整 Cargo/Slint 离线门禁 | 已由 PERF21 取代 fixed-FPS 部分；不安全地局部写入 macOS 单 layer `CGImage` 不在范围内。 |
+| PERF21 | completed | Software 可见输出改为无固定 FPS 的单槽最新快照背压，并合并 UI 消费前的脏行 | 状态机、UI refresh gate、snapshot 合并回归和完整 Cargo/Slint 离线门禁 | 不延迟 parser、协议应答、错误、断开或 shutdown；GPU/其它 renderer 保留现有 FPS 策略。 |
 | CURSOR1 | completed | 可配置 Terminal 光标闪烁开关、Settings 预览/持久化和默认兼容 | config serde、Slint 编译、定向测试、完整 Cargo 门禁 | 默认开启；关闭后光标保持显示，不影响输入/IME |
 | FOCUS1 | completed | 原生窗口失焦时将所有可见终端切换到 Unfocused FPS 上限，重新激活后恢复 pane 聚焦策略 | WindowActiveChanged、AppKit 激活同步、WindowRouter 路由回归、Slint/Cargo 门禁和双语契约 | 激活状态只在运行时维护；隐藏 Tab 仍不刷新，parser/协议应答/错误/断开/shutdown 不延迟 |
 | FOCUS4 | completed | 修正 macOS 原生窗口激活状态同步，增加 `NSWindow.isKeyWindow()` 100ms UI 轮询兜底 | macOS AppKit bridge、WindowRouter 路由回归、Cargo/Slint 门禁 | 事件钩子保留为快速路径；不改变 parser、协议应答或终止路径 |
@@ -63,6 +65,7 @@
 | ROWMODEL1 | completed | 保留单层 `TerminalRenderLine` repeater 和嵌套 model identity 复用 | focused render-line tests、Slint 编译 | 应用层不再引入 tile/partition model；`TermDamage` 和 Slint 内部 dirty region 保留。 |
 | ROWMODEL2 | completed | 删除应用层 tile/partition 配置、DTO、回调、测试和重复行 repeater | config/view/Slint focused tests、全量离线门禁 | 旧 JSON 字段作为未知字段忽略，不增加 schema migration。 |
 | ROWMODEL3 | completed | 同步双语架构、项目地图、研究和月度记录，复核无残留符号 | tracker validator、Markdown 检查、`git diff --check` | 历史 tile 条目保留为审计记录，当前实现说明改为单层行模型。 |
+| ROWMODEL4 | completed | 用 `TerminalSnapshot.dirty_rows` 驱动普通输出的按行增量 render/model 更新 | 终端 damage focused tests、Rust/Slint check、完整 Cargo tests | 首帧、resize、滚动、full damage 和渲染 key 变化保留全量回退；不改变 Slint 内部 item-tree 遍历或 backend present 语义。 |
 
 ## 本轮实施计划
 
@@ -81,6 +84,7 @@
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
 - `ROWMODEL2`：移除应用层 tile/partition 链路；旧配置字段由 Serde 忽略，不做 schema migration。
 - `ROWMODEL3`：完成双语架构、项目地图、研究和月度历史同步，并运行 tracker/Markdown/diff 检查。
+- `ROWMODEL4`：使用上游 `TermDamage` 产生变化行号，普通输出只更新对应行；首帧、视口变化和渲染 key 失效回退整屏可见行。
 
 ## 已完成
 
@@ -110,6 +114,7 @@
 - 已生成可配置渲染优化的 ARM64 release 候选（36,492,784 bytes，inode `16358516`，SHA-256 `ca1cffe72761baa1c481e9601ff8e07b6f18d5c7f749eaa5c910ad2bcc9a09b6`，Mach-O UUID `8ECE3718-6E3D-370B-94F5-193A455BE533`）。检查时没有运行中的 AxSSH 进程，下一轮可直接启动该候选。
 - 已将 `terminal_compact_rendering` 与 `terminal_row_render_cache` 两个开关从 Settings > Terminal 移到 Settings > Appearance 的 RENDERING 分组，与 Renderer 选择同区；Settings 搜索目录和双语 usage 文档同步改为 Appearance 归属，配置字段与默认值不变。
 - 已将聚焦与可见未聚焦终端呈现周期改为 `focused_terminal_refresh_fps` / `unfocused_terminal_refresh_fps`，schema v26 默认分别为 60/4 FPS，范围限制为 1-120；Appearance > Rendering 使用 SpinBox，Settings preview/save 同步所有窗口并通过 `WindowRouter` policy watch 立即唤醒 pending monitor，聚焦连续输出的 16/33/50 ms 自适应仍保留。
+- 实际 `winit-software` renderer 的可见输出不再使用固定 FPS timer 或窗口物理像素/分屏档位：输出立即进入 `AppState` 单槽 refresh gate，UI 取 batch 前的请求合并到同一批，snapshot 构造后才到达的输出最多补排一次。pending snapshot 在 UI 消费时与更晚的 `TermDamage` 合并，保留脏行并让 UI 看到最新状态；无 dirty row 且 cursor/viewport/mouse-reporting 未变的初始 snapshot 不进入 Slint queue。GPU 和其它 renderer 保留 16/33/50 ms 与持久化 FPS 上限。macOS single-layer `CGImage` 的完整 clone 继续保留：Core Animation 可在 commit 后异步读取其 provider，真正移除 copy 要改为带同步的 IOSurface/Metal 或可回收多缓冲设计。
 - 已新增默认开启的 `terminal_cursor_blink` Appearance 设置，贯通 serde、Settings 预览/保存、主窗口与 detached 窗口；关闭后停止光标闪烁 Timer 并保持光标显示，重新开启时立即恢复可见，不影响终端 cursor visibility、IME 或选区。
 - 已将原生窗口激活纳入终端呈现路由：Slint `WindowActiveChanged` 事件作为快速路径，macOS UI 线程每 100ms 读取每个 `NSWindow.isKeyWindow()` 兜底，并通过 `WindowRouter` route revision 唤醒 pending monitor；窗口失焦时该窗口所有可见 pane（包括最后保持焦点的 pane）使用 `unfocused_terminal_refresh_fps`，重新激活后恢复 focused/unfocused pane 分类，隐藏终端和 parser/协议即时路径不变。
 - 已将 Tokio runtime 改为显式有界配置：按 `available_parallelism` 取 2-4 个 async worker，blocking 池最多 8 个，blocking 线程空闲 2 秒后允许退出；启动日志记录实际 worker 上限。SFTP 图标预热目标改为 `Weak<AppState>`，最后一个 SFTP Tab 清理扩展 icon 时记录释放数量，迟到 generation 不再持有强状态引用。
@@ -133,7 +138,7 @@
 
 ## 验证
 
-- 已完成：ROWMODEL1-ROWMODEL2、BACKEND1-BACKEND4；`cargo check --locked --offline` 已通过；其余完整门禁和 tracker validator 在本轮收口。此前的 TILE/DIRTY/PARTITION 实施已撤回，历史记录保留。
+- 已完成：ROWMODEL1-ROWMODEL4、BACKEND1-BACKEND4、PERF21；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 209、应用 200、Doc tests 0）已通过。此前的 TILE/DIRTY/PARTITION 实施已撤回，历史记录保留。
 - 未完成：同负载 GPU/Skia 与 Software 的 CPU/footprint A/B；用户已确认重启后的 Software renderer 中 Settings、Tab、终端行位置和空白区域正常。
 
 ## 风险与阻塞
@@ -142,9 +147,9 @@
 - UI 刷新批处理只能延后呈现通知，不能延后 terminal parser、PTY protocol response、错误、退出或 shutdown。
 - 脏终端路由必须在 pane 转移、split、关闭和 detached/return 结构变化时回退到完整刷新，避免更新错误窗口或陈旧 UUID。
 - release 为 strip-symbols 产物，系统级 DisplayLink/Metal 和线程阻塞结论可靠，但不能从该二进制的 sample 进一步精确拆分应用内部 Rust 函数。
-- focused 持续输出仍按 16/33/50 ms 与 Appearance FPS 上限节流；该呈现调度与应用层 tile/partition 已解耦。
-- macOS software surface 现在通过单个 CoreAnimation layer 提交完整 framebuffer；Slint dirty region 仍可减少 CPU 绘制，但不改变最终 layer 上传范围。窗口像素面积、可见 pane 数和呈现频率仍会影响 CPU 成本。GPU/Skia 路径仍按普通 CAMetalLayer drawable present，需分别 A/B。
-- 双呈现策略必须按当前 `WindowRouter`/`PaneTree` 动态读取焦点，不能在 worker 中缓存 pane 归属；切换焦点后旧后台输出必须在新 deadline 内追上，但隐藏 Tab 仍不应进入 Slint event queue。
+- GPU/其它 renderer 的 focused 持续输出仍按 16/33/50 ms 与 Appearance FPS 上限节流；Software 改为单槽 latest-frame 背压，该呈现调度与应用层 tile/partition 已解耦。
+- macOS software surface 现在通过单个 CoreAnimation layer 提交完整 framebuffer；Slint dirty region 和单槽背压能减少 CPU 绘制或排队的旧帧，但不改变最终 layer 上传范围。Software 不以窗口像素/分屏数强制限速；GPU/Skia 路径仍按普通 CAMetalLayer drawable present，需分别 A/B。
+- 双呈现策略必须按当前 `WindowRouter`/`PaneTree` 动态读取焦点，不能在 worker 中缓存 pane 归属；Software 可见输出立即进入 latest-frame gate，GPU/其它 renderer 在新 deadline 内追上，隐藏 Tab 仍不应进入 Slint event queue。
 - 窗口资源清理必须先停止应用 worker，再清空 detached/main 的 Slint model 并移除强引用；不能把清理延迟到 timer 或依赖函数作用域自然 drop，否则窗口 renderer surface 和 model 可能继续存活。
 - rust-skia release build script 在 release cache 缺失时会绕过 Cargo offline 语义尝试下载预编译包；本轮最终构建复用了本机同名、同 SHA-256 的 debug cache，未把该缓存加入 Git 或项目依赖。
 - resize-only 刷新仍必须在 pane 转移、split、关闭和 detached/return 结构变化时由 WindowRouter 回退到 full refresh；本轮不改变该结构变化语义。
@@ -159,13 +164,15 @@
 
 ## 最后更新时间
 
+- 2026-08-25 16:30 +0800：Software renderer 的可见终端输出取消固定 FPS timer 和物理像素/分屏负载档位，改为 `AppState` 单槽 latest-frame refresh gate；UI 消费 pending snapshot 时合并随后发生的 `TermDamage`，且只有 snapshot 构造后的新输出才补排一次。控制序列等没有可见变化的初始 snapshot 仍不进入 Slint event queue；macOS CoreGraphics 的安全完整 `CGImage` clone 边界不变。
 - 2026-08-24：删除应用层终端 tile/partition 链路及配置接线；旧 JSON 字段作为未知字段忽略，当前 UI 使用单层 `TerminalRenderLine` model，保留 `TermDamage`、行 revision 复用和 Slint 内部 dirty region。
 - 2026-08-24：撤销 macOS softbuffer 的 512x64 CoreAnimation tile/slicing；保留持久 framebuffer、`Surface::invalidate()`、`age() == 1` 和 age 0 首帧/恢复后的完整 layer present。生产代码通过 vendor/backend Cargo check；目标机仍需按首帧、resize、Retina、隐藏/恢复、滚动、光标和动画清单进行视觉验收。
 - 2026-08-24：为 macOS 偶发键盘/IME abort 增加独立 `ax_ssh-crash.log` 同步 panic 报告，覆盖 panic 消息、源码位置、线程/平台元数据和 backtrace；不改变 renderer、终端、SSH 或凭据边界。
+- 2026-08-25：`TerminalSnapshot` 新增 `dirty_rows/full_refresh`；普通输出在应用层只渲染并通知受损行，首帧、视口/尺寸变化、full damage 和渲染 key 变化保留整行回退。Slint item-tree 遍历与 backend 完整 present 语义不变。
 - 2026-08-23 22:50 +0800
 - 计划状态变更：BACKEND1: pending -> completed; BACKEND2: pending -> completed; BACKEND3: pending -> completed; BACKEND4: in_progress -> completed
 - 验证结果：本地 backend patch 已清理死代码并通过 vendor rustfmt、locked/offline Cargo 全量门禁、翻译检查和 `git diff --check`；实际 macOS GUI/A-B 仍待用户执行。
-- 计划切换：ROWMODEL1-ROWMODEL2 已完成；ROWMODEL3 在本轮完成文档同步和门禁。
+- 计划切换：ROWMODEL1-ROWMODEL4 已完成；ROWMODEL3/4 在本轮完成文档同步、增量模型更新和门禁。
 - 影响文件：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings,view/terminal,view/tests}.rs`、`ui/{app,settings,settings/appearance,workspace-shell}.slint`、`translations/zh-CN/LC_MESSAGES/ax_ssh.po`、双语架构/使用文档和 tracker。
 - 计划状态变更：PARTITION1: pending -> completed; PARTITION2: pending -> completed; PARTITION3: pending -> completed; PARTITION4: in_progress -> completed
 - 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`、tracker validator 和 `git diff --check` 通过。

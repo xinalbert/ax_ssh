@@ -18,6 +18,17 @@ pub(super) fn select_slint_renderer(preference: RendererPreference) -> Result<()
     selector.select().map_err(Into::into)
 }
 
+/// Reports the renderer that this process selected, including Slint's explicit
+/// environment override. Renderer preference changes are restart-only, so the
+/// terminal presentation policy must use this startup decision rather than a
+/// Settings preview value.
+pub(super) fn software_renderer_selected(preference: RendererPreference) -> bool {
+    std::env::var("SLINT_BACKEND").map_or_else(
+        |_| renderer_backend_name(preference) == "winit-software",
+        |backend| backend == "winit-software",
+    )
+}
+
 pub(super) fn tokio_worker_thread_count() -> usize {
     std::thread::available_parallelism()
         .map(|parallelism| parallelism.get())

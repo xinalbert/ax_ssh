@@ -224,28 +224,38 @@ received after that snapshot schedule one follow-up. Hidden terminal output
 therefore remains in Rust state until a later full route refresh instead of
 entering the Slint event queue.
 `src/app/terminal_presentation.rs` owns a separate dirty-driven presentation
-deadline for each Local, Serial, SSH, or Telnet monitor. The current
+decision for each Local, Serial, SSH, or Telnet monitor. The current
 `WindowRouter` route classifies a terminal in an active `PaneTree` as focused or
-visible-unfocused; a terminal outside every active tree is hidden. Focused output
-presents its first dirty update immediately, then uses 16 ms for the first 500 ms
-of a continuous burst, 33 ms until two seconds, and 50 ms afterward. A 250 ms
-quiet period resets the burst to the immediate/16 ms path. `AppearanceSettings`
-also persists independent focused and visible-unfocused refresh caps as FPS,
-clamped to 1-120 FPS and defaulting to 60 FPS and 4 FPS. These caps are upper
-bounds: the focused 16/33/50 ms adaptive cadence remains in effect for sustained
-output, while the configured FPS can lower it further. A visible-unfocused split
-pane presents at most once per configured interval, while a hidden Tab has no
-presentation deadline. Settings preview and save publish the new policy through
-`WindowRouter`, waking monitors with pending output immediately. Route revisions
-wake only monitors with pending output, so a pane focus or Tab change applies the
-new policy without polling. Native window activation is runtime-only: the
+visible-unfocused; a terminal outside every active tree is hidden. On GPU and
+other non-software renderers, focused output presents its first dirty update
+immediately, then uses 16 ms for the first 500 ms of a continuous burst, 33 ms
+until two seconds, and 50 ms afterward. A 250 ms quiet period resets the burst to
+the immediate/16 ms path. `AppearanceSettings` persists independent focused and
+visible-unfocused refresh caps as FPS, clamped to 1-120 FPS and defaulting to 60
+FPS and 4 FPS; the configured value can lower the non-software cadence further.
+A visible-unfocused non-software split pane presents at most once per configured
+interval, while a hidden Tab has no presentation deadline.
+
+When the process actually selected `winit-software`, every visible dirty update
+is ready immediately—there is no fixed FPS timer and no pixel-area or split-count
+policy. `AppState` admits only one queued or in-progress UI refresh batch: output
+before the UI takes that batch is coalesced into it, and output after snapshot
+construction schedules at most one follow-up. The terminal keeps one bounded
+pending snapshot; when the UI consumes it, newer terminal damage is merged into
+the latest snapshot so earlier dirty rows cannot be lost. If an initial snapshot
+has no dirty rows and its cursor, viewport, and mouse-reporting state match the
+last published snapshot, it never enters the Slint queue; control-only terminal
+sequences therefore do not cause a redraw. Settings preview and save publish the
+new non-software policy through `WindowRouter`, waking monitors with pending
+output immediately. Route revisions wake only monitors with pending output, so a
+pane focus or Tab change applies the new policy without polling. Native window activation is runtime-only: the
 Slint `WindowActiveChanged` event hook matches each event's native window handle
 to its `AppWindow` route and publishes changes through the same route revision.
 On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 100 ms
 as a fallback when a platform activation event or native handle is unavailable.
-While a window is inactive, every
-visible terminal in that window uses the configured visible-unfocused FPS cap,
-including the pane that was last focused; hidden terminals still have no
+While a window is inactive, every visible non-software terminal in that window
+uses the configured visible-unfocused FPS cap, including the pane that was last
+focused; Software remains latest-frame driven. Hidden terminals still have no
 presentation deadline. A monitor with no dirty output has no timer wakeup.
 Parsing, protocol responses, worker errors, disconnect, and shutdown still run
 immediately; SSH retains the earliest worker receive timestamp across a
@@ -1280,7 +1290,9 @@ text brightness, bold-color, optional semantic highlighting and its status color
     rectangles; the latter enables renderer-owned static row layers and can increase
     graphics memory. Schema version 26 adds independent focused and visible-unfocused terminal refresh caps as
     `focused_terminal_refresh_fps` and `unfocused_terminal_refresh_fps`, stored as 1-120 FPS with defaults of 60 and 4;
-    missing or invalid values are clamped to that range. The appearance field
+    missing or invalid values are clamped to that range. They cap the current
+    non-software renderer's timer policy; a process running `winit-software`
+    instead uses bounded latest-frame coalescing without a fixed FPS timer. The appearance field
     `terminal_cursor_blink` is default-enabled and remains backward-compatible
     when absent; disabling it keeps the focused cursor visible while leaving
     terminal/IME cursor state unchanged. The retired
@@ -1449,14 +1461,16 @@ the software renderer has no equivalent layer cache, and the option is therefore
 disabled by default until CPU and graphics-memory measurements justify it.
 The terminal grid uses one bounded Slint repeater over `TerminalRenderLine`
 values. Rust keeps the outer line model and nested run/background/decoration
-models stable, reusing a line when its source revision and render key still
-match and updating only changed rows otherwise. There is no application-owned
-tile or partition model, no tile-size setting, and no second row repeater. This
-keeps the UI geometry and interaction overlays on one row coordinate system;
-it does not claim that a row model update becomes a framebuffer partial present.
-The upstream `TermDamage` path in `TerminalModel` remains responsible for
-avoiding unnecessary terminal-row reconstruction, while Slint's own renderer
-continues to track its internal dirty regions.
+models stable. `TerminalSnapshot` carries the changed visible row indexes, so a
+partial output update renders and notifies only those rows; first frame,
+viewport geometry changes, full damage, and render-key changes use the bounded
+full-row fallback. There is no application-owned tile or partition model, no
+tile-size setting, and no second row repeater. This keeps the UI geometry and
+interaction overlays on one row coordinate system; it does not claim that a row
+model update becomes a framebuffer partial present. The upstream `TermDamage`
+path in `TerminalModel` remains responsible for producing the changed-row list,
+while Slint's own renderer continues to visit its retained item tree and track
+internal dirty regions.
 
 The locked Slint 1.17.1 winit software backend is patched under
 `vendor/i-slint-backend-winit/` to forward every physical dirty rectangle
@@ -1470,6 +1484,12 @@ still allowing Slint to limit CPU drawing to its internal dirty regions. First
 frame, resize, Retina scale change, surface invalidation, and restore reset the
 buffer age. The winit bridge invalidates the surface on occlusion and submits
 an empty-damage frame when a new buffer still needs its first present. The
+complete clone is deliberate: Core Animation can retain the `CGImage` data after
+the transaction commits, so updating only damaged bytes in the same backing
+allocation would race the compositor and can tear or corrupt frames. Eliminating
+that copy needs a separately synchronized IOSurface/Metal or reclaimable
+multi-buffer design, not an unsafe partial update of the current single-layer
+image. The
 Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.

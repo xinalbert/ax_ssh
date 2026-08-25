@@ -157,19 +157,26 @@ UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 sna
 完整路由视图。snapshot 构造前到达的请求并入当前批次，只有构造后到达的请求补排一次。隐藏终端的
 输出因此留在 Rust 状态，直到后续完整路由刷新，而不会进入 Slint event queue。
 `src/app/terminal_presentation.rs` 为每个 Local、Serial、SSH 或 Telnet monitor 拥有独立、只由 dirty
-输出驱动的呈现 deadline。当前 `WindowRouter` 路由把活动 `PaneTree` 中的终端动态分类为 focused 或
-可见未聚焦；不属于任何活动 tree 的终端为 hidden。focused 终端的首个脏更新立即呈现，连续输出的
-前 500 ms 使用 16 ms，随后到 2 秒使用 33 ms，超过 2 秒使用 50 ms；安静 250 ms 后恢复立即首帧和
-16 ms。`AppearanceSettings` 还以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
-60 FPS 和 4 FPS。这些值是上限：聚焦持续输出仍按 16/33/50 ms 自适应，设置值可以进一步降低频率；可见未聚焦
-split pane 按设置后的周期最多呈现一次，隐藏 Tab 不设置呈现 deadline。Settings 预览和保存会通过
-`WindowRouter` 发布新策略，并立即唤醒仍有 pending 输出的 monitor。路由 revision 只唤醒仍有 pending 输出的
-monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。原生窗口激活状态只在运行时维护：Slint
+输出驱动的呈现判定。当前 `WindowRouter` 路由把活动 `PaneTree` 中的终端动态分类为 focused 或
+可见未聚焦；不属于任何活动 tree 的终端为 hidden。GPU 和其它 non-software renderer 的 focused 终端首个脏更新
+立即呈现，连续输出的前 500 ms 使用 16 ms，随后到 2 秒使用 33 ms，超过 2 秒使用 50 ms；安静 250 ms 后恢复
+立即首帧和 16 ms。`AppearanceSettings` 还以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
+60 FPS 和 4 FPS；设置值可以进一步降低 non-software 的节拍。可见未聚焦的 non-software split pane 按设置后的周期
+最多呈现一次，隐藏 Tab 不设置呈现 deadline。
+
+只有实际选择 `winit-software` 时，每个可见脏更新都立即 ready：不使用固定 FPS timer，也不再按物理像素面积或
+分屏数分档。`AppState` 只允许一个已排入或执行中的 UI refresh batch；UI 取走 batch 前的输出合并到该 batch，
+snapshot 构造后的输出最多只补排一个 follow-up。终端保留一个有界 pending snapshot；UI 消费时把较新的 terminal
+damage 合并进最新 snapshot，避免遗漏 burst 前段已经变化的脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
+viewport 与 mouse-reporting 状态均与最近一次已发布 snapshot 一致，就不进入 Slint queue，因此只有控制序列的输出
+不会触发重绘。Settings 预览和保存会通过 `WindowRouter` 发布新的 non-software 策略，并立即唤醒仍有 pending 输出的
+monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。
+原生窗口激活状态只在运行时维护：Slint
 `WindowActiveChanged` 事件钩子通过 native window handle 将事件精确匹配到对应 `AppWindow` 路由，并通过同一路由
 revision 发布变化；macOS UI 线程另以 100ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
-时遗漏激活变化。窗口失去激活时，该窗口内所有可见终端
-（包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限；隐藏终端仍没有呈现 deadline。没有脏输出时没有
-timer 唤醒。parser、协议应答、worker
+时遗漏激活变化。窗口失去激活时，该窗口内所有可见 non-software 终端
+（包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限；Software 仍按最新帧驱动。隐藏终端仍没有呈现
+deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worker
 错误、断开和 shutdown 仍立即处理；SSH 会在合并呈现批次中保留最早的 worker 接收时间。
 对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
@@ -803,7 +810,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `terminal_compact_rendering` 和默认关闭的 `terminal_row_render_cache`。前者移除多余的逐 run
     Slint item 和默认背景矩形；后者启用 renderer 持有的静态行图层，并可能增加图形内存。旧文件缺失时采用这两个默认值。schema 版本 26 增加独立的聚焦和可见未聚焦终端刷新上限
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
-    缺失或无效值会限制到该范围。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
+    缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
+    改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
     已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
@@ -893,11 +901,11 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
 终端网格现在只使用一个有界的 Slint repeater，直接遍历 `TerminalRenderLine`。
-Rust 保留外层行 model 以及嵌套的 run/background/decoration model：当来源 revision 和渲染 key
-不变时复用整行，变化时只更新对应行。不再存在应用层 tile/partition model、分区设置或第二层行 repeater，
-因此 UI 几何和交互覆盖层共用一套行坐标；行 model 更新也不等于 framebuffer partial present。
-`TerminalModel` 的上游 `TermDamage` 仍用于避免不必要的终端行重建，Slint renderer 自身的内部 dirty region
-仍继续工作。
+Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`TerminalSnapshot` 携带实际变化的可见行号，
+因此普通输出只渲染并通知这些行；首帧、视口几何变化、full damage 和渲染 key 变化才回退到有界的整行更新。
+不再存在应用层 tile/partition model、分区设置或第二层行 repeater，因此 UI 几何和交互覆盖层共用一套行坐标；
+行 model 更新也不等于 framebuffer partial present。`TerminalModel` 的上游 `TermDamage` 负责产生变化行列表，
+Slint renderer 仍会访问保留的 item tree 并维护自身 dirty region。
 
 锁定的 Slint 1.17.1 winit software backend 在 `vendor/i-slint-backend-winit/` 中携带本地补丁，把每个物理
 脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 持有
@@ -905,7 +913,10 @@ Rust 保留外层行 model 以及嵌套的 run/background/decoration model：当
 每次 present 都把完整 framebuffer 快照为独立拥有的 `CGImage`；`present_with_damage` 不再创建应用层或
 backend tile。这样保留已验证的上游坐标语义，同时仍允许 Slint 只绘制内部 dirty region。首帧、resize、
 Retina scale、surface invalidate 和窗口恢复都会重置 buffer age。winit bridge 在窗口 occluded 时使 surface
-失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。Slint API、终端所有权和 SSH 边界不变。GPU/Metal
+失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。这里完整 clone 是刻意保留的安全边界：Core Animation
+可能在 transaction commit 后继续读取 `CGImage` 数据，因此在同一后备分配中只写入 damage byte 会与 compositor
+并发，可能造成撕裂或帧损坏。要移除该 copy 必须采用带显式同步的 IOSurface/Metal 或可回收的多缓冲设计，不能对
+当前 single-layer image 进行不安全的 partial update。Slint API、终端所有权和 SSH 边界不变。GPU/Metal
 仍只把 Skia 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
 运行时终端几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 

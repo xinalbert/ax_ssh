@@ -34,7 +34,6 @@ impl AppState {
         terminal_id: Option<Uuid>,
         output_received_at: Option<Instant>,
     ) -> bool {
-        self.ui_refresh.generation = self.ui_refresh.generation.saturating_add(1);
         if let Some(tab_id) = terminal_id {
             if !self.ui_refresh.full {
                 self.ui_refresh.terminal_ids.insert(tab_id);
@@ -51,18 +50,27 @@ impl AppState {
             );
         }
 
-        let should_schedule = !self.ui_refresh.pending;
-        if should_schedule {
+        if !self.ui_refresh.pending {
+            self.ui_refresh.generation = self.ui_refresh.generation.saturating_add(1);
             self.ui_refresh.pending = true;
-        } else {
-            self.ui_refresh.coalesced_requests =
-                self.ui_refresh.coalesced_requests.saturating_add(1);
+            return true;
         }
-        should_schedule
+
+        self.ui_refresh.coalesced_requests = self.ui_refresh.coalesced_requests.saturating_add(1);
+        if self.ui_refresh.in_progress {
+            // The UI has already taken its batch, so this mutation cannot be
+            // represented by that snapshot and requires one bounded follow-up.
+            self.ui_refresh.generation = self.ui_refresh.generation.saturating_add(1);
+        }
+        false
     }
 
     pub(in crate::app) fn take_ui_refresh_batch(&mut self) -> Option<UiRefreshBatch> {
-        self.ui_refresh.pending.then(|| UiRefreshBatch {
+        if !self.ui_refresh.pending || self.ui_refresh.in_progress {
+            return None;
+        }
+        self.ui_refresh.in_progress = true;
+        Some(UiRefreshBatch {
             generation: self.ui_refresh.generation,
             full: std::mem::take(&mut self.ui_refresh.full),
             terminal_ids: std::mem::take(&mut self.ui_refresh.terminal_ids),
@@ -72,6 +80,7 @@ impl AppState {
     }
 
     pub(in crate::app) fn finish_ui_refresh(&mut self, generation: u64) -> bool {
+        self.ui_refresh.in_progress = false;
         if self.ui_refresh.generation == generation {
             self.ui_refresh.pending = false;
             false
@@ -204,6 +213,8 @@ impl AppState {
                 backend,
                 worker: None,
                 terminal: Some(terminal),
+                pending_terminal_snapshot: None,
+                published_terminal_state: None,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -262,6 +273,8 @@ impl AppState {
                 },
                 worker: None,
                 terminal: None,
+                pending_terminal_snapshot: None,
+                published_terminal_state: None,
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -295,6 +308,8 @@ impl AppState {
                 backend: TerminalBackend::Local,
                 worker: None,
                 terminal: Some(terminal),
+                pending_terminal_snapshot: None,
+                published_terminal_state: None,
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
@@ -612,7 +627,7 @@ impl AppState {
                     notice: terminal.notice_snapshot(),
                     editor: None,
                     terminal: include_terminal
-                        .then(|| terminal.terminal.as_mut().map(TerminalModel::snapshot))
+                        .then(|| terminal.terminal_snapshot_for_ui())
                         .flatten(),
                     connected: terminal.connected,
                     selection_revision: terminal.selection_revision,
@@ -818,6 +833,8 @@ impl AppState {
                             backend,
                             worker: None,
                             terminal,
+                            pending_terminal_snapshot: None,
+                            published_terminal_state: None,
                             status: if snapshot.status.is_empty() {
                                 "Restored; reconnecting...".to_owned()
                             } else {
@@ -847,6 +864,8 @@ impl AppState {
                             backend: TerminalBackend::Local,
                             worker: None,
                             terminal: Some(terminal),
+                            pending_terminal_snapshot: None,
+                            published_terminal_state: None,
                             status: snapshot.status.clone(),
                             connected: false,
                             worker_running: false,
@@ -999,6 +1018,7 @@ impl AppState {
             .as_mut()
             .context("terminal tab has no terminal model")?;
         if model.resize(size.columns() as usize, size.rows() as usize) {
+            terminal.discard_pending_terminal_snapshot();
             terminal.invalidate_selection();
         }
         Ok(true)
@@ -1013,6 +1033,7 @@ impl AppState {
             .as_mut()
             .is_some_and(|model| model.scroll(lines));
         if changed {
+            terminal.discard_pending_terminal_snapshot();
             terminal.invalidate_selection();
         }
         changed
@@ -1027,6 +1048,7 @@ impl AppState {
             .as_mut()
             .is_some_and(TerminalModel::scroll_to_bottom);
         if changed {
+            terminal.discard_pending_terminal_snapshot();
             terminal.invalidate_selection();
         }
         changed
@@ -1098,6 +1120,7 @@ impl AppState {
                 && let Some(model) = terminal.terminal.as_mut()
             {
                 model.set_scrollback_lines(scrollback_lines);
+                terminal.discard_pending_terminal_snapshot();
             }
         }
     }

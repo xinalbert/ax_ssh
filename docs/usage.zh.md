@@ -295,11 +295,12 @@ Light/Dark 两套语义色。即时预览和持久化时，
 **Cache unchanged terminal rows** 默认关闭；在 GPU/Skia 下可复用静态行图层，但会增加图形内存，Software
 模式没有等价缓存。两个选项都会立即预览，并在关闭 Settings Tab 时持久化。
 
-同一 RENDERING 分组中的 **Focused refresh rate** 和 **Unfocused refresh rate** 用帧率设置终端呈现上限，范围为
-1-120 FPS；聚焦窗格默认 60 FPS，可见但未聚焦窗格默认 4 FPS。聚焦终端的持续输出仍按 16/33/50 ms 自适应，
-更低的设置值会进一步限制这些阶段。AxSSH 原生窗口失去激活时，该窗口内所有可见 pane（包括最后保持焦点的 pane）
-都会使用 Unfocused 刷新上限。隐藏 Tab 不发布终端帧，parser 应答、错误、断开和 shutdown 仍立即处理。修改会即时预览，
-并在关闭 Settings Tab 时持久化。
+同一 RENDERING 分组中的 **Focused refresh rate** 和 **Unfocused refresh rate** 用帧率设置 non-software 终端呈现
+上限，范围为 1-120 FPS；聚焦窗格默认 60 FPS，可见但未聚焦窗格默认 4 FPS。non-software 聚焦终端的持续输出仍按
+16/33/50 ms 自适应，更低的设置值会进一步限制这些阶段。实际运行的 Software renderer 不使用固定终端 FPS 上限：
+它只保留一个最新 UI refresh batch，并在 Slint 可消费前合并后续输出。AxSSH 原生窗口失去激活时，该窗口内所有可见
+non-software pane（包括最后保持焦点的 pane）都会使用 Unfocused 刷新上限。隐藏 Tab 不发布终端帧，parser 应答、错误、
+断开和 shutdown 仍立即处理。修改会即时预览，并在关闭 Settings Tab 时持久化。
 
 同一 RENDERING 分组中的 **Blink terminal cursor** 默认开启。关闭后，聚焦终端的光标会持续显示，不会改变终端自身的
 cursor visibility、IME 输入或选区行为。修改会即时预览，并在关闭 Settings Tab 时持久化。

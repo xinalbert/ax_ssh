@@ -3,6 +3,46 @@ use super::*;
 impl TerminalTabState {
     pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 
+    /// Build at most one pending snapshot for a coalesced output burst. Later
+    /// output is merged into this bounded slot when the UI consumes it, so the
+    /// UI sees the newest frame without losing rows that changed earlier in the
+    /// burst. Control-only terminal writes still do not enter the Slint queue.
+    pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
+        if self.pending_terminal_snapshot.is_some() {
+            return true;
+        }
+        let Some(snapshot) = self.terminal.as_mut().map(TerminalModel::snapshot) else {
+            return false;
+        };
+        let visible_state = TerminalVisibleState::from(&snapshot);
+        if snapshot.dirty_rows.is_empty()
+            && self
+                .published_terminal_state
+                .as_ref()
+                .is_some_and(|current| current == &visible_state)
+        {
+            return false;
+        }
+        self.pending_terminal_snapshot = Some(snapshot);
+        true
+    }
+
+    pub(in crate::app) fn terminal_snapshot_for_ui(&mut self) -> Option<TerminalSnapshot> {
+        let current_snapshot = self.terminal.as_mut().map(TerminalModel::snapshot);
+        let snapshot = match (self.pending_terminal_snapshot.take(), current_snapshot) {
+            (Some(pending), Some(current)) => merge_terminal_snapshots(pending, current),
+            (Some(pending), None) => pending,
+            (None, Some(current)) => current,
+            (None, None) => return None,
+        };
+        self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
+        Some(snapshot)
+    }
+
+    pub(in crate::app) fn discard_pending_terminal_snapshot(&mut self) {
+        self.pending_terminal_snapshot = None;
+    }
+
     pub(in crate::app) fn invalidate_selection(&mut self) {
         self.selection_revision = if self.selection_revision == i32::MAX {
             1
@@ -309,6 +349,26 @@ impl TerminalTabState {
             || status.ends_with("worker stopped")
             || status.starts_with("Local shell exited:")
     }
+}
+
+fn merge_terminal_snapshots(
+    pending: TerminalSnapshot,
+    mut current: TerminalSnapshot,
+) -> TerminalSnapshot {
+    if pending.full_refresh
+        || current.full_refresh
+        || pending.lines.len() != current.lines.len()
+        || pending.max_columns != current.max_columns
+    {
+        current.full_refresh = true;
+        current.dirty_rows = (0..current.lines.len()).collect();
+        return current;
+    }
+
+    current.dirty_rows.extend(pending.dirty_rows);
+    current.dirty_rows.sort_unstable();
+    current.dirty_rows.dedup();
+    current
 }
 
 impl TerminalBackend {

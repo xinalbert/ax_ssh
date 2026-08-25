@@ -21,13 +21,15 @@ pub(super) enum TerminalPresentationMode {
     Focused,
 }
 
-/// Upper bounds for dirty terminal UI publication. The route decides whether a
-/// pane is focused, visible-unfocused, or hidden; this value only controls the
-/// first two cases and never delays terminal parsing or transport work.
+/// Timer ceilings for dirty terminal UI publication on non-software renderers.
+/// The route decides whether a pane is focused, visible-unfocused, or hidden;
+/// `winit-software` instead submits immediately into the bounded latest-frame
+/// UI gate and never delays terminal parsing or transport work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct TerminalPresentationPolicy {
     focused_fps: u16,
     unfocused_fps: u16,
+    software_renderer: bool,
 }
 
 impl TerminalPresentationPolicy {
@@ -35,7 +37,17 @@ impl TerminalPresentationPolicy {
         Self {
             focused_fps,
             unfocused_fps,
+            software_renderer: false,
         }
+    }
+
+    pub(super) const fn with_software_renderer(mut self, software_renderer: bool) -> Self {
+        self.software_renderer = software_renderer;
+        self
+    }
+
+    pub(super) const fn software_renderer(self) -> bool {
+        self.software_renderer
     }
 
     fn focused_interval(self) -> Duration {
@@ -105,6 +117,12 @@ impl TerminalPresentation {
             let mode = terminal_presentation_mode(tab_id);
             let policy = terminal_presentation_policy();
             let deadline = self.state.deadline(mode, policy, now);
+            if deadline.is_some_and(|deadline| deadline <= now) {
+                self.state.mark_presented(now);
+                return TerminalPresentationReady {
+                    output_received_at: self.earliest_output_received_at.take(),
+                };
+            }
             match deadline {
                 Some(deadline) => {
                     tokio::select! {
@@ -203,6 +221,15 @@ impl TerminalPresentationState {
         }
         match mode {
             TerminalPresentationMode::Hidden => None,
+            TerminalPresentationMode::Focused | TerminalPresentationMode::Unfocused
+                if policy.software_renderer =>
+            {
+                // Software frames enter the AppState single-slot refresh gate
+                // immediately. If the UI is busy, newer output is merged when
+                // the pending snapshot is consumed instead of accumulating
+                // timer-delayed work.
+                Some(now)
+            }
             TerminalPresentationMode::Focused if self.immediate_after_quiet => Some(now),
             TerminalPresentationMode::Focused => {
                 Some(self.last_presented_at.map_or(now, |presented_at| {
@@ -260,7 +287,6 @@ mod tests {
     use super::*;
 
     const DEFAULT_POLICY: TerminalPresentationPolicy = TerminalPresentationPolicy::new(60, 4);
-
     #[test]
     fn clean_state_has_no_deadline() {
         let state = TerminalPresentationState::default();
@@ -430,6 +456,33 @@ mod tests {
         assert_eq!(
             state.deadline(TerminalPresentationMode::Unfocused, policy, next_output_at),
             Some(started_at + policy.unfocused_interval())
+        );
+    }
+
+    #[test]
+    fn software_visible_output_is_immediate_without_a_timer_cap() {
+        let software_policy = DEFAULT_POLICY.with_software_renderer(true);
+        let mut state = TerminalPresentationState::default();
+        let started_at = Instant::now();
+        state.record_output(started_at);
+        state.mark_presented(started_at);
+        let next_output_at = started_at + Duration::from_millis(1);
+        state.record_output(next_output_at);
+        assert_eq!(
+            state.deadline(
+                TerminalPresentationMode::Focused,
+                software_policy,
+                next_output_at
+            ),
+            Some(next_output_at)
+        );
+        assert_eq!(
+            state.deadline(
+                TerminalPresentationMode::Unfocused,
+                software_policy,
+                next_output_at
+            ),
+            Some(next_output_at)
         );
     }
 }

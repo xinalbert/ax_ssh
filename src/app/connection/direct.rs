@@ -245,7 +245,9 @@ fn spawn_telnet_monitor(
                     event
                 }
                 _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
-                    dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    if prepare_terminal_output_snapshot(&state, tab_id) {
+                        dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    }
                     continue;
                 }
             };
@@ -397,7 +399,9 @@ fn spawn_serial_monitor(
                     event
                 }
                 _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
-                    dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    if prepare_terminal_output_snapshot(&state, tab_id) {
+                        dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    }
                     continue;
                 }
             };

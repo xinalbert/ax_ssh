@@ -140,11 +140,14 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
     let initial_fonts =
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
+    let software_renderer =
+        software_renderer_selected(sessions.settings.appearance.renderer_preference);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let restore_font_registry = font_registry.clone();
     let restore_terminal_font_started = Arc::new(AtomicBool::new(false));
     let ui = AppWindow::new().context("failed to create Slint window")?;
     let window_router = WindowRouter::new(ui.as_weak());
+    window_router.set_terminal_presentation_software_renderer(software_renderer);
     let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
     install_window_activation_hook(&window_router)?;
     let detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>> =

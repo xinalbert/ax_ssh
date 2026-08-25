@@ -32,10 +32,12 @@ pub(super) fn spawn_session_monitor(
                     event
                 }
                 ready = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
-                    if let Some(received_at) = ready.output_received_at {
-                        dispatch_terminal_output_snapshot(&ui, &state, tab_id, received_at);
-                    } else {
-                        dispatch_terminal_snapshot(&ui, &state, tab_id);
+                    if prepare_terminal_output_snapshot(&state, tab_id) {
+                        if let Some(received_at) = ready.output_received_at {
+                            dispatch_terminal_output_snapshot(&ui, &state, tab_id, received_at);
+                        } else {
+                            dispatch_terminal_snapshot(&ui, &state, tab_id);
+                        }
                     }
                     continue;
                 }

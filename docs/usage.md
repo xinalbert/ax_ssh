@@ -481,15 +481,17 @@ provide an equivalent cache in Software mode. Both choices preview immediately
 and are persisted when the Settings tab closes.
 
 **Focused refresh rate** and **Unfocused refresh rate** in the same Rendering
-section set terminal presentation caps in frames per second. They accept 1-120
-FPS and default to 60 FPS for the focused pane and 4 FPS for a visible pane that
-is not focused. The focused strategy still adapts sustained output through its
-16/33/50 ms stages; a lower configured cap limits those stages. When an AxSSH
-window loses native activation, all visible panes in that window use the
-Unfocused refresh cap, including the pane that was last focused. Hidden tabs do
-not publish terminal frames, and parser responses, errors, disconnects, and
-shutdown remain immediate. Changes preview immediately and are persisted when
-the Settings tab closes.
+section set non-software terminal presentation caps in frames per second. They
+accept 1-120 FPS and default to 60 FPS for the focused pane and 4 FPS for a
+visible pane that is not focused. The non-software focused strategy still adapts
+sustained output through its 16/33/50 ms stages; a lower configured cap limits
+those stages. A running Software renderer instead has no fixed terminal FPS cap:
+it keeps one latest UI refresh batch and coalesces later output until Slint can
+consume it. When an AxSSH window loses native activation, all visible
+non-software panes in that window use the Unfocused refresh cap, including the
+pane that was last focused. Hidden tabs do not publish terminal frames, and
+parser responses, errors, disconnects, and shutdown remain immediate. Changes
+preview immediately and are persisted when the Settings tab closes.
 
 **Blink terminal cursor** in the same Rendering section is enabled by default.
 Disable it to keep the focused terminal cursor continuously visible; this does
