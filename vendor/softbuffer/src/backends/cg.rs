@@ -385,7 +385,8 @@ impl<D, W> CGImpl<D, W> {
                 let height = (self.height - origin_y).min(TILE_HEIGHT);
                 let tile = CALayer::new();
                 tile.setAnchorPoint(CGPoint::new(0.0, 0.0));
-                tile.setGeometryFlipped(true);
+                // The parent surface already uses a top-left coordinate system. Flipping this
+                // child again reverses the CGImage contents on macOS.
                 tile.setContentsGravity(unsafe { kCAGravityTopLeft });
                 tile.setContentsScale(scale);
                 tile.setFrame(CGRect::new(
