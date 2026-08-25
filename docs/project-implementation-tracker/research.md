@@ -1,5 +1,12 @@
 # 项目研究记录
 
+## 2026-08-25 macOS Software damage-aware tile present
+
+- 实施原因：用户 sample 显示单 layer 完整 `CGImage` clone、CoreGraphics image-data lock 和 vImage color conversion 是 Software 路径主要热点；需要在保持 CPU framebuffer 可复用和 Core Animation 异步读取安全的前提下缩小提交范围。
+- 实施结论：macOS `softbuffer` 仍持有一个持久 CPU framebuffer，但 presentation surface 固定划分为 256×128 物理像素 child layers。winit 转发的每个物理 damage rectangle 映射到相交 tile；每个更新 tile 从 framebuffer 的对应行复制到独立拥有的 `CGImage`，未变化 tile 保留旧图像。
+- 安全边界：不把下一帧写入同一 `CGImage` provider；旧 tile image 继续由对应 layer 持有，直到 Core Animation 替换/回收。首帧、resize、scale 变化、surface invalidate 和恢复都使 age 归零并完整提交所有 tile。应用层仍只有 `TerminalRenderLine`/`TermDamage`，没有 tile model 或配置。
+- 验证与遗留风险：根 workspace 的 `cargo fmt --all -- --check`、locked/offline check、严格 Clippy、完整测试（209 库、200 应用）和翻译检查通过；vendor 独立 manifest 不能运行 dev-dependency 测试。目标 macOS 仍需用同一软件负载复测 CPU/footprint，并人工确认首帧、resize、Retina、隐藏/恢复、滚动、光标和选区。
+
 ## 2026-08-24 macOS Software 持久 framebuffer 与单 layer 提交
 
 - 时间：2026-08-24 14:30 +0800

@@ -274,6 +274,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> Buffer<'_, D, W> {
     /// - X, when XShm is available
     /// - Win32
     /// - Web
+    /// - Apple platforms, using Core Animation tiles
     ///
     /// Otherwise this is equivalent to [`Self::present`].
     pub fn present_with_damage(self, damage: &[Rect]) -> Result<(), SoftBufferError> {

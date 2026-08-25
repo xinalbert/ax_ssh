@@ -5,7 +5,7 @@ use crate::{util, Rect, SoftBufferError};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass, MainThreadMarker, Message};
-use objc2_core_foundation::{CFRetained, CGPoint};
+use objc2_core_foundation::{CFRetained, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
     CGImageByteOrderInfo, CGImageComponentInfo, CGImagePixelFormatInfo,
@@ -24,6 +24,9 @@ use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::ops::Deref;
 use std::ptr::{self, slice_from_raw_parts_mut, NonNull};
+
+const TILE_WIDTH: usize = 256;
+const TILE_HEIGHT: usize = 128;
 
 define_class!(
     #[unsafe(super(NSObject))]
@@ -96,7 +99,7 @@ impl Observer {
 
 #[derive(Debug)]
 pub struct CGImpl<D, W> {
-    /// Our layer.
+    /// Container layer for the independently owned tile contents.
     layer: SendCALayer,
     /// The layer that our layer was created from.
     ///
@@ -112,6 +115,10 @@ pub struct CGImpl<D, W> {
     buffer: util::PixelBuffer,
     /// Whether the current framebuffer has been submitted successfully.
     buffer_valid: bool,
+    /// Contents scale used when the tile layer geometry was built.
+    tile_scale: f64,
+    /// Tile layers keep old immutable images alive while the CPU framebuffer is reused.
+    tiles: Vec<TileLayer>,
     window_handle: W,
     _display: PhantomData<D>,
 }
@@ -250,7 +257,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             .checked_mul(height)
             .ok_or_else(|| size_out_of_range(width, height))?;
 
-        Ok(Self {
+        let mut this = Self {
             layer: SendCALayer(layer),
             root_layer: SendCALayer(root_layer),
             observer,
@@ -259,9 +266,13 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             height,
             buffer: util::PixelBuffer(vec![0; buffer_len]),
             buffer_valid: false,
+            tile_scale: 1.0,
+            tiles: Vec::new(),
             _display: PhantomData,
             window_handle: window_src,
-        })
+        };
+        this.rebuild_tiles()?;
+        Ok(this)
     }
 
     #[inline]
@@ -276,16 +287,17 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             size_out_of_range(width, height)
         })?;
         if self.width == width && self.height == height && self.buffer.len() == len {
-            return Ok(());
+            return self.ensure_tile_layout();
         }
         self.width = width;
         self.height = height;
         self.buffer = util::PixelBuffer(vec![0; len]);
         self.buffer_valid = false;
-        Ok(())
+        self.rebuild_tiles()
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {
+        self.ensure_tile_layout()?;
         if self.buffer.len() != self.width.saturating_mul(self.height) {
             let len = self
                 .width
@@ -304,20 +316,161 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
 
 impl<D, W> CGImpl<D, W> {
     fn present_full(&mut self) -> Result<(), SoftBufferError> {
-        let data_provider = owned_data_provider(self.buffer.0.clone())?;
+        self.ensure_tile_layout()?;
+        let dirty_tiles = vec![true; self.tiles.len()];
+        self.present_tiles(&dirty_tiles)
+    }
+
+    fn present_with_damage(&mut self, damage: &[Rect]) -> Result<(), SoftBufferError> {
+        self.ensure_tile_layout()?;
+        if !self.buffer_valid {
+            return self.present_full();
+        }
+        let dirty_tiles = self.dirty_tile_mask(damage);
+        self.present_tiles(&dirty_tiles)
+    }
+
+    fn present_tiles(&mut self, dirty_tiles: &[bool]) -> Result<(), SoftBufferError> {
+        let mut images = Vec::new();
+        for (index, dirty) in dirty_tiles.iter().copied().enumerate() {
+            if dirty {
+                images.push((index, self.tile_image(&self.tiles[index])?));
+            }
+        }
+        if images.is_empty() {
+            return Ok(());
+        }
+
+        CATransaction::begin();
+        CATransaction::setDisableActions(true);
+        for (index, image) in &images {
+            // SAFETY: The contents is `CGImage`, which is a valid class for `contents`.
+            unsafe {
+                self.tiles[*index]
+                    .layer
+                    .setContents(Some(image.as_ref()))
+            };
+        }
+        CATransaction::commit();
+        self.buffer_valid = true;
+        Ok(())
+    }
+
+    fn rebuild_tiles(&mut self) -> Result<(), SoftBufferError> {
+        for tile in &self.tiles {
+            tile.layer.removeFromSuperlayer();
+        }
+        self.tiles.clear();
+
+        let columns = self.width.div_ceil(TILE_WIDTH);
+        let rows = self.height.div_ceil(TILE_HEIGHT);
+        let tile_count = columns.checked_mul(rows).ok_or_else(|| {
+            SoftBufferError::PlatformError(
+                Some("CoreGraphics tile layout is too large".to_string()),
+                None,
+            )
+        })?;
+        self.tiles.try_reserve(tile_count).map_err(|_| {
+            SoftBufferError::PlatformError(
+                Some("failed to allocate CoreGraphics tile layout".to_string()),
+                None,
+            )
+        })?;
+
+        let scale = self.layer.contentsScale().max(1.0);
+        self.layer.setMasksToBounds(true);
+        for origin_y in (0..self.height).step_by(TILE_HEIGHT) {
+            for origin_x in (0..self.width).step_by(TILE_WIDTH) {
+                let width = (self.width - origin_x).min(TILE_WIDTH);
+                let height = (self.height - origin_y).min(TILE_HEIGHT);
+                let tile = CALayer::new();
+                tile.setAnchorPoint(CGPoint::new(0.0, 0.0));
+                tile.setGeometryFlipped(true);
+                tile.setContentsGravity(unsafe { kCAGravityTopLeft });
+                tile.setContentsScale(scale);
+                tile.setFrame(CGRect::new(
+                    CGPoint::new(origin_x as f64 / scale, origin_y as f64 / scale),
+                    CGSize::new(width as f64 / scale, height as f64 / scale),
+                ));
+                self.layer.addSublayer(&tile);
+                self.tiles.push(TileLayer {
+                    layer: SendCALayer(tile),
+                    origin_x,
+                    origin_y,
+                    width,
+                    height,
+                });
+            }
+        }
+        self.tile_scale = scale;
+        Ok(())
+    }
+
+    fn ensure_tile_layout(&mut self) -> Result<(), SoftBufferError> {
+        let scale = self.layer.contentsScale().max(1.0);
+        if scale != self.tile_scale {
+            self.rebuild_tiles()?;
+            self.buffer_valid = false;
+        }
+        Ok(())
+    }
+
+    fn dirty_tile_mask(&self, damage: &[Rect]) -> Vec<bool> {
+        dirty_tile_mask_for_size(self.width, self.height, damage)
+    }
+}
+
+fn dirty_tile_mask_for_size(width: usize, height: usize, damage: &[Rect]) -> Vec<bool> {
+    let columns = width.div_ceil(TILE_WIDTH);
+    let rows = height.div_ceil(TILE_HEIGHT);
+    let mut dirty_tiles = vec![false; columns * rows];
+    for rect in damage {
+        let origin_x = usize::try_from(rect.x).unwrap_or(usize::MAX).min(width);
+        let origin_y = usize::try_from(rect.y).unwrap_or(usize::MAX).min(height);
+        let end_x = origin_x
+            .saturating_add(rect.width.get() as usize)
+            .min(width);
+        let end_y = origin_y
+            .saturating_add(rect.height.get() as usize)
+            .min(height);
+        if origin_x >= end_x || origin_y >= end_y {
+            continue;
+        }
+        let first_column = origin_x / TILE_WIDTH;
+        let last_column = (end_x - 1) / TILE_WIDTH;
+        let first_row = origin_y / TILE_HEIGHT;
+        let last_row = (end_y - 1) / TILE_HEIGHT;
+        for row in first_row..=last_row {
+            for column in first_column..=last_column {
+                dirty_tiles[row * columns + column] = true;
+            }
+        }
+    }
+    dirty_tiles
+}
+
+impl<D, W> CGImpl<D, W> {
+    fn tile_image(&self, tile: &TileLayer) -> Result<CFRetained<CGImage>, SoftBufferError> {
+        let mut pixels = Vec::with_capacity(tile.width * tile.height);
+        for row in 0..tile.height {
+            let start = (tile.origin_y + row) * self.width + tile.origin_x;
+            let end = start + tile.width;
+            pixels.extend_from_slice(&self.buffer.0[start..end]);
+        }
+        let data_provider = owned_data_provider(pixels)?;
         let bitmap_info = CGBitmapInfo(
             CGImageAlphaInfo::NoneSkipFirst.0
                 | CGImageComponentInfo::Integer.0
                 | CGImageByteOrderInfo::Order32Little.0
                 | CGImagePixelFormatInfo::Packed.0,
         );
-        let image = unsafe {
+        unsafe {
             CGImage::new(
-                self.width,
-                self.height,
+                tile.width,
+                tile.height,
                 8,
                 32,
-                self.width * size_of::<u32>(),
+                tile.width * size_of::<u32>(),
                 Some(&self.color_space),
                 bitmap_info,
                 Some(&data_provider),
@@ -328,21 +481,20 @@ impl<D, W> CGImpl<D, W> {
         }
         .ok_or_else(|| {
             SoftBufferError::PlatformError(
-                Some("failed to create CoreGraphics image".to_string()),
+                Some("failed to create CoreGraphics tile image".to_string()),
                 None,
             )
-        })?;
-
-        CATransaction::begin();
-        CATransaction::setDisableActions(true);
-
-        // SAFETY: The contents is `CGImage`, which is a valid class for `contents`.
-        unsafe { self.layer.setContents(Some(image.as_ref())) };
-
-        CATransaction::commit();
-        self.buffer_valid = true;
-        Ok(())
+        })
     }
+}
+
+#[derive(Debug)]
+struct TileLayer {
+    layer: SendCALayer,
+    origin_x: usize,
+    origin_y: usize,
+    width: usize,
+    height: usize,
 }
 
 fn size_out_of_range(width: usize, height: usize) -> SoftBufferError {
@@ -421,8 +573,8 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> BufferInterface for BufferImpl<'_,
         self.imp.present_full()
     }
 
-    fn present_with_damage(self, _damage: &[Rect]) -> Result<(), SoftBufferError> {
-        self.imp.present_full()
+    fn present_with_damage(self, damage: &[Rect]) -> Result<(), SoftBufferError> {
+        self.imp.present_with_damage(damage)
     }
 }
 
@@ -444,5 +596,42 @@ impl Deref for SendCALayer {
     type Target = CALayer;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn damage_marks_only_intersecting_tiles() {
+        let damage = [Rect {
+            x: 300,
+            y: 150,
+            width: NonZeroU32::new(1).expect("non-zero test width"),
+            height: NonZeroU32::new(1).expect("non-zero test height"),
+        }];
+        let dirty = dirty_tile_mask_for_size(600, 300, &damage);
+
+        assert_eq!(dirty.len(), 3 * 3);
+        assert!(dirty[4]);
+        assert_eq!(dirty.iter().filter(|value| **value).count(), 1);
+    }
+
+    #[test]
+    fn damage_crossing_tile_edges_marks_each_intersecting_tile() {
+        let damage = [Rect {
+            x: 255,
+            y: 127,
+            width: NonZeroU32::new(3).expect("non-zero test width"),
+            height: NonZeroU32::new(3).expect("non-zero test height"),
+        }];
+        let dirty = dirty_tile_mask_for_size(600, 300, &damage);
+
+        assert!(dirty[0]);
+        assert!(dirty[1]);
+        assert!(dirty[3]);
+        assert!(dirty[4]);
+        assert_eq!(dirty.iter().filter(|value| **value).count(), 4);
     }
 }

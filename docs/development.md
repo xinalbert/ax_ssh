@@ -48,12 +48,13 @@ SLINT_BACKEND=winit-software cargo run --locked
 
 The repository patches the locked `i-slint-backend-winit` and `softbuffer`
 sources under `vendor/`. The winit patch forwards the renderer's individual
-damage rectangles. On macOS, the softbuffer patch keeps one persistent
-framebuffer and submits it through one complete CoreAnimation layer. The first
-frame, resize, Retina scale change, occlusion, and restore reset the buffer
-age. This is intentionally kept below the Slint application API so the
-terminal model and UI contracts do not depend on backend-specific types. Keep
-these patches source-available and recheck them when upgrading Slint or
+damage rectangles. On macOS, the softbuffer patch keeps one persistent CPU
+framebuffer and presents it through fixed 256x128-physical-pixel CoreAnimation
+tiles. Only tiles intersecting a damage rectangle receive a new owned
+`CGImage`; the first frame, resize, Retina scale change, occlusion, and restore
+refresh every tile. This is intentionally kept below the Slint application API
+so the terminal model and UI contracts do not depend on backend-specific types.
+Keep these patches source-available and recheck them when upgrading Slint or
 softbuffer.
 
 The environment override and saved preference are consumed before the first

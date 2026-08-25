@@ -150,9 +150,8 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
         };
 
         // Preserve the actual dirty rectangles produced by Slint for backends
-        // that support damage-aware presentation. The macOS CoreGraphics
-        // backend intentionally ignores these rectangles and submits its
-        // complete layer; this list is not a CoreAnimation slicing operation.
+        // that support damage-aware presentation. The software backend may
+        // use these rectangles to refresh only the affected presentation tiles.
         let damage = region
             .iter()
             .filter_map(|(pos, size)| {
