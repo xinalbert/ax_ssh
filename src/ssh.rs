@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use russh::client;
 use russh::keys::agent::AgentIdentity;
 use russh::keys::agent::client::{AgentClient, AgentStream};
-use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::{HashAlg, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh::{Channel, ChannelMsg, ChannelOpenFailure, ChannelStream, Pty};
 use tokio::net::TcpStream;
 use tokio::time::{Duration, timeout};
@@ -231,8 +231,20 @@ impl client::Handler for ClientHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &PublicKey,
+        server_public_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
+        let server_public_key = match server_public_key {
+            PublicKeyOrCertificate::PublicKey { key, .. } => key,
+            PublicKeyOrCertificate::Certificate(_) => {
+                // The profile and known_hosts trust stores are keyed by a
+                // concrete host public key. Do not turn a certificate into
+                // its embedded key: that would silently broaden the trust
+                // policy without certificate-authority validation.
+                self.observation.record_accepted(false)?;
+                warn!("SSH host certificates are not trusted by this profile");
+                return Ok(false);
+            }
+        };
         let actual = server_public_key
             .fingerprint(russh::keys::HashAlg::Sha256)
             .to_string();

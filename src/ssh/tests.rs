@@ -1,6 +1,7 @@
 use super::*;
 use rand::SeedableRng as _;
 use rand::rngs::StdRng;
+use russh::keys::PublicKey;
 use russh::server::{self, Auth};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -29,6 +30,52 @@ fn test_profile(name: &str, host: String) -> SessionProfile {
 #[test]
 fn interactive_client_config_disables_nagle() {
     assert!(client_config().nodelay);
+}
+
+#[tokio::test]
+async fn host_key_policy_rejects_server_certificates() {
+    let mut rng = StdRng::seed_from_u64(109);
+    let ca_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test CA key should be generated");
+    let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test host key should be generated");
+    let mut builder = russh::keys::ssh_key::certificate::Builder::new_with_random_nonce(
+        &mut rng,
+        host_key.public_key(),
+        0,
+        u64::MAX,
+    )
+    .expect("test host certificate builder should initialize");
+    builder
+        .cert_type(russh::keys::ssh_key::certificate::CertType::Host)
+        .expect("test host certificate type should be accepted");
+    builder
+        .valid_principal("example.test")
+        .expect("test host principal should be accepted");
+    let certificate = builder
+        .sign(&ca_key)
+        .expect("test host certificate should be signed");
+    let observation = FingerprintObservation::default();
+    let mut handler = ClientHandler::new(
+        None,
+        known_hosts::Snapshot::default(),
+        "example.test".to_owned(),
+        22,
+        observation.clone(),
+        None,
+    );
+
+    let accepted = client::Handler::check_server_key(
+        &mut handler,
+        &PublicKeyOrCertificate::Certificate(certificate),
+    )
+    .await
+    .expect("server certificate rejection should not fail the trust callback");
+
+    assert!(!accepted);
+    assert_eq!(observation.was_accepted().unwrap(), Some(false));
+    assert_eq!(observation.get().unwrap(), None);
+    assert_eq!(observation.get_public_key().unwrap(), None);
 }
 
 #[tokio::test]
