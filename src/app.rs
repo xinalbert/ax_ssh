@@ -143,10 +143,12 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
     let software_renderer =
         software_renderer_selected(sessions.settings.appearance.renderer_preference);
+    software_presentation::set_enabled(software_renderer);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let restore_font_registry = font_registry.clone();
     let restore_terminal_font_started = Arc::new(AtomicBool::new(false));
     let ui = AppWindow::new().context("failed to create Slint window")?;
+    ui.set_software_presentation_enabled(software_presentation::is_enabled());
     let window_router = WindowRouter::new(ui.as_weak());
     window_router.set_terminal_presentation_software_renderer(software_renderer);
     let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
@@ -358,6 +360,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     drop(_window_activation_poll);
     release_detached_windows(&detached_windows);
     clear_file_icon_cache();
+    software_presentation::remove_layout(&ui, MAIN_WINDOW_ID);
     release_window_resources(&ui);
     hide_window_for_release(&ui);
     drop(ui);
@@ -566,7 +569,6 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         runtime.clone(),
         font_registry.clone(),
         window_router.clone(),
-        window_id,
     );
     if let Ok(app) = state.lock() {
         software_presentation::set_rows(

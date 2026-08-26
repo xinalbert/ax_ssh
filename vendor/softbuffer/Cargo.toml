@@ -252,6 +252,7 @@ features = [
     "std",
     "objc2",
     "CGColorSpace",
+    "CGContext",
     "CGDataProvider",
     "CGImage",
 ]
@@ -276,6 +277,7 @@ version = "0.3.2"
 features = [
     "std",
     "objc2-core-foundation",
+    "objc2-core-graphics",
     "CALayer",
     "CATransaction",
 ]

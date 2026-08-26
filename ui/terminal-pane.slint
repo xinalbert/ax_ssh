@@ -186,6 +186,8 @@ export component TerminalPane inherits Rectangle {
     in property <TerminalViewState> view;
     in property <bool> focused: false;
     in property <bool> closable: false;
+    in property <bool> software-presentation-enabled: false;
+    in property <int> presentation-layout-revision: 0;
     in property <bool> cursor-blink-enabled: true;
     in property <string> edit-command;
     in property <int> edit-command-revision: 0;
@@ -364,17 +366,25 @@ export component TerminalPane inherits Rectangle {
 
     function schedule-terminal-size-update() {
         root.terminal-resize-pending = true;
-        root.presentation-layout-pending = true;
+        root.schedule-presentation-layout-update();
+    }
+
+    function schedule-presentation-layout-update() {
+        if root.software-presentation-enabled {
+            root.presentation-layout-pending = true;
+        }
     }
 
     function update-presentation-layout() {
-        root.presentation-layout(
-            grid-clip.x,
-            grid-clip.y,
-            grid-clip.width,
-            grid-clip.height,
-            root.cell-height,
-        );
+        if root.software-presentation-enabled {
+            root.presentation-layout(
+                grid-clip.x,
+                grid-clip.y,
+                grid-clip.width,
+                grid-clip.height,
+                root.cell-height,
+            );
+        }
     }
 
     // A pane may be created with both its final view and connected state already
@@ -537,6 +547,13 @@ export component TerminalPane inherits Rectangle {
             root.focus-input();
         }
     }
+    changed notice => { root.schedule-presentation-layout-update(); }
+    changed presentation-layout-revision => { root.schedule-presentation-layout-update(); }
+    changed software-presentation-enabled => {
+        if root.software-presentation-enabled {
+            root.schedule-presentation-layout-update();
+        }
+    }
     changed focused => {
         if root.focused && root.connected {
             root.focus-input();
@@ -641,10 +658,15 @@ export component TerminalPane inherits Rectangle {
         triggered => {
             root.terminal-resize-pending = false;
             root.update-terminal-size();
-            if root.presentation-layout-pending {
-                root.presentation-layout-pending = false;
-                root.update-presentation-layout();
-            }
+        }
+    }
+
+    Timer {
+        running: root.presentation-layout-pending;
+        interval: 16ms;
+        triggered => {
+            root.presentation-layout-pending = false;
+            root.update-presentation-layout();
         }
     }
 

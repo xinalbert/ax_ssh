@@ -152,6 +152,34 @@ pub fn set_presentation_layout(key: u64, rows_per_block: u32, regions: &[Present
     }
 }
 
+/// Removes an application-managed software presentation layout.
+///
+/// Surfaces using this key fall back to the default presentation partition on
+/// their next layout check. Removing a missing key is a no-op.
+pub fn remove_presentation_layout(key: u64) {
+    let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
+        return;
+    };
+    let Ok(mut layouts) = layouts.write() else {
+        return;
+    };
+    layouts.layouts.remove(&key);
+}
+
+pub(crate) fn presentation_layout_generation(key: u64) -> u64 {
+    let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
+        return 0;
+    };
+    let Ok(layouts) = layouts.read() else {
+        return 0;
+    };
+    layouts
+        .layouts
+        .get(&key)
+        .or_else(|| layouts.layouts.get(&0))
+        .map_or(0, |layout| layout.generation)
+}
+
 pub(crate) fn presentation_layout(key: u64) -> PresentationLayoutSnapshot {
     let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
         return PresentationLayoutSnapshot {
@@ -472,6 +500,42 @@ fn display_handle_type_name(handle: &RawDisplayHandle) -> &'static str {
         RawDisplayHandle::Windows(_) => "Windows",
         RawDisplayHandle::Android(_) => "Android",
         _ => "Unknown Name", //don't completely fail to compile if there is a new raw window handle type that's added at some point
+    }
+}
+
+#[cfg(test)]
+mod presentation_layout_tests {
+    use super::*;
+
+    #[test]
+    fn layout_generation_deduplicates_updates_and_removal_unregisters_key() {
+        const KEY: u64 = u64::MAX - 41;
+        let region = PresentationRegion {
+            x: 10,
+            y: 20,
+            width: 300,
+            height: 180,
+            row_height: 18,
+        };
+
+        remove_presentation_layout(KEY);
+        set_presentation_layout(KEY, 4, &[region]);
+        let first_generation = presentation_layout_generation(KEY);
+        assert_ne!(first_generation, 0);
+
+        set_presentation_layout(KEY, 4, &[region]);
+        assert_eq!(presentation_layout_generation(KEY), first_generation);
+
+        set_presentation_layout(KEY, 5, &[region]);
+        assert_ne!(presentation_layout_generation(KEY), first_generation);
+
+        remove_presentation_layout(KEY);
+        let layouts = PRESENTATION_LAYOUTS
+            .get()
+            .expect("test layout registry initialized")
+            .read()
+            .expect("test layout registry lock available");
+        assert!(!layouts.layouts.contains_key(&KEY));
     }
 }
 

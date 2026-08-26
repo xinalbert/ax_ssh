@@ -253,6 +253,20 @@ impl WindowRouter {
         }
     }
 
+    pub(super) fn window_for_adapter(
+        &self,
+        adapter: &Rc<dyn slint::platform::WindowAdapter>,
+    ) -> Option<(Uuid, AppWindow)> {
+        let adapter_handle = adapter.window_handle_06().ok()?.as_raw();
+        let router = self.inner.lock().ok()?;
+        router.routes.iter().find_map(|(window_id, route)| {
+            let ui = route.ui.upgrade()?;
+            let handle = ui.window().window_handle();
+            let window_handle = handle.window_handle().ok()?;
+            (window_handle.as_raw() == adapter_handle).then_some((*window_id, ui))
+        })
+    }
+
     /// Refresh native activation state from AppKit on the UI thread. The event
     /// hook is the fast path, while this poll covers macOS focus transitions
     /// that do not deliver a matching Slint activation event consistently.

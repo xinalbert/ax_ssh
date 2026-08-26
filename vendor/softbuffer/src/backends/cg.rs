@@ -1,21 +1,27 @@
 //! Softbuffer implementation using CoreGraphics.
 use crate::backend_interface::*;
 use crate::error::InitError;
-use crate::{presentation_layout, util, PresentationRegion, Rect, SoftBufferError};
+use crate::{
+    presentation_layout, presentation_layout_generation, util, PresentationRegion, Rect,
+    SoftBufferError,
+};
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, Bool};
-use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass, MainThreadMarker, Message};
+use objc2::runtime::{AnyObject, Bool, ProtocolObject};
+use objc2::{
+    define_class, msg_send, AllocAnyThread, AnyThread, DefinedClass, MainThreadMarker, Message,
+};
 use objc2_core_foundation::{CFRetained, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{
-    CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
-    CGImageByteOrderInfo, CGImageComponentInfo, CGImagePixelFormatInfo,
+    kCGColorSpaceSRGB, CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGContext,
+    CGDataProvider, CGImage, CGImageAlphaInfo, CGImageByteOrderInfo, CGImageComponentInfo,
+    CGImagePixelFormatInfo,
 };
 use objc2_foundation::{
     ns_string, NSDictionary, NSKeyValueChangeKey, NSKeyValueChangeNewKey,
     NSKeyValueObservingOptions, NSNumber, NSObject, NSObjectNSKeyValueObserverRegistration,
-    NSString, NSValue,
+    NSObjectProtocol, NSString, NSValue,
 };
-use objc2_quartz_core::{kCAGravityTopLeft, CALayer, CATransaction};
+use objc2_quartz_core::{kCAGravityTopLeft, CALayer, CALayerDelegate, CATransaction};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawWindowHandle};
 
 use std::ffi::c_void;
@@ -24,6 +30,7 @@ use std::mem::size_of;
 use std::num::NonZeroU32;
 use std::ops::Deref;
 use std::ptr::{self, slice_from_raw_parts_mut, NonNull};
+use std::sync::Mutex;
 
 const TILE_WIDTH: usize = 256;
 const TILE_HEIGHT: usize = 128;
@@ -70,6 +77,135 @@ define_class!(
         }
     }
 );
+
+#[derive(Debug)]
+struct BackingStoreIvars {
+    state: Mutex<BackingStoreState>,
+    color_space: CFRetained<CGColorSpace>,
+}
+
+// Delegate used by the optional dirty-backing-store presentation path. Core Animation may invoke
+// it after present returns, so both producer and callback synchronize access to persistent pixels.
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "SoftbufferBackingStoreDelegate"]
+    #[thread_kind = AnyThread]
+    #[ivars = BackingStoreIvars]
+    #[derive(Debug)]
+    struct BackingStoreDelegate;
+
+    unsafe impl NSObjectProtocol for BackingStoreDelegate {}
+
+    unsafe impl CALayerDelegate for BackingStoreDelegate {
+        #[unsafe(method(drawLayer:inContext:))]
+        #[allow(non_snake_case)]
+        fn drawLayer_inContext(&self, _layer: &CALayer, context: &CGContext) {
+            self.draw(context);
+        }
+    }
+);
+
+#[derive(Debug)]
+struct BackingStoreState {
+    width: usize,
+    height: usize,
+    scale: f64,
+    pixels: Vec<u32>,
+}
+
+impl BackingStoreDelegate {
+    fn new(
+        width: usize,
+        height: usize,
+        scale: f64,
+        color_space: &CFRetained<CGColorSpace>,
+    ) -> Result<Retained<Self>, SoftBufferError> {
+        let len = width
+            .checked_mul(height)
+            .ok_or_else(|| size_out_of_range(width, height))?;
+        let state = BackingStoreState {
+            width,
+            height,
+            scale,
+            pixels: vec![0; len],
+        };
+        let this = Self::alloc().set_ivars(BackingStoreIvars {
+            state: Mutex::new(state),
+            color_space: color_space.clone(),
+        });
+        // SAFETY: NSObject has no subclass initialization requirements and this class has no Drop.
+        Ok(unsafe { msg_send![super(this), init] })
+    }
+
+    fn update(
+        &self,
+        source: &[u32],
+        source_width: usize,
+        tile: &TileLayer,
+        regions: &[PixelRect],
+    ) -> Result<(), SoftBufferError> {
+        let mut state = self.ivars().state.lock().map_err(|_| {
+            SoftBufferError::PlatformError(
+                Some("CoreAnimation backing-store lock was poisoned".to_string()),
+                None,
+            )
+        })?;
+        for &(x, y, width, height) in regions {
+            for row in 0..height {
+                let source_start = (tile.origin_y + y + row) * source_width + tile.origin_x + x;
+                let source_end = source_start + width;
+                let target_start = (y + row) * tile.width + x;
+                let target_end = target_start + width;
+                state.pixels[target_start..target_end]
+                    .copy_from_slice(&source[source_start..source_end]);
+            }
+        }
+        Ok(())
+    }
+
+    fn draw_debug_overlay(&self, index: usize) -> Result<(), SoftBufferError> {
+        let mut state = self.ivars().state.lock().map_err(|_| {
+            SoftBufferError::PlatformError(
+                Some("CoreAnimation backing-store lock was poisoned".to_string()),
+                None,
+            )
+        })?;
+        let width = state.width;
+        let height = state.height;
+        draw_tile_debug_overlay(&mut state.pixels, width, height, index);
+        Ok(())
+    }
+
+    fn draw(&self, context: &CGContext) {
+        let clip = CGContext::clip_bounding_box(Some(context));
+        let Ok(state) = self.ivars().state.lock() else {
+            return;
+        };
+        let Some((x, y, width, height)) =
+            layer_clip_to_pixel_rect(clip, state.scale, state.width, state.height)
+        else {
+            return;
+        };
+        let y_end = y + height;
+
+        let mut pixels = Vec::with_capacity(width.saturating_mul(height));
+        for row in y..y_end {
+            let start = row * state.width + x;
+            pixels.extend_from_slice(&state.pixels[start..start + width]);
+        }
+        let scale = state.scale;
+        let layer_height = state.height;
+        drop(state);
+
+        let Ok(image) = image_from_pixels(width, height, &self.ivars().color_space, pixels) else {
+            return;
+        };
+        let rect = pixel_rect_to_layer_rect((x, y, width, height), scale, layer_height);
+        // Core Animation's context clip carries the dirty region, so pixels outside it remain in
+        // the layer backing store while this owned image is consumed synchronously.
+        CGContext::draw_image(Some(context), rect, Some(&image));
+    }
+}
 
 impl Observer {
     fn new(layer: &CALayer) -> Retained<Self> {
@@ -140,18 +276,25 @@ pub struct CGImpl<D, W> {
     tile_scale: f64,
     /// Tile layers keep old immutable images alive while the CPU framebuffer is reused.
     tiles: Vec<TileLayer>,
+    /// Optional delegates and immutable backing snapshots for experimental dirty-rect drawing.
+    backing_store: bool,
     /// Diagnostic-only tile boundaries and indexes, disabled unless explicitly requested.
     debug_tiles: bool,
     /// Opaque application key selecting the current terminal layout.
     presentation_layout_key: u64,
     /// Generation of the layout used to build `tiles`.
     presentation_layout_generation: u64,
+    /// Avoid repeated registry reads during one resize/buffer/present cycle.
+    layout_checked: bool,
     window_handle: W,
     _display: PhantomData<D>,
 }
 
 impl<D, W> Drop for CGImpl<D, W> {
     fn drop(&mut self) {
+        for tile in &self.tiles {
+            tile.layer.setDelegate(None);
+        }
         // SAFETY: Registered in `new`, must be removed before the observer is deallocated.
         unsafe {
             self.root_layer
@@ -264,12 +407,14 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         layer.setContentsGravity(unsafe { kCAGravityTopLeft });
 
         // Initialize color space here, to reduce work later on.
-        let color_space = CGColorSpace::new_device_rgb().ok_or_else(|| {
-            SoftBufferError::PlatformError(
-                Some("failed to create CoreGraphics RGB color space".to_string()),
-                None,
-            )
-        })?;
+        // SAFETY: `kCGColorSpaceSRGB` is an immutable CoreGraphics constant with static lifetime.
+        let color_space =
+            CGColorSpace::with_name(Some(unsafe { kCGColorSpaceSRGB })).ok_or_else(|| {
+                SoftBufferError::PlatformError(
+                    Some("failed to create CoreGraphics sRGB color space".to_string()),
+                    None,
+                )
+            })?;
 
         // Grab initial width and height from the layer (whose properties have just been initialized
         // by the observer using `NSKeyValueObservingOptionInitial`).
@@ -283,6 +428,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         let buffer_len = width
             .checked_mul(height)
             .ok_or_else(|| size_out_of_range(width, height))?;
+        let backing_store = software_backing_store_enabled();
+        if backing_store {
+            tracing::info!("using experimental CoreAnimation dirty backing store");
+        }
 
         let mut this = Self {
             layer: SendCALayer(layer),
@@ -295,9 +444,11 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             buffer_valid: false,
             tile_scale: 1.0,
             tiles: Vec::new(),
+            backing_store,
             debug_tiles: software_tile_debug_enabled(),
             presentation_layout_key: 0,
             presentation_layout_generation: 0,
+            layout_checked: false,
             _display: PhantomData,
             window_handle: window_src,
         };
@@ -323,6 +474,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         self.height = height;
         self.buffer = util::PixelBuffer(vec![0; len]);
         self.buffer_valid = false;
+        self.layout_checked = false;
         self.rebuild_tiles()
     }
 
@@ -330,6 +482,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         if self.presentation_layout_key != key {
             self.presentation_layout_key = key;
             self.buffer_valid = false;
+            self.layout_checked = false;
         }
     }
 
@@ -348,26 +501,43 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
 
     fn invalidate(&mut self) {
         self.buffer_valid = false;
+        self.layout_checked = false;
     }
 }
 
 impl<D, W> CGImpl<D, W> {
     fn present_full(&mut self) -> Result<(), SoftBufferError> {
-        self.ensure_tile_layout()?;
+        if !self.layout_checked {
+            self.ensure_tile_layout()?;
+        }
         let dirty_tiles = vec![true; self.tiles.len()];
-        self.present_tiles(&dirty_tiles)
+        let result = self.present_tiles(&dirty_tiles, None);
+        self.layout_checked = false;
+        result
     }
 
     fn present_with_damage(&mut self, damage: &[Rect]) -> Result<(), SoftBufferError> {
-        self.ensure_tile_layout()?;
+        if !self.layout_checked {
+            self.ensure_tile_layout()?;
+        }
         if !self.buffer_valid {
             return self.present_full();
         }
         let dirty_tiles = self.dirty_tile_mask(damage);
-        self.present_tiles(&dirty_tiles)
+        let result = self.present_tiles(&dirty_tiles, Some(damage));
+        self.layout_checked = false;
+        result
     }
 
-    fn present_tiles(&mut self, dirty_tiles: &[bool]) -> Result<(), SoftBufferError> {
+    fn present_tiles(
+        &mut self,
+        dirty_tiles: &[bool],
+        damage: Option<&[Rect]>,
+    ) -> Result<(), SoftBufferError> {
+        if self.backing_store {
+            return self.present_backing_tiles(dirty_tiles, damage);
+        }
+
         let mut images = Vec::new();
         for (index, dirty) in dirty_tiles.iter().copied().enumerate() {
             if dirty {
@@ -381,8 +551,63 @@ impl<D, W> CGImpl<D, W> {
         CATransaction::begin();
         CATransaction::setDisableActions(true);
         for (index, image) in &images {
+            let tile = &self.tiles[*index];
             // SAFETY: The contents is `CGImage`, which is a valid class for `contents`.
-            unsafe { self.tiles[*index].layer.setContents(Some(image.as_ref())) };
+            unsafe { tile.layer.setContents(Some(image.as_ref())) };
+        }
+        CATransaction::commit();
+        self.buffer_valid = true;
+        Ok(())
+    }
+
+    fn present_backing_tiles(
+        &mut self,
+        dirty_tiles: &[bool],
+        damage: Option<&[Rect]>,
+    ) -> Result<(), SoftBufferError> {
+        let source_width = self.width;
+        let source = &self.buffer.0;
+        let scale = self.tile_scale;
+        let mut invalidations = Vec::new();
+        for (index, dirty) in dirty_tiles.iter().copied().enumerate() {
+            if !dirty {
+                continue;
+            }
+            let tile = &self.tiles[index];
+            let pixel_regions = tile_invalidated_pixel_rects(
+                tile.origin_x,
+                tile.origin_y,
+                tile.width,
+                tile.height,
+                damage,
+            );
+            let invalidated = pixel_regions
+                .iter()
+                .copied()
+                .map(|rect| pixel_rect_to_layer_rect(rect, scale, tile.height))
+                .collect::<Vec<_>>();
+            let delegate = tile.delegate.as_ref().ok_or_else(|| {
+                SoftBufferError::PlatformError(
+                    Some("CoreAnimation backing-store delegate is missing".to_string()),
+                    None,
+                )
+            })?;
+            delegate.update(source, source_width, tile, &pixel_regions)?;
+            if self.debug_tiles {
+                delegate.draw_debug_overlay(index)?;
+            }
+            invalidations.push((index, invalidated));
+        }
+        if invalidations.is_empty() {
+            return Ok(());
+        }
+
+        CATransaction::begin();
+        CATransaction::setDisableActions(true);
+        for (index, rectangles) in invalidations {
+            for rect in rectangles {
+                self.tiles[index].layer.setNeedsDisplayInRect(rect);
+            }
         }
         CATransaction::commit();
         self.buffer_valid = true;
@@ -391,6 +616,7 @@ impl<D, W> CGImpl<D, W> {
 
     fn rebuild_tiles(&mut self) -> Result<(), SoftBufferError> {
         for tile in &self.tiles {
+            tile.layer.setDelegate(None);
             tile.layer.removeFromSuperlayer();
         }
         self.tiles.clear();
@@ -434,8 +660,16 @@ impl<D, W> CGImpl<D, W> {
                 CGSize::new(width as f64 / scale, height as f64 / scale),
             ));
             self.layer.addSublayer(&tile);
+            let delegate = if self.backing_store {
+                let delegate = BackingStoreDelegate::new(width, height, scale, &self.color_space)?;
+                tile.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
+                Some(delegate)
+            } else {
+                None
+            };
             self.tiles.push(TileLayer {
                 layer: SendCALayer(tile),
+                delegate,
                 origin_x,
                 origin_y,
                 width,
@@ -444,37 +678,63 @@ impl<D, W> CGImpl<D, W> {
         }
         self.tile_scale = scale;
         self.presentation_layout_generation = layout.generation;
+        self.layout_checked = true;
         Ok(())
     }
 
     fn ensure_tile_layout(&mut self) -> Result<(), SoftBufferError> {
+        if self.layout_checked {
+            return Ok(());
+        }
         let scale = self.layer.contentsScale().max(1.0);
-        let layout = presentation_layout(self.presentation_layout_key);
-        if scale != self.tile_scale || layout.generation != self.presentation_layout_generation {
+        let generation = presentation_layout_generation(self.presentation_layout_key);
+        if scale != self.tile_scale || generation != self.presentation_layout_generation {
             self.rebuild_tiles()?;
             self.buffer_valid = false;
         }
+        self.layout_checked = true;
         Ok(())
     }
 
     fn dirty_tile_mask(&self, damage: &[Rect]) -> Vec<bool> {
-        let mut dirty_tiles = vec![false; self.tiles.len()];
-        for (index, tile) in self.tiles.iter().enumerate() {
-            dirty_tiles[index] = damage.iter().any(|rect| rect_intersects_tile(rect, tile));
-        }
-        dirty_tiles
+        dirty_tile_mask_for_tiles(
+            self.tiles
+                .iter()
+                .map(|tile| (tile.origin_x, tile.origin_y, tile.width, tile.height)),
+            damage,
+        )
     }
 }
 
-fn rect_intersects_tile(rect: &Rect, tile: &TileLayer) -> bool {
+fn dirty_tile_mask_for_tiles<I>(tiles: I, damage: &[Rect]) -> Vec<bool>
+where
+    I: IntoIterator<Item = (usize, usize, usize, usize)>,
+{
+    tiles
+        .into_iter()
+        .map(|(origin_x, origin_y, width, height)| {
+            damage
+                .iter()
+                .any(|rect| tile_intersects_rect(rect, origin_x, origin_y, width, height))
+        })
+        .collect()
+}
+
+fn tile_intersects_rect(
+    rect: &Rect,
+    tile_origin_x: usize,
+    tile_origin_y: usize,
+    tile_width: usize,
+    tile_height: usize,
+) -> bool {
     let origin_x = usize::try_from(rect.x).unwrap_or(usize::MAX);
     let origin_y = usize::try_from(rect.y).unwrap_or(usize::MAX);
     let end_x = origin_x.saturating_add(rect.width.get() as usize);
     let end_y = origin_y.saturating_add(rect.height.get() as usize);
-    origin_x < tile.origin_x.saturating_add(tile.width)
-        && end_x > tile.origin_x
-        && origin_y < tile.origin_y.saturating_add(tile.height)
-        && end_y > tile.origin_y
+    origin_x < tile_origin_x.saturating_add(tile_width)
+        && end_x > tile_origin_x
+        && origin_y < tile_origin_y.saturating_add(tile_height)
+        && end_y > tile_origin_y
 }
 
 fn build_tile_rects(
@@ -606,34 +866,84 @@ fn subtract_pixel_rect(rect: PixelRect, cut: PixelRect, output: &mut Vec<PixelRe
     }
 }
 
-#[cfg(test)]
-fn dirty_tile_mask_for_size(width: usize, height: usize, damage: &[Rect]) -> Vec<bool> {
-    let columns = width.div_ceil(TILE_WIDTH);
-    let rows = height.div_ceil(TILE_HEIGHT);
-    let mut dirty_tiles = vec![false; columns * rows];
-    for rect in damage {
-        let origin_x = usize::try_from(rect.x).unwrap_or(usize::MAX).min(width);
-        let origin_y = usize::try_from(rect.y).unwrap_or(usize::MAX).min(height);
-        let end_x = origin_x
-            .saturating_add(rect.width.get() as usize)
-            .min(width);
-        let end_y = origin_y
-            .saturating_add(rect.height.get() as usize)
-            .min(height);
-        if origin_x >= end_x || origin_y >= end_y {
-            continue;
-        }
-        let first_column = origin_x / TILE_WIDTH;
-        let last_column = (end_x - 1) / TILE_WIDTH;
-        let first_row = origin_y / TILE_HEIGHT;
-        let last_row = (end_y - 1) / TILE_HEIGHT;
-        for row in first_row..=last_row {
-            for column in first_column..=last_column {
-                dirty_tiles[row * columns + column] = true;
+fn tile_invalidated_pixel_rects(
+    tile_origin_x: usize,
+    tile_origin_y: usize,
+    tile_width: usize,
+    tile_height: usize,
+    damage: Option<&[Rect]>,
+) -> Vec<PixelRect> {
+    let Some(damage) = damage else {
+        return vec![(0, 0, tile_width, tile_height)];
+    };
+    damage
+        .iter()
+        .filter_map(|rect| {
+            let rect_x = usize::try_from(rect.x).ok()?;
+            let rect_y = usize::try_from(rect.y).ok()?;
+            let rect_x_end = rect_x.saturating_add(rect.width.get() as usize);
+            let rect_y_end = rect_y.saturating_add(rect.height.get() as usize);
+            let tile_x_end = tile_origin_x.saturating_add(tile_width);
+            let tile_y_end = tile_origin_y.saturating_add(tile_height);
+            let x = rect_x.max(tile_origin_x);
+            let y = rect_y.max(tile_origin_y);
+            let x_end = rect_x_end.min(tile_x_end);
+            let y_end = rect_y_end.min(tile_y_end);
+            if x < x_end && y < y_end {
+                Some((x - tile_origin_x, y - tile_origin_y, x_end - x, y_end - y))
+            } else {
+                None
             }
-        }
+        })
+        .collect()
+}
+
+fn pixel_rect_to_layer_rect(rect: PixelRect, scale: f64, layer_height: usize) -> CGRect {
+    let (x, y, width, height) = rect;
+    let scale = scale.max(1.0);
+    // The framebuffer uses a top-left origin. Standalone CALayers use the macOS
+    // bottom-left coordinate system, even when their parent geometry is flipped.
+    let layer_y = if cfg!(target_os = "macos") {
+        layer_height.saturating_sub(y.saturating_add(height))
+    } else {
+        y
+    };
+    CGRect::new(
+        CGPoint::new(x as f64 / scale, layer_y as f64 / scale),
+        CGSize::new(width as f64 / scale, height as f64 / scale),
+    )
+}
+
+fn layer_clip_to_pixel_rect(
+    clip: CGRect,
+    scale: f64,
+    layer_width: usize,
+    layer_height: usize,
+) -> Option<PixelRect> {
+    let scale = scale.max(1.0);
+    let clip_x_end = clip.origin.x + clip.size.width;
+    let clip_y_end = clip.origin.y + clip.size.height;
+    let layer_x0 = (clip.origin.x.min(clip_x_end).max(0.0) * scale).floor() as usize;
+    let layer_y0 = (clip.origin.y.min(clip_y_end).max(0.0) * scale).floor() as usize;
+    let layer_x1 = (clip.origin.x.max(clip_x_end).max(0.0) * scale).ceil() as usize;
+    let layer_y1 = (clip.origin.y.max(clip_y_end).max(0.0) * scale).ceil() as usize;
+    let layer_x0 = layer_x0.min(layer_width);
+    let layer_y0 = layer_y0.min(layer_height);
+    let layer_x1 = layer_x1.min(layer_width);
+    let layer_y1 = layer_y1.min(layer_height);
+    if layer_x0 >= layer_x1 || layer_y0 >= layer_y1 {
+        return None;
     }
-    dirty_tiles
+
+    let (pixel_y0, pixel_y1) = if cfg!(target_os = "macos") {
+        (
+            layer_height.saturating_sub(layer_y1),
+            layer_height.saturating_sub(layer_y0),
+        )
+    } else {
+        (layer_y0, layer_y1)
+    };
+    Some((layer_x0, pixel_y0, layer_x1 - layer_x0, pixel_y1 - pixel_y0))
 }
 
 impl<D, W> CGImpl<D, W> {
@@ -651,35 +961,44 @@ impl<D, W> CGImpl<D, W> {
         if self.debug_tiles {
             draw_tile_debug_overlay(&mut pixels, tile.width, tile.height, index);
         }
-        let data_provider = owned_data_provider(pixels)?;
-        let bitmap_info = CGBitmapInfo(
-            CGImageAlphaInfo::NoneSkipFirst.0
-                | CGImageComponentInfo::Integer.0
-                | CGImageByteOrderInfo::Order32Little.0
-                | CGImagePixelFormatInfo::Packed.0,
-        );
-        unsafe {
-            CGImage::new(
-                tile.width,
-                tile.height,
-                8,
-                32,
-                tile.width * size_of::<u32>(),
-                Some(&self.color_space),
-                bitmap_info,
-                Some(&data_provider),
-                ptr::null(),
-                false,
-                CGColorRenderingIntent::RenderingIntentDefault,
-            )
-        }
-        .ok_or_else(|| {
-            SoftBufferError::PlatformError(
-                Some("failed to create CoreGraphics tile image".to_string()),
-                None,
-            )
-        })
+        image_from_pixels(tile.width, tile.height, &self.color_space, pixels)
     }
+}
+
+fn image_from_pixels(
+    width: usize,
+    height: usize,
+    color_space: &CGColorSpace,
+    pixels: Vec<u32>,
+) -> Result<CFRetained<CGImage>, SoftBufferError> {
+    let data_provider = owned_data_provider(pixels)?;
+    let bitmap_info = CGBitmapInfo(
+        CGImageAlphaInfo::NoneSkipFirst.0
+            | CGImageComponentInfo::Integer.0
+            | CGImageByteOrderInfo::Order32Little.0
+            | CGImagePixelFormatInfo::Packed.0,
+    );
+    unsafe {
+        CGImage::new(
+            width,
+            height,
+            8,
+            32,
+            width * size_of::<u32>(),
+            Some(color_space),
+            bitmap_info,
+            Some(&data_provider),
+            ptr::null(),
+            false,
+            CGColorRenderingIntent::RenderingIntentDefault,
+        )
+    }
+    .ok_or_else(|| {
+        SoftBufferError::PlatformError(
+            Some("failed to create CoreGraphics image".to_string()),
+            None,
+        )
+    })
 }
 
 fn top_left_to_core_animation_y(
@@ -701,19 +1020,18 @@ fn software_tile_debug_enabled() -> bool {
     })
 }
 
+fn software_backing_store_enabled() -> bool {
+    std::env::var("AXSSH_EXPERIMENT_CA_BACKING_STORE").map_or(false, |value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
 fn draw_tile_debug_overlay(pixels: &mut [u32], width: usize, height: usize, index: usize) {
     if width == 0 || height == 0 || pixels.len() < width.saturating_mul(height) {
         return;
-    }
-
-    for x in 0..width {
-        pixels[x] = DEBUG_TILE_BORDER_COLOR;
-        pixels[(height - 1) * width + x] = DEBUG_TILE_BORDER_COLOR;
-    }
-    for y in 0..height {
-        let row = y * width;
-        pixels[row] = DEBUG_TILE_BORDER_COLOR;
-        pixels[row + width - 1] = DEBUG_TILE_BORDER_COLOR;
     }
 
     let label_width = width.min(DEBUG_TILE_LABEL_WIDTH);
@@ -734,6 +1052,16 @@ fn draw_tile_debug_overlay(pixels: &mut [u32], width: usize, height: usize, inde
         }
         draw_tile_debug_glyph(pixels, width, height, glyph_x, 2, usize::from(digit - b'0'));
         glyph_x += 3 * DEBUG_TILE_GLYPH_SCALE + DEBUG_TILE_GLYPH_SCALE;
+    }
+
+    for x in 0..width {
+        pixels[x] = DEBUG_TILE_BORDER_COLOR;
+        pixels[(height - 1) * width + x] = DEBUG_TILE_BORDER_COLOR;
+    }
+    for y in 0..height {
+        let row = y * width;
+        pixels[row] = DEBUG_TILE_BORDER_COLOR;
+        pixels[row + width - 1] = DEBUG_TILE_BORDER_COLOR;
     }
 }
 
@@ -769,6 +1097,7 @@ fn draw_tile_debug_glyph(
 #[derive(Debug)]
 struct TileLayer {
     layer: SendCALayer,
+    delegate: Option<Retained<BackingStoreDelegate>>,
     origin_x: usize,
     origin_y: usize,
     width: usize,
@@ -886,11 +1215,11 @@ mod tests {
             width: NonZeroU32::new(1).expect("non-zero test width"),
             height: NonZeroU32::new(1).expect("non-zero test height"),
         }];
-        let dirty = dirty_tile_mask_for_size(600, 300, &damage);
-
-        assert_eq!(dirty.len(), 3 * 3);
-        assert!(dirty[4]);
-        assert_eq!(dirty.iter().filter(|value| **value).count(), 1);
+        let tiles = [(0, 0, 256, 128), (256, 128, 256, 128), (512, 128, 88, 128)];
+        assert_eq!(
+            dirty_tile_mask_for_tiles(tiles, &damage),
+            vec![false, true, false]
+        );
     }
 
     #[test]
@@ -901,26 +1230,90 @@ mod tests {
             width: NonZeroU32::new(3).expect("non-zero test width"),
             height: NonZeroU32::new(3).expect("non-zero test height"),
         }];
-        let dirty = dirty_tile_mask_for_size(600, 300, &damage);
+        let tiles = [
+            (0, 0, 256, 128),
+            (256, 0, 256, 128),
+            (0, 128, 256, 128),
+            (256, 128, 256, 128),
+            (512, 128, 88, 128),
+        ];
+        assert_eq!(
+            dirty_tile_mask_for_tiles(tiles, &damage),
+            vec![true, true, true, true, false]
+        );
+    }
 
-        assert!(dirty[0]);
-        assert!(dirty[1]);
-        assert!(dirty[3]);
-        assert!(dirty[4]);
-        assert_eq!(dirty.iter().filter(|value| **value).count(), 4);
+    #[test]
+    fn backing_store_damage_is_clipped_to_tile_local_pixels() {
+        let damage = [
+            Rect {
+                x: 90,
+                y: 40,
+                width: NonZeroU32::new(20).expect("non-zero test width"),
+                height: NonZeroU32::new(20).expect("non-zero test height"),
+            },
+            Rect {
+                x: 250,
+                y: 100,
+                width: NonZeroU32::new(100).expect("non-zero test width"),
+                height: NonZeroU32::new(100).expect("non-zero test height"),
+            },
+            Rect {
+                x: 0,
+                y: 0,
+                width: NonZeroU32::new(10).expect("non-zero test width"),
+                height: NonZeroU32::new(10).expect("non-zero test height"),
+            },
+        ];
+
+        assert_eq!(
+            tile_invalidated_pixel_rects(100, 50, 200, 80, Some(&damage)),
+            vec![(0, 0, 10, 10), (150, 50, 50, 30)]
+        );
+        assert_eq!(
+            tile_invalidated_pixel_rects(100, 50, 200, 80, None),
+            vec![(0, 0, 200, 80)]
+        );
+    }
+
+    #[test]
+    fn backing_store_damage_converts_top_left_pixels_to_macos_layer_points() {
+        assert_eq!(
+            pixel_rect_to_layer_rect((6, 8, 20, 10), 2.0, 100),
+            CGRect::new(CGPoint::new(3.0, 41.0), CGSize::new(10.0, 5.0))
+        );
+        assert_eq!(
+            pixel_rect_to_layer_rect((0, 0, 200, 100), 2.0, 100),
+            CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(100.0, 50.0))
+        );
+        assert_eq!(
+            pixel_rect_to_layer_rect((6, 90, 20, 10), 2.0, 100),
+            CGRect::new(CGPoint::new(3.0, 0.0), CGSize::new(10.0, 5.0))
+        );
+    }
+
+    #[test]
+    fn backing_store_layer_clip_round_trips_to_top_left_pixels() {
+        let pixels = (6, 8, 20, 10);
+        let layer_rect = pixel_rect_to_layer_rect(pixels, 2.0, 100);
+
+        assert_eq!(
+            layer_clip_to_pixel_rect(layer_rect, 2.0, 200, 100),
+            Some(pixels)
+        );
     }
 
     #[test]
     fn debug_tile_overlay_marks_edges_and_keeps_tile_interior() {
-        let width = 32;
-        let height = 24;
+        let width = 96;
+        let height = 40;
         let mut pixels = vec![0; width * height];
 
         draw_tile_debug_overlay(&mut pixels, width, height, 7);
 
         assert_eq!(pixels[width - 1], DEBUG_TILE_BORDER_COLOR);
         assert_eq!(pixels[(height - 1) * width + 12], DEBUG_TILE_BORDER_COLOR);
-        assert_eq!(pixels[12 * width + 20], 0);
+        assert_eq!(pixels[24 * width + 80], 0);
         assert_eq!(pixels[2 * width + 4], DEBUG_TILE_LABEL_COLOR);
     }
 
@@ -973,5 +1366,50 @@ mod tests {
                 (128, 237, 384, 49),
             ]
         );
+    }
+
+    #[test]
+    fn multiple_regions_remain_disjoint_after_clipping_and_overlap_filtering() {
+        let regions = [
+            PresentationRegion {
+                x: 40,
+                y: 20,
+                width: 200,
+                height: 170,
+                row_height: 17,
+            },
+            PresentationRegion {
+                x: 220,
+                y: 20,
+                width: 180,
+                height: 170,
+                row_height: 17,
+            },
+            PresentationRegion {
+                x: 500,
+                y: 180,
+                width: 300,
+                height: 200,
+                row_height: 19,
+            },
+        ];
+        let rectangles = build_tile_rects(640, 320, &regions, 3);
+        let covered_area = rectangles
+            .iter()
+            .map(|(_, _, width, height)| width * height)
+            .sum::<usize>();
+
+        assert_eq!(covered_area, 640 * 320);
+        for (index, rectangle) in rectangles.iter().enumerate() {
+            assert!(rectangles[index + 1..]
+                .iter()
+                .all(|other| !pixel_rects_intersect(*rectangle, *other)));
+        }
+        assert!(rectangles
+            .iter()
+            .any(|&(x, y, width, height)| { x == 40 && y == 20 && width == 200 && height == 51 }));
+        assert!(rectangles.iter().any(|&(x, y, width, height)| {
+            x == 500 && y == 180 && width == 140 && height == 57
+        }));
     }
 }

@@ -79,6 +79,7 @@ export component TerminalGrid inherits Rectangle {
     in property <length> cell-height;
     in property <length> font-cell-height;
     in property <length> top-offset;
+    in property <length> cursor-x;
     in property <length> cursor-y;
     in property <bool> cursor-blink;
     in property <bool> cursor-blink-enabled: true;
@@ -203,9 +204,9 @@ export component TerminalGrid inherits Rectangle {
             }
         }
 
-        // Keep one selection container per row so starting/ending a drag only
-        // changes visibility. Its children remain cell-sized and cell-aligned;
-        // this is important when CJK and Latin runs share a row.
+        // Keep one fixed selection fill per row so starting/ending a drag only
+        // changes geometry and visibility. The range is cell-based, so a
+        // single rectangle remains aligned when CJK and Latin runs share a row.
         selection-overlay := Rectangle {
             visible: root.selection.active
                 && line-index >= root.selection.first_row
@@ -216,19 +217,11 @@ export component TerminalGrid inherits Rectangle {
             property <int> last-column:
                 line-index == root.selection.last_row
                     ? root.selection.last_column : root.view.content_columns - 1;
-
-            for _[selection-column] in max(
-                0, self.last-column - self.first-column + 1
-            ) : Rectangle {
-                x: max(
-                    0,
-                    (line-index == root.selection.first_row
-                        ? root.selection.first_column : 0) + selection-column
-                ) * root.cell-width;
-                width: root.cell-width;
-                height: root.cell-height;
-                background: root.view.selection_background.with-alpha(0.72);
-            }
+            x: max(0, self.first-column) * root.cell-width;
+            width: max(0, self.last-column - self.first-column + 1)
+                * root.cell-width;
+            height: root.cell-height;
+            background: root.view.selection_background.with-alpha(0.72);
         }
 
     }
@@ -250,8 +243,8 @@ export component TerminalGrid inherits Rectangle {
     }
 
     cursor-overlay := Rectangle {
-        x: root.view.cursor_column * root.cell-width;
-        y: root.top-offset + root.view.cursor_row * root.cell-height;
+        x: root.cursor-x;
+        y: root.cursor-y;
         width: max(1, root.view.cursor_cells) * root.cell-width;
         height: root.cell-height;
         visible: root.view.connected && root.view.cursor_visible
@@ -274,7 +267,7 @@ export component TerminalGrid inherits Rectangle {
 
     preedit-overlay := Rectangle {
         x: max(0px, min(parent.width - root.cell-width,
-            root.view.cursor_column * root.cell-width));
+            root.cursor-x));
         y: root.cursor-y;
         width: self.visible
             ? min(parent.width - self.x,

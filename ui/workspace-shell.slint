@@ -182,7 +182,9 @@ component TerminalPaneGroup inherits Rectangle {
     in property <string> terminal-edit-command;
     in property <int> terminal-edit-command-revision: 0;
     in property <bool> terminal-cursor-blink: true;
+    in property <bool> software-presentation-enabled: false;
     private property <int> focus-request-revision: 0;
+    private property <int> presentation-layout-revision: 0;
 
     clip: true;
 
@@ -222,6 +224,8 @@ component TerminalPaneGroup inherits Rectangle {
         edit-command: root.terminal-edit-command;
         edit-command-revision: root.terminal-edit-command-revision;
         cursor-blink-enabled: root.terminal-cursor-blink;
+        software-presentation-enabled: root.software-presentation-enabled;
+        presentation-layout-revision: root.presentation-layout-revision;
         focus-request-revision: root.focus-request-revision;
         terminal-key(text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(
@@ -282,7 +286,13 @@ component TerminalPaneGroup inherits Rectangle {
         read-clipboard() => { return root.read-clipboard(); }
     }
 
-    changed panes => { root.terminal-presentation-layout-reset(); }
+    changed panes => {
+        if root.software-presentation-enabled {
+            root.presentation-layout-revision = root.presentation-layout-revision == 2147483647
+                ? 1 : root.presentation-layout-revision + 1;
+            root.terminal-presentation-layout-reset();
+        }
+    }
 
     for divider in root.dividers : TerminalPaneDivider {
         x: divider.vertical
@@ -315,6 +325,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     in property <string> terminal-edit-command;
     in property <int> terminal-edit-command-revision: 0;
     in property <bool> terminal-cursor-blink: true;
+    in property <bool> software-presentation-enabled: false;
 
     callback close-tab(string);
     callback list-sftp-directory(string);
@@ -388,6 +399,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             terminal-edit-command: root.terminal-edit-command;
             terminal-edit-command-revision: root.terminal-edit-command-revision;
             terminal-cursor-blink: root.terminal-cursor-blink;
+            software-presentation-enabled: root.software-presentation-enabled;
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }
@@ -493,6 +505,7 @@ export component WorkspaceShell inherits Rectangle {
     in property <int> settings-section-request-revision: 0;
     in property <bool> detached-window: false;
     in property <bool> terminal-cursor-blink: true;
+    in property <bool> software-presentation-enabled: false;
 
     out property <bool> shortcut-recording: false;
     private property <bool> sidebar-collapsed: false;
@@ -633,6 +646,7 @@ export component WorkspaceShell inherits Rectangle {
         terminal-edit-command: root.terminal-edit-command;
         terminal-edit-command-revision: root.terminal-edit-command-revision;
         terminal-cursor-blink: root.terminal-cursor-blink;
+        software-presentation-enabled: root.software-presentation-enabled;
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
         load-more-sftp => { root.load-more-sftp(); }
@@ -795,6 +809,7 @@ export component WorkspaceShell inherits Rectangle {
                         terminal-edit-command: root.terminal-edit-command;
                         terminal-edit-command-revision: root.terminal-edit-command-revision;
                         terminal-cursor-blink: root.terminal-cursor-blink;
+                        software-presentation-enabled: root.software-presentation-enabled;
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }

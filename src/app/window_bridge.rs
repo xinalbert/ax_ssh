@@ -57,6 +57,7 @@ pub(super) fn restore_detached_workspaces(
             initialize_detached_component(&ui, state)
                 .map_err(|error| slint::PlatformError::from(error.to_string()))?;
             ui.set_detached_window(true);
+            ui.set_software_presentation_enabled(software_presentation::is_enabled());
             Ok(ui)
         }) {
             Ok(ui) => ui,
@@ -86,6 +87,7 @@ pub(super) fn restore_detached_workspaces(
         );
         if let Err(error) = detached_ui.show() {
             warn!(%error, window_id = %new_window_id, "failed to show restored detached workspace");
+            software_presentation::remove_layout(&detached_ui, new_window_id);
             continue;
         }
         detached_windows
@@ -106,6 +108,12 @@ pub(super) fn install_window_activation_hook(window_router: &WindowRouter) -> Re
     set_window_event_hook(Some(Box::new(move |adapter, event, _dispatch_result| {
         if let WindowEvent::WindowActiveChanged(active) = event {
             router.set_window_active_for_adapter(adapter, *active);
+        }
+        if software_presentation::is_enabled()
+            && matches!(event, WindowEvent::ScaleFactorChanged { .. })
+            && let Some((window_id, ui)) = router.window_for_adapter(adapter)
+        {
+            software_presentation::refresh_layout(&ui, window_id);
         }
     })))
     .map(|_| ())
@@ -280,12 +288,9 @@ pub(super) fn hide_window_for_release(ui: &AppWindow) {
 }
 
 pub(super) fn release_detached_windows(detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>) {
-    let windows = detached_windows
-        .borrow_mut()
-        .drain()
-        .map(|(_, ui)| ui)
-        .collect::<Vec<_>>();
-    for ui in &windows {
+    let windows = detached_windows.borrow_mut().drain().collect::<Vec<_>>();
+    for (window_id, ui) in &windows {
+        software_presentation::remove_layout(ui, *window_id);
         release_window_resources(ui);
         hide_window_for_release(ui);
     }
@@ -382,6 +387,8 @@ pub(super) fn wire_window_actions(
                 .and_then(|detached_ui| {
                     initialize_detached_component(&detached_ui, &state_for_show)?;
                     detached_ui.set_detached_window(true);
+                    detached_ui
+                        .set_software_presentation_enabled(software_presentation::is_enabled());
                     Ok(detached_ui)
                 }) {
                 Ok(detached_ui) => detached_ui,
@@ -423,6 +430,7 @@ pub(super) fn wire_window_actions(
             );
             if let Err(error) = detached_ui.show() {
                 warn!(%error, "failed to show detached workspace window");
+                software_presentation::remove_layout(&detached_ui, detached_id);
                 if let Some(detached) = router_for_show.remove_detached(detached_id) {
                     let active_tab_id = router_for_show.restore_detached(&detached);
                     if let Some(active_tab_id) = active_tab_id
@@ -477,9 +485,11 @@ pub(super) fn wire_window_actions(
         }
         let detached_ui = windows_for_return.borrow_mut().remove(&window_id);
         if let Some(detached_ui) = detached_ui {
+            software_presentation::remove_layout(&detached_ui, window_id);
             release_window_resources(&detached_ui);
             hide_window_for_release(&detached_ui);
         } else if let Some(ui) = ui_for_return.upgrade() {
+            software_presentation::remove_layout(&ui, window_id);
             release_window_resources(&ui);
             hide_window_for_release(&ui);
         }
@@ -504,9 +514,11 @@ pub(super) fn wire_window_actions(
                 }
                 let detached_ui = windows_for_close.borrow_mut().remove(&window_id);
                 if let Some(detached_ui) = detached_ui {
+                    software_presentation::remove_layout(&detached_ui, window_id);
                     release_window_resources(&detached_ui);
                     hide_window_for_release(&detached_ui);
                 } else if let Some(ui) = ui_for_close.upgrade() {
+                    software_presentation::remove_layout(&ui, window_id);
                     release_window_resources(&ui);
                     hide_window_for_release(&ui);
                 }

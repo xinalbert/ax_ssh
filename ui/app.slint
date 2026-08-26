@@ -127,6 +127,7 @@ export component AppWindow inherits Window {
     in property <[string]> application-font-options;
     in property <int> application-font-index: 0;
     in property <string> renderer-preference: "automatic";
+    in property <bool> software-presentation-enabled: false;
     in property <string> terminal-font-family: "JetBrains Mono";
     in property <[string]> terminal-font-options;
     in property <int> terminal-font-index: 0;
@@ -699,6 +700,7 @@ export component AppWindow inherits Window {
             view: root.workspace-view;
             detached-window: root.detached-window;
             terminal-cursor-blink: root.terminal-cursor-blink;
+            software-presentation-enabled: root.software-presentation-enabled;
             requested-settings-section: root.settings-section;
             settings-section-request-revision: root.settings-section-request-revision;
             new-session => { root.new-session(); }
