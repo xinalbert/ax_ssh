@@ -413,8 +413,12 @@ impl<D, W> CGImpl<D, W> {
                 // child again reverses the CGImage contents on macOS.
                 tile.setContentsGravity(unsafe { kCAGravityTopLeft });
                 tile.setContentsScale(scale);
+                // The framebuffer and damage rectangles use a top-left origin, while this
+                // CoreAnimation layer tree resolves child frames from the bottom edge. Convert
+                // the tile's top-left framebuffer coordinate before placing the child layer.
+                let frame_y = top_left_to_core_animation_y(self.height, origin_y, height);
                 tile.setFrame(CGRect::new(
-                    CGPoint::new(origin_x as f64 / scale, origin_y as f64 / scale),
+                    CGPoint::new(origin_x as f64 / scale, frame_y as f64 / scale),
                     CGSize::new(width as f64 / scale, height as f64 / scale),
                 ));
                 self.layer.addSublayer(&tile);
@@ -518,6 +522,12 @@ impl<D, W> CGImpl<D, W> {
             )
         })
     }
+}
+
+fn top_left_to_core_animation_y(surface_height: usize, origin_y: usize, tile_height: usize) -> usize {
+    debug_assert!(origin_y <= surface_height);
+    debug_assert!(tile_height <= surface_height - origin_y);
+    surface_height - origin_y - tile_height
 }
 
 fn software_tile_debug_enabled() -> bool {
@@ -760,5 +770,12 @@ mod tests {
         assert_eq!(pixels[(height - 1) * width + 12], DEBUG_TILE_BORDER_COLOR);
         assert_eq!(pixels[12 * width + 20], 0);
         assert_eq!(pixels[2 * width + 4], DEBUG_TILE_LABEL_COLOR);
+    }
+
+    #[test]
+    fn tile_y_conversion_keeps_top_left_buffer_order() {
+        assert_eq!(top_left_to_core_animation_y(300, 0, 128), 172);
+        assert_eq!(top_left_to_core_animation_y(300, 128, 128), 44);
+        assert_eq!(top_left_to_core_animation_y(300, 256, 44), 0);
     }
 }
