@@ -27,6 +27,27 @@ use std::ptr::{self, slice_from_raw_parts_mut, NonNull};
 
 const TILE_WIDTH: usize = 256;
 const TILE_HEIGHT: usize = 128;
+const DEBUG_TILE_BORDER_COLOR: u32 = 0xffff3b81;
+const DEBUG_TILE_LABEL_BACKGROUND: u32 = 0xff10202a;
+const DEBUG_TILE_LABEL_COLOR: u32 = 0xffffffff;
+const DEBUG_TILE_LABEL_WIDTH: usize = 72;
+const DEBUG_TILE_LABEL_HEIGHT: usize = 18;
+const DEBUG_TILE_GLYPH_SCALE: usize = 2;
+
+/// A compact 3x5 font for the diagnostic `T<index>` label.
+const DEBUG_TILE_GLYPHS: [[u8; 5]; 11] = [
+    [0b111, 0b101, 0b101, 0b101, 0b111], // 0
+    [0b010, 0b110, 0b010, 0b010, 0b111], // 1
+    [0b110, 0b001, 0b010, 0b100, 0b111], // 2
+    [0b110, 0b001, 0b010, 0b001, 0b110], // 3
+    [0b101, 0b101, 0b111, 0b001, 0b001], // 4
+    [0b111, 0b100, 0b110, 0b001, 0b110], // 5
+    [0b011, 0b100, 0b111, 0b101, 0b111], // 6
+    [0b111, 0b001, 0b010, 0b010, 0b010], // 7
+    [0b111, 0b101, 0b111, 0b101, 0b111], // 8
+    [0b111, 0b101, 0b111, 0b001, 0b110], // 9
+    [0b111, 0b010, 0b010, 0b010, 0b010], // T
+];
 
 define_class!(
     #[unsafe(super(NSObject))]
@@ -119,6 +140,8 @@ pub struct CGImpl<D, W> {
     tile_scale: f64,
     /// Tile layers keep old immutable images alive while the CPU framebuffer is reused.
     tiles: Vec<TileLayer>,
+    /// Diagnostic-only tile boundaries and indexes, disabled unless explicitly requested.
+    debug_tiles: bool,
     window_handle: W,
     _display: PhantomData<D>,
 }
@@ -268,6 +291,7 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             buffer_valid: false,
             tile_scale: 1.0,
             tiles: Vec::new(),
+            debug_tiles: software_tile_debug_enabled(),
             _display: PhantomData,
             window_handle: window_src,
         };
@@ -334,7 +358,7 @@ impl<D, W> CGImpl<D, W> {
         let mut images = Vec::new();
         for (index, dirty) in dirty_tiles.iter().copied().enumerate() {
             if dirty {
-                images.push((index, self.tile_image(&self.tiles[index])?));
+                images.push((index, self.tile_image(&self.tiles[index], index)?));
             }
         }
         if images.is_empty() {
@@ -451,12 +475,19 @@ fn dirty_tile_mask_for_size(width: usize, height: usize, damage: &[Rect]) -> Vec
 }
 
 impl<D, W> CGImpl<D, W> {
-    fn tile_image(&self, tile: &TileLayer) -> Result<CFRetained<CGImage>, SoftBufferError> {
+    fn tile_image(
+        &self,
+        tile: &TileLayer,
+        index: usize,
+    ) -> Result<CFRetained<CGImage>, SoftBufferError> {
         let mut pixels = Vec::with_capacity(tile.width * tile.height);
         for row in 0..tile.height {
             let start = (tile.origin_y + row) * self.width + tile.origin_x;
             let end = start + tile.width;
             pixels.extend_from_slice(&self.buffer.0[start..end]);
+        }
+        if self.debug_tiles {
+            draw_tile_debug_overlay(&mut pixels, tile.width, tile.height, index);
         }
         let data_provider = owned_data_provider(pixels)?;
         let bitmap_info = CGBitmapInfo(
@@ -486,6 +517,87 @@ impl<D, W> CGImpl<D, W> {
                 None,
             )
         })
+    }
+}
+
+fn software_tile_debug_enabled() -> bool {
+    std::env::var("AXSSH_DEBUG_SOFTWARE_TILES").map_or(false, |value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+fn draw_tile_debug_overlay(pixels: &mut [u32], width: usize, height: usize, index: usize) {
+    if width == 0 || height == 0 || pixels.len() < width.saturating_mul(height) {
+        return;
+    }
+
+    for x in 0..width {
+        pixels[x] = DEBUG_TILE_BORDER_COLOR;
+        pixels[(height - 1) * width + x] = DEBUG_TILE_BORDER_COLOR;
+    }
+    for y in 0..height {
+        let row = y * width;
+        pixels[row] = DEBUG_TILE_BORDER_COLOR;
+        pixels[row + width - 1] = DEBUG_TILE_BORDER_COLOR;
+    }
+
+    let label_width = width.min(DEBUG_TILE_LABEL_WIDTH);
+    let label_height = height.min(DEBUG_TILE_LABEL_HEIGHT);
+    for y in 0..label_height {
+        let row = y * width;
+        for x in 0..label_width {
+            pixels[row + x] = DEBUG_TILE_LABEL_BACKGROUND;
+        }
+    }
+
+    let mut glyph_x = 4;
+    draw_tile_debug_glyph(pixels, width, height, glyph_x, 2, 10);
+    glyph_x += 3 * DEBUG_TILE_GLYPH_SCALE + DEBUG_TILE_GLYPH_SCALE;
+    for digit in index.to_string().bytes() {
+        if glyph_x + 3 * DEBUG_TILE_GLYPH_SCALE > label_width {
+            break;
+        }
+        draw_tile_debug_glyph(
+            pixels,
+            width,
+            height,
+            glyph_x,
+            2,
+            usize::from(digit - b'0'),
+        );
+        glyph_x += 3 * DEBUG_TILE_GLYPH_SCALE + DEBUG_TILE_GLYPH_SCALE;
+    }
+}
+
+fn draw_tile_debug_glyph(
+    pixels: &mut [u32],
+    width: usize,
+    height: usize,
+    origin_x: usize,
+    origin_y: usize,
+    glyph_index: usize,
+) {
+    let Some(glyph) = DEBUG_TILE_GLYPHS.get(glyph_index) else {
+        return;
+    };
+    for (row, bits) in glyph.iter().copied().enumerate() {
+        for column in 0..3 {
+            if bits & (1 << (2 - column)) == 0 {
+                continue;
+            }
+            for y in 0..DEBUG_TILE_GLYPH_SCALE {
+                for x in 0..DEBUG_TILE_GLYPH_SCALE {
+                    let pixel_x = origin_x + column * DEBUG_TILE_GLYPH_SCALE + x;
+                    let pixel_y = origin_y + row * DEBUG_TILE_GLYPH_SCALE + y;
+                    if pixel_x < width && pixel_y < height {
+                        pixels[pixel_y * width + pixel_x] = DEBUG_TILE_LABEL_COLOR;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -634,5 +746,19 @@ mod tests {
         assert!(dirty[3]);
         assert!(dirty[4]);
         assert_eq!(dirty.iter().filter(|value| **value).count(), 4);
+    }
+
+    #[test]
+    fn debug_tile_overlay_marks_edges_and_keeps_tile_interior() {
+        let width = 32;
+        let height = 24;
+        let mut pixels = vec![0; width * height];
+
+        draw_tile_debug_overlay(&mut pixels, width, height, 7);
+
+        assert_eq!(pixels[width - 1], DEBUG_TILE_BORDER_COLOR);
+        assert_eq!(pixels[(height - 1) * width + 12], DEBUG_TILE_BORDER_COLOR);
+        assert_eq!(pixels[12 * width + 20], 0);
+        assert_eq!(pixels[2 * width + 4], DEBUG_TILE_LABEL_COLOR);
     }
 }
