@@ -61,8 +61,38 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check
         run: cargo check --locked --target ${{ matrix.target }}
+      - name: Clippy
+        run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
       - name: Test
         if: matrix.run_tests
         run: cargo test --locked
       - name: Test release helper scripts
         run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
+
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+      - name: Check at the declared MSRV
+        run: cargo check --locked --target x86_64-unknown-linux-gnu
+
+  security-audit:
+    name: RustSec audit
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

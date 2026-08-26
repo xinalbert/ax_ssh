@@ -9,8 +9,8 @@
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、同负载 release 构建与采样、`docs/project-implementation-tracker/` 记录。
-- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker transport 协议、终端内容模型、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
+- 当前范围：`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、同负载 release 构建与采样、`russh` 稳定性升级、CI 发布门禁和 `docs/project-implementation-tracker/` 记录。
+- 不在本轮范围内：parser/worker transport 协议、终端内容模型、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
 
 ## 当前状态
 
@@ -75,6 +75,10 @@
 | COLOR1 | completed | macOS CoreGraphics image 使用显式 sRGB 色彩空间，保持既有像素排列与 damage 几何不变 | `cargo check --locked --offline`、Clippy、完整测试、`git diff --check` | 仅改变色彩空间；未同时设置 `contentsFormat`，避免把像素排列和色彩空间两个变量混在一次 A/B。 |
 | COLOR2 | completed | 构建 release 采样候选并由目标 macOS 对比 ICC/vImage 与 CPU | release build、Mach-O UUID/SHA-256、同窗口/pane/renderer/负载 sample | 10 秒 sample UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 release 一致；仍显示 `CA::Render::copy_image`/ICC/vImage 主导，未提供独立 CPU meter，因此不声明总 CPU 降幅。 |
 | COLOR3 | in_progress | 以环境变量接入普通 `CALayer` delegate + `setNeedsDisplayInRect` 持久 backing store，并保留现有 `setContents` 回退 | API/objc2 审阅、11 项隔离 vendor tests、Cargo check/Clippy、GUI 视觉、同负载 sample 和残影/撕裂验收 | `AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 才启用；首次目标机验收发现 4 行 block 内局部更新使用了错误的 macOS Y 原点，已改为 top-left pixel 与 bottom-left layer point 双向变换，静态门禁和新 release 已完成，等待视觉复验和同负载 A/B；`CATiledLayer` 不在本原型内。 |
+| SEC1 | completed | 升级 `russh` 到 0.63.1，并适配 `PublicKeyOrCertificate` 主机密钥回调 | `cargo update -p russh --precise 0.63.1`、locked check、SSH focused tests | 覆盖 0.62.x Curve25519 客户端崩溃/拒绝服务修复，以及 0.63.1 的 channel-ID/MAC-none 稳定性修复；证书显式拒绝，不改变 profile/known_hosts 信任语义。 |
+| SEC2 | completed | 将严格 Clippy、MSRV 1.92 和 RustSec 审计纳入普通 CI，并移除 vendor manifest 中已失效的 bench target | workflow YAML 审阅、`cargo fmt --all -- --check`；GitHub-hosted CI 执行 | MSRV 只做 locked Linux check；RustSec action 固定到已验证的 v2.0.0 commit SHA；不恢复 benchmark 或增加 dev dependency。 |
+| SEC3 | completed | 为 Release 增加 Linux 预检和安全审计依赖 | release workflow DAG 审阅 | 跨平台构建只有在 tag 校验、fmt/check/Clippy/test、脚本回归和 RustSec audit 全部成功后才启动。 |
+| SEC4 | completed | 同步双语架构、环境审计、研究和月度变更记录 | 文档链接/tracker 校验、`git diff --check` | 记录新 API 的证书拒绝边界、MSRV/CI 事实和上游 advisory 来源；历史 0.62.2 记录保留为审计快照。 |
 
 ## 9 项复核映射
 

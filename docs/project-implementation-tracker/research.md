@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-08-26 russh 客户端稳定性与主机密钥回调升级
+
+- 时间：2026-08-26 19:00 +0800
+- 检索问题：当前锁定的 `russh 0.62.2` 是否仍包含客户端 Curve25519 崩溃/拒绝服务风险；升级到哪个修复版本会改变 AxSSH 的 host-key trust API 或安全边界？
+- 检索原因：安全评估发现 `russh` 0.62.2 低于两个 Curve25519 修复版本；随后 0.63.1 又修复客户端 channel-ID 校验和非默认 MAC-none/block-cipher panic，需要在不放宽信任的前提下落地。
+- 来源列表：RustSec advisories <https://github.com/advisories/GHSA-g9hv-x236-4qp3>、<https://github.com/Eugeny/russh/security/advisories/GHSA-5xvq-cp9x-6p6r>、<https://github.com/Eugeny/russh/security/advisories/GHSA-47hw-gvq5-r2gm>、<https://github.com/Eugeny/russh/security/advisories/GHSA-p8qx-h547-fjw9>；russh release list <https://github.com/Eugeny/russh/releases>；本机 `russh 0.63.1` `client::Handler`、`PublicKeyOrCertificate` 和 AxSSH `src/ssh.rs`。
+- 关键结论：0.62.2 受影响于错误长度/全零 Curve25519 参数导致的客户端 pre-auth DoS/panic，0.62.4 起修复；0.63.1 还修复了客户端 Handler channel-ID 校验问题和非默认 MAC-none/block cipher panic。0.63.1 的 `check_server_key` 参数变为 `PublicKeyOrCertificate`；AxSSH 只匹配 `PublicKey { key, .. }`，证书直接拒绝，避免调用 `public_key()` 将证书隐式降级为普通公钥。
+- 对实施计划的影响：`Cargo.toml`/`Cargo.lock` 锁定 0.63.1；profile fingerprint、OpenSSH known_hosts、revoked/changed 决策和认证顺序保持不变。CI 增加严格 Clippy、MSRV 1.92 locked check 与 RustSec audit；Release 的跨平台 build 依赖 Linux 预检和 audit。
+- 未解决问题：AxSSH 尚未实现证书颁发机构信任，因此证书服务端仍不可用；`rustsec/audit-check` 需在 GitHub-hosted runner 访问 advisory 数据库，目标平台真实 SSH/agent/SFTP 互操作仍需手工验收。
+
 ## 2026-08-25 macOS Software damage-aware tile present
 
 - 实施原因：用户 sample 显示单 layer 完整 `CGImage` clone、CoreGraphics image-data lock 和 vImage color conversion 是 Software 路径主要热点；需要在保持 CPU framebuffer 可复用和 Core Animation 异步读取安全的前提下缩小提交范围。

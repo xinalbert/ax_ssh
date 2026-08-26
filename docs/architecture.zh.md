@@ -524,7 +524,9 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 
 ## SSH 安全契约
 
-`russh::client::Handler::check_server_key` 是信任边界。未知和不匹配的主机密钥都在
+`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.63.1`，并对
+其 `PublicKeyOrCertificate` 回调只接受具体的 `PublicKey` 变体。服务端证书会被拒绝，
+因为当前 profile/known_hosts 契约尚未实现证书颁发机构校验。未知和不匹配的主机密钥都在
 认证前拒绝。首次拒绝握手可以把 SHA-256 指纹交给确认 UI，但只有用户明确决定后，
 该精确指纹才进入 profile；密钥变化需要再次明确确认。密码只作为 callback 的临时
 输入，不进入 `SessionStore`。密码 profile 只包含以稳定 UUID 为键的可选

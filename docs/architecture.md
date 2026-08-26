@@ -812,8 +812,12 @@ terminal Meta input.
 
 ## SSH security contract
 
-`russh::client::Handler::check_server_key` is the trust boundary. Unknown and
-mismatched keys are rejected before authentication. A rejected first-contact
+`russh::client::Handler::check_server_key` is the trust boundary. The application
+pins `russh 0.63.1`, and handles its `PublicKeyOrCertificate` callback by
+accepting only the concrete `PublicKey` variant. Server certificates are
+rejected because this profile/known_hosts contract does not implement
+certificate-authority validation. Unknown and mismatched keys are rejected
+before authentication. A rejected first-contact
 handshake may expose its SHA-256 fingerprint to the confirmation UI, but only
 an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback

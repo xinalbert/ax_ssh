@@ -1,3 +1,13 @@
+# 2026-08-26 russh 稳定性升级与发布门禁环境验证
+
+- 项目边界：`Cargo.toml`、`Cargo.lock`、`src/ssh.rs`、`.github/workflows/{ci,release}.yml`、双语架构和项目跟踪；目标是纳入 russh 客户端安全修复，并把 Clippy、MSRV 与 RustSec 检查接入 CI/Release，不改变 SSH profile/known_hosts/凭据所有权。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、`russh 0.63.1`、`russh-sftp 2.3.0`；本机 `rustc/cargo 1.97.1`、rustfmt 1.9.0、Clippy 0.1.97 可用。`russh 0.63.1` 的 client host-key API 接收 `PublicKeyOrCertificate`。
+- 运行环境：Cargo.lock 已更新并在线补齐 `russh 0.63.1` 及其新传递依赖；普通 CI 新增严格 Clippy、Rust 1.92.0 locked check 和固定到 v2.0.0 提交 SHA 的 `rustsec/audit-check`，Release 先执行 Linux fmt/check/Clippy/test、Python helper 回归和同一 RustSec audit，再进入跨平台构建。vendored softbuffer manifest 删除了指向缺失源码的旧 bench target，使全 workspace Rustfmt 可以执行；不恢复 benchmark 或增加 dev dependency。
+- 变化摘要：`src/ssh.rs` 只接受 `PublicKeyOrCertificate::PublicKey`，服务端证书保持 deny-by-default；不调用证书的 `public_key()` 转换，不改变 profile fingerprint、known_hosts revoked/changed 和密码/agent/private-key 生命周期。
+- 测试环境：本机先执行在线 `cargo check --locked` 以补齐离线缓存，随后复跑 `cargo check --locked --offline`、严格 Clippy、SSH focused tests、完整 Cargo 测试、YAML/Markdown/tracker 和 `git diff --check`；GitHub-hosted runner 需实际执行 RustSec advisory 数据库检查。
+- 环境变化检查：是；直接 Rust 依赖、锁文件和 CI 发布 DAG 发生变化，Rust/Slint/MSRV 与 SSH trust 所有权不变。
+- 开工判定：实现完成；目标平台真实 SSH certificate（当前预期拒绝）、agent、SFTP 和跨平台 Release runner 仍需手工/远端验收。
+
 # 2026-08-23 Fontique 路径字体源环境验证
 
 - 项目边界：`src/app/font_bridge.rs`、`src/app/runtime.rs` 及运行时字体资源；目标是移除外部 TTF 的完整 `Vec<u8>` 常驻副本，保留嵌入式 JetBrains UI 字体和 Maple Hani fallback，不改变 renderer、配置 schema、SSH trust、凭据或 transport。
@@ -143,7 +153,7 @@
 - Rust edition：2024。
 - MSRV：Rust 1.92.0。
 - 本机工具链：`rustc 1.97.1`、`cargo 1.97.1`、`rustfmt 1.9.0`、`clippy 0.1.97`、Python 3.14.3；`cargo fmt` 与 `cargo clippy` 子命令均可用。
-- UI/运行时：Slint 1.17.1、Tokio 1、russh 0.62.2、russh-sftp 2.3.0、libmudtelnet-rs 2.0.10、tokio-serial 5.5.0；`hmac 0.13.0` 与 `sha1 0.11.0` 复用锁定依赖实现 OpenSSH hashed host 匹配；Slint 1.17.1 的 `ComponentHandle::show/hide`、`Window::on_close_requested`、多个 `AppWindow` 实例和共享 `slint::run_event_loop()` 已在本轮本地 crate 源码核对并由 `cargo check` 编译；russh 已锁定版本内建 Unix/macOS `SSH_AUTH_SOCK` 和 Windows named-pipe agent client 及外部 signer API；Tokio 启用 `process` 供有界 `xauth` 子进程调用，`rand 0.10` 是运行时依赖，用于生成单次 X11 fake cookie；macOS 已锁定的 `objc2-app-kit 0.3.2` 启用 `NSWorkspace`、`NSCell` 和 `NSColor`，以配置 detached 标题栏的 image-only 返回图标及与 Terminal 连续的 sRGB 背景；Slint 已启用 `unstable-fontique-010` 运行时字体注册，并直接依赖锁定的 `fontdb 0.23.0` 扫描系统等宽字体。
+- UI/运行时：Slint 1.17.1、Tokio 1、russh 0.63.1、russh-sftp 2.3.0、libmudtelnet-rs 2.0.10、tokio-serial 5.5.0；`hmac 0.13.0` 与 `sha1 0.11.0` 复用锁定依赖实现 OpenSSH hashed host 匹配；Slint 1.17.1 的 `ComponentHandle::show/hide`、`Window::on_close_requested`、多个 `AppWindow` 实例和共享 `slint::run_event_loop()` 已在本轮本地 crate 源码核对并由 `cargo check` 编译；russh 已锁定版本内建 Unix/macOS `SSH_AUTH_SOCK` 和 Windows named-pipe agent client 及外部 signer API，client host-key callback 使用 `PublicKeyOrCertificate`；Tokio 启用 `process` 供有界 `xauth` 子进程调用，`rand 0.10` 是运行时依赖，用于生成单次 X11 fake cookie；macOS 已锁定的 `objc2-app-kit 0.3.2` 启用 `NSWorkspace`、`NSCell` 和 `NSColor`，以配置 detached 标题栏的 image-only 返回图标及与 Terminal 连续的 sRGB 背景；Slint 已启用 `unstable-fontique-010` 运行时字体注册，并直接依赖锁定的 `fontdb 0.23.0` 扫描系统等宽字体。
 - 依赖管理：Cargo，锁文件为 `Cargo.lock`。
 
 ## 测试环境
