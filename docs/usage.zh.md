@@ -216,7 +216,8 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。默认开启 **Local selection priority**：普通左键拖动使用本地文字选择，按住
-`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI。在 **Settings > Terminal** 关闭该选项后进入标准
+`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI；如果左键没有移动，单击也会转发给已启用 mouse reporting 的 TUI，
+一旦发生移动则保持为本地选区。在 **Settings > Terminal** 关闭该选项后进入标准
 xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`Shift` 绕过 reporting 进入本地选区，
 `Alt`/`Option` 只作为上报的 modifier bit。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
 滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。手势没有交给 reporting 时，左键双击会按终端核心语义选中一个词，
@@ -302,10 +303,16 @@ Light/Dark 两套语义色。即时预览和持久化时，
 non-software pane（包括最后保持焦点的 pane）都会使用 Unfocused 刷新上限。隐藏 Tab 不发布终端帧，parser 应答、错误、
 断开和 shutdown 仍立即处理。修改会即时预览，并在关闭 Settings Tab 时持久化。
 
+**Settings > Terminal** 中的 **Software block rows** 控制 macOS CPU 路径中终端 pane 的 presentation block 高度，
+范围为 1-16 个终端行，默认 4 行。backend 会按实测行高的倍数对 pane 的 presentation 边界对齐；sidebar 和 tab 区域
+继续使用 fallback presentation grid。这只是呈现提示，不限制 FPS，也不改变终端内容、输入或 Slint 行 model。修改会即时
+预览，并在关闭 Settings Tab 时持久化。
+
 同一 RENDERING 分组中的 **Blink terminal cursor** 默认开启。关闭后，聚焦终端的光标会持续显示，不会改变终端自身的
 cursor visibility、IME 输入或选区行为。修改会即时预览，并在关闭 Settings Tab 时持久化。
 
-**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、文字亮度、粗体亮 ANSI 色、可选语义高亮、
+**Settings > Terminal** 独立控制 Terminal 字体、字号、行高、software presentation block 行数、文字亮度、
+粗体亮 ANSI 色、可选语义高亮、
 scrollback、鼠标行为以及平台相关的 Option-as-Meta。文字亮度范围为 60%-120%，步长 5%，默认
 100%；100% 会逐值保留解析后的 ANSI/256/真彩色前景。渲染先解析程序颜色和反色状态，再选择已启用的
 语义前景，最后只对可见文字应用一次亮度调整；`dim` 也合并在这一次最终调整中。背景、选区和光标不调整。

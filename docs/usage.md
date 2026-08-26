@@ -349,7 +349,9 @@ Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
 UTF-8, or legacy encoding. **Local selection priority** is enabled by default:
 left-dragging selects local text, while `Alt` (`Option` on macOS) sends a button
-gesture to the TUI. Disable it in **Settings > Terminal** for standard xterm
+gesture to the TUI. A stationary single left click is also forwarded to a
+reporting TUI; once the pointer moves, the gesture remains a local selection.
+Disable it in **Settings > Terminal** for standard xterm
 behavior: reporting receives ordinary clicks, releases, drags, and motion;
 `Shift` bypasses reporting for local selection, and `Alt`/`Option` is only a
 reported modifier. Wheel events go to the TUI while reporting is active in both
@@ -493,13 +495,22 @@ pane that was last focused. Hidden tabs do not publish terminal frames, and
 parser responses, errors, disconnects, and shutdown remain immediate. Changes
 preview immediately and are persisted when the Settings tab closes.
 
+**Software block rows** in **Settings > Terminal** controls the macOS CPU
+presentation block height for terminal panes. It accepts 1-16 terminal rows and
+defaults to 4. The backend aligns pane presentation boundaries to that many
+measured row heights; sidebar and tab areas remain on the fallback presentation
+grid. This is a presentation hint only and does not limit FPS or change terminal
+content, input, or the Slint row model. Changes preview immediately and are
+persisted when the Settings tab closes.
+
 **Blink terminal cursor** in the same Rendering section is enabled by default.
 Disable it to keep the focused terminal cursor continuously visible; this does
 not change terminal cursor visibility, IME input, or selection behavior. The
 choice previews immediately and is persisted when the Settings tab closes.
 
 **Settings > Terminal** independently controls the Terminal font, font size,
-line height, text brightness, bright ANSI colors for bold text,
+line height, software presentation block rows, text brightness, bright ANSI
+colors for bold text,
 optional semantic highlighting, scrollback, mouse behavior, and the platform-specific Option-as-Meta
 preference. Text brightness ranges from 60% to 120% in 5% steps and defaults to
 100%, which preserves resolved ANSI/256/true-color foregrounds exactly. Rendering

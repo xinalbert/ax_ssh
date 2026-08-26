@@ -22,6 +22,9 @@ msgstr "/dev/cu.usbserial or COM3"
 msgid "1 character"
 msgstr "1 个字符"
 
+msgid "1-16 terminal rows per software presentation block"
+msgstr "每个软件呈现块包含 1-16 个终端行"
+
 msgid "10-300 columns, 3-100 rows"
 msgstr "10-300 列，3-100 行"
 
@@ -1039,6 +1042,12 @@ msgstr "大小"
 msgid "Software"
 msgstr "软件"
 
+msgid "Software block rows"
+msgstr "软件呈现块行数"
+
+msgid "Software presentation block rows"
+msgstr "软件呈现块的终端行数"
+
 msgid "Speed"
 msgstr "速度"
 
@@ -1248,6 +1257,9 @@ msgstr "像素"
 
 msgid "root"
 msgstr "root"
+
+msgid "rows"
+msgstr "行"
 
 msgid "server.example.com"
 msgstr "server.example.com"

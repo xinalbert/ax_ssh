@@ -119,6 +119,12 @@ selection coordinates. Duplicate resize callbacks, zero or clamped scrolling,
 and empty output do not advance it. The revision carries no selection
 coordinates or text. The pane never owns a worker, a terminal buffer, or
 connection state.
+While a local selection or drag is active, `TerminalPane` pauses its blink timer
+and resets the cursor phase to visible so the cursor does not flicker through the
+selection highlight.
+In Local selection priority mode, a stationary single left click is deferred
+until release and forwarded to a reporting TUI; pointer movement cancels that
+candidate and keeps the gesture as local selection.
 `TerminalModel` keeps the viewport policy explicit alongside the upstream
 `display_offset`: `Follow` is the live bottom, `Detached` is user scrollback,
 and `AlternateScreen` is the remote full-screen buffer. Output preserves a
@@ -1451,10 +1457,10 @@ The default compact terminal renderer publishes separate, merged non-default
 background and decoration spans, draws text without a transparent per-run wrapper,
 and retains the legacy item tree behind a Settings switch for A/B comparison. The
 independent row-cache switch applies `cache-rendering-hint` only to static row
-backgrounds, text, and decorations. Selection uses a stable per-row overlay whose
-children remain cell-aligned, while visibility and range change without recreating
-the row container. Cursor blink, target feedback, and IME/preedit remain outside
-that layer. Compact and non-compact text content also keeps both fixed subtrees
+backgrounds, text, and decorations. Selection uses a stable per-row overlay with
+one cell-range fill; only its position, width, and visibility change, so selecting
+does not add or remove children or recreate the row container. Cursor blink, target
+feedback, and IME/preedit remain outside that layer. Compact and non-compact text content also keeps both fixed subtrees
 allocated and toggles visibility when the setting changes, avoiding a full row
 item-tree rebuild. Skia and FemtoVG can retain a row image;
 the software renderer has no equivalent layer cache, and the option is therefore
@@ -1464,32 +1470,37 @@ values. Rust keeps the outer line model and nested run/background/decoration
 models stable. `TerminalSnapshot` carries the changed visible row indexes, so a
 partial output update renders and notifies only those rows; first frame,
 viewport geometry changes, full damage, and render-key changes use the bounded
-full-row fallback. There is no application-owned tile or partition model, no
-tile-size setting, and no second row repeater. This keeps the UI geometry and
-interaction overlays on one row coordinate system; it does not claim that a row
-model update becomes a framebuffer partial present. The upstream `TermDamage`
-path in `TerminalModel` remains responsible for producing the changed-row list,
-while Slint's own renderer continues to visit its retained item tree and track
-internal dirty regions.
+full-row fallback. There is no application-owned tile or partition model and no
+second row repeater. The `Software block rows` setting is only a bounded backend
+hint (1-16 terminal rows, default 4); it does not change the Slint row model or
+the sidebar/tab layout. This keeps the UI geometry and interaction overlays on
+one row coordinate system; it does not claim that a row model update becomes a
+framebuffer partial present. The upstream `TermDamage` path in `TerminalModel`
+remains responsible for producing the changed-row list, while Slint's own
+renderer continues to visit its retained item tree and track internal dirty
+regions.
 
 The locked Slint 1.17.1 winit software backend is patched under
 `vendor/i-slint-backend-winit/` to forward every physical dirty rectangle
 instead of collapsing them into one bounding box. The macOS `softbuffer`
-CoreGraphics backend keeps one persistent CPU framebuffer but intentionally
-uses one complete Core Animation layer. A valid surface reports `age() == 1`,
-and each present snapshots the complete framebuffer into an owned `CGImage`;
-`present_with_damage` does not create application or backend tiles. This keeps
-the macOS coordinate system identical to the known-good upstream path while
-still allowing Slint to limit CPU drawing to its internal dirty regions. First
-frame, resize, Retina scale change, surface invalidation, and restore reset the
-buffer age. The winit bridge invalidates the surface on occlusion and submits
-an empty-damage frame when a new buffer still needs its first present. The
-complete clone is deliberate: Core Animation can retain the `CGImage` data after
-the transaction commits, so updating only damaged bytes in the same backing
-allocation would race the compositor and can tear or corrupt frames. Eliminating
-that copy needs a separately synchronized IOSurface/Metal or reclaimable
-multi-buffer design, not an unsafe partial update of the current single-layer
-image. The
+CoreGraphics backend keeps one persistent CPU framebuffer and partitions its
+presentation surface into safe Core Animation layers. `TerminalPane` reports
+terminal pane geometry in logical coordinates; the backend converts it to
+physical pixels. Inside those pane regions, horizontal layers cover the full
+pane width and vertical boundaries fall on the configured number of terminal
+row heights. Sidebar, tab, and unreported space use the fallback
+256×128-physical-pixel grid. `present_with_damage` maps Slint's physical
+rectangles to intersecting layers; each selected layer gets a fresh, owned
+`CGImage` containing only its rows, while unchanged layers retain their prior
+immutable images. This keeps Core Animation safe to read after a transaction
+commits without cloning or color-converting the whole framebuffer for a small
+terminal update. First frame, resize, Retina scale change, surface invalidation,
+and restore reset buffer age and submit every layer. The backend checks the
+container scale before rendering or presenting; a scale change rebuilds geometry
+and forces that same full submit. The winit bridge invalidates the surface on
+occlusion and submits an empty-damage frame when a new buffer still needs its
+first present. This is a CPU-only presentation path; it does not impose an
+application FPS cap. A large dirty region can still refresh all layers, and the
 Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.

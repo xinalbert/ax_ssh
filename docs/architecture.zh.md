@@ -102,7 +102,10 @@ Rust
 视口身份时，`AppState` 会发布一个有界 selection revision，`TerminalPane` 在它变化时清除局部坐标。
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
-不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。
+不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。进行本地选区或拖选时，
+`TerminalPane` 会暂停闪烁 Timer 并把光标相位重置为可见，避免光标在选区高亮上闪动。
+在 Local selection priority 模式下，没有发生移动的单次左键点击会延迟到释放时转发给已启用
+mouse reporting 的 TUI；指针一旦移动就取消该候选并保持本地选区。
 `TerminalModel` 在上游 `display_offset` 旁维护显式的 `Follow`、`Detached` 和
 `AlternateScreen` 视口策略。输出在 Detached 时保持用户查看的历史位置，键盘输入/粘贴回到底部，进入或
 退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
@@ -895,29 +898,31 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。
 默认的紧凑终端渲染会分别发布合并后的非默认背景 span 和装饰 span，直接绘制 Text，不再给每个 run
 增加透明包装 Rectangle；Settings 开关仍保留旧 item 树供 A/B。独立的行缓存开关只把静态行背景、文字和
-装饰放入 `cache-rendering-hint` layer；选区使用固定的逐行 overlay，子项仍按 cell 对齐，
-只更新可见性和范围而不重建行容器；光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
+装饰放入 `cache-rendering-hint` layer；选区使用固定的逐行 overlay 和单个 cell-range fill，
+只更新位置、宽度和可见性而不增删选区子项或重建行容器；光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
 紧凑与非紧凑文字内容也固定保留两套子树，设置切换时只改变可见性，避免重建整行 item tree。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
 终端网格现在只使用一个有界的 Slint repeater，直接遍历 `TerminalRenderLine`。
 Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`TerminalSnapshot` 携带实际变化的可见行号，
 因此普通输出只渲染并通知这些行；首帧、视口几何变化、full damage 和渲染 key 变化才回退到有界的整行更新。
-不再存在应用层 tile/partition model、分区设置或第二层行 repeater，因此 UI 几何和交互覆盖层共用一套行坐标；
-行 model 更新也不等于 framebuffer partial present。`TerminalModel` 的上游 `TermDamage` 负责产生变化行列表，
-Slint renderer 仍会访问保留的 item tree 并维护自身 dirty region。
+不再存在应用层 tile/partition model 或第二层行 repeater。`Software block rows` 只是 backend 的有界提示值
+（每块 1-16 行终端行，默认 4），不会改变 Slint 行 model，也不会改变 sidebar/tab 布局，因此 UI 几何和交互覆盖层
+仍共用一套行坐标；行 model 更新也不等于 framebuffer partial present。`TerminalModel` 的上游 `TermDamage` 负责
+产生变化行列表，Slint renderer 仍会访问保留的 item tree 并维护自身 dirty region。
 
 锁定的 Slint 1.17.1 winit software backend 在 `vendor/i-slint-backend-winit/` 中携带本地补丁，把每个物理
 脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 持有
-一个持久 CPU framebuffer，但有意继续使用单个完整 Core Animation layer。有效 surface 返回 `age() == 1`，
-每次 present 都把完整 framebuffer 快照为独立拥有的 `CGImage`；`present_with_damage` 不再创建应用层或
-backend tile。这样保留已验证的上游坐标语义，同时仍允许 Slint 只绘制内部 dirty region。首帧、resize、
-Retina scale、surface invalidate 和窗口恢复都会重置 buffer age。winit bridge 在窗口 occluded 时使 surface
-失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。这里完整 clone 是刻意保留的安全边界：Core Animation
-可能在 transaction commit 后继续读取 `CGImage` 数据，因此在同一后备分配中只写入 damage byte 会与 compositor
-并发，可能造成撕裂或帧损坏。要移除该 copy 必须采用带显式同步的 IOSurface/Metal 或可回收的多缓冲设计，不能对
-当前 single-layer image 进行不安全的 partial update。Slint API、终端所有权和 SSH 边界不变。GPU/Metal
-仍只把 Skia 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
+一个持久 CPU framebuffer，并把 presentation surface 划分为安全的 Core Animation layer。`TerminalPane` 以逻辑坐标
+发布终端 pane 几何，backend 边界再转换为物理像素；pane 区域内的 layer 覆盖整个 pane 宽度，垂直边界落在设置的
+终端行高倍数上。sidebar、tab 和未上报区域使用固定 256×128 物理像素的 fallback grid。`present_with_damage` 将
+Slint 的物理矩形映射到相交 layer；每个被选中的 layer 只为自身的行创建新的、独立拥有的 `CGImage`，未变化的 layer
+则继续保留旧的不可变图像。因此 Core Animation 在 transaction commit 后仍可安全读取图像，无需为一次很小的终端更新
+clone 或色彩转换整个 framebuffer。首帧、resize、Retina scale、surface invalidate 和窗口恢复都会重置 buffer age
+并提交全部 layer。backend 会在 render/present 前检查容器 scale；scale 变化时重建几何并进行同样的完整提交。winit
+bridge 在窗口 occluded 时使 surface 失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。该路径只使用 CPU，不增加
+应用 FPS 上限；大面积 damage 仍可能刷新全部 layer。Slint API、终端所有权和 SSH 边界不变。GPU/Metal 仍只把 Skia
+绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
 运行时终端几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 
 ## 分阶段范围
