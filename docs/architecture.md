@@ -1504,6 +1504,34 @@ application FPS cap. A large dirty region can still refresh all layers, and the
 Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.
+
+`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` switches only this macOS Software
+presentation boundary to an opt-in `CALayerDelegate` experiment. It preserves
+the existing pane/fallback layer geometry and ordering. Each layer retains a
+synchronized CPU backing store; present copies only its intersections with the
+physical damage list and calls `setNeedsDisplayInRect` in layer points. On
+macOS, tile-local top-left framebuffer rectangles are converted to the
+standalone layer's bottom-left coordinate system; the delegate applies the
+inverse conversion to the Core Graphics clip before reading pixels. It then
+makes an independently owned image for that clipped rectangle and draws it into
+the layer context. Delegates are retained beside their layers and cleared before
+rebuild or destruction. The
+default `setContents(CGImage)` path remains available for direct A/B and visual
+fallback. This experiment does not promise zero-copy composition: Core
+Animation may still copy or color-convert its backing store, so Retina/resize,
+stale-pixel, tearing, CPU, and sample results must be checked before enabling it
+by default.
+
+The pane geometry bridge is enabled only for the macOS Software renderer. It
+keeps a bounded, window-keyed logical geometry hint rather than terminal,
+session, or SSH state. Pane movement and notice/grid-clip changes republish the
+affected geometry; a native scale-factor event republishes every region using
+the new physical scale. Closing, returning, or failing to create a detached
+window unregisters its layout. Application locks are released before Slint or
+softbuffer calls. During rendering, the CoreGraphics surface reads only the
+layout generation once per buffer/present cycle and clones the region snapshot
+only when the generation or layer scale requires a rebuild. Other renderers do
+not run the presentation-layout revision, timer, or callback path.
 Runtime terminal geometry and user choices remain in versioned `AppSettings`;
 the Theme global remains a visual resolver rather than a persistence owner.
 

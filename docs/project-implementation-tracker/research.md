@@ -288,3 +288,59 @@
 - 关键结论：固定 8/16 行 tile 可以减少顶层重复项树遍历、model/property 通知和静态行文字绘制的重复成本；但锁定的 macOS softbuffer backend 报告 `age=0`，`present_with_damage` 忽略 damage 并设置完整尺寸 `CGImage`，所以 tile 不能单独解决最终整帧提交。不能只把 buffer age 改为 1，因为当前 buffer 没有持久 framebuffer，可能产生脏数据。
 - 对实施计划的影响：固定 8/16 行 tile 方案已撤回；当前只保留单层 `TerminalRenderLine` model 的 source/render revision 复用、上游 `TermDamage` 和 Slint 自身 dirty-region 追踪。macOS surface 仍按上游完整单 layer present，不把应用层行更新当作 framebuffer partial present。
 - 未解决问题：同负载 GPU/Skia 与 Software 的 CPU/footprint A/B 仍需目标平台采样；若热点仍集中在 `WinitSoftwareRenderer`/CoreAnimation，应单独评估 renderer/backend，而不是重新引入应用层 tile。
+
+## 2026-08-26 Core Animation 局部失效与 sRGB 实验
+
+- 时间：2026-08-26 14:00 +0800
+- 检索问题：`CALayer` 的 `setNeedsDisplayInRect` 是否能把当前每 tile `setContents(CGImage)` 路径变成真正的局部 backing-store 更新，以及显式 sRGB 是否可能减少 Core Animation 的 ICC/vImage 转换。
+- 检索原因：用户采样显示 `present_tiles -> CATransaction::commit -> CA::Render::copy_image` 和 `CGColorTransformConvertUsingCMSConverter` 为主要主线程热点，需要先拆分色彩空间因素，再评估 delegate/backing-store 方案。
+- 来源列表：Apple `CALayer.draw(in:)` <https://developer.apple.com/documentation/quartzcore/calayer/draw%28in%3A%29>；Apple `CALayerDelegate` <https://developer.apple.com/documentation/QuartzCore/CALayerDelegate>；Apple `CALayer.setNeedsDisplay`（含 `setNeedsDisplayInRect:`）<https://developer.apple.com/documentation/quartzcore/setneedsdisplay>；Apple `CALayer.display()` <https://developer.apple.com/documentation/quartzcore/calayer/display%28%29>；Apple `IOSurface` <https://developer.apple.com/documentation/IOSurface>；本机 `objc2-quartz-core 0.3.2` 和 `objc2-core-graphics 0.3.2` 生成 API。
+- 关键结论：公开 API 支持对 layer 的矩形区域失效，并在 delegate 的 `drawLayer:inContext:` 中使用被裁剪的 CGContext；但 `setContents(CGImage)` 没有图片内部的 patch 语义，直接写 provider 后备内存不安全。持久 backing-store 可能减少应用侧每 tile image 创建，但不保证 Core Animation 内部完全不复制；必须用 delegate 生命周期、不可变帧快照和目标机 sample 验证。显式 `kCGColorSpaceSRGB` 可作为独立低风险 A/B，不能预先假设会消除 ICC 转换。
+- 对实施计划的影响：新增 COLOR1（只切换 `DeviceRGB` -> `kCGColorSpaceSRGB`）和 COLOR2（同负载 release sample）；COLOR3 的 `setNeedsDisplayInRect` 原型仅在 COLOR2 之后实施，保持当前 tile 路径可回退。
+- 未解决问题：macOS 目标 layer 的实际色彩空间、`CA::Render::copy_image` 是否因显示器 profile 或 pixel format 触发、delegate backing-store 的异步读取/撕裂风险，以及 IOSurface 在 CPU-only softbuffer 路径中的公开可移植性仍需目标机实验。
+
+## 2026-08-26 sRGB release sample 复核
+
+- 时间：2026-08-26 14:32 +0800
+- 检索问题：显式 sRGB release 候选是否减少了 `CA::Render::copy_image` 下的 ICC/vImage 驻留。
+- 检索原因：需要用同一二进制 sample 决定是否继续实施普通 `CALayer` backing store。
+- 来源列表：用户提供的 Instruments sample、当前 `target/release/ax_ssh` Mach-O UUID/SHA-256、锁定的 macOS softbuffer 提交路径。
+- 样本：`/Volumes/albert_xin/2026/Download/Sample of ax_ssh-srgb-10s.txt`，macOS 15.7.7 ARM64，PID 66769，10 秒/1 ms；UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 `target/release/ax_ssh` 一致，当前 SHA-256 为 `f838a4c3b9893f93b143091622f7e212e534d1438c52b7bab1347eb9addaacd4`。
+- 主线程 8317 个采样中，有 2933 个驻留在 DisplayLink 回调栈；其中 1666 个驻留在 `CA::Transaction::commit`，1635 个驻留在 `CA::Render::copy_image`，1613 个驻留在 `CGContextDrawImage`，1087 个驻留在 `CGColorTransformConvertUsingCMSConverter`，984 个驻留在 `vImageConverterConvert`。这些是调用树驻留次数，不是实际回调次数或独立 CPU 百分比，且子项有嵌套关系。
+- 关键结论：显式 sRGB 没有消除 Core Animation 的 ICC/vImage 路径；当前 `setContents(CGImage)` 仍让 CA 在提交时准备/复制图像。应用侧 damage 只决定哪些 layer 被替换，尚未形成 CGImage 内部的矩形 patch。worker/PTY 线程主要停在 `read`、信号量或条件变量等待，不是本次热点。
+- 对实施计划的影响：COLOR2 完成；COLOR3 需要单变量原型验证，并保留安全 snapshot、残影/撕裂和目标机 CPU 验收。
+- 未解决问题：sample 没有独立 CPU meter，且不能从嵌套驻留次数推导总 CPU 降幅；CA 内部格式选择仍不公开。
+
+## 2026-08-26 macOS dirty backing-store 实施检索
+
+- 时间：2026-08-26 15:00 +0800
+- 检索问题：`CALayer.setNeedsDisplayInRect`、普通 delegate 和 `CATiledLayer` 中，哪条 CPU-only 路径适合 AxSSH 当前 pane-aware softbuffer layer。
+- 检索原因：sRGB sample 仍由 `CA::Render::copy_image`、ICC/vImage 主导，需要避免把失效标记误认为公开保证的局部提交。
+- 来源列表：Apple `CALayer`、`CALayerDelegate`、`drawLayer:inContext:`、`drawInContext:`、`setNeedsDisplay`、`contentsFormat`、`CATiledLayer`、`CGDataProvider` 和 Quartz 2D bitmap image 文档；锁定 objc2 0.3.2 生成源码与当前 vendor backend。
+- 需求定义：CPU-only software renderer 已经把 Slint damage 映射到窗口内的 presentation layer，但当前每个 dirty layer 仍通过 `setContents(CGImage)` 提交，目标是减少应用侧整块 image 构造并观察是否降低 `CA::Render::copy_image`/ICC/vImage；不能牺牲终端顺序、Retina 坐标、窗口关闭安全和帧一致性。
+- 官方 API 事实：`CALayer.setNeedsDisplayInRect:` 只标记指定区域失效；layer 有 delegate 时，Core Animation 可通过 `drawLayer:inContext:` 请求绘制，传入的 CGContext 可能已经按需要绘制的区域裁剪，实际 clip 可用 `CGContextGetClipBoundingBox` 查询。`contentsFormat` 只是期望存储格式提示，默认值为 `RGBA8Uint`，不能当作局部 patch API。来源：Apple `CALayer`、`CALayerDelegate`、`drawInContext:`、`setNeedsDisplay` 和 `contentsFormat` 文档。
+- `CATiledLayer` 事实：官方说明它会在需要时于一个或多个后台线程调用绘制回调，并允许用 `setNeedsDisplayInRect:` 使区域失效；更新是异步的，下一次显示可能仍是旧内容。官方还明确禁止直接修改 `CATiledLayer.contents`，否则会失去 tiled behavior。来源：Apple `CATiledLayer` 文档。
+- ownership 事实：`CGDataProvider` 的 direct-access pointer 只向 Core Graphics 提供只读访问；应用不能在 Core Graphics 释放 pointer 前移动或修改数据。因此不能把当前可复用的 `softbuffer::PixelBuffer` 直接作为长期 provider 后备并继续写入；当前独立 `Vec<u32>` provider 的所有权边界是正确的。
+- 候选方案比较：
+  - `CALayer` delegate backing store：与当前主线程 layer 生命周期最接近；保留一个 layer backing store，由 `setNeedsDisplayInRect` 合并脏矩形，`drawLayer:inContext:` 只从不可变 snapshot 绘制 clip 区域。优点是失效语义清晰、可保留完整帧；缺点是 Core Animation 仍可能在提交时复制/色彩转换，公开 API 没有保证零 copy。
+  - `CATiledLayer`：由 Core Animation 管理 tile cache，适合大 surface/异步绘制；需要设置固定 `tileSize`、`levelsOfDetail=1`、`fadeDuration=0`（若 API 可用），并接受至少一帧的异步可见延迟。不能同时调用 `setContents`，也不能把最新 framebuffer 当作可变共享内存直接读写。
+  - 继续 `setContents(CGImage)`：实现最小、当前视觉语义稳定，但 `damage` 只能减少替换 layer 数量，不能阻止每张替换图像在 CA 内部被准备/转换；本次 sRGB sample 已验证该限制。
+- 推荐实施顺序：
+  1. 保留当前路径作为基线，先单独测试 `contentsFormat`/像素排列变量并重新 sample。
+  2. 实现普通 `CALayer` delegate 原型：固定 layer geometry；由 `CGImpl` 保留两个有界 frame snapshot（front/back），提交前完成 framebuffer -> back snapshot 的脏矩形复制，交换后只在主线程调用 `setNeedsDisplayInRect`；delegate 只读取 front snapshot，使用 CGContext 的 clip 绘制。
+  3. 处理 resize、scale、invalidate、空 damage、窗口关闭和 delegate weak lifetime；在任何 snapshot 正在被 CA 使用时禁止写入，必要时丢弃/合并过期 frame。
+  4. 用同负载 sample 对比 `CA::Render::copy_image`、ICC/vImage、主线程驻留和外部 CPU meter；只有确认收益后再考虑 `CATiledLayer` 独立异步实验。
+- 证据缺口：Apple 文档没有承诺 `setNeedsDisplayInRect` 一定避免 backing-store 全量复制，也没有公开 CA 内部 `copy_image` 的格式选择规则；因此“减少应用侧 copy”是可合理验证的目标，“消除 CA copy/ICC”只能作为待测假设。当前 COLOR3 原型已为 objc2 0.3.2 启用普通 `CALayerDelegate` 所需的 `CGContext` 接线；`CATiledLayer` 和 `CGBitmapContext` feature 仍未启用，避免在同一次 A/B 中引入异步 tile 或另一种像素所有权模型。
+- 关键结论：普通 `CALayer` delegate 与当前 layer 生命周期最接近，可以保留同步、低延迟和明确的 weak delegate 所有权；`CATiledLayer` 是异步 cache，不能直接沿用 `setContents`，不适合作为首个终端实验。
+- 对实施计划的影响：先用环境变量实现普通 delegate 原型并保留默认基线；只有目标机视觉一致且 sample 有收益时才考虑默认启用，`CATiledLayer` 后置。
+- 未解决问题：Apple 不保证局部失效会消除内部 backing-store copy/颜色转换；目标 macOS 的实际 clip、方向、Retina、残影和性能必须实测。
+
+## 2026-08-26 macOS dirty backing-store 光标错位复核
+
+- 时间：2026-08-26 18:06 +0800
+- 检索问题：为什么实验 backing-store 连续输出时约每 4 行出现一次白色光标错位，以及 `setNeedsDisplayInRect` 与 delegate clip 应使用哪套 tile-local Y 坐标。
+- 检索原因：目标机截图中的错位间隔与默认 4 行 presentation block 完全一致；默认 `setContents(CGImage)` 不出现该问题，需要区分 Slint cursor damage、layer 排序和局部坐标转换。
+- 来源列表：[Apple Core Animation Basics](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/CoreAnimation_guide/CoreAnimationBasics/CoreAnimationBasics.html)、[Apple CALayer setNeedsDisplay](https://developer.apple.com/documentation/quartzcore/calayer/setneedsdisplay(_:))、[Apple CALayer geometryFlipped](https://developer.apple.com/documentation/quartzcore/calayer/isgeometryflipped)、当前 `vendor/softbuffer/src/backends/cg.rs` 与用户提供的目标机截图。
+- 关键结论：Slint/softbuffer damage 和 CPU framebuffer 使用左上原点物理像素，而 macOS standalone `CALayer` 自身坐标默认使用左下原点。原型只除以 Retina scale，未在 `setNeedsDisplayInRect` 和 delegate clip 读取之间翻转 tile-local Y，因此完整 block 首帧正常，局部 cursor damage 在 block 内上下镜像；`geometryFlipped` 不改变 layer 内容渲染，不能代替本次局部矩形转换。
+- 对实施计划的影响：只在实验 delegate 边界双向转换 tile-local Y；完整矩形、底边、顶部和 Retina clip 往返由 focused tests 覆盖。默认 `setContents`、pane/fallback layer 顺序、Slint dirty region、终端模型和 SSH 边界不变；目标机重新验收连续输出、光标 blink、1/4/8/16 行、跨 block、Retina/resize 和分屏后，才进行 CPU/sample A/B。
+- 未解决问题：静态坐标往返已验证，但目标机 Core Animation 实际 clip 合并、连续 blink 残影和性能收益仍需用户视觉复验与同负载 sample。

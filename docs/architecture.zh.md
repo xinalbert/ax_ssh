@@ -923,6 +923,21 @@ clone 或色彩转换整个 framebuffer。首帧、resize、Retina scale、surfa
 bridge 在窗口 occluded 时使 surface 失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。该路径只使用 CPU，不增加
 应用 FPS 上限；大面积 damage 仍可能刷新全部 layer。Slint API、终端所有权和 SSH 边界不变。GPU/Metal 仍只把 Skia
 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
+
+`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 只把 macOS Software presentation 边界切换到可选的
+`CALayerDelegate` 实验，不改变现有 pane/fallback layer 的几何、顺序和边界。每个 layer 持有同步的 CPU
+backing store；present 只复制物理 damage 与该 layer 的交集，并按 layer point 调用
+`setNeedsDisplayInRect`。macOS 下会先把 tile-local、左上原点的 framebuffer 矩形转换为独立 layer 的左下原点
+坐标；delegate 读取 Core Graphics clip 后执行严格逆变换，再为该裁剪矩形创建独立拥有的图像并绘入 layer
+context。delegate 与 layer 一同保留，并在重建或析构前清除。默认 `setContents(CGImage)` 路径仍作为直接 A/B
+基线和视觉回退。该实验不承诺零拷贝合成：Core Animation 仍可能复制或色彩转换 backing store，因此必须先验收
+Retina/resize、残影、撕裂、CPU 和 sample，才能考虑默认启用。
+pane 几何 bridge 只在 macOS Software renderer 下启用。它保存的是按窗口 key 索引的有界逻辑几何提示，
+不保存 terminal、session 或 SSH 状态。pane 移动以及 notice/grid-clip 变化会重新发布相关几何；原生
+scale-factor 事件会用新物理 scale 重新发布窗口的全部区域。detached 窗口关闭、返回或创建失败时主动注销
+布局。应用在调用 Slint 或 softbuffer 前释放自身锁；CoreGraphics surface 每个 buffer/present 周期只读取一次
+layout generation，仅在 generation 或 layer scale 要求重建时 clone region snapshot。其它 renderer 不运行
+presentation-layout revision、timer 或 callback 链路。
 运行时终端几何与用户选项仍进入版本化 `AppSettings`；Theme global 只作为视觉解析器，不拥有持久化状态。
 
 ## 分阶段范围

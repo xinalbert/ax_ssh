@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260823-terminal-dirty-region-backend-bypass
-- 目标：在保留 Slint 终端 dirty-row/model 优化的同时，让实际选择 Software 的可见输出不受固定 FPS timer 限制，而通过单槽最新快照背压避免 UI 队列积压，并让 macOS CoreGraphics surface 只更新 damage 相交的安全 presentation tile。
-- 交付物：本地锁定 winit 多矩形 damage forwarding patch、macOS softbuffer 持久 framebuffer/失效/tile present 补丁、Software 无固定 FPS 最新快照提交、无可见 snapshot 跳过、focused tests 和完整离线验证；不维护应用层 CoreAnimation tile/partition 链路。
+- 目标 ID：20260826-macos-software-partial-presentation
+- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，并以可回退实验验证普通 `CALayer` backing store 的矩形失效行为。
+- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/{terminal_presentation,software_presentation,terminal_bridge,settings_bridge,window_router,view}.rs`、`src/config{,/settings,/tests}.rs`、`ui/{app,settings,settings/terminal,terminal-pane,workspace-shell}.slint`、`vendor/{softbuffer,i-slint-backend-winit}`、翻译、双语文档和本轮实施跟踪记录。
-- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker transport 协议、终端内容模型、专用 Metal/IOSurface terminal surface、参考工程代码或构建耦合，以及未经用户提供截图的 GUI 视觉结论。
+- 当前范围：`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、同负载 release 构建与采样、`docs/project-implementation-tracker/` 记录。
+- 不在本轮范围内：SSH host-key/认证/凭据契约、parser/worker transport 协议、终端内容模型、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -23,6 +23,11 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| SPR1 | completed | 建立 9 项问题到源码、架构边界和验证命令的映射 | session 原文、project-map/current、Rust/Slint skill 审阅 | 保留用户未提交的 `ui/components/terminal-grid.slint`；不涉及 SSH/trust/凭据。 |
+| SPR2 | completed | 修复 cfg 门禁、Software/macOS 限定、scale 事件重新发布和布局注销 | macOS cfg 审阅、布局 registry focused tests、Cargo check | scale 变化重新按逻辑区域换算物理像素；窗口关闭/返回主动注销 registry entry。 |
+| SPR3 | completed | 每个 buffer/present 周期只读取一次 layout generation，重建时才 clone snapshot，并移除重复 rows 设置 | backend pure tests、settings bridge 静态审阅 | 不改变 damage、buffer age 或 CoreAnimation image ownership。 |
+| SPR4 | completed | 补齐 pane 移动、notice/grid-clip、reset 后的布局重新注册，并限制非 Software renderer 的 UI 回调 | Slint compile、layout callback contract review | presentation timer 与 PTY resize timer 已分离；终端 parser、worker、协议应答和 shutdown 不改。 |
+| SPR5 | completed | 用生产 tile geometry/damage 路径覆盖多 pane、裁剪、重叠、generation 和失效行为，并同步文档 | focused tests、Cargo fmt/check/Clippy/test、tracker/Markdown/diff checks | 8 个隔离 vendor 单测、根工程门禁和双语文档已完成；目标 macOS GUI/Retina 视觉仍由用户验收。 |
 | PERF1 | completed | 当前 release/debug 环境、采样热点和固定负载基线 | manifest/toolchain 检查、sample 归因、基线命令可复现 | 现有 421 ms sample 用于定位，不作为最终优化比例。 |
 | PERF2 | completed | 删除未消费的 active-terminal DTO/render，并确保每个可见 pane 每轮最多生成一次 snapshot | focused Rust 回归、Cargo/Slint check | 不改变 pane UUID、选区、IME 或 worker 所有权。 |
 | PERF3 | completed | 刷新门控携带脏 terminal ID，并只对未包含在已取 snapshot 中的后续请求补排 | focused 并发/状态回归、延迟 tracing 审阅 | 保持 bounded event-loop 调度和最新状态读取。 |
@@ -66,6 +71,24 @@
 | ROWMODEL2 | completed | 删除应用层 tile/partition 配置、DTO、回调、测试和重复行 repeater | config/view/Slint focused tests、全量离线门禁 | 旧 JSON 字段作为未知字段忽略，不增加 schema migration。 |
 | ROWMODEL3 | completed | 同步双语架构、项目地图、研究和月度记录，复核无残留符号 | tracker validator、Markdown 检查、`git diff --check` | 历史 tile 条目保留为审计记录，当前实现说明改为单层行模型。 |
 | ROWMODEL4 | completed | 用 `TerminalSnapshot.dirty_rows` 驱动普通输出的按行增量 render/model 更新 | 终端 damage focused tests、Rust/Slint check、完整 Cargo tests | 首帧、resize、滚动、full damage 和渲染 key 变化保留全量回退；不改变 Slint 内部 item-tree 遍历或 backend present 语义。 |
+
+| COLOR1 | completed | macOS CoreGraphics image 使用显式 sRGB 色彩空间，保持既有像素排列与 damage 几何不变 | `cargo check --locked --offline`、Clippy、完整测试、`git diff --check` | 仅改变色彩空间；未同时设置 `contentsFormat`，避免把像素排列和色彩空间两个变量混在一次 A/B。 |
+| COLOR2 | completed | 构建 release 采样候选并由目标 macOS 对比 ICC/vImage 与 CPU | release build、Mach-O UUID/SHA-256、同窗口/pane/renderer/负载 sample | 10 秒 sample UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 release 一致；仍显示 `CA::Render::copy_image`/ICC/vImage 主导，未提供独立 CPU meter，因此不声明总 CPU 降幅。 |
+| COLOR3 | in_progress | 以环境变量接入普通 `CALayer` delegate + `setNeedsDisplayInRect` 持久 backing store，并保留现有 `setContents` 回退 | API/objc2 审阅、11 项隔离 vendor tests、Cargo check/Clippy、GUI 视觉、同负载 sample 和残影/撕裂验收 | `AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 才启用；首次目标机验收发现 4 行 block 内局部更新使用了错误的 macOS Y 原点，已改为 top-left pixel 与 bottom-left layer point 双向变换，静态门禁和新 release 已完成，等待视觉复验和同负载 A/B；`CATiledLayer` 不在本原型内。 |
+
+## 9 项复核映射
+
+| # | 问题 | 处理安排 | Step |
+| --- | --- | --- | --- |
+| 1 | Retina/跨屏 scale 变化后仍使用旧物理区域 | `ScaleFactorChanged` 按窗口重新发布逻辑区域，backend 同时核对 layer scale 并使旧 framebuffer 失效 | SPR2 |
+| 2 | 每帧重复锁布局 registry 并 clone 多份 region `Vec` | 应用发布前释放 `MutexGuard`；backend 每个 buffer/present 周期只读一次 generation，只有 generation/scale 变化时 clone snapshot 并重建 layer | SPR3 |
+| 3 | 应用状态通过 softbuffer 全局旁路耦合 backend | 将内容收窄为 32 窗口、每窗口 64 region 的短生命周期 opaque presentation hint；只在 macOS Software 启用，窗口释放时注销，不传 terminal/session/SSH 状态 | SPR1、SPR2 |
+| 4 | `Hash`/`Hasher` 在非 macOS 构建可能成为未使用 import | 对 import 和 native window key 实现使用 `cfg(target_os = "macos")` | SPR2 |
+| 5 | registry 没有窗口注销，依赖容量淘汰遗留旧 entry | 新增 `remove_presentation_layout`，覆盖 detached 恢复失败、返回、关闭、批量释放和主窗口退出 | SPR2、SPR5 |
+| 6 | pane 移动、notice/grid clip、scale 与 reset 的布局失效不完整 | pane model revision、独立 notice/layout timer、scale refresh、reset 后逐 pane 重注册共同覆盖 | SPR2、SPR4 |
+| 7 | 非 Software renderer 仍执行 presentation callback/timer/layout 工作 | AppWindow 显式下发 macOS Software enable，Slint revision/timer/callback 与 Rust bridge 均先门控 | SPR2、SPR4 |
+| 8 | block-row 默认值/范围和 settings `set_rows` 重复 | 配置规范化作为应用唯一默认/范围来源，bridge 不再自建默认或 clamp；softbuffer public API 仅保留边界防御，Settings 统一通过 open-window apply 一次更新 | SPR3 |
+| 9 | 测试只覆盖旧固定辅助函数，没有覆盖生产 damage/tile 路径 | production `dirty_tile_mask_for_tiles` 直接由 backend 与测试共用，并新增多 pane、裁剪、重叠、generation 去重和注销回归 | SPR5 |
 
 ## 本轮实施计划
 
@@ -138,12 +161,18 @@
 - 已修正 Local selection priority 下的 reporting 单击：普通左键按下先保留为本地拖选候选，若释放前未跨格移动，则在释放时向已启用 mouse reporting 的 TUI 发送 press/release；一旦移动仍保持本地选区，Alt/Option 和标准 xterm 模式的既有路由不变。
 - `TerminalModel` 的 `TermDamage` 仍只负责终端 snapshot 的受损行重建；Slint renderer 的内部 dirty region 仍由框架负责，二者不再被包装成应用层 tile partial-present 链路。
 - 已实现 macOS Software 持久 framebuffer 与 pane-aware CoreAnimation presentation layer：`TerminalPane` 发布窗口相对逻辑几何和实测行高，Rust 按 Retina scale 转为物理区域，backend 在每个终端 pane 内按 1-16 行倍数分带并让每带横跨 pane；sidebar/tab/空白区域保留 256×128 fallback。`present_with_damage` 仅复制 damage 相交 layer 的行并创建独立拥有的 `CGImage`，未变化 layer 保留前帧图像。有效帧返回 `age() == 1`；首帧、resize、DPI/设置/分屏几何变化、occluded/restore 和 surface invalidate 强制重建或完整更新。
+- 已完成 session `01a03ba9-f5bb-7cc0-a7c9-021688da1471` 的 9 项复核修复：Retina scale 重算、布局 registry 主动注销、单周期 generation 读取、macOS cfg/Software 门控、pane/notice/reset 失效、Settings 重复更新清理、生产 damage/multi-region 测试和几何 bridge 边界文档均已落地；未改 terminal parser、worker、SSH trust、凭据或 FPS 策略。
 - 已新增独立的 `ax_ssh-crash.log`：进程 panic hook 同步记录 panic 消息、位置、线程/进程/平台元数据、renderer 环境和强制 Rust backtrace，随后仍调用默认 panic hook；文件使用私有权限，与缓冲滚动运行日志分离，以保留 Objective-C callback abort 前的首段报告。
+- 已完成 COLOR1：macOS CoreGraphics backend 将 `CGColorSpace::new_device_rgb()` 改为显式 `kCGColorSpaceSRGB`，不改变 BGRA/32-bit bitmap 声明、tile 几何、damage mask 或图像独立所有权；同负载 sample 显示 ICC/vImage 仍存在。
+- 已完成 COLOR2 采样：目标 sample UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 `target/release/ax_ssh` 一致；主线程热点仍在 `CA::Render::copy_image`、ICC/vImage。当前 release SHA-256 为 `f838a4c3b9893f93b143091622f7e212e534d1438c52b7bab1347eb9addaacd4`；此前 14:20 记录的 `17C09EF9...` 是更早候选，不是该 sample 的进程。
+- 已完成 COLOR3 原型代码：现有 pane/fallback layer 几何和排序不变；每个 layer 的 retained delegate 持有同步像素 backing，present 只复制 tile-local damage 并按 Retina scale 调用 `setNeedsDisplayInRect`，delegate 只为 CGContext clip 创建独立图像。默认仍走 `setContents(CGImage)`；重建/析构前清除 weak delegate，不直接共享可变 provider 内存。
 
 ## 验证
 
-- 已完成：ROWMODEL1-ROWMODEL4、BACKEND1-BACKEND5、PERF21；`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 209、应用 200、Doc tests 0）、翻译检查和 `git diff --check` 已通过；本轮 Rust 文件单独 `rustfmt` 后无差异。
-- 当前仓库的 `cargo fmt --all -- --check` 会在检查源码前因既有 `vendor/softbuffer/benches/buffer_mut.rs` 缺失退出；本轮没有创建无关 bench 文件。未完成项为新 row-aligned 布局的目标 macOS 视觉验收，以及同负载 GPU/Skia 与 Software 的 CPU/footprint A/B。
+- 已完成：SPR1-SPR5；`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 209、应用 200、Doc tests 0）、Retina 换算 focused test、去除未缓存 bench dev-dependencies 的隔离 vendor 单测（8 项）、435 条翻译、Rustfmt 源码差异检查和 `git diff --check` 通过。
+- COLOR1 已完成：`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 209、应用 201、Doc tests 0）和 `git diff --check` 通过；`cargo fmt --all -- --check` 仍被仓库既有缺失的 `vendor/softbuffer/benches/buffer_mut.rs` 阻断，已单独用 rustfmt 校验修改后的 backend。
+- COLOR3 代码验证：修改后的 backend 已通过独立 rustfmt、`cargo check --locked --offline`、严格 Clippy、隔离 vendor `--lib` 11 项测试、根工程完整 410 项测试和 release 构建；新增测试覆盖跨 tile damage 的局部裁剪、完全无交集矩形、2x Retina point 换算和 macOS tile-local Y 坐标往返。最新 release UUID 为 `3870BAB3-16BE-387A-AAA3-239B2512B595`，SHA-256 为 `7b2bf745ad26f955a90fd2bb31b9ccd67ad7fca7f4b7007a02b6d9aad9df63eb`。隔离完整 doctest 仍被 vendor 既有缺失的 `examples/utils/winit_app.rs` 阻断。
+- 未完成：仓库既有 `vendor/softbuffer/benches/buffer_mut.rs` 缺失使 `cargo fmt --all -- --check` 在完成全部文件检查前退出；Windows offline check 因本机未缓存 `atomic-waker 1.1.2` 未执行。tracker validator 本轮 current/新增记录字段完整，仍报告既有 2026-08 历史与 research 条目格式问题。目标 macOS GUI/Retina 视觉和同负载 CPU/footprint A/B 由用户执行。
 
 ## 风险与阻塞
 
@@ -159,15 +188,26 @@
 - resize-only 刷新仍必须在 pane 转移、split、关闭和 detached/return 结构变化时由 WindowRouter 回退到 full refresh；本轮不改变该结构变化语义。
 - 应用层 row model 更新只负责减少 Slint item/model 工作；macOS softbuffer 将 winit 物理 damage 映射为 backend presentation tile，但不把 `TermDamage` 变成应用层 tile 或改变 UI 坐标。升级 Slint/softbuffer 后仍需重新核对上游 damage、buffer age、CoreAnimation layer 和 DPI 语义。
 - Slint 1.17.1 的 `cache-rendering-hint` 只在 Skia/FemtoVG layer renderer 中保留离屏图像；software renderer 不提供等价 layer cache。缓存必须只包住静态终端行内容并默认关闭，避免光标闪烁或选区变化使所有行缓存失效，也避免未测量的 Retina 纹理占用成为默认成本。
+- COLOR1 的 sRGB sample 已完成；`CA::Render::copy_image`/ICC/vImage 仍存在，只能说明色彩空间提示未消除 CA 的内部准备成本，不能据此宣称局部 backing store 无效。`setNeedsDisplayInRect` 方案还需保证 delegate 绘制期间读取不可变帧数据，禁止直接改写仍被 CA 使用的 `CGImage` provider 内存。
 
 ## 下一步
 
 - 已完成终端显式 `Follow`/`Detached`/`AlternateScreen` 视口策略和双宽光标跨度快照；Detached 输出保持历史位置，输入回底，alternate screen 清理本地滚动状态。中文续格光标归一化到首格并按两格绘制。返回底部/未读输出 UI 尚未增加，目标平台视觉验收待用户执行。
 - 用相同窗口、pane 数、renderer 和持续输出对照当前单层行模型与 GPU/Skia；不再维护旧 tile/partition A/B 组合。
 - 在目标 macOS 上先验收 1/4/8/16 行设置、sidebar 展开/收起与拖宽、横竖分屏、detached 窗口、Retina scale、resize/隐藏恢复的边界和内容顺序，再进行同负载 GPU/Skia 与 Software 对照。
+- 构建同一 release 后，以默认路径和 `AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 分别验收首帧、1/4/8/16 行、sidebar 状态/拖宽、分屏、Retina、resize、隐藏恢复、滚动、光标和持续输出；视觉一致后再以相同窗口/pane/负载记录 CPU meter 与 10 秒 sample。重点比较 `CA::Render::copy_image`、ICC/vImage、delegate draw 和主线程 commit 驻留，未确认收益前不默认启用。
+- 若普通 delegate 仍进行整块 CA copy，先回到默认基线分析 sample；`CATiledLayer` 的异步延迟和禁止直接设置 `contents` 使其只能作为后续独立实验。
 
 ## 最后更新时间
 
+- 2026-08-26 18:06 +0800：修复 COLOR3 实验路径的 macOS tile-local Y 坐标。damage 从左上原点物理像素转为 CALayer 左下原点 point，delegate clip 再执行逆变换；完整 block、顶/底边和 Retina 往返测试通过，等待目标机视觉复验。
+- 2026-08-26 16:45 +0800：完成 COLOR3 release 候选。ARM64 UUID `647E1512-E87E-38A9-B28F-3CFC98BA0A7F`、SHA-256 `696523a6a94bd8565861283c13289b7912e369a1991360a91a3a53fa5450f92b`；同一二进制可用环境变量切换默认/实验路径，等待目标机视觉和 sample A/B。
+- 2026-08-26 16:21 +0800：完成 COLOR3 可回退原型和静态门禁。`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 为每个现有 presentation layer 接入 retained `CALayerDelegate`、同步像素 backing 和 tile-local `setNeedsDisplayInRect`；默认 `setContents` 不变。focused 测试发现并修复了无交集 damage 在局部坐标减法前被提前求值的下溢问题；目标机视觉/性能 A/B 尚未执行。
+- 2026-08-26 15:00 +0800：完成 COLOR3 方法检索。Apple 公开 API 支持 `CALayerDelegate.drawLayer:inContext:` + `setNeedsDisplayInRect:` 的矩形失效；`CATiledLayer` 支持异步 tile 绘制但官方要求不直接设置 `contents`，且更新可能延迟。结合当前 softbuffer ownership，首选普通 delegate backing store，CATiledLayer 只做独立实验。
+- 2026-08-26 14:32 +0800：COLOR2 sample 完成。10 秒目标 macOS release sample 与当前候选 UUID 一致；主线程 DisplayLink/CA 图像准备和 ICC/vImage 仍为主要活跃路径，COLOR3 保持待实施。
+- 2026-08-26 14:20 +0800：COLOR2 release 候选完成。`target/release/ax_ssh` UUID 为 `17C09EF9-E362-38C9-9F09-07E3A0DB5F0F`，SHA-256 为 `d993796031b219d7a2af05870ffdd33600384691755db4ce2ffb716eb2c4897c`。
+- 2026-08-26 14:00 +0800：COLOR1 完成。macOS CoreGraphics image 使用显式 sRGB 色彩空间，未改变像素排列、damage 几何或图像所有权；check、Clippy、完整 410 项测试和 diff 检查通过。
+- 2026-08-26 13:35 +0800：完成 software presentation 9 项复核修复及 SPR1-SPR5。macOS Software 专属 bridge 现在覆盖 scale、pane/notice/reset 和窗口注销；backend 每个 buffer/present 周期只读一次 generation，只有布局/scale 变化才 clone snapshot；生产 damage/multi-region/registry 与 Retina 换算回归通过。Software 仍无固定 FPS 上限，目标平台视觉验收待用户执行。
 - 2026-08-26：新增 macOS Software row-aligned presentation layout。每个 `TerminalPane` 把 window-relative 几何与实测行高发布到有界 Rust DTO，backend 按设置的 1-16 行（默认 4）划分横跨 pane 的 layer；sidebar/tab/空白区域保留 fallback grid。设置即时同步主窗口和 detached 窗口，不增加 FPS 上限；Cargo check/Clippy/409 tests、翻译和 diff 检查通过，目标平台视觉/性能 A/B 待用户执行。
 - 2026-08-25 16:30 +0800：Software renderer 的可见终端输出取消固定 FPS timer 和物理像素/分屏负载档位，改为 `AppState` 单槽 latest-frame refresh gate；UI 消费 pending snapshot 时合并随后发生的 `TermDamage`，且只有 snapshot 构造后的新输出才补排一次。控制序列等没有可见变化的初始 snapshot 仍不进入 Slint event queue；macOS CoreGraphics 的安全图像所有权边界保持不变。
 - 2026-08-25：macOS softbuffer `present_with_damage` 改为固定 256×128 物理像素 CoreAnimation tile。持久 CPU framebuffer 仍由 Slint 重用；仅把 damage 相交 tile 的像素行复制到独立 `CGImage` 并替换对应 layer 内容，旧 tile image 留给 compositor 安全持有。首帧、resize、surface invalidate 和 Retina scale 变化仍完整更新；不增加 FPS 限制。
