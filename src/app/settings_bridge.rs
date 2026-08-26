@@ -544,6 +544,7 @@ pub(super) fn wire_settings(
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
     window_router: WindowRouter,
+    window_id: Uuid,
 ) {
     ui.on_settings_search_results(|query, language| {
         ModelRc::new(VecModel::from(settings_search_results(
@@ -598,6 +599,7 @@ pub(super) fn wire_settings(
     });
 
     let ui_for_save = ui.as_weak();
+    let window_id_for_save = window_id;
     let font_registry_for_save = font_registry;
     ui.on_save_settings(
         move |application_font_family,
@@ -605,6 +607,7 @@ pub(super) fn wire_settings(
               terminal_font_family,
               font_size,
               line_height_percent,
+              terminal_software_block_rows,
               text_brightness,
               bright_bold_text,
               terminal_semantic_highlighting,
@@ -725,6 +728,7 @@ pub(super) fn wire_settings(
                     terminal_font_family: terminal_font_family.as_str(),
                     terminal_font_size: font_size,
                     terminal_line_height_percent: line_height_percent,
+                    terminal_software_block_rows,
                     color_scheme: terminal_color_scheme_for_theme(
                         theme_mode.as_str(),
                         theme_palette.as_str(),
@@ -820,6 +824,11 @@ pub(super) fn wire_settings(
                 };
                 if let Some(ui) = ui_for_save.upgrade() {
                     apply_settings_to_open_windows(&ui, &settings);
+                    software_presentation::set_rows(
+                        &ui,
+                        window_id_for_save,
+                        settings.appearance.terminal_software_block_rows,
+                    );
                 }
                 apply_terminal_presentation_policy(&window_router, &settings);
                 refresh_session_models(&ui_for_save, &state);
@@ -896,6 +905,11 @@ pub(super) fn wire_settings(
                         match save_result {
                             Ok(Ok(saved_settings)) => dispatch_ui(&ui_for_result, move |ui| {
                                 apply_settings_to_open_windows(ui, &saved_settings);
+                                software_presentation::set_rows(
+                                    ui,
+                                    window_id_for_save,
+                                    saved_settings.appearance.terminal_software_block_rows,
+                                );
                                 apply_terminal_presentation_policy(
                                     &window_router_for_save,
                                     &saved_settings,

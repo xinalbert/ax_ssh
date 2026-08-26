@@ -1,7 +1,7 @@
 //! Softbuffer implementation using CoreGraphics.
 use crate::backend_interface::*;
 use crate::error::InitError;
-use crate::{util, Rect, SoftBufferError};
+use crate::{presentation_layout, util, PresentationRegion, Rect, SoftBufferError};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass, MainThreadMarker, Message};
@@ -142,6 +142,10 @@ pub struct CGImpl<D, W> {
     tiles: Vec<TileLayer>,
     /// Diagnostic-only tile boundaries and indexes, disabled unless explicitly requested.
     debug_tiles: bool,
+    /// Opaque application key selecting the current terminal layout.
+    presentation_layout_key: u64,
+    /// Generation of the layout used to build `tiles`.
+    presentation_layout_generation: u64,
     window_handle: W,
     _display: PhantomData<D>,
 }
@@ -292,6 +296,8 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
             tile_scale: 1.0,
             tiles: Vec::new(),
             debug_tiles: software_tile_debug_enabled(),
+            presentation_layout_key: 0,
+            presentation_layout_generation: 0,
             _display: PhantomData,
             window_handle: window_src,
         };
@@ -307,9 +313,9 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
     fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) -> Result<(), SoftBufferError> {
         let width = width.get() as usize;
         let height = height.get() as usize;
-        let len = width.checked_mul(height).ok_or_else(|| {
-            size_out_of_range(width, height)
-        })?;
+        let len = width
+            .checked_mul(height)
+            .ok_or_else(|| size_out_of_range(width, height))?;
         if self.width == width && self.height == height && self.buffer.len() == len {
             return self.ensure_tile_layout();
         }
@@ -318,6 +324,13 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         self.buffer = util::PixelBuffer(vec![0; len]);
         self.buffer_valid = false;
         self.rebuild_tiles()
+    }
+
+    fn set_presentation_layout_key(&mut self, key: u64) {
+        if self.presentation_layout_key != key {
+            self.presentation_layout_key = key;
+            self.buffer_valid = false;
+        }
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {
@@ -369,11 +382,7 @@ impl<D, W> CGImpl<D, W> {
         CATransaction::setDisableActions(true);
         for (index, image) in &images {
             // SAFETY: The contents is `CGImage`, which is a valid class for `contents`.
-            unsafe {
-                self.tiles[*index]
-                    .layer
-                    .setContents(Some(image.as_ref()))
-            };
+            unsafe { self.tiles[*index].layer.setContents(Some(image.as_ref())) };
         }
         CATransaction::commit();
         self.buffer_valid = true;
@@ -386,14 +395,20 @@ impl<D, W> CGImpl<D, W> {
         }
         self.tiles.clear();
 
-        let columns = self.width.div_ceil(TILE_WIDTH);
-        let rows = self.height.div_ceil(TILE_HEIGHT);
-        let tile_count = columns.checked_mul(rows).ok_or_else(|| {
-            SoftBufferError::PlatformError(
-                Some("CoreGraphics tile layout is too large".to_string()),
+        let layout = presentation_layout(self.presentation_layout_key);
+        let rectangles = build_tile_rects(
+            self.width,
+            self.height,
+            &layout.regions,
+            layout.rows_per_block,
+        );
+        let tile_count = rectangles.len();
+        if tile_count == 0 {
+            return Err(SoftBufferError::PlatformError(
+                Some("CoreGraphics tile layout is empty".to_string()),
                 None,
-            )
-        })?;
+            ));
+        }
         self.tiles.try_reserve(tile_count).map_err(|_| {
             SoftBufferError::PlatformError(
                 Some("failed to allocate CoreGraphics tile layout".to_string()),
@@ -403,41 +418,39 @@ impl<D, W> CGImpl<D, W> {
 
         let scale = self.layer.contentsScale().max(1.0);
         self.layer.setMasksToBounds(true);
-        for origin_y in (0..self.height).step_by(TILE_HEIGHT) {
-            for origin_x in (0..self.width).step_by(TILE_WIDTH) {
-                let width = (self.width - origin_x).min(TILE_WIDTH);
-                let height = (self.height - origin_y).min(TILE_HEIGHT);
-                let tile = CALayer::new();
-                tile.setAnchorPoint(CGPoint::new(0.0, 0.0));
-                // The parent surface already uses a top-left coordinate system. Flipping this
-                // child again reverses the CGImage contents on macOS.
-                tile.setContentsGravity(unsafe { kCAGravityTopLeft });
-                tile.setContentsScale(scale);
-                // The framebuffer and damage rectangles use a top-left origin, while this
-                // CoreAnimation layer tree resolves child frames from the bottom edge. Convert
-                // the tile's top-left framebuffer coordinate before placing the child layer.
-                let frame_y = top_left_to_core_animation_y(self.height, origin_y, height);
-                tile.setFrame(CGRect::new(
-                    CGPoint::new(origin_x as f64 / scale, frame_y as f64 / scale),
-                    CGSize::new(width as f64 / scale, height as f64 / scale),
-                ));
-                self.layer.addSublayer(&tile);
-                self.tiles.push(TileLayer {
-                    layer: SendCALayer(tile),
-                    origin_x,
-                    origin_y,
-                    width,
-                    height,
-                });
-            }
+        for (origin_x, origin_y, width, height) in rectangles {
+            let tile = CALayer::new();
+            tile.setAnchorPoint(CGPoint::new(0.0, 0.0));
+            // The parent surface already uses a top-left coordinate system. Flipping this
+            // child again reverses the CGImage contents on macOS.
+            tile.setContentsGravity(unsafe { kCAGravityTopLeft });
+            tile.setContentsScale(scale);
+            // The framebuffer and damage rectangles use a top-left origin, while this
+            // CoreAnimation layer tree resolves child frames from the bottom edge. Convert
+            // the tile's top-left framebuffer coordinate before placing the child layer.
+            let frame_y = top_left_to_core_animation_y(self.height, origin_y, height);
+            tile.setFrame(CGRect::new(
+                CGPoint::new(origin_x as f64 / scale, frame_y as f64 / scale),
+                CGSize::new(width as f64 / scale, height as f64 / scale),
+            ));
+            self.layer.addSublayer(&tile);
+            self.tiles.push(TileLayer {
+                layer: SendCALayer(tile),
+                origin_x,
+                origin_y,
+                width,
+                height,
+            });
         }
         self.tile_scale = scale;
+        self.presentation_layout_generation = layout.generation;
         Ok(())
     }
 
     fn ensure_tile_layout(&mut self) -> Result<(), SoftBufferError> {
         let scale = self.layer.contentsScale().max(1.0);
-        if scale != self.tile_scale {
+        let layout = presentation_layout(self.presentation_layout_key);
+        if scale != self.tile_scale || layout.generation != self.presentation_layout_generation {
             self.rebuild_tiles()?;
             self.buffer_valid = false;
         }
@@ -445,10 +458,155 @@ impl<D, W> CGImpl<D, W> {
     }
 
     fn dirty_tile_mask(&self, damage: &[Rect]) -> Vec<bool> {
-        dirty_tile_mask_for_size(self.width, self.height, damage)
+        let mut dirty_tiles = vec![false; self.tiles.len()];
+        for (index, tile) in self.tiles.iter().enumerate() {
+            dirty_tiles[index] = damage.iter().any(|rect| rect_intersects_tile(rect, tile));
+        }
+        dirty_tiles
     }
 }
 
+fn rect_intersects_tile(rect: &Rect, tile: &TileLayer) -> bool {
+    let origin_x = usize::try_from(rect.x).unwrap_or(usize::MAX);
+    let origin_y = usize::try_from(rect.y).unwrap_or(usize::MAX);
+    let end_x = origin_x.saturating_add(rect.width.get() as usize);
+    let end_y = origin_y.saturating_add(rect.height.get() as usize);
+    origin_x < tile.origin_x.saturating_add(tile.width)
+        && end_x > tile.origin_x
+        && origin_y < tile.origin_y.saturating_add(tile.height)
+        && end_y > tile.origin_y
+}
+
+fn build_tile_rects(
+    width: usize,
+    height: usize,
+    regions: &[PresentationRegion],
+    rows_per_block: u32,
+) -> Vec<(usize, usize, usize, usize)> {
+    let mut regions = regions
+        .iter()
+        .filter_map(|region| {
+            let x = usize::try_from(region.x).ok()?;
+            let y = usize::try_from(region.y).ok()?;
+            let region_width = usize::try_from(region.width).ok()?;
+            let region_height = usize::try_from(region.height).ok()?;
+            let row_height = usize::try_from(region.row_height).ok()?.max(1);
+            let x_end = x.saturating_add(region_width).min(width);
+            let y_end = y.saturating_add(region_height).min(height);
+            (x < x_end && y < y_end).then_some((x, y, x_end, y_end, row_height))
+        })
+        .collect::<Vec<_>>();
+    regions
+        .sort_unstable_by_key(|&(x, y, x_end, y_end, row_height)| (y, x, y_end, x_end, row_height));
+    let mut accepted_regions = Vec::with_capacity(regions.len());
+    for region in regions {
+        if accepted_regions
+            .iter()
+            .any(|accepted| pixel_rects_intersect(region_bounds(&region), region_bounds(accepted)))
+        {
+            continue;
+        }
+        accepted_regions.push(region);
+    }
+
+    let mut rectangles = Vec::new();
+    for &(x, y, x_end, y_end, row_height) in &accepted_regions {
+        let block_height = row_height
+            .saturating_mul(rows_per_block.max(1) as usize)
+            .max(1);
+        let mut block_y = y;
+        while block_y < y_end {
+            let block_end = block_y.saturating_add(block_height).min(y_end);
+            rectangles.push((x, block_y, x_end - x, block_end - block_y));
+            block_y = block_end;
+        }
+    }
+
+    // Keep fallback tiles independent from terminal row boundaries. Each fixed
+    // tile is clipped around whole panes, so sidebar/tab layers never cross a
+    // pane and terminal layers stay exact row-height multiples.
+    for tile_y in (0..height).step_by(TILE_HEIGHT) {
+        let tile_end_y = tile_y.saturating_add(TILE_HEIGHT).min(height);
+        for tile_x in (0..width).step_by(TILE_WIDTH) {
+            let tile_end_x = tile_x.saturating_add(TILE_WIDTH).min(width);
+            let mut pieces = vec![(tile_x, tile_y, tile_end_x - tile_x, tile_end_y - tile_y)];
+            for region in &accepted_regions {
+                let mut remaining = Vec::with_capacity(pieces.len().saturating_mul(2));
+                for piece in pieces {
+                    subtract_pixel_rect(piece, region_bounds(region), &mut remaining);
+                }
+                pieces = remaining;
+            }
+            rectangles.extend(pieces);
+        }
+    }
+    rectangles
+        .sort_unstable_by_key(|&(x, y, rect_width, rect_height)| (y, x, rect_height, rect_width));
+    rectangles
+}
+
+type PixelRect = (usize, usize, usize, usize);
+type TerminalRegion = (usize, usize, usize, usize, usize);
+
+fn region_bounds(region: &TerminalRegion) -> PixelRect {
+    (region.0, region.1, region.2 - region.0, region.3 - region.1)
+}
+
+fn pixel_rects_intersect(a: PixelRect, b: PixelRect) -> bool {
+    let (a_x, a_y, a_width, a_height) = a;
+    let (b_x, b_y, b_width, b_height) = b;
+    a_x < b_x.saturating_add(b_width)
+        && a_x.saturating_add(a_width) > b_x
+        && a_y < b_y.saturating_add(b_height)
+        && a_y.saturating_add(a_height) > b_y
+}
+
+fn subtract_pixel_rect(rect: PixelRect, cut: PixelRect, output: &mut Vec<PixelRect>) {
+    if !pixel_rects_intersect(rect, cut) {
+        output.push(rect);
+        return;
+    }
+    let (x, y, rect_width, rect_height) = rect;
+    let (cut_x, cut_y, cut_width, cut_height) = cut;
+    let x_end = x + rect_width;
+    let y_end = y + rect_height;
+    let cut_x_end = cut_x.saturating_add(cut_width);
+    let cut_y_end = cut_y.saturating_add(cut_height);
+    let intersection_x = x.max(cut_x);
+    let intersection_y = y.max(cut_y);
+    let intersection_x_end = x_end.min(cut_x_end);
+    let intersection_y_end = y_end.min(cut_y_end);
+
+    if y < intersection_y {
+        output.push((x, y, rect_width, intersection_y - y));
+    }
+    if intersection_y_end < y_end {
+        output.push((
+            x,
+            intersection_y_end,
+            rect_width,
+            y_end - intersection_y_end,
+        ));
+    }
+    if x < intersection_x {
+        output.push((
+            x,
+            intersection_y,
+            intersection_x - x,
+            intersection_y_end - intersection_y,
+        ));
+    }
+    if intersection_x_end < x_end {
+        output.push((
+            intersection_x_end,
+            intersection_y,
+            x_end - intersection_x_end,
+            intersection_y_end - intersection_y,
+        ));
+    }
+}
+
+#[cfg(test)]
 fn dirty_tile_mask_for_size(width: usize, height: usize, damage: &[Rect]) -> Vec<bool> {
     let columns = width.div_ceil(TILE_WIDTH);
     let rows = height.div_ceil(TILE_HEIGHT);
@@ -524,7 +682,11 @@ impl<D, W> CGImpl<D, W> {
     }
 }
 
-fn top_left_to_core_animation_y(surface_height: usize, origin_y: usize, tile_height: usize) -> usize {
+fn top_left_to_core_animation_y(
+    surface_height: usize,
+    origin_y: usize,
+    tile_height: usize,
+) -> usize {
     debug_assert!(origin_y <= surface_height);
     debug_assert!(tile_height <= surface_height - origin_y);
     surface_height - origin_y - tile_height
@@ -570,14 +732,7 @@ fn draw_tile_debug_overlay(pixels: &mut [u32], width: usize, height: usize, inde
         if glyph_x + 3 * DEBUG_TILE_GLYPH_SCALE > label_width {
             break;
         }
-        draw_tile_debug_glyph(
-            pixels,
-            width,
-            height,
-            glyph_x,
-            2,
-            usize::from(digit - b'0'),
-        );
+        draw_tile_debug_glyph(pixels, width, height, glyph_x, 2, usize::from(digit - b'0'));
         glyph_x += 3 * DEBUG_TILE_GLYPH_SCALE + DEBUG_TILE_GLYPH_SCALE;
     }
 }
@@ -630,11 +785,7 @@ fn size_out_of_range(width: usize, height: usize) -> SoftBufferError {
 }
 
 fn owned_data_provider(pixels: Vec<u32>) -> Result<CFRetained<CGDataProvider>, SoftBufferError> {
-    unsafe extern "C-unwind" fn release(
-        _info: *mut c_void,
-        data: NonNull<c_void>,
-        size: usize,
-    ) {
+    unsafe extern "C-unwind" fn release(_info: *mut c_void, data: NonNull<c_void>, size: usize) {
         let data = data.cast::<u32>();
         let slice = slice_from_raw_parts_mut(data.as_ptr(), size / size_of::<u32>());
         // SAFETY: This is the exact boxed slice passed to `CGDataProvider::with_data`.
@@ -643,14 +794,15 @@ fn owned_data_provider(pixels: Vec<u32>) -> Result<CFRetained<CGDataProvider>, S
 
     let len = pixels.len().checked_mul(size_of::<u32>()).ok_or_else(|| {
         SoftBufferError::PlatformError(
-                Some("CoreGraphics image backing is too large".to_string()),
+            Some("CoreGraphics image backing is too large".to_string()),
             None,
         )
     })?;
     let raw_slice = Box::into_raw(pixels.into_boxed_slice());
     let data_ptr = raw_slice.cast::<c_void>();
     // SAFETY: The data pointer and byte length describe the owned boxed slice.
-    let provider = unsafe { CGDataProvider::with_data(ptr::null_mut(), data_ptr, len, Some(release)) };
+    let provider =
+        unsafe { CGDataProvider::with_data(ptr::null_mut(), data_ptr, len, Some(release)) };
     match provider {
         Some(provider) => Ok(provider),
         None => {
@@ -777,5 +929,49 @@ mod tests {
         assert_eq!(top_left_to_core_animation_y(300, 0, 128), 172);
         assert_eq!(top_left_to_core_animation_y(300, 128, 128), 44);
         assert_eq!(top_left_to_core_animation_y(300, 256, 44), 0);
+    }
+
+    #[test]
+    fn configured_regions_partition_the_surface_on_row_blocks() {
+        let region = PresentationRegion {
+            x: 128,
+            y: 33,
+            width: 384,
+            height: 253,
+            row_height: 17,
+        };
+        let rectangles = build_tile_rects(640, 320, &[region], 4);
+        let covered_area = rectangles
+            .iter()
+            .map(|(_, _, width, height)| width * height)
+            .sum::<usize>();
+        assert_eq!(covered_area, 640 * 320);
+        assert!(rectangles
+            .iter()
+            .all(|(_, _, width, height)| *width > 0 && *height > 0));
+        for (index, rectangle) in rectangles.iter().enumerate() {
+            assert!(rectangles[index + 1..]
+                .iter()
+                .all(|other| !pixel_rects_intersect(*rectangle, *other)));
+        }
+        assert!(rectangles.windows(2).all(|pair| {
+            let (left_x, left_y, _, _) = pair[0];
+            let (right_x, right_y, _, _) = pair[1];
+            (left_y, left_x) <= (right_y, right_x)
+        }));
+        let terminal_blocks = rectangles
+            .iter()
+            .copied()
+            .filter(|(x, y, width, _)| *x == 128 && *width == 384 && (33..286).contains(y))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            terminal_blocks,
+            vec![
+                (128, 33, 384, 68),
+                (128, 101, 384, 68),
+                (128, 169, 384, 68),
+                (128, 237, 384, 49),
+            ]
+        );
     }
 }

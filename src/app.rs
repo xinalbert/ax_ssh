@@ -86,6 +86,7 @@ mod serial_bridge;
 mod session_groups;
 mod settings_bridge;
 mod sftp_bridge;
+mod software_presentation;
 mod state;
 mod terminal_bridge;
 mod terminal_presentation;
@@ -565,7 +566,18 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         runtime.clone(),
         font_registry.clone(),
         window_router.clone(),
+        window_id,
     );
+    if let Ok(app) = state.lock() {
+        software_presentation::set_rows(
+            ui,
+            window_id,
+            app.sessions
+                .settings
+                .appearance
+                .terminal_software_block_rows,
+        );
+    }
     wire_sftp(
         ui,
         state.clone(),

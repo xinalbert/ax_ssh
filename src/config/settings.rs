@@ -6,15 +6,17 @@ use super::{
     DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
     DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS,
     DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
-    DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
-    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
-    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS,
-    MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE,
-    MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS,
+    DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS,
+    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS,
+    MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES,
+    MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH,
+    MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT,
+    MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS, MAX_TERMINAL_SOFTWARE_BLOCK_ROWS,
     MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES,
     MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
     MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS,
-    MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
+    MIN_TERMINAL_SOFTWARE_BLOCK_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL,
+    TerminalColorScheme, ThemeSettings,
 };
 
 /// The language-selection policy for AxSSH's fully translated UI locales.
@@ -127,6 +129,7 @@ pub struct AppearanceSettingsInput<'a> {
     pub terminal_font_family: &'a str,
     pub terminal_font_size: i32,
     pub terminal_line_height_percent: i32,
+    pub terminal_software_block_rows: i32,
     pub color_scheme: &'a str,
     pub text_brightness: f32,
     pub semantic_highlighting: bool,
@@ -195,6 +198,8 @@ pub struct AppearanceSettings {
     pub terminal_font_size: u16,
     #[serde(default = "default_terminal_line_height")]
     pub terminal_line_height_percent: u16,
+    #[serde(default = "default_terminal_software_block_rows")]
+    pub terminal_software_block_rows: u16,
     #[serde(default)]
     pub terminal_color_scheme: TerminalColorScheme,
     #[serde(default)]
@@ -228,6 +233,10 @@ pub struct AppearanceSettings {
     pub terminal_mouse_local_selection_priority: bool,
 }
 
+fn default_terminal_software_block_rows() -> u16 {
+    DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS
+}
+
 impl AppearanceSettings {
     pub fn normalized(input: AppearanceSettingsInput<'_>) -> Self {
         let terminal_color_scheme = TerminalColorScheme::from_setting(input.color_scheme);
@@ -253,6 +262,10 @@ impl AppearanceSettings {
             terminal_line_height_percent: input.terminal_line_height_percent.clamp(
                 i32::from(MIN_TERMINAL_LINE_HEIGHT),
                 i32::from(MAX_TERMINAL_LINE_HEIGHT),
+            ) as u16,
+            terminal_software_block_rows: input.terminal_software_block_rows.clamp(
+                i32::from(MIN_TERMINAL_SOFTWARE_BLOCK_ROWS),
+                i32::from(MAX_TERMINAL_SOFTWARE_BLOCK_ROWS),
             ) as u16,
             terminal_color_scheme: theme.terminal_color_scheme(),
             theme,
@@ -294,6 +307,7 @@ impl AppearanceSettings {
             terminal_font_family: &self.terminal_font_family,
             terminal_font_size: i32::from(self.terminal_font_size),
             terminal_line_height_percent: i32::from(self.terminal_line_height_percent),
+            terminal_software_block_rows: i32::from(self.terminal_software_block_rows),
             color_scheme: self.terminal_color_scheme.as_setting(),
             text_brightness: f32::from(self.terminal_text_brightness_percent) / 100.0,
             semantic_highlighting: self.terminal_semantic_highlighting,
@@ -326,6 +340,7 @@ impl Default for AppearanceSettings {
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),
             terminal_line_height_percent: default_terminal_line_height(),
+            terminal_software_block_rows: default_terminal_software_block_rows(),
             terminal_color_scheme: TerminalColorScheme::default(),
             theme: ThemeSettings::default(),
             terminal_text_brightness_percent: default_terminal_text_brightness_percent(),

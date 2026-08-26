@@ -15,10 +15,11 @@ mod error;
 mod util;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use std::ops;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use error::InitError;
 pub use error::SoftBufferError;
@@ -72,6 +73,112 @@ pub struct Rect {
     pub height: NonZeroU32,
 }
 
+/// A terminal grid region used to align software presentation tiles to rows.
+///
+/// Coordinates are physical pixels in the surface buffer. Regions must not
+/// extend outside the surface and are ignored when they are empty.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresentationRegion {
+    /// Top-left x coordinate.
+    pub x: u32,
+    /// Top-left y coordinate.
+    pub y: u32,
+    /// Region width.
+    pub width: u32,
+    /// Region height.
+    pub height: u32,
+    /// Physical height of one terminal row.
+    pub row_height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PresentationLayoutSnapshot {
+    pub generation: u64,
+    pub rows_per_block: u32,
+    pub regions: Vec<PresentationRegion>,
+}
+
+#[derive(Default)]
+struct PresentationLayouts {
+    next_generation: u64,
+    layouts: HashMap<u64, PresentationLayoutSnapshot>,
+}
+
+static PRESENTATION_LAYOUTS: OnceLock<RwLock<PresentationLayouts>> = OnceLock::new();
+
+/// Updates the software presentation layout for one native window.
+///
+/// The key is intentionally opaque to softbuffer. Applications should derive
+/// it from their windowing toolkit's stable native window identity. A key of
+/// zero is the fallback layout used before a native window is available.
+pub fn set_presentation_layout(key: u64, rows_per_block: u32, regions: &[PresentationRegion]) {
+    let rows_per_block = rows_per_block.clamp(1, 16);
+    let regions = regions
+        .iter()
+        .copied()
+        .filter(|region| region.width > 0 && region.height > 0 && region.row_height > 0)
+        .take(64)
+        .collect::<Vec<_>>();
+    let layouts = PRESENTATION_LAYOUTS.get_or_init(|| RwLock::new(PresentationLayouts::default()));
+    let Ok(mut layouts) = layouts.write() else {
+        return;
+    };
+    if layouts.layouts.get(&key).is_some_and(|current| {
+        current.rows_per_block == rows_per_block && current.regions == regions
+    }) {
+        return;
+    }
+    layouts.next_generation = layouts.next_generation.wrapping_add(1).max(1);
+    let generation = layouts.next_generation;
+    layouts.layouts.insert(
+        key,
+        PresentationLayoutSnapshot {
+            generation,
+            rows_per_block,
+            regions,
+        },
+    );
+    // Detached windows are bounded by the application, but keep the backend
+    // registry bounded as well if a caller supplies short-lived keys.
+    if layouts.layouts.len() > 32 {
+        if let Some(oldest_key) = layouts
+            .layouts
+            .iter()
+            .min_by_key(|(_, layout)| layout.generation)
+            .map(|(key, _)| *key)
+        {
+            layouts.layouts.remove(&oldest_key);
+        }
+    }
+}
+
+pub(crate) fn presentation_layout(key: u64) -> PresentationLayoutSnapshot {
+    let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
+        return PresentationLayoutSnapshot {
+            generation: 0,
+            rows_per_block: 4,
+            regions: Vec::new(),
+        };
+    };
+    let Ok(layouts) = layouts.read() else {
+        return PresentationLayoutSnapshot {
+            generation: 0,
+            rows_per_block: 4,
+            regions: Vec::new(),
+        };
+    };
+    layouts
+        .layouts
+        .get(&key)
+        .or_else(|| layouts.layouts.get(&0))
+        .cloned()
+        .unwrap_or(PresentationLayoutSnapshot {
+            generation: 0,
+            rows_per_block: 4,
+            regions: Vec::new(),
+        })
+}
+
 /// A surface for drawing to a window with software buffers.
 #[derive(Debug)]
 pub struct Surface<D, W> {
@@ -113,6 +220,14 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> Surface<D, W> {
     /// of the window.
     pub fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) -> Result<(), SoftBufferError> {
         self.surface_impl.resize(width, height)
+    }
+
+    /// Associates this surface with an application-managed presentation layout.
+    ///
+    /// Backends that do not support independent software presentation layers
+    /// accept the key and continue using their normal presentation path.
+    pub fn set_presentation_layout_key(&mut self, key: u64) {
+        self.surface_impl.set_presentation_layout_key(key);
     }
 
     /// Mark the contents of the surface as invalid.

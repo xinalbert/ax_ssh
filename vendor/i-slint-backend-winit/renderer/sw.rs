@@ -11,6 +11,7 @@ use i_slint_core::renderer::DrawOutcome;
 pub use i_slint_renderer_software::SoftwareRenderer;
 use i_slint_renderer_software::{PremultipliedRgbaColor, RepaintBufferType, TargetPixel};
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
@@ -99,6 +100,9 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
         };
 
         let winit_window = surface.window().clone();
+        let mut window_key_hasher = std::collections::hash_map::DefaultHasher::new();
+        winit_window.id().hash(&mut window_key_hasher);
+        surface.set_presentation_layout_key(window_key_hasher.finish());
 
         surface
             .resize(width, height)

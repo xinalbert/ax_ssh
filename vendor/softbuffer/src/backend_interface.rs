@@ -26,6 +26,10 @@ pub(crate) trait SurfaceInterface<D: HasDisplayHandle + ?Sized, W: HasWindowHand
     fn window(&self) -> &W;
     /// Resize the internal buffer to the given width and height.
     fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) -> Result<(), SoftBufferError>;
+    /// Select an application-managed software presentation layout.
+    ///
+    /// Most backends do not need this information and retain the default no-op.
+    fn set_presentation_layout_key(&mut self, _key: u64) {}
     /// Mark the surface contents as invalid.
     ///
     /// Backends with persistent buffers must discard their buffer age after a

@@ -11,6 +11,7 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <int> draft-font-index;
     in-out property <int> draft-font-size;
     in-out property <int> draft-line-height-percent;
+    in-out property <int> draft-software-block-rows;
     in-out property <float> draft-text-brightness;
     in-out property <bool> draft-bright-bold-text;
     in-out property <bool> draft-semantic-highlighting;
@@ -107,6 +108,26 @@ export component TerminalSettingsPage inherits Rectangle {
                         Text {
                             width: Theme.settings-unit-width;
                             text: @tr("%");
+                            color: Theme.muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: @tr("Software block rows");
+                    description: @tr("1-16 terminal rows per software presentation block");
+                    SettingsField {
+                        SpinBox {
+                            width: Theme.settings-number-width;
+                            height: Theme.settings-control-height;
+                            minimum: 1;
+                            maximum: 16;
+                            value <=> root.draft-software-block-rows;
+                            accessible-label: @tr("Software presentation block rows");
+                        }
+                        Text {
+                            width: Theme.settings-unit-width;
+                            text: @tr("rows");
                             color: Theme.muted;
                             vertical-alignment: center;
                         }

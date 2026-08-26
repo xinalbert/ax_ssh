@@ -108,6 +108,15 @@ macro_rules! make_dispatch {
                 }
             }
 
+            fn set_presentation_layout_key(&mut self, key: u64) {
+                match self {
+                    $(
+                        $(#[$attr])*
+                        Self::$name(inner) => inner.set_presentation_layout_key(key),
+                    )*
+                }
+            }
+
             fn invalidate(&mut self) {
                 match self {
                     $(

@@ -195,6 +195,8 @@ component TerminalPaneGroup inherits Rectangle {
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
+    callback terminal-presentation-layout(string, length, length, length, length, length);
+    callback terminal-presentation-layout-reset();
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
@@ -232,6 +234,16 @@ component TerminalPaneGroup inherits Rectangle {
             );
         }
         resized(columns, rows) => { root.resize-terminal(pane.terminal.terminal_id, columns, rows); }
+        presentation-layout(grid-x, grid-y, grid-width, grid-height, cell-height) => {
+            root.terminal-presentation-layout(
+                pane.terminal.terminal_id,
+                pane.x * parent.width + grid-x,
+                pane.y * parent.height + grid-y,
+                grid-width,
+                grid-height,
+                cell-height,
+            );
+        }
         scrolled(lines) => { root.scroll-terminal(pane.terminal.terminal_id, lines); }
         mouse-event(row, column, button, kind, shift, alt, control) => {
             root.mouse-event(pane.terminal.terminal_id, row, column, button, kind, shift, alt, control);
@@ -269,6 +281,8 @@ component TerminalPaneGroup inherits Rectangle {
         write-clipboard(text) => { root.write-clipboard(text); }
         read-clipboard() => { return root.read-clipboard(); }
     }
+
+    changed panes => { root.terminal-presentation-layout-reset(); }
 
     for divider in root.dividers : TerminalPaneDivider {
         x: divider.vertical
@@ -335,6 +349,8 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
+    callback terminal-presentation-layout(string, length, length, length, length, length);
+    callback terminal-presentation-layout-reset();
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
@@ -386,6 +402,12 @@ component DetachedWorkspaceContent inherits Rectangle {
                 );
             }
             resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+            terminal-presentation-layout(id, x, y, width, height, cell-height) => {
+                root.terminal-presentation-layout(
+                    id, x, y + Theme.terminal-top-gap, width, height, cell-height,
+                );
+            }
+            terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
             scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
             mouse-event(id, row, column, button, kind, shift, alt, control) => {
                 root.mouse-event(id, row, column, button, kind, shift, alt, control);
@@ -495,7 +517,7 @@ export component WorkspaceShell inherits Rectangle {
     callback detach-workspace(string);
     callback return-workspace(string);
     callback save-settings(
-        string, string, string, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -546,6 +568,8 @@ export component WorkspaceShell inherits Rectangle {
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resize-terminal(string, int, int);
+    callback terminal-presentation-layout(string, length, length, length, length, length);
+    callback terminal-presentation-layout-reset();
     callback scroll-terminal(string, int);
     callback mouse-event(string, int, int, int, int, bool, bool, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
@@ -635,7 +659,18 @@ export component WorkspaceShell inherits Rectangle {
             );
         }
         resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
-            scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+        terminal-presentation-layout(id, x, y, width, height, cell-height) => {
+            root.terminal-presentation-layout(
+                id,
+                x,
+                y,
+                width,
+                height,
+                cell-height,
+            );
+        }
+        terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
+        scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
             mouse-event(id, row, column, button, kind, shift, alt, control) => {
                 root.mouse-event(id, row, column, button, kind, shift, alt, control);
             }
@@ -774,6 +809,17 @@ export component WorkspaceShell inherits Rectangle {
                             );
                         }
                         resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+                        terminal-presentation-layout(id, x, y, width, height, cell-height) => {
+                            root.terminal-presentation-layout(
+                                id,
+                                x + session-navigation.width,
+                                y + workspace-titlebar.height + Theme.terminal-top-gap,
+                                width,
+                                height,
+                                cell-height,
+                            );
+                        }
+                        terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
                         scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
                         terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                             return root.terminal-selection-text(
@@ -858,7 +904,7 @@ export component WorkspaceShell inherits Rectangle {
                         tab-id: root.view.settings_tab_id;
                         requested-section: root.requested-settings-section;
                         requested-section-revision: root.settings-section-request-revision;
-                        save(application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+                        save(application-font, renderer-preference, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                              semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                              theme-mode, theme-palette,
                              theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -874,7 +920,7 @@ export component WorkspaceShell inherits Rectangle {
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                              settings-tab-id, close-after-save) => {
                             root.save-settings(
-                                application-font, renderer-preference, terminal-font, size, line-height, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+                                application-font, renderer-preference, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                                 semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                                 theme-mode, theme-palette,
                                 theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,

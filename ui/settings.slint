@@ -29,6 +29,7 @@ export struct SettingsViewState {
     terminal_font_index: int,
     terminal_font_size: int,
     terminal_line_height_percent: int,
+    terminal_software_block_rows: int,
     terminal_text_brightness: float,
     bright_bold_text: bool,
     terminal_semantic_highlighting: bool,
@@ -134,6 +135,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> terminal-font-index: root.source.terminal_font_index;
     private property <int> terminal-font-size: root.source.terminal_font_size;
     private property <int> terminal-line-height-percent: root.source.terminal_line_height_percent;
+    private property <int> terminal-software-block-rows: root.source.terminal_software_block_rows;
     private property <float> terminal-text-brightness: root.source.terminal_text_brightness;
     private property <bool> bright-bold-text: root.source.bright_bold_text;
     private property <bool> terminal-semantic-highlighting: root.source.terminal_semantic_highlighting;
@@ -217,7 +219,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> app-version: root.source.app_version;
 
     callback save(
-        string, string, string, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -244,6 +246,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-font-index: root.terminal-font-index;
     private property <int> draft-font-size: root.terminal-font-size;
     private property <int> draft-line-height-percent: root.terminal-line-height-percent;
+    private property <int> draft-software-block-rows: root.terminal-software-block-rows;
     private property <float> draft-text-brightness: root.terminal-text-brightness;
     private property <bool> draft-bright-bold-text: root.bright-bold-text;
     private property <bool> draft-semantic-highlighting: root.terminal-semantic-highlighting;
@@ -358,6 +361,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
+            root.draft-software-block-rows,
             root.draft-text-brightness,
             root.draft-bright-bold-text,
             root.draft-semantic-highlighting,
@@ -437,6 +441,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
+            root.draft-software-block-rows,
             root.draft-text-brightness,
             root.draft-bright-bold-text,
             root.draft-semantic-highlighting,
@@ -513,6 +518,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-font-family => { root.schedule-preview(); }
     changed draft-font-size => { root.schedule-preview(); }
     changed draft-line-height-percent => { root.schedule-preview(); }
+    changed draft-software-block-rows => { root.schedule-preview(); }
     changed draft-text-brightness => { root.schedule-preview(); }
     changed draft-bright-bold-text => { root.schedule-preview(); }
     changed draft-semantic-highlighting => { root.schedule-preview(); }
@@ -809,6 +815,7 @@ export component SettingsPane inherits Rectangle {
                         draft-font-index <=> root.draft-font-index;
                         draft-font-size <=> root.draft-font-size;
                         draft-line-height-percent <=> root.draft-line-height-percent;
+                        draft-software-block-rows <=> root.draft-software-block-rows;
                         draft-text-brightness <=> root.draft-text-brightness;
                         draft-bright-bold-text <=> root.draft-bright-bold-text;
                         draft-semantic-highlighting <=> root.draft-semantic-highlighting;

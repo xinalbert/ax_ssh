@@ -300,6 +300,20 @@ impl WindowRouter {
             .unwrap_or_default()
     }
 
+    pub(super) fn detached_window_entries(&self) -> Vec<(Uuid, slint::Weak<AppWindow>)> {
+        self.inner
+            .lock()
+            .map(|router| {
+                router
+                    .routes
+                    .iter()
+                    .filter(|(_, route)| route.transfer.is_some())
+                    .map(|(id, route)| (*id, route.ui.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub(super) fn active_tab(&self, window_id: Uuid) -> Option<Uuid> {
         self.inner.lock().ok().and_then(|router| {
             let route = router.routes.get(&window_id)?;

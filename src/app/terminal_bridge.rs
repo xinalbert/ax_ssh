@@ -78,6 +78,30 @@ pub(super) fn wire_terminal(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
+    let ui_for_presentation = ui.as_weak();
+    ui.on_terminal_presentation_layout(move |terminal_id, x, y, width, height, row_height| {
+        if let Some(ui) = ui_for_presentation.upgrade() {
+            software_presentation::update_region(
+                &ui,
+                window_id,
+                terminal_id.as_str(),
+                software_presentation::LogicalRegion {
+                    x,
+                    y,
+                    width,
+                    height,
+                    row_height,
+                },
+            );
+        }
+    });
+    let ui_for_presentation_reset = ui.as_weak();
+    ui.on_terminal_presentation_layout_reset(move || {
+        if let Some(ui) = ui_for_presentation_reset.upgrade() {
+            software_presentation::clear_layout(&ui, window_id);
+        }
+    });
+
     let ui_for_theme = ui.as_weak();
     let state_for_theme = state.clone();
     ui.on_refresh_terminal_appearance(move || {

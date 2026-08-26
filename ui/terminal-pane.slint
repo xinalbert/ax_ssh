@@ -224,6 +224,7 @@ export component TerminalPane inherits Rectangle {
     callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
     callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
     callback resized(int, int);
+    callback presentation-layout(length, length, length, length, length);
     callback scrolled(int);
     callback mouse-event(int, int, int, int, bool, bool, bool);
     callback selection-text(int, int, int, int) -> string;
@@ -264,14 +265,30 @@ export component TerminalPane inherits Rectangle {
     // The grid, pre-edit overlay, and native IME proxy share this one
     // content-space cursor position. The clipping parent handles negatives.
     private property <length> cursor-cell-y:
-        root.grid-top-offset + root.cursor-row * root.cell-height;
+        root.grid-top-offset + root.cursor-row-in-grid * root.cell-height;
+    private property <length> cursor-cell-x:
+        root.cursor-column-in-grid * root.cell-width;
+    // Snapshot delivery and a pending resize can briefly describe different
+    // grid sizes. Keep every cursor surface inside the current measured grid
+    // until the next terminal snapshot catches up.
+    private property <int> cursor-row-in-grid:
+        max(0, min(root.terminal-rows - 1, root.cursor-row));
+    private property <int> cursor-column-in-grid:
+        max(0, min(root.terminal-columns - 1, root.cursor-column));
+    private property <int> cursor-cells-in-grid:
+        max(1, min(root.cursor-cells,
+            root.terminal-columns - root.cursor-column-in-grid));
     private property <bool> terminal-resize-pending: false;
+    private property <bool> presentation-layout-pending: false;
     // A newly created pane cannot own native focus until Slint has completed
     // the current layout pass. Existing split panes focus directly.
     private property <bool> initial-input-focus-pending: false;
     private property <bool> cursor-blink: true;
     private property <bool> selecting: false;
     private property <bool> selection-valid: false;
+    // In local-selection-priority mode, defer a reporting click until release
+    // so a drag can remain local while a stationary click reaches a TUI.
+    private property <bool> local-click-candidate: false;
     private property <int> pressed-button: -1;
     private property <bool> last-pointer-shift: false;
     private property <bool> last-pointer-alt: false;
@@ -311,8 +328,9 @@ export component TerminalPane inherits Rectangle {
         connected: root.connected, render_lines: root.render-lines,
         row_count: root.render-lines.length,
         content_columns: root.content-columns,
-        cursor_row: root.cursor-row, cursor_column: root.cursor-column,
-        cursor_cells: root.cursor-cells,
+        cursor_row: root.cursor-row-in-grid,
+        cursor_column: root.cursor-column-in-grid,
+        cursor_cells: root.cursor-cells-in-grid,
         cursor_visible: root.cursor-visible, cursor_text: root.cursor-text,
         font_family: root.terminal-font-family, font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,
@@ -346,6 +364,17 @@ export component TerminalPane inherits Rectangle {
 
     function schedule-terminal-size-update() {
         root.terminal-resize-pending = true;
+        root.presentation-layout-pending = true;
+    }
+
+    function update-presentation-layout() {
+        root.presentation-layout(
+            grid-clip.x,
+            grid-clip.y,
+            grid-clip.width,
+            grid-clip.height,
+            root.cell-height,
+        );
     }
 
     // A pane may be created with both its final view and connected state already
@@ -365,6 +394,7 @@ export component TerminalPane inherits Rectangle {
     function clear-selection() {
         root.selecting = false;
         root.selection-valid = false;
+        root.cursor-blink = true;
         root.clear-terminal-target-highlight();
         root.selection-focus-row = root.selection-anchor-row;
         root.selection-focus-column = root.selection-anchor-column;
@@ -485,6 +515,8 @@ export component TerminalPane inherits Rectangle {
     changed terminal-font-family => { root.schedule-terminal-size-update(); }
     changed terminal-font-size => { root.schedule-terminal-size-update(); }
     changed terminal-line-height-percent => { root.schedule-terminal-size-update(); }
+    changed width => { root.schedule-terminal-size-update(); }
+    changed height => { root.schedule-terminal-size-update(); }
     changed terminal-id => {
         root.mouse-motion-pending = false;
         root.pressed-button = -1;
@@ -534,6 +566,16 @@ export component TerminalPane inherits Rectangle {
             root.focus-input();
         }
     }
+    changed selecting => {
+        if root.selecting {
+            root.cursor-blink = true;
+        }
+    }
+    changed selection-active => {
+        // A selected range should remain visually stable. Reset the phase in
+        // both directions so clearing a selection never leaves a hidden cursor.
+        root.cursor-blink = true;
+    }
 
     background: root.terminal-background;
     clip: true;
@@ -582,7 +624,8 @@ export component TerminalPane inherits Rectangle {
 
     Timer {
         running: root.cursor-blink-enabled
-            && root.connected && ime-input.has-focus && root.cursor-visible;
+            && root.connected && ime-input.has-focus && root.cursor-visible
+            && !root.selecting && !root.selection-active;
         interval: 530ms;
         triggered => { root.cursor-blink = !root.cursor-blink; }
     }
@@ -598,6 +641,10 @@ export component TerminalPane inherits Rectangle {
         triggered => {
             root.terminal-resize-pending = false;
             root.update-terminal-size();
+            if root.presentation-layout-pending {
+                root.presentation-layout-pending = false;
+                root.update-presentation-layout();
+            }
         }
     }
 
@@ -622,7 +669,7 @@ export component TerminalPane inherits Rectangle {
 
     ime-input := TextInput {
         x: grid-clip.x + max(0px, min(grid-clip.width - 1px,
-            root.cursor-column * root.cell-width));
+            root.cursor-cell-x));
         y: grid-clip.y + root.cursor-cell-y;
         width: Theme.hairline;
         height: root.cell-height;
@@ -771,6 +818,7 @@ export component TerminalPane inherits Rectangle {
                 cell-height: root.cell-height;
                 font-cell-height: root.font-cell-height;
                 top-offset: root.grid-top-offset;
+                cursor-x: root.cursor-cell-x;
                 cursor-y: root.cursor-cell-y;
                 cursor-blink: root.cursor-blink;
                 cursor-blink-enabled: root.cursor-blink-enabled;
@@ -784,6 +832,7 @@ export component TerminalPane inherits Rectangle {
                     let right = button == 2;
                     let report-mouse = root.forward-mouse-to-terminal(shift, alt);
                     root.flush-mouse-motion();
+                    root.local-click-candidate = false;
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-in-grid = true;
@@ -812,6 +861,9 @@ export component TerminalPane inherits Rectangle {
                         root.selection-focus-column = column;
                         root.selection-valid = false;
                         root.selecting = true;
+                        root.local-click-candidate = root.view.mouse_button_reporting
+                            && root.mouse-local-selection-priority
+                            && !shift && !alt;
                         root.clear-terminal-target-highlight();
                     } else if !report-mouse && right
                         && (root.right-click-copy-or-paste || root.copy-selection-on-select) {
@@ -841,6 +893,9 @@ export component TerminalPane inherits Rectangle {
                         root.selection-focus-column = column;
                         root.selection-valid = root.selection-anchor-row != row
                             || root.selection-anchor-column != column;
+                        if root.selection-valid {
+                            root.local-click-candidate = false;
+                        }
                         root.clear-terminal-target-highlight();
                     } else if root.forward-mouse-to-terminal(shift, alt) {
                         root.queue-mouse-motion(row, column, 5, shift, alt, control);
@@ -872,10 +927,18 @@ export component TerminalPane inherits Rectangle {
                         root.selection-focus-column = column;
                         root.selection-valid = root.selection-anchor-row != row
                             || root.selection-anchor-column != column;
+                        if root.selection-valid {
+                            root.local-click-candidate = false;
+                        }
                     }
                     if root.selecting && root.copy-selection-on-select && root.selection-active {
                         root.copy-selection();
                     }
+                    if root.local-click-candidate {
+                        root.mouse-event(row, column, 0, 0, shift, alt, control);
+                        root.mouse-event(row, column, 0, 1, shift, alt, control);
+                    }
+                    root.local-click-candidate = false;
                     root.selecting = false;
                 }
                 pointer-cancel => {
@@ -893,6 +956,7 @@ export component TerminalPane inherits Rectangle {
                     }
                     root.pressed-button = -1;
                     root.mouse-motion-pending = false;
+                    root.local-click-candidate = false;
                     root.selecting = false;
                 }
                 semantic-selection-request(row, column) => {
