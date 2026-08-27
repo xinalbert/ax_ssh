@@ -24,6 +24,7 @@ export struct SettingsViewState {
     application_font_options: [string],
     application_font_index: int,
     renderer_preference: string,
+    software_presentation: string,
     terminal_font_family: string,
     terminal_font_options: [string],
     terminal_font_index: int,
@@ -130,6 +131,7 @@ export component SettingsPane inherits Rectangle {
     private property <[string]> application-font-options: root.source.application_font_options;
     private property <int> application-font-index: root.source.application_font_index;
     private property <string> renderer-preference: root.source.renderer_preference;
+    private property <string> software-presentation: root.source.software_presentation;
     private property <string> terminal-font-family: root.source.terminal_font_family;
     private property <[string]> terminal-font-options: root.source.terminal_font_options;
     private property <int> terminal-font-index: root.source.terminal_font_index;
@@ -219,7 +221,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> app-version: root.source.app_version;
 
     callback save(
-        string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -242,6 +244,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-application-font-family: root.application-font-family;
     private property <int> draft-application-font-index: root.application-font-index;
     private property <string> draft-renderer-preference: root.renderer-preference;
+    private property <string> draft-software-presentation: root.software-presentation;
     private property <string> draft-font-family: root.terminal-font-family;
     private property <int> draft-font-index: root.terminal-font-index;
     private property <int> draft-font-size: root.terminal-font-size;
@@ -358,6 +361,7 @@ export component SettingsPane inherits Rectangle {
         root.save(
             root.draft-application-font-family,
             root.draft-renderer-preference,
+            root.draft-software-presentation,
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
@@ -438,6 +442,7 @@ export component SettingsPane inherits Rectangle {
         root.save(
             root.draft-application-font-family,
             root.draft-renderer-preference,
+            root.draft-software-presentation,
             root.draft-font-family,
             root.draft-font-size,
             root.draft-line-height-percent,
@@ -515,6 +520,7 @@ export component SettingsPane inherits Rectangle {
 
     changed draft-application-font-family => { root.schedule-preview(); }
     changed draft-renderer-preference => { root.schedule-preview(); }
+    changed draft-software-presentation => { root.schedule-preview(); }
     changed draft-font-family => { root.schedule-preview(); }
     changed draft-font-size => { root.schedule-preview(); }
     changed draft-line-height-percent => { root.schedule-preview(); }
@@ -771,6 +777,8 @@ export component SettingsPane inherits Rectangle {
                         draft-application-font-family <=> root.draft-application-font-family;
                         draft-application-font-index <=> root.draft-application-font-index;
                         draft-renderer-preference <=> root.draft-renderer-preference;
+                        draft-software-presentation <=> root.draft-software-presentation;
+                        apple-platform: root.apple-platform;
                         draft-terminal-compact-rendering <=> root.draft-terminal-compact-rendering;
                         draft-terminal-row-render-cache <=> root.draft-terminal-row-render-cache;
                         draft-terminal-cursor-blink <=> root.draft-terminal-cursor-blink;

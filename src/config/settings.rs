@@ -121,10 +121,45 @@ impl<'de> Deserialize<'de> for RendererPreference {
     }
 }
 
+/// Selects the macOS CPU presentation path used by newly created surfaces.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SoftwarePresentationMode {
+    #[default]
+    LayerImages,
+    DamageBackingStore,
+}
+
+impl SoftwarePresentationMode {
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::LayerImages => "layer-images",
+            Self::DamageBackingStore => "damage-backing-store",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "damage-backing-store" => Self::DamageBackingStore,
+            _ => Self::LayerImages,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SoftwarePresentationMode {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::from_setting(&String::deserialize(deserializer)?))
+    }
+}
+
 /// Raw appearance values supplied by an application settings surface.
 #[derive(Clone, Copy, Debug)]
 pub struct AppearanceSettingsInput<'a> {
     pub renderer_preference: &'a str,
+    pub software_presentation: &'a str,
     pub application_font_family: &'a str,
     pub terminal_font_family: &'a str,
     pub terminal_font_size: i32,
@@ -190,6 +225,8 @@ impl TerminalSemanticColors {
 pub struct AppearanceSettings {
     #[serde(default)]
     pub renderer_preference: RendererPreference,
+    #[serde(default)]
+    pub software_presentation: SoftwarePresentationMode,
     #[serde(default = "default_application_font_family")]
     pub application_font_family: String,
     #[serde(default = "default_terminal_font_family")]
@@ -247,6 +284,9 @@ impl AppearanceSettings {
     fn normalized_with_theme(input: AppearanceSettingsInput<'_>, theme: ThemeSettings) -> Self {
         Self {
             renderer_preference: RendererPreference::from_setting(input.renderer_preference),
+            software_presentation: SoftwarePresentationMode::from_setting(
+                input.software_presentation,
+            ),
             application_font_family: normalize_font_family(
                 input.application_font_family,
                 default_application_font_family,
@@ -303,6 +343,7 @@ impl AppearanceSettings {
         );
         let input = AppearanceSettingsInput {
             renderer_preference: self.renderer_preference.as_setting(),
+            software_presentation: self.software_presentation.as_setting(),
             application_font_family: &self.application_font_family,
             terminal_font_family: &self.terminal_font_family,
             terminal_font_size: i32::from(self.terminal_font_size),
@@ -336,6 +377,7 @@ impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             renderer_preference: RendererPreference::Automatic,
+            software_presentation: SoftwarePresentationMode::LayerImages,
             application_font_family: default_application_font_family(),
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),

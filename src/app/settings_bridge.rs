@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 45] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 46] = [
     (
         "General",
         "Language",
@@ -27,6 +27,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 45] = [
         "Appearance",
         "Renderer",
         "Changes take effect after restarting AxSSH",
+    ),
+    (
+        "Appearance",
+        "Software presentation",
+        "macOS CPU presentation path; changes take effect after restarting AxSSH",
     ),
     (
         "Appearance",
@@ -216,6 +221,7 @@ fn settings_search_results(query: &str, language: &str) -> Vec<SettingsSearchEnt
         == "zh-CN";
     SETTINGS_SEARCH_CATALOG
         .iter()
+        .filter(|(_, title, _)| cfg!(target_os = "macos") || *title != "Software presentation")
         .filter_map(|(section, title, description)| {
             let (display_section, display_title, display_description) =
                 localized_settings_search_entry(section, title, description, chinese);
@@ -275,7 +281,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 45] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 46] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -311,6 +317,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 45] = [
         "Changes take effect after restarting AxSSH",
         "渲染器",
         "重启 AxSSH 后生效",
+    ),
+    (
+        "Software presentation",
+        "macOS CPU presentation path; changes take effect after restarting AxSSH",
+        "软件呈现方式",
+        "macOS CPU 呈现路径；重启 AxSSH 后生效",
     ),
     (
         "Display mode",
@@ -602,6 +614,7 @@ pub(super) fn wire_settings(
     ui.on_save_settings(
         move |application_font_family,
               renderer_preference,
+              software_presentation,
               terminal_font_family,
               font_size,
               line_height_percent,
@@ -722,6 +735,7 @@ pub(super) fn wire_settings(
             let settings = AppSettings::normalized(AppSettingsInput {
                 appearance: AppearanceSettingsInput {
                     renderer_preference: renderer_preference.as_str(),
+                    software_presentation: software_presentation.as_str(),
                     application_font_family: application_font_family.as_str(),
                     terminal_font_family: terminal_font_family.as_str(),
                     terminal_font_size: font_size,
@@ -1200,9 +1214,26 @@ mod tests {
         }));
 
         let renderer_matches = settings_search_results("restarting", "english");
-        assert_eq!(renderer_matches.len(), 1);
-        assert_eq!(renderer_matches[0].section, "Appearance");
-        assert_eq!(renderer_matches[0].title, "Renderer");
+        assert_eq!(
+            renderer_matches.len(),
+            if cfg!(target_os = "macos") { 2 } else { 1 }
+        );
+        assert!(
+            renderer_matches
+                .iter()
+                .all(|entry| entry.section == "Appearance")
+        );
+        assert!(
+            renderer_matches
+                .iter()
+                .any(|entry| entry.title == "Renderer")
+        );
+        assert_eq!(
+            renderer_matches
+                .iter()
+                .any(|entry| entry.title == "Software presentation"),
+            cfg!(target_os = "macos")
+        );
 
         let cache_matches = settings_search_results("graphics memory", "english");
         assert_eq!(cache_matches.len(), 1);
@@ -1232,9 +1263,22 @@ mod tests {
         }));
 
         let renderer_matches = settings_search_results("重启", "simplified-chinese");
-        assert_eq!(renderer_matches.len(), 1);
-        assert_eq!(renderer_matches[0].section, "Appearance");
-        assert_eq!(renderer_matches[0].title, "渲染器");
+        assert_eq!(
+            renderer_matches.len(),
+            if cfg!(target_os = "macos") { 2 } else { 1 }
+        );
+        assert!(
+            renderer_matches
+                .iter()
+                .all(|entry| entry.section == "Appearance")
+        );
+        assert!(renderer_matches.iter().any(|entry| entry.title == "渲染器"));
+        assert_eq!(
+            renderer_matches
+                .iter()
+                .any(|entry| entry.title == "软件呈现方式"),
+            cfg!(target_os = "macos")
+        );
 
         let compact_matches = settings_search_results("省略默认背景", "simplified-chinese");
         assert_eq!(compact_matches.len(), 1);

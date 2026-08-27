@@ -232,6 +232,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
             renderer_preference: "gpu",
+            software_presentation: "damage-backing-store",
             application_font_family: "  JetBrains Mono  ",
             terminal_font_family: "  Menlo  ",
             terminal_font_size: 18,
@@ -259,6 +260,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
         }),
         AppearanceSettings {
             renderer_preference: RendererPreference::Gpu,
+            software_presentation: SoftwarePresentationMode::DamageBackingStore,
             application_font_family: "JetBrains Mono".into(),
             terminal_font_family: "Menlo".into(),
             terminal_font_size: 18,
@@ -294,6 +296,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
             renderer_preference: "unsupported",
+            software_presentation: "unsupported",
             application_font_family: "",
             terminal_font_family: "",
             terminal_font_size: 100,
@@ -321,6 +324,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
         }),
         AppearanceSettings {
             renderer_preference: RendererPreference::Automatic,
+            software_presentation: SoftwarePresentationMode::LayerImages,
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
             terminal_font_size: MAX_TERMINAL_FONT_SIZE,
@@ -350,6 +354,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
     let settings = AppSettings::normalized(AppSettingsInput {
         appearance: AppearanceSettingsInput {
             renderer_preference: "automatic",
+            software_presentation: "layer-images",
             application_font_family: "",
             terminal_font_family: "",
             terminal_font_size: 14,
@@ -885,6 +890,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     let settings = AppSettings::normalized(AppSettingsInput {
         appearance: AppearanceSettingsInput {
             renderer_preference: "software",
+            software_presentation: "layer-images",
             application_font_family: "Maple Mono NF CN",
             terminal_font_family: "",
             terminal_font_size: 100,
@@ -1053,6 +1059,34 @@ fn renderer_preference_defaults_and_serializes_stable_values() {
         serde_json::to_value(RendererPreference::Software)
             .expect("software renderer preference should serialize"),
         "software"
+    );
+}
+
+#[test]
+fn software_presentation_defaults_and_serializes_stable_values() {
+    let legacy: AppearanceSettings =
+        serde_json::from_str("{}").expect("legacy appearance should load");
+    assert_eq!(
+        legacy.software_presentation,
+        SoftwarePresentationMode::LayerImages
+    );
+
+    let invalid: AppearanceSettings =
+        serde_json::from_str(r#"{"software_presentation":"unsupported"}"#)
+            .expect("unknown software presentation should normalize");
+    assert_eq!(
+        invalid.software_presentation,
+        SoftwarePresentationMode::LayerImages
+    );
+    assert_eq!(
+        serde_json::to_value(SoftwarePresentationMode::LayerImages)
+            .expect("layer-image presentation should serialize"),
+        "layer-images"
+    );
+    assert_eq!(
+        serde_json::to_value(SoftwarePresentationMode::DamageBackingStore)
+            .expect("damage backing-store presentation should serialize"),
+        "damage-backing-store"
     );
 }
 

@@ -29,6 +29,20 @@ pub(super) fn software_renderer_selected(preference: RendererPreference) -> bool
     )
 }
 
+pub(super) fn configure_software_presentation(mode: SoftwarePresentationMode) {
+    #[cfg(target_os = "macos")]
+    softbuffer::set_macos_ca_backing_store_enabled(software_presentation_uses_backing_store(mode));
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = mode;
+}
+
+pub(super) const fn software_presentation_uses_backing_store(
+    mode: SoftwarePresentationMode,
+) -> bool {
+    matches!(mode, SoftwarePresentationMode::DamageBackingStore)
+}
+
 pub(super) fn tokio_worker_thread_count() -> usize {
     std::thread::available_parallelism()
         .map(|parallelism| parallelism.get())

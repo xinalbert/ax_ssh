@@ -26,9 +26,9 @@ use ax_ssh::config::{
     ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
     MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, RendererPreference, SerialDataBits,
     SerialFlowControl, SerialParity, SerialStopBits, SessionProfile, SessionStore,
-    ShortcutSettings, TerminalColorScheme, TerminalSemanticColorsInput, TerminalSettingsInput,
-    ThemePalette, ThemeSettings, UiLanguage, WorkspaceSettingsInput, X11Settings,
-    normalize_group_name,
+    ShortcutSettings, SoftwarePresentationMode, TerminalColorScheme, TerminalSemanticColorsInput,
+    TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage, WorkspaceSettingsInput,
+    X11Settings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::serial::{
@@ -119,6 +119,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let sessions = config.load().context("failed to load session profiles")?;
+    configure_software_presentation(sessions.settings.appearance.software_presentation);
     select_slint_renderer(sessions.settings.appearance.renderer_preference)
         .context("failed to select Slint renderer")?;
     let workspace_snapshot = match config.load_workspace() {
@@ -627,6 +628,16 @@ mod tests {
                 "winit-software"
             }
         );
+    }
+
+    #[test]
+    fn software_presentation_maps_only_damage_mode_to_backing_store() {
+        assert!(!software_presentation_uses_backing_store(
+            SoftwarePresentationMode::LayerImages
+        ));
+        assert!(software_presentation_uses_backing_store(
+            SoftwarePresentationMode::DamageBackingStore
+        ));
     }
 
     #[test]

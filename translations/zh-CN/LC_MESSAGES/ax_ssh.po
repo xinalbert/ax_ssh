@@ -289,6 +289,9 @@ msgstr "默认值"
 msgid "DISPLAY"
 msgstr "显示"
 
+msgid "Damage backing store (experimental)"
+msgstr "脏区后备存储（实验）"
+
 msgid "Danger"
 msgstr "危险"
 
@@ -537,6 +540,9 @@ msgstr "AxSSH 界面使用的语言"
 
 msgid "Launch the selected X server only when a forwarded graphical app opens"
 msgstr "仅在转发的图形应用打开时启动所选 X server"
+
+msgid "Layer images (stable)"
+msgstr "图层图像（稳定）"
 
 msgid "Leave blank to keep saved password"
 msgstr "留空以保留已保存的密码"
@@ -1045,8 +1051,14 @@ msgstr "软件"
 msgid "Software block rows"
 msgstr "软件呈现块行数"
 
+msgid "Software presentation"
+msgstr "软件呈现方式"
+
 msgid "Software presentation block rows"
 msgstr "软件呈现块的终端行数"
+
+msgid "Software presentation path"
+msgstr "软件呈现路径"
 
 msgid "Speed"
 msgstr "速度"
@@ -1251,6 +1263,9 @@ msgstr "X11"
 
 msgid "lines"
 msgstr "行"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 呈现路径；重启 AxSSH 后生效"
 
 msgid "px"
 msgstr "像素"

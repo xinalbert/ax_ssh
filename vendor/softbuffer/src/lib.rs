@@ -21,6 +21,9 @@ use std::num::NonZeroU32;
 use std::ops;
 use std::sync::{Arc, OnceLock, RwLock};
 
+#[cfg(target_vendor = "apple")]
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use error::InitError;
 pub use error::SoftBufferError;
 
@@ -105,6 +108,24 @@ struct PresentationLayouts {
 }
 
 static PRESENTATION_LAYOUTS: OnceLock<RwLock<PresentationLayouts>> = OnceLock::new();
+
+#[cfg(target_vendor = "apple")]
+static MACOS_CA_BACKING_STORE_ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Selects the CoreAnimation backing-store path for subsequently created Apple surfaces.
+///
+/// Existing surfaces keep the mode selected at creation. The
+/// `AXSSH_EXPERIMENT_CA_BACKING_STORE` environment variable overrides this
+/// process setting when it is present.
+#[cfg(target_vendor = "apple")]
+pub fn set_macos_ca_backing_store_enabled(enabled: bool) {
+    MACOS_CA_BACKING_STORE_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+#[cfg(target_vendor = "apple")]
+pub(crate) fn macos_ca_backing_store_enabled() -> bool {
+    MACOS_CA_BACKING_STORE_ENABLED.load(Ordering::Relaxed)
+}
 
 /// Updates the software presentation layout for one native window.
 ///

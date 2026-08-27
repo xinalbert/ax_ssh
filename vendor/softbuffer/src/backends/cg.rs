@@ -2,8 +2,8 @@
 use crate::backend_interface::*;
 use crate::error::InitError;
 use crate::{
-    presentation_layout, presentation_layout_generation, util, PresentationRegion, Rect,
-    SoftBufferError,
+    macos_ca_backing_store_enabled, presentation_layout, presentation_layout_generation, util,
+    PresentationRegion, Rect, SoftBufferError,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, ProtocolObject};
@@ -1021,12 +1021,16 @@ fn software_tile_debug_enabled() -> bool {
 }
 
 fn software_backing_store_enabled() -> bool {
-    std::env::var("AXSSH_EXPERIMENT_CA_BACKING_STORE").map_or(false, |value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    std::env::var("AXSSH_EXPERIMENT_CA_BACKING_STORE")
+        .map(|value| enabled_environment_value(&value))
+        .unwrap_or_else(|_| macos_ca_backing_store_enabled())
+}
+
+fn enabled_environment_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 fn draw_tile_debug_overlay(pixels: &mut [u32], width: usize, height: usize, index: usize) {
@@ -1206,6 +1210,16 @@ impl Deref for SendCALayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backing_store_environment_values_are_explicit() {
+        for value in ["1", "true", "TRUE", " yes ", "on"] {
+            assert!(enabled_environment_value(value));
+        }
+        for value in ["", "0", "false", "off", "unsupported"] {
+            assert!(!enabled_environment_value(value));
+        }
+    }
 
     #[test]
     fn damage_marks_only_intersecting_tiles() {

@@ -101,6 +101,8 @@ export component AppearanceSettingsPage inherits Rectangle {
     in-out property <string> draft-application-font-family;
     in-out property <int> draft-application-font-index;
     in-out property <string> draft-renderer-preference;
+    in-out property <string> draft-software-presentation;
+    in property <bool> apple-platform;
     in-out property <bool> draft-terminal-compact-rendering;
     in-out property <bool> draft-terminal-row-render-cache;
     in-out property <bool> draft-terminal-cursor-blink;
@@ -197,6 +199,24 @@ export component AppearanceSettingsPage inherits Rectangle {
                             selected(_value, index) => {
                                 root.draft-renderer-preference = index == 1 ? "gpu"
                                     : (index == 2 ? "software" : "automatic");
+                            }
+                        }
+                    }
+                }
+                if root.apple-platform : SettingsRow {
+                    label: @tr("Software presentation");
+                    description: @tr("macOS CPU presentation path; changes take effect after restarting AxSSH");
+                    SettingsField {
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: [@tr("Layer images (stable)"), @tr("Damage backing store (experimental)")];
+                            current-index: root.draft-software-presentation == "damage-backing-store" ? 1 : 0;
+                            accessible-label: @tr("Software presentation path");
+                            selected(_value, index) => {
+                                root.draft-software-presentation = index == 1
+                                    ? "damage-backing-store"
+                                    : "layer-images";
                             }
                         }
                     }
