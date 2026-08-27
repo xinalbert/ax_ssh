@@ -287,6 +287,11 @@ after restart. An explicit `SLINT_BACKEND` environment value takes priority and
 is left to Slint, so `SLINT_BACKEND=winit-software` remains a bounded diagnostic
 fallback without changing terminal models or worker flow. The macOS Skia default
 uses Metal and retains Slint's softbuffer fallback.
+`AppearanceSettings::software_presentation` independently selects the macOS
+CPU presentation implementation. Startup maps `layer-images` or
+`damage-backing-store` into a process-local softbuffer switch before the first
+window creates a surface. Existing surfaces are never hot-switched, and other
+platform backends do not consume this value.
 Only non-root leaves of a `PaneTree` are independently closable. Their close
 intent is revalidated against the owning window route, collapses that leaf in
 the tree, removes exactly that runtime Tab, cancels a pending probe, and shuts
@@ -1320,7 +1325,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     terminal/IME cursor state unchanged. The retired
     `terminal_partition_strategy` JSON field is ignored as an unknown field when
     older settings are loaded; it is no longer part of the settings schema or
-    runtime state. Missing fields keep those defaults. Schema version 24 adds the `RendererPreference` field with stable
+    runtime state. Missing fields keep those defaults. Schema version 27 adds
+    `software_presentation` with stable `layer-images` and
+    `damage-backing-store` values; missing or invalid values preserve the stable
+    layer-image path. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
     an active renderer. Schema version 23 adds the default-enabled
@@ -1524,8 +1532,12 @@ Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.
 
-`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` switches only this macOS Software
-presentation boundary to an opt-in `CALayerDelegate` experiment. It preserves
+The macOS `SoftwarePresentationMode::DamageBackingStore` setting switches only
+this Software presentation boundary to an opt-in `CALayerDelegate` experiment.
+`LayerImages` is the stable default. If
+`AXSSH_EXPERIMENT_CA_BACKING_STORE` is present, truthy values select the
+experiment and all other values select the stable path for that process. Both
+the saved setting and override are consumed before surface creation. The experiment preserves
 the existing pane/fallback layer geometry and ordering. Each layer retains a
 synchronized CPU backing store; present copies only its intersections with the
 physical damage list and calls `setNeedsDisplayInRect` in layer points. On

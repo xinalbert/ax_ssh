@@ -38,6 +38,12 @@ existing behavior. GPU selects `winit-skia` and Software selects
 `winit-software` on every supported desktop platform. The setting is read
 before the first `AppWindow` and takes effect only after restart.
 
+On macOS, **Settings > Appearance > Software presentation** separately persists
+`layer-images` or `damage-backing-store` for the Software renderer. The stable
+default uses independently owned layer `CGImage` values. The experimental mode
+uses the `CALayerDelegate` backing-store implementation and also takes effect
+only for surfaces created after restart.
+
 `SLINT_BACKEND` takes precedence over the saved preference and explicitly
 selects a renderer; for example, this forces the software path on macOS when
 collecting a comparison sample:
@@ -45,6 +51,10 @@ collecting a comparison sample:
 ```bash
 SLINT_BACKEND=winit-software cargo run --locked
 ```
+
+`AXSSH_EXPERIMENT_CA_BACKING_STORE` overrides the saved Software presentation
+mode when present. `1`, `true`, `yes`, and `on` enable the experimental path;
+any other value selects the stable layer-image path for that process.
 
 The repository patches the locked `i-slint-backend-winit` and `softbuffer`
 sources under `vendor/`. The winit patch forwards the renderer's individual

@@ -194,6 +194,9 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 renderer；它会在重启后生效。显式 `SLINT_BACKEND` 的优先级更高，选择权交给 Slint，因此仍可用
 `SLINT_BACKEND=winit-software` 做有界诊断回退，且不会改变终端 model 或 worker 链路。macOS 的
 Skia 默认表面使用 Metal，并由 Slint 的 softbuffer 提供回退。
+`AppearanceSettings::software_presentation` 独立选择 macOS CPU 呈现实现。启动过程在首个窗口创建
+surface 前将 `layer-images` 或 `damage-backing-store` 映射到进程内 softbuffer 开关。已有 surface
+绝不热切换，其它平台 backend 不读取该值。
 只有 `PaneTree` 的非根叶节点可以单独关闭。关闭意图会按所属窗口路由重新校验，随后折叠该叶节点、
 只移除对应运行时 Tab、取消 pending probe，并异步 shutdown 仍存在的 worker。子 pane 中 local shell
 正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态
@@ -823,7 +826,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
     缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
     改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
-    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 24 增加
+    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 27 增加
+    `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值保持稳定图层图像路径。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
@@ -932,8 +936,10 @@ bridge 在窗口 occluded 时使 surface 失效，即使新 buffer 没有 dirty 
 应用 FPS 上限；大面积 damage 仍可能刷新全部 layer。Slint API、终端所有权和 SSH 边界不变。GPU/Metal 仍只把 Skia
 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
 
-`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 只把 macOS Software presentation 边界切换到可选的
-`CALayerDelegate` 实验，不改变现有 pane/fallback layer 的几何、顺序和边界。每个 layer 持有同步的 CPU
+macOS 的 `SoftwarePresentationMode::DamageBackingStore` 设置只把 Software presentation 边界切换到可选的
+`CALayerDelegate` 实验，`LayerImages` 为稳定默认值。存在 `AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，真值为
+当前进程选择实验路径，其它值选择稳定路径；保存值和覆盖值都在 surface 创建前读取。该实验不改变现有
+pane/fallback layer 的几何、顺序和边界。每个 layer 持有同步的 CPU
 backing store；present 只复制物理 damage 与该 layer 的交集，并按 layer point 调用
 `setNeedsDisplayInRect`。macOS 下会先把 tile-local、左上原点的 framebuffer 矩形转换为独立 layer 的左下原点
 坐标；delegate 读取 Core Graphics clip 后执行严格逆变换，再为该裁剪矩形创建独立拥有的图像并绘入 layer

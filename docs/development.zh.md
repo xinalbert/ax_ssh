@@ -34,12 +34,19 @@ Renderer** 会为下一次启动保存 Automatic、GPU 或 Software。Automatic 
 `winit-software`，保持现有平台行为。GPU 在受支持桌面平台选择 `winit-skia`，Software 选择
 `winit-software`。设置会在首个 `AppWindow` 创建前读取，因此仅在重启后生效。
 
+macOS 的 **Settings > Appearance > Software presentation** 另行保存 Software renderer 的
+`layer-images` 或 `damage-backing-store`。稳定默认值使用独立拥有的图层 `CGImage`；实验值使用
+`CALayerDelegate` backing store，并且同样只对重启后创建的 surface 生效。
+
 `SLINT_BACKEND` 的优先级高于已保存偏好，可显式选择 renderer；例如在 macOS 采集对照 sample 时
 强制走 software：
 
 ```bash
 SLINT_BACKEND=winit-software cargo run --locked
 ```
+
+存在 `AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，它会覆盖已保存的 Software presentation：`1`、
+`true`、`yes` 和 `on` 启用实验路径，其它值为当前进程选择稳定图层图像路径。
 
 仓库在 `vendor/` 下维护锁定 `i-slint-backend-winit` 和 `softbuffer` 的本地补丁。winit 补丁转发
 renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留一个持久 CPU framebuffer，并通过固定的

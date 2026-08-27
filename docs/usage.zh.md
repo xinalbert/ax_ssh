@@ -283,7 +283,10 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；Renderer 可为
 下一次应用启动选择 **Automatic**、**GPU** 或 **Software**：Automatic 在 macOS 使用 GPU/Skia，在
 Windows/Linux 使用 software；GPU 使用 Skia，Software 使用 software renderer。当前进程设置
-`SLINT_BACKEND` 时会覆盖这个已保存选择。Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
+`SLINT_BACKEND` 时会覆盖这个已保存选择。macOS 的 **Software presentation** 为下一次启动选择 CPU renderer
+的呈现路径：**Layer images（稳定）** 保留独立拥有的 `CGImage` 图层路径，**Damage backing store（实验）**
+使用 `CALayerDelegate` 脏区失效。当前 renderer 不使用 macOS software surface 时会忽略该值；它也不改变
+FPS 策略。Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
 **AxSSH**、**Solarized**、**Arctic**、**Tokyo**、**Ember**、**Forest** 或 **Custom**，因此
 所有固定配色都能同时用于浅色和深色。Arctic 偏冷色技术感，Tokyo 偏夜间，Ember 偏暖色，
 Forest 使用绿色高对比。在 Dark 模式中，所有配色共用 axshell 的高饱和 ANSI-16 色，同时保留

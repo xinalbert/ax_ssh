@@ -3,13 +3,13 @@
 ## 当前目标
 
 - 目标 ID：20260826-macos-software-partial-presentation
-- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，以可回退实验验证普通 `CALayer` backing store 的矩形失效行为，并降低终端空闲时的周期性 worker/UI 唤醒。
-- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；CELL1-CELL4 终端文字/覆盖层格宽统一、真实行原点和单格拖选；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；WAKE1-WAKE4 SSH/Telnet 按需输出 flush、Local PTY 事件唤醒/低频退出兜底、macOS 激活低频兜底和完整门禁；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
+- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，以可回退实验验证普通 `CALayer` backing store 的矩形失效行为，将两条 CPU presentation 路径纳入持久化渲染选项，并降低终端空闲时的周期性 worker/UI 唤醒。
+- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；CELL1-CELL4 终端文字/覆盖层格宽统一、真实行原点和单格拖选；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；CPU1-CPU4 两条 macOS Software presentation 路径的配置、启动接线、Appearance 选项和门禁；WAKE1-WAKE4 SSH/Telnet 按需输出 flush、Local PTY 事件唤醒/低频退出兜底、macOS 激活低频兜底和完整门禁；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/terminal-pane.slint` 与 `ui/components/terminal-grid.slint` 的终端单元格几何、`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、`src/{local_shell,telnet}.rs`、`src/ssh/worker/shell.rs` 与 `src/app.rs` 的空闲 timer/wake 策略、同负载 release 构建与采样、`russh` 稳定性升级、CI 发布门禁和 `docs/project-implementation-tracker/` 记录。
+- 当前范围：`src/config/`、`src/app/{runtime,settings_bridge,view/settings}.rs` 与 `ui/settings/appearance.slint` 的 Software presentation 配置和启动接线，`vendor/softbuffer/src/{lib,backends/cg}.rs` 的 macOS CoreGraphics image/layer presentation、终端单元格几何、空闲 timer/wake 策略、同负载 release 构建与采样、安全升级门禁和 `docs/project-implementation-tracker/` 记录。
 - 不在本轮范围内：终端 parser/内容模型、SSH/Telnet 协议或认证/信任语义、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
 
 ## 当前状态
@@ -82,7 +82,11 @@
 | CELL2 | completed | software presentation region 从实际首个完整终端行开始 | Slint callback contract、Retina 物理区域换算和 backend partition tests | `grid-top-offset` 顶部余量交给 fallback，不跨入行级 block。目标机视觉待用户确认。 |
 | CELL3 | completed | 完整离线门禁、双语契约和目标平台验收说明 | fmt、check、Clippy、test、tracker/Markdown、`git diff --check` | 本轮代码与新增记录通过；validator 仍报告既有历史记录格式债务，GUI 视觉由用户截图确认。 |
 | CELL4 | completed | 鼠标拖选使用半开单元格边界，使最小选区精确为一格且绘制与复制一致 | Slint 编译、正向/反向/跨行范围审阅、完整 Cargo 门禁 | xterm mouse reporting 仍使用包含格坐标；双击单词和三击逻辑行继续使用 Rust 包含式范围。目标机拖选视觉待用户确认。 |
-| COLOR3 | in_progress | 以环境变量接入普通 `CALayer` delegate + `setNeedsDisplayInRect` 持久 backing store，并保留现有 `setContents` 回退 | API/objc2 审阅、11 项隔离 vendor tests、Cargo check/Clippy、GUI 视觉、同负载 sample 和残影/撕裂验收 | A/B 暂缓至 CELL1-CELL4 视觉正确性收口；`AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 才启用，`CATiledLayer` 不在本原型内。 |
+| COLOR3 | in_progress | 以可配置方式接入普通 `CALayer` delegate + `setNeedsDisplayInRect` 持久 backing store，并保留现有 `setContents` 回退 | API/objc2 审阅、12 项隔离 vendor tests、Cargo check/Clippy、GUI 视觉、同负载 sample 和残影/撕裂验收 | A/B 暂缓至 CELL1-CELL4 视觉正确性收口；Settings 实验值或 `AXSSH_EXPERIMENT_CA_BACKING_STORE=1` 启用，`CATiledLayer` 不在本原型内。 |
+| CPU1 | completed | 新增稳定的 Software presentation 配置枚举和启动期 backend 选择契约 | config normalization/serde、启动选择单测 | schema v27 默认保持独立 `CGImage/setContents`；环境变量继续作为显式诊断覆盖。 |
+| CPU2 | completed | 将两条 CPU 路径放入 Appearance > Rendering，并标明重启后生效 | Slint 编译、Settings 搜索与草稿/保存映射回归、翻译检查 | 仅 macOS Software 使用该值；不热切换已有窗口或 surface。 |
+| CPU3 | completed | softbuffer 接收有界启动配置并选择 image-layer 或 backing-store 路径 | vendor focused tests、macOS cfg Cargo check | 只传一个进程内 bool，不向 backend 传 terminal/session/SSH 状态，不改变 damage 几何与图像所有权。 |
+| CPU4 | completed | 同步双语契约、项目地图、月度记录并完成全量门禁 | fmt/check/Clippy/test、tracker/Markdown/`git diff --check` | 自动化门禁通过；目标 macOS 仍需分别验收两条路径的视觉和 sample。 |
 | SEC1 | completed | 升级 `russh` 到 0.63.1，并适配 `PublicKeyOrCertificate` 主机密钥回调 | `cargo update -p russh --precise 0.63.1`、locked check、SSH focused tests | 覆盖 0.62.x Curve25519 客户端崩溃/拒绝服务修复，以及 0.63.1 的 channel-ID/MAC-none 稳定性修复；证书显式拒绝，不改变 profile/known_hosts 信任语义。 |
 | SEC2 | completed | 将严格 Clippy、MSRV 1.92 和 RustSec 审计纳入普通 CI，并移除 vendor manifest 中已失效的 bench target | workflow YAML 审阅、`cargo fmt --all -- --check`；GitHub-hosted CI 执行 | MSRV 只做 locked Linux check；RustSec action 固定到已验证的 v2.0.0 commit SHA；不恢复 benchmark 或增加 dev dependency。 |
 | SEC3 | completed | 为 Release 增加 Linux 预检和安全审计依赖 | release workflow DAG 审阅 | 跨平台构建只有在 tag 校验、fmt/check/Clippy/test、脚本回归和 RustSec audit 全部成功后才启动。 |
@@ -221,6 +225,7 @@
 
 ## 最后更新时间
 
+- 2026-08-27 13:05 +0800：完成 CPU1-CPU4。schema v27 保存 macOS Software 的稳定图层图像/实验脏区 backing store 选择；Appearance > Rendering、Settings 搜索/保存、中文目录和启动期 softbuffer 开关已贯通，环境变量保留为进程覆盖。完整 Rust/Slint/翻译门禁及 12 项独立 softbuffer 测试通过，等待目标机分别进行视觉和同负载 sample A/B。
 - 2026-08-27 11:04 +0800：SSH/Telnet 空闲输出 timer 改为按需一次性 flush；Local PTY 空闲 child 检查降至 1s，reader 关闭即时唤醒并只短暂快速确认；macOS 激活兜底放宽到 500ms。完整 Rust/Slint 门禁通过，等待同 release Idle Wake Ups 复测。
 
 - 2026-08-27 10:03 +0800：鼠标拖选改为最近插入边界和行优先半开索引，最小选区可精确为一个单元格；绘制与复制只消费同一规范化包含式范围，xterm mouse reporting 和语义/逻辑行选择不变。完整 Rust/Slint 门禁通过，等待目标机拖选视觉确认。
