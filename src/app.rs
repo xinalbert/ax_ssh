@@ -304,7 +304,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let _window_activation_poll = {
         let timer = slint::Timer::default();
         let router_for_activation_poll = window_router.clone();
-        timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
+        timer.start(TimerMode::Repeated, Duration::from_millis(500), move || {
             router_for_activation_poll.sync_window_activation_from_native();
         });
         timer

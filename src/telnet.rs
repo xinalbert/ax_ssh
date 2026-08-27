@@ -13,7 +13,7 @@ use tokio::net::tcp::OwnedWriteHalf;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tokio::time::{Duration, MissedTickBehavior, interval, timeout};
+use tokio::time::{Duration, Instant as TokioInstant, sleep, timeout};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -291,9 +291,8 @@ async fn run_telnet_session(
     }
     info!(session_id = %session_id, host = %config.host, port = config.port, "Telnet connected without encryption");
 
-    let mut output_flush = interval(OUTPUT_FLUSH_INTERVAL);
-    output_flush.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    output_flush.tick().await;
+    let output_flush = sleep(OUTPUT_FLUSH_INTERVAL);
+    tokio::pin!(output_flush);
     let mut output = Vec::new();
     let mut read_buffer = [0_u8; MAX_OUTPUT_BATCH_BYTES];
     let mut frame_buffer = TelnetFrameBuffer::default();
@@ -336,6 +335,7 @@ async fn run_telnet_session(
                 }
             }
             read = reader.read(&mut read_buffer) => {
+                let arm_output_flush = output.is_empty();
                 let read = match read {
                     Ok(0) => break,
                     Ok(read) => read,
@@ -384,8 +384,13 @@ async fn run_telnet_session(
                         break;
                     }
                 }
+                if arm_output_flush && !output.is_empty() {
+                    output_flush
+                        .as_mut()
+                        .reset(TokioInstant::now() + OUTPUT_FLUSH_INTERVAL);
+                }
             }
-            _ = output_flush.tick() => {
+            _ = &mut output_flush, if !output.is_empty() => {
                 if !flush_output(&event_tx, &mut output, session_id).await {
                     break;
                 }

@@ -25,7 +25,9 @@ const EVENT_CAPACITY: usize = 32;
 const MAX_INPUT_BYTES: usize = 16 * 1024;
 const MAX_OUTPUT_BATCH_BYTES: usize = 16 * 1024;
 const MAX_ERROR_CHARS: usize = 512;
-const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const IDLE_CHILD_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const CHILD_EXIT_RECHECK_INTERVAL: Duration = Duration::from_millis(25);
+const CHILD_EXIT_RECHECK_ATTEMPTS: u8 = 40;
 const EVENT_BACKPRESSURE_INTERVAL: Duration = Duration::from_millis(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 
@@ -41,11 +43,13 @@ pub enum LocalShellEvent {
 enum LocalShellCommand {
     Send(Vec<u8>),
     Wake,
+    ReaderClosed,
 }
 
 struct LocalShellTask {
     shell: String,
     initial_size: TerminalSize,
+    command_tx: SyncSender<LocalShellCommand>,
     command_rx: Receiver<LocalShellCommand>,
     pending_resize: Arc<Mutex<Option<TerminalSize>>>,
     shutdown_requested: Arc<AtomicBool>,
@@ -82,6 +86,7 @@ impl LocalShellHandle {
         let task = LocalShellTask {
             shell,
             initial_size,
+            command_tx: command_tx.clone(),
             command_rx,
             pending_resize: pending_resize.clone(),
             shutdown_requested: shutdown_requested.clone(),
@@ -219,7 +224,7 @@ impl Drop for LocalShellHandle {
 
 async fn wait_for_thread(thread: &JoinHandle<()>) {
     while !thread.is_finished() {
-        tokio::time::sleep(COMMAND_POLL_INTERVAL).await;
+        tokio::time::sleep(CHILD_EXIT_RECHECK_INTERVAL).await;
     }
 }
 
@@ -335,6 +340,7 @@ fn run_local_shell(task: LocalShellTask) -> Result<()> {
     let LocalShellTask {
         shell,
         initial_size,
+        command_tx,
         command_rx,
         pending_resize,
         shutdown_requested,
@@ -382,7 +388,7 @@ fn run_local_shell(task: LocalShellTask) -> Result<()> {
     let reader_shutdown = shutdown_requested.clone();
     let reader_thread = thread::Builder::new()
         .name("axssh-local-pty-reader".to_owned())
-        .spawn(move || read_output(reader, &reader_tx, &reader_shutdown));
+        .spawn(move || read_output(reader, &reader_tx, &reader_shutdown, &command_tx));
     let reader_thread = match reader_thread {
         Ok(reader_thread) => reader_thread,
         Err(error) => {
@@ -444,7 +450,7 @@ fn terminate_child(child: &mut dyn portable_pty::Child, process_group: i32) -> R
         {
             return Ok(());
         }
-        thread::sleep(COMMAND_POLL_INTERVAL);
+        thread::sleep(CHILD_EXIT_RECHECK_INTERVAL);
     }
     anyhow::bail!("local PTY child did not exit after forced termination")
 }
@@ -474,6 +480,7 @@ fn drive_local_shell(
     )
     .context("local shell event receiver closed during startup")?;
     let mut applied_size = initial_size;
+    let mut child_exit_rechecks = 0_u8;
     while !shutdown_requested.load(Ordering::Acquire) {
         apply_pending_resize(
             master,
@@ -485,14 +492,28 @@ fn drive_local_shell(
         if let Some(status) = child.try_wait().context("failed to poll local shell")? {
             return Ok(Some(status.to_string()));
         }
-        match command_rx.recv_timeout(COMMAND_POLL_INTERVAL) {
+        let rapid_exit_recheck = child_exit_rechecks > 0;
+        let poll_interval = if rapid_exit_recheck {
+            CHILD_EXIT_RECHECK_INTERVAL
+        } else {
+            IDLE_CHILD_POLL_INTERVAL
+        };
+        match command_rx.recv_timeout(poll_interval) {
             Ok(LocalShellCommand::Send(data)) => {
                 writer
                     .write_all(&data)
                     .and_then(|_| writer.flush())
                     .context("failed to write local PTY input")?;
             }
-            Ok(LocalShellCommand::Wake) | Err(RecvTimeoutError::Timeout) => {}
+            Ok(LocalShellCommand::Wake) => {}
+            Ok(LocalShellCommand::ReaderClosed) => {
+                child_exit_rechecks = CHILD_EXIT_RECHECK_ATTEMPTS;
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                if rapid_exit_recheck {
+                    child_exit_rechecks -= 1;
+                }
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 shutdown_requested.store(true, Ordering::Release);
             }
@@ -537,11 +558,15 @@ fn read_output(
     mut reader: Box<dyn Read + Send>,
     event_tx: &mpsc::Sender<LocalShellEvent>,
     shutdown_requested: &Arc<AtomicBool>,
+    command_tx: &SyncSender<LocalShellCommand>,
 ) {
     let mut buffer = vec![0; MAX_OUTPUT_BATCH_BYTES];
     loop {
         match reader.read(&mut buffer) {
-            Ok(0) => return,
+            Ok(0) => {
+                let _ = command_tx.try_send(LocalShellCommand::ReaderClosed);
+                return;
+            }
             Ok(read) => {
                 if send_event_with_cancellation(
                     event_tx,
@@ -568,6 +593,7 @@ fn read_output(
                     shutdown_requested,
                 );
                 shutdown_requested.store(true, Ordering::Release);
+                let _ = wake_worker(command_tx);
                 return;
             }
         }
@@ -819,6 +845,29 @@ mod tests {
             .is_err()
         );
         assert!(event_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn output_reader_notifies_owner_after_eof() {
+        let shutdown_requested = Arc::new(AtomicBool::new(false));
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let (command_tx, command_rx) = sync_channel(1);
+
+        read_output(
+            Box::new(std::io::Cursor::new(b"done".to_vec())),
+            &event_tx,
+            &shutdown_requested,
+            &command_tx,
+        );
+
+        assert_eq!(
+            event_rx.try_recv(),
+            Ok(LocalShellEvent::Output(b"done".to_vec()))
+        );
+        assert!(matches!(
+            command_rx.try_recv(),
+            Ok(LocalShellCommand::ReaderClosed)
+        ));
     }
 
     #[cfg(not(windows))]

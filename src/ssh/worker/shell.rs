@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use tokio::task::JoinSet;
-use tokio::time::{MissedTickBehavior, interval, timeout};
+use tokio::time::{Instant as TokioInstant, sleep, timeout};
 
 use crate::sftp::{SftpBrowserHandle, SftpTransferEvent};
 
@@ -95,9 +95,8 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         }
     }
 
-    let mut output_flush = interval(OUTPUT_FLUSH_INTERVAL);
-    output_flush.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    output_flush.tick().await;
+    let output_flush = sleep(OUTPUT_FLUSH_INTERVAL);
+    tokio::pin!(output_flush);
     let mut output = Vec::new();
     let mut output_received_at = None;
     let mut awaiting_output_after_input = None;
@@ -351,6 +350,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                 match event {
                     Ok(Some(SshEvent::Output(data))) => {
                         let received_at = Instant::now();
+                        let arm_output_flush = output.is_empty();
                         output_received_at.get_or_insert(received_at);
                         let input_observation = awaiting_output_after_input.take();
                         let flush_for_input = input_observation.is_some();
@@ -367,6 +367,11 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             );
                         }
                         output.extend_from_slice(&data);
+                        if arm_output_flush && !output.is_empty() {
+                            output_flush
+                                .as_mut()
+                                .reset(TokioInstant::now() + OUTPUT_FLUSH_INTERVAL);
+                        }
                         if (flush_for_input || output.len() >= MAX_OUTPUT_BATCH_BYTES)
                             && !flush_output(
                                 &event_tx,
@@ -466,7 +471,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     }
                 }
             }
-            _ = output_flush.tick() => {
+            _ = &mut output_flush, if !output.is_empty() => {
                 if !flush_output(
                     &event_tx,
                     &mut output,
