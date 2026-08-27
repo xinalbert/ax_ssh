@@ -200,7 +200,10 @@ Skia 默认表面使用 Metal，并由 Slint 的 softbuffer 提供回退。
 继续可见；关闭可见 Terminal Tab 仍负责关闭整棵树。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、语义双击、逻辑行三击、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
-resize 生命周期仍由 `TerminalPane` 保留。
+resize 生命周期仍由 `TerminalPane` 保留。指针 callback 同时携带所在单元格和最近的插入边界；
+`TerminalPane` 将鼠标拖选保存为行优先、左闭右开的边界范围，因此跨过一个单元格只会选中一个单元格，
+再统一将该草稿规范化成绘制和剪贴板读取共用的包含式首末格。Rust 边界返回的语义单词和逻辑行范围仍为
+包含式，并显式转换到同一本地半开表示。
 终端目标激活遵循相同边界。按住平台主修饰键时（macOS 为 `Cmd`，其它平台为 `Ctrl`），指针移动或
 按下主修饰键都会让 application bridge 检查当前可见行和单元格。私有 parser 返回完整、有界目标的
 字符区间，`TerminalModel` 再将其映射回半开 cell 区间；`TerminalPane` 只短暂保存
@@ -753,8 +756,8 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
 Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 分别测量配置主字体的
-50 个 Latin cell、已注册 Han fallback 的 25 个双宽字形和 3 个 box-drawing 字形；`TerminalPane`
-取三者中最大的单 cell advance，使 Latin、Han 与盒线共用保守的一套 grid metric。Rust 保留终端逻辑列，
+50 个 Latin cell；终端网格使用该主字体的 Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
+和盒线字形只在其一格或两格 span 内居中，不再扩大所有列。Rust 保留终端逻辑列，
 继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
 span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
 光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
@@ -900,8 +903,8 @@ IME、键盘焦点、可访问性和标准文本编辑右键菜单。
 主题刷新不会 resize PTY、发送 worker 命令或改变 SSH/本地 shell 生命周期。
 默认的紧凑终端渲染会分别发布合并后的非默认背景 span 和装饰 span，直接绘制 Text，不再给每个 run
 增加透明包装 Rectangle；Settings 开关仍保留旧 item 树供 A/B。独立的行缓存开关只把静态行背景、文字和
-装饰放入 `cache-rendering-hint` layer；选区使用固定的逐行 overlay 和单个 cell-range fill，
-只更新位置、宽度和可见性而不增删选区子项或重建行容器；光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
+装饰放入 `cache-rendering-hint` layer；选区使用固定的逐行 overlay，每个选中列绘制一个固定逻辑单元格 fill；
+选区变化只重建这个有界 overlay model，不从混合 Unicode 文字 advance 推导范围；光标闪烁、目标反馈和 IME/preedit 都在缓存层外。
 紧凑与非紧凑文字内容也固定保留两套子树，设置切换时只改变可见性，避免重建整行 item tree。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
@@ -917,7 +920,7 @@ Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`Te
 脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 持有
 一个持久 CPU framebuffer，并把 presentation surface 划分为安全的 Core Animation layer。`TerminalPane` 以逻辑坐标
 发布终端 pane 几何，backend 边界再转换为物理像素；pane 区域内的 layer 覆盖整个 pane 宽度，垂直边界落在设置的
-终端行高倍数上。sidebar、tab 和未上报区域使用固定 256×128 物理像素的 fallback grid。`present_with_damage` 将
+终端行高倍数上。pane 只上报从 `grid-top-offset` 开始的完整底对齐终端行，顶部小数余量留给 fallback；sidebar、tab 和未上报区域使用固定 256×128 物理像素的 fallback grid。`present_with_damage` 将
 Slint 的物理矩形映射到相交 layer；每个被选中的 layer 只为自身的行创建新的、独立拥有的 `CGImage`，未变化的 layer
 则继续保留旧的不可变图像。因此 Core Animation 在 transaction commit 后仍可安全读取图像，无需为一次很小的终端更新
 clone 或色彩转换整个 framebuffer。首帧、resize、Retina scale、surface invalidate 和窗口恢复都会重置 buffer age

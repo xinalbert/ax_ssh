@@ -240,15 +240,12 @@ export component TerminalPane inherits Rectangle {
     callback pane-focus(string);
     callback pane-command(string, string) -> bool;
 
-    // Measure the primary font and the registered fallback glyphs separately.
-    // The terminal grid uses one logical cell width for every script; using
-    // only Latin M can leave CJK and box-drawing glyphs on a fractional edge.
+    // The terminal model defines columns from the selected monospace font's
+    // Latin advance. Wide and fallback glyphs are centered inside one or two
+    // of these cells; letting a fallback enlarge every cell makes text runs
+    // drift away from cursor, selection, pointer, and IME coordinates.
     private property <length> font-cell-width:
-        max(
-            max(1px,
-                max(cell-probe.preferred-width / 50,
-                    wide-cell-probe.preferred-width / 50)),
-            symbol-cell-probe.preferred-width / 3);
+        max(1px, cell-probe.preferred-width / 50);
     private property <length> font-cell-height: max(1px, cell-probe.preferred-height);
     private property <length> cell-width: root.font-cell-width;
     private property <length> cell-height:
@@ -264,6 +261,14 @@ export component TerminalPane inherits Rectangle {
     // them. Only panes below the minimum row floor clip older top rows.
     private property <length> grid-top-offset:
         grid-clip.height - root.terminal-rows * root.cell-height;
+    // Row-aligned software presentation begins at the first complete rendered
+    // row. Extremely short panes use fallback tiles until a full grid fits.
+    private property <length> presentation-grid-top-offset:
+        max(0px, root.grid-top-offset);
+    private property <length> presentation-grid-height:
+        root.grid-top-offset >= 0px
+            ? root.terminal-rows * root.cell-height
+            : 0px;
     // The grid, pre-edit overlay, and native IME proxy share this one
     // content-space cursor position. The clipping parent handles negatives.
     private property <length> cursor-cell-y:
@@ -303,10 +308,11 @@ export component TerminalPane inherits Rectangle {
     private property <bool> mouse-motion-shift: false;
     private property <bool> mouse-motion-alt: false;
     private property <bool> mouse-motion-control: false;
-    private property <int> selection-anchor-row: 0;
-    private property <int> selection-anchor-column: 0;
-    private property <int> selection-focus-row: 0;
-    private property <int> selection-focus-column: 0;
+    // Mouse selection endpoints are insertion boundaries in a row-major cell
+    // sequence. Keeping the end exclusive lets a drag span exactly one cell;
+    // rendering and clipboard callbacks derive the same inclusive cell range.
+    private property <int> selection-anchor-index: 0;
+    private property <int> selection-focus-index: 0;
     private property <int> target-pointer-row: 0;
     private property <int> target-pointer-column: 0;
     private property <bool> target-pointer-in-grid: false;
@@ -314,18 +320,25 @@ export component TerminalPane inherits Rectangle {
         active: false, row: 0, start_column: 0, end_column: 0,
     };
     private property <bool> selection-active: root.selection-valid;
-    private property <bool> anchor-first:
-        root.selection-anchor-row < root.selection-focus-row
-        || (root.selection-anchor-row == root.selection-focus-row
-            && root.selection-anchor-column <= root.selection-focus-column);
+    private property <int> selection-column-count: max(1, root.content-columns);
+    private property <int> selection-first-index:
+        min(root.selection-anchor-index, root.selection-focus-index);
+    private property <int> selection-end-index:
+        max(root.selection-anchor-index, root.selection-focus-index);
+    private property <int> selection-last-cell-index:
+        root.selection-valid
+            ? max(0, root.selection-end-index - 1)
+            : root.selection-first-index;
     private property <int> selection-first-row:
-        root.anchor-first ? root.selection-anchor-row : root.selection-focus-row;
+        floor(root.selection-first-index / root.selection-column-count);
     private property <int> selection-first-column:
-        root.anchor-first ? root.selection-anchor-column : root.selection-focus-column;
+        root.selection-first-index
+            - root.selection-first-row * root.selection-column-count;
     private property <int> selection-last-row:
-        root.anchor-first ? root.selection-focus-row : root.selection-anchor-row;
+        floor(root.selection-last-cell-index / root.selection-column-count);
     private property <int> selection-last-column:
-        root.anchor-first ? root.selection-focus-column : root.selection-anchor-column;
+        root.selection-last-cell-index
+            - root.selection-last-row * root.selection-column-count;
     private property <TerminalGridView> grid-view: {
         connected: root.connected, render_lines: root.render-lines,
         row_count: root.render-lines.length,
@@ -379,9 +392,9 @@ export component TerminalPane inherits Rectangle {
         if root.software-presentation-enabled {
             root.presentation-layout(
                 grid-clip.x,
-                grid-clip.y,
+                grid-clip.y + root.presentation-grid-top-offset,
                 grid-clip.width,
-                grid-clip.height,
+                root.presentation-grid-height,
                 root.cell-height,
             );
         }
@@ -406,27 +419,28 @@ export component TerminalPane inherits Rectangle {
         root.selection-valid = false;
         root.cursor-blink = true;
         root.clear-terminal-target-highlight();
-        root.selection-focus-row = root.selection-anchor-row;
-        root.selection-focus-column = root.selection-anchor-column;
+        root.selection-focus-index = root.selection-anchor-index;
     }
 
     function copy-selection() {
         if root.selection-active {
             root.write-clipboard(root.selection-text(
-                root.selection-anchor-row,
-                root.selection-anchor-column,
-                root.selection-focus-row,
-                root.selection-focus-column,
+                root.selection-first-row,
+                root.selection-first-column,
+                root.selection-last-row,
+                root.selection-last-column,
             ));
             ime-input.focus();
         }
     }
 
     function select-all-visible() {
-        root.selection-anchor-row = 0;
-        root.selection-anchor-column = 0;
-        root.selection-focus-row = max(0, root.render-lines.length - 1);
-        root.selection-focus-column = max(0, root.content-columns - 1);
+        if root.render-lines.length <= 0 || root.content-columns <= 0 {
+            root.clear-selection();
+            return;
+        }
+        root.selection-anchor-index = 0;
+        root.selection-focus-index = root.render-lines.length * root.content-columns;
         root.selection-valid = true;
         if root.copy-selection-on-select {
             root.copy-selection();
@@ -452,10 +466,10 @@ export component TerminalPane inherits Rectangle {
         if !selection.active {
             return;
         }
-        root.selection-anchor-row = selection.anchor_row;
-        root.selection-anchor-column = selection.anchor_column;
-        root.selection-focus-row = selection.focus_row;
-        root.selection-focus-column = selection.focus_column;
+        root.selection-anchor-index = selection.anchor_row * root.selection-column-count
+            + selection.anchor_column;
+        root.selection-focus-index = selection.focus_row * root.selection-column-count
+            + selection.focus_column + 1;
         root.selection-valid = true;
         root.selecting = false;
         root.clear-terminal-target-highlight();
@@ -606,32 +620,6 @@ export component TerminalPane inherits Rectangle {
         width: 0px;
         height: 0px;
         text: @tr("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM");
-        font-family: root.terminal-font-family;
-        font-size: root.terminal-font-size;
-        font-weight: 400;
-        letter-spacing: 0px;
-        opacity: 0;
-    }
-
-    wide-cell-probe := Text {
-        x: -1000px;
-        y: -1000px;
-        width: 0px;
-        height: 0px;
-        text: "中中中中中中中中中中中中中中中中中中中中中中中中中";
-        font-family: root.terminal-font-family;
-        font-size: root.terminal-font-size;
-        font-weight: 400;
-        letter-spacing: 0px;
-        opacity: 0;
-    }
-
-    symbol-cell-probe := Text {
-        x: -1000px;
-        y: -1000px;
-        width: 0px;
-        height: 0px;
-        text: "┌─┐";
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         font-weight: 400;
@@ -849,7 +837,7 @@ export component TerminalPane inherits Rectangle {
                     root.right-click-copy-or-paste || root.copy-selection-on-select;
                 mouse-local-selection-priority: root.mouse-local-selection-priority;
                 target-highlight: root.terminal-target-highlight;
-                pointer-down(row, column, button, shift, alt, control, meta) => {
+                pointer-down(row, column, boundary-column, button, shift, alt, control, meta) => {
                     let left = button == 0;
                     let right = button == 2;
                     let report-mouse = root.forward-mouse-to-terminal(shift, alt);
@@ -877,10 +865,9 @@ export component TerminalPane inherits Rectangle {
                         root.last-primary-target-activated = true;
                         root.clear-selection();
                     } else if !report-mouse && left {
-                        root.selection-anchor-row = row;
-                        root.selection-anchor-column = column;
-                        root.selection-focus-row = row;
-                        root.selection-focus-column = column;
+                        root.selection-anchor-index = row * root.selection-column-count
+                            + boundary-column;
+                        root.selection-focus-index = root.selection-anchor-index;
                         root.selection-valid = false;
                         root.selecting = true;
                         root.local-click-candidate = root.view.mouse_button_reporting
@@ -899,7 +886,7 @@ export component TerminalPane inherits Rectangle {
                         }
                     }
                 }
-                pointer-moved(row, column, shift, alt, control, meta) => {
+                pointer-moved(row, column, boundary-column, shift, alt, control, meta) => {
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-in-grid = true;
@@ -911,10 +898,10 @@ export component TerminalPane inherits Rectangle {
                             row, column, root.pressed-button, shift, alt, control,
                         );
                     } else if root.selecting {
-                        root.selection-focus-row = row;
-                        root.selection-focus-column = column;
-                        root.selection-valid = root.selection-anchor-row != row
-                            || root.selection-anchor-column != column;
+                        root.selection-focus-index = row * root.selection-column-count
+                            + boundary-column;
+                        root.selection-valid = root.selection-anchor-index
+                            != root.selection-focus-index;
                         if root.selection-valid {
                             root.local-click-candidate = false;
                         }
@@ -933,7 +920,7 @@ export component TerminalPane inherits Rectangle {
                         root.clear-terminal-target-highlight();
                     }
                 }
-                pointer-up(row, column, _button, shift, alt, control) => {
+                pointer-up(row, column, boundary-column, _button, shift, alt, control) => {
                     root.last-pointer-shift = shift;
                     root.last-pointer-alt = alt;
                     root.last-pointer-control = control;
@@ -945,10 +932,10 @@ export component TerminalPane inherits Rectangle {
                         root.pressed-button = -1;
                     }
                     if root.selecting {
-                        root.selection-focus-row = row;
-                        root.selection-focus-column = column;
-                        root.selection-valid = root.selection-anchor-row != row
-                            || root.selection-anchor-column != column;
+                        root.selection-focus-index = row * root.selection-column-count
+                            + boundary-column;
+                        root.selection-valid = root.selection-anchor-index
+                            != root.selection-focus-index;
                         if root.selection-valid {
                             root.local-click-candidate = false;
                         }

@@ -88,10 +88,13 @@ export component TerminalGrid inherits Rectangle {
     in property <bool> mouse-local-selection-priority;
     in property <TerminalTargetHighlight> target-highlight;
 
-    callback pointer-down(int, int, int, bool, bool, bool, bool);
-    callback pointer-moved(int, int, bool, bool, bool, bool);
+    // Pointer callbacks carry both the containing cell column and the nearest
+    // insertion boundary in 0..=content_columns. Terminal mouse reporting uses
+    // the cell; local text selection uses the boundary.
+    callback pointer-down(int, int, int, int, bool, bool, bool, bool);
+    callback pointer-moved(int, int, int, bool, bool, bool, bool);
     callback pointer-hovered(bool);
-    callback pointer-up(int, int, int, bool, bool, bool);
+    callback pointer-up(int, int, int, int, bool, bool, bool);
     callback pointer-cancel();
     callback semantic-selection-request(int, int);
     callback line-selection-request(int, int);
@@ -104,6 +107,7 @@ export component TerminalGrid inherits Rectangle {
     private property <int> click-timeout-ticks: 0;
     private property <int> click-cell-row: -1;
     private property <int> click-cell-column: -1;
+    private property <int> click-boundary-column: -1;
     private property <bool> click-pressed: false;
     // Trackpad scroll events arrive as small pixel deltas. Keep the residual
     // in the grid so a complete terminal row is dispatched as one command.
@@ -204,9 +208,8 @@ export component TerminalGrid inherits Rectangle {
             }
         }
 
-        // Keep one fixed selection fill per row so starting/ending a drag only
-        // changes geometry and visibility. The range is cell-based, so a
-        // single rectangle remains aligned when CJK and Latin runs share a row.
+        // Paint selection one terminal cell at a time. Independent cell edges
+        // keep fractional logical widths aligned when CJK and Latin share a row.
         selection-overlay := Rectangle {
             visible: root.selection.active
                 && line-index >= root.selection.first_row
@@ -217,11 +220,19 @@ export component TerminalGrid inherits Rectangle {
             property <int> last-column:
                 line-index == root.selection.last_row
                     ? root.selection.last_column : root.view.content_columns - 1;
-            x: max(0, self.first-column) * root.cell-width;
-            width: max(0, self.last-column - self.first-column + 1)
-                * root.cell-width;
+            width: parent.width;
             height: root.cell-height;
-            background: root.view.selection_background.with-alpha(0.72);
+            background: transparent;
+
+            for _[selection-column] in max(
+                0, selection-overlay.last-column - selection-overlay.first-column + 1
+            ) : Rectangle {
+                x: max(0, selection-overlay.first-column + selection-column)
+                    * root.cell-width;
+                width: root.cell-width;
+                height: root.cell-height;
+                background: root.view.selection_background.with-alpha(0.72);
+            }
         }
 
     }
@@ -308,15 +319,20 @@ export component TerminalGrid inherits Rectangle {
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
+                let boundary-column = max(0, min(root.view.content_columns,
+                    round(self.mouse-x / root.cell-width)));
                 if event.button == PointerEventButton.left {
                     root.click-pressed = true;
                     if root.click-sequence > 0
-                        && (root.click-cell-row != row || root.click-cell-column != column) {
+                        && (root.click-cell-row != row
+                            || root.click-cell-column != column
+                            || root.click-boundary-column != boundary-column) {
                         root.click-sequence = 0;
                         root.click-timeout-ticks = 0;
                     }
                     root.click-cell-row = row;
                     root.click-cell-column = column;
+                    root.click-boundary-column = boundary-column;
                 } else {
                     root.click-sequence = 0;
                     root.click-timeout-ticks = 0;
@@ -331,6 +347,7 @@ export component TerminalGrid inherits Rectangle {
                 root.pointer-down(
                     row,
                     column,
+                    boundary-column,
                     event.button == PointerEventButton.left ? 0
                         : event.button == PointerEventButton.middle ? 1
                         : event.button == PointerEventButton.right ? 2 : 5,
@@ -344,9 +361,12 @@ export component TerminalGrid inherits Rectangle {
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
+                let boundary-column = max(0, min(root.view.content_columns,
+                    round(self.mouse-x / root.cell-width)));
                 root.pointer-up(
                     row,
                     column,
+                    boundary-column,
                     event.button == PointerEventButton.left ? 0
                     : event.button == PointerEventButton.middle ? 1
                     : event.button == PointerEventButton.right ? 2 : 5,
@@ -361,14 +381,19 @@ export component TerminalGrid inherits Rectangle {
                     floor((self.mouse-y - root.top-offset) / root.cell-height)));
                 let column = max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width)));
+                let boundary-column = max(0, min(root.view.content_columns,
+                    round(self.mouse-x / root.cell-width)));
                 if root.click-pressed
-                    && (root.click-cell-row != row || root.click-cell-column != column) {
+                    && (root.click-cell-row != row
+                        || root.click-cell-column != column
+                        || root.click-boundary-column != boundary-column) {
                     root.click-sequence = 0;
                     root.click-timeout-ticks = 0;
                 }
                 root.pointer-moved(
                     row,
                     column,
+                    boundary-column,
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control,

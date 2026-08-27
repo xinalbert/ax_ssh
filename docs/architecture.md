@@ -297,7 +297,13 @@ visible Terminal Tab still owns whole-tree shutdown.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, semantic double-click, logical-line triple-click, scroll, and context-menu gestures into callbacks, while `TerminalPane`
-retains the focus, IME input, selection draft, and resize lifecycle.
+retains the focus, IME input, selection draft, and resize lifecycle. Pointer
+callbacks carry both the containing cell and the nearest insertion boundary.
+`TerminalPane` stores a mouse drag as a half-open, row-major boundary range, so
+crossing one cell produces exactly one selected cell; it normalizes that draft
+once into the same inclusive first/last cells used for painting and clipboard
+reads. Semantic and logical-line ranges remain inclusive at the Rust boundary
+and are converted explicitly into the same local half-open representation.
 Terminal target activation follows the same boundary. While the platform primary
 modifier is held (`Cmd` on macOS and `Ctrl` elsewhere), a pointer move or primary
 modifier press asks the application bridge about the current visible row and
@@ -1207,10 +1213,10 @@ release packages must retain `assets/fonts/` by the executable or platform
 resource path. Maple Mono NF CN is required there for deterministic Han glyph
 rendering; Iosevka Term and Monaspace Neon remain optional primary families,
 and all font notices remain required.
-Slint measures the configured primary font with 50 Latin cells, the registered
-Han fallback with 25 double-width glyphs, and three box-drawing glyphs.
-`TerminalPane` uses the largest resulting single-cell advance so Latin,
-Han, and box-drawing rendering share one conservative grid metric. Rust
+Slint measures the configured primary font with 50 Latin cells. The terminal
+grid uses that Latin monospace advance as its logical cell width; registered
+Han fallback and box-drawing glyphs are centered inside their one- or two-cell
+spans instead of enlarging every column. Rust
 preserves the terminal's logical columns, keeps ASCII text batched, and
 publishes non-ASCII cells as independent render runs. The grid centers each
 non-ASCII glyph inside its one- or two-cell span, so fallback shaping cannot
@@ -1462,8 +1468,9 @@ background and decoration spans, draws text without a transparent per-run wrappe
 and retains the legacy item tree behind a Settings switch for A/B comparison. The
 independent row-cache switch applies `cache-rendering-hint` only to static row
 backgrounds, text, and decorations. Selection uses a stable per-row overlay with
-one cell-range fill; only its position, width, and visibility change, so selecting
-does not add or remove children or recreate the row container. Cursor blink, target
+one fixed logical-cell fill per selected column; selection changes rebuild only
+that bounded overlay model, and geometry never comes from mixed Unicode text
+advances. Cursor blink, target
 feedback, and IME/preedit remain outside that layer. Compact and non-compact text content also keeps both fixed subtrees
 allocated and toggles visibility when the setting changes, avoiding a full row
 item-tree rebuild. Skia and FemtoVG can retain a row image;
@@ -1492,7 +1499,9 @@ presentation surface into safe Core Animation layers. `TerminalPane` reports
 terminal pane geometry in logical coordinates; the backend converts it to
 physical pixels. Inside those pane regions, horizontal layers cover the full
 pane width and vertical boundaries fall on the configured number of terminal
-row heights. Sidebar, tab, and unreported space use the fallback
+row heights. The pane reports only the complete bottom-aligned rows beginning
+at its `grid-top-offset`; the fractional top remainder stays in fallback space.
+Sidebar, tab, and unreported space use the fallback
 256×128-physical-pixel grid. `present_with_damage` maps Slint's physical
 rectangles to intersecting layers; each selected layer gets a fresh, owned
 `CGImage` containing only its rows, while unchanged layers retain their prior
