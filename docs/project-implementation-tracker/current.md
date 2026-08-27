@@ -3,14 +3,14 @@
 ## 当前目标
 
 - 目标 ID：20260826-macos-software-partial-presentation
-- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，并以可回退实验验证普通 `CALayer` backing store 的矩形失效行为。
-- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；CELL1-CELL4 终端文字/覆盖层格宽统一、真实行原点和单格拖选；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
+- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，以可回退实验验证普通 `CALayer` backing store 的矩形失效行为，并降低终端空闲时的周期性 worker/UI 唤醒。
+- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；CELL1-CELL4 终端文字/覆盖层格宽统一、真实行原点和单格拖选；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；WAKE1-WAKE4 SSH/Telnet 按需输出 flush、Local PTY 事件唤醒/低频退出兜底、macOS 激活低频兜底和完整门禁；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/terminal-pane.slint` 与 `ui/components/terminal-grid.slint` 的终端单元格几何、`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、同负载 release 构建与采样、`russh` 稳定性升级、CI 发布门禁和 `docs/project-implementation-tracker/` 记录。
-- 不在本轮范围内：parser/worker transport 协议、终端内容模型、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
+- 当前范围：`ui/terminal-pane.slint` 与 `ui/components/terminal-grid.slint` 的终端单元格几何、`vendor/softbuffer/src/backends/cg.rs` 的 macOS CoreGraphics image/layer presentation、`src/{local_shell,telnet}.rs`、`src/ssh/worker/shell.rs` 与 `src/app.rs` 的空闲 timer/wake 策略、同负载 release 构建与采样、`russh` 稳定性升级、CI 发布门禁和 `docs/project-implementation-tracker/` 记录。
+- 不在本轮范围内：终端 parser/内容模型、SSH/Telnet 协议或认证/信任语义、GPU/Metal renderer、未经目标机验收就默认启用 backing store、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合。
 
 ## 当前状态
 
@@ -51,7 +51,11 @@
 | PERF21 | completed | Software 可见输出改为无固定 FPS 的单槽最新快照背压，并合并 UI 消费前的脏行 | 状态机、UI refresh gate、snapshot 合并回归和完整 Cargo/Slint 离线门禁 | 不延迟 parser、协议应答、错误、断开或 shutdown；GPU/其它 renderer 保留现有 FPS 策略。 |
 | CURSOR1 | completed | 可配置 Terminal 光标闪烁开关、Settings 预览/持久化和默认兼容 | config serde、Slint 编译、定向测试、完整 Cargo 门禁 | 默认开启；关闭后光标保持显示，不影响输入/IME |
 | FOCUS1 | completed | 原生窗口失焦时将所有可见终端切换到 Unfocused FPS 上限，重新激活后恢复 pane 聚焦策略 | WindowActiveChanged、AppKit 激活同步、WindowRouter 路由回归、Slint/Cargo 门禁和双语契约 | 激活状态只在运行时维护；隐藏 Tab 仍不刷新，parser/协议应答/错误/断开/shutdown 不延迟 |
-| FOCUS4 | completed | 修正 macOS 原生窗口激活状态同步，增加 `NSWindow.isKeyWindow()` 100ms UI 轮询兜底 | macOS AppKit bridge、WindowRouter 路由回归、Cargo/Slint 门禁 | 事件钩子保留为快速路径；不改变 parser、协议应答或终止路径 |
+| FOCUS4 | completed | 修正 macOS 原生窗口激活状态同步，增加 `NSWindow.isKeyWindow()` UI 轮询兜底 | macOS AppKit bridge、WindowRouter 路由回归、Cargo/Slint 门禁 | 初始 100ms 周期已由 WAKE3 放宽到 500ms；事件钩子保留为快速路径。 |
+| WAKE1 | completed | SSH/Telnet 输出 flush 改为缓冲区非空时才启动的一次性 16ms timer | Telnet loopback、SSH worker 回归、Cargo check/Clippy/test | 16 KiB 上限和 SSH 输入后首输出即时 flush 保持不变；空闲连接不再循环 tick。 |
+| WAKE2 | completed | Local PTY reader EOF/错误主动唤醒 owner，空闲 child 检查降为 1s，并限制 EOF 后 25ms 快速确认窗口 | Local PTY 8 项、EOF 通知测试、满事件队列 shutdown/drop 回归 | 输入、resize、shutdown 仍即时唤醒；快速确认最多 40 次，之后回到低频兜底。 |
+| WAKE3 | completed | macOS `NSWindow.isKeyWindow()` 激活兜底轮询从 100ms 放宽到 500ms | AppKit cfg 编译、WindowRouter 回归、完整 Cargo 门禁 | `WindowActiveChanged` 仍是快速路径；只降低平台事件遗漏时的兜底响应频率。 |
+| WAKE4 | completed | 同步双语架构、项目地图和月度历史并完成质量门禁 | fmt/check/Clippy/test、tracker/Markdown/`git diff --check` | 不改 renderer、队列容量、SSH trust、凭据或终端解析。 |
 | MEM1 | completed | 显式限制 Tokio worker/blocking 线程并缩短空闲 blocking 线程保留时间 | runtime 配置单测、完整 Cargo 离线门禁、线程数复核 | 保留至少 2 个 async worker、最多 4 个；blocking 池最多 8 个，空闲 2 秒后允许退出。 |
 | MEM2 | completed | 断开 SFTP 后不让图标预热任务强持有 AppState，并记录图标缓存释放数量 | file-icon 生命周期 focused tests、完整 Cargo 离线门禁 | 预热目标使用 `Weak<AppState>`；Fontique、Slint、CoreAnimation 与 macOS allocator 的进程级缓存不承诺立即归还 RSS。 |
 | MEM3 | completed | 更新双语架构、环境审计和可重复资源验证说明 | 文档相对链接、tracker/env-audit validator、`git diff --check` | 说明 Rust drop、线程池回收和平台缓存之间的边界，不把单次 sample 当作泄漏证明。 |
@@ -176,6 +180,7 @@
 - 已完成 COLOR3 原型代码：现有 pane/fallback layer 几何和排序不变；每个 layer 的 retained delegate 持有同步像素 backing，present 只复制 tile-local damage 并按 Retina scale 调用 `setNeedsDisplayInRect`，delegate 只为 CGContext clip 创建独立图像。默认仍走 `setContents(CGImage)`；重建/析构前清除 weak delegate，不直接共享可变 provider 内存。
 - 已完成 CELL1/CELL2：TerminalPane 使用主字体 50 个 Latin cell 的 advance 作为唯一逻辑格宽，中文和盒线保持独立 run 并在一格或两格内居中；TerminalGrid 选区恢复固定逐格 fill。Software presentation 只注册从 `grid-top-offset` 开始的完整底对齐行，顶部小数余量和不足三行的 pane 留给 fallback 分区。
 - 已完成 CELL4：TerminalGrid 的 pointer callback 同时携带所在格与最近插入边界；TerminalPane 用行优先半开索引保存鼠标拖选，并只在绘制/复制前转换为同一包含式首末格。单格、反向和跨行拖选共用该路径；远端 mouse reporting、双击单词和三击逻辑行的既有契约不变。
+- 已完成 WAKE1-WAKE3：SSH/Telnet 的 16ms flush 只在输出缓冲区非空时启动一次；Local PTY reader 关闭会通过有界命令通道唤醒 owner，空闲 child 轮询从 25ms 降为 1s，并把 25ms 退出确认限制在最多一秒；macOS 激活事件继续走快速路径，`isKeyWindow` 兜底从 100ms 降为 500ms。
 
 ## 验证
 
@@ -184,6 +189,7 @@
 - COLOR3 代码验证：修改后的 backend 已通过独立 rustfmt、`cargo check --locked --offline`、严格 Clippy、隔离 vendor `--lib` 11 项测试、根工程完整 410 项测试和 release 构建；新增测试覆盖跨 tile damage 的局部裁剪、完全无交集矩形、2x Retina point 换算和 macOS tile-local Y 坐标往返。最新 release UUID 为 `3870BAB3-16BE-387A-AAA3-239B2512B595`，SHA-256 为 `7b2bf745ad26f955a90fd2bb31b9ccd67ad7fca7f4b7007a02b6d9aad9df63eb`。隔离完整 doctest 仍被 vendor 既有缺失的 `examples/utils/winit_app.rs` 阻断。
 - CELL1-CELL3 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 210、应用 201、Doc tests 0）、Slint `ui/app.slint` 重编译、release 构建和 `git diff --check` 通过。ARM64 release UUID 为 `3FED0FF3-7C78-391C-B769-A04F7EFA6E97`，SHA-256 为 `b16c9387957656b7154dde6c887040ebc5df6b08b449bb6483269344d621745b`；tracker validator 仍报告本月旧历史/research 条目格式债务，目标 macOS 光标、选区、Retina 和 backing-store 视觉由用户确认。
 - CELL4 已完成：定向 selection 测试 4 项及 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 210、应用 201、Doc tests 0）和 Slint `ui/app.slint` 重编译通过。
+- WAKE1-WAKE4 已完成：Local PTY 定向测试 8 项、Telnet 定向测试 4 项，以及 `cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 211、应用 201、Doc tests 0）和 `git diff --check` 通过。
 - 未完成：Windows offline check 因本机未缓存 `atomic-waker 1.1.2` 未执行。tracker validator 本轮 current/新增记录字段完整，仍报告既有 2026-08 历史与 research 条目格式问题。目标 macOS GUI/Retina 拖选视觉和同负载 CPU/footprint A/B 由用户执行。
 
 ## 风险与阻塞
@@ -211,8 +217,11 @@
 - 若普通 delegate 仍进行整块 CA copy，先回到默认基线分析 sample；`CATiledLayer` 的异步延迟和禁止直接设置 `contents` 使其只能作为后续独立实验。
 - 在目标 macOS 上先复验新格宽与 row-origin：长 ASCII、中文/盒线混排、跨行选区、光标闪烁、1/4/8/16 行 block、Retina/resize 和 split 边界；确认无错位后再恢复 COLOR3 的默认/实验 backing-store A/B。
 - 单格拖选需要在目标 macOS 上复验同格跨中线、向左/向右反向拖动、跨软换行与硬换行、双击单词、三击逻辑行，以及 Copy selection on select；视觉与复制内容都正确后再恢复 COLOR3 A/B。
+- 使用同一 release 分别记录空窗口、一个空闲 Local、一个空闲 SSH/Telnet 和两个 Local pane 的 Activity Monitor/Instruments Idle Wake Ups；实际系统唤醒会受 Tokio timer 合并和 macOS power management 影响，不用源码 timer 数量直接替代测量值。
 
 ## 最后更新时间
+
+- 2026-08-27 11:04 +0800：SSH/Telnet 空闲输出 timer 改为按需一次性 flush；Local PTY 空闲 child 检查降至 1s，reader 关闭即时唤醒并只短暂快速确认；macOS 激活兜底放宽到 500ms。完整 Rust/Slint 门禁通过，等待同 release Idle Wake Ups 复测。
 
 - 2026-08-27 10:03 +0800：鼠标拖选改为最近插入边界和行优先半开索引，最小选区可精确为一个单元格；绘制与复制只消费同一规范化包含式范围，xterm mouse reporting 和语义/逻辑行选择不变。完整 Rust/Slint 门禁通过，等待目标机拖选视觉确认。
 

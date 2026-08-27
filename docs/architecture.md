@@ -257,7 +257,7 @@ output immediately. Route revisions wake only monitors with pending output, so a
 pane focus or Tab change applies the new policy without polling. Native window activation is runtime-only: the
 Slint `WindowActiveChanged` event hook matches each event's native window handle
 to its `AppWindow` route and publishes changes through the same route revision.
-On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 100 ms
+On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 500 ms
 as a fallback when a platform activation event or native handle is unavailable.
 While a window is inactive, every visible non-software terminal in that window
 uses the configured visible-unfocused FPS cap, including the pane that was last
@@ -583,10 +583,16 @@ must not locally hide either dialog before the Rust state transition accepts it.
    already queued Output update cannot restore an older grid while the user is
    still dragging the window. The worker's later `Resized` acknowledgement
    remains transport confirmation only.
-   SSH output normally crosses the worker boundary in bounded 16 ms/16 KiB
-   batches. The first output observed after terminal input flushes the current
-   batch immediately, reducing interactive echo rendering delay without local
-   prediction or duplicate echo; sustained unrelated output retains batching.
+   SSH and Telnet output crosses the worker boundary in bounded 16 KiB batches.
+   A one-shot 16 ms flush is armed only after the output buffer becomes non-empty,
+   so an idle connection has no recurring output timer. The first SSH output
+   observed after terminal input flushes the current batch immediately, reducing
+   interactive echo rendering delay without local prediction or duplicate echo;
+   sustained unrelated output retains batching. A Local PTY owner normally blocks
+   on its bounded command channel and checks child exit once per second as a
+   fallback. PTY reader closure wakes it immediately and enables at most one second
+   of 25 ms exit rechecks; input, resize, and shutdown use the same event-driven
+   wake path.
    Local, Serial, SSH, and Telnet monitors parse every worker event and return
    terminal protocol responses immediately. Only their UI publication is
    coalesced by the focused adaptive, configured visible-unfocused FPS, or hidden

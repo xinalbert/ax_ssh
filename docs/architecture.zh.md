@@ -176,7 +176,7 @@ viewport 与 mouse-reporting 状态均与最近一次已发布 snapshot 一致�
 monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。
 原生窗口激活状态只在运行时维护：Slint
 `WindowActiveChanged` 事件钩子通过 native window handle 将事件精确匹配到对应 `AppWindow` 路由，并通过同一路由
-revision 发布变化；macOS UI 线程另以 100ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
+revision 发布变化；macOS UI 线程另以 500ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
 时遗漏激活变化。窗口失去激活时，该窗口内所有可见 non-software 终端
 （包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限；Software 仍按最新帧驱动。隐藏终端仍没有呈现
 deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worker
@@ -370,9 +370,12 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
    worker 事件已捕获的旧快照；因此已经排队的 Output 不会在用户持续拖动窗口时把界面
    恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
-   SSH 输出通常以有界的 16 ms/16 KiB 批次跨越 worker 边界；终端输入后观察到的首个输出会
-   立即刷新当前批次，降低交互回显的本地绘制等待，同时不做本地预测或重复回显；持续的无关
-   输出仍保留批处理。Local、Serial、SSH 与 Telnet monitor 都会立即解析每个 worker 事件并回送终端
+   SSH 与 Telnet 输出以有界的 16 KiB 批次跨越 worker 边界；只有输出缓冲区从空变为非空后才启动
+   一次性 16ms flush，因此空闲连接没有循环输出 timer。终端输入后观察到的首个 SSH 输出会立即
+   刷新当前批次，降低交互回显的本地绘制等待，同时不做本地预测或重复回显；持续的无关输出仍
+   保留批处理。本地 PTY owner 通常阻塞在有界命令通道，仅每秒兜底检查一次子进程退出；PTY reader
+   关闭会立即唤醒 owner，并在最多一秒内使用 25ms 快速确认，输入、resize 和 shutdown 复用同一事件
+   唤醒路径。Local、Serial、SSH 与 Telnet monitor 都会立即解析每个 worker 事件并回送终端
    协议应答；只有 UI publication 按上述 focused 自适应、配置后的可见未聚焦 FPS 或 hidden 策略合并。
    错误、断开、shutdown 和 worker 清理不会等待呈现 deadline。
 9. macOS 应用保留标准原生标题栏，并关闭 AppKit 的整窗背景拖动。窗口移动只由该原生
