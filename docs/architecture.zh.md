@@ -476,6 +476,13 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 终端恢复只是有界文本回放，不会恢复远端进程或 alternate screen 状态。
 已删除的 profile 会跳过，其余工作区继续恢复。
 
+File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只拥有路径输入弹层并
+发送用户意图；`src/app/workspace/files.rs` 校验路径，在 Tokio blocking pool 中执行
+有界文件 I/O，并在 UI 线程应用已加载快照。只有快照校验通过后才停止当前 worker 和
+待处理 host-key probe；随后丢弃 detached window 对象与 route，替换 Tab/pane tree，
+再通过既有连接边界启动新 worker。并发打开请求会被拒绝，弹层和快照都不能携带凭据
+或活动 transport 状态。
+
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生

@@ -1192,6 +1192,16 @@ host keys still require explicit confirmation. Terminal restore is bounded text
 replay and does not recreate remote processes or alternate-screen state. Missing
 profiles are skipped while the remaining workspace is restored.
 
+The File menu exposes the same contract through user-selected workspace paths.
+Slint owns only the modal path input and emits intent; `src/app/workspace/files.rs`
+validates the path, performs bounded file I/O on Tokio's blocking pool, and
+applies a loaded snapshot on the UI thread. A load is validated before current
+workers and pending host-key probes are stopped. Detached window objects and
+routes are then discarded, Tabs and pane trees are replaced, and fresh workers
+are started through the existing connection boundary. Concurrent open requests
+are rejected, and neither the dialog nor the snapshot can carry credentials or
+live transport state.
+
 `assets/fonts/` contains project-owned Maple Mono NF CN, Iosevka Term,
 JetBrains Mono, and Monaspace Neon files with their family-specific notices.
 They are not Slint imports. The four JetBrains Mono faces are compiled into the

@@ -143,6 +143,12 @@ AxSSH 退出时会把打开的工作区保存到独立的私有 `workspace.json`
 连接会作为新的 worker 重建，不会持久化活动连接；SSH 仍需经过正常的已信任
 host key 和认证流程，已删除的 profile 会跳过。
 
+使用 **File > Save Workspace** 可把同一个有界快照写入弹层中的路径。默认路径是
+私有 `workspace.json`，保存到这里也就确定了 AxSSH 下次启动时恢复的内容。
+**File > Open Workspace** 会先校验选中的 JSON，再停止当前 worker、恢复全部有效
+Tab 与 pane/window 布局，并通过正常的信任与认证流程启动新 worker。自定义路径可
+用于保存命名快照；打开命名快照并正常退出后，当前布局也会成为下次自动启动的工作区。
+
 展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时创建
 空 Group 或 Ungrouped 服务器。展开后的 Group 行显示名称、数量和
 居中的绘制下尖角；收起后显示对应的绘制上尖角，避免名称与文字徽标重复。点击 Group

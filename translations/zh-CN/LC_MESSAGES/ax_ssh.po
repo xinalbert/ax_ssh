@@ -673,6 +673,9 @@ msgstr "打开设置"
 msgid "Open Settings shortcut"
 msgstr "打开设置快捷键"
 
+msgid "Open Workspace"
+msgstr "打开工作区"
+
 msgid "Open a new local shell tab"
 msgstr "打开新的本地 Shell 标签页"
 
@@ -933,6 +936,9 @@ msgstr "另存为远端路径"
 
 msgid "Save SSH password for future connections"
 msgstr "保存 SSH 密码供以后连接使用"
+
+msgid "Save Workspace"
+msgstr "保存工作区"
 
 msgid "Save password (optional)"
 msgstr "保存密码（可选）"
@@ -1251,6 +1257,9 @@ msgstr "工作区"
 
 msgid "Workspace command"
 msgstr "工作区命令"
+
+msgid "Workspace file path"
+msgstr "工作区文件路径"
 
 msgid "Workspace tab width"
 msgstr "工作区标签页宽度"

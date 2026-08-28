@@ -221,6 +221,15 @@ terminal text, and SFTP browser paths. Saved connections are recreated as new
 workers rather than persisted live connections. SSH still follows the normal
 trusted host-key and authentication flow, and missing profiles are skipped.
 
+Use **File > Save Workspace** to write the same bounded snapshot to the path in
+the workspace dialog. The default path is the private `workspace.json`, so
+saving it there also defines what the next AxSSH launch restores. **File > Open
+Workspace** validates the selected JSON before changing the current workspace,
+then stops its workers, restores all valid Tabs and pane/window layouts, and
+starts fresh workers through the normal trust and authentication flow. A custom
+path can be used for named snapshots; opening one and exiting normally also
+makes that opened layout the next automatic startup workspace.
+
 Saved sessions are organized beneath collapsible group rows in the expanded
 navigator. Right-click blank list space to create an empty group or an
 Ungrouped server even before any profile exists. Expanded group rows show their
