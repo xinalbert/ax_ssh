@@ -1,0 +1,62 @@
+import { ElidedButton } from "elided-controls.slint";
+import { FlatTextInput } from "flat-text-input.slint";
+import { Theme } from "../theme.slint";
+
+export component WorkspaceFileDialog inherits Rectangle {
+    in property <string> mode;
+    in-out property <string> path;
+
+    callback confirm(string);
+    callback cancel();
+
+    background: Theme.overlay;
+    TouchArea { }
+
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: min(Theme.host-dialog-width, root.width - 2 * Theme.space-xxl);
+        height: 216px;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: Theme.frame-border;
+        border-radius: Theme.radius;
+
+        VerticalLayout {
+            padding: Theme.dialog-padding;
+            spacing: Theme.space-xl;
+            Text {
+                text: root.mode == "save" ? @tr("Save Workspace") : @tr("Open Workspace");
+                color: Theme.text;
+                font-size: Theme.font-title;
+                font-weight: 700;
+            }
+            Text {
+                text: @tr("Workspace file path");
+                color: Theme.muted;
+                font-size: Theme.font-body;
+            }
+            FlatTextInput {
+                text <=> root.path;
+                placeholder-text: @tr("Workspace file path");
+                accessible-label: @tr("Workspace file path");
+                accepted(value) => {
+                    if !value.is-empty {
+                        root.confirm(value);
+                    }
+                }
+            }
+            Rectangle { vertical-stretch: 1; }
+            HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-md;
+                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+                ElidedButton {
+                    text: root.mode == "save" ? @tr("Save") : @tr("Open");
+                    enabled: !root.path.is-empty;
+                    clicked => { root.confirm(root.path); }
+                }
+            }
+        }
+    }
+}

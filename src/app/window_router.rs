@@ -724,6 +724,31 @@ impl WindowRouter {
         detached
     }
 
+    /// Drop detached routes when a complete workspace is about to replace the
+    /// current one. The native window objects are released by the window
+    /// bridge before this method is called; no tabs are restored to the main
+    /// route because they belong to the discarded workspace.
+    pub(super) fn discard_detached(&self) {
+        let removed = self
+            .inner
+            .lock()
+            .map(|mut router| {
+                let ids = router
+                    .routes
+                    .iter()
+                    .filter_map(|(id, route)| route.transfer.as_ref().map(|_| *id))
+                    .collect::<Vec<_>>();
+                for id in &ids {
+                    router.routes.remove(id);
+                }
+                ids.len()
+            })
+            .unwrap_or(0);
+        if removed > 0 {
+            self.notify_terminal_presentation_change();
+        }
+    }
+
     pub(super) fn restore_detached(&self, detached: &DetachedRoute) -> Option<Uuid> {
         let mut router = self.inner.lock().ok()?;
         let main = router.routes.get_mut(&MAIN_WINDOW_ID)?;

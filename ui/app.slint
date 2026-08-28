@@ -59,6 +59,7 @@ export component AppWindow inherits Window {
     in property <[string]> serial-port-options;
     in property <[string]> local-shell-options;
     in property <string> status: "";
+    in property <string> workspace-default-path: "";
     in property <string> active-tab-id: "";
     in property <string> active-pane-id: "";
     in property <string> settings-tab-id: "";
@@ -242,7 +243,8 @@ export component AppWindow inherits Window {
     out property <bool> menu-shortcuts-enabled:
         !workspace-shell.shortcut-recording
         && !root.host-key-dialog-open
-        && !root.password-dialog-open;
+        && !root.password-dialog-open
+        && !overlay-host.workspace-file-dialog-open;
     private property <WorkspaceViewState> workspace-view: {
         sessions: root.sessions,
         workspace_tabs: root.workspace-tabs,
@@ -470,6 +472,8 @@ export component AppWindow inherits Window {
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback log-keyboard-event(string, bool, bool, bool, bool, string, string);
     callback menu-action(string);
+    callback workspace-file-action(string, string);
+    callback workspace-file-loaded();
     callback menu-state-changed();
     callback write-clipboard(string);
     callback read-clipboard() -> string;
@@ -515,6 +519,23 @@ export component AppWindow inherits Window {
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.new-session-menu-shortcut;
                 activated => { root.menu-action("new-session"); root.new-session(); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: @tr("Open Workspace");
+                enabled: root.menu-shortcuts-enabled;
+                activated => {
+                    root.menu-action("open-workspace");
+                    overlay-host.show-workspace-file-dialog("open", root.workspace-default-path);
+                }
+            }
+            MenuItem {
+                title: @tr("Save Workspace");
+                enabled: root.menu-shortcuts-enabled;
+                activated => {
+                    root.menu-action("save-workspace");
+                    overlay-host.show-workspace-file-dialog("save", root.workspace-default-path);
+                }
             }
             MenuSeparator { }
             MenuItem {
@@ -877,6 +898,7 @@ export component AppWindow inherits Window {
             return root.authenticate-session(secret, vault-password, remember, storage);
         }
         cancel-password-dialog => { root.cancel-password-dialog(); }
+        workspace-file-action(mode, path) => { root.workspace-file-action(mode, path); }
     }
 
 }

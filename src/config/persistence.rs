@@ -80,8 +80,14 @@ impl ConfigStore {
         if !path.exists() {
             return Ok(None);
         }
+        Self::load_workspace_file(&path).map(Some)
+    }
+
+    /// Load a user-selected workspace snapshot using the same bounded schema
+    /// and file-size checks as the automatic startup snapshot.
+    pub fn load_workspace_file(path: &Path) -> Result<WorkspaceSnapshot> {
         let file =
-            File::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
+            File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
         let metadata = file
             .metadata()
             .with_context(|| format!("failed to inspect {}", path.display()))?;
@@ -103,24 +109,61 @@ impl ConfigStore {
                 MAX_CONFIG_FILE_BYTES
             );
         }
-        let snapshot = serde_json::from_slice(&bytes)
+        let snapshot: WorkspaceSnapshot = serde_json::from_slice(&bytes)
             .with_context(|| format!("invalid workspace snapshot {}", path.display()))?;
-        Ok(Some(snapshot))
+        snapshot
+            .validate()
+            .with_context(|| format!("invalid workspace snapshot {}", path.display()))?;
+        Ok(snapshot)
     }
 
     pub fn save_workspace(&self, snapshot: &WorkspaceSnapshot) -> Result<()> {
-        snapshot
-            .validate()
-            .context("workspace snapshot validation failed")?;
-        let bytes =
-            serde_json::to_vec_pretty(snapshot).context("failed to encode workspace snapshot")?;
-        if bytes.len() > MAX_CONFIG_FILE_BYTES {
-            anyhow::bail!(
-                "encoded workspace snapshot exceeds the {MAX_CONFIG_FILE_BYTES} byte limit"
-            );
-        }
+        let bytes = encode_workspace_snapshot(snapshot)?;
         write_private_file_atomically(&self.workspace_path(), &bytes)
     }
+
+    /// Save a user-selected workspace snapshot atomically.
+    pub fn save_workspace_file(path: &Path, snapshot: &WorkspaceSnapshot) -> Result<()> {
+        let bytes = encode_workspace_snapshot(snapshot)?;
+        write_user_file_atomically(path, &bytes)
+    }
+}
+
+fn encode_workspace_snapshot(snapshot: &WorkspaceSnapshot) -> Result<Vec<u8>> {
+    snapshot
+        .validate()
+        .context("workspace snapshot validation failed")?;
+    let bytes =
+        serde_json::to_vec_pretty(snapshot).context("failed to encode workspace snapshot")?;
+    if bytes.len() > MAX_CONFIG_FILE_BYTES {
+        anyhow::bail!("encoded workspace snapshot exceeds the {MAX_CONFIG_FILE_BYTES} byte limit");
+    }
+    Ok(bytes)
+}
+
+/// Atomically write a user-selected snapshot without changing permissions on
+/// an existing parent directory. The snapshot itself remains private.
+fn write_user_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    let (mut file, mut temporary) = create_private_temporary_file(path)?;
+    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
+    drop(file);
+    write_result.with_context(|| format!("failed to write {}", temporary.path().display()))?;
+    replace_file_atomically(temporary.path(), path).with_context(|| {
+        format!(
+            "failed to atomically replace {} with {}",
+            path.display(),
+            temporary.path().display()
+        )
+    })?;
+    temporary.disarm();
+    set_private_file_permissions(path);
+    sync_parent_directory(parent);
+    Ok(())
 }
 
 pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {

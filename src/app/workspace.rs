@@ -1,9 +1,11 @@
 use super::*;
 
+mod files;
 mod session_editor;
 mod session_management;
 mod tabs;
 
+pub(super) use self::files::wire_workspace_file_actions;
 pub(in crate::app) use self::session_editor::{
     SessionEditorContext, begin_profile_mutation, commit_profile_credential_storage,
     ensure_profile_mutation_current, finish_profile_mutation, wire_session_editor,

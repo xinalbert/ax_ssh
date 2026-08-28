@@ -109,7 +109,9 @@ fn config_load_rejects_oversized_files_before_deserialization() {
 
 #[test]
 fn workspace_snapshot_round_trips_separately_from_session_store() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-workspace-{}.json", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ax-ssh-workspace-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).expect("workspace test directory should be created");
+    let path = root.join("sessions.json");
     let store = ConfigStore::new(&path);
     let tab_id = Uuid::new_v4();
     let snapshot = WorkspaceSnapshot {
@@ -143,8 +145,48 @@ fn workspace_snapshot_round_trips_separately_from_session_store() {
     );
     assert_ne!(store.path(), &store.workspace_path());
     assert!(store.workspace_path().exists());
-    let _ = fs::remove_file(path);
-    let _ = fs::remove_file(store.workspace_path());
+    fs::remove_dir_all(root).expect("workspace test directory should be removed");
+}
+
+#[test]
+fn workspace_snapshot_round_trips_through_a_user_selected_path() {
+    let root = std::env::temp_dir().join(format!("ax-ssh-workspace-file-{}", Uuid::new_v4()));
+    let path = root.join("team.axworkspace.json");
+    let tab_id = Uuid::new_v4();
+    let snapshot = WorkspaceSnapshot {
+        version: WORKSPACE_SNAPSHOT_VERSION,
+        tabs: vec![WorkspaceTabSnapshot {
+            id: tab_id,
+            title: "Local Shell".to_owned(),
+            kind: "terminal".to_owned(),
+            ..WorkspaceTabSnapshot::default()
+        }],
+        active_tab_id: Some(tab_id),
+        windows: Vec::new(),
+    };
+
+    ConfigStore::save_workspace_file(&path, &snapshot)
+        .expect("selected workspace path should be writable");
+    assert_eq!(
+        ConfigStore::load_workspace_file(&path)
+            .expect("selected workspace path should be readable"),
+        snapshot
+    );
+
+    fs::remove_dir_all(root).expect("workspace fixture should be removed");
+}
+
+#[test]
+fn workspace_file_load_rejects_an_unsupported_snapshot_version() {
+    let path = std::env::temp_dir().join(format!("ax-ssh-workspace-version-{}", Uuid::new_v4()));
+    fs::write(&path, br#"{"version":99,"tabs":[],"windows":[]}"#)
+        .expect("workspace fixture should be written");
+
+    let error = ConfigStore::load_workspace_file(&path)
+        .expect_err("unsupported workspace version should be rejected");
+    assert!(error.to_string().contains("invalid workspace snapshot"));
+
+    fs::remove_file(path).expect("workspace fixture should be removed");
 }
 
 #[test]

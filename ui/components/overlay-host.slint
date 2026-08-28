@@ -1,5 +1,6 @@
 import { AuthenticationDialog, HostKeyDialog } from "security-dialogs.slint";
 import { SessionManagementDialog } from "session-management-dialog.slint";
+import { WorkspaceFileDialog } from "workspace-file-dialog.slint";
 
 // Rust remains authoritative for the security prompt. This DTO is deliberately
 // read-only so the host cannot dismiss an SSH trust/authentication phase early.
@@ -28,6 +29,18 @@ export component OverlayHost inherits Rectangle {
     callback reject-host-key();
     callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
+    callback workspace-file-action(string, string);
+
+    out property <bool> workspace-file-dialog-open: workspace-file-open;
+    private property <bool> workspace-file-open: false;
+    private property <string> workspace-file-mode;
+    private property <string> workspace-file-path;
+
+    public function show-workspace-file-dialog(mode: string, path: string) {
+        root.workspace-file-mode = mode;
+        root.workspace-file-path = path;
+        root.workspace-file-open = true;
+    }
 
     private property <bool> session-management-open: false;
     private property <string> session-management-action;
@@ -68,6 +81,16 @@ export component OverlayHost inherits Rectangle {
             );
         }
         cancel => { root.session-management-open = false; }
+    }
+
+    if root.workspace-file-open : WorkspaceFileDialog {
+        mode: root.workspace-file-mode;
+        path <=> root.workspace-file-path;
+        confirm(value) => {
+            root.workspace-file-open = false;
+            root.workspace-file-action(root.workspace-file-mode, value);
+        }
+        cancel => { root.workspace-file-open = false; }
     }
 
     if root.security.host_key_open : HostKeyDialog {

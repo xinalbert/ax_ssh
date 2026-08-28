@@ -118,6 +118,7 @@ const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
 pub fn run(log_directory: PathBuf) -> Result<()> {
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
+    let workspace_default_path = config.workspace_path();
     let sessions = config.load().context("failed to load session profiles")?;
     configure_software_presentation(sessions.settings.appearance.software_presentation);
     select_slint_renderer(sessions.settings.appearance.renderer_preference)
@@ -218,6 +219,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             .keys,
     );
     ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
+    ui.set_workspace_default_path(workspace_default_path.display().to_string().into());
     for initial_font in initial_fonts {
         if let Err(error) = font_registry
             .lock()
@@ -548,6 +550,15 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
     wire_session_management(ui, state.clone(), runtime.clone(), persistence);
+    wire_workspace_file_actions(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        font_registry.clone(),
+        log_directory.clone(),
+        window_router.clone(),
+        detached_windows.clone(),
+    );
     wire_connection_request(
         ui,
         state.clone(),

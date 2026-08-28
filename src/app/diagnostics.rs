@@ -150,11 +150,13 @@ fn safe_menu_action(action: &str) -> &'static str {
         "new-session" => "new-session",
         "open-about" => "open-about",
         "open-settings" => "open-settings",
+        "open-workspace" => "open-workspace",
         "open-shortcuts" => "open-shortcuts",
         "paste-terminal" => "paste-terminal",
         "next-tab" => "next-tab",
         "previous-tab" => "previous-tab",
         "refresh-sftp" => "refresh-sftp",
+        "save-workspace" => "save-workspace",
         "select-all-terminal" => "select-all-terminal",
         "switch-ssh-sftp" => "switch-ssh-sftp",
         "toggle-sidebar" => "toggle-sidebar",
@@ -198,6 +200,7 @@ mod tests {
         );
         assert_eq!(safe_keyboard_action("secret"), "unknown");
         assert_eq!(safe_menu_action("open-settings"), "open-settings");
+        assert_eq!(safe_menu_action("open-workspace"), "open-workspace");
         assert_eq!(safe_menu_action("previous-tab"), "previous-tab");
         assert_eq!(safe_menu_action("next-tab"), "next-tab");
         assert_eq!(safe_menu_action("copy-terminal"), "copy-terminal");
@@ -206,6 +209,7 @@ mod tests {
             safe_menu_action("select-all-terminal"),
             "select-all-terminal"
         );
+        assert_eq!(safe_menu_action("save-workspace"), "save-workspace");
         assert_eq!(safe_menu_action("user supplied"), "unknown");
     }
 }

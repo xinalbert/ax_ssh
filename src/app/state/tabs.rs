@@ -758,6 +758,10 @@ impl AppState {
         &mut self,
         snapshots: &[ax_ssh::config::WorkspaceTabSnapshot],
     ) -> Vec<Uuid> {
+        // A replacement workspace must not let a queued refresh for a removed
+        // Tab run against a newly restored Tab that happens to reuse its UUID.
+        self.ui_refresh = UiRefreshState::default();
+        self.serial_ports.clear();
         self.tabs.clear();
         self.active_tab_id = None;
         let mut restored = Vec::new();

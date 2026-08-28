@@ -30,8 +30,9 @@ use self::workspace::*;
 
 pub(super) use self::options::{
     clear_private_key_option_model, clear_session_editor_option_models,
-    clear_settings_option_models, dispatch_ui, load_font_options, load_local_shell_options,
-    load_private_key_options, load_x11_server_installations, parse_uuid, set_status,
+    clear_settings_option_models, dispatch_ui, dispatch_ui_result, load_font_options,
+    load_local_shell_options, load_private_key_options, load_x11_server_installations, parse_uuid,
+    set_status,
 };
 pub(super) use self::settings::{
     apply_settings_to_component, apply_settings_to_open_windows,
