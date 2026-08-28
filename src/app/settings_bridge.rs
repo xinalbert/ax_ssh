@@ -1170,6 +1170,43 @@ mod tests {
     }
 
     #[test]
+    fn language_save_keeps_other_preview_settings_unpersisted() {
+        let path = std::env::temp_dir()
+            .join(format!("axssh-language-preview-{}", Uuid::new_v4()))
+            .join("sessions.json");
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(path.clone()),
+            SessionStore::default(),
+        )));
+        let mut preview = AppSettings::default();
+        preview.terminal.scrollback_lines = 321;
+        apply_preview_settings(&state, preview).expect("preview should update memory");
+
+        let revision = AtomicU64::new(1);
+        assert!(save_ui_language(&state, UiLanguage::SimplifiedChinese, 1, &revision).unwrap());
+
+        assert_eq!(
+            state
+                .lock()
+                .unwrap()
+                .sessions
+                .settings
+                .terminal
+                .scrollback_lines,
+            321
+        );
+        let persisted = ConfigStore::new(path).load().unwrap();
+        assert_eq!(
+            persisted.settings.terminal.scrollback_lines,
+            AppSettings::default().terminal.scrollback_lines
+        );
+        assert_eq!(
+            persisted.settings.ui_language,
+            UiLanguage::SimplifiedChinese
+        );
+    }
+
+    #[test]
     fn stale_language_save_cannot_overwrite_latest_request() {
         let path = std::env::temp_dir()
             .join(format!("axssh-language-revision-{}", Uuid::new_v4()))

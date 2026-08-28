@@ -18,6 +18,7 @@ pub(super) fn start_telnet_connection(
         let mut app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        ensure_current_profile(&app, &profile, "Telnet")?;
         let columns = u32::from(app.sessions.settings.terminal.default_columns);
         let rows = u32::from(app.sessions.settings.terminal.default_rows);
         let terminal = app
@@ -57,6 +58,7 @@ pub(super) fn start_serial_connection(
         let mut app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        ensure_current_profile(&app, &profile, "Serial")?;
         let terminal = app
             .terminal_mut(tab_id)
             .context("Serial terminal tab disappeared")?;
@@ -183,7 +185,7 @@ pub(super) fn start_serial_connection(
             .map(|port| SharedString::from(port.port_name.clone()))
             .collect::<Vec<_>>();
 
-        let events = {
+        let (events, stale_profile) = {
             let mut app = match state.lock() {
                 Ok(app) => app,
                 Err(_) => {
@@ -192,19 +194,42 @@ pub(super) fn start_serial_connection(
                 }
             };
             app.replace_serial_ports(ports);
-            let Some(terminal) = app.terminal_mut(tab_id) else {
-                return;
-            };
-            if !direct_attempt_matches(terminal, profile.id, attempt_id, DirectProtocol::Serial)
-                || terminal.worker.is_some()
-            {
-                return;
+            if !current_profile_matches(&app, &profile) {
+                (None, true)
+            } else {
+                let Some(terminal) = app.terminal_mut(tab_id) else {
+                    return;
+                };
+                if !direct_attempt_matches(terminal, profile.id, attempt_id, DirectProtocol::Serial)
+                    || terminal.worker.is_some()
+                {
+                    (None, false)
+                } else {
+                    let (worker, events) = SerialSessionHandle::spawn(
+                        &runtime_for_monitor,
+                        profile.id,
+                        resolved_config,
+                    );
+                    terminal.worker = Some(TerminalWorker::Serial(worker));
+                    terminal.status = format!("Opening serial port {}...", resolved.port_name);
+                    (Some(events), false)
+                }
             }
-            let (worker, events) =
-                SerialSessionHandle::spawn(&runtime_for_monitor, profile.id, resolved_config);
-            terminal.worker = Some(TerminalWorker::Serial(worker));
-            terminal.status = format!("Opening serial port {}...", resolved.port_name);
-            events
+        };
+        if stale_profile {
+            let _ = finish_direct_attempt(
+                &state,
+                tab_id,
+                profile.id,
+                attempt_id,
+                DirectProtocol::Serial,
+                "Session changed before the serial worker started",
+            );
+            refresh_workspace(&ui, &state);
+            return;
+        }
+        let Some(events) = events else {
+            return;
         };
         dispatch_ui(&ui, move |ui| {
             ui.set_serial_port_options(ModelRc::new(VecModel::from(port_names)));
@@ -548,6 +573,22 @@ fn direct_attempt_matches(
     }) == Some((profile_id, Some(attempt_id)))
 }
 
+fn current_profile_matches(app: &AppState, profile: &SessionProfile) -> bool {
+    app.sessions
+        .sessions
+        .iter()
+        .find(|current| current.id == profile.id)
+        == Some(profile)
+}
+
+fn ensure_current_profile(app: &AppState, profile: &SessionProfile, protocol: &str) -> Result<()> {
+    if current_profile_matches(app, profile) {
+        Ok(())
+    } else {
+        anyhow::bail!("{protocol} session profile changed before the worker started")
+    }
+}
+
 fn mutate_direct_attempt(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
@@ -645,5 +686,26 @@ mod tests {
                 .and_then(TerminalTabState::telnet_route),
             Some((profile.id, Some(second_attempt)))
         );
+    }
+
+    #[test]
+    fn direct_worker_requires_the_current_profile_snapshot() {
+        let original = SessionProfile::new_telnet("console", "127.0.0.1");
+        let mut changed = original.clone();
+        if let ConnectionProfile::Telnet(config) = &mut changed.connection {
+            config.port = 2323;
+        }
+        let app = AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("ax-ssh-direct-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore {
+                sessions: vec![changed],
+                ..SessionStore::default()
+            },
+        );
+
+        assert!(!current_profile_matches(&app, &original));
+        assert!(ensure_current_profile(&app, &original, "Telnet").is_err());
     }
 }
