@@ -1,15 +1,11 @@
 use super::*;
 use crate::app::credential_tasks::{CredentialRollback, credential_storage_for_save};
-
-#[derive(Default)]
-pub(in crate::app) struct ProfileMutationCoordinator {
-    gate: tokio::sync::Mutex<()>,
-}
+use crate::app::state::PersistenceCoordinator;
 
 pub(in crate::app) struct SessionEditorContext {
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
-    profile_mutations: Arc<ProfileMutationCoordinator>,
+    persistence: Arc<PersistenceCoordinator>,
     font_registry: Arc<Mutex<FontRegistry>>,
     terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
     window_router: WindowRouter,
@@ -20,7 +16,7 @@ impl SessionEditorContext {
     pub(in crate::app) fn new(
         state: Arc<Mutex<AppState>>,
         runtime: Handle,
-        profile_mutations: Arc<ProfileMutationCoordinator>,
+        persistence: Arc<PersistenceCoordinator>,
         font_registry: Arc<Mutex<FontRegistry>>,
         terminal_font_started: Arc<std::sync::atomic::AtomicBool>,
         window_router: WindowRouter,
@@ -29,7 +25,7 @@ impl SessionEditorContext {
         Self {
             state,
             runtime,
-            profile_mutations,
+            persistence,
             font_registry,
             terminal_font_started,
             window_router,
@@ -42,7 +38,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
     let SessionEditorContext {
         state,
         runtime,
-        profile_mutations,
+        persistence,
         font_registry,
         terminal_font_started,
         window_router,
@@ -188,9 +184,9 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
             let runtime_for_connect = runtime.clone();
             let font_registry_for_connect = font_registry.clone();
             let terminal_font_started_for_connect = terminal_font_started.clone();
-            let profile_mutations = profile_mutations.clone();
+            let persistence = persistence.clone();
             runtime_for_save.spawn(async move {
-                let _mutation_guard = profile_mutations.gate.lock().await;
+                let _mutation_guard = persistence.gate.lock().await;
                 if let Err(error) = ensure_profile_mutation_current(
                     &state,
                     profile_id,
@@ -282,25 +278,23 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
 
 pub(super) async fn delete_session_profile(
     state: &Arc<Mutex<AppState>>,
-    profile_mutations: &ProfileMutationCoordinator,
+    persistence: &PersistenceCoordinator,
     session_id: &str,
 ) -> Result<String> {
     let session_id = Uuid::parse_str(session_id).context("invalid session id")?;
-    let (profile, mutation_token) = {
-        let mut app = state
+    let profile = {
+        let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-        let profile = app
-            .sessions
+        app.sessions
             .sessions
             .iter()
             .find(|profile| profile.id == session_id)
             .cloned()
-            .context("session not found")?;
-        let mutation_token = app.begin_profile_mutation(session_id);
-        (profile, mutation_token)
+            .context("session not found")?
     };
-    let _mutation_guard = profile_mutations.gate.lock().await;
+    let mutation_token = begin_profile_mutation(state, session_id, Some(&profile))?;
+    let _mutation_guard = persistence.gate.lock().await;
     if let Err(error) =
         ensure_profile_mutation_current(state, session_id, mutation_token, Some(&profile))
     {
@@ -336,7 +330,7 @@ pub(super) async fn delete_session_profile(
     Ok(format!("Session {} deleted", profile.name))
 }
 
-pub(super) fn begin_profile_mutation(
+pub(in crate::app) fn begin_profile_mutation(
     state: &Arc<Mutex<AppState>>,
     profile_id: Uuid,
     expected: Option<&SessionProfile>,
@@ -352,10 +346,13 @@ pub(super) fn begin_profile_mutation(
     if current != expected {
         anyhow::bail!("session changed before the save started");
     }
+    if app.profile_mutation_is_pending(profile_id) {
+        anyhow::bail!("session is already being modified");
+    }
     Ok(app.begin_profile_mutation(profile_id))
 }
 
-fn ensure_profile_mutation_current(
+pub(in crate::app) fn ensure_profile_mutation_current(
     state: &Arc<Mutex<AppState>>,
     profile_id: Uuid,
     token: Uuid,
@@ -375,7 +372,11 @@ fn ensure_profile_mutation_current(
     Ok(())
 }
 
-fn finish_profile_mutation(state: &Arc<Mutex<AppState>>, profile_id: Uuid, token: Uuid) {
+pub(in crate::app) fn finish_profile_mutation(
+    state: &Arc<Mutex<AppState>>,
+    profile_id: Uuid,
+    token: Uuid,
+) {
     if let Ok(mut app) = state.lock() {
         app.finish_profile_mutation(profile_id, token);
     }
@@ -409,6 +410,48 @@ pub(super) fn commit_profile_save(
         Ok(())
     })();
     app.finish_profile_mutation(profile.id, token);
+    result
+}
+
+pub(in crate::app) fn commit_profile_credential_storage(
+    state: &Arc<Mutex<AppState>>,
+    expected: &SessionProfile,
+    storage: CredentialStorage,
+    token: Uuid,
+) -> Result<()> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if !app.profile_mutation_is_current(expected.id, token) {
+        anyhow::bail!("credential storage update was superseded");
+    }
+    let result = (|| {
+        let current = app
+            .sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == expected.id);
+        if current != Some(expected) {
+            anyhow::bail!("session changed while saving credential storage");
+        }
+        let mut candidate = app.sessions.clone();
+        let ssh = candidate
+            .sessions
+            .iter_mut()
+            .find(|profile| profile.id == expected.id)
+            .and_then(SessionProfile::ssh_mut)
+            .context("credential storage requires an SSH profile")?;
+        if !matches!(ssh.auth, AuthMethod::Password) {
+            anyhow::bail!("non-password profiles cannot store password credentials");
+        }
+        if ssh.credential_storage != Some(storage) {
+            ssh.credential_storage = Some(storage);
+            app.config.save(&candidate)?;
+        }
+        app.sessions = candidate;
+        Ok(())
+    })();
+    app.finish_profile_mutation(expected.id, token);
     result
 }
 

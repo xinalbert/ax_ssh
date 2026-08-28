@@ -398,7 +398,7 @@ pub(super) fn spawn_session_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Ssh,
                             target,
                         );
@@ -503,6 +503,14 @@ pub(super) fn spawn_session_monitor(
                         continue;
                     }
                     if used_stored_credential {
+                        let persistence = match state.lock() {
+                            Ok(app) => app.persistence_coordinator.clone(),
+                            Err(_) => {
+                                set_status(&ui, "Cannot read session state");
+                                continue;
+                            }
+                        };
+                        let _persistence_guard = persistence.gate.lock().await;
                         if let Some(storage) = ssh.credential_storage {
                             match delete_password(profile.id, storage).await {
                                 Ok(rollback) => {
@@ -521,6 +529,7 @@ pub(super) fn spawn_session_monitor(
                                         tab_id,
                                         profile.id,
                                         None,
+                                        Some(&profile),
                                     ) {
                                         Ok(true) => {}
                                         Ok(false) => {
@@ -595,7 +604,7 @@ pub(super) fn spawn_session_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Ssh,
                             target,
                         );
@@ -622,7 +631,7 @@ pub(super) fn spawn_session_monitor(
                 state.clone(),
                 ui.clone(),
                 tab_id,
-                profile.clone(),
+                profile.id,
                 ReconnectProtocol::Ssh,
                 target,
             );
@@ -808,6 +817,35 @@ pub(super) fn persist_authenticated_credential(
     credential: PendingCredentialStore,
 ) {
     runtime.spawn(async move {
+        let persistence = match state.lock() {
+            Ok(app) => app.persistence_coordinator.clone(),
+            Err(_) => {
+                set_status(&ui, "Cannot read session state");
+                return;
+            }
+        };
+        let mutation_token = match begin_profile_mutation(
+            &state,
+            session_id,
+            Some(&credential.expected_profile),
+        ) {
+            Ok(token) => token,
+            Err(error) => {
+                debug!(session_id = %session_id, %error, "skipping credential persistence for a changed profile");
+                return;
+            }
+        };
+        let _mutation_guard = persistence.gate.lock().await;
+        if let Err(error) = ensure_profile_mutation_current(
+            &state,
+            session_id,
+            mutation_token,
+            Some(&credential.expected_profile),
+        ) {
+            finish_profile_mutation(&state, session_id, mutation_token);
+            debug!(session_id = %session_id, %error, "stale credential persistence ignored");
+            return;
+        }
         let rollback = match save_password(
             credential.storage,
             session_id,
@@ -827,14 +865,29 @@ pub(super) fn persist_authenticated_credential(
                         &format!("Connected, but password could not be saved: {error}"),
                     );
                 }
+                finish_profile_mutation(&state, session_id, mutation_token);
                 return;
             }
         };
 
-        if let Err(error) = set_credential_storage(
+        if let Err(error) = ensure_profile_mutation_current(
             &state,
             session_id,
-            Some(credential.storage),
+            mutation_token,
+            Some(&credential.expected_profile),
+        ) {
+            if let Err(cleanup_error) = rollback.restore().await {
+                warn!(session_id = %session_id, %cleanup_error, "failed to restore credential after profile changed");
+            }
+            finish_profile_mutation(&state, session_id, mutation_token);
+            debug!(session_id = %session_id, %error, "stale credential storage update ignored");
+            return;
+        }
+        if let Err(error) = commit_profile_credential_storage(
+            &state,
+            &credential.expected_profile,
+            credential.storage,
+            mutation_token,
         ) {
             warn!(session_id = %session_id, %error, "failed to persist credential storage policy");
             if let Err(cleanup_error) = rollback.restore().await {
@@ -865,6 +918,7 @@ pub(super) fn persist_authenticated_credential(
 }
 
 pub(super) struct PendingCredentialStore {
+    pub(super) expected_profile: SessionProfile,
     pub(super) storage: CredentialStorage,
     pub(super) previous_storage: Option<CredentialStorage>,
     pub(super) secret: zeroize::Zeroizing<String>,

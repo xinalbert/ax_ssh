@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::state::PersistenceCoordinator;
 use serde::{Deserialize, Serialize};
 
 pub(super) const SESSION_TRANSFER_FORMAT: &str = "axssh-session-export";
@@ -35,11 +36,12 @@ pub(in crate::app) fn wire_session_management(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
-    profile_mutations: Arc<ProfileMutationCoordinator>,
+    persistence: Arc<PersistenceCoordinator>,
 ) {
     let ui_for_duplicate = ui.as_weak();
     let state_for_duplicate = state.clone();
     let runtime_for_duplicate = runtime.clone();
+    let persistence_for_duplicate = persistence.clone();
     ui.on_duplicate_session(move |id| {
         log_ui_action("session.duplicate");
         let id = match parse_uuid(id.as_str(), "session", &ui_for_duplicate) {
@@ -48,7 +50,9 @@ pub(in crate::app) fn wire_session_management(
         };
         let ui = ui_for_duplicate.clone();
         let state = state_for_duplicate.clone();
+        let persistence = persistence_for_duplicate.clone();
         runtime_for_duplicate.spawn(async move {
+            let _persistence_guard = persistence.gate.lock().await;
             match duplicate_session_profile(&state, id) {
                 Ok(message) => {
                     refresh_session_models(&ui, &state);
@@ -65,6 +69,7 @@ pub(in crate::app) fn wire_session_management(
     let ui_for_transfer = ui.as_weak();
     let state_for_transfer = state.clone();
     let runtime_for_transfer = runtime.clone();
+    let persistence_for_transfer = persistence.clone();
     ui.on_session_transfer_action(move |action, target| {
         let action = action.as_str();
         let target = target.as_str().to_owned();
@@ -106,7 +111,9 @@ pub(in crate::app) fn wire_session_management(
                 log_ui_action("group.duplicate");
                 let ui = ui_for_transfer.clone();
                 let state = state_for_transfer.clone();
+                let persistence = persistence_for_transfer.clone();
                 runtime_for_transfer.spawn(async move {
+                    let _persistence_guard = persistence.gate.lock().await;
                     match duplicate_session_group(&state, &target) {
                         Ok(message) => {
                             refresh_session_models(&ui, &state);
@@ -136,7 +143,9 @@ pub(in crate::app) fn wire_session_management(
                 };
                 let ui = ui_for_transfer.clone();
                 let state = state_for_transfer.clone();
+                let persistence = persistence_for_transfer.clone();
                 runtime_for_transfer.spawn(async move {
+                    let _persistence_guard = persistence.gate.lock().await;
                     match import_session_transfer(&state, &clipboard, mode, &target) {
                         Ok(message) => {
                             refresh_session_models(&ui, &state);
@@ -161,7 +170,7 @@ pub(in crate::app) fn wire_session_management(
     });
 
     let ui_for_action = ui.as_weak();
-    let profile_mutations_for_action = profile_mutations;
+    let persistence_for_action = persistence;
     ui.on_manage_session_action(move |action, target, value| {
         log_ui_action("session-management.execute");
         let action = action.as_str().to_owned();
@@ -169,11 +178,12 @@ pub(in crate::app) fn wire_session_management(
         let value = value.as_str().to_owned();
         let ui = ui_for_action.clone();
         let state = state.clone();
-        let profile_mutations = profile_mutations_for_action.clone();
+        let persistence = persistence_for_action.clone();
         runtime.spawn(async move {
             let result = if action == "delete-session" {
-                delete_session_profile(&state, &profile_mutations, &target).await
+                delete_session_profile(&state, &persistence, &target).await
             } else {
+                let _persistence_guard = persistence.gate.lock().await;
                 update_session_group(&state, &action, &target, &value)
             };
             match result {

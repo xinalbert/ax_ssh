@@ -91,7 +91,7 @@ pub(super) fn start_serial_connection(
                         state.clone(),
                         ui.clone(),
                         tab_id,
-                        profile.clone(),
+                        profile.id,
                         ReconnectProtocol::Serial,
                         ConnectionTarget::Terminal,
                     );
@@ -114,7 +114,7 @@ pub(super) fn start_serial_connection(
                         state.clone(),
                         ui.clone(),
                         tab_id,
-                        profile.clone(),
+                        profile.id,
                         ReconnectProtocol::Serial,
                         ConnectionTarget::Terminal,
                     );
@@ -137,7 +137,7 @@ pub(super) fn start_serial_connection(
                         state.clone(),
                         ui.clone(),
                         tab_id,
-                        profile.clone(),
+                        profile.id,
                         ReconnectProtocol::Serial,
                         ConnectionTarget::Terminal,
                     );
@@ -168,7 +168,7 @@ pub(super) fn start_serial_connection(
                         state.clone(),
                         ui.clone(),
                         tab_id,
-                        profile.clone(),
+                        profile.id,
                         ReconnectProtocol::Serial,
                         ConnectionTarget::Terminal,
                     );
@@ -319,7 +319,7 @@ fn spawn_telnet_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Telnet,
                             ConnectionTarget::Terminal,
                         );
@@ -342,7 +342,7 @@ fn spawn_telnet_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Telnet,
                             ConnectionTarget::Terminal,
                         );
@@ -367,7 +367,7 @@ fn spawn_telnet_monitor(
                 state.clone(),
                 ui.clone(),
                 tab_id,
-                profile.clone(),
+                profile.id,
                 ReconnectProtocol::Telnet,
                 ConnectionTarget::Terminal,
             );
@@ -472,7 +472,7 @@ fn spawn_serial_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Serial,
                             ConnectionTarget::Terminal,
                         );
@@ -495,7 +495,7 @@ fn spawn_serial_monitor(
                             state.clone(),
                             ui.clone(),
                             tab_id,
-                            profile.clone(),
+                            profile.id,
                             ReconnectProtocol::Serial,
                             ConnectionTarget::Terminal,
                         );
@@ -520,7 +520,7 @@ fn spawn_serial_monitor(
                 state.clone(),
                 ui.clone(),
                 tab_id,
-                profile.clone(),
+                profile.id,
                 ReconnectProtocol::Serial,
                 ConnectionTarget::Terminal,
             );

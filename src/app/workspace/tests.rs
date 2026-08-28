@@ -786,8 +786,12 @@ async fn deleting_a_profile_keeps_open_terminal_tabs() {
     let terminal_id = app.open_terminal_tab(&profile);
     let state = Arc::new(Mutex::new(app));
 
-    let profile_mutations = ProfileMutationCoordinator::default();
-    delete_session_profile(&state, &profile_mutations, &profile.id.to_string())
+    let persistence = state
+        .lock()
+        .expect("state should remain readable")
+        .persistence_coordinator
+        .clone();
+    delete_session_profile(&state, &persistence, &profile.id.to_string())
         .await
         .expect("profile should be deleted");
 
@@ -799,7 +803,7 @@ async fn deleting_a_profile_keeps_open_terminal_tabs() {
 }
 
 #[test]
-fn out_of_order_profile_saves_keep_the_newest_started_mutation() {
+fn overlapping_profile_mutations_are_rejected() {
     let path = std::env::temp_dir().join(format!("ax-ssh-save-order-{}.json", Uuid::new_v4()));
     let original = SessionProfile::new("server", "server.example", "alice");
     let mut sessions = SessionStore::default();
@@ -808,20 +812,13 @@ fn out_of_order_profile_saves_keep_the_newest_started_mutation() {
 
     let first = begin_profile_mutation(&state, original.id, Some(&original))
         .expect("first save should start");
-    let second = begin_profile_mutation(&state, original.id, Some(&original))
-        .expect("second save should supersede the first");
-    let newest = SessionProfile {
-        name: "newest".to_owned(),
-        ..original.clone()
-    };
-    commit_profile_save(&state, &newest, Some(&original), second)
-        .expect("newest save should commit");
-    let stale = SessionProfile {
-        name: "stale".to_owned(),
+    assert!(begin_profile_mutation(&state, original.id, Some(&original)).is_err());
+    let saved = SessionProfile {
+        name: "saved".to_owned(),
         ..original.clone()
     };
 
-    assert!(commit_profile_save(&state, &stale, Some(&original), first).is_err());
+    commit_profile_save(&state, &saved, Some(&original), first).expect("first save should commit");
     assert_eq!(
         state
             .lock()
@@ -829,13 +826,13 @@ fn out_of_order_profile_saves_keep_the_newest_started_mutation() {
             .sessions
             .sessions[0]
             .name,
-        "newest"
+        "saved"
     );
     let _ = std::fs::remove_file(path);
 }
 
 #[test]
-fn stale_profile_save_cannot_resurrect_a_deleted_profile() {
+fn profile_delete_waits_for_an_in_progress_mutation_to_finish() {
     let path = std::env::temp_dir().join(format!("ax-ssh-save-delete-{}.json", Uuid::new_v4()));
     let original = SessionProfile::new("server", "server.example", "alice");
     let mut sessions = SessionStore::default();
@@ -844,15 +841,12 @@ fn stale_profile_save_cannot_resurrect_a_deleted_profile() {
 
     let save =
         begin_profile_mutation(&state, original.id, Some(&original)).expect("save should start");
+    assert!(begin_profile_mutation(&state, original.id, Some(&original)).is_err());
+    commit_profile_save(&state, &original, Some(&original), save).expect("save should commit");
     let delete = begin_profile_mutation(&state, original.id, Some(&original))
-        .expect("delete should supersede the save");
+        .expect("delete should start after the save finishes");
     commit_profile_delete(&state, &original, delete).expect("delete should commit");
-    let stale = SessionProfile {
-        name: "stale".to_owned(),
-        ..original.clone()
-    };
 
-    assert!(commit_profile_save(&state, &stale, Some(&original), save).is_err());
     assert!(
         state
             .lock()
@@ -860,6 +854,34 @@ fn stale_profile_save_cannot_resurrect_a_deleted_profile() {
             .sessions
             .sessions
             .is_empty()
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn credential_storage_commit_requires_the_current_profile_mutation() {
+    let path =
+        std::env::temp_dir().join(format!("ax-ssh-credential-storage-{}.json", Uuid::new_v4()));
+    let original = SessionProfile::new("server", "server.example", "alice");
+    let mut sessions = SessionStore::default();
+    sessions.upsert(original.clone());
+    let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
+
+    let token = begin_profile_mutation(&state, original.id, Some(&original))
+        .expect("credential storage mutation should start");
+    commit_profile_credential_storage(&state, &original, CredentialStorage::SystemKeyring, token)
+        .expect("credential storage should commit");
+
+    assert_eq!(
+        state
+            .lock()
+            .expect("state should remain readable")
+            .sessions
+            .sessions[0]
+            .ssh()
+            .expect("profile should remain SSH")
+            .credential_storage,
+        Some(CredentialStorage::SystemKeyring)
     );
     let _ = std::fs::remove_file(path);
 }

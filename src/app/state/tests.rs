@@ -537,7 +537,7 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
         .expect("tab should close");
 
     assert!(
-        !set_credential_storage_while_loading(&state, tab_id, profile.id, None)
+        !set_credential_storage_while_loading(&state, tab_id, profile.id, None, None)
             .expect("stale credential result should be ignored without error")
     );
     let state = state.lock().expect("state should remain readable");

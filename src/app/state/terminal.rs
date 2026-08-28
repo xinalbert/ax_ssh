@@ -322,6 +322,7 @@ impl TerminalTabState {
             self.ssh_phase,
             SshConnectionPhase::Probing(_)
                 | SshConnectionPhase::AwaitingHostKey(_)
+                | SshConnectionPhase::ConfirmingHostKey(_)
                 | SshConnectionPhase::AwaitingAuthentication { .. }
                 | SshConnectionPhase::LoadingStoredCredential
         )

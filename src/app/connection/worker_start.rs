@@ -12,13 +12,14 @@ pub(super) fn start_session_worker(
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
     tab_id: Uuid,
-    profile_id: Uuid,
+    profile: SessionProfile,
     secret: zeroize::Zeroizing<String>,
     credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
     source: AuthenticationStart,
     target: ConnectionTarget,
 ) -> Result<()> {
+    let profile_id = profile.id;
     let attempt_id = Uuid::new_v4();
     let (profile, events, credential_to_store) = {
         let mut app = state
@@ -34,13 +35,15 @@ pub(super) fn start_session_worker(
         }) {
             anyhow::bail!("terminal tab is not awaiting authentication");
         }
-        let mut profile = app
+        let mut profile = profile;
+        let current_profile = app
             .sessions
             .sessions
             .iter()
-            .find(|profile| profile.id == profile_id)
-            .cloned()
-            .context("session not found")?;
+            .find(|candidate| candidate.id == profile_id);
+        if current_profile != Some(&profile) {
+            anyhow::bail!("session profile changed before the worker started");
+        }
         if target == ConnectionTarget::Sftp {
             let initial_path = app
                 .terminal_mut(tab_id)

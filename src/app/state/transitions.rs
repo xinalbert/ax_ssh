@@ -143,40 +143,12 @@ pub(in crate::app) fn retire_session_attempt(
     }
 }
 
-pub(in crate::app) fn set_credential_storage(
-    state: &Arc<Mutex<AppState>>,
-    session_id: Uuid,
-    credential_storage: Option<CredentialStorage>,
-) -> Result<()> {
-    let mut app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    let mut candidate = app.sessions.clone();
-    let profile = candidate
-        .sessions
-        .iter_mut()
-        .find(|profile| profile.id == session_id)
-        .context("session not found while updating credential storage")?;
-    let ssh = profile
-        .ssh_mut()
-        .context("only SSH profiles can update credential storage")?;
-    if ssh.credential_storage == credential_storage {
-        return Ok(());
-    }
-    if credential_storage.is_some() && !matches!(ssh.auth, AuthMethod::Password) {
-        anyhow::bail!("non-password profiles cannot store password credentials");
-    }
-    ssh.credential_storage = credential_storage;
-    app.config.save(&candidate)?;
-    app.sessions = candidate;
-    Ok(())
-}
-
 pub(in crate::app) fn set_credential_storage_while_loading(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     session_id: Uuid,
     credential_storage: Option<CredentialStorage>,
+    expected_profile: Option<&SessionProfile>,
 ) -> Result<bool> {
     let mut app = state
         .lock()
@@ -200,6 +172,9 @@ pub(in crate::app) fn set_credential_storage_while_loading(
         .iter_mut()
         .find(|profile| profile.id == session_id)
         .context("session not found while updating credential storage")?;
+    if expected_profile.is_some_and(|expected| profile != expected) {
+        return Ok(false);
+    }
     let ssh = profile
         .ssh_mut()
         .context("only SSH profiles can update credential storage")?;

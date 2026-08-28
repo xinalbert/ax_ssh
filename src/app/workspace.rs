@@ -4,8 +4,9 @@ mod session_editor;
 mod session_management;
 mod tabs;
 
-pub(super) use self::session_editor::{
-    ProfileMutationCoordinator, SessionEditorContext, wire_session_editor,
+pub(in crate::app) use self::session_editor::{
+    SessionEditorContext, begin_profile_mutation, commit_profile_credential_storage,
+    ensure_profile_mutation_current, finish_profile_mutation, wire_session_editor,
 };
 pub(super) use self::session_management::wire_session_management;
 pub(super) use self::tabs::{close_terminal_child_pane, close_workspace_tab, wire_workspace_tabs};
@@ -15,8 +16,8 @@ use self::tabs::clear_session_editor_resources;
 
 #[cfg(test)]
 use self::session_editor::{
-    CredentialChange, begin_profile_mutation, commit_profile_delete, commit_profile_save,
-    profile_from_editor, profile_from_editor_with_password, should_connect_after_save,
+    CredentialChange, commit_profile_delete, commit_profile_save, profile_from_editor,
+    profile_from_editor_with_password, should_connect_after_save,
 };
 #[cfg(test)]
 use self::session_management::{

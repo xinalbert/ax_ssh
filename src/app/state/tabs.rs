@@ -11,6 +11,7 @@ impl AppState {
             active_tab_id: None,
             terminal_numbers: HashMap::new(),
             profile_mutations: HashMap::new(),
+            persistence_coordinator: Arc::new(PersistenceCoordinator::default()),
             local_terminal_number: 0,
             serial_ports: Vec::new(),
             ui_refresh: UiRefreshState::default(),
@@ -949,6 +950,10 @@ impl AppState {
         self.profile_mutations.get(&profile_id) == Some(&token)
     }
 
+    pub(in crate::app) fn profile_mutation_is_pending(&self, profile_id: Uuid) -> bool {
+        self.profile_mutations.contains_key(&profile_id)
+    }
+
     pub(in crate::app) fn finish_profile_mutation(&mut self, profile_id: Uuid, token: Uuid) {
         if self.profile_mutation_is_current(profile_id, token) {
             self.profile_mutations.remove(&profile_id);
@@ -1166,6 +1171,7 @@ impl AppState {
                 SshConnectionPhase::Idle
                 | SshConnectionPhase::Probing(_)
                 | SshConnectionPhase::AwaitingHostKey(_)
+                | SshConnectionPhase::ConfirmingHostKey(_)
                 | SshConnectionPhase::LoadingStoredCredential,
             )
             | None => ActiveSecurityPrompt::None,

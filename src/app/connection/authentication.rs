@@ -37,7 +37,7 @@ pub(in crate::app) fn begin_authentication(
             state.clone(),
             ui.clone(),
             tab_id,
-            profile.id,
+            profile.clone(),
             zeroize::Zeroizing::new(String::new()),
             None,
             false,
@@ -82,7 +82,7 @@ pub(in crate::app) fn begin_authentication(
             state.clone(),
             ui.clone(),
             tab_id,
-            profile.id,
+            profile.clone(),
             password,
             None,
             false,
@@ -156,7 +156,7 @@ pub(in crate::app) fn begin_authentication(
                     state,
                     ui.clone(),
                     tab_id,
-                    profile.id,
+                    profile.clone(),
                     secret,
                     None,
                     true,
@@ -167,7 +167,21 @@ pub(in crate::app) fn begin_authentication(
                 }
             }
             Ok(None) => {
-                match set_credential_storage_while_loading(&state, tab_id, profile.id, None) {
+                let persistence = match state.lock() {
+                    Ok(app) => app.persistence_coordinator.clone(),
+                    Err(_) => {
+                        set_status(&ui, "Cannot read session state");
+                        return;
+                    }
+                };
+                let _persistence_guard = persistence.gate.lock().await;
+                match set_credential_storage_while_loading(
+                    &state,
+                    tab_id,
+                    profile.id,
+                    None,
+                    Some(&profile),
+                ) {
                     Ok(true) => {}
                     Ok(false) => {
                         debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing credential result ignored");
@@ -233,6 +247,7 @@ pub(in crate::app) fn wire_authentication(
                         SshConnectionPhase::Idle
                         | SshConnectionPhase::Probing(_)
                         | SshConnectionPhase::AwaitingHostKey(_)
+                        | SshConnectionPhase::ConfirmingHostKey(_)
                         | SshConnectionPhase::LoadingStoredCredential => return None,
                     };
                     let profile = app
@@ -280,7 +295,7 @@ pub(in crate::app) fn wire_authentication(
                             state,
                             ui.clone(),
                             tab_id,
-                            profile.id,
+                            profile.clone(),
                             secret,
                             None,
                             true,
@@ -291,7 +306,21 @@ pub(in crate::app) fn wire_authentication(
                         }
                     }
                     Ok(None) => {
-                        match set_credential_storage_while_loading(&state, tab_id, profile.id, None) {
+                        let persistence = match state.lock() {
+                            Ok(app) => app.persistence_coordinator.clone(),
+                            Err(_) => {
+                                set_status(&ui, "Cannot read session state");
+                                return;
+                            }
+                        };
+                        let _persistence_guard = persistence.gate.lock().await;
+                        match set_credential_storage_while_loading(
+                            &state,
+                            tab_id,
+                            profile.id,
+                            None,
+                            Some(&profile),
+                        ) {
                             Ok(true) => {}
                             Ok(false) => {
                                 debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing vault credential result ignored");
@@ -342,6 +371,7 @@ pub(in crate::app) fn wire_authentication(
             )
             .map(|storage| {
                 PendingCredentialStore {
+                    expected_profile: profile.clone(),
                     storage,
                     previous_storage,
                     vault_password: (storage == CredentialStorage::EncryptedVault)
@@ -357,7 +387,7 @@ pub(in crate::app) fn wire_authentication(
             state_for_auth.clone(),
             ui_for_auth.clone(),
             tab_id,
-            profile.id,
+            profile.clone(),
             password,
             credential_to_store,
             false,

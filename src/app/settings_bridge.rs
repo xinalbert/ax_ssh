@@ -556,6 +556,7 @@ pub(super) fn wire_settings(
     runtime: Handle,
     font_registry: Arc<Mutex<FontRegistry>>,
     window_router: WindowRouter,
+    persistence: Arc<PersistenceCoordinator>,
 ) {
     ui.on_settings_search_results(|query, language| {
         ModelRc::new(VecModel::from(settings_search_results(
@@ -567,6 +568,7 @@ pub(super) fn wire_settings(
     let ui_for_language = ui.as_weak();
     let state_for_language = state.clone();
     let runtime_for_language = runtime.clone();
+    let persistence_for_language = persistence.clone();
     let language_revision = Arc::new(AtomicU64::new(0));
     ui.on_save_ui_language(move |index| {
         log_ui_action("settings.language.save");
@@ -577,7 +579,9 @@ pub(super) fn wire_settings(
         let language_revision = language_revision.clone();
         let state = state_for_language.clone();
         let ui = ui_for_language.clone();
+        let persistence = persistence_for_language.clone();
         runtime_for_language.spawn(async move {
+            let _persistence_guard = persistence.gate.lock().await;
             let revision_for_save = language_revision.clone();
             let save_result = tokio::task::spawn_blocking(move || {
                 save_ui_language(&state, language, revision, &revision_for_save)
@@ -611,6 +615,7 @@ pub(super) fn wire_settings(
 
     let ui_for_save = ui.as_weak();
     let font_registry_for_save = font_registry;
+    let persistence_for_save = persistence;
     ui.on_save_settings(
         move |application_font_family,
               renderer_preference,
@@ -856,6 +861,7 @@ pub(super) fn wire_settings(
             let window_router_for_save = window_router.clone();
             let font_registry = font_registry_for_save.clone();
             let runtime_for_save = runtime.clone();
+            let persistence_for_save = persistence_for_save.clone();
             let runtime_for_close = runtime_for_save.clone();
             set_status(&ui_for_save, "Saving workspace settings...");
             runtime.spawn(async move {
@@ -905,6 +911,7 @@ pub(super) fn wire_settings(
                     let ui_for_close = ui_for_result.clone();
                     let state_for_close = state_for_refresh.clone();
                     runtime_for_save.spawn(async move {
+                        let _persistence_guard = persistence_for_save.gate.lock().await;
                         let save_result = tokio::task::spawn_blocking(move || {
                             save_workspace_settings(&state_for_save, settings_for_save)
                         })

@@ -16,7 +16,7 @@ pub(in crate::app) fn schedule_reconnect(
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
     tab_id: Uuid,
-    profile: SessionProfile,
+    profile_id: Uuid,
     protocol: ReconnectProtocol,
     target: ConnectionTarget,
 ) {
@@ -49,13 +49,31 @@ pub(in crate::app) fn schedule_reconnect(
     let runtime_for_task = runtime.clone();
     runtime.spawn(async move {
         tokio::time::sleep(delay).await;
-        let current = state.lock().ok().is_some_and(|app| {
-            app.terminal(tab_id)
-                .is_some_and(|terminal| terminal.reconnect_current(generation))
+        let profile = state.lock().ok().and_then(|app| {
+            let terminal = app.terminal(tab_id)?;
+            if !terminal.reconnect_current(generation) || terminal.profile_id() != Some(profile_id)
+            {
+                return None;
+            }
+            let profile = app
+                .sessions
+                .sessions
+                .iter()
+                .find(|profile| profile.id == profile_id)
+                .cloned()?;
+            profile_matches_reconnect_protocol(&profile, protocol).then_some(profile)
         });
-        if !current {
+        let Some(profile) = profile else {
+            if clear_reconnect_attempt(
+                &state,
+                tab_id,
+                generation,
+                "Session changed, uses a different protocol, or was removed; reconnect cancelled",
+            ) {
+                refresh_workspace(&ui, &state);
+            }
             return;
-        }
+        };
         set_tab_status(&state, &ui, tab_id, "Reconnecting...");
         let result = match protocol {
             ReconnectProtocol::Ssh => {
@@ -89,7 +107,7 @@ pub(in crate::app) fn schedule_reconnect(
                 state,
                 ui,
                 tab_id,
-                profile,
+                profile_id,
                 protocol,
                 target,
             );
@@ -198,6 +216,17 @@ fn reconnect_delay(attempt: u8) -> Duration {
     (RECONNECT_BASE_DELAY * 2u32.saturating_pow(shift)).min(RECONNECT_MAX_DELAY)
 }
 
+fn profile_matches_reconnect_protocol(
+    profile: &SessionProfile,
+    protocol: ReconnectProtocol,
+) -> bool {
+    match protocol {
+        ReconnectProtocol::Ssh => profile.ssh().is_some(),
+        ReconnectProtocol::Telnet => profile.telnet().is_some(),
+        ReconnectProtocol::Serial => profile.serial().is_some(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +237,37 @@ mod tests {
         assert_eq!(reconnect_delay(2), Duration::from_secs(2));
         assert_eq!(reconnect_delay(5), Duration::from_secs(16));
         assert_eq!(reconnect_delay(8), Duration::from_secs(30));
+    }
+
+    #[test]
+    fn reconnect_requires_the_original_profile_protocol() {
+        let ssh = SessionProfile::new("ssh", "ssh.example", "alice");
+        let telnet = SessionProfile::new_telnet("telnet", "telnet.example");
+        let serial = SessionProfile::new_serial("serial", "/dev/cu.usbserial");
+
+        assert!(profile_matches_reconnect_protocol(
+            &ssh,
+            ReconnectProtocol::Ssh
+        ));
+        assert!(profile_matches_reconnect_protocol(
+            &telnet,
+            ReconnectProtocol::Telnet
+        ));
+        assert!(profile_matches_reconnect_protocol(
+            &serial,
+            ReconnectProtocol::Serial
+        ));
+        assert!(!profile_matches_reconnect_protocol(
+            &ssh,
+            ReconnectProtocol::Telnet
+        ));
+        assert!(!profile_matches_reconnect_protocol(
+            &telnet,
+            ReconnectProtocol::Serial
+        ));
+        assert!(!profile_matches_reconnect_protocol(
+            &serial,
+            ReconnectProtocol::Ssh
+        ));
     }
 }

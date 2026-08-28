@@ -57,12 +57,12 @@ use self::session_groups::{
 };
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ClosedTab, ClosedTabKind, ConnectionStart,
-    ConnectionTarget, PendingHostKey, PendingProbe, SftpBrowserSnapshot, SftpNavigation,
-    SftpTransferPhase, SshConnectionPhase, SshSftpNavigation, TerminalNoticeSnapshot,
-    TerminalTabState, TerminalWorker, WorkspaceTabSummary, WorkspaceTransfer,
-    finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
-    prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
-    set_credential_storage, set_credential_storage_while_loading,
+    ConnectionTarget, PendingHostKey, PendingProbe, PersistenceCoordinator, SftpBrowserSnapshot,
+    SftpNavigation, SftpTransferPhase, SshConnectionPhase, SshSftpNavigation,
+    TerminalNoticeSnapshot, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
+    WorkspaceTransfer, finish_stored_credential_retry, prepare_authentication_retry,
+    prepare_host_key_retry, prepare_stored_credential_retry, retire_session_attempt,
+    session_attempt_is_active, set_credential_storage_while_loading,
 };
 use self::terminal_render::{
     RenderedTerminalLine, RenderedTerminalRun, RgbColor, SemanticColorOverrides,
@@ -526,13 +526,20 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         window_router.clone(),
         window_id,
     );
-    let profile_mutations = Arc::new(ProfileMutationCoordinator::default());
+    let persistence = match state.lock() {
+        Ok(app) => app.persistence_coordinator.clone(),
+        Err(_) => {
+            set_status(&ui.as_weak(), "Cannot initialize session mutation state");
+            return;
+        }
+    };
+    let persistence_for_settings = persistence.clone();
     wire_session_editor(
         ui,
         SessionEditorContext::new(
             state.clone(),
             runtime.clone(),
-            profile_mutations.clone(),
+            persistence.clone(),
             font_registry.clone(),
             terminal_font_started.clone(),
             window_router.clone(),
@@ -540,7 +547,7 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         ),
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
-    wire_session_management(ui, state.clone(), runtime.clone(), profile_mutations);
+    wire_session_management(ui, state.clone(), runtime.clone(), persistence);
     wire_connection_request(
         ui,
         state.clone(),
@@ -570,6 +577,7 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         runtime.clone(),
         font_registry.clone(),
         window_router.clone(),
+        persistence_for_settings,
     );
     if let Ok(app) = state.lock() {
         software_presentation::set_rows(

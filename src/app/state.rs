@@ -31,9 +31,19 @@ pub(super) struct AppState {
     active_tab_id: Option<Uuid>,
     terminal_numbers: HashMap<Uuid, u32>,
     profile_mutations: HashMap<Uuid, Uuid>,
+    pub(super) persistence_coordinator: Arc<PersistenceCoordinator>,
     local_terminal_number: u32,
     serial_ports: Vec<SerialPortDescriptor>,
     ui_refresh: UiRefreshState,
+}
+
+/// Serializes filesystem-backed configuration, credential, and trust mutations.
+///
+/// Per-profile tokens reject stale profile work; this process-wide gate keeps
+/// whole-store configuration writes from overwriting one another.
+#[derive(Default)]
+pub(super) struct PersistenceCoordinator {
+    pub(super) gate: tokio::sync::Mutex<()>,
 }
 
 #[derive(Default)]
@@ -529,6 +539,7 @@ pub(super) enum SshConnectionPhase {
     Idle,
     Probing(PendingProbe),
     AwaitingHostKey(PendingHostKey),
+    ConfirmingHostKey(PendingHostKey),
     AwaitingAuthentication { vault_unlock_only: bool },
     LoadingStoredCredential,
 }
@@ -587,7 +598,7 @@ mod transitions;
 pub(super) use self::transitions::{
     finish_stored_credential_retry, prepare_authentication_retry, prepare_host_key_retry,
     prepare_stored_credential_retry, retire_session_attempt, session_attempt_is_active,
-    set_credential_storage, set_credential_storage_while_loading,
+    set_credential_storage_while_loading,
 };
 
 #[cfg(test)]
