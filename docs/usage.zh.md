@@ -37,6 +37,9 @@ cargo run --locked
    加密保险库记录。之后使用既有保险库记录仍需输入其保险库口令解锁已保存的 SSH 密码。
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
+   当前版本不支持 RSA 私钥；请使用 Ed25519 或 ECDSA 私钥，或使用包含这类 identity 的
+   SSH agent。内置 SSH transport 因当前 RSA 实现没有可用的修复版本且存在已知时序侧信道
+   advisory，已禁用 RSA。
    关闭正在探测或等待认证的 Tab，只会取消或丢弃该 Tab 自己的连接流程。
 6. 使用 **SSH agent** 时，AxSSH 在连接开始时访问当时可用的 agent，不显示密码或 passphrase
    弹窗。Unix/macOS 读取当前 `SSH_AUTH_SOCK`；Windows 优先使用该变量，未设置时使用 OpenSSH

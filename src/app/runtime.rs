@@ -37,6 +37,7 @@ pub(super) fn configure_software_presentation(mode: SoftwarePresentationMode) {
     let _ = mode;
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) const fn software_presentation_uses_backing_store(
     mode: SoftwarePresentationMode,
 ) -> bool {

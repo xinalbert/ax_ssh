@@ -25,7 +25,9 @@ keyring = "4.1.5"
 libmudtelnet-rs = "2.0.10"
 portable-pty = "0.9.0"
 rand = "0.10"
-russh = "0.63.1"
+# Keep russh's RSA feature disabled until its rsa dependency has a patched
+# release for RUSTSEC-2023-0071.
+russh = { version = "0.63.1", default-features = false, features = ["flate2", "aws-lc-rs"] }
 russh-sftp = "2.3.0"
 sha1 = "0.11.0"
 open = "5.3.6"

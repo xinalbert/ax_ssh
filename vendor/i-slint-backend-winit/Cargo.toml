@@ -201,7 +201,7 @@ features = ["derive"]
 default-features = false
 
 [dependencies.webbrowser]
-version = "1.2.0"
+version = "1.2.2"
 
 [dependencies.winit]
 version = "0.30.2"

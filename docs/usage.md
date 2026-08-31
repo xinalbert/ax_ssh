@@ -54,6 +54,10 @@ cargo run --locked
    Password, vault-password, and passphrase fields cannot be copied, cut, or
    selected, and are cleared after a submitted secret is accepted or the prompt
    is cancelled.
+   RSA private keys are not supported in this build; use an Ed25519 or ECDSA key,
+   or an SSH agent identity of one of those types. The bundled SSH transport
+   disables RSA because its current implementation has no patched version for
+   the known timing-side-channel advisory.
    Closing a probing or pending-authentication Tab cancels or discards only that
    Tab's connection flow.
 6. For **SSH agent**, AxSSH uses the agent available when the connection starts

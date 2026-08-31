@@ -17,6 +17,7 @@ use uuid::Uuid;
 use super::*;
 
 #[derive(Clone, Copy)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(super) struct LogicalRegion {
     pub(super) x: f32,
     pub(super) y: f32,

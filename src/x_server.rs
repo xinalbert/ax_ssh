@@ -299,7 +299,7 @@ fn default_windows_path(directory: &str, executable: &str) -> Option<PathBuf> {
     executable_on_search_path(search_path.as_deref(), executable).or_else(|| {
         ["ProgramFiles", "ProgramFiles(x86)"]
             .into_iter()
-            .filter_map(|name| std::env::var_os(name))
+            .filter_map(std::env::var_os)
             .map(PathBuf::from)
             .map(|root| root.join(directory).join(executable))
             .find(|path| path.is_file())

@@ -6,7 +6,7 @@ AxSSH is a cross-platform desktop terminal workspace built with Rust, Slint,
 and Tokio. It combines saved SSH, Telnet, and serial sessions with independent
 local and remote terminal tabs and persistent workspace settings.
 
-Current functionality includes SSH password, private-key, and runtime-agent
+Current functionality includes SSH password, non-RSA private-key, and runtime-agent
 authentication with explicit host-key confirmation, plaintext Telnet, manually initiated serial
 connections with automatic port discovery, bounded terminal scrollback, ANSI
 rendering, selection, clipboard shortcuts, native input-method support, and

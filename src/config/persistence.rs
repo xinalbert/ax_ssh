@@ -352,11 +352,10 @@ fn replace_file_atomically(temporary: &Path, destination: &Path) -> io::Result<(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn atomic_write_does_not_follow_the_legacy_tmp_symlink() {
         use std::os::unix::fs::symlink;
