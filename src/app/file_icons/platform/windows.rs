@@ -198,11 +198,12 @@ fn icon_to_rgba(icon: HICON) -> Option<FileIcon> {
     // SAFETY: CreateDIBSection returned a buffer of FILE_ICON_BYTE_LEN bytes that remains
     // valid until `bitmap` is dropped below. It is copied before either GDI owner is released.
     let bgra = unsafe { std::slice::from_raw_parts(bits.cast::<u8>(), FILE_ICON_BYTE_LEN) };
-    if !bgra.chunks_exact(4).any(|pixel| pixel[3] != 0) {
+    let (pixels, _) = bgra.as_chunks::<4>();
+    if !pixels.iter().any(|pixel| pixel[3] != 0) {
         return None;
     }
     let mut rgba = Vec::with_capacity(FILE_ICON_BYTE_LEN);
-    for pixel in bgra.chunks_exact(4) {
+    for pixel in pixels {
         let alpha = pixel[3];
         rgba.push(unpremultiply(pixel[2], alpha));
         rgba.push(unpremultiply(pixel[1], alpha));
