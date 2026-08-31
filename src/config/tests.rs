@@ -366,7 +366,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
         }),
         AppearanceSettings {
             renderer_preference: RendererPreference::Automatic,
-            software_presentation: SoftwarePresentationMode::LayerImages,
+            software_presentation: SoftwarePresentationMode::DamageBackingStore,
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
             terminal_font_size: MAX_TERMINAL_FONT_SIZE,
@@ -1105,12 +1105,12 @@ fn renderer_preference_defaults_and_serializes_stable_values() {
 }
 
 #[test]
-fn software_presentation_defaults_and_serializes_stable_values() {
+fn software_presentation_defaults_to_damage_backing_store_and_serializes_stable_values() {
     let legacy: AppearanceSettings =
         serde_json::from_str("{}").expect("legacy appearance should load");
     assert_eq!(
         legacy.software_presentation,
-        SoftwarePresentationMode::LayerImages
+        SoftwarePresentationMode::DamageBackingStore
     );
 
     let invalid: AppearanceSettings =
@@ -1118,6 +1118,13 @@ fn software_presentation_defaults_and_serializes_stable_values() {
             .expect("unknown software presentation should normalize");
     assert_eq!(
         invalid.software_presentation,
+        SoftwarePresentationMode::DamageBackingStore
+    );
+    let fallback: AppearanceSettings =
+        serde_json::from_str(r#"{"software_presentation":"layer-images"}"#)
+            .expect("explicit layer-image fallback should load");
+    assert_eq!(
+        fallback.software_presentation,
         SoftwarePresentationMode::LayerImages
     );
     assert_eq!(

@@ -125,8 +125,8 @@ impl<'de> Deserialize<'de> for RendererPreference {
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum SoftwarePresentationMode {
-    #[default]
     LayerImages,
+    #[default]
     DamageBackingStore,
 }
 
@@ -140,8 +140,9 @@ impl SoftwarePresentationMode {
 
     pub fn from_setting(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
+            "layer-images" => Self::LayerImages,
             "damage-backing-store" => Self::DamageBackingStore,
-            _ => Self::LayerImages,
+            _ => Self::default(),
         }
     }
 }
@@ -377,7 +378,7 @@ impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             renderer_preference: RendererPreference::Automatic,
-            software_presentation: SoftwarePresentationMode::LayerImages,
+            software_presentation: SoftwarePresentationMode::default(),
             application_font_family: default_application_font_family(),
             terminal_font_family: default_terminal_font_family(),
             terminal_font_size: default_terminal_font_size(),

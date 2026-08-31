@@ -210,7 +210,7 @@ export component AppearanceSettingsPage inherits Rectangle {
                         ThemedComboBox {
                             width: parent.width;
                             height: Theme.settings-control-height;
-                            model: [@tr("Layer images (stable)"), @tr("Damage backing store (experimental)")];
+                            model: [@tr("Layer images (fallback)"), @tr("Damage backing store (default)")];
                             current-index: root.draft-software-presentation == "damage-backing-store" ? 1 : 0;
                             accessible-label: @tr("Software presentation path");
                             selected(_value, index) => {

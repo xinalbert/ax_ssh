@@ -289,8 +289,8 @@ msgstr "默认值"
 msgid "DISPLAY"
 msgstr "显示"
 
-msgid "Damage backing store (experimental)"
-msgstr "脏区后备存储（实验）"
+msgid "Damage backing store (default)"
+msgstr "脏区后备存储（默认）"
 
 msgid "Danger"
 msgstr "危险"
@@ -541,8 +541,8 @@ msgstr "AxSSH 界面使用的语言"
 msgid "Launch the selected X server only when a forwarded graphical app opens"
 msgstr "仅在转发的图形应用打开时启动所选 X server"
 
-msgid "Layer images (stable)"
-msgstr "图层图像（稳定）"
+msgid "Layer images (fallback)"
+msgstr "图层图像（回退）"
 
 msgid "Leave blank to keep saved password"
 msgstr "留空以保留已保存的密码"
