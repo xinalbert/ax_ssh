@@ -922,10 +922,13 @@ mod tests {
             .expect("local PTY should accept the output loop");
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        timeout(Duration::from_secs(5), worker.shutdown())
-            .await
-            .expect("shutdown must not leave a detached blocking join")
-            .expect("running local PTY should shut down cleanly");
+        timeout(
+            WORKER_SHUTDOWN_TIMEOUT.saturating_add(Duration::from_secs(1)),
+            worker.shutdown(),
+        )
+        .await
+        .expect("shutdown must not leave a detached blocking join")
+        .expect("running local PTY should shut down cleanly");
     }
 
     #[cfg(not(windows))]
