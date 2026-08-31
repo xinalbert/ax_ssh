@@ -472,9 +472,9 @@ or **Software** for the next application launch: Automatic uses GPU/Skia on
 macOS and software on Windows/Linux; GPU uses Skia and Software uses the
 software renderer. `SLINT_BACKEND` overrides this saved choice for the current
 process. On macOS, **Software presentation** selects the CPU renderer's
-presentation path for the next launch: **Layer images (stable)** keeps the
-independently owned `CGImage` layer path, while **Damage backing store
-(experimental)** uses `CALayerDelegate` damage invalidation. This choice is
+presentation path for the next launch: **Damage backing store (default)** uses
+the lower-CPU `CALayerDelegate` damage invalidation path, while **Layer images
+(fallback)** keeps the independently owned `CGImage` compatibility path. This choice is
 ignored when the active renderer does not use the macOS software surface and
 does not change the FPS policy. Display mode selects **Follow system**,
 **Light**, or **Dark**. Color palette independently selects **AxSSH**,

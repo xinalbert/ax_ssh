@@ -448,12 +448,30 @@ must not locally hide either dialog before the Rust state transition accepts it.
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
-   terminal worker. Profile save and delete operations share one asynchronous
-   credential gate and assign a latest-mutation token per profile. They validate
+   terminal worker. Every `SessionStore` persistence path shares one process-wide
+   asynchronous gate, while profile save and delete operations reserve an exclusive
+   mutation token per profile. They validate
    the original profile before changing a credential and again before replacing
    `SessionStore`; a superseded operation restores its own credential backup
-   before releasing the gate. A completed save closes only the editor Tab whose
-   Tab and draft identities initiated that save.
+   before releasing the gate. The credential reference write uses the same token
+   commit and is accepted only for a password-authenticated profile. Host-key
+   confirmation also takes the shared asynchronous gate and its per-profile
+   token: known-hosts/config file work runs in Tokio blocking tasks, and the
+   profile is rechecked before every
+   commit. Normal confirmation records the known-host first and then pins the
+   profile. Revoked-key confirmation clears and commits the profile pin before
+   attempting to remove the `@revoked` record; if that removal fails, the
+   revoked record remains authoritative and the cleared pin cannot bypass it.
+   These two files are not one OS transaction, so the ordering preserves the
+   deny-by-default invariant on partial failure. A completed save closes only
+   the editor Tab whose Tab and draft identities initiated that save.
+   Reconnect timers retain only a profile UUID; when a delay expires they read
+   the current profile again, and SSH, Telnet, and Serial worker setup rejects a
+   snapshot that no longer equals that definition. Serial repeats this check
+   after asynchronous port discovery, immediately before creating the worker.
+   Credential reads have a bounded timeout. Credential mutations use a soft
+   deadline only for observability and still await the uncancellable blocking
+   operation before releasing the persistence gate, preserving write ordering.
 5. The terminal surface maps Slint special keys, including F1-F12, to
    UI-independent terminal key values and applies a narrow shifted-hyphen
    fallback when the platform still reports `-` for `Shift+-`.
@@ -862,7 +880,7 @@ matches are rejected before authentication and cannot be bypassed by the normal
 confirmation action. Unknown confirmation appends the observed key; changed
 confirmation atomically replaces matching non-revoked host records while
 preserving unrelated and revoked records. Revoked record removal is a separate
-explicit action.
+explicit action and cannot proceed as a profile-pin fallback.
 The key bytes and optional passphrase are loaded in one blocking task, used for
 one authentication attempt, and then dropped without entering configuration,
 tracing fields, or UI models. The separate, non-secret `.ssh` candidate-path
@@ -1337,8 +1355,9 @@ text brightness, bold-color, optional semantic highlighting and its status color
     older settings are loaded; it is no longer part of the settings schema or
     runtime state. Missing fields keep those defaults. Schema version 27 adds
     `software_presentation` with stable `layer-images` and
-    `damage-backing-store` values; missing or invalid values preserve the stable
-    layer-image path. Schema version 24 adds the `RendererPreference` field with stable
+    `damage-backing-store` values; missing or invalid values select the default
+    damage backing store, while an explicitly saved `layer-images` value remains
+    a compatibility fallback. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
     an active renderer. Schema version 23 adds the default-enabled
@@ -1542,12 +1561,23 @@ Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.
 
+The patched `softbuffer::Surface::damage_support()` exposes the native
+presentation contract without changing the `present_with_damage` call. Windows,
+Wayland surfaces with `wl_surface.damage_buffer` (protocol version 4+), X11
+XShm, and Core Graphics tiles report direct rectangle/tile handling. Web reports
+bounding-rectangle upload, KMS reports driver-dependent handling, and X11 Wire,
+older Wayland surfaces, Orbital, and Android report a full-frame or lock-time
+fallback. The winit software bridge uses that capability to avoid building a
+damage list when the backend cannot consume it. This keeps the application
+damage model reusable while making platform-specific savings explicit; the
+macOS `SoftwarePresentationMode` remains macOS-only.
+
 The macOS `SoftwarePresentationMode::DamageBackingStore` setting switches only
-this Software presentation boundary to an opt-in `CALayerDelegate` experiment.
-`LayerImages` is the stable default. If
+this Software presentation boundary to the default lower-CPU `CALayerDelegate`
+path. `LayerImages` remains an explicit compatibility fallback. If
 `AXSSH_EXPERIMENT_CA_BACKING_STORE` is present, truthy values select the
-experiment and all other values select the stable path for that process. Both
-the saved setting and override are consumed before surface creation. The experiment preserves
+damage backing store and all other values select the layer-image path for that process. Both
+the saved setting and override are consumed before surface creation. The default path preserves
 the existing pane/fallback layer geometry and ordering. Each layer retains a
 synchronized CPU backing store; present copies only its intersections with the
 physical damage list and calls `setNeedsDisplayInRect` in layer points. On
@@ -1557,11 +1587,10 @@ inverse conversion to the Core Graphics clip before reading pixels. It then
 makes an independently owned image for that clipped rectangle and draws it into
 the layer context. Delegates are retained beside their layers and cleared before
 rebuild or destruction. The
-default `setContents(CGImage)` path remains available for direct A/B and visual
-fallback. This experiment does not promise zero-copy composition: Core
+`setContents(CGImage)` path remains available for direct A/B and visual
+fallback. The backing-store path does not promise zero-copy composition: Core
 Animation may still copy or color-convert its backing store, so Retina/resize,
-stale-pixel, tearing, CPU, and sample results must be checked before enabling it
-by default.
+stale-pixel, tearing, CPU, and sample results remain release acceptance checks.
 
 The pane geometry bridge is enabled only for the macOS Software renderer. It
 keeps a bounded, window-keyed logical geometry hint rather than terminal,

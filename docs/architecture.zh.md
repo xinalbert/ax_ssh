@@ -283,7 +283,7 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    SSH transport 还会读取平台用户的有界 OpenSSH `known_hosts` 文件。未撤销的精确匹配属于共享信任；
    profile 冲突、变更密钥、坏记录和文件不可读都不会放宽信任。精确匹配 `@revoked` 时在认证前拒绝，
    普通确认不能绕过。未知确认追加观察到的公钥；变更确认原子替换匹配 host 的非撤销记录，同时保留
-   注释、无关主机和撤销记录。移除撤销记录是独立的显式动作。
+   注释、无关主机和撤销记录。移除撤销记录是独立的显式动作，不能作为 profile 指纹回退。
 4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
@@ -291,10 +291,17 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会有意改用系统凭据库，
    而不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
-   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。profile 保存和删除
-   共享一个异步凭据闸门，并为每个 profile 分配最新 mutation token；在修改凭据前和替换
+   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。所有 `SessionStore` 持久化路径
+   共享一个进程级异步闸门，profile 保存和删除另为每个 profile 保留互斥 mutation token；在修改凭据前和替换
    `SessionStore` 前都会重新核验原 profile。已被后续操作取代的事务会在释放闸门前恢复自己的
-   凭据备份；保存完成后也只关闭发起该操作且 Tab/draft identity 仍匹配的编辑器。
+   凭据备份；凭据后端引用也必须用同一个 token 提交，且只有密码认证 profile 才能写入。
+   主机密钥确认同样占用共享异步闸门及其 profile mutation token：known_hosts 和配置文件操作都在
+   Tokio blocking task 中执行，每个提交点都会重新核验 profile。普通确认先记录 known_hosts，再写入 profile 指纹；
+   撤销密钥确认先清除并提交 profile 指纹，再尝试删除 `@revoked` 记录。删除失败时撤销记录仍是
+   权威拒绝来源，已清除的 profile 指纹不能绕过它。两个文件不属于同一个操作系统事务，因此该
+   顺序保证部分失败时仍保持默认拒绝。保存完成后也只关闭发起该操作且 Tab/draft identity 仍匹配的编辑器。
+   重连计时器只保留 profile UUID；延迟结束时重新读取当前 profile，SSH、Telnet 和 Serial worker 启动都会拒绝已经不再与该定义相等的旧 snapshot。
+   Serial 在异步串口发现完成后、真正创建 worker 前还会再次校验；凭据读取有明确的超时，凭据写入的超时只作为可观测的软截止，仍会等待不可取消的 blocking 操作完成后才释放持久化闸门，以保持写入顺序。
 5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
    `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
    生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
@@ -834,7 +841,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
     改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
     已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 27 增加
-    `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值保持稳定图层图像路径。schema 版本 24 增加
+    `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值采用默认的脏区
+    backing store，显式保存的 `layer-images` 仍作为兼容性回退。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用
     Automatic。该偏好只在首个窗口创建前读取，绝不会热切换已运行的 renderer。schema 版本 16 新增
     收起 Group 徽标字符数设置，`0` 表示完整组名，
@@ -943,16 +951,25 @@ bridge 在窗口 occluded 时使 surface 失效，即使新 buffer 没有 dirty 
 应用 FPS 上限；大面积 damage 仍可能刷新全部 layer。Slint API、终端所有权和 SSH 边界不变。GPU/Metal 仍只把 Skia
 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
 
-macOS 的 `SoftwarePresentationMode::DamageBackingStore` 设置只把 Software presentation 边界切换到可选的
-`CALayerDelegate` 实验，`LayerImages` 为稳定默认值。存在 `AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，真值为
-当前进程选择实验路径，其它值选择稳定路径；保存值和覆盖值都在 surface 创建前读取。该实验不改变现有
+补丁后的 `softbuffer::Surface::damage_support()` 暴露原生呈现契约，但不改变
+`present_with_damage` 调用方式。Windows、支持 `wl_surface.damage_buffer` 的 Wayland
+surface（协议版本 4+）、X11 XShm 与 Core Graphics tile 会报告直接矩形或 tile 处理；Web
+报告 bounding rectangle 上传，KMS 报告由驱动决定，X11 Wire、旧版 Wayland、Orbital 与 Android
+报告整帧或锁定时机回退。winit software bridge 在 backend 无法消费局部 damage 时不再构造
+无意义的 damage 列表。这样应用层 damage model 可以复用，同时明确平台收益边界；macOS
+`SoftwarePresentationMode` 仍然只属于 macOS。
+
+macOS 的 `SoftwarePresentationMode::DamageBackingStore` 设置只把 Software presentation 边界切换到默认的
+低 CPU `CALayerDelegate` 路径，`LayerImages` 保留为显式兼容性回退。存在
+`AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，真值为当前进程选择脏区 backing store，其它值选择图层图像路径；
+保存值和覆盖值都在 surface 创建前读取。默认路径不改变现有
 pane/fallback layer 的几何、顺序和边界。每个 layer 持有同步的 CPU
 backing store；present 只复制物理 damage 与该 layer 的交集，并按 layer point 调用
 `setNeedsDisplayInRect`。macOS 下会先把 tile-local、左上原点的 framebuffer 矩形转换为独立 layer 的左下原点
 坐标；delegate 读取 Core Graphics clip 后执行严格逆变换，再为该裁剪矩形创建独立拥有的图像并绘入 layer
-context。delegate 与 layer 一同保留，并在重建或析构前清除。默认 `setContents(CGImage)` 路径仍作为直接 A/B
-基线和视觉回退。该实验不承诺零拷贝合成：Core Animation 仍可能复制或色彩转换 backing store，因此必须先验收
-Retina/resize、残影、撕裂、CPU 和 sample，才能考虑默认启用。
+context。delegate 与 layer 一同保留，并在重建或析构前清除。`setContents(CGImage)` 路径仍作为直接 A/B
+基线和视觉回退。backing-store 路径不承诺零拷贝合成：Core Animation 仍可能复制或色彩转换 backing store，
+因此 Retina/resize、残影、撕裂、CPU 和 sample 仍属于发布验收项。
 pane 几何 bridge 只在 macOS Software renderer 下启用。它保存的是按窗口 key 索引的有界逻辑几何提示，
 不保存 terminal、session 或 SSH 状态。pane 移动以及 notice/grid-clip 变化会重新发布相关几何；原生
 scale-factor 事件会用新物理 scale 重新发布窗口的全部区域。detached 窗口关闭、返回或创建失败时主动注销

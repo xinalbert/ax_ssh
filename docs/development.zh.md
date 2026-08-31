@@ -35,8 +35,8 @@ Renderer** 会为下一次启动保存 Automatic、GPU 或 Software。Automatic 
 `winit-software`。设置会在首个 `AppWindow` 创建前读取，因此仅在重启后生效。
 
 macOS 的 **Settings > Appearance > Software presentation** 另行保存 Software renderer 的
-`layer-images` 或 `damage-backing-store`。稳定默认值使用独立拥有的图层 `CGImage`；实验值使用
-`CALayerDelegate` backing store，并且同样只对重启后创建的 surface 生效。
+`layer-images` 或 `damage-backing-store`。默认使用 CPU 消耗较低的 `CALayerDelegate` 脏区 backing
+store；独立拥有的图层 `CGImage` 路径保留为兼容性回退。两项选择都只对重启后创建的 surface 生效。
 
 `SLINT_BACKEND` 的优先级高于已保存偏好，可显式选择 renderer；例如在 macOS 采集对照 sample 时
 强制走 software：
@@ -46,7 +46,7 @@ SLINT_BACKEND=winit-software cargo run --locked
 ```
 
 存在 `AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，它会覆盖已保存的 Software presentation：`1`、
-`true`、`yes` 和 `on` 启用实验路径，其它值为当前进程选择稳定图层图像路径。
+`true`、`yes` 和 `on` 选择脏区 backing store，其它值为当前进程选择图层图像回退路径。
 
 仓库在 `vendor/` 下维护锁定 `i-slint-backend-winit` 和 `softbuffer` 的本地补丁。winit 补丁转发
 renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留一个持久 CPU framebuffer，并通过固定的
@@ -54,6 +54,12 @@ renderer 产生的每个独立 damage 矩形；macOS softbuffer 补丁保留一�
 首帧、resize、Retina scale、occlusion 和恢复会刷新全部 tile。补丁位于 Slint 应用 API 之下，因此终端 model
 和 UI 契约不依赖 backend 专用类型。升级 Slint 或 softbuffer 时必须重新核对并重新采样，且继续保留这些补丁的
 上游许可证和源码。
+
+`softbuffer::Surface::damage_support()` 是这条链路的跨平台能力探针。`Rectangles` 覆盖 Win32、X11
+XShm、Wayland 协议 4+ 和 Core Graphics tile；Web 使用 `BoundingRect`，KMS 为
+`DriverDependent`。无 XShm 的 X11、Wayland 协议 3 及更早版本、Orbital 与 Android 都明确标记为整帧或
+锁定时机回退。winit bridge 会据此在回退路径直接调用 `present()`。该 API 只描述呈现行为；持久化的
+Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 
 环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
 

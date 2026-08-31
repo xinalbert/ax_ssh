@@ -290,8 +290,9 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 下一次应用启动选择 **Automatic**、**GPU** 或 **Software**：Automatic 在 macOS 使用 GPU/Skia，在
 Windows/Linux 使用 software；GPU 使用 Skia，Software 使用 software renderer。当前进程设置
 `SLINT_BACKEND` 时会覆盖这个已保存选择。macOS 的 **Software presentation** 为下一次启动选择 CPU renderer
-的呈现路径：**Layer images（稳定）** 保留独立拥有的 `CGImage` 图层路径，**Damage backing store（实验）**
-使用 `CALayerDelegate` 脏区失效。当前 renderer 不使用 macOS software surface 时会忽略该值；它也不改变
+的呈现路径：**Damage backing store（默认）** 使用 CPU 消耗较低的 `CALayerDelegate` 脏区失效路径，
+**Layer images（回退）** 保留独立拥有的 `CGImage` 兼容路径。当前 renderer 不使用 macOS software surface
+时会忽略该值；它也不改变
 FPS 策略。Display mode 单独选择 **Follow system**、**Light** 或 **Dark**；Color palette 单独选择
 **AxSSH**、**Solarized**、**Arctic**、**Tokyo**、**Ember**、**Forest** 或 **Custom**，因此
 所有固定配色都能同时用于浅色和深色。Arctic 偏冷色技术感，Tokyo 偏夜间，Ember 偏暖色，

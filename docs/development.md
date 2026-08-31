@@ -39,10 +39,10 @@ existing behavior. GPU selects `winit-skia` and Software selects
 before the first `AppWindow` and takes effect only after restart.
 
 On macOS, **Settings > Appearance > Software presentation** separately persists
-`layer-images` or `damage-backing-store` for the Software renderer. The stable
-default uses independently owned layer `CGImage` values. The experimental mode
-uses the `CALayerDelegate` backing-store implementation and also takes effect
-only for surfaces created after restart.
+`layer-images` or `damage-backing-store` for the Software renderer. The default
+uses the lower-CPU `CALayerDelegate` damage backing store. The independently
+owned layer `CGImage` path remains available as a compatibility fallback. Both
+choices take effect only for surfaces created after restart.
 
 `SLINT_BACKEND` takes precedence over the saved preference and explicitly
 selects a renderer; for example, this forces the software path on macOS when
@@ -53,8 +53,8 @@ SLINT_BACKEND=winit-software cargo run --locked
 ```
 
 `AXSSH_EXPERIMENT_CA_BACKING_STORE` overrides the saved Software presentation
-mode when present. `1`, `true`, `yes`, and `on` enable the experimental path;
-any other value selects the stable layer-image path for that process.
+mode when present. `1`, `true`, `yes`, and `on` select the damage backing store;
+any other value selects the layer-image fallback for that process.
 
 The repository patches the locked `i-slint-backend-winit` and `softbuffer`
 sources under `vendor/`. The winit patch forwards the renderer's individual
@@ -66,6 +66,15 @@ refresh every tile. This is intentionally kept below the Slint application API
 so the terminal model and UI contracts do not depend on backend-specific types.
 Keep these patches source-available and recheck them when upgrading Slint or
 softbuffer.
+
+`softbuffer::Surface::damage_support()` is the cross-platform capability probe
+for this path. `Rectangles` covers Win32, X11 with XShm, Wayland protocol 4+,
+and the Core Graphics tile path; `BoundingRect` is used by Web, while KMS is
+`DriverDependent`. X11 without SHM, Wayland protocol 3 and older, Orbital, and
+Android are explicit full-frame or lock-time fallbacks. The winit bridge uses
+the probe to call `present()` directly for those fallbacks. This API describes
+presentation behavior only; the persisted Software presentation selector and
+the pane layout hint remain macOS-only.
 
 The environment override and saved preference are consumed before the first
 `AppWindow` is created, so renderer initialization failures are reported during
