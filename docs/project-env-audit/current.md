@@ -1,3 +1,13 @@
+# 2026-08-31 RSA 兼容性与 RustSec 风险接受环境验证
+
+- 项目边界：`Cargo.toml`、`Cargo.lock`、`.github/workflows/{ci,release}.yml`、双语 SSH 文档；恢复 `russh 0.63.1` 的 RSA feature，同时保持 host-key trust、凭据和 worker ownership 不变。
+- 环境记忆状态：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Tokio 1、`russh 0.63.1`；RSA 依赖为 `rsa 0.10.0-rc.18`，RustSec `RUSTSEC-2023-0071` 当前无修复版本。
+- 运行环境：本机 `rustc/cargo 1.97.1`、rustfmt 1.9.0、Clippy 0.1.97、`cargo-audit 0.22.2` 可用；audit-check 使用固定 v2.0.0 commit，并仅通过 `ignore: RUSTSEC-2023-0071` 接受该单项风险。
+- 变化摘要：RSA 私钥、RSA 主机密钥和 RSA agent identity 恢复可用；审计仍阻断未列入忽略项的漏洞，不使用全局 audit bypass。文档提示攻击者可观测签名时序时不要使用 RSA。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 214、应用 211、Doc tests 0）、`git diff --check` 和离线 `cargo-audit --ignore RUSTSEC-2023-0071` 均通过；审计剩余 6 条允许级别告警。
+- 环境变化检查：是；Cargo feature、锁文件、CI audit 参数和认证能力发生变化，Rust/Slint/MSRV、known_hosts 信任和秘密生命周期不变。
+- 开工判定：实现完成；应在后续上游 RSA 修复发布后移除忽略项并重新评估，目标平台 RSA 服务器/agent 互操作仍需人工验收。
+
 # 2026-08-26 russh 稳定性升级与发布门禁环境验证
 
 - 项目边界：`Cargo.toml`、`Cargo.lock`、`src/ssh.rs`、`.github/workflows/{ci,release}.yml`、双语架构和项目跟踪；目标是纳入 russh 客户端安全修复，并把 Clippy、MSRV 与 RustSec 检查接入 CI/Release，不改变 SSH profile/known_hosts/凭据所有权。

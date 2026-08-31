@@ -848,10 +848,11 @@ terminal Meta input.
 ## SSH security contract
 
 `russh::client::Handler::check_server_key` is the trust boundary. The application
-pins `russh 0.63.1` with its optional RSA feature disabled because the pinned
-RSA implementation has no patched release for RUSTSEC-2023-0071. Ed25519 and
-ECDSA private keys remain supported. The application handles the
-`PublicKeyOrCertificate` callback by
+pins `russh 0.63.1` with its optional RSA feature enabled for compatibility with
+existing servers. This intentionally accepts RUSTSEC-2023-0071 because the
+pinned RSA implementation has no patched release; deployments where an attacker
+can observe signing timing should prefer Ed25519 or ECDSA. The application
+handles the `PublicKeyOrCertificate` callback by
 accepting only the concrete `PublicKey` variant. Server certificates are
 rejected because this profile/known_hosts contract does not implement
 certificate-authority validation. Unknown and mismatched keys are rejected

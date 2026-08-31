@@ -89,7 +89,7 @@
 | CPU4 | completed | 同步双语契约、项目地图、月度记录并完成全量门禁 | fmt/check/Clippy/test、tracker/Markdown/`git diff --check` | 自动化门禁通过；目标 macOS 仍需分别验收两条路径的视觉和 sample。 |
 | CPU5 | completed | 将 CPU 消耗较低的 damage backing store 提升为缺失/无效配置的默认值，保留显式 layer-image 回退 | config default/normalization/serde、Slint 编译、翻译与双语文档 | 不迁移或覆盖已显式保存的 `layer-images`；只影响 macOS Software surface 的下次启动。 |
 | SEC1 | completed | 升级 `russh` 到 0.63.1，并适配 `PublicKeyOrCertificate` 主机密钥回调 | `cargo update -p russh --precise 0.63.1`、locked check、SSH focused tests | 覆盖 0.62.x Curve25519 客户端崩溃/拒绝服务修复，以及 0.63.1 的 channel-ID/MAC-none 稳定性修复；证书显式拒绝，不改变 profile/known_hosts 信任语义。 |
-| SEC2 | completed | 将严格 Clippy、MSRV 1.92 和 RustSec 审计纳入普通 CI，并移除 vendor manifest 中已失效的 bench target | workflow YAML 审阅、`cargo fmt --all -- --check`；GitHub-hosted CI 执行 | MSRV 只做 locked Linux check；RustSec action 固定到已验证的 v2.0.0 commit SHA；不恢复 benchmark 或增加 dev dependency。 |
+| SEC2 | completed | 将严格 Clippy、MSRV 1.92 和 RustSec 审计纳入普通 CI，并移除 vendor manifest 中已失效的 bench target | workflow YAML 审阅、`cargo fmt --all -- --check`；GitHub-hosted CI 执行 | MSRV 只做 locked Linux check；RustSec action 固定到已验证的 v2.0.0 commit SHA，仅显式忽略已接受的 `RUSTSEC-2023-0071`；不恢复 benchmark 或增加 dev dependency。 |
 | SEC3 | completed | 为 Release 增加 Linux 预检和安全审计依赖 | release workflow DAG 审阅 | 跨平台构建只有在 tag 校验、fmt/check/Clippy/test、脚本回归和 RustSec audit 全部成功后才启动。 |
 | SEC4 | completed | 同步双语架构、环境审计、研究和月度变更记录 | 文档链接/tracker 校验、`git diff --check` | 记录新 API 的证书拒绝边界、MSRV/CI 事实和上游 advisory 来源；历史 0.62.2 记录保留为审计快照。 |
 | SEC5 | completed | 以 AppState 的进程级 Tokio persistence gate 串行化所有 `SessionStore` 写入，并以 per-profile mutation token 保护编辑/删除、认证后凭据保存和 trust 更新 | mutation token focused tests、credential rollback/commit tests | 凭据引用提交只接受当前密码 profile；不持有同步状态锁跨越 await。 |

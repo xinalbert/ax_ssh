@@ -1,5 +1,14 @@
 # 项目环境变化记录
 
+## 2026-08-31 RSA 兼容性与 RustSec 风险接受环境验证
+
+- 日期：2026-08-31
+- 变化摘要：恢复 `russh 0.63.1` 的 RSA feature，锁文件重新包含 `rsa 0.10.0-rc.18`、`pkcs1` 和 `crypto-primes`；CI 与 Release 的 RustSec audit-check 仅忽略 `RUSTSEC-2023-0071`，以兼容现有 RSA SSH 服务器并明确接受 Marvin timing side-channel 风险。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`.github/workflows/{ci,release}.yml`、`README*.md`、`docs/{usage,usage.zh,architecture,architecture.zh}.md`、`docs/project-{env-audit,implementation-tracker}/`。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Cargo locked/offline 门禁；本地审计使用 `cargo-audit 0.22.2 audit --ignore RUSTSEC-2023-0071`，不改变其他 advisory 的失败策略。
+- 验证结果：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 214、应用 211、Doc tests 0）、`git diff --check` 和带单项 ignore 的离线审计通过；审计仍显示 6 条允许级别告警。
+- 风险/待办：RSA 私钥、RSA 主机密钥和 RSA agent identity 重新可用；如果攻击者能观察签名时序，应迁移到 Ed25519/ECDSA。上游修复发布后必须删除该 ignore 并重新执行审计。
+
 ## 2026-08-22 原生窗口激活刷新环境验证
 
 - 日期：2026-08-22

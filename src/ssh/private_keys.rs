@@ -93,6 +93,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rsa_keys_round_trip_through_loader() {
+        let mut rng = StdRng::seed_from_u64(127);
+        let key = PrivateKey::random(&mut rng, russh::keys::Algorithm::Rsa { hash: None })
+            .expect("test RSA private key should be generated");
+        let path = std::env::temp_dir().join(format!("ax-ssh-rsa-key-{}", Uuid::new_v4()));
+        fs::write(
+            &path,
+            key.to_openssh(russh::keys::ssh_key::LineEnding::LF)
+                .expect("RSA key should encode")
+                .as_bytes(),
+        )
+        .expect("RSA key fixture should be written");
+
+        let loaded = load_private_key(path.clone(), Zeroizing::new(String::new()))
+            .await
+            .expect("RSA key should load");
+        assert_eq!(loaded.public_key(), key.public_key());
+
+        fs::remove_file(path).expect("RSA key fixture should be removed");
+    }
+
+    #[tokio::test]
     async fn encrypted_keys_require_the_matching_passphrase() {
         let mut rng = StdRng::seed_from_u64(126);
         let key = PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
