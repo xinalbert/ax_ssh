@@ -226,6 +226,7 @@ pub fn remove_presentation_layout(key: u64) {
     layouts.layouts.remove(&key);
 }
 
+#[cfg_attr(not(target_vendor = "apple"), allow(dead_code))]
 pub(crate) fn presentation_layout_generation(key: u64) -> u64 {
     let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
         return 0;
@@ -240,6 +241,7 @@ pub(crate) fn presentation_layout_generation(key: u64) -> u64 {
         .map_or(0, |layout| layout.generation)
 }
 
+#[cfg_attr(not(target_vendor = "apple"), allow(dead_code))]
 pub(crate) fn presentation_layout(key: u64) -> PresentationLayoutSnapshot {
     let Some(layouts) = PRESENTATION_LAYOUTS.get() else {
         return PresentationLayoutSnapshot {
