@@ -11,7 +11,7 @@ use web_sys::{OffscreenCanvas, OffscreenCanvasRenderingContext2d};
 
 use crate::backend_interface::*;
 use crate::error::{InitError, SwResultExt};
-use crate::{util, NoDisplayHandle, NoWindowHandle, Rect, SoftBufferError};
+use crate::{util, DamageSupport, NoDisplayHandle, NoWindowHandle, Rect, SoftBufferError};
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 
@@ -261,6 +261,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for WebImpl
         }
 
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::BoundingRect
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {

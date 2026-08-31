@@ -7,7 +7,7 @@
 
 use crate::backend_interface::*;
 use crate::error::{InitError, SwResultExt};
-use crate::{util, Rect, SoftBufferError};
+use crate::{util, DamageSupport, Rect, SoftBufferError};
 use raw_window_handle::{
     HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, XcbDisplayHandle,
     XcbWindowHandle,
@@ -338,6 +338,13 @@ impl<D: HasDisplayHandle + ?Sized, W: HasWindowHandle> SurfaceInterface<D, W> fo
         }
 
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        match &self.buffer {
+            Buffer::Shm(_) => DamageSupport::Rectangles,
+            Buffer::Wire(_) => DamageSupport::FullFrame,
+        }
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {

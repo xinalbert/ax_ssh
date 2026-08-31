@@ -76,6 +76,45 @@ pub struct Rect {
     pub height: NonZeroU32,
 }
 
+/// Describes how a software surface consumes damage rectangles.
+///
+/// A surface always accepts [`Buffer::present_with_damage`]. This value lets a
+/// caller decide whether producing a detailed damage list is worthwhile for the
+/// current native presentation path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DamageSupport {
+    /// The backend forwards each rectangle to the native compositor or blitter.
+    Rectangles,
+    /// The backend first uploads the bounding rectangle of all damage.
+    BoundingRect,
+    /// The backend maps damage to its own persistent presentation tiles.
+    Tiles,
+    /// The backend asks the display driver to apply rectangles; drivers may
+    /// ignore that request and update the full framebuffer.
+    DriverDependent,
+    /// The backend has no partial-present operation and submits the full frame.
+    FullFrame,
+    /// The platform requires damage before the buffer is locked, so this API
+    /// submits a full frame after the lock-time decision has already passed.
+    LockTimeRequired,
+}
+
+impl DamageSupport {
+    /// Returns whether the backend can use a damage list to reduce some work.
+    pub const fn supports_partial_damage(self) -> bool {
+        matches!(
+            self,
+            Self::Rectangles | Self::BoundingRect | Self::Tiles | Self::DriverDependent
+        )
+    }
+
+    /// Returns whether callers should treat a presentation as a full-frame
+    /// update regardless of the supplied rectangles.
+    pub const fn is_full_frame_fallback(self) -> bool {
+        matches!(self, Self::FullFrame | Self::LockTimeRequired)
+    }
+}
+
 /// A terminal grid region used to align software presentation tiles to rows.
 ///
 /// Coordinates are physical pixels in the surface buffer. Regions must not
@@ -288,6 +327,14 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> Surface<D, W> {
         self.surface_impl.invalidate();
     }
 
+    /// Reports how this surface consumes damage rectangles at presentation.
+    ///
+    /// The result can change with runtime backend state, such as Wayland
+    /// protocol version or X11 shared-memory availability.
+    pub fn damage_support(&self) -> DamageSupport {
+        self.surface_impl.damage_support()
+    }
+
     /// Copies the window contents into a buffer.
     ///
     /// ## Platform Dependent Behavior
@@ -433,14 +480,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> Buffer<'_, D, W> {
     ///
     /// # Platform dependent behavior
     ///
-    /// Supported on:
-    /// - Wayland
-    /// - X, when XShm is available
-    /// - Win32
-    /// - Web
-    /// - Apple platforms, using Core Animation tiles
-    ///
-    /// Otherwise this is equivalent to [`Self::present`].
+    /// The backend-specific behavior is available from
+    /// [`Surface::damage_support`]. Backends that report [`DamageSupport::FullFrame`]
+    /// or [`DamageSupport::LockTimeRequired`] treat this call as equivalent to
+    /// [`Self::present`].
     pub fn present_with_damage(self, damage: &[Rect]) -> Result<(), SoftBufferError> {
         self.buffer_impl.present_with_damage(damage)
     }
@@ -527,6 +570,24 @@ fn display_handle_type_name(handle: &RawDisplayHandle) -> &'static str {
 #[cfg(test)]
 mod presentation_layout_tests {
     use super::*;
+
+    #[test]
+    fn damage_support_reports_partial_and_full_frame_paths() {
+        for support in [
+            DamageSupport::Rectangles,
+            DamageSupport::BoundingRect,
+            DamageSupport::Tiles,
+            DamageSupport::DriverDependent,
+        ] {
+            assert!(support.supports_partial_damage());
+            assert!(!support.is_full_frame_fallback());
+        }
+
+        for support in [DamageSupport::FullFrame, DamageSupport::LockTimeRequired] {
+            assert!(!support.supports_partial_damage());
+            assert!(support.is_full_frame_fallback());
+        }
+    }
 
     #[test]
     fn layout_generation_deduplicates_updates_and_removal_unregisters_key() {

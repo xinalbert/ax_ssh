@@ -107,6 +107,7 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
         surface
             .resize(width, height)
             .map_err(|e| format!("Error resizing softbuffer surface: {e}"))?;
+        let damage_support = surface.damage_support();
 
         let mut target_buffer = surface
             .buffer_mut()
@@ -153,32 +154,43 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
             })
         };
 
-        // Preserve the actual dirty rectangles produced by Slint for backends
-        // that support damage-aware presentation. The software backend may
-        // use these rectangles to refresh only the affected presentation tiles.
-        let damage = region
-            .iter()
-            .filter_map(|(pos, size)| {
-                let x = u32::try_from(pos.x).ok()?;
-                let y = u32::try_from(pos.y).ok()?;
-                Some(softbuffer::Rect {
-                    x,
-                    y,
-                    width: NonZeroU32::new(size.width)?,
-                    height: NonZeroU32::new(size.height)?,
-                })
-            })
-            .collect::<Vec<_>>();
+        // Check the same range constraints used when constructing damage
+        // rectangles, but avoid allocating a list on full-frame backends.
+        let has_damage = region.iter().any(|(pos, size)| {
+            u32::try_from(pos.x).is_ok()
+                && u32::try_from(pos.y).is_ok()
+                && size.width != 0
+                && size.height != 0
+        });
         // A new/invalid buffer must be submitted even when the renderer did
         // not report a non-empty region (for example after restore). A valid
         // persistent buffer can skip an empty frame entirely.
-        if !damage.is_empty() || age == 0 {
+        if has_damage || age == 0 {
             winit_window.pre_present_notify();
-            if damage.is_empty() {
+            if damage_support.is_full_frame_fallback() {
                 target_buffer
                     .present()
                     .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;
             } else {
+                let damage = region
+                    .iter()
+                    .filter_map(|(pos, size)| {
+                        let x = u32::try_from(pos.x).ok()?;
+                        let y = u32::try_from(pos.y).ok()?;
+                        Some(softbuffer::Rect {
+                            x,
+                            y,
+                            width: NonZeroU32::new(size.width)?,
+                            height: NonZeroU32::new(size.height)?,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                if damage.is_empty() {
+                    target_buffer
+                        .present()
+                        .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;
+                    return Ok(DrawOutcome::Success);
+                }
                 target_buffer
                     .present_with_damage(&damage)
                     .map_err(|e| format!("Error presenting softbuffer buffer: {e}"))?;

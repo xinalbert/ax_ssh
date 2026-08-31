@@ -3,7 +3,7 @@ use crate::backend_interface::*;
 use crate::error::InitError;
 use crate::{
     macos_ca_backing_store_enabled, presentation_layout, presentation_layout_generation, util,
-    PresentationRegion, Rect, SoftBufferError,
+    DamageSupport, PresentationRegion, Rect, SoftBufferError,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, ProtocolObject};
@@ -476,6 +476,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for CGImpl<
         self.buffer_valid = false;
         self.layout_checked = false;
         self.rebuild_tiles()
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::Tiles
     }
 
     fn set_presentation_layout_key(&mut self, key: u64) {

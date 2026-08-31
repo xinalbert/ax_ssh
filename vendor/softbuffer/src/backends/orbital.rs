@@ -3,7 +3,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle, OrbitalWindowHandle, 
 use std::{cmp, marker::PhantomData, num::NonZeroU32, slice, str};
 
 use crate::backend_interface::*;
-use crate::{util, Rect, SoftBufferError};
+use crate::{util, DamageSupport, Rect, SoftBufferError};
 
 #[derive(Debug)]
 struct OrbitalMap {
@@ -166,6 +166,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for Orbital
             self.height = height;
         }
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::FullFrame
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {

@@ -3,7 +3,7 @@
 //! This module converts the input buffer into a bitmap and then stretches it to the window.
 
 use crate::backend_interface::*;
-use crate::{Rect, SoftBufferError};
+use crate::{DamageSupport, Rect, SoftBufferError};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawWindowHandle};
 
 use std::io;
@@ -267,6 +267,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for Win32Im
         self.buffer = Some(Buffer::new(self.dc.0, width, height));
 
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::Rectangles
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {

@@ -1,6 +1,6 @@
 //! Interface implemented by backends
 
-use crate::{InitError, Rect, SoftBufferError};
+use crate::{DamageSupport, InitError, Rect, SoftBufferError};
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::num::NonZeroU32;
@@ -36,6 +36,10 @@ pub(crate) trait SurfaceInterface<D: HasDisplayHandle + ?Sized, W: HasWindowHand
     /// window is hidden, restored, or otherwise loses its backing surface.
     /// Other backends can keep the default no-op implementation.
     fn invalidate(&mut self) {}
+    /// Report how this backend consumes damage rectangles.
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::FullFrame
+    }
     /// Get a mutable reference to the buffer.
     fn buffer_mut(&mut self) -> Result<Self::Buffer<'_>, SoftBufferError>;
     /// Fetch the buffer from the window.

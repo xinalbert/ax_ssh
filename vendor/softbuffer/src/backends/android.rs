@@ -12,7 +12,7 @@ use raw_window_handle::AndroidNdkWindowHandle;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawWindowHandle};
 
 use crate::error::InitError;
-use crate::{util, BufferInterface, Rect, SoftBufferError, SurfaceInterface};
+use crate::{util, BufferInterface, DamageSupport, Rect, SoftBufferError, SurfaceInterface};
 
 /// The handle to a window for software buffering.
 #[derive(Debug)]
@@ -74,6 +74,10 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for Android
                     Some(Box::new(err)),
                 )
             })
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::LockTimeRequired
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {

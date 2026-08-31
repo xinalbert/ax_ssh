@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use crate::backend_interface::*;
 use crate::error::{InitError, SoftBufferError, SwResultExt};
+use crate::DamageSupport;
 
 #[derive(Debug)]
 pub(crate) struct KmsDisplayImpl<D: ?Sized> {
@@ -238,6 +239,10 @@ impl<D: HasDisplayHandle + ?Sized, W: HasWindowHandle> SurfaceInterface<D, W> fo
         });
 
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        DamageSupport::DriverDependent
     }
 
     /*

@@ -1,7 +1,7 @@
 use crate::{
     backend_interface::*,
     error::{InitError, SwResultExt},
-    util, Rect, SoftBufferError,
+    util, DamageSupport, Rect, SoftBufferError,
 };
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::{
@@ -197,6 +197,13 @@ impl<D: HasDisplayHandle + ?Sized, W: HasWindowHandle> SurfaceInterface<D, W>
             .ok_or(SoftBufferError::SizeOutOfRange { width, height })?,
         );
         Ok(())
+    }
+
+    fn damage_support(&self) -> DamageSupport {
+        match self.surface.as_ref() {
+            Some(surface) if surface.version() >= 4 => DamageSupport::Rectangles,
+            _ => DamageSupport::FullFrame,
+        }
     }
 
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {
