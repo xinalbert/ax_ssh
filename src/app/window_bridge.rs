@@ -4,6 +4,7 @@ use std::path::Path;
 
 use i_slint_core::context::set_window_event_hook;
 use i_slint_core::platform::WindowEvent;
+#[cfg(target_os = "macos")]
 use slint::Color;
 
 use super::*;

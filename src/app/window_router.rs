@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use super::terminal_presentation::TerminalPresentationPolicy;
 use super::*;
 use ax_ssh::config::{PaneNodeSnapshot, WorkspaceSnapshot, WorkspaceWindowSnapshot};
-use raw_window_handle::HasWindowHandle as _;
+use slint::winit_030::winit::raw_window_handle::HasWindowHandle as _;
 use tokio::sync::watch;
 
 #[derive(Clone)]

@@ -1,8 +1,7 @@
 use std::path::Path;
 
-use anyhow::Context;
 #[cfg(target_os = "macos")]
-use anyhow::Result;
+use anyhow::{Context, Result};
 use slint::ComponentHandle;
 use slint::platform::Clipboard;
 #[cfg(target_os = "macos")]
