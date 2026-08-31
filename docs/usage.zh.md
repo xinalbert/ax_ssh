@@ -179,6 +179,7 @@ Tab 条，Settings 则打开为独立的工作台页面。Tab 条最右侧的 `+
 在 macOS 上为 `Cmd+Shift+[` / `Cmd+Shift+]`，在 Windows 和 Linux 上为
 `Ctrl+Shift+[` / `Ctrl+Shift+]`。至少打开两个 Tab 时才可用；录制快捷键或处理安全提示时
 会暂时禁用。
+如果激活的 Tab 超出当前可见范围，Tab 条会自动滚动到该 Tab，而不需要手动滚动。
 激活已连接的 Terminal Tab 后，应用会在 Tab 布局更新完成后恢复原生输入焦点，
 选中的会话可以直接接收下一次按键。
 在既有分屏 pane 之间切换时，目标 pane 会立即取得输入焦点。

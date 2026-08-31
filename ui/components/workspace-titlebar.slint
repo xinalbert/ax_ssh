@@ -427,10 +427,18 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <string> drag-kind;
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
+    private property <int> tab-visibility-revision: 0;
     changed tabs => {
         if root.drag-source-index >= root.tabs.length {
             root.clear-tab-drag();
         }
+        root.tab-visibility-revision += 1;
+    }
+    changed tab-width => {
+        root.tab-visibility-revision += 1;
+    }
+    changed width => {
+        root.tab-visibility-revision += 1;
     }
 
     function scroll-tabs(delta-x: length, delta-y: length) {
@@ -438,6 +446,28 @@ export component WorkspaceTitlebar inherits Rectangle {
         tabs-flick.viewport-x = max(
             tabs-flick.width - tabs-flick.viewport-width,
             min(0px, tabs-flick.viewport-x + delta),
+        );
+    }
+
+    function ensure-tab-visible(index: int) {
+        if index < 0 || index >= root.tabs.length || root.tab-width <= 0
+                || tabs-flick.width <= 0px {
+            return;
+        }
+
+        let tab-left = index * root.tab-width * 1px;
+        let tab-right = tab-left + root.tab-width * 1px;
+        let visible-left = -tabs-flick.viewport-x;
+        let visible-right = visible-left + tabs-flick.width;
+        let next-viewport-x = tab-left < visible-left
+            ? -tab-left
+            : (tab-right > visible-right
+                ? tabs-flick.width - tab-right
+                : tabs-flick.viewport-x);
+
+        tabs-flick.viewport-x = max(
+            tabs-flick.width - tabs-flick.viewport-width,
+            min(0px, next-viewport-x),
         );
     }
 
@@ -522,6 +552,19 @@ export component WorkspaceTitlebar inherits Rectangle {
                 viewport-height: self.height;
 
                 for tab[index] in root.tabs : Rectangle {
+                    private property <bool> tab-active:
+                        tab.id == root.active-tab-id;
+                    private property <int> tab-visibility-key:
+                        root.tab-visibility-revision * 2
+                            + floor(tabs-flick.width / 1px)
+                            + floor(tabs-flick.viewport-width / 1px)
+                            + (self.tab-active ? 1 : 0);
+                    changed tab-visibility-key => {
+                        if self.tab-active {
+                            root.ensure-tab-visible(index);
+                        }
+                    }
+
                     x: index * root.tab-width * 1px;
                     y: 0px;
                     width: root.tab-width * 1px;

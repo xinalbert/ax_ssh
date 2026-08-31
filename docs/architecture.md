@@ -410,6 +410,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
    while an instance suffix such as `#1` remains part of the Tab's stable title.
    Previous/Next Tab intent asks `AppState` to activate the adjacent UUID in
    this same list and wraps at either end; zero or one Tab leaves state unchanged.
+   The Slint Tab strip keeps an activated Tab visible by adjusting its local
+   `Flickable.viewport-x`; this presentation-only scroll is not persisted or
+   sent through the application boundary.
    Each SSH Tab also owns its current connection phase: idle, cancellable host-key
    probe, pending host-key confirmation, pending authentication, or stored-
    credential loading. There is no global pending-probe, trust, or authentication

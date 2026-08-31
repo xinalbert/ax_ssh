@@ -268,6 +268,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    并在指针位置绘制不可交互的 Tab 副本；不会创建第二个运行时 Tab。前置 UI 序号从当前
    列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。Previous/Next Tab 意图会让
    `AppState` 在同一列表中激活相邻 UUID 并首尾循环；零个或一个 Tab 时状态不变。每个
+   Slint Tab 条会通过调整本地 `Flickable.viewport-x` 保持激活 Tab 可见；这项仅用于呈现的
+   滚动不会持久化，也不会跨越应用边界。
    SSH Tab 还独占当前
    连接阶段：idle、可取消的主机密钥探测、等待主机密钥确认、等待认证或读取已存凭据；不再
    存在全局的 probe、信任或认证等待槽位。

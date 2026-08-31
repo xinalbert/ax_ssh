@@ -277,6 +277,8 @@ the selection wraps at either end. The fixed shortcuts are `Cmd+Shift+[` /
 `Cmd+Shift+]` on macOS and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows and Linux.
 They are available when at least two Tabs are open and are temporarily disabled
 while recording a shortcut or answering a security prompt.
+When activation moves to a Tab outside the visible strip, the Tab bar scrolls
+that Tab into view automatically.
 Activating a connected Terminal Tab restores its native input focus after the
 Tab layout update, so the next keystroke is ready for the selected session.
 Moving between existing split panes focuses the destination immediately.
