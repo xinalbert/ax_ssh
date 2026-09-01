@@ -138,6 +138,7 @@
 | XPLAT3 | completed | winit 按能力选择 damage 提交或完整提交 | winit/softbuffer compile、能力分类测试 | full-frame 与 lock-time 不构造无效的局部提交；空 damage 和 age=0 首帧语义不变。 |
 | XPLAT4 | completed | 双语契约、项目地图、月度记录和质量门禁 | tracker、Markdown、fmt/check/Clippy/test/diff 检查 | 目标平台 GUI 与真实 driver 行为仍属于平台验收，不由离线构建替代。 |
 | WS1 | completed | 为有界 workspace 快照增加菜单保存/打开、路径弹层和异步替换流程 | workspace persistence tests、Slint 编译、完整 Rust/Slint 离线门禁、目标平台菜单与多窗口视觉验收 | 快照只含 Tab/layout/有限终端文本，不含凭据或 live handle；打开前先停止旧 worker，文件 I/O 不阻塞 UI。目标平台菜单、路径输入和 detached 多窗口视觉仍由用户验收。 |
+| FONT1 | completed | 修复自带终端字体异步注册后粗体布局仍复用普通回退字体的问题 | Fontique 字重注册回归、Slint 编译、完整 Rust/Slint 离线门禁、`git diff --check` | 字体注册代次驱动终端 `font-weight` 绑定和工作区刷新，同时同步主窗口与 detached 窗口；不改变字体族选择或字体资源。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
 - `ROWMODEL2`：移除应用层 tile/partition 链路；旧配置字段由 Serde 忽略，不做 schema migration。
@@ -204,6 +205,8 @@
 - 已完成 WAKE1-WAKE3：SSH/Telnet 的 16ms flush 只在输出缓冲区非空时启动一次；Local PTY reader 关闭会通过有界命令通道唤醒 owner，空闲 child 轮询从 25ms 降为 1s，并把 25ms 退出确认限制在最多一秒；macOS 激活事件继续走快速路径，`isKeyWindow` 兜底从 100ms 降为 500ms。
 - 已完成 XPLAT1-XPLAT4：`softbuffer::Surface::damage_support()` 将 native presentation 能力显式分类为矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time；Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics 各 backend 返回运行时能力，winit software bridge 对 full-frame/lock-time 路径直接使用 `present()`，不改变既有 `present_with_damage` 兼容契约。
 
+- 已完成 FONT1：保留自带字体族与四种 JetBrains Mono 字重的注册方式；新增字体注册代次，使异步字体加载完成后终端 `font-weight` 绑定失效并重建布局，避免普通回退字体布局缓存吞掉 Bold/Italic；主窗口和已分离窗口同步该代次，字体注册仍不进入终端/SSH 状态边界。
+
 ## 验证
 
 - 已完成：SPR1-SPR5；`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 209、应用 200、Doc tests 0）、Retina 换算 focused test、去除未缓存 bench dev-dependencies 的隔离 vendor 单测（8 项）、435 条翻译、Rustfmt 源码差异检查和 `git diff --check` 通过。
@@ -216,6 +219,8 @@
 - XPLAT1-XPLAT4 已完成：能力枚举/helper、各平台 cfg 映射、winit full-frame fallback、双语架构/开发说明和项目地图已同步；macOS 目标通过本地编译，Windows 交叉检查受本机未缓存 `atomic-waker 1.1.2` 阻断，Linux/Android/Web/KMS/Orbital 需由对应 CI 或目标设备完成编译和运行时验收。
 - 已完成 SEC5-SEC11：AppState 的进程级 Tokio persistence gate 串行化 Settings、profile/group/import、认证后凭据与 host-key 等完整 `SessionStore` 写入，per-profile mutation token 保护 profile 专属事务；凭据读取保留硬超时，保存/删除/回滚在软截止后仍等待 blocking 操作完成再释放 gate；凭据引用要求当前密码 profile，revoked 确认先清 pin 再尝试删除撤销记录，known_hosts/config I/O 在 blocking task 执行；自动重连按 profile UUID 触发时读取最新配置，SSH/Telnet/Serial worker 都拒绝陈旧快照，Serial 在异步发现后再次验证。语言即时保存只写语言字段，保持其它 Settings 预览草稿不提前持久化。同步双语契约、项目地图和月度记录。
 - 未完成：Windows offline check 因本机未缓存 `atomic-waker 1.1.2` 未执行。tracker validator 本轮 current/新增记录字段完整，仍报告既有 2026-08 历史与 research 条目格式问题。目标 macOS GUI/Retina 拖选视觉和同负载 CPU/footprint A/B 由用户执行。
+
+- FONT1 已完成：Fontique 四字重注册测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 215、应用 212、Doc tests 0）和 `git diff --check` 通过；目标平台粗体/斜体视觉仍需用户验收。
 
 ## 风险与阻塞
 
@@ -247,6 +252,7 @@
 
 ## 最后更新时间
 
+- 2026-09-01：修复异步自带字体注册后的终端粗体/斜体布局缓存失效；FONT1 已完成，主窗口与 detached 窗口同步字体注册代次，完整离线 Rust/Slint 门禁通过，目标平台视觉待用户验收。
 - 2026-08-28 11:30 +0800：增加 File 菜单 workspace 保存/打开、非阻塞路径弹层、用户路径有界原子读写，以及打开前 worker/probe 清理、Tab UUID 重映射和 detached route 替换；WS1 已完成，目标平台视觉待用户验收。
 - 2026-08-28 14:38 +0800：完成 SEC5-SEC11，收敛 session `01a040ac-d2f1-7fc2-b033-cc1c58f5b4ca` 复核出的 credential timeout、Telnet/Serial 旧快照和设置预览语义问题；完整验证结果见本轮月度记录。
 - 2026-08-28 09:18 +0800：完成 XPLAT1-XPLAT4。新增 `Surface::damage_support()` 跨平台能力探针和 backend 映射；winit software bridge 对 full-frame/lock-time backend 直接走 `present()`，并同步双语架构、开发文档、项目地图和月度历史。macOS 本地门禁已通过，Windows offline check 受未缓存 `atomic-waker 1.1.2` 阻断，其他平台交由对应 CI/设备验收。

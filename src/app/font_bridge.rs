@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use slint::ComponentHandle;
 use slint::fontique_010::fontique;
 
 const MAX_FONT_FAMILY_CHARS: usize = 128;
@@ -62,11 +63,13 @@ pub(super) struct FontResources {
 pub(super) struct FontRegistry {
     resources: FontResources,
     registered_families: BTreeSet<&'static str>,
+    generation: u64,
 }
 
 pub(super) fn load_terminal_font_on_demand(
     runtime: &tokio::runtime::Handle,
     ui: slint::Weak<super::AppWindow>,
+    state: Arc<Mutex<super::AppState>>,
     font_registry: Arc<Mutex<FontRegistry>>,
     started: Arc<AtomicBool>,
 ) {
@@ -130,6 +133,17 @@ pub(super) fn load_terminal_font_on_demand(
                     return;
                 }
             }
+            let generation = match font_registry.lock() {
+                Ok(registry) => registry.generation_as_slint_int(),
+                Err(_) => {
+                    started.store(false, Ordering::Release);
+                    tracing::warn!("font registry lock poisoned after terminal registration");
+                    ui.set_status("Cannot update terminal font state".into());
+                    return;
+                }
+            };
+            super::view::set_font_registry_generation(ui, generation);
+            super::view::refresh_workspace(&ui.as_weak(), &state);
         });
     });
 }
@@ -212,6 +226,7 @@ impl FontRegistry {
         Self {
             resources: FontResources::new(),
             registered_families: BTreeSet::new(),
+            generation: 0,
         }
     }
 
@@ -223,6 +238,10 @@ impl FontRegistry {
         bundled_font(family).is_some_and(|font| self.registered_families.contains(font.family))
     }
 
+    pub(super) fn generation_as_slint_int(&self) -> i32 {
+        self.generation.min(i32::MAX as u64) as i32
+    }
+
     pub(super) fn register_loaded_font(&mut self, font: LoadedBundledFont) -> Result<()> {
         if self.registered_families.contains(font.family) {
             return Ok(());
@@ -231,6 +250,7 @@ impl FontRegistry {
         let family = font.family;
         register_loaded_font_in_collection(&mut collection, font)?;
         self.registered_families.insert(family);
+        self.generation = self.generation.wrapping_add(1);
         tracing::info!(family, "bundled font registered from resources");
         Ok(())
     }
@@ -500,6 +520,56 @@ mod tests {
 
         assert_eq!(loaded.family, BUNDLED_UI_FONT_FAMILY);
         assert!(matches!(loaded.source, BundledFontSource::Embedded));
+    }
+
+    #[test]
+    fn embedded_ui_font_registers_regular_bold_and_italic_faces() {
+        let resources = FontResources {
+            directories: Vec::new(),
+        };
+        let loaded = resources
+            .load_bundled_font(BUNDLED_UI_FONT_FAMILY)
+            .expect("embedded UI font should load")
+            .expect("default UI font should be bundled");
+        let mut collection = fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        });
+
+        register_loaded_font_in_collection(&mut collection, loaded)
+            .expect("embedded UI font faces should register");
+
+        let family = collection
+            .family_by_name(BUNDLED_UI_FONT_FAMILY)
+            .expect("registered UI font family should exist");
+        assert!(
+            family
+                .fonts()
+                .iter()
+                .any(|font| font.style() == fontique::FontStyle::Normal
+                    && font.weight() == fontique::FontWeight::NORMAL)
+        );
+        assert!(
+            family
+                .fonts()
+                .iter()
+                .any(|font| font.style() == fontique::FontStyle::Normal
+                    && font.weight() == fontique::FontWeight::BOLD)
+        );
+        assert!(
+            family
+                .fonts()
+                .iter()
+                .any(|font| font.style() == fontique::FontStyle::Italic
+                    && font.weight() == fontique::FontWeight::NORMAL)
+        );
+        assert!(
+            family
+                .fonts()
+                .iter()
+                .any(|font| font.style() == fontique::FontStyle::Italic
+                    && font.weight() == fontique::FontWeight::BOLD)
+        );
     }
 
     #[test]

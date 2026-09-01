@@ -109,6 +109,7 @@ pub(in crate::app) fn wire_workspace_tabs(
         load_terminal_font_on_demand(
             &runtime_for_local,
             ui_for_local.clone(),
+            state_for_local.clone(),
             font_registry_for_local.clone(),
             terminal_font_started_for_local.clone(),
         );

@@ -47,6 +47,7 @@ export struct TerminalGridView {
     cursor_text: string,
     mouse_button_reporting: bool,
     font_family: string,
+    font_registry_generation: int,
     font_size: length,
     foreground: color,
     background: color,
@@ -102,6 +103,13 @@ export component TerminalGrid inherits Rectangle {
     callback copy-request();
     callback paste-request();
     callback select-all-request();
+
+    // Runtime font registration can replace a cached fallback face without
+    // changing the requested family or weight. Keep the generation in this
+    // binding so Slint reshapes the text with the newly registered face.
+    function terminal-font-weight(bold: bool, font-generation: int) -> int {
+        return bold ? 700 + font-generation * 0 : 400 + font-generation * 0;
+    }
 
     private property <int> click-sequence: 0;
     private property <int> click-timeout-ticks: 0;
@@ -161,7 +169,8 @@ export component TerminalGrid inherits Rectangle {
                     color: run.foreground;
                     font-family: root.view.font_family;
                     font-size: root.view.font_size;
-                    font-weight: run.bold ? 700 : 400;
+                    font-weight: root.terminal-font-weight(
+                        run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
                     letter-spacing: 0px;
                     horizontal-alignment: run.centered ? center : left;
@@ -185,7 +194,8 @@ export component TerminalGrid inherits Rectangle {
                     color: run.foreground;
                     font-family: root.view.font_family;
                     font-size: root.view.font_size;
-                    font-weight: run.bold ? 700 : 400;
+                    font-weight: root.terminal-font-weight(
+                        run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
                     letter-spacing: 0px;
                     horizontal-alignment: run.centered ? center : left;

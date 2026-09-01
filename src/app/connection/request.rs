@@ -192,6 +192,7 @@ where
         load_terminal_font_on_demand(
             runtime,
             ui.clone(),
+            state.clone(),
             font_registry.clone(),
             terminal_font_started.clone(),
         );

@@ -240,6 +240,18 @@ pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &
     }
 }
 
+pub(in crate::app) fn set_font_registry_generation(ui: &AppWindow, generation: i32) {
+    ui.set_font_registry_generation(generation);
+    let Some(router) = global_window_router() else {
+        return;
+    };
+    for detached_ui in router.detached_uis() {
+        if let Some(detached_ui) = detached_ui.upgrade() {
+            detached_ui.set_font_registry_generation(generation);
+        }
+    }
+}
+
 pub(super) fn menu_shortcut_keys(action: &'static str, setting: &str) -> slint::Keys {
     match menu_shortcut_from_setting(setting) {
         Ok(shortcut) => shortcut.keys,

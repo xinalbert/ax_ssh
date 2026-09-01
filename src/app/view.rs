@@ -37,7 +37,7 @@ pub(super) use self::options::{
 pub(super) use self::settings::{
     apply_settings_to_component, apply_settings_to_open_windows,
     apply_terminal_presentation_policy, apply_ui_language_to_open_windows, empty_terminal_snapshot,
-    select_ui_language, terminal_render_line, to_slint_color,
+    select_ui_language, set_font_registry_generation, terminal_render_line, to_slint_color,
 };
 pub(super) use self::sftp::{
     clear_file_icon_cache, local_icon_keys, prewarm_file_icons, sftp_icon_keys,

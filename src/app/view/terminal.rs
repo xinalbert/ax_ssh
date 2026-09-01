@@ -480,6 +480,7 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current_terminal.notice == updated_terminal.notice
         && current_terminal.content_columns == updated_terminal.content_columns
         && current_terminal.font_family == updated_terminal.font_family
+        && current_terminal.font_registry_generation == updated_terminal.font_registry_generation
         && current_terminal.font_size == updated_terminal.font_size
         && current_terminal.line_height_percent == updated_terminal.line_height_percent
         && current_terminal.foreground == updated_terminal.foreground
@@ -699,6 +700,7 @@ pub(super) fn terminal_view_from_snapshot(
         cursor_visible: snapshot.cursor_visible,
         cursor_text,
         font_family: ui.get_terminal_font_family(),
+        font_registry_generation: ui.get_font_registry_generation(),
         font_size: ui.get_terminal_font_size() as f32,
         line_height_percent: ui.get_terminal_line_height_percent(),
         foreground: to_slint_color(renderer.foreground()),
@@ -814,6 +816,7 @@ fn terminal_view_from_snapshot_incremental(
     terminal.cursor_visible = snapshot.cursor_visible;
     terminal.cursor_text = cursor_text;
     terminal.font_family = ui.get_terminal_font_family();
+    terminal.font_registry_generation = ui.get_font_registry_generation();
     terminal.font_size = ui.get_terminal_font_size() as f32;
     terminal.line_height_percent = ui.get_terminal_line_height_percent();
     terminal.foreground = to_slint_color(renderer.foreground());

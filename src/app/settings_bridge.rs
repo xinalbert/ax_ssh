@@ -1071,6 +1071,14 @@ fn load_preview_bundled_fonts(
                     return;
                 }
             }
+            let generation = match font_registry.lock() {
+                Ok(registry) => registry.generation_as_slint_int(),
+                Err(_) => {
+                    ui.set_status("Cannot update font state".into());
+                    return;
+                }
+            };
+            super::view::set_font_registry_generation(ui, generation);
             let settings = match state.lock() {
                 Ok(app) => app.sessions.settings.clone(),
                 Err(_) => {
@@ -1079,6 +1087,7 @@ fn load_preview_bundled_fonts(
                 }
             };
             apply_settings_to_open_windows(ui, &settings);
+            super::view::refresh_workspace(&ui.as_weak(), &state);
         });
     });
 }

@@ -125,6 +125,9 @@ export component AppWindow inherits Window {
     in property <[TerminalPaneDividerView]> terminal-dividers;
     in property <bool> terminal-mouse-local-selection-priority: true;
     in property <string> application-font-family: "JetBrains Mono";
+    // Incremented when runtime font resources are registered so text layout
+    // bindings can invalidate cached fallback shaping.
+    in property <int> font-registry-generation: 0;
     in property <[string]> application-font-options;
     in property <int> application-font-index: 0;
     in property <string> renderer-preference: "automatic";

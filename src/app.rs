@@ -220,15 +220,18 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     );
     ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
     ui.set_workspace_default_path(workspace_default_path.display().to_string().into());
-    for initial_font in initial_fonts {
-        if let Err(error) = font_registry
+    let font_generation = {
+        let mut registry = font_registry
             .lock()
-            .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))?
-            .register_loaded_font(initial_font)
-        {
-            warn!(%error, "failed to register a configured bundled font");
+            .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))?;
+        for initial_font in initial_fonts {
+            if let Err(error) = registry.register_loaded_font(initial_font) {
+                warn!(%error, "failed to register a configured bundled font");
+            }
         }
-    }
+        registry.generation_as_slint_int()
+    };
+    set_font_registry_generation(&ui, font_generation);
     select_ui_language(settings.ui_language)?;
     apply_settings_to_component(&ui, &settings);
     apply_terminal_presentation_policy(&window_router, &settings);

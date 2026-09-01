@@ -658,6 +658,7 @@ pub(super) fn wire_terminal(
                         load_terminal_font_on_demand(
                             &runtime_for_command,
                             ui_for_command.clone(),
+                            state_for_command.clone(),
                             font_registry_for_command.clone(),
                             terminal_font_started_for_command.clone(),
                         );
