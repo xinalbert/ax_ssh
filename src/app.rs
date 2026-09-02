@@ -17,7 +17,8 @@ use slint::TimerMode;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::Duration;
+use tokio::task::JoinSet;
+use tokio::time::{Duration, timeout};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -356,10 +357,36 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             );
         }
     }
-    for worker in workers {
-        if let Err(error) = runtime.block_on(worker.shutdown()) {
-            warn!(%error, "failed to shut down terminal worker cleanly");
+    let workers_timed_out = runtime.block_on(async move {
+        let mut pending = JoinSet::new();
+        for worker in workers {
+            pending.spawn(async move { worker.shutdown().await });
         }
+        let completed = timeout(Duration::from_secs(5), async {
+            while let Some(result) = pending.join_next().await {
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        warn!(%error, "failed to shut down terminal worker cleanly");
+                    }
+                    Err(error) => {
+                        warn!(%error, "terminal worker shutdown task failed");
+                    }
+                }
+            }
+        })
+        .await
+        .is_ok();
+        if !completed {
+            pending.abort_all();
+            while pending.join_next().await.is_some() {}
+        }
+        !completed
+    });
+    if workers_timed_out {
+        warn!(
+            "terminal worker shutdown exceeded the application timeout; remaining tasks were aborted"
+        );
     }
 
     #[cfg(target_os = "macos")]

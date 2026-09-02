@@ -3,8 +3,6 @@ use super::local_files::{
     validate_local_file_for_open,
 };
 use super::*;
-use std::fs::File as LocalFile;
-use std::io::Read;
 use std::path::PathBuf;
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -114,25 +112,17 @@ fn queue_local_upload_path(
                 if metadata.len() > ax_ssh::sftp::MAX_UPLOAD_BYTES {
                     anyhow::bail!("local file exceeds the upload size limit");
                 }
-                let mut file = LocalFile::open(&local_path)
-                    .with_context(|| format!("cannot open dropped local file {local_path:?}"))?;
-                let mut data = Vec::with_capacity(metadata.len() as usize);
-                file.read_to_end(&mut data)
-                    .context("cannot read dropped local upload file")?;
-                if data.len() as u64 != metadata.len() {
-                    anyhow::bail!("local file changed while preparing upload");
-                }
                 let name = local_path
                     .file_name()
                     .and_then(|value| value.to_str())
                     .filter(|value| !value.is_empty())
                     .context("dropped local file has no valid name")?
                     .to_owned();
-                Ok::<_, anyhow::Error>((name, data))
+                Ok::<_, anyhow::Error>((name, metadata.len()))
             }
         })
         .await;
-        let (name, data) = match read {
+        let (name, total_bytes) = match read {
             Ok(Ok(value)) => value,
             Ok(Err(error)) => {
                 set_status(&ui, &format!("Cannot prepare dropped upload: {error}"));
@@ -152,12 +142,12 @@ fn queue_local_upload_path(
             let transfer_id = Uuid::new_v4();
             terminal
                 .sftp
-                .queue_transfer(transfer_id, name, data.len() as u64)?;
+                .queue_transfer(transfer_id, name, total_bytes)?;
             terminal
                 .worker
                 .as_ref()
                 .context("active SFTP tab has no worker")?
-                .request_open_sftp_upload(transfer_id, remote_path, data)
+                .request_open_sftp_upload(transfer_id, remote_path, local_path, total_bytes)
         });
         match queued {
             Ok(()) => dispatch_active_snapshot(&ui, &state_for_task),
@@ -653,35 +643,6 @@ pub(super) fn wire_sftp(
         let state_for_upload_task = state_for_upload.clone();
         let ui_for_upload_task = ui_for_upload.clone();
         runtime_for_upload.spawn(async move {
-            let read = tokio::task::spawn_blocking(move || {
-                let mut file = LocalFile::open(&local_path)
-                    .with_context(|| format!("cannot open local file {local_path:?}"))?;
-                let mut data = Vec::with_capacity(expected_size as usize);
-                file.read_to_end(&mut data)
-                    .context("cannot read local upload file")?;
-                if data.len() as u64 != expected_size {
-                    anyhow::bail!("local file changed while preparing upload");
-                }
-                Ok::<_, anyhow::Error>(data)
-            })
-            .await;
-            let data = match read {
-                Ok(Ok(data)) => data,
-                Ok(Err(error)) => {
-                    set_status(
-                        &ui_for_upload_task,
-                        &format!("Cannot read local upload file: {error}"),
-                    );
-                    return;
-                }
-                Err(error) => {
-                    set_status(
-                        &ui_for_upload_task,
-                        &format!("Local upload task failed: {error}"),
-                    );
-                    return;
-                }
-            };
             let queued = with_active_sftp_terminal(&state_for_upload_task, |terminal| {
                 let transfer_id = Uuid::new_v4();
                 terminal.sftp.queue_transfer(
@@ -691,13 +652,18 @@ pub(super) fn wire_sftp(
                         .next()
                         .unwrap_or_default()
                         .to_owned(),
-                    data.len() as u64,
+                    expected_size,
                 )?;
                 terminal
                     .worker
                     .as_ref()
                     .context("active SFTP tab has no worker")?
-                    .request_open_sftp_upload(transfer_id, remote_path, data)
+                    .request_open_sftp_upload(
+                        transfer_id,
+                        remote_path,
+                        PathBuf::from(local_path),
+                        expected_size,
+                    )
             });
             if let Err(error) = queued {
                 set_status(

@@ -391,9 +391,11 @@ impl SshSessionHandle {
         &self,
         transfer_id: Uuid,
         path: String,
-        data: Vec<u8>,
+        local_path: std::path::PathBuf,
+        total_bytes: u64,
     ) -> Result<()> {
-        let request = SftpUploadRequest::new(transfer_id, path, data)?;
+        let request =
+            SftpUploadRequest::from_local_file(transfer_id, path, local_path, total_bytes)?;
         self.command_tx
             .try_send(SshCommand::OpenSftpUpload { request })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))
@@ -425,8 +427,10 @@ impl SshSessionHandle {
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
-        if !self.task.is_finished() && self.command_tx.send(SshCommand::Disconnect).await.is_err() {
-            debug!("SSH worker command receiver already closed during shutdown");
+        if !self.task.is_finished()
+            && let Err(error) = queue_disconnect(&self.command_tx)
+        {
+            debug!(%error, "SSH worker disconnect command was not queued during shutdown");
         }
 
         match timeout(WORKER_SHUTDOWN_TIMEOUT, &mut self.task).await {
@@ -444,6 +448,12 @@ impl SshSessionHandle {
             }
         }
     }
+}
+
+fn queue_disconnect(
+    command_tx: &mpsc::Sender<SshCommand>,
+) -> Result<(), mpsc::error::TrySendError<SshCommand>> {
+    command_tx.try_send(SshCommand::Disconnect)
 }
 
 fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
@@ -688,6 +698,43 @@ mod tests {
                 .has_changed()
                 .expect("watch receiver should be open")
         );
+    }
+
+    #[test]
+    fn full_command_queue_does_not_block_disconnect_request() {
+        let (sender, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            sender
+                .try_send(SshCommand::LoadMoreSftp)
+                .expect("test command should fill the queue");
+        }
+        assert!(matches!(
+            queue_disconnect(&sender),
+            Err(mpsc::error::TrySendError::Full(SshCommand::Disconnect))
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_aborts_a_worker_that_never_returns_with_a_full_queue() {
+        let (command_tx, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            command_tx
+                .try_send(SshCommand::LoadMoreSftp)
+                .expect("test command should fill the queue");
+        }
+        let (resize_tx, _resize_rx) = watch::channel(TerminalSize::backend(80, 24));
+        let task = tokio::spawn(std::future::pending::<()>());
+        let handle = SshSessionHandle {
+            session_id: Uuid::new_v4(),
+            command_tx,
+            resize_tx,
+            next_input_sequence: AtomicU64::new(0),
+            task,
+        };
+        let shutdown = tokio::spawn(handle.shutdown());
+        tokio::task::yield_now().await;
+        tokio::time::advance(WORKER_SHUTDOWN_TIMEOUT + Duration::from_millis(1)).await;
+        assert!(shutdown.await.expect("shutdown task should join").is_ok());
     }
 
     #[test]

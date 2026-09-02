@@ -211,13 +211,9 @@ impl TelnetSessionHandle {
 
     pub async fn shutdown(mut self) -> Result<()> {
         if !self.task.is_finished()
-            && self
-                .command_tx
-                .send(TelnetCommand::Disconnect)
-                .await
-                .is_err()
+            && let Err(error) = queue_disconnect(&self.command_tx)
         {
-            debug!("Telnet worker command receiver already closed during shutdown");
+            debug!(%error, "Telnet worker disconnect command was not queued during shutdown");
         }
         match timeout(WORKER_SHUTDOWN_TIMEOUT, &mut self.task).await {
             Ok(joined) => joined.context("Telnet worker task failed during shutdown"),
@@ -234,6 +230,12 @@ impl TelnetSessionHandle {
             }
         }
     }
+}
+
+fn queue_disconnect(
+    command_tx: &mpsc::Sender<TelnetCommand>,
+) -> Result<(), mpsc::error::TrySendError<TelnetCommand>> {
+    command_tx.try_send(TelnetCommand::Disconnect)
 }
 
 async fn run_telnet_session(
@@ -547,6 +549,42 @@ fn bounded_error(error: &impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_command_queue_does_not_block_disconnect_request() {
+        let (sender, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            sender
+                .try_send(TelnetCommand::Send(Vec::new()))
+                .expect("test command should fill the queue");
+        }
+        assert!(matches!(
+            queue_disconnect(&sender),
+            Err(mpsc::error::TrySendError::Full(TelnetCommand::Disconnect))
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_aborts_a_worker_that_never_returns_with_a_full_queue() {
+        let (command_tx, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            command_tx
+                .try_send(TelnetCommand::Send(Vec::new()))
+                .expect("test command should fill the queue");
+        }
+        let (resize_tx, _resize_rx) = watch::channel(TerminalSize::backend(80, 24));
+        let task = tokio::spawn(std::future::pending::<()>());
+        let handle = TelnetSessionHandle {
+            command_tx,
+            resize_tx,
+            task,
+        };
+        let shutdown = tokio::spawn(handle.shutdown());
+        tokio::task::yield_now().await;
+        tokio::time::advance(WORKER_SHUTDOWN_TIMEOUT + Duration::from_millis(1)).await;
+        assert!(shutdown.await.expect("shutdown task should join").is_ok());
+    }
+
     use libmudtelnet_rs::telnet::op_command::NOP;
     use tokio::net::TcpListener;
 

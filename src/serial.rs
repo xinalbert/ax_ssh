@@ -181,13 +181,9 @@ impl SerialSessionHandle {
 
     pub async fn shutdown(mut self) -> Result<()> {
         if !self.task.is_finished()
-            && self
-                .command_tx
-                .send(SerialCommand::Disconnect)
-                .await
-                .is_err()
+            && let Err(error) = queue_disconnect(&self.command_tx)
         {
-            debug!("serial worker command receiver already closed during shutdown");
+            debug!(%error, "serial worker disconnect command was not queued during shutdown");
         }
         match timeout(WORKER_SHUTDOWN_TIMEOUT, &mut self.task).await {
             Ok(joined) => joined.context("serial worker task failed during shutdown"),
@@ -204,6 +200,12 @@ impl SerialSessionHandle {
             }
         }
     }
+}
+
+fn queue_disconnect(
+    command_tx: &mpsc::Sender<SerialCommand>,
+) -> Result<(), mpsc::error::TrySendError<SerialCommand>> {
+    command_tx.try_send(SerialCommand::Disconnect)
 }
 
 async fn run_serial_session(
@@ -355,6 +357,36 @@ fn bounded_error(error: &impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_command_queue_does_not_block_disconnect_request() {
+        let (sender, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            sender
+                .try_send(SerialCommand::Send(Vec::new()))
+                .expect("test command should fill the queue");
+        }
+        assert!(matches!(
+            queue_disconnect(&sender),
+            Err(mpsc::error::TrySendError::Full(SerialCommand::Disconnect))
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_aborts_a_worker_that_never_returns_with_a_full_queue() {
+        let (command_tx, _receiver) = mpsc::channel(COMMAND_CAPACITY);
+        for _ in 0..COMMAND_CAPACITY {
+            command_tx
+                .try_send(SerialCommand::Send(Vec::new()))
+                .expect("test command should fill the queue");
+        }
+        let task = tokio::spawn(std::future::pending::<()>());
+        let handle = SerialSessionHandle { command_tx, task };
+        let shutdown = tokio::spawn(handle.shutdown());
+        tokio::task::yield_now().await;
+        tokio::time::advance(WORKER_SHUTDOWN_TIMEOUT + Duration::from_millis(1)).await;
+        assert!(shutdown.await.expect("shutdown task should join").is_ok());
+    }
 
     fn usb(port_name: &str, serial: Option<&str>) -> SerialPortDescriptor {
         SerialPortDescriptor {

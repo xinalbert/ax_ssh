@@ -10,7 +10,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::fs::{self, File as LocalFile, OpenOptions};
 use std::future::Future;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -22,7 +22,7 @@ use russh_sftp::client::{Config, RawSftpSession};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio::task::{JoinError, JoinHandle};
 use tokio::time::{Duration, Instant, timeout, timeout_at};
 use tracing::{debug, warn};
@@ -36,6 +36,7 @@ use super::{
 pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
 
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
+const MAX_CONCURRENT_UPLOADS: usize = 8;
 const WRITER_QUEUE_CAPACITY: usize = 2;
 const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
@@ -56,6 +57,7 @@ const MAX_CACHE_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_CACHE_FILES: usize = 128;
 
 static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static GLOBAL_UPLOAD_SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SftpTransferEvent {
@@ -110,13 +112,19 @@ pub(crate) struct SftpUploadRequest {
     transfer_id: Uuid,
     remote_path: String,
     name: String,
-    data: Vec<u8>,
+    local_path: PathBuf,
+    total_bytes: u64,
 }
 
 impl SftpUploadRequest {
-    pub(crate) fn new(transfer_id: Uuid, remote_path: String, data: Vec<u8>) -> Result<Self> {
+    pub(crate) fn from_local_file(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+    ) -> Result<Self> {
         validate_remote_path(&remote_path)?;
-        if data.len() as u64 > super::MAX_UPLOAD_BYTES {
+        if total_bytes > super::MAX_UPLOAD_BYTES {
             anyhow::bail!(
                 "upload content exceeds the {}-byte limit",
                 super::MAX_UPLOAD_BYTES
@@ -141,7 +149,8 @@ impl SftpUploadRequest {
             transfer_id,
             remote_path,
             name,
-            data,
+            local_path,
+            total_bytes,
         })
     }
 
@@ -154,7 +163,7 @@ impl SftpUploadRequest {
     }
 
     pub(crate) fn total_bytes(&self) -> u64 {
-        self.data.len() as u64
+        self.total_bytes
     }
 }
 
@@ -264,18 +273,36 @@ pub(crate) struct SftpUploadHandle {
 }
 
 impl SftpUploadHandle {
+    pub(crate) fn reserve_global_slot() -> Result<OwnedSemaphorePermit> {
+        global_upload_slots()
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "the global SFTP upload limit of {MAX_CONCURRENT_UPLOADS} transfers has been reached"
+                )
+            })
+    }
+
     pub(crate) fn spawn<S>(
         runtime: &Handle,
         stream: S,
         request: SftpUploadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
+        global_slot: OwnedSemaphorePermit,
     ) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
         let cancellation = TransferCancellation::new();
-        let task = runtime.spawn(run_upload(stream, request, cancellation.clone(), event_tx));
+        let task = runtime.spawn(run_upload(
+            stream,
+            request,
+            cancellation.clone(),
+            event_tx,
+            global_slot,
+        ));
         Self {
             transfer_id,
             cancellation,
@@ -543,10 +570,11 @@ async fn run_upload<S>(
     request: SftpUploadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
+    _global_slot: OwnedSemaphorePermit,
 ) where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let total_bytes = request.data.len() as u64;
+    let total_bytes = request.total_bytes;
     let event = SftpTransferEvent::Started {
         transfer_id: request.transfer_id,
         remote_path: request.remote_path.clone(),
@@ -577,6 +605,10 @@ async fn run_upload<S>(
     let _ = send_transfer_state(&event_tx, terminal).await;
 }
 
+fn global_upload_slots() -> &'static Arc<Semaphore> {
+    GLOBAL_UPLOAD_SLOTS.get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_UPLOADS)))
+}
+
 async fn upload_initialized<S>(
     stream: S,
     request: &SftpUploadRequest,
@@ -586,6 +618,7 @@ async fn upload_initialized<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let deadline = Instant::now() + DOWNLOAD_TIMEOUT;
     let session = RawSftpSession::new_with_config(
         PacketLimitedStream::new(stream),
         Config {
@@ -596,7 +629,7 @@ where
     );
     await_step(
         cancellation,
-        Instant::now() + DOWNLOAD_TIMEOUT,
+        deadline,
         REQUEST_TIMEOUT,
         "SFTP upload handshake",
         session.init(),
@@ -620,7 +653,7 @@ where
     }
     let handle = await_step(
         cancellation,
-        Instant::now() + DOWNLOAD_TIMEOUT,
+        deadline,
         REQUEST_TIMEOUT,
         "opening remote upload file",
         session.open(
@@ -633,29 +666,42 @@ where
     .context("cannot open remote upload file")?
     .handle;
     let mut offset = 0_u64;
-    let mut next_progress = PROGRESS_STEP_BYTES.min(request.data.len() as u64);
+    let mut next_progress = PROGRESS_STEP_BYTES.min(request.total_bytes);
     let result = async {
-        while offset < request.data.len() as u64 {
+        while offset < request.total_bytes {
             cancellation.wait_until_running().await?;
-            let end = (offset as usize + DOWNLOAD_CHUNK_BYTES as usize).min(request.data.len());
-            let chunk = request.data[offset as usize..end].to_vec();
+            let requested = (request.total_bytes - offset).min(u64::from(DOWNLOAD_CHUNK_BYTES));
+            let chunk = await_step(
+                cancellation,
+                deadline,
+                REQUEST_TIMEOUT,
+                "reading local upload",
+                read_local_upload_chunk(
+                    &request.local_path,
+                    offset,
+                    requested as usize,
+                    request.total_bytes,
+                ),
+            )
+            .await??;
+            let chunk_bytes = chunk.len() as u64;
             await_step(
                 cancellation,
-                Instant::now() + DOWNLOAD_TIMEOUT,
+                deadline,
                 REQUEST_TIMEOUT,
                 "writing remote upload",
                 session.write(handle.clone(), offset, chunk),
             )
             .await?
             .context("cannot write remote upload")?;
-            offset = end as u64;
-            if offset >= next_progress || offset == request.data.len() as u64 {
+            offset += chunk_bytes;
+            if offset >= next_progress || offset == request.total_bytes {
                 send_progress(
                     event_tx,
                     SftpTransferEvent::Progress {
                         transfer_id: request.transfer_id,
                         downloaded_bytes: offset,
-                        total_bytes: request.data.len() as u64,
+                        total_bytes: request.total_bytes,
                     },
                 )?;
                 next_progress = offset.saturating_add(PROGRESS_STEP_BYTES);
@@ -681,6 +727,35 @@ where
     }
     let _ = session.close_session();
     result
+}
+
+async fn read_local_upload_chunk(
+    path: &Path,
+    offset: u64,
+    length: usize,
+    expected_size: u64,
+) -> Result<Vec<u8>> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("cannot inspect local upload file {path:?}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            anyhow::bail!("local upload source is not a regular file");
+        }
+        if metadata.len() != expected_size {
+            anyhow::bail!("local upload file changed while it was being uploaded");
+        }
+        let mut file = LocalFile::open(&path)
+            .with_context(|| format!("cannot open local upload file {path:?}"))?;
+        file.seek(SeekFrom::Start(offset))
+            .context("cannot seek local upload file")?;
+        let mut chunk = vec![0_u8; length];
+        file.read_exact(&mut chunk)
+            .context("cannot read local upload file")?;
+        Ok::<_, anyhow::Error>(chunk)
+    })
+    .await
+    .context("local upload read task failed")?
 }
 
 async fn ensure_remote_target_absent_for_transfer(
@@ -1650,6 +1725,51 @@ mod tests {
     use std::sync::Mutex;
 
     use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status};
+
+    #[tokio::test]
+    async fn local_upload_reads_bounded_chunks_and_rejects_size_changes() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-upload-{}.bin", Uuid::new_v4()));
+        let contents = vec![0x5a; (DOWNLOAD_CHUNK_BYTES as usize) + 17];
+        fs::write(&path, &contents).expect("upload fixture should write");
+
+        let first = read_local_upload_chunk(
+            &path,
+            0,
+            DOWNLOAD_CHUNK_BYTES as usize,
+            contents.len() as u64,
+        )
+        .await
+        .expect("first upload chunk should read");
+        assert_eq!(first.len(), DOWNLOAD_CHUNK_BYTES as usize);
+
+        fs::write(&path, b"changed").expect("changed upload fixture should write");
+        let error = read_local_upload_chunk(
+            &path,
+            0,
+            DOWNLOAD_CHUNK_BYTES as usize,
+            contents.len() as u64,
+        )
+        .await
+        .expect_err("changed upload source should be rejected");
+        assert!(error.to_string().contains("changed"));
+
+        fs::remove_file(path).expect("upload fixture should be removed");
+    }
+
+    #[test]
+    fn local_upload_request_stores_a_path_and_bounded_size_only() {
+        let path = PathBuf::from("/tmp/example.bin");
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            "/remote/example.bin".to_owned(),
+            path.clone(),
+            64 * 1024,
+        )
+        .expect("local upload request should validate");
+
+        assert_eq!(request.local_path, path);
+        assert_eq!(request.total_bytes(), 64 * 1024);
+    }
 
     struct TestCacheDir(PathBuf);
 

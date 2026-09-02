@@ -349,6 +349,21 @@ pub(super) async fn run_sftp_session(
                                 session_id,
                             ).await;
                         } else {
+                            let global_slot = match SftpUploadHandle::reserve_global_slot() {
+                                Ok(slot) => slot,
+                                Err(error) => {
+                                    send_sftp_transfer_event(
+                                        &event_tx,
+                                        SftpTransferEvent::Failed {
+                                            transfer_id,
+                                            message: bounded_error_message(&error),
+                                        },
+                                        session_id,
+                                    )
+                                    .await;
+                                    continue;
+                                }
+                            };
                             let stream = connection.open_sftp_stream().await;
                             match stream {
                                 Ok(stream) => {
@@ -368,6 +383,7 @@ pub(super) async fn run_sftp_session(
                                             stream,
                                             request,
                                             transfer_event_tx.clone(),
+                                            global_slot,
                                         ),
                                     ));
                                 }
