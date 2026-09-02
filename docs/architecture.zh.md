@@ -462,15 +462,16 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     展开 Group 集合，也不接收 Group 切换 callback。`SessionNavigationGroup` 与
     `CompactSessionNavigationGroup` 分别管理各自的 Group 展开/收起，因此点击或
     Enter/Space 只改变当前组件的呈现状态。持久化 Group 名称仍由 `SessionStore` 持有，
-    空 Group 也能跨重启保留。展开态先渲染 Local Shell 卡片，再渲染可折叠的 Group 父行
-    及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。展开父行显示名称、数量和
+    空 Group 也能跨重启保留。展开态先渲染独立的侧栏切换行，再渲染 Local Shell 卡片、可折叠的
+    Group 父行及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。展开父行显示名称、数量和
     居中的绘制下尖角；收起父行显示对应的上尖角。只有紧凑栏以可配置的 1-4 个 Group 名称
     字符生成文字徽标，或在 Full name 模式显示完整组名，而不是文件夹图标。Full name 模式
     将收起栏限制为 180px，并切换为高密度列表：标题行把侧栏按钮放在末端，Local Shell 使用
     图标加文字的单行项，Group 使用带展开尖角和数量的单行名称，服务器则缩进显示单行全名。
     长名称在稳定行高中省略，并可通过 tooltip 查看全文。
     自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击执行
-    相同的本地展开动作；只有独立的紧凑面板按钮负责展开或收起侧栏。原生行右键菜单可在 Group 内
+    相同的本地展开动作；独立、可聚焦的侧栏切换行负责展开或收起侧栏，展开态位于 Local Shell
+    上方，收起态保持在顶部，而 Local Shell 位于其下方；两者在两种模式中都使用独立行和独立触控区域。原生行右键菜单可在 Group 内
     新增服务器、复制或 Duplicate Group、重命名或删除 Group，以及连接、复制地址、复制配置、
     Duplicate、编辑或删除服务器；Ungrouped 只提供新增服务器。右击列表空白区域可
     新建空 Group 或 Ungrouped 服务器；剪贴板导入/导出只属于 File 菜单。`SessionActionMenu` 把四种菜单形态

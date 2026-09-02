@@ -741,9 +741,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
     `SessionNavigationGroup` and `CompactSessionNavigationGroup` independently
     expand/collapse their own Group rows, so either click or Enter/Space changes
     only that component's presentation state. Persisted group names belong to
-    `SessionStore`, so empty groups survive restart. The expanded view renders a
-    Local Shell card, then collapsible parent group rows and their single-line
-    server children. Only the masked endpoint crosses into Slint. The expanded
+    `SessionStore`, so empty groups survive restart. The expanded view renders
+    the independent sidebar toggle row first, followed by the Local Shell card,
+    then collapsible parent group rows and their single-line server children.
+    Only the masked endpoint crosses into Slint. The expanded
     parent shows its name, count, and a centered drawn down chevron; a collapsed
     parent shows the matching up chevron. The compact rail alone uses a
     configurable 1-4 character badge derived from the group name, or the full
@@ -753,9 +754,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
     an icon-and-label row, groups use a single-line label with disclosure and
     count, and indented servers use their single-line names. Long labels elide
     within stable-height rows and remain available through tooltips.
-    A separate compact panel control is the only action that expands or
-    collapses the sidebar. In the expanded sidebar it sits at the trailing
-    edge of the Local Shell row; in the collapsed rail it remains a top control.
+    A separate, focusable sidebar toggle row is the only action that expands or
+    collapses the sidebar. In the expanded sidebar it appears above the Local
+    Shell row, while the collapsed rail keeps the toggle at the top and Local
+    Shell below it. The toggle and Local Shell action use separate rows and
+    hit targets in both modes.
     Custom group rows are keyboard focusable and use Enter/Space for the same
     local disclosure action as a click; this never changes the sidebar state. Native
     row context menus create servers in a group, copy or duplicate a group,

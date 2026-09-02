@@ -763,15 +763,22 @@ export component SessionNavigation inherits Rectangle {
             padding-bottom: Theme.space-xs;
             spacing: 0px;
 
+            SidebarRailToggle {
+                width: parent.width;
+                expanded: true;
+                full-width: true;
+                activated => { root.collapsed = true; }
+            }
+
+            Rectangle { height: Theme.hairline; background: Theme.divider; }
+
             Rectangle {
                 height: Theme.sidebar-local-card-height;
                 background: local-card-touch.has-hover ? Theme.hover : transparent;
                 border-radius: Theme.radius-small;
 
                 local-card-touch := TouchArea {
-                    width: parent.width
-                        - Theme.sidebar-card-padding
-                        - Theme.sidebar-rail-toggle-size;
+                    width: parent.width;
                     height: parent.height;
                     mouse-cursor: pointer;
                     accessible-role: button;
@@ -808,20 +815,6 @@ export component SessionNavigation inherits Rectangle {
                             text: root.local-shell-description;
                             text-color: Theme.muted;
                             font-size: Theme.font-caption;
-                        }
-                    }
-
-                    Rectangle {
-                        width: Theme.sidebar-rail-toggle-size;
-                        height: parent.height;
-
-                        SidebarRailToggle {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            width: parent.width;
-                            height: Theme.sidebar-rail-toggle-size;
-                            expanded: true;
-                            activated => { root.collapsed = true; }
                         }
                     }
                 }
