@@ -590,6 +590,7 @@ export component SettingsToggleRow inherits Rectangle {
 
 export component SettingsInfoRow inherits Rectangle {
     in property <string> label;
+    in property <string> description;
     in property <string> value;
     in property <bool> show-divider: true;
 
@@ -597,6 +598,7 @@ export component SettingsInfoRow inherits Rectangle {
 
     info-row := SettingsRow {
         label: root.label;
+        description: root.description;
         show-divider: root.show-divider;
         SettingsField {
             Text {

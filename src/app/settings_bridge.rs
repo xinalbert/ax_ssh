@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 46] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 49] = [
     (
         "General",
         "Language",
@@ -194,6 +194,9 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 46] = [
         "Paste Into Terminal",
         "Terminal command shortcut",
     ),
+    ("Shortcuts", "Select All", "Terminal command shortcut"),
+    ("Shortcuts", "Previous Tab", "Workspace command shortcut"),
+    ("Shortcuts", "Next Tab", "Workspace command shortcut"),
     (
         "About",
         "Application",
@@ -281,7 +284,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 46] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 49] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -535,6 +538,24 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 46] = [
         "Terminal command shortcut",
         "粘贴到终端",
         "终端命令快捷键",
+    ),
+    (
+        "Select All",
+        "Terminal command shortcut",
+        "全选",
+        "终端命令快捷键",
+    ),
+    (
+        "Previous Tab",
+        "Workspace command shortcut",
+        "上一个标签页",
+        "工作区命令快捷键",
+    ),
+    (
+        "Next Tab",
+        "Workspace command shortcut",
+        "下一个标签页",
+        "工作区命令快捷键",
     ),
     (
         "Application",
@@ -1297,6 +1318,17 @@ mod tests {
         assert_eq!(blink_matches.len(), 1);
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "Blink terminal cursor");
+
+        for (query, title) in [
+            ("select all", "Select All"),
+            ("previous tab", "Previous Tab"),
+            ("next tab", "Next Tab"),
+        ] {
+            let fixed_shortcut_matches = settings_search_results(query, "english");
+            assert_eq!(fixed_shortcut_matches.len(), 1);
+            assert_eq!(fixed_shortcut_matches[0].section, "Shortcuts");
+            assert_eq!(fixed_shortcut_matches[0].title, title);
+        }
     }
 
     #[test]
@@ -1342,5 +1374,16 @@ mod tests {
         assert_eq!(blink_matches.len(), 1);
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "终端光标闪烁");
+
+        for (query, title) in [
+            ("全选", "全选"),
+            ("上一个标签页", "上一个标签页"),
+            ("下一个标签页", "下一个标签页"),
+        ] {
+            let fixed_shortcut_matches = settings_search_results(query, "simplified-chinese");
+            assert_eq!(fixed_shortcut_matches.len(), 1);
+            assert_eq!(fixed_shortcut_matches[0].section, "Shortcuts");
+            assert_eq!(fixed_shortcut_matches[0].title, title);
+        }
     }
 }

@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { ElidedButton } from "../components/elided-controls.slint";
-import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading, ShortcutRecorder } from "../components/settings-controls.slint";
+import { SettingsField, SettingsInfoRow, SettingsPage, SettingsRow, SettingsSectionHeading, ShortcutRecorder } from "../components/settings-controls.slint";
 
 export component ShortcutsSettingsPage inherits SettingsPage {
     in-out property <string> draft-open-settings-shortcut;
@@ -19,6 +19,13 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
     in property <string> default-open-sftp-shortcut;
+    in property <bool> apple-platform: false;
+
+    private property <string> select-all-shortcut: root.apple-platform ? "Cmd+A" : "Ctrl+Shift+A";
+    private property <string> previous-tab-shortcut: root.apple-platform
+        ? "Cmd+Shift+[" : "Ctrl+Shift+[";
+    private property <string> next-tab-shortcut: root.apple-platform
+        ? "Cmd+Shift+]" : "Ctrl+Shift+]";
 
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
     callback shortcut-recording-changed(bool);
@@ -169,7 +176,6 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     SettingsRow {
         label: @tr("Paste Into Terminal");
         description: @tr("Terminal command");
-        show-divider: false;
         SettingsField {
             paste-recorder := ShortcutRecorder {
                 width: Theme.settings-field-width;
@@ -183,5 +189,22 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 }
             }
         }
+    }
+    SettingsSectionHeading { label: @tr("DEFAULTS"); }
+    SettingsInfoRow {
+        label: @tr("Select All");
+        description: @tr("Terminal command");
+        value: root.select-all-shortcut;
+    }
+    SettingsInfoRow {
+        label: @tr("Previous Tab");
+        description: @tr("Workspace command");
+        value: root.previous-tab-shortcut;
+    }
+    SettingsInfoRow {
+        label: @tr("Next Tab");
+        description: @tr("Workspace command");
+        value: root.next-tab-shortcut;
+        show-divider: false;
     }
 }
