@@ -270,6 +270,14 @@ New-session editors and terminal sessions share the workspace tab bar, while
 Settings opens as a separate workbench view. The `+` at the right end of that
 bar lists every saved connection and connects the selected profile; **File >
 New Server** and the sidebar blank-area context menu open the session editor.
+Activating a connection or opening a new editor synchronizes keyboard focus to
+the active workspace Tab and scrolls it into view; the editor then focuses its
+**Session name** field.
+Workspace Tabs participate in Tab navigation; `Enter` or `Space` activates the
+focused Tab.
+When switching between host-backed workspace Tabs, the matching server row in
+the sidebar becomes selected and highlighted. Non-host Tabs leave the sidebar
+selection unchanged, so terminal and editor keyboard input keeps its focus.
 Drag a workspace Tab to reorder it. Its leading number changes with its current
 position, while an instance suffix such as `#1` remains unchanged.
 Use **Window > Previous Tab** / **Next Tab** to cycle through that current order;

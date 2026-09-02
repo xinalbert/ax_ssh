@@ -428,12 +428,15 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
     private property <int> tab-visibility-revision: 0;
+    private property <int> active-tab-focus-revision: 0;
     changed tabs => {
         if root.drag-source-index >= root.tabs.length {
             root.clear-tab-drag();
         }
         root.tab-visibility-revision += 1;
+        root.active-tab-focus-revision += 1;
     }
+    changed active-tab-id => { root.active-tab-focus-revision += 1; }
     changed tab-width => {
         root.tab-visibility-revision += 1;
     }
@@ -569,10 +572,52 @@ export component WorkspaceTitlebar inherits Rectangle {
                     y: 0px;
                     width: root.tab-width * 1px;
                     height: parent.height;
-                    background: transparent;
                     opacity: root.drag-source-index == index
                         ? Theme.tab-drag-source-opacity
                         : 1;
+
+                    tab-focus := FocusScope {
+                        private property <bool> active: tab.id == root.active-tab-id;
+                        private property <int> focus-revision: root.active-tab-focus-revision;
+                        private property <bool> focus-pending: false;
+                        width: parent.width;
+                        height: parent.height;
+                        focus-on-click: true;
+                        focus-on-tab-navigation: true;
+                        accessible-role: button;
+                        accessible-label: tab.title;
+
+                        changed active => {
+                            if self.active {
+                                self.focus-pending = true;
+                            }
+                        }
+                        changed focus-revision => {
+                            if self.active {
+                                self.focus-pending = true;
+                            }
+                        }
+
+                        key-pressed(event) => {
+                            if event.text == Key.Return || event.text == Key.Space {
+                                root.activate-tab(tab.id);
+                                return EventResult.accept;
+                            }
+                            return EventResult.reject;
+                        }
+
+                        Timer {
+                            running: tab-focus.focus-pending;
+                            interval: 16ms;
+                            triggered => {
+                                tab-focus.focus-pending = false;
+                                if tab-focus.active {
+                                    root.ensure-tab-visible(index);
+                                    tab-focus.focus();
+                                }
+                            }
+                        }
+                    }
 
                     if tab.id == root.active-tab-id
                             || (root.drag-source-index >= 0
@@ -628,6 +673,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                         pointer-event(event) => {
                             if event.kind == PointerEventKind.down
                                     && event.button == PointerEventButton.left {
+                                tab-focus.focus();
                                 root.begin-tab-drag(
                                     tab.id, index, tab.title, tab.kind, tab.connected,
                                     self.mouse-x,
@@ -674,6 +720,16 @@ export component WorkspaceTitlebar inherits Rectangle {
                         scroll-tabs(delta-x, delta-y) => {
                             root.scroll-tabs(delta-x, delta-y);
                         }
+                    }
+                    if tab-focus.has-focus : Rectangle {
+                        x: Theme.hairline;
+                        y: Theme.tab-surface-inset;
+                        width: parent.width - 2 * Theme.hairline;
+                        height: parent.height - Theme.tab-surface-inset - Theme.hairline;
+                        border-width: Theme.hairline;
+                        border-color: Theme.focus;
+                        border-radius: Theme.tab-surface-radius;
+                        background: transparent;
                     }
                 }
 

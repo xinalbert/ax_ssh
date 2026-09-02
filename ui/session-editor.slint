@@ -78,6 +78,7 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> serial-stop-bits: "1";
     private property <string> serial-parity: "none";
     private property <string> serial-flow-control: "none";
+    private property <bool> initial-focus-pending: false;
 
     function submit(connect-after-save: bool) {
         root.save(
@@ -135,8 +136,14 @@ export component SessionEditorPane inherits Rectangle {
         root.serial-flow-control = root.source.serial_flow_control;
     }
 
-    init => { root.reset-draft(); }
-    changed incoming-draft-id => { root.reset-draft(); }
+    init => {
+        root.reset-draft();
+        root.initial-focus-pending = true;
+    }
+    changed incoming-draft-id => {
+        root.reset-draft();
+        root.initial-focus-pending = true;
+    }
     changed protocol => {
         if root.protocol != "SSH" {
             root.password-draft = "";
@@ -173,6 +180,17 @@ export component SessionEditorPane inherits Rectangle {
     changed credential-storage-draft => {
         if root.credential-storage-draft != "encrypted-vault" {
             root.vault-password-draft = "";
+        }
+    }
+
+    Timer {
+        running: root.initial-focus-pending;
+        interval: 16ms;
+        triggered => {
+            root.initial-focus-pending = false;
+            if root.visible {
+                name-edit.focus();
+            }
         }
     }
 

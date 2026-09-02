@@ -227,6 +227,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_status("".into());
     ui.set_active_tab_id("".into());
     ui.set_active_pane_id("".into());
+    ui.set_active_profile_id("".into());
     ui.set_active_tab_kind("empty".into());
     ui.set_active_tab_title("".into());
     ui.set_active_tab_status("".into());

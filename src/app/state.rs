@@ -369,6 +369,7 @@ pub(super) struct WorkspaceTabSummary {
 
 pub(super) struct ActiveTabSnapshot {
     pub(super) id: Option<Uuid>,
+    pub(super) profile_id: Option<Uuid>,
     pub(super) kind: &'static str,
     pub(super) title: String,
     pub(super) status: String,
@@ -385,6 +386,7 @@ impl Default for ActiveTabSnapshot {
     fn default() -> Self {
         Self {
             id: None,
+            profile_id: None,
             kind: "empty",
             title: "Workspace".to_owned(),
             status: String::new(),

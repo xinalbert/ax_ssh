@@ -622,6 +622,7 @@ impl AppState {
                 }
                 ActiveTabSnapshot {
                     id: Some(tab.id),
+                    profile_id: terminal.profile_id(),
                     kind: terminal.backend.kind(),
                     title: tab.title.clone(),
                     status: terminal.status.clone(),

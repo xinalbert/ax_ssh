@@ -133,6 +133,13 @@ pub(in crate::app) fn apply_active_snapshot(
         .unwrap_or_else(|| active_pane_id.clone());
     ui.set_active_tab_id(active_tab_id.into());
     ui.set_active_pane_id(active_pane_id.into());
+    ui.set_active_profile_id(
+        snapshot
+            .profile_id
+            .map(|id| id.to_string())
+            .unwrap_or_default()
+            .into(),
+    );
     ui.set_active_tab_kind(snapshot.kind.into());
     ui.set_active_tab_title(snapshot.title.into());
     ui.set_active_tab_status(snapshot.status.into());

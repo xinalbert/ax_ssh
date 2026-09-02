@@ -80,6 +80,21 @@ fn same_profile_opens_independent_terminal_tabs() {
 }
 
 #[test]
+fn active_snapshot_exposes_only_profile_backed_tab_identity() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("Remote", "remote.example", "alice");
+
+    state.open_terminal_tab(&profile);
+    assert_eq!(state.active_snapshot().profile_id, Some(profile.id));
+
+    state.open_local_shell_tab();
+    assert_eq!(state.active_snapshot().profile_id, None);
+
+    state.open_settings_tab();
+    assert_eq!(state.active_snapshot().profile_id, None);
+}
+
+#[test]
 fn terminal_notice_shows_retry_for_exhausted_reconnects() {
     let mut state = test_state();
     let profile = SessionProfile::new("remote", "remote.example", "alice");

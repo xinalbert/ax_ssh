@@ -44,6 +44,7 @@ export struct WorkspaceViewState {
     connection_options: [ConnectableSessionRow],
     active_tab_id: string,
     active_pane_id: string,
+    active_profile_id: string,
     settings_tab_id: string,
     active_tab_kind: string,
     status: string,
@@ -727,6 +728,7 @@ export component WorkspaceShell inherits Rectangle {
             sessions: root.view.sessions;
             sidebar-width: root.view.sidebar_width;
             collapsed-group-label-chars: root.view.collapsed_group_label_chars;
+            active-profile-id: root.view.active_profile_id;
             divider-top-offset: workspace-titlebar.height;
             collapsed <=> root.sidebar-collapsed;
             open-local-shell => { root.open-local-shell(); }

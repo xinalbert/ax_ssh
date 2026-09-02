@@ -62,6 +62,7 @@ export component AppWindow inherits Window {
     in property <string> workspace-default-path: "";
     in property <string> active-tab-id: "";
     in property <string> active-pane-id: "";
+    in property <string> active-profile-id: "";
     in property <string> settings-tab-id: "";
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
@@ -253,6 +254,7 @@ export component AppWindow inherits Window {
         connection_options: root.connection-options,
         active_tab_id: root.active-tab-id,
         active_pane_id: root.active-pane-id,
+        active_profile_id: root.active-profile-id,
         settings_tab_id: root.settings-tab-id,
         active_tab_kind: root.active-tab-kind,
         status: root.status,

@@ -623,9 +623,19 @@ export component SessionNavigation inherits Rectangle {
     callback session-transfer-action(string, string);
 
     private property <bool> expanded: !root.collapsed;
+    in property <string> active-profile-id: "";
     private property <string> selected-kind;
     private property <string> selected-id;
     private property <string> selected-group-name;
+
+    function sync-active-profile-selection() {
+        if !root.active-profile-id.is-empty {
+            root.select-target("server", root.active-profile-id, "");
+        }
+    }
+
+    init => { root.sync-active-profile-selection(); }
+    changed active-profile-id => { root.sync-active-profile-selection(); }
 
     public function import-session-config() {
         root.session-transfer-action("import-any", "");
