@@ -1,3 +1,7 @@
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+
 fn main() {
     println!("cargo:rerun-if-env-changed=AXSSH_BUILD_REVISION");
     println!("cargo:rerun-if-changed=ui");
@@ -21,7 +25,29 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_owned());
     println!("cargo:rustc-env=AXSSH_BUILD_REVISION={revision}");
 
-    embed_resource::compile("packaging/windows/axssh.rc", embed_resource::NONE)
+    let resource_file = if matches!(env::var("TARGET"), Ok(target) if target.contains("windows")) {
+        let icon_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets/ion/terminal_icon_all_formats/terminal_icon.ico");
+        assert!(
+            icon_path.is_file(),
+            "Windows application icon is missing: {}",
+            icon_path.display()
+        );
+        let icon_path = icon_path.to_string_lossy().replace('\\', "\\\\");
+        let resource_file =
+            PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is missing")).join("axssh.rc");
+        fs::write(&resource_file, format!("1 ICON \"{icon_path}\"\n")).unwrap_or_else(|error| {
+            panic!(
+                "failed to write generated Windows resource file {}: {error}",
+                resource_file.display()
+            )
+        });
+        resource_file
+    } else {
+        PathBuf::from("packaging/windows/axssh.rc")
+    };
+
+    embed_resource::compile(resource_file, embed_resource::NONE)
         .manifest_optional()
         .expect("failed to embed the Windows application icon");
 
