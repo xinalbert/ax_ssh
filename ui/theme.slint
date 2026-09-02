@@ -77,6 +77,14 @@ export global Theme {
     out property <color> frame-border: border;
     out property <color> control-border: border;
     out property <color> tab-divider: border.with-alpha(0.46);
+    // Keep the selected workspace tab distinct in every built-in and custom
+    // palette. These derive from the contrast-protected accent role instead
+    // of adding another persisted palette field.
+    out property <color> tab-active-surface: accent.with-alpha(resolved-dark ? 0.18 : 0.12);
+    out property <color> tab-active-border: accent.with-alpha(resolved-dark ? 0.82 : 0.72);
+    out property <color> tab-active-indicator: accent;
+    out property <color> tab-active-text: text;
+    out property <color> tab-inactive-text: muted;
     out property <color> sidebar-divider: divider;
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
@@ -139,6 +147,7 @@ export global Theme {
     out property <length> tab-content-spacing: 4px;
     out property <length> tab-surface-inset: 3px;
     out property <length> tab-surface-radius: 8px;
+    out property <length> tab-active-indicator-height: 2px;
     // Keep one hairline below the Tab boundary and a slightly larger breathing
     // space at the lower window edge. These affect only the outer surface;
     // pane and cell geometry remain unchanged internally.

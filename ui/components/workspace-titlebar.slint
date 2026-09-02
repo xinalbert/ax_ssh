@@ -110,7 +110,7 @@ component WorkspaceTabContent inherits HorizontalLayout {
     ElidedLabel {
         horizontal-stretch: 1;
         text: root.title;
-        text-color: Theme.text;
+        text-color: root.active ? Theme.tab-active-text : Theme.tab-inactive-text;
         font-size: Theme.tab-title-font-size;
         font-weight: root.active
             ? Theme.tab-title-active-font-weight
@@ -594,14 +594,33 @@ export component WorkspaceTitlebar inherits Rectangle {
                         background: tab.kind == "terminal"
                             ? Theme.panel-alt
                             : Theme.background;
+                        border-width: Theme.hairline;
+                        border-color: Theme.tab-active-border;
+                    }
+                    if tab.id == root.active-tab-id
+                            || (root.drag-source-index >= 0
+                                && root.drag-target-index == index) : Rectangle {
+                        x: Theme.hairline;
+                        y: Theme.tab-surface-inset + Theme.hairline;
+                        width: parent.width - 2 * Theme.hairline;
+                        height: parent.height - Theme.tab-surface-inset - Theme.hairline;
+                        border-radius: Theme.tab-surface-radius - Theme.hairline;
+                        background: Theme.tab-active-surface;
+                    }
+                    if tab.id == root.active-tab-id : Rectangle {
+                        x: Theme.tab-surface-radius;
+                        y: Theme.tab-surface-inset;
+                        width: parent.width - 2 * Theme.tab-surface-radius;
+                        height: Theme.tab-active-indicator-height;
+                        background: Theme.tab-active-indicator;
                     }
                     if root.drag-source-index >= 0
                             && root.drag-target-index == index : Rectangle {
                         x: Theme.tab-surface-radius;
                         y: Theme.tab-surface-inset;
                         width: parent.width - 2 * Theme.tab-surface-radius;
-                        height: Theme.hairline;
-                        background: Theme.accent;
+                        height: Theme.tab-active-indicator-height;
+                        background: Theme.tab-active-indicator;
                     }
 
                     tab-touch := TouchArea {
@@ -711,13 +730,23 @@ export component WorkspaceTitlebar inherits Rectangle {
                     background: root.drag-kind == "terminal"
                         ? Theme.panel-alt
                         : Theme.background;
+                    border-width: Theme.hairline;
+                    border-color: Theme.tab-active-border;
+                }
+                Rectangle {
+                    x: Theme.hairline;
+                    y: Theme.tab-surface-inset + Theme.hairline;
+                    width: parent.width - 2 * Theme.hairline;
+                    height: parent.height - Theme.tab-surface-inset - Theme.hairline;
+                    border-radius: Theme.tab-surface-radius - Theme.hairline;
+                    background: Theme.tab-active-surface;
                 }
                 Rectangle {
                     x: Theme.tab-surface-radius;
                     y: Theme.tab-surface-inset;
                     width: parent.width - 2 * Theme.tab-surface-radius;
-                    height: Theme.hairline;
-                    background: Theme.accent;
+                    height: Theme.tab-active-indicator-height;
+                    background: Theme.tab-active-indicator;
                 }
 
                 WorkspaceTabContent {
