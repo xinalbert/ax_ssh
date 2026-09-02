@@ -21,10 +21,11 @@ pub(super) enum TerminalPresentationMode {
     Focused,
 }
 
-/// Timer ceilings for dirty terminal UI publication on non-software renderers.
-/// The route decides whether a pane is focused, visible-unfocused, or hidden;
-/// `winit-software` instead submits immediately into the bounded latest-frame
-/// UI gate and never delays terminal parsing or transport work.
+/// Timer ceilings for dirty terminal UI publication.
+/// The route decides whether a pane is focused, visible-unfocused, or hidden.
+/// A focused `winit-software` pane submits immediately into the bounded
+/// latest-frame UI gate; every visible-unfocused pane honors the configured
+/// refresh ceiling without delaying terminal parsing or transport work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct TerminalPresentationPolicy {
     focused_fps: u16,
@@ -221,9 +222,7 @@ impl TerminalPresentationState {
         }
         match mode {
             TerminalPresentationMode::Hidden => None,
-            TerminalPresentationMode::Focused | TerminalPresentationMode::Unfocused
-                if policy.software_renderer =>
-            {
+            TerminalPresentationMode::Focused if policy.software_renderer => {
                 // Software frames enter the AppState single-slot refresh gate
                 // immediately. If the UI is busy, newer output is merged when
                 // the pending snapshot is consumed instead of accumulating
@@ -460,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn software_visible_output_is_immediate_without_a_timer_cap() {
+    fn software_only_bypasses_the_focused_refresh_cap() {
         let software_policy = DEFAULT_POLICY.with_software_renderer(true);
         let mut state = TerminalPresentationState::default();
         let started_at = Instant::now();
@@ -482,7 +481,7 @@ mod tests {
                 software_policy,
                 next_output_at
             ),
-            Some(next_output_at)
+            Some(started_at + software_policy.unfocused_interval())
         );
     }
 }
