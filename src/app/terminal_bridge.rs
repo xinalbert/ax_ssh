@@ -1,6 +1,8 @@
 #[cfg(target_os = "windows")]
 use std::{cell::Cell, rc::Rc};
 
+#[cfg(target_os = "windows")]
+use super::input::terminal_key_from_physical_keycode;
 use super::*;
 use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{
