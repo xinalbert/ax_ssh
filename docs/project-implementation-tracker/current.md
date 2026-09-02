@@ -139,6 +139,10 @@
 | XPLAT4 | completed | 双语契约、项目地图、月度记录和质量门禁 | tracker、Markdown、fmt/check/Clippy/test/diff 检查 | 目标平台 GUI 与真实 driver 行为仍属于平台验收，不由离线构建替代。 |
 | WS1 | completed | 为有界 workspace 快照增加菜单保存/打开、路径弹层和异步替换流程 | workspace persistence tests、Slint 编译、完整 Rust/Slint 离线门禁、目标平台菜单与多窗口视觉验收 | 快照只含 Tab/layout/有限终端文本，不含凭据或 live handle；打开前先停止旧 worker，文件 I/O 不阻塞 UI。目标平台菜单、路径输入和 detached 多窗口视觉仍由用户验收。 |
 | FONT1 | completed | 修复自带终端字体异步注册后粗体布局仍复用普通回退字体的问题 | Fontique 字重注册回归、Slint 编译、完整 Rust/Slint 离线门禁、`git diff --check` | 字体注册代次驱动终端 `font-weight` 绑定和工作区刷新，同时同步主窗口与 detached 窗口；不改变字体族选择或字体资源。 |
+| KPAD1 | completed | Windows 物理数字小键盘映射、终端 application-keypad 模式读取和 DEC/xterm 应用小键盘编码 | 输入/编码/终端模式定向回归、host Cargo check；Windows target 仍待 CI/目标机 | 补充目标 ID：`20260901-windows-keypad-input`；只在远端 `ESC =` 模式且无修饰键时截获，普通 NumLock/IME 路径保持不变。 |
+| KPAD2 | completed | 双语输入契约、项目地图、月度记录和离线质量门禁 | fmt/check/Clippy/test、tracker/Markdown、`git diff --check` | 不改变 SSH transport、host-key trust、凭据或持久化。 |
+| SHORT1 | completed | 在设置页展示所有应用层快捷键，包括固定的平台快捷键 | Slint 编译、设置搜索回归、翻译检查和完整 Cargo 门禁 | 可配置快捷键保持现有保存契约；固定的 Terminal Select All、Previous Tab、Next Tab 只读展示。 |
+| INPUT1 | completed | 统一普通输入框的复制/粘贴入口，并为密码输入提供安全的粘贴菜单 | Slint 编译、输入组件静态审阅、完整 Cargo 门禁 | 普通文本/路径/编辑器支持系统 Copy/Cut/Paste/Select All；SecretTextInput 仍禁止复制，仅允许粘贴，不改变凭据生命周期。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
 - `ROWMODEL2`：移除应用层 tile/partition 链路；旧配置字段由 Serde 忽略，不做 schema migration。
@@ -252,6 +256,9 @@
 
 ## 最后更新时间
 
+- 2026-09-01 21:57 +0800：完成 SHORT1/INPUT1；Shortcuts 展示三个固定平台快捷键，普通文本输入和 TextEdit 使用完整原生剪贴板操作，SecretTextInput 仅新增粘贴入口并保持秘密不可复制。完整 Rust/Slint、翻译和差异门禁通过；目标平台输入法、快捷键和菜单视觉待用户验收。
+- 2026-09-01 15:55 +0800：完成 MODAL1 阻塞式 dialog 统一与窗口路由锁定；共享 `ModalFrame`、`OverlayHost` 安全优先仲裁和 Rust 侧 Tab/Pane/workspace 动作复核已接通，完整离线门禁通过，目标平台焦点/菜单验收待用户执行。
+- 2026-09-01 18:37 +0800：完成 KPAD1-KPAD2；Windows 在远端 `ESC =` application-keypad 模式下编码无修饰物理数字小键盘，普通 NumLock/IME/快捷键路径不变。host 离线门禁通过；Windows target 构建和实机键盘验收仍待 CI/目标机。
 - 2026-09-01：修复异步自带字体注册后的终端粗体/斜体布局缓存失效；FONT1 已完成，主窗口与 detached 窗口同步字体注册代次，完整离线 Rust/Slint 门禁通过，目标平台视觉待用户验收。
 - 2026-08-28 11:30 +0800：增加 File 菜单 workspace 保存/打开、非阻塞路径弹层、用户路径有界原子读写，以及打开前 worker/probe 清理、Tab UUID 重映射和 detached route 替换；WS1 已完成，目标平台视觉待用户验收。
 - 2026-08-28 14:38 +0800：完成 SEC5-SEC11，收敛 session `01a040ac-d2f1-7fc2-b033-cc1c58f5b4ca` 复核出的 credential timeout、Telnet/Serial 旧快照和设置预览语义问题；完整验证结果见本轮月度记录。

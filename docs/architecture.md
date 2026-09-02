@@ -383,11 +383,23 @@ not open either directory, and saving them does not mutate a running Tab.
 
 `OverlayHost` owns the local group/profile-management dialog open state and
 draft, deriving its title, message, and button presentation from one action
-value. It forwards a management command only after confirmation. It also
-composes the SSH host-key and authentication dialogs, but these are intentionally
-different: their visibility and prompt identity are read-only Rust-owned
-security phase. The UI may submit confirm/reject/authenticate/cancel intent, but
-must not locally hide either dialog before the Rust state transition accepts it.
+value. It forwards a management command only after confirmation. Every blocking
+dialog uses the shared `ModalFrame`: one overlay, centered surface, responsive
+size cap, focus handoff, and Escape-to-cancel behavior. SSH host-key and
+authentication dialogs remain intentionally different in ownership: their
+visibility and prompt identity are read-only Rust-owned security phase. The UI
+may submit confirm/reject/authenticate/cancel intent, but must not locally hide
+either dialog before the Rust state transition accepts it.
+
+`OverlayHost` presents at most one dialog. A security prompt has priority over a
+local management or workspace-file dialog; the covered local dialog and its
+draft remain intact and resume after the security decision. A second local
+request while any dialog is open is ignored rather than replacing unsaved input.
+Its derived `modal-open` state disables application menu actions and is reported
+to `WindowRouter`. The router independently treats the active Tab's pending
+security phase as locked, so Tab activation, cycling, reordering, closing, pane
+commands, and workspace transfer cannot race the UI-state callback. The
+tab-local terminal connection notice deliberately remains non-blocking.
 
 ## Event flow
 
@@ -434,7 +446,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
    prompt, then let the worker connect to the current runtime agent after host
    trust is established. The security overlay renders only the active Tab's pending
    phase; inactive Tabs retain their own prompt until activated, and changing an
-   authentication prompt clears its secret inputs before it becomes visible.
+   authentication prompt clears its secret inputs before it becomes visible. Once
+   a blocking dialog is visible, the current window stays on that Tab until the
+   dialog is resolved; background prompts on inactive Tabs do not take focus.
 4. Settings > General owns the default backend for a newly remembered SSH
    password: the platform credential store or the encrypted application vault.
    Each ordinary password prompt initializes its backend selector from that
@@ -478,9 +492,14 @@ must not locally hide either dialog before the Rust state transition accepts it.
 5. The terminal surface maps Slint special keys, including F1-F12, to
    UI-independent terminal key values and applies a narrow shifted-hyphen
    fallback when the platform still reports `-` for `Shift+-`.
-   `src/terminal/input.rs` emits control bytes, normal CSI or
-   application-cursor SS3 arrow/Home/End sequences, and modified xterm
-   navigation/function-key sequences. A transparent, cursor-positioned
+   `src/terminal/input.rs` emits control bytes, normal CSI, application-cursor
+   SS3 arrow/Home/End sequences, application-keypad SS3 sequences, and modified
+   xterm navigation/function-key sequences. On Windows, a shown Winit window
+   preserves the physical numeric-keypad identity only while the active terminal
+   has entered application-keypad mode through `ESC =`: unmodified, non-synthetic
+   keypad presses are encoded there and prevented from reaching the text proxy a
+   second time. Normal mode, NumLock behavior, IME, and any modified keypad
+   input continue through Slint's normal path. A transparent, cursor-positioned
    `TextInput` is the native text and IME proxy: special keys and terminal
    control chords use `key-pressed`, while printable text, Shift text, and IME
    commits enter only through `edited`; preedit remains local UI state. At the
@@ -680,8 +699,9 @@ must not locally hide either dialog before the Rust state transition accepts it.
     Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` on Windows/Linux,
     preserving plain terminal `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` on those platforms.
     The commands are disabled outside a Terminal Tab, so ordinary non-secret
-    text fields retain native editing shortcuts and context menus; secret fields
-    remain non-copyable. No generic text-focus bridge, Cut, or Undo command is
+    text fields retain native Copy, Cut, Paste, and Select All shortcuts and
+    context menus; secret fields expose paste but remain non-copyable. No generic
+    text-focus bridge, Cut, or Undo command is
     introduced. **Previous Tab** and **Next Tab** use the
     same parser for fixed `Cmd+Shift+[` / `Cmd+Shift+]` accelerators on macOS
     and `Ctrl+Shift+[` / `Ctrl+Shift+]` on Windows/Linux. They are enabled only
@@ -956,10 +976,11 @@ logged, and all relay tasks are aborted and joined before the SSH worker closes.
 Authentication secrets use `ui/components/secret-text-input.slint`, not the
 general-purpose text input. It retains native password masking, IME, focus, and
 password-input accessibility semantics, but does not publish an
-`accessible-value`, offer an edit context menu, allow copy/cut shortcuts, or
-allow pointer selection to reach the platform selection clipboard. Its
-accessibility contract permits setting a value, not reading one. At the Slint to
-application boundary the accepted `SharedString` is copied immediately into
+`accessible-value`, offer a copy/edit context menu, allow copy/cut shortcuts,
+or allow pointer selection to reach the platform selection clipboard. It exposes
+a paste-only context action so password values can be entered without making them
+copyable. Its accessibility contract permits setting a value, not reading one. At
+the Slint-to-application boundary, the accepted `SharedString` is copied immediately into
 `Zeroizing<String>`; the SSH worker, private-key loader, vault task, and
 credential rollback keep AxSSH-owned secret buffers zeroized on drop. This
 shortens AxSSH-owned lifetimes, but does not claim to erase temporary copies
@@ -988,9 +1009,10 @@ Authenticated connections follow this lifecycle:
   transport inactivity boundary decide connection liveness; a quiet shell data
   channel is valid and never has its own output timeout;
 - tab close invalidates the tab/attempt route before requesting worker shutdown;
-- window shutdown requests disconnect for every remaining worker, waits for
-  each join with a timeout, explicitly releases all detached and main-window
-  Slint models and window handles, and only then shuts down Tokio.
+- window shutdown requests disconnect for every remaining worker, joins them
+  concurrently under a five-second application deadline (aborting any
+  stragglers), explicitly releases all detached and main-window Slint models
+  and window handles, and only then shuts down Tokio.
 
 ## SFTP browsing and write contract
 
@@ -1119,7 +1141,11 @@ Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
 menu owns bounded Download and Delete intents; the remote toolbar retains
 rename, UTF-8 edit, and Save As operations. Local regular files
-can be uploaded through the same transfer queue. Editor monitoring polls a
+can be uploaded through the same transfer queue. The application passes only a
+validated path and size; the worker revalidates the source and streams one
+64 KiB chunk at a time. A process-wide eight-upload semaphore bounds the
+resident upload chunks (about 512 KiB at this boundary), so a 512 MiB upload
+does not become a resident buffer. Editor monitoring polls a
 remote size/mtime fingerprint while the editor is open. Automatic upload is
 explicit and off by default, debounced, and still guarded by the observed
 fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
@@ -1474,10 +1500,11 @@ cross into Rust, persistence, diagnostics, workers, or transports.
 `ui/components/flat-text-input.slint` owns the matching theme-native single-line
 control for non-secret Settings, session-editor, and management-dialog fields.
 It keeps native cursor placement, selection, IME, keyboard focus, accessibility,
-and the standard edit context menu.
+and the standard Copy, Cut, Paste, Select All shortcuts and edit context menu.
 `ui/components/secret-text-input.slint` is the separate password-only control
 for SSH passwords, vault passwords, and private-key passphrases; it deliberately
-does not inherit ordinary selection or copy/cut behavior. Numeric inputs remain
+allows paste from its context action but does not inherit ordinary selection or
+copy/cut behavior. Numeric inputs remain
 standard `SpinBox` controls so their range and increment semantics are not
 reimplemented.
 `ui/components/settings-controls.slint` consumes those tokens to provide the

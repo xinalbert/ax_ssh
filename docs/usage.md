@@ -406,7 +406,7 @@ Settings. Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` elsewhere.
 Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
 The same keyboard shortcuts work in a detached Terminal window even though it
 has no client-area menu. Non-secret text fields retain their native editing
-shortcuts and context menus; secret fields remain non-copyable.
+shortcuts and context menus; secret fields allow paste but remain non-copyable.
 Hold `Cmd` on macOS, or `Ctrl` on Windows/Linux, and click a visible terminal
 target to open it. While that modifier is held, the complete recognized URL or
 path is underlined; the indicator clears when the modifier is released or text
@@ -449,6 +449,8 @@ On macOS, Settings and About are in the standard AxSSH application menu, and
 the Settings item follows its configured shortcut. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
 contains General, Appearance, Terminal, X11, Workspace, Shortcuts, and About pages.
+The Shortcuts page lists both configurable shortcuts and fixed platform shortcuts such as
+Select All, Previous Tab, and Next Tab.
 The search field above the detail area finds category names, setting titles, and
 descriptions across all pages. Select a result to open its category. Every
 category detail area scrolls independently when its content exceeds the window.

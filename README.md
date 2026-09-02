@@ -3,23 +3,23 @@
 # AxSSH
 
 AxSSH is a cross-platform desktop terminal workspace built with Rust, Slint,
-and Tokio. It combines saved SSH, Telnet, and serial sessions with independent
-local and remote terminal tabs and persistent workspace settings.
+and Tokio. It keeps saved SSH, Telnet, Serial, and local-shell sessions alongside
+independent Terminal and SFTP Tabs with persistent workspace settings.
 
-Current functionality includes SSH password, private-key, and runtime-agent
-authentication with explicit host-key confirmation, plaintext Telnet, manually initiated serial
-connections with automatic port discovery, bounded terminal scrollback, ANSI
-rendering, selection, clipboard shortcuts, native input-method support, and
-bounded remote SFTP directory browsing in dedicated dual-pane SFTP tabs. The
-local pane reads only bounded directory metadata and can open regular files with
-the platform default application. Remote regular files can be downloaded into a
-private cache and opened from the bounded transfer queue. SFTP upload, delete,
-edit, reconnect, workspace restoration, and full
-terminal mouse reporting are not implemented yet. A connected SSH Terminal and
-its SFTP companion can move together into a separate native window and return
-without reconnecting.
+## Highlights
 
-## Quick start
+- Connect over SSH with a password, private key, or runtime agent, with explicit
+  SHA-256 host-key confirmation before a host is trusted.
+- Work in local or remote terminals with bounded scrollback, ANSI rendering,
+  selection, clipboard, and native input-method support. Windows physical numeric
+  keypads also reach terminal applications, including DEC application-keypad mode.
+- Browse local and remote files in a dedicated SFTP Tab, with bounded directory
+  listing, recursive downloads, uploads, rename, delete, and remote text editing.
+- Use split panes and detached native workspace windows. Settings exposes both
+  configurable shortcuts and fixed platform shortcuts; non-secret fields support
+  native editing and paste, while secret fields remain non-copyable.
+
+## Quick Start
 
 Install Rust `1.92.0` or newer and use a desktop environment supported by
 Slint's winit backend, then run:
@@ -28,46 +28,32 @@ Slint's winit backend, then run:
 cargo run --locked
 ```
 
-The first connection to a host is rejected until you verify and explicitly
-confirm its SHA-256 host-key fingerprint. See the [usage guide](docs/usage.md)
-for session setup, terminal controls, settings, and data-storage behavior.
+Unknown and changed SSH host keys are rejected until you verify and explicitly
+confirm their SHA-256 fingerprint. Session setup, terminal controls, SFTP, and
+settings are covered by the [usage guide](docs/usage.md).
 
 ## Releases
 
 GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
-Silicon, Intel, and universal application bundles. On the default branch,
-synchronize and commit the release metadata, then push a valid annotated
-`YYYY-MM-DD[-N]` tag such as `2026-08-12` or `2026-08-12-1`. That tag directly
-starts the Release workflow. The workflow validates the tag and checked-in
-metadata before rebuilding every release asset, and failed jobs can be re-run
-from the same tag run without moving the tag. Each published Release groups
-high-signal commits into a short
-Highlights section with an explicit full-changelog link, then retains GitHub's
-generated release notes for the complete change list.
+Silicon, Intel, and universal application bundles. After release metadata is
+synchronized and committed on the default branch, pushing a valid annotated
+`YYYY-MM-DD[-N]` tag starts the release workflow. See the
+[release guide](docs/development.md#github-releases) for the required commands.
 
 ## Documentation
 
 - [Usage guide](docs/usage.md)
-- [Architecture](docs/architecture.md)
 - [Development and verification](docs/development.md)
+- [Architecture](docs/architecture.md)
 - [Documentation index](docs/README.md)
-- [Implementation tracker](docs/project-implementation-tracker/current.md)
 
-## Security and repository boundary
+## Help and Security
 
-Unknown and changed SSH host keys are denied by default. Remembered passwords are
-stored by macOS Keychain, Windows Credential Manager, or Unix Secret Service;
-passwords, private-key passphrases, private-key contents, SSH-agent socket paths
-and identities, terminal output, and live worker state are never written to the
-session JSON. Telnet is unencrypted.
-Serial discovery lists device metadata only; a device is opened only after an
-explicit connect action.
-
-`third_package/axshell` is reference material only. It is not a Cargo workspace
-member, source import, runtime dependency, build input, or documentation
-dependency. AxSSH uses Slint for its UI, russh and russh-sftp for SSH/SFTP,
-libmudtelnet-rs for Telnet protocol events, and tokio-serial for serial
-transport.
+Report problems through the [issue tracker](https://github.com/xinalbert/ax_ssh/issues/new)
+or the **Report a bug** action in the application's About page. Passwords are
+stored only when requested, using the system credential store or the encrypted
+application vault; plaintext passwords, private-key passphrases, terminal output,
+and live worker state are not written to session JSON. Telnet is unencrypted.
 
 ## License
 

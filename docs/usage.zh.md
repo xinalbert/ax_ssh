@@ -35,7 +35,7 @@ cargo run --locked
    storage** 菜单中只为本次提示改选后端，再勾选 **Save password (optional)**。只有认证成功后才会
    保存密码；请求加密保险库但保险库口令留空时会改存系统凭据库，提供非空保险库口令才会创建
    加密保险库记录。之后使用既有保险库记录仍需输入其保险库口令解锁已保存的 SSH 密码。
-   密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择；应用接收已提交的秘密后
+   密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择，但可通过键盘或右键菜单粘贴；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
    当前版本支持 RSA 私钥和 RSA agent identity，以兼容现有服务器。该版本有意接受
    RUSTSEC-2023-0071（当前锁定 RSA 实现没有修复版本的 Marvin 时序侧信道 advisory）。
@@ -247,7 +247,7 @@ xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`
 Settings 中修改；Select All 固定为 macOS `Cmd+A`、其它平台 `Ctrl+Shift+A`。
 Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。detached Terminal
 虽然没有客户区菜单，仍可使用相同键盘快捷键。普通非秘密文本字段继续使用原生编辑快捷键和
-右键菜单，秘密字段仍不可复制。
+右键菜单；秘密字段可粘贴但仍不可复制。
 在 macOS 按住 `Cmd`，或在 Windows/Linux 按住 `Ctrl`，再点击可见终端目标即可打开。
 按住时，完整识别出的 URL 或路径会显示下划线；松开修饰键或开始文本选择时提示消失。AxSSH 识别
 `http://` 和 `https://` URL，并交给本机默认程序；不会自行请求这些 URL。
@@ -276,7 +276,8 @@ Windows/Linux 继续保持 Alt 作为终端 Meta 输入；本地键盘布局的 
 macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会跟随其配置快捷键；
 Windows 和 Linux 分别在 Edit
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、
-Workspace、Shortcuts 和 About 页面。详情区顶部的搜索框可跨所有页面查找分类名、设置标题和说明，
+Workspace、Shortcuts 和 About 页面。Shortcuts 页面同时列出可配置快捷键和 Select All、Previous Tab、
+Next Tab 等固定的平台快捷键。详情区顶部的搜索框可跨所有页面查找分类名、设置标题和说明，
 选择结果会打开对应分类；每个分类的详情内容超过窗口时都可独立滚动。除 renderer 外，修改会立即作用于
 当前应用，关闭 Settings Tab 的 `x` 后才会持久化；renderer 只在重启后生效。
 Settings Tab 已经打开时再次按其快捷键，只会激活这个单例 Tab。

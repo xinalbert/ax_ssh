@@ -250,9 +250,17 @@ source snapshot。保存 profile 时密码可以留空；保存密码开关和�
 它们只是本地草稿：修改时不会打开任一目录，保存时也不会改变已经运行的 Tab。
 
 `OverlayHost` 拥有 Group/Profile 管理弹层的开关和草稿，并从单个 action 派生标题、消息和
-按钮表现；只有确认后才向上发送管理命令。它也组合 SSH 主机密钥与认证弹层，但二者是刻意
-保留的例外：可见性和 prompt identity 仍是 Rust 安全 phase 的只读输入。UI 只能提交
+按钮表现；只有确认后才向上发送管理命令。所有阻塞式 dialog 共用 `ModalFrame`：一层遮罩、
+居中的 surface、响应式尺寸上限、焦点转交和 Escape 取消行为。SSH 主机密钥与认证弹层仍是
+刻意保留的例外：可见性和 prompt identity 仍是 Rust 安全 phase 的只读输入。UI 只能提交
 confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前自行隐藏弹层。
+
+`OverlayHost` 同一时刻最多呈现一个 dialog。安全提示优先于本地管理或 workspace-file
+dialog；被覆盖的本地 dialog 与其草稿保持不变，安全决策结束后恢复。任一 dialog 打开时再次
+请求本地 dialog 会被忽略，避免替换未保存输入。派生的 `modal-open` 会禁用 application
+菜单动作并回传 `WindowRouter`。Router 还独立把 active Tab 的 pending security phase 视为
+locked，因此 Tab 激活、循环、排序、关闭、pane command 和 workspace 转移都不能与 UI 状态
+callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保持非阻塞。
 
 ## 事件流
 
@@ -281,7 +289,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
-   Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。
+   Tab 的等待阶段；非活动 Tab 保留自己的提示直到被激活，认证提示切换时会先清空其中的秘密输入。阻塞式
+   dialog 显示期间当前窗口保持在该 Tab，直到 dialog 被处理；非活动 Tab 的后台 prompt 不会抢占焦点。
    SSH transport 还会读取平台用户的有界 OpenSSH `known_hosts` 文件。未撤销的精确匹配属于共享信任；
    profile 冲突、变更密钥、坏记录和文件不可读都不会放宽信任。精确匹配 `@revoked` 时在认证前拒绝，
    普通确认不能绕过。未知确认追加观察到的公钥；变更确认原子替换匹配 host 的非撤销记录，同时保留
@@ -306,8 +315,11 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
    Serial 在异步串口发现完成后、真正创建 worker 前还会再次校验；凭据读取有明确的超时，凭据写入的超时只作为可观测的软截止，仍会等待不可取消的 blocking 操作完成后才释放持久化闸门，以保持写入顺序。
 5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
    `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
-   生成控制字节、普通 CSI 或 application-cursor SS3 方向/Home/End 序列，以及带修饰键的
-   xterm 导航/功能键序列。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：
+   生成控制字节、普通 CSI、application-cursor SS3 方向/Home/End 序列、application-keypad
+   SS3 序列，以及带修饰键的 xterm 导航/功能键序列。在 Windows 上，已显示的 Winit 窗口仅在活动
+   终端通过 `ESC =` 进入 application-keypad 模式时保留物理数字小键盘身份：无修饰且非合成的
+   小键盘按下会在该边界编码，并阻止再次进入文本代理。普通模式、NumLock 行为、IME 和带修饰键的
+   小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：
    特殊键与终端控制组合键走 `key-pressed`，可打印字符、Shift 文字和 IME 提交只通过
    `edited` 进入；预编辑保留在局部 UI 状态。物理 macOS 按键在应用边界先读取 AppKit 当前聚合的
    修饰键状态，再还原 Slint Apple 映射中交换的 Control/Command 语义，因此即使缺少某一侧修饰键
@@ -421,8 +433,8 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
     只为 Terminal 提供 **Copy**、**Paste** 和 **Select All**，并移除永久 disabled 的 Undo
     占位。Copy/Paste 复用可配置的终端快捷键；Select All 固定为 macOS `Cmd+A`、
     Windows/Linux `Ctrl+Shift+A`，从而保留这些平台终端内普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V`
-    的输入语义。非 Terminal Tab 中这些命令保持 disabled，因此普通非秘密文本字段继续使用
-    原生编辑快捷键和右键菜单，秘密字段仍不可复制；本轮不增加通用文本焦点 bridge、Cut 或 Undo。
+    的输入语义。非 Terminal Tab 中这些命令保持 disabled，因此普通非秘密文本字段继续使用原生 Copy、Cut、Paste、Select All
+    快捷键和右键菜单；秘密字段提供粘贴入口但仍不可复制。本轮不增加通用文本焦点 bridge、Cut 或 Undo。
     macOS
     的 **Previous Tab** / **Next Tab** 通过同一解析器使用固定 `Cmd+Shift+[` /
     `Cmd+Shift+]`，Windows/Linux 使用 `Ctrl+Shift+[` / `Ctrl+Shift+]`。它们只在多于一个
@@ -610,7 +622,8 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 
 认证秘密使用 `ui/components/secret-text-input.slint`，而不是通用文本输入。它保留
 原生密码遮蔽、IME、焦点和密码输入可访问性语义，但不发布 `accessible-value`、不提供
-编辑右键菜单、不允许复制/剪切快捷键，也不允许鼠标选择进入平台 selection clipboard。
+复制/编辑右键菜单、不允许复制/剪切快捷键，也不允许鼠标选择进入平台 selection clipboard；
+它只提供粘贴右键操作，便于输入而不让秘密变得可复制。
 其可访问性契约允许设置值，不允许读取值。Slint 到应用边界会立即把已接收的
 `SharedString` 复制到 `Zeroizing<String>`；SSH worker、私钥加载、保险库任务和凭据
 回滚会在 drop 时清零 AxSSH 自己拥有的秘密缓冲区。这只能缩短 AxSSH 拥有的秘密寿命，
@@ -633,8 +646,8 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
   存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
 - 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
-- 窗口退出对所有剩余 worker 请求断开，在超时边界内逐个等待 join，显式释放所有 detached/主窗口
-  Slint model 和窗口强引用，最后再关闭 Tokio。
+- 窗口退出对所有剩余 worker 请求断开，在五秒应用总时限内并发等待 join，超时后中止剩余任务，显式
+  释放所有 detached/主窗口 Slint model 和窗口强引用，最后再关闭 Tokio。
 
 ## SFTP 浏览与写操作契约
 
@@ -712,7 +725,9 @@ subsystem stream。
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
 和活动 transfer。远端文件行右键菜单负责有界下载和删除 intent；远端工具栏保留重命名、UTF-8 编辑和
-Save As。本地 regular file 通过同一 transfer queue 上传。
+Save As。本地 regular file 通过同一 transfer queue 上传。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
+每次只流式读取一个 64 KiB chunk；进程级最多同时运行 8 个上传，进一步把此边界的常驻 chunk
+内存限制在约 512 KiB，因此 512 MiB 上传不会变成常驻内存缓冲。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
 拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。
 
@@ -906,9 +921,9 @@ control border、focus、hover 和 selected 状态 token，避免共享组件各
 局部值不会进入 Rust、持久化、diagnostics、worker 或 transport。
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、
-IME、键盘焦点、可访问性和标准文本编辑右键菜单。
+IME、键盘焦点、可访问性以及 Copy、Cut、Paste、Select All 快捷键和标准文本编辑右键菜单。
 `ui/components/secret-text-input.slint` 是 SSH 密码、保险库口令和私钥 passphrase 专用的
-密码输入，不继承普通字段的选择或复制/剪切行为。数值输入继续使用标准 `SpinBox`，不重复
+密码输入，提供粘贴右键操作但不继承普通字段的选择或复制/剪切行为。数值输入继续使用标准 `SpinBox`，不重复
 实现范围与增减语义。
 `ui/components/settings-controls.slint` 使用这些 token 提供共享的 Settings 图标、导航、
 页面、右对齐紧凑字段、设置行、开关、快捷键和操作标题栏。设置行保持稳定的标题/元数据
