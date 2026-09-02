@@ -418,6 +418,18 @@ fn tracks_application_cursor_mode() {
 }
 
 #[test]
+fn tracks_application_keypad_mode() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    assert!(!terminal.application_keypad());
+
+    terminal.process(b"\x1b=");
+    assert!(terminal.application_keypad());
+
+    terminal.process(b"\x1b>");
+    assert!(!terminal.application_keypad());
+}
+
+#[test]
 fn encodes_sgr_click_release_wheel_drag_and_modifiers() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     terminal.process(b"\x1b[?1000h\x1b[?1006h");

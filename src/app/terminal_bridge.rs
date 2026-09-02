@@ -1,11 +1,22 @@
+#[cfg(target_os = "windows")]
+use std::{cell::Cell, rc::Rc};
+
 use super::*;
 use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{
     TerminalTarget, terminal_target_at_cell, terminal_target_span_at_cell,
 };
 use ax_ssh::terminal::{
-    TerminalModel, TerminalMouseButton, TerminalMouseEvent, TerminalMouseEventKind,
-    TerminalMouseModifiers,
+    TerminalKey, TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
+    TerminalMouseEventKind, TerminalMouseModifiers, encode_key_with_modes,
+};
+#[cfg(target_os = "windows")]
+use slint::winit_030::{
+    EventResult, WinitWindowAccessor,
+    winit::{
+        event::{ElementState, WindowEvent},
+        keyboard::{ModifiersState, PhysicalKey},
+    },
 };
 
 pub(super) fn start_local_shell(
@@ -69,6 +80,215 @@ pub(super) fn resume_existing_local_shell(
     Ok(())
 }
 
+/// Register after a Slint window is shown, when its Winit adapter exists.
+///
+/// The physical key identity is necessary only for application-keypad mode:
+/// Slint otherwise keeps ownership of normal text, IME, and NumLock behavior.
+#[cfg(target_os = "windows")]
+pub(super) fn install_terminal_keypad_input_hook(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    window_router: WindowRouter,
+    window_id: Uuid,
+) {
+    let modifiers = Rc::new(Cell::new(ModifiersState::default()));
+    let modifiers_for_event = modifiers.clone();
+    let ui_for_keypad = ui.as_weak();
+    ui.window().on_winit_window_event(move |_window, event| {
+        match event {
+            WindowEvent::ModifiersChanged(next) => {
+                modifiers_for_event.set(next.state());
+            }
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic,
+                ..
+            } => {
+                if *is_synthetic || event.state != ElementState::Pressed {
+                    return EventResult::Propagate;
+                }
+                let modifiers = modifiers_for_event.get();
+                if modifiers.shift_key()
+                    || modifiers.control_key()
+                    || modifiers.alt_key()
+                    || modifiers.super_key()
+                {
+                    return EventResult::Propagate;
+                }
+                let PhysicalKey::Code(keycode) = event.physical_key else {
+                    return EventResult::Propagate;
+                };
+                let Some(key) = terminal_key_from_physical_keycode(keycode) else {
+                    return EventResult::Propagate;
+                };
+                let Some(tab_id) = window_router.active_tab(window_id) else {
+                    return EventResult::Propagate;
+                };
+                let input = TerminalInputContext {
+                    ui: &ui_for_keypad,
+                    state: &state,
+                    window_router: &window_router,
+                    window_id,
+                };
+                if !input.application_keypad_active(tab_id) {
+                    return EventResult::Propagate;
+                }
+                if input.dispatch(tab_id, key, TerminalModifiers::default(), true) {
+                    return EventResult::PreventDefault;
+                }
+            }
+            _ => {}
+        }
+        EventResult::Propagate
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(super) fn install_terminal_keypad_input_hook(
+    _ui: &AppWindow,
+    _state: Arc<Mutex<AppState>>,
+    _window_router: WindowRouter,
+    _window_id: Uuid,
+) {
+}
+
+struct TerminalInputContext<'a> {
+    ui: &'a slint::Weak<AppWindow>,
+    state: &'a Arc<Mutex<AppState>>,
+    window_router: &'a WindowRouter,
+    window_id: Uuid,
+}
+
+impl TerminalInputContext<'_> {
+    #[cfg(target_os = "windows")]
+    fn application_keypad_active(&self, tab_id: Uuid) -> bool {
+        self.state.lock().is_ok_and(|app| {
+            !self
+                .window_router
+                .workspace_actions_locked(self.window_id, &app)
+                && self
+                    .window_router
+                    .owns_terminal_pane(self.window_id, tab_id, &app)
+                && app.terminal(tab_id).is_some_and(|terminal| {
+                    terminal.connected
+                        && terminal
+                            .terminal
+                            .as_ref()
+                            .is_some_and(TerminalModel::application_keypad)
+                })
+        })
+    }
+
+    fn dispatch(
+        &self,
+        tab_id: Uuid,
+        key: TerminalKey,
+        modifiers: TerminalModifiers,
+        physical_key_event: bool,
+    ) -> bool {
+        let input_started_at = std::time::Instant::now();
+        let mut state_lock_elapsed = None;
+        let mut worker_request_elapsed = None;
+        log_terminal_input(&key, modifiers, physical_key_event);
+        let state_lock_started_at = std::time::Instant::now();
+        let result = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))
+            .and_then(|mut app| {
+                state_lock_elapsed = Some(state_lock_started_at.elapsed());
+                if self
+                    .window_router
+                    .workspace_actions_locked(self.window_id, &app)
+                {
+                    return Ok((false, false));
+                }
+                if !self
+                    .window_router
+                    .owns_terminal_pane(self.window_id, tab_id, &app)
+                {
+                    return Ok((true, false));
+                }
+                let modifiers = if cfg!(target_os = "macos")
+                    && !app.sessions.settings.terminal.option_as_meta
+                {
+                    TerminalModifiers {
+                        alt: false,
+                        ..modifiers
+                    }
+                } else {
+                    modifiers
+                };
+                let terminal = app.terminal(tab_id).context("terminal tab not found")?;
+                if !terminal.connected {
+                    return Ok((false, false));
+                }
+                let model = terminal
+                    .terminal
+                    .as_ref()
+                    .context("active tab has no terminal model")?;
+                let application_cursor = model.application_cursor();
+                let application_keypad = model.application_keypad();
+                let Some(data) =
+                    encode_key_with_modes(&key, modifiers, application_cursor, application_keypad)
+                else {
+                    return Ok((false, false));
+                };
+                let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
+                {
+                    let terminal = app.terminal(tab_id).context("terminal tab not found")?;
+                    let worker_request_started_at = std::time::Instant::now();
+                    let request_result = terminal
+                        .worker
+                        .as_ref()
+                        .context("active terminal has no worker")?
+                        .request_send(data);
+                    worker_request_elapsed = Some(worker_request_started_at.elapsed());
+                    request_result?;
+                }
+                Ok((true, viewport_changed))
+            });
+        match result {
+            Ok((handled, true)) => {
+                log_terminal_input_latency(
+                    "handled-and-scrolled",
+                    input_started_at.elapsed(),
+                    state_lock_elapsed,
+                    worker_request_elapsed,
+                );
+                log_ui_action_outcome("terminal.send-input", "handled-and-scrolled");
+                dispatch_terminal_snapshot(self.ui, self.state, tab_id);
+                handled
+            }
+            Ok((handled, false)) => {
+                log_terminal_input_latency(
+                    if handled { "handled" } else { "ignored" },
+                    input_started_at.elapsed(),
+                    state_lock_elapsed,
+                    worker_request_elapsed,
+                );
+                log_ui_action_outcome(
+                    "terminal.send-input",
+                    if handled { "handled" } else { "ignored" },
+                );
+                handled
+            }
+            Err(error) => {
+                log_terminal_input_latency(
+                    "error",
+                    input_started_at.elapsed(),
+                    state_lock_elapsed,
+                    worker_request_elapsed,
+                );
+                log_ui_action_outcome("terminal.send-input", "error");
+                debug!(%error, "terminal input failed");
+                set_status(self.ui, &format!("Cannot send terminal input: {error}"));
+                true
+            }
+        }
+    }
+}
+
 pub(super) fn wire_terminal(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -119,92 +339,17 @@ pub(super) fn wire_terminal(
             let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_key) else {
                 return true;
             };
-            let input_started_at = std::time::Instant::now();
-            let mut state_lock_elapsed = None;
-            let mut worker_request_elapsed = None;
             // Committed TextInput and pasted text are not physical key events, so
             // they must not inherit a still-held shortcut modifier such as Cmd+V.
-            let mut modifiers =
-                terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
+            let modifiers = terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
             let key = terminal_key_from_slint(text.as_str(), modifiers);
-            log_terminal_input(&key, modifiers, physical_key_event);
-            let state_lock_started_at = std::time::Instant::now();
-            let result = state_for_key
-                .lock()
-                .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-                .and_then(|mut app| {
-                    state_lock_elapsed = Some(state_lock_started_at.elapsed());
-                    if !router_for_key.owns_terminal_pane(window_id, tab_id, &app) {
-                        return Ok((true, false));
-                    }
-                    if cfg!(target_os = "macos") && !app.sessions.settings.terminal.option_as_meta {
-                        modifiers.alt = false;
-                    }
-                    let terminal = app.terminal(tab_id).context("terminal tab not found")?;
-                    if !terminal.connected {
-                        return Ok((false, false));
-                    }
-                    let application_cursor = terminal
-                        .terminal
-                        .as_ref()
-                        .context("active tab has no terminal model")?
-                        .application_cursor();
-                    let Some(data) = encode_terminal_key(&key, modifiers, application_cursor)
-                    else {
-                        return Ok((false, false));
-                    };
-                    let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
-                    {
-                        let terminal = app.terminal(tab_id).context("terminal tab not found")?;
-                        let worker_request_started_at = std::time::Instant::now();
-                        let request_result = terminal
-                            .worker
-                            .as_ref()
-                            .context("active terminal has no worker")?
-                            .request_send(data);
-                        worker_request_elapsed = Some(worker_request_started_at.elapsed());
-                        request_result?;
-                    }
-                    Ok((true, viewport_changed))
-                });
-            match result {
-                Ok((handled, true)) => {
-                    log_terminal_input_latency(
-                        "handled-and-scrolled",
-                        input_started_at.elapsed(),
-                        state_lock_elapsed,
-                        worker_request_elapsed,
-                    );
-                    log_ui_action_outcome("terminal.send-input", "handled-and-scrolled");
-                    dispatch_terminal_snapshot(&ui_for_key, &state_for_key, tab_id);
-                    handled
-                }
-                Ok((handled, false)) => {
-                    log_terminal_input_latency(
-                        if handled { "handled" } else { "ignored" },
-                        input_started_at.elapsed(),
-                        state_lock_elapsed,
-                        worker_request_elapsed,
-                    );
-                    log_ui_action_outcome(
-                        "terminal.send-input",
-                        if handled { "handled" } else { "ignored" },
-                    );
-                    handled
-                }
-                Err(error) => {
-                    log_terminal_input_latency(
-                        "error",
-                        input_started_at.elapsed(),
-                        state_lock_elapsed,
-                        worker_request_elapsed,
-                    );
-                    log_ui_action_outcome("terminal.send-input", "error");
-                    debug!(%error, "terminal input failed");
-                    set_status(&ui_for_key, &format!("Cannot send terminal input: {error}"));
-                    true
-                }
+            TerminalInputContext {
+                ui: &ui_for_key,
+                state: &state_for_key,
+                window_router: &router_for_key,
+                window_id,
             }
+            .dispatch(tab_id, key, modifiers, physical_key_event)
         },
     );
 

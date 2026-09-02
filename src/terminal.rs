@@ -1,6 +1,8 @@
 //! Bounded terminal grid with primary-screen reflow on resize.
 
-pub use self::input::{TerminalKey, TerminalModifiers, encode_key};
+pub use self::input::{
+    TerminalKey, TerminalKeypadKey, TerminalModifiers, encode_key, encode_key_with_modes,
+};
 
 mod input;
 mod model;

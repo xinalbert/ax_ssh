@@ -63,6 +63,10 @@ impl TerminalModel {
         self.term.mode().contains(TermMode::APP_CURSOR)
     }
 
+    pub fn application_keypad(&self) -> bool {
+        self.term.mode().contains(TermMode::APP_KEYPAD)
+    }
+
     pub fn mouse_reporting(&self) -> TerminalMouseReporting {
         let mode = self.term.mode();
         TerminalMouseReporting {

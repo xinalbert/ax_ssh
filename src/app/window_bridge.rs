@@ -91,6 +91,12 @@ pub(super) fn restore_detached_workspaces(
             software_presentation::remove_layout(&detached_ui, new_window_id);
             continue;
         }
+        install_terminal_keypad_input_hook(
+            &detached_ui,
+            state.clone(),
+            window_router.clone(),
+            new_window_id,
+        );
         detached_windows
             .borrow_mut()
             .insert(new_window_id, detached_ui);

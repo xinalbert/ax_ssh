@@ -104,6 +104,7 @@ pub(super) fn log_ui_action_outcome(action: &'static str, outcome: &'static str)
 fn terminal_key_label(key: &TerminalKey) -> Cow<'static, str> {
     match key {
         TerminalKey::Text(_) => Cow::Borrowed("Text"),
+        TerminalKey::Keypad(_) => Cow::Borrowed("Keypad"),
         TerminalKey::Return => Cow::Borrowed("Enter"),
         TerminalKey::Backspace => Cow::Borrowed("Backspace"),
         TerminalKey::Tab => Cow::Borrowed("Tab"),
@@ -185,6 +186,12 @@ mod tests {
         assert_eq!(terminal_key_label(&TerminalKey::Return), "Enter");
         assert_eq!(terminal_key_label(&TerminalKey::Up), "ArrowUp");
         assert_eq!(terminal_key_label(&TerminalKey::Function(12)), "F12");
+        assert_eq!(
+            terminal_key_label(&TerminalKey::Keypad(
+                ax_ssh::terminal::TerminalKeypadKey::One
+            )),
+            "Keypad"
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
-use ax_ssh::terminal::{TerminalKey, TerminalModifiers};
+use ax_ssh::terminal::{TerminalKey, TerminalKeypadKey, TerminalModifiers};
 use slint::platform::Key;
+use slint::winit_030::winit::keyboard::KeyCode;
 
 pub(super) struct MenuShortcut {
     pub(super) keys: slint::Keys,
@@ -162,6 +163,34 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
             };
             TerminalKey::Text(text.to_owned())
         })
+}
+
+/// Preserve physical numeric-keypad identity until the terminal decides
+/// whether its application-keypad mode is active.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(super) fn terminal_key_from_physical_keycode(keycode: KeyCode) -> Option<TerminalKey> {
+    let keypad = match keycode {
+        KeyCode::Numpad0 => TerminalKeypadKey::Zero,
+        KeyCode::Numpad1 => TerminalKeypadKey::One,
+        KeyCode::Numpad2 => TerminalKeypadKey::Two,
+        KeyCode::Numpad3 => TerminalKeypadKey::Three,
+        KeyCode::Numpad4 => TerminalKeypadKey::Four,
+        KeyCode::Numpad5 => TerminalKeypadKey::Five,
+        KeyCode::Numpad6 => TerminalKeypadKey::Six,
+        KeyCode::Numpad7 => TerminalKeypadKey::Seven,
+        KeyCode::Numpad8 => TerminalKeypadKey::Eight,
+        KeyCode::Numpad9 => TerminalKeypadKey::Nine,
+        KeyCode::NumpadDecimal => TerminalKeypadKey::Decimal,
+        KeyCode::NumpadComma => TerminalKeypadKey::Comma,
+        KeyCode::NumpadDivide => TerminalKeypadKey::Divide,
+        KeyCode::NumpadMultiply => TerminalKeypadKey::Multiply,
+        KeyCode::NumpadSubtract => TerminalKeypadKey::Subtract,
+        KeyCode::NumpadAdd => TerminalKeypadKey::Add,
+        KeyCode::NumpadEnter => TerminalKeypadKey::Enter,
+        KeyCode::NumpadEqual => TerminalKeypadKey::Equal,
+        _ => return None,
+    };
+    Some(TerminalKey::Keypad(keypad))
 }
 
 #[cfg(test)]
@@ -452,6 +481,23 @@ mod tests {
             terminal_key_from_slint(f12.as_str(), TerminalModifiers::default()),
             TerminalKey::Function(12)
         );
+    }
+
+    #[test]
+    fn maps_physical_numeric_keypad_codes_to_terminal_keypad_values() {
+        assert_eq!(
+            terminal_key_from_physical_keycode(KeyCode::Numpad0),
+            Some(TerminalKey::Keypad(TerminalKeypadKey::Zero))
+        );
+        assert_eq!(
+            terminal_key_from_physical_keycode(KeyCode::NumpadDecimal),
+            Some(TerminalKey::Keypad(TerminalKeypadKey::Decimal))
+        );
+        assert_eq!(
+            terminal_key_from_physical_keycode(KeyCode::NumpadEnter),
+            Some(TerminalKey::Keypad(TerminalKeypadKey::Enter))
+        );
+        assert_eq!(terminal_key_from_physical_keycode(KeyCode::KeyA), None);
     }
 
     #[test]

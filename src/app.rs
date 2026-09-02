@@ -39,7 +39,7 @@ use ax_ssh::serial::{
 use ax_ssh::sftp::{SftpBrowserEvent, SftpEntry, SftpTransferEvent};
 use ax_ssh::ssh::{SshSessionEvent, SshSessionHandle, discover_private_keys, probe_host_key};
 use ax_ssh::telnet::{TelnetSessionEvent, TelnetSessionHandle};
-use ax_ssh::terminal::{TerminalSnapshot, encode_key as encode_terminal_key};
+use ax_ssh::terminal::TerminalSnapshot;
 
 use self::credential_tasks::{
     delete_password, load_system_password, load_vault_password, save_password,
@@ -296,6 +296,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
     ui.show().context("failed to show main window")?;
+    install_terminal_keypad_input_hook(&ui, state.clone(), window_router.clone(), MAIN_WINDOW_ID);
     if let Some(snapshot) = workspace_snapshot.as_ref() {
         restore_detached_workspaces(
             snapshot,
