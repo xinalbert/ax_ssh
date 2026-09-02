@@ -1,0 +1,43 @@
+import { Theme } from "../theme.slint";
+
+// Shared modal chrome keeps every blocking prompt in one focus and visual layer.
+// Callers provide only the dialog body through @children.
+export component ModalFrame inherits FocusScope {
+    in property <length> dialog-width;
+    in property <length> dialog-height;
+    in property <color> dialog-border-color: Theme.frame-border;
+    callback dismissed();
+
+    width: 100%;
+    height: 100%;
+
+    init => { root.focus(); }
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.dismissed();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: Theme.overlay;
+        TouchArea { }
+    }
+
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: min(root.dialog-width, max(0px, root.width - 2 * Theme.space-xxl));
+        height: min(root.dialog-height, max(0px, root.height - 2 * Theme.space-xxl));
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: root.dialog-border-color;
+        border-radius: Theme.radius;
+
+        @children
+    }
+}

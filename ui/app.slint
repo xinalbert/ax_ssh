@@ -243,11 +243,10 @@ export component AppWindow inherits Window {
     in property <bool> menu-terminal-active: false;
     in property <bool> menu-has-multiple-tabs: false;
     in property <bool> menu-has-active-tab: false;
+    out property <bool> modal-open: overlay-host.modal-open;
     out property <bool> menu-shortcuts-enabled:
         !workspace-shell.shortcut-recording
-        && !root.host-key-dialog-open
-        && !root.password-dialog-open
-        && !overlay-host.workspace-file-dialog-open;
+        && !root.modal-open;
     private property <WorkspaceViewState> workspace-view: {
         sessions: root.sessions,
         workspace_tabs: root.workspace-tabs,
@@ -478,6 +477,7 @@ export component AppWindow inherits Window {
     callback workspace-file-action(string, string);
     callback workspace-file-loaded();
     callback menu-state-changed();
+    callback modal-state-changed(bool);
     callback write-clipboard(string);
     callback read-clipboard() -> string;
     callback report-bug();
@@ -503,6 +503,7 @@ export component AppWindow inherits Window {
     changed terminal-color-scheme => { root.schedule-terminal-appearance-refresh(); }
     changed terminal-appearance-revision => { root.schedule-terminal-appearance-refresh(); }
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
+    changed modal-open => { root.modal-state-changed(root.modal-open); }
     changed menu-terminal-active => { root.menu-state-changed(); }
     changed menu-has-multiple-tabs => { root.menu-state-changed(); }
     changed menu-has-active-tab => { root.menu-state-changed(); }
@@ -618,6 +619,7 @@ export component AppWindow inherits Window {
             title: @tr("Pane");
             MenuItem {
                 title: @tr("New Local Shell");
+                enabled: root.menu-shortcuts-enabled;
                 activated => { root.menu-action("new-local-shell"); root.open-local-shell(); }
             }
             MenuItem {
@@ -666,6 +668,7 @@ export component AppWindow inherits Window {
             MenuSeparator { }
             if root.apple-platform : MenuItem {
                 title: @tr("Close Current Tab");
+                enabled: root.menu-shortcuts-enabled && root.menu-has-active-tab;
                 activated => {
                     root.menu-action("close-tab");
                     workspace-shell.request-close-tab(root.active-tab-id);
@@ -673,7 +676,7 @@ export component AppWindow inherits Window {
             }
             if !root.apple-platform : MenuItem {
                 title: @tr("Close Current Tab");
-                enabled: root.menu-has-active-tab;
+                enabled: root.menu-shortcuts-enabled && root.menu-has-active-tab;
                 activated => {
                     root.menu-action("close-tab");
                     workspace-shell.request-close-tab(root.active-tab-id);
@@ -684,6 +687,7 @@ export component AppWindow inherits Window {
             title: @tr("Help");
             MenuItem {
                 title: @tr("Keyboard Shortcuts");
+                enabled: root.menu-shortcuts-enabled;
                 activated => {
                     root.menu-action("open-shortcuts");
                     root.request-settings-section("Shortcuts");
@@ -692,6 +696,7 @@ export component AppWindow inherits Window {
             }
             if !root.apple-platform : MenuItem {
                 title: @tr("About AxSSH");
+                enabled: root.menu-shortcuts-enabled;
                 activated => {
                     root.menu-action("open-about");
                     root.request-settings-section("About");
@@ -706,7 +711,7 @@ export component AppWindow inherits Window {
         height: parent.height;
 
         capture-key-pressed(event) => {
-            if workspace-shell.shortcut-recording || root.host-key-dialog-open || root.password-dialog-open {
+            if workspace-shell.shortcut-recording || root.modal-open {
                 return EventResult.reject;
             }
             if event.text == Key.Escape && workspace-shell.dismiss-transient-controls() {

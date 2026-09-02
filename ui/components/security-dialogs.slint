@@ -1,10 +1,11 @@
 import { CheckBox } from "std-widgets.slint";
 import { ElidedButton } from "elided-controls.slint";
+import { ModalFrame } from "modal-frame.slint";
 import { SecretTextInput } from "secret-text-input.slint";
 import { ThemedComboBox } from "themed-combo-box.slint";
 import { Theme } from "../theme.slint";
 
-export component HostKeyDialog inherits Rectangle {
+export component HostKeyDialog inherits ModalFrame {
     in property <string> endpoint;
     in property <string> fingerprint;
     in property <bool> changed;
@@ -14,52 +15,43 @@ export component HostKeyDialog inherits Rectangle {
     callback confirm();
     callback cancel();
 
-    background: Theme.overlay;
-    TouchArea { }
+    dialog-width: Theme.host-dialog-width;
+    dialog-height: Theme.host-dialog-height;
+    dialog-border-color: root.changed ? Theme.danger : Theme.frame-border;
+    dismissed => { root.cancel(); }
 
-    Rectangle {
-        x: (root.width - self.width) / 2;
-        y: (root.height - self.height) / 2;
-        width: Theme.host-dialog-width;
-        height: Theme.host-dialog-height;
-        background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: root.changed ? Theme.danger : Theme.frame-border;
-        border-radius: Theme.radius;
-
-        VerticalLayout {
-            padding: Theme.dialog-padding;
-            spacing: Theme.space-xl;
-            Text {
-                text: root.revoked ? @tr("SSH host key revoked") : (root.changed ? @tr("SSH host key changed") : @tr("Unknown SSH host key"));
-                color: root.revoked || root.changed ? Theme.danger : Theme.text;
-                font-size: Theme.font-title;
-                font-weight: 700;
-            }
-            Text { text: root.endpoint; color: Theme.muted; font-size: Theme.font-body; }
-            Text { text: @tr("SHA-256 fingerprint"); color: Theme.muted; font-size: Theme.font-small; }
-            Text {
-                text: root.fingerprint;
-                color: Theme.text;
-                font-family: root.monospace-font-family;
-                font-size: Theme.font-small;
-                wrap: word-wrap;
-            }
-            Rectangle { vertical-stretch: 1; }
-            HorizontalLayout {
-                alignment: end;
-                spacing: Theme.space-md;
-                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
-                ElidedButton {
-                    text: root.revoked ? @tr("Remove revoked record") : (root.changed ? @tr("Trust new key") : @tr("Trust and continue"));
-                    clicked => { root.confirm(); }
-                }
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: root.revoked ? @tr("SSH host key revoked") : (root.changed ? @tr("SSH host key changed") : @tr("Unknown SSH host key"));
+            color: root.revoked || root.changed ? Theme.danger : Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        Text { text: root.endpoint; color: Theme.muted; font-size: Theme.font-body; }
+        Text { text: @tr("SHA-256 fingerprint"); color: Theme.muted; font-size: Theme.font-small; }
+        Text {
+            text: root.fingerprint;
+            color: Theme.text;
+            font-family: root.monospace-font-family;
+            font-size: Theme.font-small;
+            wrap: word-wrap;
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+            ElidedButton {
+                text: root.revoked ? @tr("Remove revoked record") : (root.changed ? @tr("Trust new key") : @tr("Trust and continue"));
+                clicked => { root.confirm(); }
             }
         }
     }
 }
 
-export component AuthenticationDialog inherits Rectangle {
+export component AuthenticationDialog inherits ModalFrame {
     in property <string> endpoint;
     in property <bool> private-key;
     in property <bool> vault-storage;
@@ -102,104 +94,94 @@ export component AuthenticationDialog inherits Rectangle {
         root.selected-credential-storage = root.default-credential-storage;
     }
 
-    background: Theme.overlay;
-    TouchArea { }
+    dialog-width: Theme.password-dialog-width;
+    dialog-height: root.private-key
+        ? Theme.password-private-key-dialog-height
+        : Theme.password-dialog-height;
+    dismissed => { root.cancel-and-clear(); }
 
-    Rectangle {
-        x: (root.width - self.width) / 2;
-        y: (root.height - self.height) / 2;
-        width: Theme.password-dialog-width;
-        height: root.private-key
-            ? Theme.password-private-key-dialog-height
-            : Theme.password-dialog-height;
-        background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: Theme.frame-border;
-        border-radius: Theme.radius;
-
-        VerticalLayout {
-            padding: Theme.dialog-padding;
-            spacing: Theme.space-xl;
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: root.private-key
+                ? @tr("Private key authentication")
+                : (root.vault-unlock-only ? @tr("Unlock encrypted credentials") : @tr("Password authentication"));
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        Text {
+            text: root.endpoint;
+            color: Theme.muted;
+            font-size: Theme.font-body;
+            overflow: elide;
+        }
+        if root.private-key : Text {
+            text: root.key-path;
+            color: Theme.text;
+            font-size: Theme.font-small;
+            overflow: elide;
+        }
+        secret-edit := SecretTextInput {
+            visible: !root.vault-unlock-only;
+            height: self.visible ? Theme.editor-input-row-height : 0px;
+            placeholder-text: root.private-key
+                ? @tr("Private key passphrase (optional)")
+                : @tr("Password");
+            accessible-label: root.private-key
+                ? @tr("Private key passphrase")
+                : @tr("SSH password");
+            accepted => { root.submit(); }
+        }
+        vault-password-edit := SecretTextInput {
+            visible: !root.private-key
+                && (root.vault-storage
+                    || (remember-password.checked
+                        && root.selected-credential-storage == "encrypted-vault"));
+            height: self.visible ? Theme.editor-input-row-height : 0px;
+            placeholder-text: root.vault-unlock-only
+                ? @tr("Vault password")
+                : @tr("Optional; empty saves in system credential store");
+            accessible-label: @tr("Vault password");
+            accepted => { root.submit(); }
+        }
+        remember-password := CheckBox {
+            visible: !root.private-key && !root.vault-unlock-only;
+            height: self.visible ? Theme.editor-check-row-height : 0px;
+            text: @tr("Save password (optional)");
+            checked: false;
+        }
+        if !root.private-key && !root.vault-unlock-only : HorizontalLayout {
+            height: Theme.combo-box-control-height;
+            spacing: Theme.space-md;
             Text {
-                text: root.private-key
-                    ? @tr("Private key authentication")
-                    : (root.vault-unlock-only ? @tr("Unlock encrypted credentials") : @tr("Password authentication"));
-                color: Theme.text;
-                font-size: Theme.font-title;
-                font-weight: 700;
-            }
-            Text {
-                text: root.endpoint;
+                width: 132px;
+                text: @tr("Save password in");
                 color: Theme.muted;
-                font-size: Theme.font-body;
-                overflow: elide;
-            }
-            if root.private-key : Text {
-                text: root.key-path;
-                color: Theme.text;
                 font-size: Theme.font-small;
-                overflow: elide;
+                vertical-alignment: center;
             }
-            secret-edit := SecretTextInput {
-                visible: !root.vault-unlock-only;
-                height: self.visible ? Theme.editor-input-row-height : 0px;
-                placeholder-text: root.private-key
-                    ? @tr("Private key passphrase (optional)")
-                    : @tr("Password");
-                accessible-label: root.private-key
-                    ? @tr("Private key passphrase")
-                    : @tr("SSH password");
-                accepted => { root.submit(); }
-            }
-            vault-password-edit := SecretTextInput {
-                visible: !root.private-key
-                    && (root.vault-storage
-                        || (remember-password.checked
-                            && root.selected-credential-storage == "encrypted-vault"));
-                height: self.visible ? Theme.editor-input-row-height : 0px;
-                placeholder-text: root.vault-unlock-only
-                    ? @tr("Vault password")
-                    : @tr("Optional; empty saves in system credential store");
-                accessible-label: @tr("Vault password");
-                accepted => { root.submit(); }
-            }
-            remember-password := CheckBox {
-                visible: !root.private-key && !root.vault-unlock-only;
-                height: self.visible ? Theme.editor-check-row-height : 0px;
-                text: @tr("Save password (optional)");
-                checked: false;
-            }
-            if !root.private-key && !root.vault-unlock-only : HorizontalLayout {
-                height: Theme.combo-box-control-height;
-                spacing: Theme.space-md;
-                Text {
-                    width: 132px;
-                    text: @tr("Save password in");
-                    color: Theme.muted;
-                    font-size: Theme.font-small;
-                    vertical-alignment: center;
-                }
-                credential-storage-picker := ThemedComboBox {
-                    enabled: remember-password.checked;
-                    current-index: root.selected-credential-storage == "encrypted-vault" ? 1 : 0;
-                    model: root.credential-storage-options;
-                    accessible-label: @tr("Credential storage");
-                    selected(_value, index) => {
-                        root.selected-credential-storage = index == 1
-                            ? "encrypted-vault"
-                            : "system-keyring";
-                    }
+            credential-storage-picker := ThemedComboBox {
+                enabled: remember-password.checked;
+                current-index: root.selected-credential-storage == "encrypted-vault" ? 1 : 0;
+                model: root.credential-storage-options;
+                accessible-label: @tr("Credential storage");
+                selected(_value, index) => {
+                    root.selected-credential-storage = index == 1
+                        ? "encrypted-vault"
+                        : "system-keyring";
                 }
             }
-            HorizontalLayout {
-                alignment: end;
-                spacing: Theme.space-md;
-                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel-and-clear(); } }
-                ElidedButton {
-                    text: @tr("Connect");
-                    clicked => {
-                        root.submit();
-                    }
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Cancel"); clicked => { root.cancel-and-clear(); } }
+            ElidedButton {
+                text: @tr("Connect");
+                clicked => {
+                    root.submit();
                 }
             }
         }

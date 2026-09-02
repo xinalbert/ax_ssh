@@ -1,8 +1,9 @@
 import { ElidedButton } from "elided-controls.slint";
 import { FlatTextInput } from "flat-text-input.slint";
+import { ModalFrame } from "modal-frame.slint";
 import { Theme } from "../theme.slint";
 
-export component SessionManagementDialog inherits Rectangle {
+export component SessionManagementDialog inherits ModalFrame {
     in property <string> action;
     in property <string> title;
     in property <string> message;
@@ -14,57 +15,48 @@ export component SessionManagementDialog inherits Rectangle {
     private property <bool> accepts-name: root.action == "new-group"
         || root.action == "rename-group";
 
-    background: Theme.overlay;
-    TouchArea { }
+    dialog-width: Theme.session-management-dialog-width;
+    dialog-height: Theme.session-management-dialog-height;
+    dialog-border-color: root.action == "delete-group" || root.action == "delete-session"
+        ? Theme.danger : Theme.frame-border;
+    dismissed => { root.cancel(); }
 
-    Rectangle {
-        x: (root.width - self.width) / 2;
-        y: (root.height - self.height) / 2;
-        width: min(Theme.session-management-dialog-width, root.width - 2 * Theme.space-xxl);
-        height: Theme.session-management-dialog-height;
-        background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: root.action == "delete-group" || root.action == "delete-session"
-            ? Theme.danger : Theme.frame-border;
-        border-radius: Theme.radius;
-
-        VerticalLayout {
-            padding: Theme.dialog-padding;
-            spacing: Theme.space-xl;
-            Text {
-                text: root.title;
-                color: root.action == "delete-group" || root.action == "delete-session"
-                    ? Theme.danger : Theme.text;
-                font-size: Theme.font-title;
-                font-weight: 700;
-            }
-            if !root.message.is-empty : Text {
-                text: root.message;
-                color: Theme.muted;
-                font-size: Theme.font-body;
-                wrap: word-wrap;
-            }
-            if root.accepts-name : FlatTextInput {
-                text <=> root.value;
-                placeholder-text: @tr("Group name");
-                accessible-label: @tr("Group name");
-                accepted(value) => {
-                    if !value.is-empty {
-                        root.confirm(value);
-                    }
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: root.title;
+            color: root.action == "delete-group" || root.action == "delete-session"
+                ? Theme.danger : Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        if !root.message.is-empty : Text {
+            text: root.message;
+            color: Theme.muted;
+            font-size: Theme.font-body;
+            wrap: word-wrap;
+        }
+        if root.accepts-name : FlatTextInput {
+            text <=> root.value;
+            placeholder-text: @tr("Group name");
+            accessible-label: @tr("Group name");
+            accepted(value) => {
+                if !value.is-empty {
+                    root.confirm(value);
                 }
             }
-            Rectangle { vertical-stretch: 1; }
-            HorizontalLayout {
-                alignment: end;
-                spacing: Theme.space-md;
-                ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
-                ElidedButton {
-                    text: root.action == "delete-group" || root.action == "delete-session"
-                        ? @tr("Delete") : @tr("Save");
-                    enabled: !root.accepts-name || !root.value.is-empty;
-                    clicked => { root.confirm(root.value); }
-                }
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+            ElidedButton {
+                text: root.action == "delete-group" || root.action == "delete-session"
+                    ? @tr("Delete") : @tr("Save");
+                enabled: !root.accepts-name || !root.value.is-empty;
+                clicked => { root.confirm(root.value); }
             }
         }
     }

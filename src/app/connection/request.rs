@@ -101,7 +101,12 @@ pub(in crate::app) fn wire_connection_request(
             &context_for_active_sftp.state,
         );
         let navigation = match context_for_active_sftp.state.lock() {
-            Ok(mut app) => app.switch_ssh_sftp_tab(),
+            Ok(mut app) => {
+                if router_for_active_sftp.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
+                app.switch_ssh_sftp_tab()
+            }
             Err(_) => {
                 set_status(
                     &context_for_active_sftp.ui,

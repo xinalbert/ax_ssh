@@ -31,12 +31,17 @@ export component OverlayHost inherits Rectangle {
     callback cancel-password-dialog();
     callback workspace-file-action(string, string);
 
-    out property <bool> workspace-file-dialog-open: workspace-file-open;
+    private property <bool> security-open: root.security.host_key_open || root.security.password_open;
+    out property <bool> modal-open: root.security-open
+        || root.workspace-file-open || root.session-management-open;
     private property <bool> workspace-file-open: false;
     private property <string> workspace-file-mode;
     private property <string> workspace-file-path;
 
     public function show-workspace-file-dialog(mode: string, path: string) {
+        if root.security-open || root.workspace-file-open || root.session-management-open {
+            return;
+        }
         root.workspace-file-mode = mode;
         root.workspace-file-path = path;
         root.workspace-file-open = true;
@@ -60,6 +65,9 @@ export component OverlayHost inherits Rectangle {
                 : "");
 
     public function show-session-management(action: string, target: string, subject: string) {
+        if root.security-open || root.workspace-file-open || root.session-management-open {
+            return;
+        }
         root.session-management-action = action;
         root.session-management-target = target;
         root.session-management-subject = subject;
@@ -67,7 +75,9 @@ export component OverlayHost inherits Rectangle {
         root.session-management-open = true;
     }
 
-    if root.session-management-open : SessionManagementDialog {
+    // Security confirmation always wins. A local dialog stays in state while it
+    // is covered, so its user input resumes after the security decision.
+    if !root.security-open && root.session-management-open : SessionManagementDialog {
         action: root.session-management-action;
         title: root.session-management-title;
         message: root.session-management-message;
@@ -83,7 +93,7 @@ export component OverlayHost inherits Rectangle {
         cancel => { root.session-management-open = false; }
     }
 
-    if root.workspace-file-open : WorkspaceFileDialog {
+    if !root.security-open && root.workspace-file-open : WorkspaceFileDialog {
         mode: root.workspace-file-mode;
         path <=> root.workspace-file-path;
         confirm(value) => {
@@ -103,7 +113,7 @@ export component OverlayHost inherits Rectangle {
         cancel => { root.reject-host-key(); }
     }
 
-    if root.security.password_open : AuthenticationDialog {
+    if !root.security.host_key_open && root.security.password_open : AuthenticationDialog {
         endpoint: root.security.password_endpoint;
         private-key: root.security.password_private_key;
         vault-storage: root.security.password_vault_storage;

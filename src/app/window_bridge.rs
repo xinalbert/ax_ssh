@@ -314,6 +314,11 @@ pub(super) fn wire_window_actions(
     window_id: Uuid,
     detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 ) {
+    let router_for_modal_state = window_router.clone();
+    ui.on_modal_state_changed(move |open| {
+        router_for_modal_state.set_modal_open(window_id, open);
+    });
+
     let ui_for_detach = ui.as_weak();
     let state_for_detach = state.clone();
     let runtime_for_detach = runtime.clone();
@@ -335,6 +340,9 @@ pub(super) fn wire_window_actions(
         };
         let (transfer, pane_tree) = match state_for_detach.lock() {
             Ok(mut app) => {
+                if router_for_detach.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
                 if !router_for_detach.tab_ids(window_id, &app).contains(&tab_id) {
                     set_status(&ui_for_detach, "Tab not found in this window");
                     return;
@@ -467,9 +475,10 @@ pub(super) fn wire_window_actions(
             Some(tab_id) => tab_id,
             None => return,
         };
-        let belongs_to_window = state_for_return
-            .lock()
-            .is_ok_and(|app| router_for_return.tab_ids(window_id, &app).contains(&tab_id));
+        let belongs_to_window = state_for_return.lock().is_ok_and(|app| {
+            !router_for_return.workspace_actions_locked(window_id, &app)
+                && router_for_return.tab_ids(window_id, &app).contains(&tab_id)
+        });
         if !belongs_to_window {
             set_status(&ui_for_return, "Tab not found in this window");
             return;

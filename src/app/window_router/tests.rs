@@ -134,6 +134,48 @@ fn inactive_workspace_terminal_is_hidden_from_presentation() {
 }
 
 #[test]
+fn blocking_modal_prevents_tab_navigation_until_it_is_dismissed() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let first_tab_id = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, first_tab_id, &mut app));
+    let second_tab_id = app.open_local_shell_tab();
+
+    router.set_modal_open(MAIN_WINDOW_ID, true);
+    assert!(router.workspace_actions_locked(MAIN_WINDOW_ID, &app));
+    assert!(!router.activate_tab(MAIN_WINDOW_ID, second_tab_id, &mut app));
+    assert!(!router.cycle_tab(MAIN_WINDOW_ID, true, &mut app));
+    assert_eq!(router.active_tab(MAIN_WINDOW_ID), Some(first_tab_id));
+
+    router.set_modal_open(MAIN_WINDOW_ID, false);
+    assert!(!router.workspace_actions_locked(MAIN_WINDOW_ID, &app));
+    assert!(router.activate_tab(MAIN_WINDOW_ID, second_tab_id, &mut app));
+}
+
+#[test]
+fn pending_authentication_locks_tab_navigation_before_ui_modal_state_arrives() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let profile = SessionProfile::new("server", "server.example", "alice");
+    app.sessions.sessions.push(profile.clone());
+    let secure_tab_id = app.open_terminal_tab(&profile);
+    assert!(router.activate_tab(MAIN_WINDOW_ID, secure_tab_id, &mut app));
+    let other_tab_id = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, secure_tab_id, &mut app));
+    assert!(
+        app.terminal_mut(secure_tab_id)
+            .expect("terminal tab should exist")
+            .set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+                vault_unlock_only: false,
+            })
+    );
+
+    assert!(router.workspace_actions_locked(MAIN_WINDOW_ID, &app));
+    assert!(!router.activate_tab(MAIN_WINDOW_ID, other_tab_id, &mut app));
+    assert_eq!(router.active_tab(MAIN_WINDOW_ID), Some(secure_tab_id));
+}
+
+#[test]
 fn inactive_native_window_uses_the_visible_unfocused_refresh_mode() {
     let router = test_router();
     let mut app = router_test_state();

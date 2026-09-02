@@ -21,6 +21,8 @@ struct WindowRouterState {
 struct WindowRoute {
     ui: slint::Weak<AppWindow>,
     transfer: Option<WorkspaceTransfer>,
+    /// UI-local blocking modals are reported by the Slint overlay host.
+    modal_open: bool,
     /// Native window activation is runtime-only and is never persisted.
     window_active: bool,
     /// The stable identity shown in the workspace Tab strip.
@@ -66,6 +68,7 @@ impl WindowRouter {
             WindowRoute {
                 ui: main_ui,
                 transfer: None,
+                modal_open: false,
                 window_active: true,
                 active_tab_id: None,
                 pane_trees: HashMap::new(),
@@ -172,6 +175,7 @@ impl WindowRouter {
                     active_tab_id: transfer.active_tab_id,
                     ui,
                     transfer: Some(transfer),
+                    modal_open: false,
                     window_active: true,
                     pane_trees,
                 },
@@ -342,7 +346,44 @@ impl WindowRouter {
         })
     }
 
+    pub(super) fn set_modal_open(&self, window_id: Uuid, modal_open: bool) {
+        if let Ok(mut router) = self.inner.lock()
+            && let Some(route) = router.routes.get_mut(&window_id)
+        {
+            route.modal_open = modal_open;
+        }
+    }
+
+    /// Modal input is enforced at the routing boundary as well as in Slint.
+    /// The state check makes security prompts fail closed before the UI callback
+    /// reporting the overlay has reached this router.
+    pub(super) fn workspace_actions_locked(&self, window_id: Uuid, app: &AppState) -> bool {
+        let Some((modal_open, active_tab_id)) = self.inner.lock().ok().and_then(|router| {
+            let route = router.routes.get(&window_id)?;
+            let active_tab_id = route.active_tab_id.map(|workspace_tab_id| {
+                route
+                    .pane_trees
+                    .get(&workspace_tab_id)
+                    .map(PaneTree::focused_tab_id)
+                    .unwrap_or(workspace_tab_id)
+            });
+            Some((route.modal_open, active_tab_id))
+        }) else {
+            return true;
+        };
+        modal_open
+            || active_tab_id.is_some_and(|tab_id| {
+                !matches!(
+                    app.security_prompt_for(Some(tab_id)),
+                    ActiveSecurityPrompt::None
+                )
+            })
+    }
+
     pub(super) fn activate_tab(&self, window_id: Uuid, tab_id: Uuid, app: &mut AppState) -> bool {
+        if self.workspace_actions_locked(window_id, app) {
+            return false;
+        }
         let is_terminal = app
             .terminal(tab_id)
             .is_some_and(|terminal| !terminal.is_sftp());
@@ -379,6 +420,9 @@ impl WindowRouter {
         tab_id: Uuid,
         app: &mut AppState,
     ) -> Option<PaneLayout> {
+        if self.workspace_actions_locked(window_id, app) {
+            return None;
+        }
         if app
             .terminal(tab_id)
             .is_none_or(|terminal| terminal.is_sftp())

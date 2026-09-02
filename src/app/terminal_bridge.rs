@@ -578,6 +578,12 @@ pub(super) fn wire_terminal(
     let terminal_font_started_for_command = terminal_font_started;
     let router_for_command = window_router;
     ui.on_terminal_pane_command(move |tab_id, command| {
+        if state_for_command
+            .lock()
+            .is_ok_and(|app| router_for_command.workspace_actions_locked(window_id, &app))
+        {
+            return false;
+        }
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_command) else {
             return false;
         };

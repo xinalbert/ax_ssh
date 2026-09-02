@@ -17,6 +17,9 @@ pub(in crate::app) fn wire_workspace_tabs(
         log_ui_action("workspace.open-settings");
         let load_options = match state_for_settings.lock() {
             Ok(mut app) => {
+                if router_for_settings.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
                 let load_options = !app.has_settings_tab();
                 let tab_id = app.open_settings_tab();
                 let _ = router_for_settings.activate_tab(window_id, tab_id, &mut app);
@@ -44,6 +47,9 @@ pub(in crate::app) fn wire_workspace_tabs(
         log_ui_action("workspace.new-session");
         match state_for_new.lock() {
             Ok(mut app) => {
+                if router_for_new.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
                 let tab_id = app.open_session_editor_tab();
                 let _ = router_for_new.activate_tab(window_id, tab_id, &mut app);
             }
@@ -62,6 +68,9 @@ pub(in crate::app) fn wire_workspace_tabs(
         log_ui_action("workspace.new-session-in-group");
         match state_for_new_in_group.lock() {
             Ok(mut app) => {
+                if router_for_new_in_group.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
                 let tab_id = app.open_session_editor_for_group(group_name.as_str());
                 let _ = router_for_new_in_group.activate_tab(window_id, tab_id, &mut app);
             }
@@ -83,6 +92,9 @@ pub(in crate::app) fn wire_workspace_tabs(
             None => return,
         };
         let opened = state_for_edit.lock().is_ok_and(|mut app| {
+            if router_for_edit.workspace_actions_locked(window_id, &app) {
+                return false;
+            }
             if !app.open_session_editor_for_profile(id) {
                 return false;
             }
@@ -106,6 +118,12 @@ pub(in crate::app) fn wire_workspace_tabs(
     let router_for_local = window_router.clone();
     ui.on_open_local_shell(move || {
         log_ui_action("workspace.open-local-shell");
+        if state_for_local
+            .lock()
+            .is_ok_and(|app| router_for_local.workspace_actions_locked(window_id, &app))
+        {
+            return;
+        }
         load_terminal_font_on_demand(
             &runtime_for_local,
             ui_for_local.clone(),
@@ -179,6 +197,9 @@ pub(in crate::app) fn wire_workspace_tabs(
             None => return,
         };
         let moved = state_for_move.lock().is_ok_and(|mut app| {
+            if router_for_move.workspace_actions_locked(window_id, &app) {
+                return false;
+            }
             let tab_ids = router_for_move.tab_ids(window_id, &app);
             app.move_tab_for(id, target_index.max(0) as usize, &tab_ids)
         });
@@ -192,12 +213,19 @@ pub(in crate::app) fn wire_workspace_tabs(
     let ui_for_close = ui.as_weak();
     let state_for_close = state.clone();
     let runtime_for_close = runtime.clone();
+    let router_for_close = window_router.clone();
     ui.on_close_tab(move |id| {
         log_ui_action("workspace.close-tab");
         let id = match parse_uuid(id.as_str(), "tab", &ui_for_close) {
             Some(id) => id,
             None => return,
         };
+        if state_for_close
+            .lock()
+            .is_ok_and(|app| router_for_close.workspace_actions_locked(window_id, &app))
+        {
+            return;
+        }
         close_workspace_tab(id, &state_for_close, &ui_for_close, &runtime_for_close);
     });
 
