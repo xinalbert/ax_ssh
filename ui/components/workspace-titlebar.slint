@@ -579,7 +579,10 @@ export component WorkspaceTitlebar inherits Rectangle {
                     tab-focus := FocusScope {
                         private property <bool> active: tab.id == root.active-tab-id;
                         private property <int> focus-revision: root.active-tab-focus-revision;
-                        private property <bool> focus-pending: false;
+                        // New repeater items can be active on their first evaluation, so
+                        // initialize the deferred focus/visibility pass from that state.
+                        private property <bool> focus-pending: active;
+                        private property <bool> visibility-pending: active;
                         width: parent.width;
                         height: parent.height;
                         focus-on-click: true;
@@ -590,11 +593,13 @@ export component WorkspaceTitlebar inherits Rectangle {
                         changed active => {
                             if self.active {
                                 self.focus-pending = true;
+                                self.visibility-pending = true;
                             }
                         }
                         changed focus-revision => {
                             if self.active {
                                 self.focus-pending = true;
+                                self.visibility-pending = true;
                             }
                         }
 
@@ -612,8 +617,19 @@ export component WorkspaceTitlebar inherits Rectangle {
                             triggered => {
                                 tab-focus.focus-pending = false;
                                 if tab-focus.active {
-                                    root.ensure-tab-visible(index);
                                     tab-focus.focus();
+                                    root.ensure-tab-visible(index);
+                                    tab-focus.visibility-pending = true;
+                                }
+                            }
+                        }
+                        Timer {
+                            running: tab-focus.visibility-pending;
+                            interval: 32ms;
+                            triggered => {
+                                tab-focus.visibility-pending = false;
+                                if tab-focus.active {
+                                    root.ensure-tab-visible(index);
                                 }
                             }
                         }
