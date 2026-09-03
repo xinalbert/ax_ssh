@@ -228,7 +228,7 @@
 - 未完成：Windows offline check 因本机未缓存 `atomic-waker 1.1.2` 未执行。tracker validator 本轮 current/新增记录字段完整，仍报告既有 2026-08 历史与 research 条目格式问题。目标 macOS GUI/Retina 拖选视觉和同负载 CPU/footprint A/B 由用户执行。
 
 - FONT1 已完成：Fontique 四字重注册测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 215、应用 212、Doc tests 0）和 `git diff --check` 通过；目标平台粗体/斜体视觉仍需用户验收。
-- CRED1 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 226、应用 216、Doc tests 0）和 `git diff --check` 通过；用户日志对应 profile 当前仍显式引用 `system-keyring`，需重新保存并提供保险库口令才能迁移。
+- CRED1 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 227、应用 218、Doc tests 0）和 `git diff --check` 通过；用户日志对应 profile 当前仍显式引用 `system-keyring`，不会自动迁移；重新保存时可选择加密保险库，留空用户口令会生成隐藏解锁密钥。
 
 ## 风险与阻塞
 
