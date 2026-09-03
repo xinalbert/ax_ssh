@@ -687,7 +687,10 @@ mod tests {
 
             let mut received = Vec::new();
             let mut buffer = [0; 256];
-            while received.len() < 1024 {
+            // Wait for the client to close its write half instead of dropping
+            // the socket as soon as the expected responses arrive. On Windows,
+            // that early drop can reset the client's pending socket operation.
+            loop {
                 let read = timeout(Duration::from_secs(2), stream.read(&mut buffer))
                     .await
                     .expect("client should respond")
@@ -696,16 +699,6 @@ mod tests {
                     break;
                 }
                 received.extend_from_slice(&buffer[..read]);
-                let has_input = received
-                    .windows(5)
-                    .any(|window| window == [b'G', b'O', IAC, IAC, b'\r']);
-                let has_naws = received
-                    .windows(10)
-                    .any(|window| window == [IAC, SB, NAWS, 0, IAC, IAC, 0, 40, IAC, SE]);
-                let rejected_unknown = received.windows(3).any(|window| window == [IAC, DONT, 99]);
-                if has_input && has_naws && rejected_unknown {
-                    break;
-                }
             }
             received
         });
