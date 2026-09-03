@@ -2,8 +2,9 @@
 //!
 //! Profile JSON stores only a [`CredentialStorage`] policy. Passwords are held
 //! either by the platform keyring or in per-profile encrypted vault records.
-//! Callers must execute these synchronous operations away from the Slint UI
-//! thread and keep vault passwords short-lived.
+//! App-generated vault unlock keys also use a separate platform keyring entry;
+//! callers must execute these synchronous operations away from the Slint UI
+//! thread and keep all key material short-lived.
 
 use std::fs;
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ use zeroize::Zeroizing;
 use crate::config::{CredentialStorage, write_private_file_atomically};
 
 const CREDENTIAL_SERVICE: &str = "com.axsoft.ax_ssh";
+const VAULT_UNLOCK_ACCOUNT_PREFIX: &str = "vault-unlock:";
 const VAULT_RECORD_VERSION: u32 = 1;
 const VAULT_SALT_BYTES: usize = 32;
 const MAX_VAULT_RECORD_BYTES: u64 = 32 * 1024;
@@ -183,6 +185,50 @@ impl CredentialStore {
         }
     }
 
+    /// Load the hidden unlock key for an app-generated encrypted-vault record.
+    /// This key is never sent to the UI or serialized into a profile.
+    pub fn load_vault_unlock_password(&self, session_id: Uuid) -> Result<Option<String>> {
+        let entry = vault_unlock_entry(session_id)?;
+        match entry.get_password() {
+            Ok(password) => Ok(Some(password)),
+            Err(Error::NoEntry) => Ok(None),
+            Err(error) => Err(error).context("failed to read encrypted vault unlock key"),
+        }
+    }
+
+    pub fn save_vault_unlock_password(&self, session_id: Uuid, password: &str) -> Result<()> {
+        validate_password(password, "vault unlock password")?;
+        vault_unlock_entry(session_id)?
+            .set_password(password)
+            .context("failed to save encrypted vault unlock key")
+    }
+
+    pub fn delete_vault_unlock_password(&self, session_id: Uuid) -> Result<()> {
+        match vault_unlock_entry(session_id)?.delete_credential() {
+            Ok(()) | Err(Error::NoEntry) => Ok(()),
+            Err(error) => Err(error).context("failed to delete encrypted vault unlock key"),
+        }
+    }
+
+    pub fn backup_vault_unlock_password(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<Zeroizing<String>>> {
+        self.load_vault_unlock_password(session_id)
+            .map(|password| password.map(Zeroizing::new))
+    }
+
+    pub fn restore_vault_unlock_password(
+        &self,
+        session_id: Uuid,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<()> {
+        match password {
+            Some(password) => self.save_vault_unlock_password(session_id, password.as_str()),
+            None => self.delete_vault_unlock_password(session_id),
+        }
+    }
+
     pub fn backup(&self, storage: CredentialStorage, session_id: Uuid) -> Result<CredentialBackup> {
         match storage {
             CredentialStorage::SystemKeyring => Ok(CredentialBackup::SystemKeyring(
@@ -249,6 +295,14 @@ struct VaultRecord {
 fn system_entry(session_id: Uuid) -> Result<Entry> {
     Entry::new(CREDENTIAL_SERVICE, &format!("session:{session_id}"))
         .context("failed to open system credential entry")
+}
+
+fn vault_unlock_entry(session_id: Uuid) -> Result<Entry> {
+    Entry::new(
+        CREDENTIAL_SERVICE,
+        &format!("{VAULT_UNLOCK_ACCOUNT_PREFIX}{session_id}"),
+    )
+    .context("failed to open encrypted vault unlock entry")
 }
 
 fn validate_password(value: &str, label: &str) -> Result<()> {

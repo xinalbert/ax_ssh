@@ -1,5 +1,7 @@
 use super::*;
-use crate::app::credential_tasks::{CredentialRollback, credential_storage_for_save};
+use crate::app::credential_tasks::{
+    CredentialRollback, credential_storage_for_save, vault_password_for_save,
+};
 use crate::app::state::PersistenceCoordinator;
 
 pub(in crate::app) struct SessionEditorContext {
@@ -303,8 +305,14 @@ pub(super) async fn delete_session_profile(
     }
     let credential_rollback = match apply_credential_change(
         session_id,
-        if let Some(storage) = profile.ssh().and_then(|ssh| ssh.credential_storage) {
-            CredentialChange::Delete(storage)
+        if let Some((storage, vault_password_generated)) = profile.ssh().and_then(|ssh| {
+            ssh.credential_storage
+                .map(|storage| (storage, ssh.credential_vault_key_in_keyring))
+        }) {
+            CredentialChange::Delete {
+                storage,
+                vault_password_generated,
+            }
         } else {
             CredentialChange::None
         },
@@ -417,6 +425,7 @@ pub(in crate::app) fn commit_profile_credential_storage(
     state: &Arc<Mutex<AppState>>,
     expected: &SessionProfile,
     storage: CredentialStorage,
+    vault_password_generated: bool,
     token: Uuid,
 ) -> Result<()> {
     let mut app = state
@@ -444,8 +453,14 @@ pub(in crate::app) fn commit_profile_credential_storage(
         if !matches!(ssh.auth, AuthMethod::Password) {
             anyhow::bail!("non-password profiles cannot store password credentials");
         }
-        if ssh.credential_storage != Some(storage) {
+        if vault_password_generated && storage != CredentialStorage::EncryptedVault {
+            anyhow::bail!("generated vault passwords require encrypted-vault storage");
+        }
+        if ssh.credential_storage != Some(storage)
+            || ssh.credential_vault_key_in_keyring != vault_password_generated
+        {
             ssh.credential_storage = Some(storage);
+            ssh.credential_vault_key_in_keyring = vault_password_generated;
             app.config.save(&candidate)?;
         }
         app.sessions = candidate;
@@ -494,12 +509,17 @@ pub(super) fn commit_profile_delete(
 
 pub(super) enum CredentialChange {
     None,
-    Delete(CredentialStorage),
+    Delete {
+        storage: CredentialStorage,
+        vault_password_generated: bool,
+    },
     Store {
         storage: CredentialStorage,
         previous_storage: Option<CredentialStorage>,
         password: zeroize::Zeroizing<String>,
         vault_password: Option<zeroize::Zeroizing<String>>,
+        vault_password_generated: bool,
+        previous_vault_password_generated: bool,
     },
 }
 
@@ -509,17 +529,26 @@ async fn apply_credential_change(
 ) -> Result<Option<CredentialRollback>> {
     match change {
         CredentialChange::None => Ok(None),
-        CredentialChange::Delete(storage) => delete_password(session_id, storage).await.map(Some),
+        CredentialChange::Delete {
+            storage,
+            vault_password_generated,
+        } => delete_password(session_id, storage, vault_password_generated)
+            .await
+            .map(Some),
         CredentialChange::Store {
             storage,
             previous_storage,
             password,
             vault_password,
+            vault_password_generated,
+            previous_vault_password_generated,
         } => save_password(
             storage,
             session_id,
             password,
             vault_password,
+            vault_password_generated,
+            previous_vault_password_generated,
             previous_storage,
         )
         .await
@@ -617,24 +646,36 @@ pub(super) fn profile_from_editor_with_password(
     let existing_storage = existing
         .and_then(SessionProfile::ssh)
         .and_then(|ssh| ssh.credential_storage);
+    let existing_vault_password_generated = existing
+        .and_then(SessionProfile::ssh)
+        .is_some_and(|ssh| ssh.credential_vault_key_in_keyring);
     let password_storage = if password_auth && !password.is_empty() && remember_password {
         Some(credential_storage_for_save(
             CredentialStorage::from_setting(credential_storage),
             !vault_password.is_empty(),
-        )?)
+        ))
     } else {
         None
     };
+    let (vault_password, vault_password_generated) = password_storage
+        .filter(|storage| *storage == CredentialStorage::EncryptedVault)
+        .map(|storage| vault_password_for_save(storage, vault_password))
+        .unwrap_or_else(|| (zeroize::Zeroizing::new(String::new()), false));
     let credential_change = if let Some(storage) = password_storage {
         CredentialChange::Store {
             storage,
             previous_storage: existing_storage,
             password: zeroize::Zeroizing::new(password.to_owned()),
             vault_password: (storage == CredentialStorage::EncryptedVault)
-                .then(|| zeroize::Zeroizing::new(vault_password.to_owned())),
+                .then_some(vault_password.clone()),
+            vault_password_generated,
+            previous_vault_password_generated: existing_vault_password_generated,
         }
     } else if !ssh_protocol || !password_auth {
-        existing_storage.map_or(CredentialChange::None, CredentialChange::Delete)
+        existing_storage.map_or(CredentialChange::None, |storage| CredentialChange::Delete {
+            storage,
+            vault_password_generated: existing_vault_password_generated,
+        })
     } else {
         CredentialChange::None
     };
@@ -667,6 +708,17 @@ pub(super) fn profile_from_editor_with_password(
         } else {
             None
         };
+        ssh.credential_vault_key_in_keyring =
+            if password_storage == Some(CredentialStorage::EncryptedVault) {
+                vault_password_generated
+            } else if password_storage.is_none() {
+                existing.and_then(SessionProfile::ssh).is_some_and(|ssh| {
+                    ssh.credential_storage == Some(CredentialStorage::EncryptedVault)
+                        && ssh.credential_vault_key_in_keyring
+                })
+            } else {
+                false
+            };
         ssh.host_key_fingerprint = preserved_fingerprint;
         ssh.x11_forwarding = x11_forwarding;
         ssh.sftp_remote_path = sftp_remote_path.trim().to_owned();

@@ -116,13 +116,17 @@ fn remembering_a_password_updates_the_existing_credential_backend() {
             previous_storage,
             password,
             vault_password,
+            vault_password_generated,
+            previous_vault_password_generated,
         } => {
             assert_eq!(storage, CredentialStorage::SystemKeyring);
             assert_eq!(previous_storage, Some(CredentialStorage::SystemKeyring));
             assert_eq!(password.as_str(), "new-password");
             assert!(vault_password.is_none());
+            assert!(!vault_password_generated);
+            assert!(!previous_vault_password_generated);
         }
-        CredentialChange::None | CredentialChange::Delete(_) => {
+        CredentialChange::None | CredentialChange::Delete { .. } => {
             panic!("entered password should be stored")
         }
     }
@@ -202,8 +206,8 @@ fn session_editor_saves_trimmed_sftp_default_paths() {
 }
 
 #[test]
-fn remembering_new_password_without_vault_password_is_rejected() {
-    let result = profile_from_editor_with_password(
+fn remembering_new_password_without_vault_password_generates_hidden_unlock_key() {
+    let (profile, change, connection_password) = profile_from_editor_with_password(
         None,
         "new",
         "",
@@ -227,17 +231,44 @@ fn remembering_new_password_without_vault_password_is_rejected() {
         "none",
         "none",
         None,
-    );
-    let error = match result {
-        Err(error) => error,
-        Ok(_) => panic!("encrypted vault saves require a vault password"),
-    };
+    )
+    .expect("profile should save with a generated vault password");
     assert_eq!(
-        error.to_string(),
-        "vault password is required for encrypted application vault"
+        profile.ssh().and_then(|ssh| ssh.credential_storage),
+        Some(CredentialStorage::EncryptedVault)
     );
+    assert!(
+        profile
+            .ssh()
+            .is_some_and(|ssh| ssh.credential_vault_key_in_keyring)
+    );
+    match change {
+        CredentialChange::Store {
+            storage,
+            vault_password,
+            vault_password_generated,
+            ..
+        } => {
+            assert_eq!(storage, CredentialStorage::EncryptedVault);
+            let vault_password = vault_password.expect("generated vault password should be stored");
+            assert!(vault_password.len() >= 40);
+            assert!(vault_password_generated);
+        }
+        CredentialChange::None | CredentialChange::Delete { .. } => {
+            panic!("generated vault password should retain encrypted-vault storage")
+        }
+    }
+    assert_eq!(
+        connection_password
+            .expect("remembered password should also be used for immediate connection")
+            .as_str(),
+        "new-password"
+    );
+}
 
-    let (profile, change, connection_password) = profile_from_editor_with_password(
+#[test]
+fn remembering_with_a_user_vault_password_does_not_enable_keyring_unlock() {
+    let (profile, change, _) = profile_from_editor_with_password(
         None,
         "new",
         "",
@@ -262,30 +293,30 @@ fn remembering_new_password_without_vault_password_is_rejected() {
         "none",
         None,
     )
-    .expect("profile should save with a vault password");
-    assert_eq!(
-        profile.ssh().and_then(|ssh| ssh.credential_storage),
-        Some(CredentialStorage::EncryptedVault)
-    );
+    .expect("profile should save with a user vault password");
+
+    assert!(profile.ssh().is_some_and(|ssh| {
+        ssh.credential_storage == Some(CredentialStorage::EncryptedVault)
+            && !ssh.credential_vault_key_in_keyring
+    }));
     match change {
         CredentialChange::Store {
-            storage,
             vault_password,
+            vault_password_generated,
             ..
         } => {
-            assert_eq!(storage, CredentialStorage::EncryptedVault);
-            assert!(vault_password.is_some());
+            assert_eq!(
+                vault_password
+                    .expect("user vault password should be passed to storage")
+                    .as_str(),
+                "vault-password"
+            );
+            assert!(!vault_password_generated);
         }
-        CredentialChange::None | CredentialChange::Delete(_) => {
-            panic!("vault password should retain encrypted-vault storage")
+        CredentialChange::None | CredentialChange::Delete { .. } => {
+            panic!("user vault password should store the encrypted credential")
         }
     }
-    assert_eq!(
-        connection_password
-            .expect("remembered password should also be used for immediate connection")
-            .as_str(),
-        "new-password"
-    );
 }
 
 #[test]
@@ -410,7 +441,10 @@ fn switching_to_private_key_preserves_trust_and_deletes_the_credential() {
     );
     assert!(matches!(
         change,
-        CredentialChange::Delete(CredentialStorage::SystemKeyring)
+        CredentialChange::Delete {
+            storage: CredentialStorage::SystemKeyring,
+            vault_password_generated: false,
+        }
     ));
 }
 
@@ -455,7 +489,10 @@ fn switching_to_ssh_agent_discards_password_input_and_credential_reference() {
     assert!(connection_password.is_none());
     assert!(matches!(
         change,
-        CredentialChange::Delete(CredentialStorage::SystemKeyring)
+        CredentialChange::Delete {
+            storage: CredentialStorage::SystemKeyring,
+            vault_password_generated: false,
+        }
     ));
 }
 
@@ -851,8 +888,14 @@ fn credential_storage_commit_requires_the_current_profile_mutation() {
 
     let token = begin_profile_mutation(&state, original.id, Some(&original))
         .expect("credential storage mutation should start");
-    commit_profile_credential_storage(&state, &original, CredentialStorage::SystemKeyring, token)
-        .expect("credential storage should commit");
+    commit_profile_credential_storage(
+        &state,
+        &original,
+        CredentialStorage::SystemKeyring,
+        false,
+        token,
+    )
+    .expect("credential storage should commit");
 
     assert_eq!(
         state

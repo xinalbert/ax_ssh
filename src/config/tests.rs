@@ -1373,7 +1373,9 @@ fn terminal_shell_cache_is_normalized_and_only_adds_discoveries() {
 #[test]
 fn profile_json_contains_no_secret_fields() {
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
-    ssh_mut(&mut profile).credential_storage = Some(CredentialStorage::EncryptedVault);
+    let ssh = ssh_mut(&mut profile);
+    ssh.credential_storage = Some(CredentialStorage::EncryptedVault);
+    ssh.credential_vault_key_in_keyring = true;
     let value = serde_json::to_value(profile).expect("profile should serialize");
     let object = value.as_object().expect("profile should be an object");
 
@@ -1385,7 +1387,19 @@ fn profile_json_contains_no_secret_fields() {
         object["connection"]["config"]["credential_storage"],
         "encrypted-vault"
     );
+    assert_eq!(
+        object["connection"]["config"]["credential_vault_key_in_keyring"],
+        true
+    );
     assert!(!object.contains_key("credential_stored"));
+}
+
+#[test]
+fn generated_vault_unlock_marker_requires_an_encrypted_password_profile() {
+    let mut profile = SessionProfile::new("demo", "host.example", "alice");
+    let ssh = ssh_mut(&mut profile);
+    ssh.credential_vault_key_in_keyring = true;
+    assert!(profile.validate().is_err());
 }
 
 #[test]

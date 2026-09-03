@@ -224,6 +224,7 @@ pub(super) fn duplicate_session_profile(
     duplicate.name = duplicate_session_name(&candidate, &source.name)?;
     if let Some(ssh) = duplicate.ssh_mut() {
         ssh.credential_storage = None;
+        ssh.credential_vault_key_in_keyring = false;
     }
     duplicate.validate()?;
     candidate.upsert(duplicate);
@@ -376,6 +377,7 @@ fn sanitize_transferred_profile(profile: &mut SessionProfile) {
     profile.group_name = normalize_group_name(&profile.group_name);
     if let Some(ssh) = profile.ssh_mut() {
         ssh.credential_storage = None;
+        ssh.credential_vault_key_in_keyring = false;
         ssh.host_key_fingerprint = None;
     }
 }
@@ -417,6 +419,7 @@ pub(super) fn duplicate_session_group(
         duplicate.group_name = duplicate_group.clone();
         if let Some(ssh) = duplicate.ssh_mut() {
             ssh.credential_storage = None;
+            ssh.credential_vault_key_in_keyring = false;
         }
         duplicate.validate()?;
         candidate.upsert(duplicate);

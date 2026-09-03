@@ -436,9 +436,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    reference. A non-empty value is available to **Save & connect** as a
    Tab-scoped one-time secret, and it updates the selected backend before the
    profile save only when **Save password (optional)** is checked. A requested
-   encrypted-vault save without a vault password is rejected, so the selected
-   vault backend never falls back to the system credential store. Existing vault
-   records remain vault records and still require their vault password to unlock.
+   encrypted-vault save without a vault password generates a per-profile random
+   unlock key, stores that key separately in the platform credential store, and
+   keeps the SSH password encrypted in the vault. The key is never exposed to
+   Slint. Existing user-managed vault records remain vault records and still
+   require their vault password to unlock.
    Private-key profiles
    load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
@@ -458,9 +460,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    Without **Save password (optional)**, an inline password is used once by **Save &
    connect** and a save-only action discards it. With **Save password (optional)**
    enabled, the
-   selected backend is updated transactionally with the profile. A missing
-   vault password is rejected instead of selecting the system credential store
-   or creating an unusable vault record. The secret is
+   selected backend is updated transactionally with the profile. A missing vault
+   password generates a hidden per-profile unlock key in the system credential
+   store instead of selecting the system credential store for the SSH password.
+   The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
@@ -887,20 +890,25 @@ handshake may expose its SHA-256 fingerprint to the confirmation UI, but only
 an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback
 inputs and are not part of `SessionStore`. A password profile contains only an
-optional `credential_storage` reference keyed by its stable UUID, never the
-password or a vault password. The session editor keeps its masked password and
+optional `credential_storage` reference keyed by its stable UUID, plus a
+non-secret marker for an auto-generated vault key held separately in the
+platform credential store; it never contains the password or vault key. The session editor keeps its masked password and
 vault-password fields blank on every open and clears them after submission. A
 non-empty editor password stays transient by default and is carried only by the
 corresponding Tab until host-key confirmation completes and the SSH worker takes
 ownership. Checking **Save password (optional)** additionally writes it through
 the selected backend, with rollback if profile persistence fails. If an
-encrypted-vault save has no vault password, it is rejected and never changes
-the selected backend to the system credential store. Existing vault records
-still require their vault password to unlock. Settings > General initializes
+encrypted-vault save has no vault password, AxSSH generates a random
+per-profile unlock key and stores it separately in the platform credential
+store; the SSH password remains in the encrypted vault and the key is never
+returned to the UI. Existing user-managed vault records still require their
+vault password to unlock. Settings > General initializes
 the backend for a future
 checked save-password action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
-application-vault record. The vault derives a per-record key with Argon2id,
+application-vault record. Auto-generated vault keys are random and profile-scoped
+and are stored only in a separate platform credential entry. The vault derives
+a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
 keeps the vault password transient. Private-key profiles persist only a path.
 The SSH transport also reads the bounded platform OpenSSH `known_hosts` file.
@@ -1389,7 +1397,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     terminal/IME cursor state unchanged. The retired
     `terminal_partition_strategy` JSON field is ignored as an unknown field when
     older settings are loaded; it is no longer part of the settings schema or
-    runtime state. Missing fields keep those defaults. Schema version 27 adds
+    runtime state. Missing fields keep those defaults. Schema version 28 adds
+    the optional per-SSH-profile `credential_vault_key_in_keyring` marker for
+    an app-generated encrypted-vault key; older profiles default it to false.
+    Schema version 27 adds
     `software_presentation` with stable `layer-images` and
     `damage-backing-store` values; missing or invalid values select the default
     damage backing store, while an explicitly saved `layer-images` value remains

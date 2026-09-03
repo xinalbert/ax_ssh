@@ -1,5 +1,43 @@
 use super::*;
-use crate::app::credential_tasks::credential_storage_for_save;
+use crate::app::credential_tasks::{credential_storage_for_save, vault_password_for_save};
+
+async fn clear_missing_auto_vault_credential(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile: &SessionProfile,
+) {
+    let persistence = match state.lock() {
+        Ok(app) => app.persistence_coordinator.clone(),
+        Err(_) => return,
+    };
+    let _persistence_guard = persistence.gate.lock().await;
+    let rollback = match delete_password(profile.id, CredentialStorage::EncryptedVault, true).await
+    {
+        Ok(rollback) => rollback,
+        Err(error) => {
+            warn!(session_id = %profile.id, %error, "failed to remove unusable automatic vault credential");
+            return;
+        }
+    };
+    match set_credential_storage_while_loading(state, tab_id, profile.id, None, Some(profile)) {
+        Ok(true) => {}
+        Ok(false) => {
+            if let Err(error) = rollback.restore().await {
+                warn!(session_id = %profile.id, %error, "failed to restore stale automatic vault credential");
+            }
+        }
+        Err(error) => {
+            if let Err(restore_error) = rollback.restore().await {
+                warn!(session_id = %profile.id, %restore_error, "failed to restore automatic vault credential after profile save failure");
+            }
+            warn!(
+                session_id = %profile.id,
+                %error,
+                    "failed to clear unusable automatic vault credential reference"
+            );
+        }
+    }
+}
 
 pub(in crate::app) fn begin_authentication(
     runtime: &Handle,
@@ -107,14 +145,107 @@ pub(in crate::app) fn begin_authentication(
         return;
     };
     if storage == CredentialStorage::EncryptedVault {
-        set_awaiting_authentication(&state, tab_id, profile.id, true);
-        set_tab_status(
-            &state,
-            &ui,
-            tab_id,
-            "Unlocking the saved password requires the vault password",
-        );
-        refresh_workspace(&ui, &state);
+        if ssh.credential_vault_key_in_keyring {
+            let runtime_for_lookup = runtime.clone();
+            if !set_loading_stored_credential(&state, tab_id, profile.id) {
+                debug!(tab_id = %tab_id, session_id = %profile.id, "stale authentication start ignored");
+                return;
+            }
+            set_tab_status(
+                &state,
+                &ui,
+                tab_id,
+                "Loading the hidden encrypted-vault unlock key...",
+            );
+            refresh_workspace(&ui, &state);
+            runtime.spawn(async move {
+                let unlock = load_vault_unlock_password(profile.id).await;
+                let current = match state.lock() {
+                    Ok(app) => terminal_has_phase(&app, tab_id, profile.id, |phase| {
+                        matches!(phase, SshConnectionPhase::LoadingStoredCredential)
+                    }),
+                    Err(_) => {
+                        set_status(&ui, "Cannot read session state");
+                        return;
+                    }
+                };
+                if !current {
+                    return;
+                }
+                match unlock {
+                    Ok(Some(unlock)) => match load_vault_password(profile.id, unlock).await {
+                        Ok(Some(secret)) => {
+                            if let Err(error) = start_session_worker(
+                                &runtime_for_lookup,
+                                state,
+                                ui.clone(),
+                                tab_id,
+                                profile.clone(),
+                                secret,
+                                None,
+                                true,
+                                AuthenticationStart::StoredCredential,
+                                target,
+                            ) {
+                                set_status(&ui, &format!("Cannot start connection: {error}"));
+                            }
+                        }
+                        Ok(None) => {
+                            clear_missing_auto_vault_credential(&state, tab_id, &profile).await;
+                            set_awaiting_authentication(&state, tab_id, profile.id, false);
+                            set_tab_status(
+                                &state,
+                                &ui,
+                                tab_id,
+                                "Saved password was not found; enter it again",
+                            );
+                            refresh_workspace(&ui, &state);
+                        }
+                        Err(error) => {
+                            set_awaiting_authentication(&state, tab_id, profile.id, false);
+                            set_tab_status(
+                                &state,
+                                &ui,
+                                tab_id,
+                                &format!("Cannot unlock saved password; enter it again: {error}"),
+                            );
+                            refresh_workspace(&ui, &state);
+                        }
+                    },
+                    Ok(None) => {
+                        clear_missing_auto_vault_credential(&state, tab_id, &profile).await;
+                        set_awaiting_authentication(&state, tab_id, profile.id, false);
+                        set_tab_status(
+                            &state,
+                            &ui,
+                            tab_id,
+                            "Saved password could not be unlocked; enter it again",
+                        );
+                        refresh_workspace(&ui, &state);
+                    }
+                    Err(error) => {
+                        warn!(session_id = %profile.id, %error, "automatic vault unlock key lookup failed");
+                        set_awaiting_authentication(&state, tab_id, profile.id, false);
+                        set_tab_status(
+                            &state,
+                            &ui,
+                            tab_id,
+                            &format!("System credential unavailable; enter password: {error}"),
+                        );
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+            });
+        } else {
+            set_awaiting_authentication(&state, tab_id, profile.id, true);
+            set_tab_status(
+                &state,
+                &ui,
+                tab_id,
+                "Unlocking the saved password requires the vault password",
+            );
+            refresh_workspace(&ui, &state);
+        }
         return;
     }
 
@@ -364,24 +495,21 @@ pub(in crate::app) fn wire_authentication(
             return false;
         }
         let credential_to_store = if password_auth {
-            let storage = match selected_storage_for_remember(
+            let storage = selected_storage_for_remember(
                 remember_password,
                 storage.as_str(),
-                vault_password.as_str(),
-            ) {
-                Ok(storage) => storage,
-                Err(error) => {
-                    set_status(&ui_for_auth, &format!("Cannot save password: {error}"));
-                    return false;
-                }
-            };
+            );
             storage.map(|storage| {
+                let (vault_password, vault_password_generated) =
+                    vault_password_for_save(storage, vault_password.as_str());
                 PendingCredentialStore {
                     expected_profile: profile.clone(),
                     storage,
                     previous_storage,
                     vault_password: (storage == CredentialStorage::EncryptedVault)
-                        .then(|| vault_password.clone()),
+                        .then_some(vault_password),
+                    vault_password_generated,
+                    previous_vault_password_generated: ssh.credential_vault_key_in_keyring,
                     secret: password.clone(),
                 }
             })
@@ -480,16 +608,14 @@ pub(in crate::app) fn wire_authentication(
 fn selected_storage_for_remember(
     remember_password: bool,
     setting: &str,
-    vault_password: &str,
-) -> anyhow::Result<Option<CredentialStorage>> {
+) -> Option<CredentialStorage> {
     if !remember_password {
-        return Ok(None);
+        return None;
     }
-    credential_storage_for_save(
+    Some(credential_storage_for_save(
         CredentialStorage::from_setting(setting),
-        !vault_password.is_empty(),
-    )
-    .map(Some)
+        true,
+    ))
 }
 
 #[cfg(test)]
@@ -498,20 +624,11 @@ mod tests {
 
     #[test]
     fn prompt_storage_uses_explicit_selection_only_when_remembering() {
-        let storage = selected_storage_for_remember(false, "encrypted-vault", "")
-            .expect("disabled password saving should not validate the backend");
+        let storage = selected_storage_for_remember(false, "encrypted-vault");
         assert_eq!(storage, None);
-        let error = selected_storage_for_remember(true, "encrypted-vault", "")
-            .expect_err("encrypted vault saves require a vault password");
-        assert_eq!(
-            error.to_string(),
-            "vault password is required for encrypted application vault"
-        );
-        let storage = selected_storage_for_remember(true, "encrypted-vault", "vault-password")
-            .expect("encrypted vault saves should accept a vault password");
+        let storage = selected_storage_for_remember(true, "encrypted-vault");
         assert_eq!(storage, Some(CredentialStorage::EncryptedVault));
-        let storage = selected_storage_for_remember(true, "system-keyring", "")
-            .expect("system credential saves should not require a vault password");
+        let storage = selected_storage_for_remember(true, "system-keyring");
         assert_eq!(storage, Some(CredentialStorage::SystemKeyring));
     }
 }

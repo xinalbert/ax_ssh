@@ -89,6 +89,10 @@ pub struct SshConfig {
     /// itself is never serialized in this profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential_storage: Option<CredentialStorage>,
+    /// Whether the encrypted-vault record uses an app-generated unlock key
+    /// stored separately in the platform credential store.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub credential_vault_key_in_keyring: bool,
     /// A SHA-256 SSH public-key fingerprint. The empty value means unknown;
     /// the SSH layer must refuse the connection until it is trusted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -341,6 +345,7 @@ impl<'de> Deserialize<'de> for SessionProfile {
                     .auth
                     .ok_or_else(|| serde::de::Error::missing_field("auth"))?,
                 credential_storage,
+                credential_vault_key_in_keyring: false,
                 host_key_fingerprint: wire.host_key_fingerprint,
                 x11_forwarding: wire.x11_forwarding.unwrap_or(true),
                 sftp_remote_path: default_sftp_remote_path(),
@@ -374,6 +379,7 @@ impl SessionProfile {
                 username: username.into(),
                 auth: AuthMethod::default(),
                 credential_storage: None,
+                credential_vault_key_in_keyring: false,
                 host_key_fingerprint: None,
                 x11_forwarding: true,
                 sftp_remote_path: default_sftp_remote_path(),
@@ -454,6 +460,10 @@ const fn default_true() -> bool {
     true
 }
 
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 fn default_sftp_remote_path() -> String {
     "~".to_owned()
 }
@@ -470,8 +480,17 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
                     MAX_HOST_KEY_FINGERPRINT_CHARS,
                 )?;
             }
-            if !matches!(config.auth, AuthMethod::Password) && config.credential_storage.is_some() {
+            if !matches!(config.auth, AuthMethod::Password)
+                && (config.credential_storage.is_some() || config.credential_vault_key_in_keyring)
+            {
                 anyhow::bail!("non-password profiles cannot store password credentials");
+            }
+            if config.credential_vault_key_in_keyring
+                && config.credential_storage != Some(CredentialStorage::EncryptedVault)
+            {
+                anyhow::bail!(
+                    "generated vault unlock keys require encrypted-vault credential storage"
+                );
             }
             if let AuthMethod::PrivateKey { path } = &config.auth {
                 let path = path

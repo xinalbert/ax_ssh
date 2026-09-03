@@ -143,13 +143,13 @@
 | KPAD2 | completed | 双语输入契约、项目地图、月度记录和离线质量门禁 | fmt/check/Clippy/test、tracker/Markdown、`git diff --check` | 不改变 SSH transport、host-key trust、凭据或持久化。 |
 | SHORT1 | completed | 在设置页展示所有应用层快捷键，包括固定的平台快捷键 | Slint 编译、设置搜索回归、翻译检查和完整 Cargo 门禁 | 可配置快捷键保持现有保存契约；固定的 Terminal Select All、Previous Tab、Next Tab 只读展示。 |
 | INPUT1 | completed | 统一普通输入框的复制/粘贴入口，并为密码输入提供安全的粘贴菜单 | Slint 编译、输入组件静态审阅、完整 Cargo 门禁 | 普通文本/路径/编辑器支持系统 Copy/Cut/Paste/Select All；SecretTextInput 仍禁止复制，仅允许粘贴，不改变凭据生命周期。 |
-| CRED1 | completed | 禁止加密保险库保存缺少口令时静默降级到系统密钥库，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | 所选加密保险库后端缺少非空口令时直接拒绝保存；不迁移或删除已有系统凭据。 |
+| CRED1 | completed | 加密保险库缺少用户口令时生成隐藏逐服务器解锁密钥，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | SSH 密码仍保存在加密保险库；随机解锁密钥只保存在系统凭据库，不进入 profile JSON、UI 或日志。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
 - `ROWMODEL2`：移除应用层 tile/partition 链路；旧配置字段由 Serde 忽略，不做 schema migration。
 - `ROWMODEL3`：完成双语架构、项目地图、研究和月度历史同步，并运行 tracker/Markdown/diff 检查。
 - `ROWMODEL4`：使用上游 `TermDamage` 产生变化行号，普通输出只更新对应行；首帧、视口变化和渲染 key 失效回退整屏可见行。
-- `CRED1`：加密保险库保存必须提供非空保险库口令；认证弹窗和会话编辑器都拒绝无口令保存，不再把所选后端改写为系统密钥库。
+- `CRED1`：加密保险库保存可省略用户口令；认证弹窗和会话编辑器为每个 profile 生成隐藏随机解锁密钥并单独保存，不把 SSH 密码后端改写为系统密钥库。
 
 ## 已完成
 
@@ -171,7 +171,7 @@
 - 已将 application-owned Local/Serial 持续输出呈现节拍从 16 ms 改为 33 ms；Tokio interval 仍保留立即首 tick 和 `MissedTickBehavior::Skip`。paused-time 回归确认 32 ms 时第二 tick 未完成、33 ms 时完成。SSH/Telnet 16 ms/16 KiB worker 批次、parser、协议应答、错误、断开和 shutdown 路径不变。
 - 已生成 33 ms ARM64 release 候选（36,360,352 bytes，SHA-256 `b46058c2c03224449c06ee45a038cc69100d6e665579a70213f59856fb48889d`）。构建时 PID 91806 仍映射旧 inode 16352449，新文件是 inode 16354239；必须重启才会进入新候选。
 - 已确认用户 `13:33` software sample 的 Mach-O UUID `9EDF8F81-7062-35AC-820A-221B3CAFEA06` 与当前 33 ms release 完全一致。2,248 个主线程样本中 DisplayLink 占约 67.7%、run-loop 空闲约 31.9%、Core Animation 提交约 36.8%、其中 vImage 颜色转换约 24.9%，Slint software 绘制分支约 25.8%、组件遍历约 24.6%；physical footprint 为 130.3 MiB、峰值 191.3 MiB。日志、Tokio、7 个 PTY 和 reader 线程仍主要阻塞。
-- 已完成 CRED1：凭据保存策略不再把缺少保险库口令的加密保险库选择降级为系统密钥库；认证弹窗和会话编辑器均返回明确错误并保留当前 UI 输入。同步简体中文翻译映射与目录；既有 `system-keyring` profile 未被自动迁移或删除。
+- 已完成 CRED1：缺少用户保险库口令时，认证弹窗和会话编辑器为 profile 生成随机隐藏解锁密钥并单独保存到系统凭据库；SSH 密码仍写入加密保险库，随机值不进入 UI、profile JSON 或日志。既有 `system-keyring` profile 未被自动迁移或删除。
 - 已从锁定依赖源码确认原版 macOS `softbuffer` 0.4.8 每帧报告 buffer age 0，`present_with_damage` 忽略 damage 并将完整 `CGImage` 设置到单个 `CALayer.contents`；本地 patch 现在保留持久 framebuffer、`age() == 1` 和失效传播，并把 damage 映射到有界 Core Animation presentation layer。终端 pane 按设置的终端行高倍数分区，sidebar/tab/空白区使用固定 256×128 物理像素 fallback。winit patch 保留 Slint 产生的每个独立 damage rectangle，不再先合并 bounding box；macOS backend 只替换相交 layer。
 - 已用统一 `TerminalPresentation` 接入 Local、Serial、SSH 与 Telnet monitor：无 dirty 输出时不创建 timer deadline；focused 首个脏更新立即呈现，连续输出前 500 ms/到 2 秒/超过 2 秒分别采用 16/33/50 ms，安静 250 ms 后重置；活动 split tree 中未聚焦 pane 按 Appearance 的 FPS 上限呈现（默认 4 FPS，范围 1-120），隐藏 Tab 无 deadline。`WindowRouter` route revision 和 policy watch 会唤醒有 pending 输出的 monitor，焦点、Tab 或设置变化后立即按新策略重算；SSH 合并批次保留最早 `received_at`，parser、协议应答、错误、断开和 shutdown 仍走即时路径。
 - 已生成双策略 ARM64 release 候选（36,376,960 bytes，inode `16356094`，SHA-256 `f419bfbcf7b50e3431062b7b78d5b3053e238265dd6133b5c5a23814ec8d291f`，Mach-O UUID `792FB118-6118-31F4-9359-CA56B5692B8D`）。检查时运行中的 PID 94454 仍映射旧 inode `16354239`，必须退出并重启后才会运行新候选。
@@ -260,7 +260,7 @@
 
 ## 最后更新时间
 
-- 2026-09-03 10:50 +0800：完成 CRED1；修复选择加密保险库但未填写保险库口令时静默改用系统密钥库的问题。认证弹窗和会话编辑器现在拒绝该保存请求，更新双语架构说明与界面提示；既有 system-keyring 凭据保持不变，完整 Rust/Slint 门禁通过。
+- 2026-09-03：完成 CRED1；选择加密保险库但未填写用户口令时，认证弹窗和会话编辑器为 profile 生成随机隐藏解锁密钥并单独保存到系统密钥库，SSH 密码仍保存在加密记录中；更新双语架构说明与界面提示，随机值不进入 profile、UI 或日志。
 - 2026-09-01 21:57 +0800：完成 SHORT1/INPUT1；Shortcuts 展示三个固定平台快捷键，普通文本输入和 TextEdit 使用完整原生剪贴板操作，SecretTextInput 仅新增粘贴入口并保持秘密不可复制。完整 Rust/Slint、翻译和差异门禁通过；目标平台输入法、快捷键和菜单视觉待用户验收。
 - 2026-09-01 15:55 +0800：完成 MODAL1 阻塞式 dialog 统一与窗口路由锁定；共享 `ModalFrame`、`OverlayHost` 安全优先仲裁和 Rust 侧 Tab/Pane/workspace 动作复核已接通，完整离线门禁通过，目标平台焦点/菜单验收待用户执行。
 - 2026-09-01 18:37 +0800：完成 KPAD1-KPAD2；Windows 在远端 `ESC =` application-keypad 模式下编码无修饰物理数字小键盘，普通 NumLock/IME/快捷键路径不变。host 离线门禁通过；Windows target 构建和实机键盘验收仍待 CI/目标机。

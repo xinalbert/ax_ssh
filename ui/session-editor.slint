@@ -552,7 +552,7 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.vault-password-draft;
-                                placeholder-text: @tr("Required for encrypted application vault");
+                                placeholder-text: @tr("Optional; blank generates a hidden vault key");
                                 accessible-label: @tr("Credential vault password");
                             }
                         }

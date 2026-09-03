@@ -246,7 +246,7 @@ TRANSLATIONS = {
     "Open the AxSSH issue tracker": "打开 AxSSH 问题跟踪器",
     "Option acts as Meta": "Option 作为 Meta",
     "Optional": "可选",
-    "Required for encrypted application vault": "使用应用加密保险库时必须填写",
+    "Optional; blank generates a hidden vault key": "可选；留空会生成隐藏的保险库密钥",
     "Optional; enter only when connecting or saving": "可选；仅在连接或保存时输入",
     "Overlay": "遮罩",
     "Pane": "窗格",

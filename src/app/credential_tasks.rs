@@ -1,6 +1,7 @@
 //! Tokio boundary for synchronous platform credential operations.
 
 use anyhow::{Context, Result};
+use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use tokio::time::{Duration, timeout};
 use tracing::warn;
 use uuid::Uuid;
@@ -13,12 +14,20 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(in crate::app) fn credential_storage_for_save(
     requested: CredentialStorage,
-    vault_password_supplied: bool,
-) -> Result<CredentialStorage> {
-    if requested == CredentialStorage::EncryptedVault && !vault_password_supplied {
-        anyhow::bail!("vault password is required for encrypted application vault");
+    _vault_password_supplied: bool,
+) -> CredentialStorage {
+    requested
+}
+
+pub(in crate::app) fn vault_password_for_save(
+    storage: CredentialStorage,
+    vault_password: &str,
+) -> (Zeroizing<String>, bool) {
+    if storage == CredentialStorage::EncryptedVault && vault_password.is_empty() {
+        let random = rand::random::<[u8; 32]>();
+        return (Zeroizing::new(STANDARD_NO_PAD.encode(random)), true);
     }
-    Ok(requested)
+    (Zeroizing::new(vault_password.to_owned()), false)
 }
 
 pub(super) async fn load_system_password(session_id: Uuid) -> Result<Option<Zeroizing<String>>> {
@@ -36,11 +45,21 @@ pub(super) async fn load_vault_password(
         .map(|password| password.map(Zeroizing::new))
 }
 
+pub(super) async fn load_vault_unlock_password(
+    session_id: Uuid,
+) -> Result<Option<Zeroizing<String>>> {
+    run_read(move || CredentialStore::platform()?.load_vault_unlock_password(session_id))
+        .await
+        .map(|password| password.map(Zeroizing::new))
+}
+
 pub(super) async fn save_password(
     storage: CredentialStorage,
     session_id: Uuid,
     password: Zeroizing<String>,
     vault_password: Option<Zeroizing<String>>,
+    vault_password_generated: bool,
+    previous_vault_password_generated: bool,
     previous_storage: Option<CredentialStorage>,
 ) -> Result<CredentialRollback> {
     run_mutation(move || {
@@ -52,12 +71,15 @@ pub(super) async fn save_password(
                 store.backup(previous_storage, session_id)?,
             ));
         }
+        let vault_unlock_backup = (vault_password_generated || previous_vault_password_generated)
+            .then(|| store.backup_vault_unlock_password(session_id))
+            .transpose()?;
         let save_result = match storage {
             CredentialStorage::SystemKeyring => {
                 store.save_system_password(session_id, password.as_str())
             }
             CredentialStorage::EncryptedVault => {
-                let vault_password = vault_password.context("vault password is required")?;
+                let vault_password = vault_password.as_ref().context("vault password is required")?;
                 store.save_vault_password(session_id, password.as_str(), vault_password.as_str())
             }
         };
@@ -67,17 +89,47 @@ pub(super) async fn save_password(
                     "failed to save remembered password and restore the previous credential: {restore_error}"
                 ));
             }
+            if let Some(backup) = vault_unlock_backup
+                && let Err(restore_error) = store.restore_vault_unlock_password(session_id, backup)
+            {
+                return Err(error).context(format!(
+                    "failed to save remembered password and restore the previous vault unlock key: {restore_error}"
+                ));
+            }
             return Err(error).context("failed to save remembered password");
+        }
+        let unlock_result = if storage == CredentialStorage::EncryptedVault
+            && vault_password_generated
+        {
+            let vault_password = vault_password
+                .as_ref()
+                .context("generated vault password is missing")?;
+            store.save_vault_unlock_password(session_id, vault_password.as_str())
+        } else if previous_vault_password_generated {
+            store.delete_vault_unlock_password(session_id)
+        } else {
+            Ok(())
+        };
+        if let Err(error) = unlock_result {
+            restore_backups(&store, session_id, backups)?;
+            if let Some(backup) = vault_unlock_backup {
+                store.restore_vault_unlock_password(session_id, backup)?;
+            }
+            return Err(error).context("failed to save encrypted vault unlock key");
         }
         if let Some(previous_storage) = previous_storage.filter(|value| *value != storage)
             && let Err(error) = store.delete_password(previous_storage, session_id)
         {
             restore_backups(&store, session_id, backups)?;
+            if let Some(backup) = vault_unlock_backup {
+                store.restore_vault_unlock_password(session_id, backup)?;
+            }
             return Err(error).context("failed to remove the replaced remembered password");
         }
         Ok(CredentialRollback {
             session_id,
             backups,
+            vault_unlock_backup,
         })
     })
     .await
@@ -86,13 +138,18 @@ pub(super) async fn save_password(
 pub(super) struct CredentialRollback {
     session_id: Uuid,
     backups: Vec<(CredentialStorage, CredentialBackup)>,
+    vault_unlock_backup: Option<Option<Zeroizing<String>>>,
 }
 
 impl CredentialRollback {
     pub(super) async fn restore(self) -> Result<()> {
         run_mutation(move || {
             let store = CredentialStore::platform()?;
-            restore_backups(&store, self.session_id, self.backups)
+            restore_backups(&store, self.session_id, self.backups)?;
+            if let Some(backup) = self.vault_unlock_backup {
+                store.restore_vault_unlock_password(self.session_id, backup)?;
+            }
+            Ok(())
         })
         .await
     }
@@ -101,14 +158,30 @@ impl CredentialRollback {
 pub(super) async fn delete_password(
     session_id: Uuid,
     previous_storage: CredentialStorage,
+    vault_password_generated: bool,
 ) -> Result<CredentialRollback> {
     run_mutation(move || {
         let store = CredentialStore::platform()?;
         let backup = store.backup(previous_storage, session_id)?;
-        store.delete_password(previous_storage, session_id)?;
+        let vault_unlock_backup = vault_password_generated
+            .then(|| store.backup_vault_unlock_password(session_id))
+            .transpose()?;
+        if let Err(error) = store.delete_password(previous_storage, session_id) {
+            return Err(error).context("failed to remove remembered password");
+        }
+        if vault_password_generated
+            && let Err(error) = store.delete_vault_unlock_password(session_id)
+        {
+            restore_backups(&store, session_id, vec![(previous_storage, backup)])?;
+            if let Some(unlock_backup) = vault_unlock_backup {
+                store.restore_vault_unlock_password(session_id, unlock_backup)?;
+            }
+            return Err(error).context("failed to remove encrypted vault unlock key");
+        }
         Ok(CredentialRollback {
             session_id,
             backups: vec![(previous_storage, backup)],
+            vault_unlock_backup,
         })
     })
     .await
@@ -175,6 +248,25 @@ mod tests {
         Arc,
         atomic::{AtomicBool, Ordering},
     };
+
+    #[test]
+    fn blank_encrypted_vault_password_generates_a_hidden_key() {
+        let (generated, was_generated) =
+            vault_password_for_save(CredentialStorage::EncryptedVault, "");
+        assert!(was_generated);
+        assert_eq!(generated.len(), 43);
+        assert!(
+            generated
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric()
+                    || matches!(character, '+' | '/' | '='))
+        );
+
+        let (provided, was_generated) =
+            vault_password_for_save(CredentialStorage::EncryptedVault, "vault-password");
+        assert!(!was_generated);
+        assert_eq!(provided.as_str(), "vault-password");
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn mutation_soft_deadline_waits_for_blocking_completion() {

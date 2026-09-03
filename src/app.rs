@@ -42,7 +42,8 @@ use ax_ssh::telnet::{TelnetSessionEvent, TelnetSessionHandle};
 use ax_ssh::terminal::TerminalSnapshot;
 
 use self::credential_tasks::{
-    delete_password, load_system_password, load_vault_password, save_password,
+    delete_password, load_system_password, load_vault_password, load_vault_unlock_password,
+    save_password,
 };
 use self::input::{
     format_shortcut_event_with_current_modifiers, menu_shortcut_from_setting,

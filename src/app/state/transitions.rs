@@ -185,6 +185,9 @@ pub(in crate::app) fn set_credential_storage_while_loading(
         anyhow::bail!("non-password profiles cannot store password credentials");
     }
     ssh.credential_storage = credential_storage;
+    if credential_storage != Some(CredentialStorage::EncryptedVault) {
+        ssh.credential_vault_key_in_keyring = false;
+    }
     app.config.save(&candidate)?;
     app.sessions = candidate;
     Ok(true)

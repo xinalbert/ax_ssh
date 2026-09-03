@@ -512,7 +512,13 @@ pub(super) fn spawn_session_monitor(
                         };
                         let _persistence_guard = persistence.gate.lock().await;
                         if let Some(storage) = ssh.credential_storage {
-                            match delete_password(profile.id, storage).await {
+                            match delete_password(
+                                profile.id,
+                                storage,
+                                ssh.credential_vault_key_in_keyring,
+                            )
+                            .await
+                            {
                                 Ok(rollback) => {
                                     if !session_is_loading_stored_credential(
                                         &state,
@@ -851,6 +857,8 @@ pub(super) fn persist_authenticated_credential(
             session_id,
             credential.secret,
             credential.vault_password,
+            credential.vault_password_generated,
+            credential.previous_vault_password_generated,
             credential.previous_storage,
         )
         .await {
@@ -887,6 +895,7 @@ pub(super) fn persist_authenticated_credential(
             &state,
             &credential.expected_profile,
             credential.storage,
+            credential.vault_password_generated,
             mutation_token,
         ) {
             warn!(session_id = %session_id, %error, "failed to persist credential storage policy");
@@ -923,6 +932,8 @@ pub(super) struct PendingCredentialStore {
     pub(super) previous_storage: Option<CredentialStorage>,
     pub(super) secret: zeroize::Zeroizing<String>,
     pub(super) vault_password: Option<zeroize::Zeroizing<String>>,
+    pub(super) vault_password_generated: bool,
+    pub(super) previous_vault_password_generated: bool,
 }
 
 pub(super) fn mutate_terminal_attempt(

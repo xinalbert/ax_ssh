@@ -23,8 +23,8 @@ cargo run --locked
    **SFTP directories** 区域可以设置新 SFTP Tab 首次打开的远端和本地目录；默认分别是 `~` 与平台 home 目录。
 3. 保存会话并在会话导航中选择它。新建 SSH profile 时，也可以点击 **Save & connect**，
    保存成功后立即进入正常的主机密钥流程。编辑器密码是可选项：留空可只保存 profile，不保存密码；
-   非空值可只供本次连接使用。勾选 **Save password (optional)** 才保存密码。选择加密保险库时必须提供非空保险库口令；
-   否则保存会被拒绝，不会使用系统凭据库。重复打开同一个已保存会话会创建彼此独立的终端
+   非空值可只供本次连接使用。勾选 **Save password (optional)** 才保存密码。选择加密保险库且保险库口令留空时，
+   AxSSH 会生成逐服务器的随机隐藏解锁密钥，将其单独保存到系统凭据库；该密钥只用于后台解锁，绝不会显示。重复打开同一个已保存会话会创建彼此独立的终端
    Tab，每个 Tab 都有自己的连接与输出。每个 SSH Tab 都可以独立等待主机密钥确认或认证；
    安全提示始终对应活动 Tab，切换 Tab 后其它等待提示仍会保留。
 4. 使用 SSH 首次连接时，先通过可信来源核对界面显示的 SHA-256 主机密钥指纹，再确认信任。
@@ -33,8 +33,8 @@ cargo run --locked
    SSH 密码，先在 **Settings > General** 选择 **System credential store** 或
    **Encrypted application vault**。密码弹窗会以该设置为初始值，也可以在 **Credential
    storage** 菜单中只为本次提示改选后端，再勾选 **Save password (optional)**。只有认证成功后才会
-   保存密码；请求加密保险库但保险库口令留空时会拒绝保存，提供非空保险库口令才会创建
-   加密保险库记录。之后使用既有保险库记录仍需输入其保险库口令解锁已保存的 SSH 密码。
+   保存密码；请求加密保险库但保险库口令留空时会使用隐藏随机解锁密钥，提供非空保险库口令则继续创建用户管理的
+   加密保险库记录。之后使用用户管理的保险库记录仍需输入其保险库口令，自动生成的记录会在后台解锁。
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择，但可通过键盘或右键菜单粘贴；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
    当前版本支持 RSA 私钥和 RSA agent identity，以兼容现有服务器。该版本有意接受
@@ -90,7 +90,7 @@ vendor/product/serial-number 元数据跟踪被操作系统改名的设备；找
 已确认的主机密钥指纹，下次连接必须重新明确确认；把 SSH profile 切换为 Telnet 或 Serial
 会移除其已记住的 SSH 凭据引用。会话编辑器不会显示已保存密码，密码留空会保留原凭据；
 新输入的密码可以由 **Save & connect** 使用一次，也可以勾选 **Save password (optional)** 并选择后端后保存；
-选择加密保险库但保险库口令留空时会拒绝保存。
+选择加密保险库但保险库口令留空时会生成隐藏的逐服务器解锁密钥并保存到系统凭据库。
 修改 **Settings > General** 的默认后端只用于初始化之后的保存选择，不会迁移或破坏既有 SSH profile
 所引用的后端。
 
@@ -359,7 +359,7 @@ forwarding 开关；X11 cookie 永远不会保存。Serial 可以保存
 
 选择 **System credential store** 后，记住的密码通过 macOS Keychain、Windows Credential
 Manager 或 Unix Secret Service 保存。选择 **Encrypted application vault** 后，应用会在
-配置目录中为每个 profile 保存一个私有加密记录，保险库口令不会保存。每日日志单独写入
+配置目录中为每个 profile 保存一个私有加密记录。保险库口令留空时，随机解锁密钥会单独保存到系统凭据库且不会显示；用户输入的保险库口令不会保存。每日日志单独写入
 平台本地应用数据目录的 `logs` 子目录，最多保留 15 个文件。`RUST_LOG` 可以覆盖默认的
 `ax_ssh=info,russh=warn` 过滤规则。凭据和终端内容不得写入日志；运行日志仍可能包含 host、
 port、session ID 或主机指纹等连接元数据，附加到 issue 前应先检查。
