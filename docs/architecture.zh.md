@@ -285,7 +285,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
    保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
    **Save password (optional)** 时才会在 profile 保存前更新所选后端。若请求加密保险库但未提供
-   保险库口令，会降级为系统凭据库并记录实际后端；既有保险库记录仍是保险库记录，解锁时仍需要
+   保险库口令，保存会被拒绝，因此所选保险库后端不会回退到系统凭据库；既有保险库记录仍是保险库记录，解锁时仍需要
 其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
@@ -299,8 +299,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
    **Save password (optional)** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
-   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会有意改用系统凭据库，
-   而不会创建无法解锁的保险库记录；
+   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会拒绝保存，不会改用系统凭据库，
+   也不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
    保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。所有 `SessionStore` 持久化路径
    共享一个进程级异步闸门，profile 保存和删除另为每个 profile 保留互斥 mutation token；在修改凭据前和替换
@@ -573,7 +573,7 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 `credential_storage` 后端引用，绝不包含密码或保险库口令。编辑器中的密码和保险库口令每次
 打开都为空，提交后立即清空；非空密码默认只由对应 Tab 短期持有，主机密钥确认完成并由 SSH worker
 接管后即清除。只有勾选 **Save password (optional)** 才会额外通过所选后端写入，profile 持久化失败时回滚。
-若选择加密保险库但未提供保险库口令，会有意改用系统凭据库并持久化实际引用，不会创建空口令
+若选择加密保险库但未提供保险库口令，保存会被拒绝，不会把后端改为系统凭据库，也不会创建空口令
 保险库记录；既有保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
 后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
 后端使用按 profile 分隔的应用记录。保险库对每条记录用 Argon2id 派生密钥、用

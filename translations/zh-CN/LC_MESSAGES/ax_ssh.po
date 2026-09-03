@@ -700,9 +700,6 @@ msgstr "Option 作为 Meta"
 msgid "Optional"
 msgstr "可选"
 
-msgid "Optional; empty saves in system credential store"
-msgstr "可选；留空时保存到系统凭据存储"
-
 msgid "Optional; enter only when connecting or saving"
 msgstr "可选；仅在连接或保存时输入"
 
@@ -840,6 +837,9 @@ msgstr "渲染后端"
 
 msgid "Report a bug"
 msgstr "报告问题"
+
+msgid "Required for encrypted application vault"
+msgstr "使用应用加密保险库时必须填写"
 
 msgid "Reset defaults"
 msgstr "恢复默认值"

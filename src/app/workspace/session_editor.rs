@@ -617,13 +617,14 @@ pub(super) fn profile_from_editor_with_password(
     let existing_storage = existing
         .and_then(SessionProfile::ssh)
         .and_then(|ssh| ssh.credential_storage);
-    let password_storage =
-        (password_auth && !password.is_empty() && remember_password).then(|| {
-            credential_storage_for_save(
-                CredentialStorage::from_setting(credential_storage),
-                !vault_password.is_empty(),
-            )
-        });
+    let password_storage = if password_auth && !password.is_empty() && remember_password {
+        Some(credential_storage_for_save(
+            CredentialStorage::from_setting(credential_storage),
+            !vault_password.is_empty(),
+        )?)
+    } else {
+        None
+    };
     let credential_change = if let Some(storage) = password_storage {
         CredentialChange::Store {
             storage,

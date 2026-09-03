@@ -202,8 +202,8 @@ fn session_editor_saves_trimmed_sftp_default_paths() {
 }
 
 #[test]
-fn remembering_new_password_without_vault_password_falls_back_to_system_keyring() {
-    let (profile, change, connection_password) = match profile_from_editor_with_password(
+fn remembering_new_password_without_vault_password_is_rejected() {
+    let result = profile_from_editor_with_password(
         None,
         "new",
         "",
@@ -227,32 +227,14 @@ fn remembering_new_password_without_vault_password_falls_back_to_system_keyring(
         "none",
         "none",
         None,
-    ) {
-        Ok(result) => result,
-        Err(error) => panic!("missing vault password should fall back to system keyring: {error}"),
+    );
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("encrypted vault saves require a vault password"),
     };
     assert_eq!(
-        profile.ssh().and_then(|ssh| ssh.credential_storage),
-        Some(CredentialStorage::SystemKeyring)
-    );
-    match change {
-        CredentialChange::Store {
-            storage,
-            vault_password,
-            ..
-        } => {
-            assert_eq!(storage, CredentialStorage::SystemKeyring);
-            assert!(vault_password.is_none());
-        }
-        CredentialChange::None | CredentialChange::Delete(_) => {
-            panic!("remembered password should use the system credential store")
-        }
-    }
-    assert_eq!(
-        connection_password
-            .expect("remembered password should also be used for immediate connection")
-            .as_str(),
-        "new-password"
+        error.to_string(),
+        "vault password is required for encrypted application vault"
     );
 
     let (profile, change, connection_password) = profile_from_editor_with_password(

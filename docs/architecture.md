@@ -436,9 +436,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
    reference. A non-empty value is available to **Save & connect** as a
    Tab-scoped one-time secret, and it updates the selected backend before the
    profile save only when **Save password (optional)** is checked. A requested
-   encrypted-vault save without a vault password falls back to the system
-   credential store and records that effective backend; existing vault records
-   remain vault records and still require their vault password to unlock.
+   encrypted-vault save without a vault password is rejected, so the selected
+   vault backend never falls back to the system credential store. Existing vault
+   records remain vault records and still require their vault password to unlock.
    Private-key profiles
    load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
@@ -459,8 +459,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    connect** and a save-only action discards it. With **Save password (optional)**
    enabled, the
    selected backend is updated transactionally with the profile. A missing
-   vault password deliberately selects the system credential store instead of
-   creating an unusable vault record. The secret is
+   vault password is rejected instead of selecting the system credential store
+   or creating an unusable vault record. The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
@@ -894,10 +894,10 @@ non-empty editor password stays transient by default and is carried only by the
 corresponding Tab until host-key confirmation completes and the SSH worker takes
 ownership. Checking **Save password (optional)** additionally writes it through
 the selected backend, with rollback if profile persistence fails. If an
-encrypted-vault save has no vault password, it deliberately uses the system
-credential store and persists that effective reference; it never creates an
-empty-password vault record. Existing vault records still require their vault
-password to unlock. Settings > General initializes the backend for a future
+encrypted-vault save has no vault password, it is rejected and never changes
+the selected backend to the system credential store. Existing vault records
+still require their vault password to unlock. Settings > General initializes
+the backend for a future
 checked save-password action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. The vault derives a per-record key with Argon2id,

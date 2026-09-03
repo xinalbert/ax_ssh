@@ -31,8 +31,8 @@ cargo run --locked
    normal host-key flow. The editor password is optional: leave it empty to
    save the profile without a password, or use a non-empty value once for that
    connection. Select **Save password (optional)** to persist it. A save with
-   no vault password uses the system credential store, even when encrypted vault
-   was selected; provide a vault password to create an encrypted-vault record.
+   an encrypted-vault selection requires a non-empty vault password; otherwise
+   saving is rejected and no system credential is used.
    Opening the same saved session more than once creates
    independent terminal tabs with separate connections and output. Each SSH Tab
    can independently wait for host-key confirmation or authentication; the
@@ -48,8 +48,8 @@ cargo run --locked
    in **Settings > General**. The password prompt starts with that choice, and
    its **Save password in** menu can override the backend for this prompt.
    Select **Save password (optional)** to save after successful authentication.
-   Leaving a requested vault password empty saves to the system credential
-   store instead; a non-empty vault password creates an encrypted-vault record.
+   A requested encrypted-vault save with an empty vault password is rejected;
+   a non-empty vault password creates an encrypted-vault record.
    Later use of an existing vault record still asks for that vault password.
    Password, vault-password, and passphrase fields cannot be copied, cut, or
    selected, and are cleared after a submitted secret is accepted or the prompt
@@ -133,8 +133,8 @@ explicitly on its next connection. Switching an SSH profile to Telnet or Serial
 removes its remembered SSH credential reference. The session editor never shows
 a saved password; leaving the field blank preserves it. A newly entered password
 can be used once by **Save & connect**, or persisted by selecting **Save
-password (optional)** and a backend. With an empty vault password, that save
-uses the system credential store. Changing the default in **Settings > General** only
+password (optional)** and a backend. An encrypted-vault save with an empty vault
+password is rejected. Changing the default in **Settings > General** only
 initializes future storage selections and does not migrate the backend referenced
 by an existing SSH profile.
 

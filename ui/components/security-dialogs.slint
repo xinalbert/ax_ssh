@@ -142,7 +142,7 @@ export component AuthenticationDialog inherits ModalFrame {
             height: self.visible ? Theme.editor-input-row-height : 0px;
             placeholder-text: root.vault-unlock-only
                 ? @tr("Vault password")
-                : @tr("Optional; empty saves in system credential store");
+                : @tr("Required for encrypted application vault");
             accessible-label: @tr("Vault password");
             accepted => { root.submit(); }
         }

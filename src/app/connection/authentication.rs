@@ -364,12 +364,18 @@ pub(in crate::app) fn wire_authentication(
             return false;
         }
         let credential_to_store = if password_auth {
-            selected_storage_for_remember(
+            let storage = match selected_storage_for_remember(
                 remember_password,
                 storage.as_str(),
                 vault_password.as_str(),
-            )
-            .map(|storage| {
+            ) {
+                Ok(storage) => storage,
+                Err(error) => {
+                    set_status(&ui_for_auth, &format!("Cannot save password: {error}"));
+                    return false;
+                }
+            };
+            storage.map(|storage| {
                 PendingCredentialStore {
                     expected_profile: profile.clone(),
                     storage,
@@ -475,13 +481,15 @@ fn selected_storage_for_remember(
     remember_password: bool,
     setting: &str,
     vault_password: &str,
-) -> Option<CredentialStorage> {
-    remember_password.then(|| {
-        credential_storage_for_save(
-            CredentialStorage::from_setting(setting),
-            !vault_password.is_empty(),
-        )
-    })
+) -> anyhow::Result<Option<CredentialStorage>> {
+    if !remember_password {
+        return Ok(None);
+    }
+    credential_storage_for_save(
+        CredentialStorage::from_setting(setting),
+        !vault_password.is_empty(),
+    )
+    .map(Some)
 }
 
 #[cfg(test)]
@@ -490,21 +498,20 @@ mod tests {
 
     #[test]
     fn prompt_storage_uses_explicit_selection_only_when_remembering() {
+        let storage = selected_storage_for_remember(false, "encrypted-vault", "")
+            .expect("disabled password saving should not validate the backend");
+        assert_eq!(storage, None);
+        let error = selected_storage_for_remember(true, "encrypted-vault", "")
+            .expect_err("encrypted vault saves require a vault password");
         assert_eq!(
-            selected_storage_for_remember(false, "encrypted-vault", ""),
-            None
+            error.to_string(),
+            "vault password is required for encrypted application vault"
         );
-        assert_eq!(
-            selected_storage_for_remember(true, "encrypted-vault", ""),
-            Some(CredentialStorage::SystemKeyring)
-        );
-        assert_eq!(
-            selected_storage_for_remember(true, "encrypted-vault", "vault-password"),
-            Some(CredentialStorage::EncryptedVault)
-        );
-        assert_eq!(
-            selected_storage_for_remember(true, "system-keyring", ""),
-            Some(CredentialStorage::SystemKeyring)
-        );
+        let storage = selected_storage_for_remember(true, "encrypted-vault", "vault-password")
+            .expect("encrypted vault saves should accept a vault password");
+        assert_eq!(storage, Some(CredentialStorage::EncryptedVault));
+        let storage = selected_storage_for_remember(true, "system-keyring", "")
+            .expect("system credential saves should not require a vault password");
+        assert_eq!(storage, Some(CredentialStorage::SystemKeyring));
     }
 }
