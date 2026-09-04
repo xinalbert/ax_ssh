@@ -170,13 +170,13 @@ component TerminalNoticeBanner inherits Rectangle {
 
         ElidedButton {
             visible: !root.notice.primary_action.is-empty;
-            width: self.visible ? 88px : 0px;
+            width: self.visible ? self.preferred-width : 0px;
             text: root.notice.primary_label;
             clicked => { root.action(root.notice.primary_action); }
         }
         ElidedButton {
             visible: !root.notice.secondary_action.is-empty;
-            width: self.visible ? 76px : 0px;
+            width: self.visible ? self.preferred-width : 0px;
             text: root.notice.secondary_label;
             clicked => { root.action(root.notice.secondary_action); }
         }

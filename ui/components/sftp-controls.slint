@@ -10,12 +10,20 @@ export component SftpActionButton inherits FocusScope {
     callback clicked();
 
     private property <length> text-height: label.line-height;
+    // Keep enough room for the measured label and both horizontal insets.
+    // Callers may still provide a larger width for stable toolbar geometry.
+    private property <length> natural-width: max(
+        Theme.sftp-control-min-width,
+        label.natural-width + 2 * Theme.space-md,
+    );
     out property <length> control-height: max(
         Theme.sftp-control-min-height,
         root.text-height + 2 * Theme.sftp-control-padding-y,
     );
 
     height: root.control-height;
+    min-width: root.natural-width;
+    preferred-width: root.natural-width;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;

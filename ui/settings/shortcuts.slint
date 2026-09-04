@@ -36,7 +36,7 @@ export component ShortcutsSettingsPage inherits SettingsPage {
             label: @tr("WORKSPACE");
         }
         ElidedButton {
-            width: Theme.settings-reset-button-width;
+            width: max(Theme.settings-reset-button-width, self.preferred-width);
             height: Theme.settings-control-height;
             text: @tr("Reset defaults");
             clicked => {

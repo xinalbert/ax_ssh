@@ -522,13 +522,20 @@ component SftpDirectoryPane inherits Rectangle {
         root.control-height + 2 * Theme.sftp-path-row-padding-y;
     private property <length> status-height:
         root.control-height + 2 * Theme.sftp-status-row-padding-y;
-    private property <length> title-actions-width: Theme.sftp-nav-icon-button-width
-        + (root.allow-hidden ? Theme.space-sm + Theme.sftp-hidden-control-width : 0px)
+    private property <length> toolbar-actions-preferred-width:
+        (root.allow-hidden ? Theme.sftp-hidden-control-width : 0px)
         + (root.allow-navigation && root.selection-count == 1
-            ? 3 * Theme.space-sm + 2 * Theme.sftp-path-action-width + 150px
+            ? 2 * Theme.sftp-toolbar-action-reserve-width + 150px
             : (!root.allow-navigation && root.selection-count > 0
-                ? Theme.space-sm + Theme.sftp-path-action-width
-                : 0px));
+                ? Theme.sftp-toolbar-action-reserve-width : 0px))
+        + (root.allow-hidden
+            && ((root.allow-navigation && root.selection-count == 1)
+                || (!root.allow-navigation && root.selection-count > 0))
+            ? Theme.space-sm : 0px)
+        + (root.allow-navigation && root.selection-count == 1
+            ? 2 * Theme.space-sm : 0px);
+    private property <length> title-actions-width: Theme.sftp-nav-icon-button-width
+        + Theme.space-sm + root.toolbar-actions-preferred-width;
 
     changed current-path => { root.path-draft = root.current-path; }
 
@@ -572,8 +579,7 @@ component SftpDirectoryPane inherits Rectangle {
                 );
                 width: min(
                     max(0px, parent.width - 2 * Theme.sftp-column-padding),
-                    4 * Theme.sftp-path-action-width + 3 * Theme.space-sm
-                        + Theme.sftp-hidden-control-width + Theme.space-sm,
+                    root.toolbar-actions-preferred-width,
                 );
                 height: parent.height;
                 spacing: Theme.space-sm;
@@ -585,7 +591,6 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive;
                 }
                 if root.allow-navigation && root.selection-count == 1 : SftpActionButton {
-                    width: Theme.sftp-path-action-width;
                     height: root.control-height;
                     text: @tr("Edit");
                     accessible-name: @tr("Edit selected remote file");
@@ -600,7 +605,6 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.loading;
                 }
                 if root.allow-navigation && root.selection-count == 1 : SftpActionButton {
-                    width: Theme.sftp-path-action-width;
                     height: root.control-height;
                     text: @tr("Rename");
                     accessible-name: @tr("Rename selected remote entry");
@@ -608,7 +612,6 @@ component SftpDirectoryPane inherits Rectangle {
                     clicked => { root.rename-selected(root.rename-name-draft); }
                 }
                 if !root.allow-navigation && root.selection-count > 0 : SftpActionButton {
-                    width: Theme.sftp-path-action-width;
                     height: root.control-height;
                     text: @tr("Upload");
                     accessible-name: @tr("Upload selected local files");
@@ -673,7 +676,6 @@ component SftpDirectoryPane inherits Rectangle {
                     accepted(path) => { root.list-directory(path); }
                 }
                 SftpActionButton {
-                    width: Theme.sftp-path-action-width;
                     height: root.control-height;
                     text: @tr("Open");
                     enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
@@ -785,7 +787,7 @@ component SftpTransferEntry inherits Rectangle {
     // Reserve one slot for Pause/Resume and one for Cancel so both actions
     // remain visible for a running transfer.
     private property <length> action-slot-width:
-        2 * Theme.sftp-path-action-width + 2 * Theme.sftp-column-gap;
+        2 * Theme.sftp-transfer-action-width + 2 * Theme.sftp-column-gap;
     private property <length> content-width: max(
         0px,
         root.width - Theme.sftp-column-padding - Theme.sftp-selection-width
@@ -917,9 +919,9 @@ component SftpTransferEntry inherits Rectangle {
     }
     if root.transfer.pausable : SftpActionButton {
         x: parent.width - Theme.sftp-column-padding - self.width
-            - Theme.sftp-column-gap - Theme.sftp-path-action-width;
+            - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
         y: (parent.height - self.height) / 2;
-        width: Theme.sftp-path-action-width;
+        width: Theme.sftp-transfer-action-width;
         height: Theme.sftp-control-min-height;
         text: @tr("Pause");
         accessible-name: @tr("Pause {0}", root.transfer.name);
@@ -928,9 +930,9 @@ component SftpTransferEntry inherits Rectangle {
     }
     if root.transfer.resumable : SftpActionButton {
         x: parent.width - Theme.sftp-column-padding - self.width
-            - Theme.sftp-column-gap - Theme.sftp-path-action-width;
+            - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
         y: (parent.height - self.height) / 2;
-        width: Theme.sftp-path-action-width;
+        width: Theme.sftp-transfer-action-width;
         height: Theme.sftp-control-min-height;
         text: @tr("Resume");
         accessible-name: @tr("Resume {0}", root.transfer.name);
@@ -941,7 +943,7 @@ component SftpTransferEntry inherits Rectangle {
         visible: root.transfer.cancellable;
         x: parent.width - Theme.sftp-column-padding - self.width;
         y: (parent.height - self.height) / 2;
-        width: Theme.sftp-path-action-width;
+        width: Theme.sftp-transfer-action-width;
         height: Theme.sftp-control-min-height;
         text: @tr("Cancel");
         accessible-name: @tr("Cancel {0}", root.transfer.name);
@@ -996,22 +998,25 @@ component SftpTransferQueue inherits Rectangle {
                 spacing: Theme.space-sm;
 
                 SftpActionButton {
-                    width: 112px;
+                    width: 136px;
                     height: parent.height;
+                    font-size: Theme.font-caption;
                     text: @tr("Transferring ({0})", root.active-count);
                     enabled: true;
                     clicked => { root.page = "active"; }
                 }
                 SftpActionButton {
-                    width: 82px;
+                    width: 92px;
                     height: parent.height;
+                    font-size: Theme.font-caption;
                     text: @tr("Failed ({0})", root.failed-count);
                     enabled: true;
                     clicked => { root.page = "failed"; }
                 }
                 SftpActionButton {
-                    width: 92px;
+                    width: 102px;
                     height: parent.height;
+                    font-size: Theme.font-caption;
                     text: @tr("Success ({0})", root.completed-count);
                     enabled: true;
                     clicked => { root.page = "completed"; }
@@ -1056,7 +1061,7 @@ component SftpTransferQueue inherits Rectangle {
         }
         if !root.collapsed : Rectangle {
             private property <length> action-slot-width:
-                2 * Theme.sftp-path-action-width + 2 * Theme.sftp-column-gap;
+                2 * Theme.sftp-transfer-action-width + 2 * Theme.sftp-column-gap;
             private property <length> content-width: max(
                 0px,
                 self.width - Theme.sftp-column-padding - Theme.sftp-selection-width
@@ -1394,7 +1399,6 @@ export component SftpPane inherits Rectangle {
                         accessible-label: @tr("Save As remote path");
                     }
                     SftpActionButton {
-                        width: Theme.sftp-path-action-width;
                         text: @tr("Save");
                         enabled: !root.view.editor_remote_changed;
                         clicked => { root.save-remote-file(editor-path-draft, editor.text); }
