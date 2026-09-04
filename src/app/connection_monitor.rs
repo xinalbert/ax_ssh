@@ -515,7 +515,7 @@ pub(super) fn spawn_session_monitor(
                             match delete_password(
                                 profile.id,
                                 storage,
-                                ssh.credential_vault_key_in_keyring,
+                                ssh.credential_vault_key_saved,
                             )
                             .await
                             {

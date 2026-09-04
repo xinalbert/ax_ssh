@@ -143,7 +143,7 @@
 | KPAD2 | completed | 双语输入契约、项目地图、月度记录和离线质量门禁 | fmt/check/Clippy/test、tracker/Markdown、`git diff --check` | 不改变 SSH transport、host-key trust、凭据或持久化。 |
 | SHORT1 | completed | 在设置页展示所有应用层快捷键，包括固定的平台快捷键 | Slint 编译、设置搜索回归、翻译检查和完整 Cargo 门禁 | 可配置快捷键保持现有保存契约；固定的 Terminal Select All、Previous Tab、Next Tab 只读展示。 |
 | INPUT1 | completed | 统一普通输入框的复制/粘贴入口，并为密码输入提供安全的粘贴菜单 | Slint 编译、输入组件静态审阅、完整 Cargo 门禁 | 普通文本/路径/编辑器支持系统 Copy/Cut/Paste/Select All；SecretTextInput 仍禁止复制，仅允许粘贴，不改变凭据生命周期。 |
-| CRED1 | completed | 加密保险库缺少用户口令时生成隐藏逐服务器解锁密钥，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | SSH 密码仍保存在加密保险库；随机解锁密钥只保存在系统凭据库，不进入 profile JSON、UI 或日志。 |
+| CRED1 | completed | 加密保险库缺少用户口令时生成隐藏逐服务器解锁密钥，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | 默认使用应用私有 `0600` 文件自动解锁，不访问系统密钥库；旧 profile 仅在本地解锁文件缺失时迁移一次旧 keyring 条目。随机解锁密钥不进入 profile JSON、UI 或日志。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
 - `ROWMODEL2`：移除应用层 tile/partition 链路；旧配置字段由 Serde 忽略，不做 schema migration。
@@ -171,7 +171,7 @@
 - 已将 application-owned Local/Serial 持续输出呈现节拍从 16 ms 改为 33 ms；Tokio interval 仍保留立即首 tick 和 `MissedTickBehavior::Skip`。paused-time 回归确认 32 ms 时第二 tick 未完成、33 ms 时完成。SSH/Telnet 16 ms/16 KiB worker 批次、parser、协议应答、错误、断开和 shutdown 路径不变。
 - 已生成 33 ms ARM64 release 候选（36,360,352 bytes，SHA-256 `b46058c2c03224449c06ee45a038cc69100d6e665579a70213f59856fb48889d`）。构建时 PID 91806 仍映射旧 inode 16352449，新文件是 inode 16354239；必须重启才会进入新候选。
 - 已确认用户 `13:33` software sample 的 Mach-O UUID `9EDF8F81-7062-35AC-820A-221B3CAFEA06` 与当前 33 ms release 完全一致。2,248 个主线程样本中 DisplayLink 占约 67.7%、run-loop 空闲约 31.9%、Core Animation 提交约 36.8%、其中 vImage 颜色转换约 24.9%，Slint software 绘制分支约 25.8%、组件遍历约 24.6%；physical footprint 为 130.3 MiB、峰值 191.3 MiB。日志、Tokio、7 个 PTY 和 reader 线程仍主要阻塞。
-- 已完成 CRED1：缺少用户保险库口令时，认证弹窗和会话编辑器为 profile 生成随机隐藏解锁密钥并单独保存到系统凭据库；SSH 密码仍写入加密保险库，随机值不进入 UI、profile JSON 或日志。既有 `system-keyring` profile 未被自动迁移或删除。
+- 已完成 CRED1：缺少用户保险库口令时，认证弹窗和会话编辑器为 profile 生成随机隐藏解锁密钥并保存到应用私有 `0600` 文件；SSH 密码仍写入加密保险库，随机值不进入 UI、profile JSON 或日志。旧 profile 仅在本地解锁文件缺失时迁移一次旧 keyring 条目；新的应用设置默认使用 `encrypted-vault`。
 - 已从锁定依赖源码确认原版 macOS `softbuffer` 0.4.8 每帧报告 buffer age 0，`present_with_damage` 忽略 damage 并将完整 `CGImage` 设置到单个 `CALayer.contents`；本地 patch 现在保留持久 framebuffer、`age() == 1` 和失效传播，并把 damage 映射到有界 Core Animation presentation layer。终端 pane 按设置的终端行高倍数分区，sidebar/tab/空白区使用固定 256×128 物理像素 fallback。winit patch 保留 Slint 产生的每个独立 damage rectangle，不再先合并 bounding box；macOS backend 只替换相交 layer。
 - 已用统一 `TerminalPresentation` 接入 Local、Serial、SSH 与 Telnet monitor：无 dirty 输出时不创建 timer deadline；focused 首个脏更新立即呈现，连续输出前 500 ms/到 2 秒/超过 2 秒分别采用 16/33/50 ms，安静 250 ms 后重置；活动 split tree 中未聚焦 pane 按 Appearance 的 FPS 上限呈现（默认 4 FPS，范围 1-120），隐藏 Tab 无 deadline。`WindowRouter` route revision 和 policy watch 会唤醒有 pending 输出的 monitor，焦点、Tab 或设置变化后立即按新策略重算；SSH 合并批次保留最早 `received_at`，parser、协议应答、错误、断开和 shutdown 仍走即时路径。
 - 已生成双策略 ARM64 release 候选（36,376,960 bytes，inode `16356094`，SHA-256 `f419bfbcf7b50e3431062b7b78d5b3053e238265dd6133b5c5a23814ec8d291f`，Mach-O UUID `792FB118-6118-31F4-9359-CA56B5692B8D`）。检查时运行中的 PID 94454 仍映射旧 inode `16354239`，必须退出并重启后才会运行新候选。
@@ -228,7 +228,7 @@
 - 未完成：Windows offline check 因本机未缓存 `atomic-waker 1.1.2` 未执行。tracker validator 本轮 current/新增记录字段完整，仍报告既有 2026-08 历史与 research 条目格式问题。目标 macOS GUI/Retina 拖选视觉和同负载 CPU/footprint A/B 由用户执行。
 
 - FONT1 已完成：Fontique 四字重注册测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 215、应用 212、Doc tests 0）和 `git diff --check` 通过；目标平台粗体/斜体视觉仍需用户验收。
-- CRED1 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 227、应用 218、Doc tests 0）和 `git diff --check` 通过；用户日志对应 profile 当前仍显式引用 `system-keyring`，不会自动迁移；重新保存时可选择加密保险库，留空用户口令会生成隐藏解锁密钥。
+- CRED1 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 227、应用 218、Doc tests 0）和 `git diff --check` 通过；当时用户日志对应 profile 仍显式引用 `system-keyring`，不会自动迁移。后续 schema 29 已将加密保险库和应用私有文件自动解锁设为默认，重新保存时仍可显式选择系统密钥库。
 
 ## 风险与阻塞
 

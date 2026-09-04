@@ -1375,7 +1375,7 @@ fn profile_json_contains_no_secret_fields() {
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
     let ssh = ssh_mut(&mut profile);
     ssh.credential_storage = Some(CredentialStorage::EncryptedVault);
-    ssh.credential_vault_key_in_keyring = true;
+    ssh.credential_vault_key_saved = true;
     let value = serde_json::to_value(profile).expect("profile should serialize");
     let object = value.as_object().expect("profile should be an object");
 
@@ -1388,17 +1388,44 @@ fn profile_json_contains_no_secret_fields() {
         "encrypted-vault"
     );
     assert_eq!(
-        object["connection"]["config"]["credential_vault_key_in_keyring"],
+        object["connection"]["config"]["credential_vault_key_saved"],
         true
     );
     assert!(!object.contains_key("credential_stored"));
 }
 
 #[test]
+fn legacy_vault_unlock_marker_alias_loads_and_uses_the_new_name() {
+    let id = Uuid::new_v4();
+    let json = format!(
+        r#"{{"sessions":[{{"id":"{id}","name":"legacy","connection":{{"protocol":"ssh","config":{{"host":"host.example","port":22,"username":"alice","auth":"Password","credential_storage":"encrypted-vault","credential_vault_key_in_keyring":true}}}}}}]}}"#
+    );
+
+    let store: SessionStore =
+        serde_json::from_str(&json).expect("legacy unlock marker should deserialize");
+    assert!(ssh(&store.sessions[0]).credential_vault_key_saved);
+    let encoded = serde_json::to_string(&store).expect("migrated profile should serialize");
+    assert!(encoded.contains("credential_vault_key_saved"));
+    assert!(!encoded.contains("credential_vault_key_in_keyring"));
+}
+
+#[test]
+fn application_default_uses_the_encrypted_vault() {
+    assert_eq!(
+        AppSettings::default().credential_storage,
+        CredentialStorage::EncryptedVault
+    );
+    assert_eq!(
+        CredentialStorage::from_setting("unrecognized-storage"),
+        CredentialStorage::EncryptedVault
+    );
+}
+
+#[test]
 fn generated_vault_unlock_marker_requires_an_encrypted_password_profile() {
     let mut profile = SessionProfile::new("demo", "host.example", "alice");
     let ssh = ssh_mut(&mut profile);
-    ssh.credential_vault_key_in_keyring = true;
+    ssh.credential_vault_key_saved = true;
     assert!(profile.validate().is_err());
 }
 

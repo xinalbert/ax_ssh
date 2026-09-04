@@ -145,7 +145,7 @@ pub(in crate::app) fn begin_authentication(
         return;
     };
     if storage == CredentialStorage::EncryptedVault {
-        if ssh.credential_vault_key_in_keyring {
+        if ssh.credential_vault_key_saved {
             let runtime_for_lookup = runtime.clone();
             if !set_loading_stored_credential(&state, tab_id, profile.id) {
                 debug!(tab_id = %tab_id, session_id = %profile.id, "stale authentication start ignored");
@@ -509,7 +509,7 @@ pub(in crate::app) fn wire_authentication(
                     vault_password: (storage == CredentialStorage::EncryptedVault)
                         .then_some(vault_password),
                     vault_password_generated,
-                    previous_vault_password_generated: ssh.credential_vault_key_in_keyring,
+                    previous_vault_password_generated: ssh.credential_vault_key_saved,
                     secret: password.clone(),
                 }
             })

@@ -29,8 +29,8 @@ const MAX_SFTP_LOCAL_PATH_BYTES: usize = 4_096;
 #[serde(rename_all = "kebab-case")]
 pub enum CredentialStorage {
     #[default]
-    SystemKeyring,
     EncryptedVault,
+    SystemKeyring,
 }
 
 impl CredentialStorage {
@@ -38,7 +38,7 @@ impl CredentialStorage {
         match value.trim().to_ascii_lowercase().as_str() {
             "system-keyring" | "system keyring" | "keyring" | "stored" => Self::SystemKeyring,
             "encrypted-vault" | "encrypted vault" | "vault" => Self::EncryptedVault,
-            _ => Self::SystemKeyring,
+            _ => Self::EncryptedVault,
         }
     }
 
@@ -90,9 +90,15 @@ pub struct SshConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential_storage: Option<CredentialStorage>,
     /// Whether the encrypted-vault record uses an app-generated unlock key
-    /// stored separately in the platform credential store.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub credential_vault_key_in_keyring: bool,
+    /// stored separately in the private application credential directory.
+    /// The legacy `credential_vault_key_in_keyring` name is accepted when
+    /// loading profiles written by older versions.
+    #[serde(
+        default,
+        alias = "credential_vault_key_in_keyring",
+        skip_serializing_if = "is_false"
+    )]
+    pub credential_vault_key_saved: bool,
     /// A SHA-256 SSH public-key fingerprint. The empty value means unknown;
     /// the SSH layer must refuse the connection until it is trusted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -345,7 +351,7 @@ impl<'de> Deserialize<'de> for SessionProfile {
                     .auth
                     .ok_or_else(|| serde::de::Error::missing_field("auth"))?,
                 credential_storage,
-                credential_vault_key_in_keyring: false,
+                credential_vault_key_saved: false,
                 host_key_fingerprint: wire.host_key_fingerprint,
                 x11_forwarding: wire.x11_forwarding.unwrap_or(true),
                 sftp_remote_path: default_sftp_remote_path(),
@@ -379,7 +385,7 @@ impl SessionProfile {
                 username: username.into(),
                 auth: AuthMethod::default(),
                 credential_storage: None,
-                credential_vault_key_in_keyring: false,
+                credential_vault_key_saved: false,
                 host_key_fingerprint: None,
                 x11_forwarding: true,
                 sftp_remote_path: default_sftp_remote_path(),
@@ -481,11 +487,11 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
                 )?;
             }
             if !matches!(config.auth, AuthMethod::Password)
-                && (config.credential_storage.is_some() || config.credential_vault_key_in_keyring)
+                && (config.credential_storage.is_some() || config.credential_vault_key_saved)
             {
                 anyhow::bail!("non-password profiles cannot store password credentials");
             }
-            if config.credential_vault_key_in_keyring
+            if config.credential_vault_key_saved
                 && config.credential_storage != Some(CredentialStorage::EncryptedVault)
             {
                 anyhow::bail!(

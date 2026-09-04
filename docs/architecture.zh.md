@@ -285,7 +285,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
    保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
    **Save password (optional)** 时才会在 profile 保存前更新所选后端。若请求加密保险库但未提供
-   保险库口令，保存会为该 profile 生成随机解锁密钥并单独保存到系统凭据库，SSH 密码仍保存在加密保险库中；密钥不会暴露给 UI。既有用户管理的保险库记录仍是保险库记录，解锁时仍需要
+   保险库口令，保存会为该 profile 生成随机解锁密钥并保存到应用私有目录的 `0600` 文件，SSH 密码仍保存在加密保险库中；密钥不会暴露给 UI，也不会通过系统密钥库读取。既有用户管理的保险库记录仍是保险库记录，解锁时仍需要
 其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
@@ -295,11 +295,11 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    profile 冲突、变更密钥、坏记录和文件不可读都不会放宽信任。精确匹配 `@revoked` 时在认证前拒绝，
    普通确认不能绕过。未知确认追加观察到的公钥；变更确认原子替换匹配 host 的非撤销记录，同时保留
    注释、无关主机和撤销记录。移除撤销记录是独立的显式动作，不能作为 profile 指纹回退。
-4. Settings > General 持有新记住 SSH 密码的默认后端：平台系统凭据库或应用加密保险库。
+4. Settings > General 持有新记住 SSH 密码的默认后端：默认是应用加密保险库，也可以显式选择平台系统凭据库。
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
    **Save password (optional)** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
-   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会保存随机隐藏解锁密钥，不会把 SSH 密码后端改为系统凭据库，也不会创建无法解锁的保险库记录；
+   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会把随机隐藏解锁密钥保存到应用私有目录，不会把 SSH 密码后端改为系统凭据库，也不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
    保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。所有 `SessionStore` 持久化路径
    共享一个进程级异步闸门，profile 保存和删除另为每个 profile 保留互斥 mutation token；在修改凭据前和替换
@@ -572,9 +572,9 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 `credential_storage` 后端引用，以及自动生成解锁密钥的非敏感标记，绝不包含密码或保险库密钥。编辑器中的密码和保险库口令每次
 打开都为空，提交后立即清空；非空密码默认只由对应 Tab 短期持有，主机密钥确认完成并由 SSH worker
 接管后即清除。只有勾选 **Save password (optional)** 才会额外通过所选后端写入，profile 持久化失败时回滚。
-若选择加密保险库但未提供保险库口令，保存会为该 profile 生成并单独保护随机解锁密钥，不会把 SSH 密码后端改为系统凭据库，也不会创建空口令保险库记录；既有用户管理的保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
+若选择加密保险库但未提供保险库口令，保存会为该 profile 生成并保存到应用私有目录的 `0600` 文件，不会把 SSH 密码后端改为系统凭据库，也不会创建空口令保险库记录；既有用户管理的保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
 后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
-后端使用按 profile 分隔的应用记录；自动生成的保险库密钥随机、按 profile 分隔，并单独保存到系统凭据库。保险库对每条记录用 Argon2id 派生密钥、用
+后端使用按 profile 分隔的应用记录；自动生成的保险库密钥随机、按 profile 分隔，并单独保存到应用私有目录。默认本机自动解锁不需要再次访问系统密钥库，但同一操作系统账户下有文件访问权限的进程仍可读取该解锁文件。保险库对每条记录用 Argon2id 派生密钥、用
 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，保险库口令始终是短期输入。私钥
 profile 只持久化路径；私钥内容和可选 passphrase 只在一次 blocking 加载/认证任务中短暂存在，
 不进入配置、tracing 字段或 UI model。独立的非秘密 `.ssh` 候选路径扫描只有在 Session Editor
@@ -858,7 +858,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
     缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
     改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
-    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 28 增加逐 SSH profile 的可选 `credential_vault_key_in_keyring` 标记，用于表示应用自动生成的加密保险库密钥；旧 profile 默认是 false。schema 版本 27 增加
+    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 27 增加
     `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值采用默认的脏区
     backing store，显式保存的 `layer-images` 仍作为兼容性回退。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用

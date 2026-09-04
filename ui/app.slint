@@ -48,7 +48,7 @@ export component AppWindow inherits Window {
     in property <string> editor-sftp-remote-path: "~";
     in property <string> editor-sftp-local-path;
     in property <string> editor-credential-storage;
-    in property <string> editor-default-credential-storage: "system-keyring";
+    in property <string> editor-default-credential-storage: "encrypted-vault";
     in property <bool> editor-x11-forwarding: false;
     in property <string> editor-serial-port;
     in property <string> editor-serial-baud-rate: "115200";
@@ -202,7 +202,7 @@ export component AppWindow inherits Window {
     in property <int> default-terminal-rows: 36;
     in property <string> local-shell: "System default";
     in property <int> local-shell-index: 0;
-    in property <string> credential-storage: "system-keyring";
+    in property <string> credential-storage: "encrypted-vault";
     in property <string> ui-language: "english";
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;

@@ -307,7 +307,7 @@ pub(super) async fn delete_session_profile(
         session_id,
         if let Some((storage, vault_password_generated)) = profile.ssh().and_then(|ssh| {
             ssh.credential_storage
-                .map(|storage| (storage, ssh.credential_vault_key_in_keyring))
+                .map(|storage| (storage, ssh.credential_vault_key_saved))
         }) {
             CredentialChange::Delete {
                 storage,
@@ -457,10 +457,10 @@ pub(in crate::app) fn commit_profile_credential_storage(
             anyhow::bail!("generated vault passwords require encrypted-vault storage");
         }
         if ssh.credential_storage != Some(storage)
-            || ssh.credential_vault_key_in_keyring != vault_password_generated
+            || ssh.credential_vault_key_saved != vault_password_generated
         {
             ssh.credential_storage = Some(storage);
-            ssh.credential_vault_key_in_keyring = vault_password_generated;
+            ssh.credential_vault_key_saved = vault_password_generated;
             app.config.save(&candidate)?;
         }
         app.sessions = candidate;
@@ -648,7 +648,7 @@ pub(super) fn profile_from_editor_with_password(
         .and_then(|ssh| ssh.credential_storage);
     let existing_vault_password_generated = existing
         .and_then(SessionProfile::ssh)
-        .is_some_and(|ssh| ssh.credential_vault_key_in_keyring);
+        .is_some_and(|ssh| ssh.credential_vault_key_saved);
     let password_storage = if password_auth && !password.is_empty() && remember_password {
         Some(credential_storage_for_save(
             CredentialStorage::from_setting(credential_storage),
@@ -708,13 +708,13 @@ pub(super) fn profile_from_editor_with_password(
         } else {
             None
         };
-        ssh.credential_vault_key_in_keyring =
+        ssh.credential_vault_key_saved =
             if password_storage == Some(CredentialStorage::EncryptedVault) {
                 vault_password_generated
             } else if password_storage.is_none() {
                 existing.and_then(SessionProfile::ssh).is_some_and(|ssh| {
                     ssh.credential_storage == Some(CredentialStorage::EncryptedVault)
-                        && ssh.credential_vault_key_in_keyring
+                        && ssh.credential_vault_key_saved
                 })
             } else {
                 false

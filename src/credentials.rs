@@ -2,9 +2,11 @@
 //!
 //! Profile JSON stores only a [`CredentialStorage`] policy. Passwords are held
 //! either by the platform keyring or in per-profile encrypted vault records.
-//! App-generated vault unlock keys also use a separate platform keyring entry;
-//! callers must execute these synchronous operations away from the Slint UI
-//! thread and keep all key material short-lived.
+//! App-generated vault unlock keys are stored in a separate private application
+//! file. The file is protected by the application's private directory and
+//! permissions, so the default save path does not require an OS keychain
+//! prompt. Callers must execute these synchronous operations away from the
+//! Slint UI thread and keep all key material short-lived.
 
 use std::fs;
 use std::path::PathBuf;
@@ -31,6 +33,7 @@ const VAULT_SALT_BYTES: usize = 32;
 const MAX_VAULT_RECORD_BYTES: u64 = 32 * 1024;
 const MAX_VAULT_PASSWORD_BYTES: usize = 1024;
 const VAULT_AAD_PREFIX: &[u8] = b"axssh-credential-vault:v1:";
+const VAULT_UNLOCK_FILE_BYTES: u64 = MAX_VAULT_PASSWORD_BYTES as u64;
 
 #[derive(Clone, Debug)]
 pub struct CredentialStore {
@@ -185,28 +188,50 @@ impl CredentialStore {
         }
     }
 
-    /// Load the hidden unlock key for an app-generated encrypted-vault record.
+    /// Load the hidden unlock key from the app-private credential directory.
     /// This key is never sent to the UI or serialized into a profile.
     pub fn load_vault_unlock_password(&self, session_id: Uuid) -> Result<Option<String>> {
-        let entry = vault_unlock_entry(session_id)?;
-        match entry.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(Error::NoEntry) => Ok(None),
-            Err(error) => Err(error).context("failed to read encrypted vault unlock key"),
+        let path = self.vault_unlock_path(session_id);
+        if !path.exists() {
+            return Ok(None);
         }
+        let metadata = fs::metadata(&path).with_context(|| {
+            format!(
+                "failed to inspect encrypted vault unlock key {}",
+                path.display()
+            )
+        })?;
+        if metadata.len() > VAULT_UNLOCK_FILE_BYTES {
+            anyhow::bail!("encrypted vault unlock key exceeds the size limit");
+        }
+        let bytes = fs::read(&path).with_context(|| {
+            format!(
+                "failed to read encrypted vault unlock key {}",
+                path.display()
+            )
+        })?;
+        let password =
+            String::from_utf8(bytes).context("encrypted vault unlock key is not valid UTF-8")?;
+        validate_password(&password, "vault unlock password")?;
+        Ok(Some(password))
     }
 
     pub fn save_vault_unlock_password(&self, session_id: Uuid, password: &str) -> Result<()> {
         validate_password(password, "vault unlock password")?;
-        vault_unlock_entry(session_id)?
-            .set_password(password)
-            .context("failed to save encrypted vault unlock key")
+        write_private_file_atomically(&self.vault_unlock_path(session_id), password.as_bytes())
     }
 
     pub fn delete_vault_unlock_password(&self, session_id: Uuid) -> Result<()> {
-        match vault_unlock_entry(session_id)?.delete_credential() {
-            Ok(()) | Err(Error::NoEntry) => Ok(()),
-            Err(error) => Err(error).context("failed to delete encrypted vault unlock key"),
+        let path = self.vault_unlock_path(session_id);
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error).with_context(|| {
+                format!(
+                    "failed to delete encrypted vault unlock key {}",
+                    path.display()
+                )
+            }),
         }
     }
 
@@ -227,6 +252,42 @@ impl CredentialStore {
             Some(password) => self.save_vault_unlock_password(session_id, password.as_str()),
             None => self.delete_vault_unlock_password(session_id),
         }
+    }
+
+    /// Load a pre-1.0 unlock key from the system keyring for one-time migration.
+    /// New records never call this path.
+    pub fn load_legacy_vault_unlock_password(&self, session_id: Uuid) -> Result<Option<String>> {
+        let entry = vault_unlock_entry(session_id)?;
+        match entry.get_password() {
+            Ok(password) => Ok(Some(password)),
+            Err(Error::NoEntry) => Ok(None),
+            Err(error) => Err(error).context("failed to read legacy encrypted vault unlock key"),
+        }
+    }
+
+    /// Remove a pre-1.0 unlock key after it has been copied to the private file.
+    pub fn delete_legacy_vault_unlock_password(&self, session_id: Uuid) -> Result<()> {
+        match vault_unlock_entry(session_id)?.delete_credential() {
+            Ok(()) | Err(Error::NoEntry) => Ok(()),
+            Err(error) => Err(error).context("failed to delete legacy encrypted vault unlock key"),
+        }
+    }
+
+    /// Prefer the private file and migrate a legacy keyring value only when
+    /// no local value exists.
+    pub fn load_or_migrate_vault_unlock_password(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<String>> {
+        if let Some(password) = self.load_vault_unlock_password(session_id)? {
+            return Ok(Some(password));
+        }
+        let Some(password) = self.load_legacy_vault_unlock_password(session_id)? else {
+            return Ok(None);
+        };
+        self.save_vault_unlock_password(session_id, &password)?;
+        self.delete_legacy_vault_unlock_password(session_id)?;
+        Ok(Some(password))
     }
 
     pub fn backup(&self, storage: CredentialStorage, session_id: Uuid) -> Result<CredentialBackup> {
@@ -265,6 +326,10 @@ impl CredentialStore {
 
     fn vault_path(&self, session_id: Uuid) -> PathBuf {
         self.vault_dir.join(format!("{session_id}.json"))
+    }
+
+    fn vault_unlock_path(&self, session_id: Uuid) -> PathBuf {
+        self.vault_dir.join(format!("{session_id}.unlock"))
     }
 
     fn read_vault_record(&self, session_id: Uuid) -> Result<Option<Vec<u8>>> {
@@ -392,6 +457,61 @@ mod tests {
             store
                 .load_vault_password(id, "vault-password")
                 .expect("missing credential should be valid"),
+            None
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_vault_unlock_round_trips_with_private_permissions() {
+        let root = std::env::temp_dir().join(format!("ax-ssh-unlock-{}", Uuid::new_v4()));
+        let store = CredentialStore::new(root.clone());
+        let id = Uuid::new_v4();
+
+        store
+            .save_vault_unlock_password(id, "generated-vault-password")
+            .expect("unlock key should save");
+        assert_eq!(
+            store
+                .load_vault_unlock_password(id)
+                .expect("unlock key should load"),
+            Some("generated-vault-password".to_owned())
+        );
+        assert!(
+            store
+                .vault_unlock_path(id)
+                .ends_with(format!("{id}.unlock"))
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            assert_eq!(
+                fs::metadata(store.vault_unlock_path(id))
+                    .expect("unlock key file should exist")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+            assert_eq!(
+                fs::metadata(&root)
+                    .expect("credential directory should exist")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+
+        store
+            .delete_vault_unlock_password(id)
+            .expect("unlock key should delete");
+        assert_eq!(
+            store
+                .load_vault_unlock_password(id)
+                .expect("missing unlock key should be valid"),
             None
         );
         let _ = fs::remove_dir_all(root);

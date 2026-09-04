@@ -700,8 +700,8 @@ msgstr "Option 作为 Meta"
 msgid "Optional"
 msgstr "可选"
 
-msgid "Optional; blank generates a hidden vault key"
-msgstr "可选；留空会生成隐藏的保险库密钥"
+msgid "Optional; blank enables local automatic unlock"
+msgstr "可选；留空启用本地自动解锁"
 
 msgid "Optional; enter only when connecting or saving"
 msgstr "可选；仅在连接或保存时输入"

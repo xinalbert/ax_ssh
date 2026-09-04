@@ -437,10 +437,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    Tab-scoped one-time secret, and it updates the selected backend before the
    profile save only when **Save password (optional)** is checked. A requested
    encrypted-vault save without a vault password generates a per-profile random
-   unlock key, stores that key separately in the platform credential store, and
-   keeps the SSH password encrypted in the vault. The key is never exposed to
-   Slint. Existing user-managed vault records remain vault records and still
-   require their vault password to unlock.
+   unlock key, stores that key in a private `0600` application file, and keeps
+   the SSH password encrypted in the vault. The key is never exposed to Slint
+   or read through the system keychain. Existing user-managed vault records
+   remain vault records and still require their vault password to unlock.
    Private-key profiles
    load the selected path off the UI thread and
    request a transient passphrase only when the encrypted key cannot be opened
@@ -452,7 +452,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    a blocking dialog is visible, the current window stays on that Tab until the
    dialog is resolved; background prompts on inactive Tabs do not take focus.
 4. Settings > General owns the default backend for a newly remembered SSH
-   password: the platform credential store or the encrypted application vault.
+   password: the encrypted application vault by default, or the platform
+   credential store when explicitly selected.
    Each ordinary password prompt initializes its backend selector from that
    setting and may override it for that prompt; the selector is ignored unless
    **Save password (optional)** is checked. The session editor uses the profile's
@@ -461,8 +462,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    connect** and a save-only action discards it. With **Save password (optional)**
    enabled, the
    selected backend is updated transactionally with the profile. A missing vault
-   password generates a hidden per-profile unlock key in the system credential
-   store instead of selecting the system credential store for the SSH password.
+   password generates a hidden per-profile unlock key in the private application
+   credential directory instead of selecting the system credential store for
+   the SSH password. This is the default behavior, so ordinary save and startup
+   do not invoke the system keychain.
    The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
@@ -892,22 +895,25 @@ key requires a second explicit decision. Passwords are transient callback
 inputs and are not part of `SessionStore`. A password profile contains only an
 optional `credential_storage` reference keyed by its stable UUID, plus a
 non-secret marker for an auto-generated vault key held separately in the
-platform credential store; it never contains the password or vault key. The session editor keeps its masked password and
+private application credential directory; it never contains the password or
+vault key. The session editor keeps its masked password and
 vault-password fields blank on every open and clears them after submission. A
 non-empty editor password stays transient by default and is carried only by the
 corresponding Tab until host-key confirmation completes and the SSH worker takes
 ownership. Checking **Save password (optional)** additionally writes it through
 the selected backend, with rollback if profile persistence fails. If an
 encrypted-vault save has no vault password, AxSSH generates a random
-per-profile unlock key and stores it separately in the platform credential
-store; the SSH password remains in the encrypted vault and the key is never
-returned to the UI. Existing user-managed vault records still require their
-vault password to unlock. Settings > General initializes
+    per-profile unlock key and stores it separately in the private application
+    credential directory; the SSH password remains in the encrypted vault and the key is
+never returned to the UI. Existing user-managed vault records still require
+their vault password to unlock. Settings > General initializes
 the backend for a future
 checked save-password action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. Auto-generated vault keys are random and profile-scoped
-and are stored only in a separate platform credential entry. The vault derives
+and are stored only in a separate private `0600` file. Legacy profiles whose
+local file is missing may read their old keyring entry once and migrate it.
+The vault derives
 a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
 keeps the vault password transient. Private-key profiles persist only a path.
@@ -1397,9 +1403,13 @@ text brightness, bold-color, optional semantic highlighting and its status color
     terminal/IME cursor state unchanged. The retired
     `terminal_partition_strategy` JSON field is ignored as an unknown field when
     older settings are loaded; it is no longer part of the settings schema or
-    runtime state. Missing fields keep those defaults. Schema version 28 adds
-    the optional per-SSH-profile `credential_vault_key_in_keyring` marker for
-    an app-generated encrypted-vault key; older profiles default it to false.
+    runtime state. Missing fields keep those defaults. Schema version 29 adds
+    the optional per-SSH-profile `credential_vault_key_saved` marker for
+    an app-generated encrypted-vault key; the old
+    `credential_vault_key_in_keyring` name remains accepted when loading older
+    profiles, and older profiles default it to false. New application settings
+    default to `encrypted-vault`; selecting `system-keyring` remains an explicit
+    opt-in.
     Schema version 27 adds
     `software_presentation` with stable `layer-images` and
     `damage-backing-store` values; missing or invalid values select the default

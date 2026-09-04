@@ -65,7 +65,7 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> sftp-local-path-draft;
     private property <string> password-draft;
     private property <bool> remember-password-draft: false;
-    private property <string> credential-storage-draft: "system-keyring";
+    private property <string> credential-storage-draft: "encrypted-vault";
     private property <string> vault-password-draft;
     private property <[string]> credential-storage-options: [
         @tr("System credential store"),
@@ -552,7 +552,7 @@ export component SessionEditorPane inherits Rectangle {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
                                 text <=> root.vault-password-draft;
-                                placeholder-text: @tr("Optional; blank generates a hidden vault key");
+                                placeholder-text: @tr("Optional; blank enables local automatic unlock");
                                 accessible-label: @tr("Credential vault password");
                             }
                         }

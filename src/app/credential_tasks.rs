@@ -48,7 +48,7 @@ pub(super) async fn load_vault_password(
 pub(super) async fn load_vault_unlock_password(
     session_id: Uuid,
 ) -> Result<Option<Zeroizing<String>>> {
-    run_read(move || CredentialStore::platform()?.load_vault_unlock_password(session_id))
+    run_read(move || CredentialStore::platform()?.load_or_migrate_vault_unlock_password(session_id))
         .await
         .map(|password| password.map(Zeroizing::new))
 }
@@ -204,8 +204,8 @@ where
 {
     timeout(OPERATION_TIMEOUT, tokio::task::spawn_blocking(operation))
         .await
-        .context("system credential operation timed out")?
-        .context("system credential task failed")?
+        .context("credential operation timed out")?
+        .context("credential task failed")?
 }
 
 /// Run a credential mutation to completion before returning.
@@ -231,12 +231,12 @@ where
 {
     let mut task = tokio::task::spawn_blocking(operation);
     match timeout(deadline, &mut task).await {
-        Ok(result) => result.context("system credential task failed")?,
+        Ok(result) => result.context("credential task failed")?,
         Err(_) => {
             warn!(
-                "system credential mutation exceeded its soft deadline; waiting for completion to preserve write ordering"
+                "credential mutation exceeded its soft deadline; waiting for completion to preserve write ordering"
             );
-            task.await.context("system credential task failed")?
+            task.await.context("credential task failed")?
         }
     }
 }

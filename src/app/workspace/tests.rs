@@ -240,7 +240,7 @@ fn remembering_new_password_without_vault_password_generates_hidden_unlock_key()
     assert!(
         profile
             .ssh()
-            .is_some_and(|ssh| ssh.credential_vault_key_in_keyring)
+            .is_some_and(|ssh| ssh.credential_vault_key_saved)
     );
     match change {
         CredentialChange::Store {
@@ -267,7 +267,7 @@ fn remembering_new_password_without_vault_password_generates_hidden_unlock_key()
 }
 
 #[test]
-fn remembering_with_a_user_vault_password_does_not_enable_keyring_unlock() {
+fn remembering_with_a_user_vault_password_does_not_enable_automatic_unlock_marker() {
     let (profile, change, _) = profile_from_editor_with_password(
         None,
         "new",
@@ -297,7 +297,7 @@ fn remembering_with_a_user_vault_password_does_not_enable_keyring_unlock() {
 
     assert!(profile.ssh().is_some_and(|ssh| {
         ssh.credential_storage == Some(CredentialStorage::EncryptedVault)
-            && !ssh.credential_vault_key_in_keyring
+            && !ssh.credential_vault_key_saved
     }));
     match change {
         CredentialChange::Store {

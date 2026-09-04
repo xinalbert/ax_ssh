@@ -144,7 +144,7 @@ fn reconnect_ssh(
         AuthMethod::Password
             if ssh.credential_storage == Some(CredentialStorage::SystemKeyring)
                 || (ssh.credential_storage == Some(CredentialStorage::EncryptedVault)
-                    && ssh.credential_vault_key_in_keyring) =>
+                    && ssh.credential_vault_key_saved) =>
         {
             if !set_ssh_reconnect_phase(state, tab_id, profile.id) {
                 anyhow::bail!("SSH reconnect is no longer current")

@@ -494,7 +494,7 @@ impl Default for SessionEditorSnapshot {
             sftp_remote_path: "~".to_owned(),
             sftp_local_path: default_local_directory(),
             credential_storage: String::new(),
-            default_credential_storage: "system-keyring".to_owned(),
+            default_credential_storage: "encrypted-vault".to_owned(),
             x11_forwarding: true,
             serial_port: String::new(),
             serial_baud_rate: "115200".to_owned(),

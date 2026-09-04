@@ -186,7 +186,7 @@ pub(in crate::app) fn set_credential_storage_while_loading(
     }
     ssh.credential_storage = credential_storage;
     if credential_storage != Some(CredentialStorage::EncryptedVault) {
-        ssh.credential_vault_key_in_keyring = false;
+        ssh.credential_vault_key_saved = false;
     }
     app.config.save(&candidate)?;
     app.sessions = candidate;

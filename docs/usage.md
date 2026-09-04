@@ -32,8 +32,9 @@ cargo run --locked
    save the profile without a password, or use a non-empty value once for that
    connection. Select **Save password (optional)** to persist it. A save with
    an encrypted-vault selection accepts an empty vault password: AxSSH generates
-   a per-server random unlock key, stores it in the platform credential store,
-   and uses it only to unlock the encrypted record. The key is never shown.
+   a per-server random unlock key, stores it in a private `0600` application
+   file, and uses it only to unlock the encrypted record. The key is never
+   shown, and normal save/startup does not invoke the system keychain.
    Opening the same saved session more than once creates
    independent terminal tabs with separate connections and output. Each SSH Tab
    can independently wait for host-key confirmation or authentication; the
@@ -50,7 +51,7 @@ cargo run --locked
    its **Save password in** menu can override the backend for this prompt.
    Select **Save password (optional)** to save after successful authentication.
    A requested encrypted-vault save with an empty vault password generates a
-   hidden per-server unlock key in the platform credential store; a non-empty
+   hidden per-server unlock key in a private application file; a non-empty
    vault password remains a user-managed vault record. Existing user-managed
    vault records still ask for their vault password, while generated records
    unlock in the background without showing the key.
@@ -137,8 +138,8 @@ removes its remembered SSH credential reference. The session editor never shows
 a saved password; leaving the field blank preserves it. A newly entered password
 can be used once by **Save & connect**, or persisted by selecting **Save
 password (optional)** and a backend. An encrypted-vault save with an empty vault
-password uses a hidden per-server unlock key stored in the platform credential
-store. Changing the default in **Settings > General** only
+password uses a hidden per-server unlock key stored in a private application
+file. Changing the default in **Settings > General** only
 initializes future storage selections and does not migrate the backend referenced
 by an existing SSH profile.
 
@@ -583,11 +584,14 @@ contain passwords, vault passwords, private-key passphrases, private-key
 contents, terminal output, or live process state.
 
 Remembered passwords are stored through macOS Keychain, Windows Credential
-Manager, or Unix Secret Service when **System credential store** is selected.
-The **Encrypted application vault** stores one private encrypted record per
-profile in the application configuration directory. When its vault password is
-left blank, a random unlock key is stored separately in the platform credential
-store and is never shown; a user-entered vault password is never saved. Daily logs are written separately to the `logs` subdirectory of the
+Manager, or Unix Secret Service only when **System credential store** is
+explicitly selected. The **Encrypted application vault** is the default and
+stores one private encrypted record per profile in the application
+configuration directory. When its vault password is left blank, a random
+unlock key is stored separately in a private `0600` application file and is
+never shown; a user-entered vault password is never saved. This avoids an extra
+system-keychain prompt, but same-account processes with file access can read
+the unlock file. Daily logs are written separately to the `logs` subdirectory of the
 platform-local application data directory, with at most 15 files retained. `RUST_LOG`
 overrides the default `ax_ssh=info,russh=warn` filter. Credentials and terminal
 contents must not be logged. Operational logs may still contain connection

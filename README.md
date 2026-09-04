@@ -51,8 +51,8 @@ synchronized and committed on the default branch, pushing a valid annotated
 
 Report problems through the [issue tracker](https://github.com/xinalbert/ax_ssh/issues/new)
 or the **Report a bug** action in the application's About page. Passwords are
-stored only when requested, using the system credential store or the encrypted
-application vault; plaintext passwords, private-key passphrases, terminal output,
+stored only when requested, using the encrypted application vault by default or
+the explicitly selected system credential store; plaintext passwords, private-key passphrases, terminal output,
 and live worker state are not written to session JSON. Telnet is unencrypted.
 
 ## License
