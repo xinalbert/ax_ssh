@@ -238,9 +238,13 @@ export component AppWindow inherits Window {
     in property <string> default-open-sftp-shortcut;
     in property <bool> apple-platform: false;
     in property <bool> detached-window: false;
+    // Runtime-only native activation state. It restores terminal input after
+    // returning from another application or AxSSH window.
+    in property <bool> window-active: true;
     in property <string> app-version;
     private property <string> settings-section: "General";
     private property <int> settings-section-request-revision: 0;
+    private property <int> terminal-focus-request-revision: 0;
     in property <bool> menu-terminal-active: false;
     in property <bool> menu-has-multiple-tabs: false;
     in property <bool> menu-has-active-tab: false;
@@ -502,6 +506,20 @@ export component AppWindow inherits Window {
     changed standard-widget-color-scheme => {
         Palette.color-scheme = root.standard-widget-color-scheme;
     }
+    changed active-tab-id => {
+        root.terminal-focus-request-revision = root.terminal-focus-request-revision == 2147483647
+            ? 1 : root.terminal-focus-request-revision + 1;
+    }
+    changed active-tab-kind => {
+        root.terminal-focus-request-revision = root.terminal-focus-request-revision == 2147483647
+            ? 1 : root.terminal-focus-request-revision + 1;
+    }
+    changed window-active => {
+        if root.window-active {
+            root.terminal-focus-request-revision = root.terminal-focus-request-revision == 2147483647
+                ? 1 : root.terminal-focus-request-revision + 1;
+        }
+    }
     changed terminal-color-scheme => { root.schedule-terminal-appearance-refresh(); }
     changed terminal-appearance-revision => { root.schedule-terminal-appearance-refresh(); }
     changed menu-shortcuts-enabled => { root.menu-state-changed(); }
@@ -732,6 +750,9 @@ export component AppWindow inherits Window {
             height: parent.height;
             view: root.workspace-view;
             detached-window: root.detached-window;
+            window-active: root.window-active;
+            input-blocked: root.modal-open;
+            terminal-focus-request-revision: root.terminal-focus-request-revision;
             terminal-cursor-blink: root.terminal-cursor-blink;
             software-presentation-enabled: root.software-presentation-enabled;
             requested-settings-section: root.settings-section;

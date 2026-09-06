@@ -115,6 +115,9 @@ pub(super) fn install_window_activation_hook(window_router: &WindowRouter) -> Re
     set_window_event_hook(Some(Box::new(move |adapter, event, _dispatch_result| {
         if let WindowEvent::WindowActiveChanged(active) = event {
             router.set_window_active_for_adapter(adapter, *active);
+            if let Some((_, ui)) = router.window_for_adapter(adapter) {
+                ui.set_window_active(*active);
+            }
         }
         if software_presentation::is_enabled()
             && matches!(event, WindowEvent::ScaleFactorChanged { .. })

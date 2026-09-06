@@ -628,3 +628,10 @@
 - 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.17.1、softbuffer 0.4.8 和 locked/offline Cargo 门禁；不新增运行时 crate，不改变 SSH trust、凭据或 transport。
 - 验证结果：全量 fmt/check/严格 Clippy/test/build、vendor rustfmt、中文 catalog/check 和 `git diff --check` 通过；仓库未提供 `scripts/validate_tracking_docs.py`，该命令未执行。目标平台软件 renderer 的持续输出、resize、隐藏恢复、DPI、闪烁/残影和同负载 sample/A-B 仍待用户验收。
 - 环境变化检查：是；仅 macOS CoreGraphics backend 增加持久 framebuffer 与 full-layer present 状态，非 Apple backend dispatch 未改行为。
+## 2026-09-06 Settings 控件与终端焦点修复
+
+- 日期：2026-09-06
+- 变化摘要：General 三处下拉改用项目主题组件；活动窗口/Terminal Tab 通过有界 revision 和延迟恢复透明 IME 焦点。
+- 受影响文件：`ui/settings/general.slint`、`ui/app.slint`、`ui/workspace-shell.slint`、`src/app/window_bridge.rs`、`src/app/window_router.rs`、双语使用说明和 tracker。
+- 更新后的命令或环境：工具链、Cargo.lock、Slint build 入口和 locked/offline 门禁保持不变。
+- 验证结果：fmt、locked/offline check、严格 Clippy、完整 Cargo test（230 库、218 应用、Doc tests 0）及 diff 检查通过；目标平台 GUI 未自动验收。

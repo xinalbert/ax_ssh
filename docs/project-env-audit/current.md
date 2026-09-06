@@ -1,3 +1,15 @@
+# 2026-09-06 Settings 控件与终端焦点修复环境验证
+
+- 项目类型：Rust 2024 独立桌面应用（Slint UI、Tokio runtime、russh transport）。
+- 运行环境：MSRV 1.92.0；本机 `rustc/cargo 1.97.1`、rustfmt 1.9.0、Clippy 0.1.97；Slint 1.17.1，依赖与锁文件未改变。
+- 测试环境：Slint UI 由 `build.rs` 编译；`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline` 可执行。
+- 关键命令：`cargo fmt --all -- --check`；`cargo check --locked --offline`；`cargo clippy --all-targets --locked --offline -- -D warnings`；`cargo test --locked --offline`；`git diff --check`。
+- 外部依赖：无新增依赖、无联网检索；本轮仅使用仓库已有 Slint/Rust API。
+- 证据文件：`Cargo.toml`、`Cargo.lock`、`build.rs`、`ui/app.slint`、`ui/workspace-shell.slint`、`ui/settings/general.slint`、`src/app/window_bridge.rs`、`src/app/window_router.rs`。
+- 最后确认时间：2026-09-06 13:10 +0800。
+- 环境变化检查：否；仅修改 UI 与窗口事件桥接，不改变工具链、依赖、构建入口或测试命令。
+- 开工判定：施工完成；窗口/Tab 焦点和下拉视觉仍需目标平台人工验收。
+
 # 2026-08-31 RSA 兼容性与 RustSec 风险接受环境验证
 
 - 项目边界：`Cargo.toml`、`Cargo.lock`、`.github/workflows/{ci,release}.yml`、双语 SSH 文档；恢复 `russh 0.63.1` 的 RSA feature，同时保持 host-key trust、凭据和 worker ownership 不变。

@@ -286,6 +286,7 @@ impl WindowRouter {
                     super::macos_window::is_key_window(ui.window()).unwrap_or(route.window_active);
                 if route.window_active != active {
                     route.window_active = active;
+                    ui.set_window_active(active);
                     changed = true;
                 }
             }

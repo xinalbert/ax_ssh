@@ -1,6 +1,7 @@
-import { ComboBox, SpinBox } from "std-widgets.slint";
+import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
     in property <string> ui-language;
@@ -24,12 +25,13 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: @tr("Language");
         description: @tr("Language used by the AxSSH interface");
         SettingsField {
-            ComboBox {
+            ThemedComboBox {
+                width: parent.width;
                 height: Theme.settings-control-height;
                 model: [@tr("Follow system"), @tr("English"), @tr("Simplified Chinese")];
                 current-index <=> root.selected-ui-language-index;
                 accessible-label: @tr("Interface language");
-                selected(_value) => {
+                selected(_value, _index) => {
                     let requested-index = root.selected-ui-language-index;
                     root.restore-ui-language-selection();
                     root.save-ui-language(requested-index);
@@ -42,12 +44,13 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: @tr("Local shell");
         description: @tr("Executable used for new local terminal tabs");
         SettingsField {
-            ComboBox {
+            ThemedComboBox {
+                width: parent.width;
                 height: Theme.settings-control-height;
                 model: root.local-shell-options;
                 current-index <=> root.draft-local-shell-index;
                 accessible-label: @tr("Local shell");
-                selected(value) => { root.draft-local-shell = value; }
+                selected(value, _index) => { root.draft-local-shell = value; }
             }
         }
     }
@@ -55,12 +58,13 @@ export component GeneralSettingsPage inherits SettingsPage {
         label: @tr("Remembered password storage");
         description: @tr("Used for remembered passwords and new passwords entered in the session editor");
         SettingsField {
-            ComboBox {
+            ThemedComboBox {
+                width: parent.width;
                 height: Theme.settings-control-height;
                 model: [@tr("System credential store"), @tr("Encrypted application vault")];
                 current-index: root.draft-credential-storage == "encrypted-vault" ? 1 : 0;
                 accessible-label: @tr("Remembered password storage");
-                selected(value) => {
+                selected(value, _index) => {
                     root.draft-credential-storage = value == @tr("Encrypted application vault")
                         ? "encrypted-vault"
                         : "system-keyring";

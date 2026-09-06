@@ -184,15 +184,22 @@ component TerminalPaneGroup inherits Rectangle {
     in property <int> terminal-edit-command-revision: 0;
     in property <bool> terminal-cursor-blink: true;
     in property <bool> software-presentation-enabled: false;
-    private property <int> focus-request-revision: 0;
+    in property <int> focus-request-revision: 0;
+    private property <int> combined-focus-request-revision: 0;
     private property <int> presentation-layout-revision: 0;
 
     clip: true;
 
     function restore-terminal-input-focus() {
-        root.focus-request-revision = root.focus-request-revision == 2147483647
+        root.combined-focus-request-revision = root.combined-focus-request-revision == 2147483647
             ? 1
-            : root.focus-request-revision + 1;
+            : root.combined-focus-request-revision + 1;
+    }
+
+    changed focus-request-revision => {
+        root.combined-focus-request-revision = root.combined-focus-request-revision == 2147483647
+            ? 1
+            : root.combined-focus-request-revision + 1;
     }
 
     callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
@@ -227,7 +234,7 @@ component TerminalPaneGroup inherits Rectangle {
         cursor-blink-enabled: root.terminal-cursor-blink;
         software-presentation-enabled: root.software-presentation-enabled;
         presentation-layout-revision: root.presentation-layout-revision;
-        focus-request-revision: root.focus-request-revision;
+        focus-request-revision: root.combined-focus-request-revision;
         terminal-key(text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(
                 pane.terminal.terminal_id, text, alt, control, meta, shift, physical-key-event,
@@ -325,6 +332,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     in property <WorkspaceViewState> view;
     in property <string> terminal-edit-command;
     in property <int> terminal-edit-command-revision: 0;
+    in property <int> terminal-focus-revision: 0;
     in property <bool> terminal-cursor-blink: true;
     in property <bool> software-presentation-enabled: false;
 
@@ -401,6 +409,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             terminal-edit-command-revision: root.terminal-edit-command-revision;
             terminal-cursor-blink: root.terminal-cursor-blink;
             software-presentation-enabled: root.software-presentation-enabled;
+            focus-request-revision: root.terminal-focus-revision;
             format-shortcut(text, alt, control, meta, shift) => {
                 return root.format-shortcut(text, alt, control, meta, shift);
             }
@@ -505,6 +514,9 @@ export component WorkspaceShell inherits Rectangle {
     in property <string> requested-settings-section: "General";
     in property <int> settings-section-request-revision: 0;
     in property <bool> detached-window: false;
+    in property <bool> window-active: true;
+    in property <bool> input-blocked: false;
+    in property <int> terminal-focus-request-revision: 0;
     in property <bool> terminal-cursor-blink: true;
     in property <bool> software-presentation-enabled: false;
 
@@ -516,6 +528,9 @@ export component WorkspaceShell inherits Rectangle {
     private property <bool> sftp-transfers-collapsed: false;
     private property <string> terminal-edit-command: "";
     private property <int> terminal-edit-command-revision: 0;
+    private property <int> terminal-focus-revision: 0;
+    private property <int> terminal-focus-pending-revision: 0;
+    private property <int> terminal-focus-consumed-revision: 0;
 
     callback new-session();
     callback new-session-in-group(string);
@@ -640,12 +655,34 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
+    changed terminal-focus-request-revision => {
+        root.terminal-focus-pending-revision = root.terminal-focus-request-revision;
+    }
+    changed input-blocked => {
+        if !root.input-blocked && root.window-active && root.view.active_tab_kind == "terminal" {
+            root.terminal-focus-pending-revision = root.terminal-focus-pending-revision == 2147483647
+                ? 1 : root.terminal-focus-pending-revision + 1;
+        }
+    }
+    Timer {
+        running: root.terminal-focus-pending-revision != root.terminal-focus-consumed-revision;
+        interval: 40ms;
+        triggered => {
+            root.terminal-focus-consumed-revision = root.terminal-focus-pending-revision;
+            if root.window-active && !root.input-blocked && root.view.active_tab_kind == "terminal" {
+                root.terminal-focus-revision = root.terminal-focus-revision == 2147483647
+                    ? 1 : root.terminal-focus-revision + 1;
+            }
+        }
+    }
+
     if root.detached-window : DetachedWorkspaceContent {
         width: parent.width;
         height: parent.height;
         view: root.view;
         terminal-edit-command: root.terminal-edit-command;
         terminal-edit-command-revision: root.terminal-edit-command-revision;
+        terminal-focus-revision: root.terminal-focus-revision;
         terminal-cursor-blink: root.terminal-cursor-blink;
         software-presentation-enabled: root.software-presentation-enabled;
         close-tab(id) => { root.close-tab(id); }
@@ -812,6 +849,7 @@ export component WorkspaceShell inherits Rectangle {
                         terminal-edit-command-revision: root.terminal-edit-command-revision;
                         terminal-cursor-blink: root.terminal-cursor-blink;
                         software-presentation-enabled: root.software-presentation-enabled;
+                        focus-request-revision: root.terminal-focus-revision;
                         format-shortcut(text, alt, control, meta, shift) => {
                             return root.format-shortcut(text, alt, control, meta, shift);
                         }

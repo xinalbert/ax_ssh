@@ -2,103 +2,54 @@
 
 ## 当前目标
 
-- 目标 ID：20260826-macos-software-partial-presentation
-- 目标：逐变量评估 macOS CPU-only software presentation 在 `present_tiles -> CATransaction::commit` 路径上的脏区收益，以可回退实验验证普通 `CALayer` backing store 的矩形失效行为，将两条 CPU presentation 路径纳入持久化渲染选项，并降低终端空闲时的周期性 worker/UI 唤醒。
-- 交付物：COLOR1 显式 sRGB 变量；COLOR2 同负载 release 采样与热点归因；CELL1-CELL4 终端文字/覆盖层格宽统一、真实行原点和单格拖选；COLOR3 可选 Core Animation 局部 backing store 原型、边界测试和目标平台 A/B；CPU1-CPU5 两条 macOS Software presentation 路径的配置、启动接线、Appearance 选项、默认值和门禁；WAKE1-WAKE4 SSH/Telnet 按需输出 flush、Local PTY 事件唤醒/低频退出兜底、macOS 激活低频兜底和完整门禁；XPLAT1-XPLAT4 跨平台 damage 能力描述、各 backend 映射、winit fallback 和双语契约；保留当前 damage、持久 framebuffer、终端行模型和安全图像所有权边界。
+- 目标：修复终端在切换应用窗口或工作区 Tab 后需要鼠标点击才能继续输入的问题，并统一 Settings > General 下拉控件颜色。
+- 交付物：活动终端在无阻塞弹窗时恢复透明 IME 输入代理焦点；General 页面三处下拉统一使用项目主题组件；相应双语使用说明、实施跟踪与离线门禁记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：Software presentation、终端呈现调度，以及本轮复核发现的 profile mutation、凭据落盘、host-key 确认和重连快照并发安全；相关实现位于 `src/config/`、`src/app/`、`src/ssh/`、vendor backend 和 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：终端 parser/内容模型、GPU/Metal renderer、`CATiledLayer`、IOSurface、多缓冲交换链、参考工程代码或构建耦合；本轮不改变 SSH 协议或认证算法，只修复其应用侧 profile/trust 生命周期。
+- 当前范围：`ui/{app,workspace-shell,terminal-pane,settings/general}.slint`、`ui/components/themed-combo-box.slint`、`src/app/{window_bridge,window_router}.rs`、焦点/设置使用说明与实施跟踪。
+- 不在本轮范围内：终端 parser、PTY/SSH transport、凭据、主机密钥信任、持久化 schema、renderer 和参考工程。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| SPR1 | completed | 建立 9 项问题到源码、架构边界和验证命令的映射 | session 原文、project-map/current、Rust/Slint skill 审阅 | 保留用户未提交的 `ui/components/terminal-grid.slint`；不涉及 SSH/trust/凭据。 |
-| SPR2 | completed | 修复 cfg 门禁、Software/macOS 限定、scale 事件重新发布和布局注销 | macOS cfg 审阅、布局 registry focused tests、Cargo check | scale 变化重新按逻辑区域换算物理像素；窗口关闭/返回主动注销 registry entry。 |
-| SPR3 | completed | 每个 buffer/present 周期只读取一次 layout generation，重建时才 clone snapshot，并移除重复 rows 设置 | backend pure tests、settings bridge 静态审阅 | 不改变 damage、buffer age 或 CoreAnimation image ownership。 |
-| SPR4 | completed | 补齐 pane 移动、notice/grid-clip、reset 后的布局重新注册，并限制非 Software renderer 的 UI 回调 | Slint compile、layout callback contract review | presentation timer 与 PTY resize timer 已分离；终端 parser、worker、协议应答和 shutdown 不改。 |
-| SPR5 | completed | 用生产 tile geometry/damage 路径覆盖多 pane、裁剪、重叠、generation 和失效行为，并同步文档 | focused tests、Cargo fmt/check/Clippy/test、tracker/Markdown/diff checks | 8 个隔离 vendor 单测、根工程门禁和双语文档已完成；目标 macOS GUI/Retina 视觉仍由用户验收。 |
-| PERF1 | completed | 当前 release/debug 环境、采样热点和固定负载基线 | manifest/toolchain 检查、sample 归因、基线命令可复现 | 现有 421 ms sample 用于定位，不作为最终优化比例。 |
-| PERF2 | completed | 删除未消费的 active-terminal DTO/render，并确保每个可见 pane 每轮最多生成一次 snapshot | focused Rust 回归、Cargo/Slint check | 不改变 pane UUID、选区、IME 或 worker 所有权。 |
-| PERF3 | completed | 刷新门控携带脏 terminal ID，并只对未包含在已取 snapshot 中的后续请求补排 | focused 并发/状态回归、延迟 tracing 审阅 | 保持 bounded event-loop 调度和最新状态读取。 |
-| PERF4 | completed | 未变化 pane/divider 不发送父行通知；terminal-only 更新跳过 SFTP 和无关 workspace 属性 | model identity/notification 回归、Cargo check | 结构变化仍回退到完整窗口刷新。 |
-| PERF5 | completed | Local/Serial 立即解析输出，但每 terminal 最多每 16 ms 发布一次 UI 呈现请求 | Tokio paused-time/focused worker 回归 | 协议应答、错误、退出和 shutdown 不等待展示 timer。 |
-| PERF6 | completed | Terminal dirty generation、稳定行 identity、增量 render/语义高亮缓存和更少 snapshot 字符串分配 | terminal/render focused tests、Cargo check | `TermDamage`、resize/offset/theme/highlight 失效已审查；行 revision 使用 64-bit。 |
-| PERF7 | completed | 完整离线门禁、边界审计和可采样的 release 候选 | fmt、check、Clippy、test、translation、Markdown/tracker、release build、`git diff --check` | release 构建复用本机同 target/feature 的 rust-skia 缓存。 |
-| PERF8 | completed | 优化前后 debug sample 的结构性对照与 10 秒稳定性复核 | 相同 debug 二进制、renderer、窗口尺寸、7 个可见 Local pane 和持续输出负载 | 只用于判定热点转移与优化方向，不声明总 CPU 降幅。 |
-| PERF9 | completed | 优化后 release 10 秒 sample 与 CPU meter 基线 | 已验证 release 二进制，相同 renderer、窗口尺寸、7 个可见 Local pane 和持续输出负载 | release 已 strip Rust 符号；系统级 DisplayLink/Metal 与线程阻塞归因仍可靠。 |
-| PERF10 | completed | Local/Serial 持续输出的 33 ms UI 呈现候选 | paused-time 节拍回归、完整 Cargo/Slint 门禁、release build | 首个脏输出仍立即呈现；parser、协议应答和终止路径不延迟。 |
-| PERF11 | completed | 聚焦 16/33/50 ms 自适应与可见未聚焦低频双呈现策略 | pure 状态机、焦点路由和 no-output 回归 | 首次脏输出立即呈现；隐藏 Tab 不进入 UI，parser/协议/终止路径不延迟。 |
-| PERF12 | completed | Local、Serial、SSH、Telnet monitor 统一接入呈现状态 | 四协议编译、状态机/路由 focused tests | 保留 SSH/Telnet 的 16 ms/16 KiB transport batching，只统一 UI publication。 |
-| PERF13 | completed | 双语架构、项目地图、完整离线门禁和 release 候选 | fmt、check、Clippy、test、Markdown/tracker、release build | 不改 renderer 依赖、配置 schema、trust 或 credential 边界。 |
-| PERF14 | blocked | 同一 release 的 Software/GPU/行缓存 10 秒 A/B 和目标平台 GUI/真实 transport 验收 | 相同窗口、7 pane、负载和 sample/CPU meter | 依次对照旧 item 树、紧凑节点和紧凑节点+静态行缓存；等待用户目标平台验收。 |
-| PERF15 | completed | 两项独立、向后兼容的终端渲染性能设置及 Settings 预览/持久化链路 | config normalization/serde 与 Rust/Slint 映射回归 | 紧凑节点默认开启；静态行 layer cache 默认关闭。 |
-| PERF16 | completed | 可切换的紧凑 run 节点树与只覆盖静态行内容的 layer cache | Slint 编译、model identity 与终端交互回归 | 光标、选区、IME 和目标高亮保持在缓存层外。 |
-| PERF17 | completed | 双语契约、翻译、完整离线门禁和新 release A/B 候选 | fmt、check、Clippy、test、translation、Markdown/tracker、release build、`git diff --check` | 不升级 renderer 或引入参考工程耦合。 |
-| PERF18 | completed | 把两个终端渲染性能开关从 Terminal 页移到 Appearance 页 RENDERING 分组 | Slint 编译、Settings 搜索路由回归、完整 Cargo 门禁、翻译/链接/`git diff --check` | 配置 schema、字段名、默认值和持久化不变；只调整展示分组与搜索归属。 |
-| PERF19 | completed | 将聚焦/可见未聚焦终端刷新周期改为可配置 FPS，并接入设置预览、持久化和热更新 | FPS 归一化/serde、Slint callback、policy watch、四协议呈现状态机和完整门禁 | 范围 1-120 FPS；默认聚焦 60、未聚焦 4；聚焦 16/33/50 ms 自适应仍作为上限策略。 |
-| PERF20 | completed | Software 专属持续输出 20/15/10 FPS 自适应，以及无可见 terminal snapshot 的 UI publication 抑制 | 呈现状态机、控制序列/cursor 回归、完整 Cargo/Slint 离线门禁 | 已由 PERF21 取代 fixed-FPS 部分；不安全地局部写入单个 `CGImage` 不在范围内。 |
-| PERF21 | completed | Software 可见输出改为无固定 FPS 的单槽最新快照背压，并合并 UI 消费前的脏行 | 状态机、UI refresh gate、snapshot 合并回归和完整 Cargo/Slint 离线门禁 | 不延迟 parser、协议应答、错误、断开或 shutdown；GPU/其它 renderer 保留现有 FPS 策略。 |
-| CURSOR1 | completed | 可配置 Terminal 光标闪烁开关、Settings 预览/持久化和默认兼容 | config serde、Slint 编译、定向测试、完整 Cargo 门禁 | 默认开启；关闭后光标保持显示，不影响输入/IME |
-| FOCUS1 | completed | 原生窗口失焦时将所有可见终端切换到 Unfocused FPS 上限，重新激活后恢复 pane 聚焦策略 | WindowActiveChanged、AppKit 激活同步、WindowRouter 路由回归、Slint/Cargo 门禁和双语契约 | 激活状态只在运行时维护；隐藏 Tab 仍不刷新，parser/协议应答/错误/断开/shutdown 不延迟 |
-| FOCUS4 | completed | 修正 macOS 原生窗口激活状态同步，增加 `NSWindow.isKeyWindow()` UI 轮询兜底 | macOS AppKit bridge、WindowRouter 路由回归、Cargo/Slint 门禁 | 初始 100ms 周期已由 WAKE3 放宽到 500ms；事件钩子保留为快速路径。 |
-| WAKE1 | completed | SSH/Telnet 输出 flush 改为缓冲区非空时才启动的一次性 16ms timer | Telnet loopback、SSH worker 回归、Cargo check/Clippy/test | 16 KiB 上限和 SSH 输入后首输出即时 flush 保持不变；空闲连接不再循环 tick。 |
-| WAKE2 | completed | Local PTY reader EOF/错误主动唤醒 owner，空闲 child 检查降为 1s，并限制 EOF 后 25ms 快速确认窗口 | Local PTY 8 项、EOF 通知测试、满事件队列 shutdown/drop 回归 | 输入、resize、shutdown 仍即时唤醒；快速确认最多 40 次，之后回到低频兜底。 |
-| WAKE3 | completed | macOS `NSWindow.isKeyWindow()` 激活兜底轮询从 100ms 放宽到 500ms | AppKit cfg 编译、WindowRouter 回归、完整 Cargo 门禁 | `WindowActiveChanged` 仍是快速路径；只降低平台事件遗漏时的兜底响应频率。 |
-| WAKE4 | completed | 同步双语架构、项目地图和月度历史并完成质量门禁 | fmt/check/Clippy/test、tracker/Markdown/`git diff --check` | 不改 renderer、队列容量、SSH trust、凭据或终端解析。 |
-| MEM1 | completed | 显式限制 Tokio worker/blocking 线程并缩短空闲 blocking 线程保留时间 | runtime 配置单测、完整 Cargo 离线门禁、线程数复核 | 保留至少 2 个 async worker、最多 4 个；blocking 池最多 8 个，空闲 2 秒后允许退出。 |
-| MEM2 | completed | 断开 SFTP 后不让图标预热任务强持有 AppState，并记录图标缓存释放数量 | file-icon 生命周期 focused tests、完整 Cargo 离线门禁 | 预热目标使用 `Weak<AppState>`；Fontique、Slint、CoreAnimation 与 macOS allocator 的进程级缓存不承诺立即归还 RSS。 |
-| MEM3 | completed | 更新双语架构、环境审计和可重复资源验证说明 | 文档相对链接、tracker/env-audit validator、`git diff --check` | 说明 Rust drop、线程池回收和平台缓存之间的边界，不把单次 sample 当作泄漏证明。 |
-| APP1 | completed | 按职责拆出 renderer/Tokio runtime 与启动字体辅助模块 | Rust module check、Cargo check、runtime tests | `src/app/runtime.rs` 负责 renderer、Tokio worker 上限/回收和启动字体读取；生成类型仍留在 app 层。 |
-| APP2 | completed | 拆出 detached workspace、窗口激活和窗口动作处理 | Cargo check、workspace/window focused tests | `src/app/window_bridge.rs` 只编排 AppWindow、WindowRouter 和 AppState DTO，不改变 pane transfer、worker shutdown 或窗口生命周期。 |
-| APP3 | completed | 拆出平台剪贴板、诊断和 macOS 菜单辅助 | Cargo check、diagnostic/menu tests | `src/app/platform_support.rs` 保持 cfg 隔离；诊断不增加 host/path/password/session 内容。 |
-| APP4 | completed | 更新项目地图、架构说明并完成完整离线门禁 | fmt、check、Clippy、test、tracker、`git diff --check` | 不改变 Slint/Cargo/SSH/renderer 行为契约。 |
-| MEM4 | completed | 统一释放主窗口和 detached 窗口的 Slint models、文本、图标行与敏感 UI 字段，并在退出前丢弃窗口强引用 | 生命周期 focused tests（如适用）、fmt、check、Clippy、test、tracker、`git diff --check` | Software/GPU 共用同一路径；不承诺平台 allocator/Fontique/CoreAnimation/Metal RSS 立即下降。 |
-| MEM5 | completed | 减少 detached 窗口重复持有的 sidebar/settings/editor/font option models，并记录 bundled Fontique 字体的常驻边界 | Slint/Cargo 门禁、tracker/Markdown 检查、静态生命周期审阅 | Terminal/SFTP surface 所需 model 保留；不伪造 Fontique 动态卸载，不改变字体字重或 fallback 行为。 |
-| MEM6 | completed | Maple/Iosevka/Monaspace 改用 Fontique 路径源，避免 worker 长期持有完整字体 `Vec<u8>`；JetBrains 保留嵌入 | font_bridge 定向测试、完整 Rust/Slint 离线门禁、同负载 macOS footprint/vmmap 复核 | 代码与离线门禁已通过；保留现有字体选择和 Maple Hani fallback；目标平台仍需确认 Fontique cache 与 RSS 变化。 |
-| RZ1 | completed | 记录 resize 根因、外部依据和低风险实施边界 | tracker 规范、现有 resize 路径审计、research 记录 | 采用 resize 前沿尺寸合并与 resize-only 刷新；暂缓平台专用 live-resize surface hold。 |
-| RZ2 | completed | resize 成功后只调度当前 terminal pane snapshot | focused 路由/刷新 gate 回归、Slint/Cargo check | 不改变非 resize 的 full refresh 语义。 |
-| RZ3 | completed | AppState 在真实模型尺寸变化前去重模型、选区 revision 和 worker 请求 | state resize focused tests | worker 请求失败时保持现有错误优先级。 |
-| RZ4 | completed | SSH/Telnet watch 与 Local pending resize 对相同尺寸不发通知/唤醒 | worker/local focused tests | latest-value 合并仍保留，Serial 无 PTY resize 通道。 |
-| RZ5 | completed | 完整 Rust/Slint、tracker 和差异门禁并记录平台验收边界 | fmt、check、Clippy、test、tracker、`git diff --check` | macOS 实际拖动流畅度由用户验收。 |
-| ROWMODEL1 | completed | 保留单层 `TerminalRenderLine` repeater 和嵌套 model identity 复用 | focused render-line tests、Slint 编译 | 应用层不再引入 tile/partition model；`TermDamage` 和 Slint 内部 dirty region 保留。 |
-| ROWMODEL2 | completed | 删除应用层 tile/partition 配置、DTO、回调、测试和重复行 repeater | config/view/Slint focused tests、全量离线门禁 | 旧 JSON 字段作为未知字段忽略，不增加 schema migration。 |
-| ROWMODEL3 | completed | 同步双语架构、项目地图、研究和月度记录，复核无残留符号 | tracker validator、Markdown 检查、`git diff --check` | 历史 tile 条目保留为审计记录，当前实现说明改为单层行模型。 |
-| ROWMODEL4 | completed | 用 `TerminalSnapshot.dirty_rows` 驱动普通输出的按行增量 render/model 更新 | 终端 damage focused tests、Rust/Slint check、完整 Cargo tests | 首帧、resize、滚动、full damage 和渲染 key 变化保留全量回退；不改变 Slint 内部 item-tree 遍历或 backend present 语义。 |
+| FOCUS5 | completed | 定位 Tab 标题栏与窗口激活造成的 IME 焦点覆盖链路 | `WorkspaceTitlebar`、`TerminalPane`、`WindowRouter` 静态审阅 | 不涉及 SSH、PTY 或凭据。 |
+| FOCUS6 | completed | 在活动窗口、无模态时延后恢复当前终端的 IME 焦点 | Slint 重编译、窗口路由和定向测试 | 只在活动窗口且无阻塞弹窗时恢复。 |
+| GENERAL1 | completed | 将 General 页面下拉统一为 `ThemedComboBox` | Slint 重编译与设置映射检查 | 保留语言、shell、凭据选择语义。 |
+| FOCUS7 | completed | 完成双语说明、跟踪记录和全量离线门禁 | fmt、check、Clippy、test、tracker、Markdown、diff | 目标平台 GUI 仍待用户验收。 |
 
-| COLOR1 | completed | macOS CoreGraphics image 使用显式 sRGB 色彩空间，保持既有像素排列与 damage 几何不变 | `cargo check --locked --offline`、Clippy、完整测试、`git diff --check` | 仅改变色彩空间；未同时设置 `contentsFormat`，避免把像素排列和色彩空间两个变量混在一次 A/B。 |
-| COLOR2 | completed | 构建 release 采样候选并由目标 macOS 对比 ICC/vImage 与 CPU | release build、Mach-O UUID/SHA-256、同窗口/pane/renderer/负载 sample | 10 秒 sample UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 release 一致；仍显示 `CA::Render::copy_image`/ICC/vImage 主导，未提供独立 CPU meter，因此不声明总 CPU 降幅。 |
-| CELL1 | completed | 以 Latin monospace advance 作为逻辑单元格宽度，并让选择背景按单元格边界绘制 | Slint 编译、ASCII/CJK/符号静态几何审阅、目标机光标/选区视觉验收 | 中文仍占两个逻辑格；光标、选区、鼠标命中和 IME 共用同一格宽。目标机视觉待用户确认。 |
-| CELL2 | completed | software presentation region 从实际首个完整终端行开始 | Slint callback contract、Retina 物理区域换算和 backend partition tests | `grid-top-offset` 顶部余量交给 fallback，不跨入行级 block。目标机视觉待用户确认。 |
-| CELL3 | completed | 完整离线门禁、双语契约和目标平台验收说明 | fmt、check、Clippy、test、tracker/Markdown、`git diff --check` | 本轮代码与新增记录通过；validator 仍报告既有历史记录格式债务，GUI 视觉由用户截图确认。 |
-| CELL4 | completed | 鼠标拖选使用半开单元格边界，使最小选区精确为一格且绘制与复制一致 | Slint 编译、正向/反向/跨行范围审阅、完整 Cargo 门禁 | xterm mouse reporting 仍使用包含格坐标；双击单词和三击逻辑行继续使用 Rust 包含式范围。目标机拖选视觉待用户确认。 |
-| COLOR3 | in_progress | 以可配置方式接入普通 `CALayer` delegate + `setNeedsDisplayInRect` 持久 backing store，并保留现有 `setContents` 回退 | API/objc2 审阅、12 项隔离 vendor tests、Cargo check/Clippy、GUI 视觉、同负载 sample 和残影/撕裂验收 | backing store 已提升为默认，`AXSSH_EXPERIMENT_CA_BACKING_STORE=0` 可回退；`CATiledLayer` 不在本原型内。 |
-| CPU1 | completed | 新增稳定的 Software presentation 配置枚举和启动期 backend 选择契约 | config normalization/serde、启动选择单测 | schema v27 保存两条稳定路径；环境变量继续作为显式诊断覆盖。 |
-| CPU2 | completed | 将两条 CPU 路径放入 Appearance > Rendering，并标明重启后生效 | Slint 编译、Settings 搜索与草稿/保存映射回归、翻译检查 | 仅 macOS Software 使用该值；不热切换已有窗口或 surface。 |
-| CPU3 | completed | softbuffer 接收有界启动配置并选择 image-layer 或 backing-store 路径 | vendor focused tests、macOS cfg Cargo check | 只传一个进程内 bool，不向 backend 传 terminal/session/SSH 状态，不改变 damage 几何与图像所有权。 |
-| CPU4 | completed | 同步双语契约、项目地图、月度记录并完成全量门禁 | fmt/check/Clippy/test、tracker/Markdown/`git diff --check` | 自动化门禁通过；目标 macOS 仍需分别验收两条路径的视觉和 sample。 |
-| CPU5 | completed | 将 CPU 消耗较低的 damage backing store 提升为缺失/无效配置的默认值，保留显式 layer-image 回退 | config default/normalization/serde、Slint 编译、翻译与双语文档 | 不迁移或覆盖已显式保存的 `layer-images`；只影响 macOS Software surface 的下次启动。 |
-| SEC1 | completed | 升级 `russh` 到 0.63.1，并适配 `PublicKeyOrCertificate` 主机密钥回调 | `cargo update -p russh --precise 0.63.1`、locked check、SSH focused tests | 覆盖 0.62.x Curve25519 客户端崩溃/拒绝服务修复，以及 0.63.1 的 channel-ID/MAC-none 稳定性修复；证书显式拒绝，不改变 profile/known_hosts 信任语义。 |
-| SEC2 | completed | 将严格 Clippy、MSRV 1.92 和 RustSec 审计纳入普通 CI，并移除 vendor manifest 中已失效的 bench target | workflow YAML 审阅、`cargo fmt --all -- --check`；GitHub-hosted CI 执行 | MSRV 只做 locked Linux check；RustSec action 固定到已验证的 v2.0.0 commit SHA，仅显式忽略已接受的 `RUSTSEC-2023-0071`；不恢复 benchmark 或增加 dev dependency。 |
-| SEC3 | completed | 为 Release 增加 Linux 预检和安全审计依赖 | release workflow DAG 审阅 | 跨平台构建只有在 tag 校验、fmt/check/Clippy/test、脚本回归和 RustSec audit 全部成功后才启动。 |
-| SEC4 | completed | 同步双语架构、环境审计、研究和月度变更记录 | 文档链接/tracker 校验、`git diff --check` | 记录新 API 的证书拒绝边界、MSRV/CI 事实和上游 advisory 来源；历史 0.62.2 记录保留为审计快照。 |
-| SEC5 | completed | 以 AppState 的进程级 Tokio persistence gate 串行化所有 `SessionStore` 写入，并以 per-profile mutation token 保护编辑/删除、认证后凭据保存和 trust 更新 | mutation token focused tests、credential rollback/commit tests | 凭据引用提交只接受当前密码 profile；不持有同步状态锁跨越 await。 |
-| SEC6 | completed | 修复 revoked host-key 确认顺序，并将 known_hosts/config I/O 移出 UI 线程 | host-key phase/ordering review、Rust/Slint check | 先清 profile pin 再删 `@revoked`；删除失败保持拒绝，不把两个文件假装成单一事务。 |
-| SEC7 | completed | 重连计时器只保存 profile UUID，触发时重新读取当前 profile；worker 启动拒绝陈旧快照 | reconnect/worker snapshot review and focused tests | 手动重试与自动重连都不能使用已编辑或已删除的 profile 快照。 |
-| SEC8 | completed | 同步双语安全契约、项目地图、月度记录并完成完整离线门禁 | fmt、check、Clippy、test、Markdown/tracker、`git diff --check` | 保留既有 renderer/性能改动和目标 macOS 视觉验收边界。 |
-| SEC9 | completed | 修复凭证 mutation 超时释放持久化闸门的竞态 | credential task soft-deadline regression、完整 Rust 门禁 | 读取保留 20s 硬超时；保存、删除和回滚只在软截止后告警，仍等待 `spawn_blocking` 实际完成再释放 gate。 |
-| SEC10 | completed | Telnet/Serial worker 启动使用完整 `SessionProfile` 快照并覆盖异步串口发现窗口 | direct snapshot focused tests、完整 Rust 门禁 | 启动前和 Serial 端口发现后都比较完整 profile；过期尝试清理状态且不启动旧 worker。 |
-| SEC11 | completed | 固化设置语言即时保存与预览草稿隔离语义，并同步安全架构契约 | settings regression、双语 docs、tracker/diff checks | 语言保存只写语言字段，避免把未确认的其它预览设置提前落盘；不改变现有 UI 行为。 |
+## 已完成
+
+- 已完成项目环境预检：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo locked/offline 工具链与 CI 命令均由仓库证据和本机工具链复核。
+- 已确认根因：活动 Tab 的标题栏 `FocusScope` 在其 16ms 延迟任务中覆盖了先前的终端 IME 焦点；原生窗口重新激活仅更新终端呈现路由，未向 Slint 终端输入代理发送重新聚焦请求。
+- 已确认颜色根因：General 使用 Slint 原生 `ComboBox`（`Palette`），其它设置页使用项目 `ThemedComboBox`（`Theme`），两套调色板导致下拉颜色不一致。
+
+## 验证
+
+- 已完成：静态焦点链路、General 控件差异与既有窗口路由/终端 pane 契约审阅；fmt、locked/offline check、严格 Clippy、完整测试（230 库、218 应用、Doc tests 0）和 diff 检查。
+- 未完成：目标平台的实际切换窗口/Tab 输入和下拉视觉验收；tracker 中既有历史条目的格式债务仍未迁移。
+
+## 风险与阻塞
+
+- 焦点恢复只能在窗口激活且没有阻塞式弹窗时发生，避免截获安全认证或管理对话框输入。
+- GUI 焦点与下拉颜色需要用户在目标平台实测；不捕获应用截图作为验收证据。
+
+## 下一步
+
+- 由用户在目标平台确认窗口/Tab 切换后的首个按键无需点击，并检查 General 下拉及弹出列表的颜色一致性。
+
+## 最后更新时间
+
+- 2026-09-06 13:10 +0800
 
 ## 9 项复核映射
 
