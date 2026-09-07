@@ -2,9 +2,14 @@
 
 # AxSSH
 
+[![CI](https://img.shields.io/github/actions/workflow/status/xinalbert/ax_ssh/ci.yml?branch=master&label=CI)](https://github.com/xinalbert/ax_ssh/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/xinalbert/ax_ssh)](https://github.com/xinalbert/ax_ssh/releases/latest)
+[![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f6feb)](https://github.com/xinalbert/ax_ssh/releases/latest)
+
 AxSSH 是一个由 Rust、Slint 和 Tokio 构建的跨平台桌面终端工作区，在同一个原生应用中
-提供已保存的 SSH、Telnet、Serial 和本地 shell 会话，以及彼此独立的 Terminal/SFTP Tab
-和持久化工作区设置。
+集中管理已保存的 SSH、Telnet、Serial 和本地 shell 会话，以及彼此独立的 Terminal/SFTP Tab。
 
 ## 功能概览
 
@@ -26,11 +31,13 @@ cargo run --locked
 未知或发生变化的 SSH 主机密钥会被拒绝；核对并明确确认服务器的 SHA-256 指纹后才能继续。
 会话创建、终端操作、SFTP 和设置说明见[使用指南](docs/usage.zh.md)。
 
+开发命令、renderer 选项、打包方式和验证门禁见[开发说明](docs/development.zh.md)。
+
 ## 发布
 
 GitHub Releases 会提供 Windows x86_64、Linux x86_64/aarch64，以及 macOS Apple Silicon、
-Intel 和通用应用包。在默认分支同步并提交发行元数据后，推送有效的 annotated
-`YYYY-MM-DD[-N]` tag 会直接启动发布 workflow。所需命令见[发布说明](docs/development.zh.md#github-发布)。
+Intel 和通用应用包。Release tag 使用 `YYYY-MM-DD` 或 `YYYY-MM-DD-N`；在默认分支同步版本
+元数据后，推送 annotated tag 会直接启动发布 workflow。所需命令见[发布说明](docs/development.zh.md#github-发布)。
 
 ## 文档
 
@@ -42,9 +49,9 @@ Intel 和通用应用包。在默认分支同步并提交发行元数据后，�
 ## 支持与安全
 
 可通过 [issue tracker](https://github.com/xinalbert/ax_ssh/issues/new) 或应用 About 页的
-**Report a bug** 反馈问题。只有用户明确选择保存时才会写入密码，并且仅使用系统凭据库或加密
-应用保险库；会话 JSON 不会写入明文密码、私钥 passphrase、终端输出或运行中的 worker 状态。
-Telnet 不加密。
+**Report a bug** 提交问题或功能建议。只有用户明确选择保存时才会写入密码，并且仅使用系统
+凭据库或加密应用保险库；会话 JSON 不会写入明文密码、私钥 passphrase、终端输出或运行中的
+worker 状态。Telnet 不加密；未知或发生变化的 SSH 主机密钥在明确确认前始终被阻止。
 
 ## 许可证
 

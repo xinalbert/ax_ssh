@@ -2,9 +2,15 @@
 
 # AxSSH
 
+[![CI](https://img.shields.io/github/actions/workflow/status/xinalbert/ax_ssh/ci.yml?branch=master&label=CI)](https://github.com/xinalbert/ax_ssh/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/xinalbert/ax_ssh)](https://github.com/xinalbert/ax_ssh/releases/latest)
+[![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f6feb)](https://github.com/xinalbert/ax_ssh/releases/latest)
+
 AxSSH is a cross-platform desktop terminal workspace built with Rust, Slint,
-and Tokio. It keeps saved SSH, Telnet, Serial, and local-shell sessions alongside
-independent Terminal and SFTP Tabs with persistent workspace settings.
+and Tokio. It brings saved SSH, Telnet, Serial, and local-shell sessions
+together with independent Terminal and SFTP Tabs in one native application.
 
 ## Highlights
 
@@ -32,12 +38,15 @@ Unknown and changed SSH host keys are rejected until you verify and explicitly
 confirm their SHA-256 fingerprint. Session setup, terminal controls, SFTP, and
 settings are covered by the [usage guide](docs/usage.md).
 
+For development commands, renderer options, packaging, and verification gates,
+see the [development guide](docs/development.md).
+
 ## Releases
 
 GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
-Silicon, Intel, and universal application bundles. After release metadata is
-synchronized and committed on the default branch, pushing a valid annotated
-`YYYY-MM-DD[-N]` tag starts the release workflow. See the
+Silicon, Intel, and universal application bundles. Release tags use
+`YYYY-MM-DD` or `YYYY-MM-DD-N`; the annotated tag starts the release workflow
+after version metadata is synchronized on the default branch. See the
 [release guide](docs/development.md#github-releases) for the required commands.
 
 ## Documentation
@@ -47,13 +56,15 @@ synchronized and committed on the default branch, pushing a valid annotated
 - [Architecture](docs/architecture.md)
 - [Documentation index](docs/README.md)
 
-## Help and Security
+## Support and Security
 
-Report problems through the [issue tracker](https://github.com/xinalbert/ax_ssh/issues/new)
+Report bugs and feature requests through the [issue tracker](https://github.com/xinalbert/ax_ssh/issues/new)
 or the **Report a bug** action in the application's About page. Passwords are
 stored only when requested, using the encrypted application vault by default or
-the explicitly selected system credential store; plaintext passwords, private-key passphrases, terminal output,
-and live worker state are not written to session JSON. Telnet is unencrypted.
+the explicitly selected system credential store. Plaintext passwords,
+private-key passphrases, terminal output, and live worker state are not written
+to session JSON. Telnet is unencrypted, and unknown or changed SSH host keys
+remain blocked until explicitly confirmed.
 
 ## License
 
