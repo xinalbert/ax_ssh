@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -355,6 +356,7 @@ fn run_local_shell(task: LocalShellTask) -> Result<()> {
         .context("failed to open local pseudo-terminal")?;
     let mut command = CommandBuilder::new(&shell_path);
     command.env("TERM", "xterm-256color");
+    configure_local_shell_command(&mut command, &shell_path);
     let mut child = pair
         .slave
         .spawn_command(command)
@@ -644,6 +646,71 @@ fn pty_size(size: TerminalSize) -> PtySize {
     }
 }
 
+fn configure_local_shell_command(command: &mut CommandBuilder, shell_path: &Path) {
+    #[cfg(target_os = "macos")]
+    configure_macos_zsh_command(command, shell_path);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (command, shell_path);
+}
+
+#[cfg(target_os = "macos")]
+fn configure_macos_zsh_command(command: &mut CommandBuilder, shell_path: &Path) {
+    if !is_zsh_shell(shell_path) {
+        return;
+    }
+
+    // A PTY makes zsh interactive, while `-l` also loads /etc/zprofile and
+    // ~/.zprofile. This lets the user's existing Homebrew shellenv policy
+    // apply without AxSSH sourcing or rewriting any shell startup file.
+    command.arg("-l");
+    let homebrew_paths = macos_homebrew_path_entries();
+
+    if let Some(path) = prepend_unique_path_entries(env::var_os("PATH").as_deref(), homebrew_paths)
+    {
+        command.env("PATH", path);
+    }
+}
+
+fn is_zsh_shell(shell_path: &Path) -> bool {
+    shell_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("zsh"))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_homebrew_path_entries() -> Vec<PathBuf> {
+    ["/opt/homebrew", "/usr/local"]
+        .into_iter()
+        .map(Path::new)
+        .filter(|prefix| is_executable(&prefix.join("bin/brew")))
+        .flat_map(|prefix| [prefix.join("bin"), prefix.join("sbin")])
+        .filter(|directory| directory.is_dir())
+        .collect()
+}
+
+fn prepend_unique_path_entries(
+    current_path: Option<&OsStr>,
+    candidates: impl IntoIterator<Item = PathBuf>,
+) -> Option<OsString> {
+    let current_entries = current_path
+        .map(env::split_paths)
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let mut entries = Vec::new();
+    for candidate in candidates {
+        if !current_entries.contains(&candidate) && !entries.contains(&candidate) {
+            entries.push(candidate);
+        }
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    entries.extend(current_entries);
+    env::join_paths(entries).ok()
+}
+
 fn platform_shell_candidates() -> Vec<String> {
     #[cfg(windows)]
     {
@@ -674,7 +741,12 @@ fn default_shell_fallback() -> Option<&'static str> {
     {
         Some("cmd.exe")
     }
+    #[cfg(target_os = "macos")]
+    {
+        Some("/bin/zsh")
+    }
     #[cfg(not(windows))]
+    #[cfg(not(target_os = "macos"))]
     {
         Some("sh")
     }
@@ -787,6 +859,83 @@ mod tests {
     fn invalid_shell_is_rejected_without_fallback() {
         assert!(resolve_shell("axssh-shell-that-does-not-exist").is_err());
         assert!(resolve_shell("bad\nshell").is_err());
+    }
+
+    #[test]
+    fn zsh_shell_detection_uses_the_executable_name() {
+        assert!(is_zsh_shell(Path::new("/bin/zsh")));
+        assert!(is_zsh_shell(Path::new("ZSH")));
+        assert!(!is_zsh_shell(Path::new("/bin/bash")));
+        assert!(!is_zsh_shell(Path::new("/bin/zsh-wrapper")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_zsh_uses_login_startup_files() {
+        let mut command = CommandBuilder::new("/bin/zsh");
+        configure_local_shell_command(&mut command, Path::new("/bin/zsh"));
+        assert_eq!(
+            command.get_argv(),
+            &vec![OsString::from("/bin/zsh"), OsString::from("-l")]
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn non_macos_shells_keep_native_startup_arguments() {
+        let mut command = CommandBuilder::new("sh");
+        configure_local_shell_command(&mut command, Path::new("sh"));
+        assert_eq!(command.get_argv(), &vec![OsString::from("sh")]);
+    }
+
+    #[test]
+    fn default_shell_fallback_matches_the_platform() {
+        #[cfg(windows)]
+        assert_eq!(default_shell_fallback(), Some("cmd.exe"));
+        #[cfg(target_os = "macos")]
+        assert_eq!(default_shell_fallback(), Some("/bin/zsh"));
+        #[cfg(all(not(windows), not(target_os = "macos")))]
+        assert_eq!(default_shell_fallback(), Some("sh"));
+    }
+
+    #[test]
+    fn homebrew_path_entries_are_prepended_once() {
+        let current_path =
+            env::join_paths(["/usr/bin", "/opt/homebrew/bin"]).expect("test path should be valid");
+        let updated = prepend_unique_path_entries(
+            Some(current_path.as_os_str()),
+            [
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/opt/homebrew/sbin"),
+                PathBuf::from("/opt/homebrew/sbin"),
+            ],
+        )
+        .expect("missing Homebrew path entry should be added");
+
+        assert_eq!(
+            env::split_paths(&updated).collect::<Vec<_>>(),
+            vec![
+                PathBuf::from("/opt/homebrew/sbin"),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/opt/homebrew/bin"),
+            ]
+        );
+    }
+
+    #[test]
+    fn no_homebrew_path_entries_leave_the_child_path_unset() {
+        let current_path =
+            env::join_paths(["/usr/bin", "/opt/homebrew/bin"]).expect("test path should be valid");
+        assert_eq!(
+            prepend_unique_path_entries(
+                Some(current_path.as_os_str()),
+                [
+                    PathBuf::from("/usr/bin"),
+                    PathBuf::from("/opt/homebrew/bin")
+                ],
+            ),
+            None
+        );
     }
 
     #[test]
