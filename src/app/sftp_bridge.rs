@@ -9,6 +9,8 @@ const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_REMOTE_NAME_CHARS: usize = 512;
+const MAX_DROPPED_LOCAL_PATHS: usize = 32;
+const MAX_DROPPED_LOCAL_DATA_BYTES: usize = LOCAL_DIRECTORY_PATH_LIMIT * MAX_DROPPED_LOCAL_PATHS;
 
 type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
 
@@ -23,12 +25,7 @@ fn local_file_drag_data(path: &str) -> SlintDataTransfer {
     data
 }
 
-fn parse_dropped_local_path(text: &str) -> Result<PathBuf> {
-    let raw = text
-        .split(['\n', '\r'])
-        .map(str::trim)
-        .find(|value| !value.is_empty())
-        .context("dropped data did not contain a local file path")?;
+fn parse_single_dropped_path(raw: &str) -> Result<PathBuf> {
     if raw.len() > LOCAL_DIRECTORY_PATH_LIMIT || raw.chars().any(char::is_control) {
         anyhow::bail!("dropped local file path is invalid or too long");
     }
@@ -52,6 +49,38 @@ fn parse_dropped_local_path(text: &str) -> Result<PathBuf> {
         anyhow::bail!("dropped local file path is empty");
     }
     Ok(path)
+}
+
+/// Parse all non-empty lines of dropped text as local paths.
+///
+/// Each line may be a bare POSIX/Windows path or a `file://` URI.  Remote
+/// authority hosts and control characters are rejected.  Duplicate paths are
+/// removed while preserving first-seen order so the caller can queue them as
+/// independent transfers.
+fn parse_dropped_local_paths(text: &str) -> Result<Vec<PathBuf>> {
+    if text.len() > MAX_DROPPED_LOCAL_DATA_BYTES {
+        anyhow::bail!("dropped data is too large");
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut paths = Vec::new();
+    for raw in text.split(['\n', '\r']).map(str::trim) {
+        if raw.is_empty() {
+            continue;
+        }
+        let path = parse_single_dropped_path(raw)?;
+        if seen.insert(path.clone()) {
+            if paths.len() >= MAX_DROPPED_LOCAL_PATHS {
+                anyhow::bail!(
+                    "dropped data contains too many local files (maximum {MAX_DROPPED_LOCAL_PATHS})"
+                );
+            }
+            paths.push(path);
+        }
+    }
+    if paths.is_empty() {
+        anyhow::bail!("dropped data did not contain a local file path");
+    }
+    Ok(paths)
 }
 
 fn percent_decode_path(value: &str) -> Result<String> {
@@ -93,10 +122,137 @@ fn queue_sftp_write(
     })
 }
 
+fn join_remote_upload_path(directory: &str, name: &str) -> String {
+    if directory == "/" || directory.is_empty() {
+        format!("/{name}")
+    } else {
+        format!("{}/{}", directory.trim_end_matches('/'), name)
+    }
+}
+
+fn with_sftp_terminal_for_tab<T>(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    action: impl FnOnce(&mut TerminalTabState) -> Result<T>,
+) -> Result<T> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let terminal = app
+        .terminal_mut(tab_id)
+        .context("SFTP tab is no longer available")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("upload target is no longer an SFTP tab");
+    }
+    if !terminal.connected {
+        anyhow::bail!("SFTP session is no longer connected");
+    }
+    action(terminal)
+}
+
+fn active_sftp_upload_target(state: &Arc<Mutex<AppState>>) -> Result<(Uuid, String)> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let tab_id = app.active_tab_id().context("no active terminal")?;
+    let terminal = app.terminal_mut(tab_id).context("no active terminal")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("SFTP is available only in an SFTP tab");
+    }
+    if !terminal.connected {
+        anyhow::bail!("SFTP session is not connected");
+    }
+    let remote_directory = terminal.sftp.path.trim().to_owned();
+    if remote_directory.is_empty() {
+        anyhow::bail!("remote SFTP directory is not ready");
+    }
+    Ok((tab_id, remote_directory))
+}
+
+fn prepare_selected_local_upload(
+    state: &Arc<Mutex<AppState>>,
+) -> Result<(Uuid, PathBuf, u64, String)> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let tab_id = app.active_tab_id().context("no active terminal")?;
+    let terminal = app.terminal_mut(tab_id).context("no active terminal")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("SFTP is available only in an SFTP tab");
+    }
+    if !terminal.connected {
+        anyhow::bail!("SFTP session is not connected");
+    }
+    let remote_directory = terminal.sftp.path.trim().to_owned();
+    if remote_directory.is_empty() {
+        anyhow::bail!("remote SFTP directory is not ready");
+    }
+    let selected = terminal
+        .sftp
+        .local
+        .entries
+        .iter()
+        .filter(|entry| terminal.sftp.local.selected.contains(&entry.path))
+        .filter(|entry| !entry.is_dir && !entry.is_symlink)
+        .cloned()
+        .collect::<Vec<_>>();
+    if selected.len() != 1 {
+        anyhow::bail!("select exactly one regular local file to upload");
+    }
+    let entry = &selected[0];
+    if entry.size > ax_ssh::sftp::MAX_UPLOAD_BYTES {
+        anyhow::bail!("local file exceeds the upload size limit");
+    }
+    Ok((
+        tab_id,
+        entry.path.clone().into(),
+        entry.size,
+        join_remote_upload_path(&remote_directory, &entry.name),
+    ))
+}
+
+fn queue_upload_for_tab(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    remote_path: String,
+    local_path: PathBuf,
+    total_bytes: u64,
+) -> Result<()> {
+    let name = remote_path
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .context("remote upload target is missing a file name")?
+        .to_owned();
+    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        let transfer_id = Uuid::new_v4();
+        terminal
+            .sftp
+            .queue_upload_transfer(transfer_id, name.clone(), total_bytes)?;
+        let result = match terminal.worker.as_ref() {
+            Some(worker) => {
+                worker.request_open_sftp_upload(transfer_id, remote_path, local_path, total_bytes)
+            }
+            None => Err(anyhow::anyhow!("SFTP tab has no worker")),
+        };
+        if let Err(error) = result {
+            terminal.sftp.finish_transfer(
+                transfer_id,
+                SftpTransferPhase::Failed,
+                "Upload request was rejected".to_owned(),
+            );
+            return Err(error);
+        }
+        Ok(())
+    })
+}
+
 fn queue_local_upload_path(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    remote_directory: String,
     local_path: PathBuf,
 ) {
     let state_for_task = state.clone();
@@ -133,22 +289,14 @@ fn queue_local_upload_path(
                 return;
             }
         };
-        let queued = with_active_sftp_terminal(&state_for_task, |terminal| {
-            let remote_path = if terminal.sftp.path == "/" {
-                format!("/{name}")
-            } else {
-                format!("{}/{}", terminal.sftp.path.trim_end_matches('/'), name)
-            };
-            let transfer_id = Uuid::new_v4();
-            terminal
-                .sftp
-                .queue_transfer(transfer_id, name, total_bytes)?;
-            terminal
-                .worker
-                .as_ref()
-                .context("active SFTP tab has no worker")?
-                .request_open_sftp_upload(transfer_id, remote_path, local_path, total_bytes)
-        });
+        let remote_path = join_remote_upload_path(&remote_directory, &name);
+        let queued = queue_upload_for_tab(
+            &state_for_task,
+            tab_id,
+            remote_path,
+            local_path,
+            total_bytes,
+        );
         match queued {
             Ok(()) => dispatch_active_snapshot(&ui, &state_for_task),
             Err(error) => set_status(&ui, &format!("Cannot queue dropped upload: {error}")),
@@ -581,19 +729,33 @@ pub(super) fn wire_sftp(
                 return;
             }
         };
-        let path = match parse_dropped_local_path(text.as_str()) {
-            Ok(path) => path,
+        let paths = match parse_dropped_local_paths(text.as_str()) {
+            Ok(paths) => paths,
             Err(error) => {
                 set_status(&ui_for_drop, &format!("Cannot use dropped path: {error}"));
                 return;
             }
         };
-        queue_local_upload_path(
-            &runtime_for_drop,
-            state_for_drop.clone(),
-            ui_for_drop.clone(),
-            path,
-        );
+        let (tab_id, remote_directory) = match active_sftp_upload_target(&state_for_drop) {
+            Ok(target) => target,
+            Err(error) => {
+                set_status(
+                    &ui_for_drop,
+                    &format!("Cannot prepare dropped upload: {error}"),
+                );
+                return;
+            }
+        };
+        for path in paths {
+            queue_local_upload_path(
+                &runtime_for_drop.clone(),
+                state_for_drop.clone(),
+                ui_for_drop.clone(),
+                tab_id,
+                remote_directory.clone(),
+                path,
+            );
+        }
     });
 
     ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
@@ -605,32 +767,8 @@ pub(super) fn wire_sftp(
     ui.on_upload_selected_local_sftp(move || {
         log_ui_action("sftp.upload-selected-local");
         sync_window_active(&router_for_upload, window_id, &state_for_upload);
-        let prepared = with_active_sftp_terminal(&state_for_upload, |terminal| {
-            let selected = terminal
-                .sftp
-                .local
-                .entries
-                .iter()
-                .filter(|entry| terminal.sftp.local.selected.contains(&entry.path))
-                .filter(|entry| !entry.is_dir && !entry.is_symlink)
-                .cloned()
-                .collect::<Vec<_>>();
-            if selected.len() != 1 {
-                anyhow::bail!("select exactly one regular local file to upload");
-            }
-            let entry = &selected[0];
-            if entry.size > ax_ssh::sftp::MAX_UPLOAD_BYTES {
-                anyhow::bail!("local file exceeds the upload size limit");
-            }
-            let name = entry.name.clone();
-            let remote_path = if terminal.sftp.path == "/" {
-                format!("/{name}")
-            } else {
-                format!("{}/{}", terminal.sftp.path.trim_end_matches('/'), name)
-            };
-            Ok((entry.path.clone(), entry.size, remote_path))
-        });
-        let (local_path, expected_size, remote_path) = match prepared {
+        let prepared = prepare_selected_local_upload(&state_for_upload);
+        let (tab_id, local_path, expected_size, remote_path) = match prepared {
             Ok(value) => value,
             Err(error) => {
                 set_status(
@@ -643,28 +781,13 @@ pub(super) fn wire_sftp(
         let state_for_upload_task = state_for_upload.clone();
         let ui_for_upload_task = ui_for_upload.clone();
         runtime_for_upload.spawn(async move {
-            let queued = with_active_sftp_terminal(&state_for_upload_task, |terminal| {
-                let transfer_id = Uuid::new_v4();
-                terminal.sftp.queue_transfer(
-                    transfer_id,
-                    remote_path
-                        .rsplit('/')
-                        .next()
-                        .unwrap_or_default()
-                        .to_owned(),
-                    expected_size,
-                )?;
-                terminal
-                    .worker
-                    .as_ref()
-                    .context("active SFTP tab has no worker")?
-                    .request_open_sftp_upload(
-                        transfer_id,
-                        remote_path,
-                        PathBuf::from(local_path),
-                        expected_size,
-                    )
-            });
+            let queued = queue_upload_for_tab(
+                &state_for_upload_task,
+                tab_id,
+                remote_path,
+                local_path,
+                expected_size,
+            );
             if let Err(error) = queued {
                 set_status(
                     &ui_for_upload_task,
@@ -1555,20 +1678,64 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dropped_local_path_accepts_file_uri_and_rejects_remote_hosts() {
-        assert_eq!(
-            parse_dropped_local_path("file:///tmp/hello%20world.txt").unwrap(),
-            PathBuf::from("/tmp/hello world.txt")
-        );
-        assert!(parse_dropped_local_path("file://other-host/tmp/file.txt").is_err());
-        assert!(parse_dropped_local_path("file:///tmp/bad%2").is_err());
+    fn dropped_local_paths_parses_multiple_lines() {
+        let paths =
+            parse_dropped_local_paths("file:///tmp/a.txt\n/tmp/b.txt\nfile:///tmp/c%20d.txt")
+                .unwrap();
+        assert_eq!(paths.len(), 3);
+        assert_eq!(paths[0], PathBuf::from("/tmp/a.txt"));
+        assert_eq!(paths[1], PathBuf::from("/tmp/b.txt"));
+        assert_eq!(paths[2], PathBuf::from("/tmp/c d.txt"));
     }
 
     #[test]
-    fn dropped_local_path_uses_only_the_first_non_empty_line() {
-        assert_eq!(
-            parse_dropped_local_path("\n /tmp/first.txt\n/tmp/second.txt").unwrap(),
-            PathBuf::from("/tmp/first.txt")
+    fn dropped_local_paths_rejects_invalid_uri_escape() {
+        assert!(parse_dropped_local_paths("file:///tmp/bad%2").is_err());
+    }
+
+    #[test]
+    fn dropped_local_paths_accepts_localhost_authority() {
+        let paths = parse_dropped_local_paths("file://localhost/tmp/ok.txt").unwrap();
+        assert_eq!(paths, vec![PathBuf::from("/tmp/ok.txt")]);
+    }
+
+    #[test]
+    fn dropped_local_paths_deduplicates() {
+        let paths = parse_dropped_local_paths("/tmp/a.txt\n/tmp/a.txt\nfile:///tmp/a.txt").unwrap();
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0], PathBuf::from("/tmp/a.txt"));
+    }
+
+    #[test]
+    fn dropped_local_paths_skips_blank_lines() {
+        let paths = parse_dropped_local_paths("\n\n/tmp/x.txt\n\n").unwrap();
+        assert_eq!(paths, vec![PathBuf::from("/tmp/x.txt")]);
+    }
+
+    #[test]
+    fn dropped_local_paths_rejects_empty() {
+        assert!(parse_dropped_local_paths("\n\n  \n").is_err());
+    }
+
+    #[test]
+    fn dropped_local_paths_rejects_remote_host_in_uri_list() {
+        assert!(
+            parse_dropped_local_paths("file:///tmp/ok.txt\nfile://evil-host/tmp/bad.txt").is_err()
         );
+    }
+
+    #[test]
+    fn dropped_local_paths_is_bounded() {
+        let text = (0..=MAX_DROPPED_LOCAL_PATHS)
+            .map(|index| format!("/tmp/file-{index}.txt"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(parse_dropped_local_paths(&text).is_err());
+    }
+
+    #[test]
+    fn dropped_local_paths_rejects_oversized_payload() {
+        let text = " ".repeat(MAX_DROPPED_LOCAL_DATA_BYTES + 1);
+        assert!(parse_dropped_local_paths(&text).is_err());
     }
 }

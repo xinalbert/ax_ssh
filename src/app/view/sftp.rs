@@ -274,8 +274,8 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
                 size: size.into(),
                 speed: speed.into(),
                 selected: transfer.selected,
-                pausable: transfer.phase == SftpTransferPhase::Downloading,
-                resumable: transfer.phase == SftpTransferPhase::Paused,
+                pausable: transfer.pausable && transfer.phase == SftpTransferPhase::Downloading,
+                resumable: transfer.pausable && transfer.phase == SftpTransferPhase::Paused,
                 cancellable: transfer.phase.cancellable(),
             }
         })

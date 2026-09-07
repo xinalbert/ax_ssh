@@ -63,6 +63,10 @@ impl ActiveSftpTransfer {
         }
     }
 
+    fn is_pausable(&self) -> bool {
+        matches!(self, Self::Download(_))
+    }
+
     fn resume(&self) {
         match self {
             Self::Download(transfer) => transfer.resume(),
@@ -458,7 +462,9 @@ pub(super) async fn run_sftp_session(
                     Some(SshCommand::PauseSftpTransfer { transfer_id }) => {
                         if let Some(transfer) = transfers
                             .iter()
-                            .find(|transfer| transfer.transfer_id() == transfer_id)
+                            .find(|transfer| {
+                                transfer.transfer_id() == transfer_id && transfer.is_pausable()
+                            })
                         {
                             transfer.pause();
                         }
@@ -467,7 +473,9 @@ pub(super) async fn run_sftp_session(
                     Some(SshCommand::ResumeSftpTransfer { transfer_id }) => {
                         if let Some(transfer) = transfers
                             .iter()
-                            .find(|transfer| transfer.transfer_id() == transfer_id)
+                            .find(|transfer| {
+                                transfer.transfer_id() == transfer_id && transfer.is_pausable()
+                            })
                         {
                             transfer.resume();
                         }

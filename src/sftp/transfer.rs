@@ -114,6 +114,18 @@ pub(crate) struct SftpUploadRequest {
     name: String,
     local_path: PathBuf,
     total_bytes: u64,
+    local_identity: Arc<LocalUploadIdentity>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LocalUploadIdentity {
+    length: u64,
+    modified: Option<SystemTime>,
+    created: Option<SystemTime>,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
 }
 
 impl SftpUploadRequest {
@@ -123,6 +135,14 @@ impl SftpUploadRequest {
         local_path: PathBuf,
         total_bytes: u64,
     ) -> Result<Self> {
+        let metadata = fs::symlink_metadata(&local_path)
+            .with_context(|| format!("cannot inspect local upload file {local_path:?}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            anyhow::bail!("local upload source is not a regular file");
+        }
+        if metadata.len() != total_bytes {
+            anyhow::bail!("local upload file size changed before it was queued");
+        }
         validate_remote_path(&remote_path)?;
         if total_bytes > super::MAX_UPLOAD_BYTES {
             anyhow::bail!(
@@ -151,6 +171,7 @@ impl SftpUploadRequest {
             name,
             local_path,
             total_bytes,
+            local_identity: Arc::new(local_upload_identity(&metadata)),
         })
     }
 
@@ -681,6 +702,7 @@ where
                     offset,
                     requested as usize,
                     request.total_bytes,
+                    &request.local_identity,
                 ),
             )
             .await??;
@@ -734,19 +756,31 @@ async fn read_local_upload_chunk(
     offset: u64,
     length: usize,
     expected_size: u64,
+    expected_identity: &Arc<LocalUploadIdentity>,
 ) -> Result<Vec<u8>> {
     let path = path.to_owned();
+    let expected_identity = expected_identity.clone();
     tokio::task::spawn_blocking(move || {
         let metadata = fs::symlink_metadata(&path)
             .with_context(|| format!("cannot inspect local upload file {path:?}"))?;
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             anyhow::bail!("local upload source is not a regular file");
         }
-        if metadata.len() != expected_size {
+        if metadata.len() != expected_size
+            || local_upload_identity(&metadata) != *expected_identity.as_ref()
+        {
             anyhow::bail!("local upload file changed while it was being uploaded");
         }
         let mut file = LocalFile::open(&path)
             .with_context(|| format!("cannot open local upload file {path:?}"))?;
+        let opened_metadata = file
+            .metadata()
+            .with_context(|| format!("cannot inspect opened local upload file {path:?}"))?;
+        if opened_metadata.len() != expected_size
+            || local_upload_identity(&opened_metadata) != *expected_identity.as_ref()
+        {
+            anyhow::bail!("local upload file changed while it was being uploaded");
+        }
         file.seek(SeekFrom::Start(offset))
             .context("cannot seek local upload file")?;
         let mut chunk = vec![0_u8; length];
@@ -756,6 +790,28 @@ async fn read_local_upload_chunk(
     })
     .await
     .context("local upload read task failed")?
+}
+
+fn local_upload_identity(metadata: &fs::Metadata) -> LocalUploadIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        LocalUploadIdentity {
+            length: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        LocalUploadIdentity {
+            length: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
+        }
+    }
 }
 
 async fn ensure_remote_target_absent_for_transfer(
@@ -1731,12 +1787,16 @@ mod tests {
         let path = std::env::temp_dir().join(format!("ax-ssh-upload-{}.bin", Uuid::new_v4()));
         let contents = vec![0x5a; (DOWNLOAD_CHUNK_BYTES as usize) + 17];
         fs::write(&path, &contents).expect("upload fixture should write");
+        let identity = Arc::new(local_upload_identity(
+            &fs::symlink_metadata(&path).expect("upload fixture metadata should be readable"),
+        ));
 
         let first = read_local_upload_chunk(
             &path,
             0,
             DOWNLOAD_CHUNK_BYTES as usize,
             contents.len() as u64,
+            &identity,
         )
         .await
         .expect("first upload chunk should read");
@@ -1748,6 +1808,7 @@ mod tests {
             0,
             DOWNLOAD_CHUNK_BYTES as usize,
             contents.len() as u64,
+            &identity,
         )
         .await
         .expect_err("changed upload source should be rejected");
@@ -1758,7 +1819,9 @@ mod tests {
 
     #[test]
     fn local_upload_request_stores_a_path_and_bounded_size_only() {
-        let path = PathBuf::from("/tmp/example.bin");
+        let path =
+            std::env::temp_dir().join(format!("ax-ssh-upload-request-{}.bin", Uuid::new_v4()));
+        fs::write(&path, vec![0_u8; 64 * 1024]).expect("request fixture should write");
         let request = SftpUploadRequest::from_local_file(
             Uuid::new_v4(),
             "/remote/example.bin".to_owned(),
@@ -1769,6 +1832,7 @@ mod tests {
 
         assert_eq!(request.local_path, path);
         assert_eq!(request.total_bytes(), 64 * 1024);
+        fs::remove_file(path).expect("request fixture should be removed");
     }
 
     struct TestCacheDir(PathBuf);

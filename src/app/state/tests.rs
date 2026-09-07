@@ -1057,6 +1057,22 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
 }
 
 #[test]
+fn sftp_upload_transfer_does_not_expose_pause_controls() {
+    let mut sftp = SftpBrowserState::default();
+    let transfer_id = Uuid::new_v4();
+
+    sftp.queue_upload_transfer(transfer_id, "upload.txt".to_owned(), 10)
+        .expect("upload should be queued");
+    sftp.start_transfer(transfer_id, "upload.txt".to_owned(), 10);
+
+    assert!(!sftp.transfer_is_pausable(transfer_id));
+    assert!(!sftp.request_transfer_pause(transfer_id));
+    let snapshot = sftp.snapshot(true);
+    assert!(!snapshot.transfers[0].pausable);
+    assert_eq!(snapshot.transfer_selected_pausable_count, 0);
+}
+
+#[test]
 fn sftp_transfer_state_ignores_late_events_after_cancellation() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();

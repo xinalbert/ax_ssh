@@ -21,11 +21,23 @@ impl SftpBrowserState {
         let transfer_selected_active_count =
             self.selected_transfer_ids(SftpTransferPhase::active).len();
         let transfer_selected_pausable_count = self
-            .selected_transfer_ids(SftpTransferPhase::pausable)
-            .len();
+            .transfers
+            .iter()
+            .filter(|transfer| {
+                self.selected_transfers.contains(&transfer.id)
+                    && transfer.pausable
+                    && transfer.phase.pausable()
+            })
+            .count();
         let transfer_selected_resumable_count = self
-            .selected_transfer_ids(SftpTransferPhase::resumable)
-            .len();
+            .transfers
+            .iter()
+            .filter(|transfer| {
+                self.selected_transfers.contains(&transfer.id)
+                    && transfer.pausable
+                    && transfer.phase.resumable()
+            })
+            .count();
         SftpBrowserSnapshot {
             available,
             open: self.open,
@@ -65,6 +77,25 @@ impl SftpBrowserState {
         name: String,
         total_bytes: u64,
     ) -> Result<()> {
+        self.queue_transfer_with_pause(id, name, total_bytes, true)
+    }
+
+    pub(in crate::app) fn queue_upload_transfer(
+        &mut self,
+        id: Uuid,
+        name: String,
+        total_bytes: u64,
+    ) -> Result<()> {
+        self.queue_transfer_with_pause(id, name, total_bytes, false)
+    }
+
+    fn queue_transfer_with_pause(
+        &mut self,
+        id: Uuid,
+        name: String,
+        total_bytes: u64,
+        pausable: bool,
+    ) -> Result<()> {
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
             if transfer.phase == SftpTransferPhase::Queued {
                 transfer.name = name;
@@ -89,6 +120,7 @@ impl SftpBrowserState {
             id,
             name,
             phase: SftpTransferPhase::Queued,
+            pausable,
             downloaded_bytes: 0,
             total_bytes,
             bytes_per_second: 0,
@@ -204,7 +236,7 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
-        if transfer.phase != SftpTransferPhase::Downloading {
+        if !transfer.pausable || transfer.phase != SftpTransferPhase::Downloading {
             return false;
         }
         transfer.phase = SftpTransferPhase::Pausing;
@@ -216,10 +248,12 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
-        if !matches!(
-            transfer.phase,
-            SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
-        ) {
+        if !transfer.pausable
+            || !matches!(
+                transfer.phase,
+                SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
+            )
+        {
             return false;
         }
         transfer.phase = SftpTransferPhase::Paused;
@@ -232,7 +266,7 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
-        if transfer.phase != SftpTransferPhase::Paused {
+        if !transfer.pausable || transfer.phase != SftpTransferPhase::Paused {
             return false;
         }
         transfer.phase = SftpTransferPhase::Resuming;
@@ -283,14 +317,18 @@ impl SftpBrowserState {
         self.transfers
             .iter()
             .find(|transfer| transfer.id == id)
-            .is_some_and(|transfer| transfer.phase == SftpTransferPhase::Downloading)
+            .is_some_and(|transfer| {
+                transfer.pausable && transfer.phase == SftpTransferPhase::Downloading
+            })
     }
 
     pub(in crate::app) fn transfer_is_resumable(&self, id: Uuid) -> bool {
         self.transfers
             .iter()
             .find(|transfer| transfer.id == id)
-            .is_some_and(|transfer| transfer.phase == SftpTransferPhase::Paused)
+            .is_some_and(|transfer| {
+                transfer.pausable && transfer.phase == SftpTransferPhase::Paused
+            })
     }
 
     pub(in crate::app) fn toggle_transfer_selection(&mut self, id: Uuid, selected: bool) -> bool {
@@ -689,6 +727,7 @@ impl SftpTransferState {
             id: self.id,
             name: self.name.clone(),
             phase: self.phase,
+            pausable: self.pausable,
             downloaded_bytes: self.downloaded_bytes,
             total_bytes: self.total_bytes,
             bytes_per_second: self.bytes_per_second,
