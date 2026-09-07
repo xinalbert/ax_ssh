@@ -575,6 +575,16 @@ tab-local terminal connection notice deliberately remains non-blocking.
    PTY resize operation. A full event queue is cancellation-aware and cannot
    strand the reader. Worker shutdown has a fixed timeout and never waits forever;
    the controller retains its child-killer fallback until worker cleanup clears it.
+   Shell startup is platform-specific: when `SHELL` is unavailable, macOS
+   defaults to `/bin/zsh`; macOS `zsh` receives `-l`, so zsh loads
+   its normal system/user login and interactive files; Linux and other Unix
+   shells keep their normal interactive startup mode without a forced login
+   flag; Windows `cmd.exe`/PowerShell receive no profile override and retain
+   their native startup behavior. For macOS `zsh`, AxSSH also checks the
+   standard Homebrew prefixes for an executable `bin/brew` and prepends only
+   their existing `bin`/`sbin` directories to that child PTY's `PATH`. Missing
+   prefixes leave the inherited path unchanged; AxSSH never invokes
+   `brew shellenv` itself or modifies user shell startup files.
 8. Each tab that renders a terminal owns one bounded `TerminalModel`. An
    SFTP-only tab deliberately keeps this model absent because it never renders
    terminal cells; its browser state remains independent. `vt100` owns the

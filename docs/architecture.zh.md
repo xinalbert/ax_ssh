@@ -360,6 +360,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    资源，并异步等待 worker 可 join。与最后已应用行列数相同的重复尺寸会在调用平台 PTY resize
    前丢弃；满事件队列的反压可响应取消，不会卡住 reader。worker shutdown 使用固定超时，不会
    无限等待；controller 会保留 child-killer 兜底，直到 worker 收尾明确清除它。
+   shell 启动按平台判断：`SHELL` 不可用时 macOS 默认使用 `/bin/zsh`；macOS 的 `zsh` 会收到 `-l`，
+   由 zsh 正常加载系统/用户的 login 与
+   interactive 启动文件；Linux 和其他 Unix shell 保持普通 interactive 启动模式，不强制增加 login
+   参数；Windows 的 `cmd.exe`/PowerShell 不覆盖 profile 参数，保留各自原生启动行为。macOS 的
+   `zsh` 还会检查标准 Homebrew 前缀中的可执行 `bin/brew`，仅将已存在的 `bin`/`sbin` 目录前置到
+   该 PTY 子进程的 `PATH`。未发现前缀时继承的 PATH 保持不变；AxSSH 不会自行调用 `brew shellenv`，
+   也不会修改用户的 shell 启动文件。
 8. 每个真正渲染终端的 Tab 持有一个有界 `TerminalModel`。纯 SFTP Tab 从不渲染终端字符格，
    因此不创建该模型，只保留独立的浏览状态。`vt100` 负责行、字符格样式、光标、
    scrollback、宽字符和 application-cursor 模式。终端生成的 `PtyWrite` 协议应答（包括 Windows
