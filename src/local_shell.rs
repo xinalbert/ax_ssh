@@ -2,6 +2,9 @@
 
 use std::collections::BTreeSet;
 use std::env;
+#[cfg(all(not(target_os = "macos"), test))]
+use std::ffi::OsString;
+#[cfg(target_os = "macos")]
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
