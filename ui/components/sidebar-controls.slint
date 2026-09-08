@@ -87,6 +87,12 @@ export component SidebarRailToggle inherits FocusScope {
         ? @tr("Collapse session sidebar")
         : @tr("Expand session sidebar");
 
+    row-background := Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
+    }
+
     key-pressed(event) => {
         if event.text == Key.Return || event.text == Key.Space {
             root.activated();
@@ -114,7 +120,7 @@ export component SidebarRailToggle inherits FocusScope {
         y: (parent.height - self.height) / 2;
         width: Theme.sidebar-rail-toggle-size;
         height: Theme.sidebar-rail-toggle-size;
-        background: toggle-touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
         border-width: root.has-focus ? Theme.hairline : 0px;
         border-color: Theme.focus;
         border-radius: Theme.radius-small;
@@ -124,9 +130,15 @@ export component SidebarRailToggle inherits FocusScope {
             y: (parent.height - self.height) / 2;
             expanded: root.expanded;
         }
-        toggle-touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { root.activated(); }
+    }
+
+    row-touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => {
+            root.focus();
+            root.activated();
         }
     }
 }
