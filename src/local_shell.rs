@@ -671,6 +671,7 @@ fn configure_macos_zsh_command(command: &mut CommandBuilder, shell_path: &Path) 
     }
 }
 
+#[cfg(target_os = "macos")]
 fn is_zsh_shell(shell_path: &Path) -> bool {
     shell_path
         .file_name()
@@ -689,6 +690,7 @@ fn macos_homebrew_path_entries() -> Vec<PathBuf> {
         .collect()
 }
 
+#[cfg(target_os = "macos")]
 fn prepend_unique_path_entries(
     current_path: Option<&OsStr>,
     candidates: impl IntoIterator<Item = PathBuf>,
@@ -861,6 +863,7 @@ mod tests {
         assert!(resolve_shell("bad\nshell").is_err());
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn zsh_shell_detection_uses_the_executable_name() {
         assert!(is_zsh_shell(Path::new("/bin/zsh")));
@@ -898,6 +901,7 @@ mod tests {
         assert_eq!(default_shell_fallback(), Some("sh"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn homebrew_path_entries_are_prepended_once() {
         let current_path =
@@ -922,6 +926,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn no_homebrew_path_entries_leave_the_child_path_unset() {
         let current_path =
