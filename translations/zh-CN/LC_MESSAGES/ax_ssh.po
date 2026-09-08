@@ -202,6 +202,9 @@ msgstr "选择新建 SFTP 标签页打开的远端和本地目录。"
 msgid "Clear"
 msgstr "清除"
 
+msgid "Clear Recent"
+msgstr "清除最近记录"
+
 msgid "Clear settings search"
 msgstr "清除设置搜索"
 
@@ -672,6 +675,9 @@ msgstr "打开设置"
 
 msgid "Open Settings shortcut"
 msgstr "打开设置快捷键"
+
+msgid "Open Recent"
+msgstr "打开最近工作区"
 
 msgid "Open Workspace"
 msgstr "打开工作区"

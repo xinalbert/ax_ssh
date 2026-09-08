@@ -21,9 +21,9 @@ pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{
     AuthMethod, ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
-    MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialConfig, SerialDataBits, SerialFlowControl,
-    SerialParity, SerialStopBits, SessionProfile, SessionProtocol, SessionStore, SshConfig,
-    TelnetConfig, normalize_group_name,
+    MAX_RECENT_WORKSPACES, MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialConfig,
+    SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits, SessionProfile,
+    SessionProtocol, SessionStore, SshConfig, TelnetConfig, normalize_group_name,
 };
 #[cfg(test)]
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
@@ -83,7 +83,7 @@ const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
 const DEFAULT_COLLAPSED_GROUP_LABEL_CHARS: u8 = 2;
-const CURRENT_SCHEMA_VERSION: u32 = 29;
+const CURRENT_SCHEMA_VERSION: u32 = 30;
 const TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION: u32 = 22;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;

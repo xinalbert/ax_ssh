@@ -95,6 +95,57 @@ fn store_validation_enforces_group_and_profile_count_limits() {
 }
 
 #[test]
+fn recent_workspace_paths_are_bounded_and_most_recent_first() {
+    let mut store = SessionStore::default();
+    for index in 0..(MAX_RECENT_WORKSPACES + 2) {
+        store
+            .record_workspace_path(&PathBuf::from(format!("/tmp/workspace-{index}.json")))
+            .expect("workspace path should be accepted");
+    }
+
+    assert_eq!(store.recent_workspace_paths().len(), MAX_RECENT_WORKSPACES);
+    assert_eq!(
+        store.recent_workspace_paths().first(),
+        Some(&format!(
+            "/tmp/workspace-{}.json",
+            MAX_RECENT_WORKSPACES + 1
+        ))
+    );
+
+    store
+        .record_workspace_path(&PathBuf::from("/tmp/workspace-3.json"))
+        .expect("existing workspace path should be accepted");
+    assert_eq!(
+        store.recent_workspace_paths().first(),
+        Some(&"/tmp/workspace-3.json".to_owned())
+    );
+    assert_eq!(
+        store
+            .recent_workspace_paths()
+            .iter()
+            .filter(|path| path.as_str() == "/tmp/workspace-3.json")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn recent_workspace_paths_reject_invalid_values() {
+    let mut store = SessionStore::default();
+    assert!(store.record_workspace_path(&PathBuf::from(" ")).is_err());
+    assert!(
+        store
+            .record_workspace_path(&PathBuf::from("bad\npath"))
+            .is_err()
+    );
+    assert!(
+        store
+            .record_workspace_path(&PathBuf::from("x".repeat(4_097)))
+            .is_err()
+    );
+}
+
+#[test]
 fn config_load_rejects_oversized_files_before_deserialization() {
     let path = std::env::temp_dir().join(format!("ax-ssh-oversized-{}.json", Uuid::new_v4()));
     fs::write(&path, vec![b' '; MAX_CONFIG_FILE_BYTES + 1])
@@ -749,6 +800,7 @@ fn version_eleven_custom_theme_round_trips_without_secrets() {
         version: CURRENT_SCHEMA_VERSION,
         groups: Vec::new(),
         sessions: Vec::new(),
+        recent_workspaces: Vec::new(),
         settings,
     };
 

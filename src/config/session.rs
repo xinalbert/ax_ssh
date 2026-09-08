@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,8 @@ pub const MAX_USERNAME_CHARS: usize = 256;
 pub const MAX_PRIVATE_KEY_PATH_CHARS: usize = 4_096;
 pub(crate) const MAX_SESSION_PROFILES: usize = 1_024;
 pub(crate) const MAX_GROUPS: usize = 256;
+pub const MAX_RECENT_WORKSPACES: usize = 8;
+const MAX_WORKSPACE_PATH_CHARS: usize = 4_096;
 const MAX_GROUP_NAME_CHARS: usize = 64;
 const MAX_HOST_KEY_FINGERPRINT_CHARS: usize = 256;
 const MAX_SERIAL_PORT_CHARS: usize = 512;
@@ -590,6 +593,19 @@ fn validate_group_name(value: &str, allow_empty: bool) -> Result<()> {
     Ok(())
 }
 
+fn validate_workspace_path(path: &str) -> Result<()> {
+    if path.is_empty() {
+        anyhow::bail!("workspace path cannot be empty");
+    }
+    if path.chars().count() > MAX_WORKSPACE_PATH_CHARS {
+        anyhow::bail!("workspace path cannot exceed {MAX_WORKSPACE_PATH_CHARS} characters");
+    }
+    if path.chars().any(char::is_control) {
+        anyhow::bail!("workspace path cannot contain control characters");
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct SessionStore {
     pub version: u32,
@@ -597,6 +613,8 @@ pub struct SessionStore {
     pub groups: Vec<String>,
     #[serde(default)]
     pub sessions: Vec<SessionProfile>,
+    #[serde(default)]
+    pub recent_workspaces: Vec<String>,
     pub settings: AppSettings,
 }
 
@@ -606,6 +624,7 @@ impl Default for SessionStore {
             version: CURRENT_SCHEMA_VERSION,
             groups: Vec::new(),
             sessions: Vec::new(),
+            recent_workspaces: Vec::new(),
             settings: AppSettings::default(),
         }
     }
@@ -619,6 +638,8 @@ struct SessionStoreWire {
     groups: Vec<String>,
     #[serde(default)]
     sessions: Vec<SessionProfile>,
+    #[serde(default)]
+    recent_workspaces: Vec<String>,
     #[serde(default)]
     settings: Option<AppSettings>,
     #[serde(default)]
@@ -639,6 +660,11 @@ impl<'de> Deserialize<'de> for SessionStore {
         if wire.sessions.len() > MAX_SESSION_PROFILES {
             return Err(serde::de::Error::custom(format!(
                 "session store cannot exceed {MAX_SESSION_PROFILES} profiles"
+            )));
+        }
+        if wire.recent_workspaces.len() > MAX_RECENT_WORKSPACES {
+            return Err(serde::de::Error::custom(format!(
+                "session store cannot exceed {MAX_RECENT_WORKSPACES} recent workspaces"
             )));
         }
         let mut settings = wire.settings.unwrap_or_default();
@@ -675,6 +701,7 @@ impl<'de> Deserialize<'de> for SessionStore {
             version: wire.version.max(CURRENT_SCHEMA_VERSION),
             groups: wire.groups,
             sessions: wire.sessions,
+            recent_workspaces: wire.recent_workspaces,
             settings,
         };
         store.normalize_groups();
@@ -690,6 +717,20 @@ impl SessionStore {
         }
         if self.sessions.len() > MAX_SESSION_PROFILES {
             anyhow::bail!("session store cannot exceed {MAX_SESSION_PROFILES} profiles");
+        }
+        if self.recent_workspaces.len() > MAX_RECENT_WORKSPACES {
+            anyhow::bail!("session store cannot exceed {MAX_RECENT_WORKSPACES} recent workspaces");
+        }
+        for path in &self.recent_workspaces {
+            validate_workspace_path(path)?;
+        }
+        let mut recent_paths = HashSet::with_capacity(self.recent_workspaces.len());
+        if self
+            .recent_workspaces
+            .iter()
+            .any(|path| !recent_paths.insert(path))
+        {
+            anyhow::bail!("recent workspaces cannot contain duplicates");
         }
         for group in &self.groups {
             validate_group_name(group, false)?;
@@ -710,6 +751,35 @@ impl SessionStore {
         } else {
             self.sessions.push(profile);
         }
+    }
+
+    pub fn recent_workspace_paths(&self) -> &[String] {
+        &self.recent_workspaces
+    }
+
+    pub fn record_workspace_path(&mut self, path: &Path) -> Result<()> {
+        let path = path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("workspace path is not valid UTF-8"))?
+            .trim();
+        validate_workspace_path(path)?;
+        self.recent_workspaces.retain(|known| known != path);
+        self.recent_workspaces.insert(0, path.to_owned());
+        self.recent_workspaces.truncate(MAX_RECENT_WORKSPACES);
+        Ok(())
+    }
+
+    pub fn remove_workspace_path(&mut self, path: &Path) -> bool {
+        let Some(path) = path.to_str() else {
+            return false;
+        };
+        let before = self.recent_workspaces.len();
+        self.recent_workspaces.retain(|known| known != path);
+        before != self.recent_workspaces.len()
+    }
+
+    pub fn clear_workspace_paths(&mut self) {
+        self.recent_workspaces.clear();
     }
 
     pub fn remove(&mut self, id: Uuid) -> bool {

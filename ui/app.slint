@@ -60,6 +60,7 @@ export component AppWindow inherits Window {
     in property <[string]> local-shell-options;
     in property <string> status: "";
     in property <string> workspace-default-path: "";
+    in property <[string]> recent-workspace-paths;
     in property <string> active-tab-id: "";
     in property <string> active-pane-id: "";
     in property <string> active-profile-id: "";
@@ -551,6 +552,27 @@ export component AppWindow inherits Window {
                 activated => {
                     root.menu-action("open-workspace");
                     overlay-host.show-workspace-file-dialog("open", root.workspace-default-path);
+                }
+            }
+            Menu {
+                title: @tr("Open Recent");
+                enabled: root.menu-shortcuts-enabled && root.recent-workspace-paths.length > 0;
+                for path in root.recent-workspace-paths : MenuItem {
+                    title: path;
+                    enabled: root.menu-shortcuts-enabled;
+                    activated => {
+                        root.menu-action("open-recent-workspace");
+                        root.workspace-file-action("open-recent", path);
+                    }
+                }
+                MenuSeparator { }
+                MenuItem {
+                    title: @tr("Clear Recent");
+                    enabled: root.menu-shortcuts-enabled;
+                    activated => {
+                        root.menu-action("clear-recent-workspaces");
+                        root.workspace-file-action("clear-recent", "");
+                    }
                 }
             }
             MenuItem {

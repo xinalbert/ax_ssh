@@ -1,6 +1,32 @@
 use super::super::*;
+use std::path::Path;
 
 const MAX_WORKSPACE_FILE_PATH_BYTES: usize = 4096;
+
+struct PendingWorkspaceOpen {
+    snapshot: ax_ssh::config::WorkspaceSnapshot,
+    recent_workspace_paths: Option<Vec<String>>,
+}
+
+#[derive(Clone)]
+struct WorkspaceOpenContext {
+    ui: slint::Weak<AppWindow>,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    pending_snapshot: Arc<Mutex<Option<PendingWorkspaceOpen>>>,
+    opening: Arc<AtomicBool>,
+    persistence: Arc<PersistenceCoordinator>,
+}
+
+pub(in crate::app) fn set_recent_workspace_paths(ui: &AppWindow, paths: &[String]) {
+    ui.set_recent_workspace_paths(ModelRc::new(VecModel::from(
+        paths
+            .iter()
+            .cloned()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+}
 
 fn remap_workspace_snapshot_ids(
     mut snapshot: ax_ssh::config::WorkspaceSnapshot,
@@ -56,13 +82,13 @@ pub(in crate::app) fn wire_workspace_file_actions(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
+    persistence: Arc<PersistenceCoordinator>,
     font_registry: Arc<Mutex<FontRegistry>>,
     log_directory: PathBuf,
     window_router: WindowRouter,
     detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 ) {
-    let pending_snapshot: Arc<Mutex<Option<ax_ssh::config::WorkspaceSnapshot>>> =
-        Arc::new(Mutex::new(None));
+    let pending_snapshot: Arc<Mutex<Option<PendingWorkspaceOpen>>> = Arc::new(Mutex::new(None));
     let workspace_open_active = Arc::new(AtomicBool::new(false));
     let pending_snapshot_for_apply = pending_snapshot.clone();
     let workspace_open_for_apply = workspace_open_active.clone();
@@ -78,7 +104,7 @@ pub(in crate::app) fn wire_workspace_file_actions(
             workspace_open_for_apply.store(false, std::sync::atomic::Ordering::Release);
             return;
         };
-        let snapshot = match pending_snapshot_for_apply.lock() {
+        let pending = match pending_snapshot_for_apply.lock() {
             Ok(mut pending) => pending.take(),
             Err(_) => {
                 workspace_open_for_apply.store(false, std::sync::atomic::Ordering::Release);
@@ -86,7 +112,11 @@ pub(in crate::app) fn wire_workspace_file_actions(
                 return;
             }
         };
-        let Some(snapshot) = snapshot else {
+        let Some(PendingWorkspaceOpen {
+            snapshot,
+            recent_workspace_paths,
+        }) = pending
+        else {
             workspace_open_for_apply.store(false, std::sync::atomic::Ordering::Release);
             return;
         };
@@ -139,6 +169,9 @@ pub(in crate::app) fn wire_workspace_file_actions(
             &router_for_apply,
             &windows_for_apply,
         );
+        if let Some(paths) = recent_workspace_paths {
+            set_recent_workspace_paths(&ui, &paths);
+        }
         refresh_workspace(&ui.as_weak(), &state_for_apply);
         ui.set_status(format!("Workspace opened ({} tabs)", snapshot.tabs.len()).into());
     });
@@ -146,7 +179,25 @@ pub(in crate::app) fn wire_workspace_file_actions(
     let ui_for_action = ui.as_weak();
     let state_for_action = state.clone();
     let router_for_action = window_router.clone();
+    let persistence_for_action = persistence.clone();
+    let open_context = WorkspaceOpenContext {
+        ui: ui.as_weak(),
+        state: state.clone(),
+        runtime: runtime.clone(),
+        pending_snapshot: pending_snapshot.clone(),
+        opening: workspace_open_active.clone(),
+        persistence: persistence.clone(),
+    };
     ui.on_workspace_file_action(move |mode, raw_path| {
+        if mode.as_str() == "clear-recent" {
+            clear_recent_workspace_paths(
+                &ui_for_action,
+                &state_for_action,
+                &runtime,
+                &persistence_for_action,
+            );
+            return;
+        }
         let path = match workspace_file_path(raw_path.as_str()) {
             Ok(path) => path,
             Err(error) => {
@@ -162,14 +213,8 @@ pub(in crate::app) fn wire_workspace_file_actions(
                 &router_for_action,
                 path,
             ),
-            "open" => open_workspace_file(
-                &ui_for_action,
-                &state_for_action,
-                &runtime,
-                &pending_snapshot,
-                &workspace_open_active,
-                path,
-            ),
+            "open" => open_workspace_file(&open_context, path, false),
+            "open-recent" => open_workspace_file(&open_context, path, true),
             _ => set_status(&ui_for_action, "Unknown workspace file action"),
         }
     });
@@ -224,14 +269,12 @@ fn save_workspace_file(
 }
 
 fn open_workspace_file(
-    ui: &slint::Weak<AppWindow>,
-    state: &Arc<Mutex<AppState>>,
-    runtime: &Handle,
-    pending_snapshot: &Arc<Mutex<Option<ax_ssh::config::WorkspaceSnapshot>>>,
-    workspace_open_active: &Arc<AtomicBool>,
+    context: &WorkspaceOpenContext,
     path: PathBuf,
+    remove_from_history_on_failure: bool,
 ) {
-    if workspace_open_active
+    if context
+        .opening
         .compare_exchange(
             false,
             true,
@@ -240,14 +283,15 @@ fn open_workspace_file(
         )
         .is_err()
     {
-        set_status(ui, "A workspace is already opening");
+        set_status(&context.ui, "A workspace is already opening");
         return;
     }
-    let workspace_open_active = workspace_open_active.clone();
-    let ui = ui.clone();
-    let state = state.clone();
-    let pending_snapshot = pending_snapshot.clone();
-    runtime.spawn(async move {
+    let workspace_open_active = context.opening.clone();
+    let ui = context.ui.clone();
+    let state = context.state.clone();
+    let pending_snapshot = context.pending_snapshot.clone();
+    let persistence = context.persistence.clone();
+    context.runtime.spawn(async move {
         let reset_open_gate = || {
             workspace_open_active.store(false, std::sync::atomic::Ordering::Release);
         };
@@ -259,6 +303,18 @@ fn open_workspace_file(
         {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(error)) => {
+                if remove_from_history_on_failure {
+                    match remove_recent_workspace_path(&state, &persistence, &path).await {
+                        Ok(paths) => {
+                            dispatch_ui(&ui, move |ui| set_recent_workspace_paths(ui, &paths))
+                        }
+                        Err(removal_error) => warn!(
+                            %removal_error,
+                            path = %path.display(),
+                            "failed to remove unavailable recent workspace"
+                        ),
+                    }
+                }
                 reset_open_gate();
                 set_status(&ui, &format!("Workspace open failed: {error}"));
                 return;
@@ -267,6 +323,16 @@ fn open_workspace_file(
                 reset_open_gate();
                 set_status(&ui, &format!("Workspace load task failed: {error}"));
                 return;
+            }
+        };
+
+        let recent_workspace_paths = match record_recent_workspace_path(&state, &persistence, &path)
+            .await
+        {
+            Ok(paths) => Some(paths),
+            Err(error) => {
+                warn!(%error, path = %path.display(), "failed to persist recent workspace path");
+                None
             }
         };
 
@@ -289,7 +355,10 @@ fn open_workspace_file(
         }
 
         if let Ok(mut pending) = pending_snapshot.lock() {
-            *pending = Some(snapshot);
+            *pending = Some(PendingWorkspaceOpen {
+                snapshot,
+                recent_workspace_paths,
+            });
         } else {
             reset_open_gate();
             set_status(&ui, "Cannot queue workspace state");
@@ -297,6 +366,89 @@ fn open_workspace_file(
         }
         if !dispatch_ui_result(&ui, move |ui| ui.invoke_workspace_file_loaded()) {
             reset_open_gate();
+        }
+    });
+}
+
+async fn update_recent_workspace_paths(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &Arc<PersistenceCoordinator>,
+    update: impl FnOnce(&mut ax_ssh::config::SessionStore) -> Result<()> + Send + 'static,
+) -> Result<Vec<String>> {
+    let _persistence_guard = persistence.gate.lock().await;
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        let config = {
+            let app = state
+                .lock()
+                .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+            app.config.clone()
+        };
+        let mut sessions = match config.load() {
+            Ok(sessions) => sessions,
+            Err(error) => {
+                return Err(error.context("failed to reload committed session store"));
+            }
+        };
+        update(&mut sessions)?;
+        config.save(&sessions)?;
+        let paths = sessions.recent_workspace_paths().to_vec();
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        app.sessions.recent_workspaces = sessions.recent_workspaces;
+        Ok(paths)
+    })
+    .await
+    .map_err(|error| anyhow::anyhow!("recent workspace update task failed: {error}"))?
+}
+
+async fn record_recent_workspace_path(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &Arc<PersistenceCoordinator>,
+    path: &Path,
+) -> Result<Vec<String>> {
+    let path = path.to_path_buf();
+    update_recent_workspace_paths(state, persistence, move |sessions| {
+        sessions.record_workspace_path(&path)
+    })
+    .await
+}
+
+async fn remove_recent_workspace_path(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &Arc<PersistenceCoordinator>,
+    path: &Path,
+) -> Result<Vec<String>> {
+    let path = path.to_path_buf();
+    update_recent_workspace_paths(state, persistence, move |sessions| {
+        sessions.remove_workspace_path(&path);
+        Ok(())
+    })
+    .await
+}
+
+fn clear_recent_workspace_paths(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+    runtime: &Handle,
+    persistence: &Arc<PersistenceCoordinator>,
+) {
+    let ui = ui.clone();
+    let state = state.clone();
+    let persistence = persistence.clone();
+    runtime.spawn(async move {
+        match update_recent_workspace_paths(&state, &persistence, |sessions| {
+            sessions.clear_workspace_paths();
+            Ok(())
+        })
+        .await
+        {
+            Ok(paths) => {
+                dispatch_ui(&ui, move |ui| set_recent_workspace_paths(ui, &paths));
+                set_status(&ui, "Recent workspaces cleared");
+            }
+            Err(error) => set_status(&ui, &format!("Cannot clear recent workspaces: {error}")),
         }
     });
 }

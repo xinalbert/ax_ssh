@@ -150,8 +150,10 @@ fn safe_menu_action(action: &str) -> &'static str {
         "new-local-shell" => "new-local-shell",
         "new-session" => "new-session",
         "open-about" => "open-about",
+        "open-recent-workspace" => "open-recent-workspace",
         "open-settings" => "open-settings",
         "open-workspace" => "open-workspace",
+        "clear-recent-workspaces" => "clear-recent-workspaces",
         "open-shortcuts" => "open-shortcuts",
         "paste-terminal" => "paste-terminal",
         "next-tab" => "next-tab",
@@ -208,6 +210,14 @@ mod tests {
         assert_eq!(safe_keyboard_action("secret"), "unknown");
         assert_eq!(safe_menu_action("open-settings"), "open-settings");
         assert_eq!(safe_menu_action("open-workspace"), "open-workspace");
+        assert_eq!(
+            safe_menu_action("open-recent-workspace"),
+            "open-recent-workspace"
+        );
+        assert_eq!(
+            safe_menu_action("clear-recent-workspaces"),
+            "clear-recent-workspaces"
+        );
         assert_eq!(safe_menu_action("previous-tab"), "previous-tab");
         assert_eq!(safe_menu_action("next-tab"), "next-tab");
         assert_eq!(safe_menu_action("copy-terminal"), "copy-terminal");

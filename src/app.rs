@@ -6,7 +6,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -117,21 +117,48 @@ use self::workspace::*;
 slint::include_modules!();
 
 const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
-pub fn run(log_directory: PathBuf) -> Result<()> {
-    let config_path = ConfigStore::default_path()?;
-    let config = ConfigStore::new(config_path);
-    let workspace_default_path = config.workspace_path();
-    let sessions = config.load().context("failed to load session profiles")?;
-    configure_software_presentation(sessions.settings.appearance.software_presentation);
-    select_slint_renderer(sessions.settings.appearance.renderer_preference)
-        .context("failed to select Slint renderer")?;
-    let workspace_snapshot = match config.load_workspace() {
+
+fn load_startup_workspace(
+    config: &ConfigStore,
+    sessions: &mut SessionStore,
+) -> Option<ax_ssh::config::WorkspaceSnapshot> {
+    let recent_paths = sessions.recent_workspace_paths().to_vec();
+    let mut removed_unavailable_path = false;
+    for path in recent_paths {
+        match ConfigStore::load_workspace_file(Path::new(&path)) {
+            Ok(snapshot) => {
+                if removed_unavailable_path && let Err(error) = config.save(sessions) {
+                    warn!(%error, "failed to persist cleaned recent workspace history");
+                }
+                return Some(snapshot);
+            }
+            Err(error) => {
+                warn!(%error, path, "recent workspace could not be restored; removing it from history");
+                removed_unavailable_path |= sessions.remove_workspace_path(Path::new(&path));
+            }
+        }
+    }
+    if removed_unavailable_path && let Err(error) = config.save(sessions) {
+        warn!(%error, "failed to persist cleaned recent workspace history");
+    }
+    match config.load_workspace() {
         Ok(snapshot) => snapshot,
         Err(error) => {
             warn!(%error, "workspace snapshot could not be loaded; starting with an empty workspace");
             None
         }
-    };
+    }
+}
+
+pub fn run(log_directory: PathBuf) -> Result<()> {
+    let config_path = ConfigStore::default_path()?;
+    let config = ConfigStore::new(config_path);
+    let mut sessions = config.load().context("failed to load session profiles")?;
+    configure_software_presentation(sessions.settings.appearance.software_presentation);
+    select_slint_renderer(sessions.settings.appearance.renderer_preference)
+        .context("failed to select Slint renderer")?;
+    let workspace_snapshot = load_startup_workspace(&config, &mut sessions);
+    let workspace_default_path = config.workspace_path();
     let tokio_worker_threads = tokio_worker_thread_count();
     let runtime = build_tokio_runtime(tokio_worker_threads)
         .context("failed to start bounded Tokio runtime")?;
@@ -160,7 +187,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>> =
         Rc::new(RefCell::new(HashMap::new()));
 
-    let (rows, groups, connection_options, settings) = {
+    let (rows, groups, connection_options, settings, recent_workspace_paths) = {
         let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
@@ -169,6 +196,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             group_option_rows(&app.sessions),
             connection_option_rows(&app.sessions),
             app.sessions.settings.clone(),
+            app.sessions.recent_workspace_paths().to_vec(),
         )
     };
     ui.set_sessions(ModelRc::new(VecModel::from(rows)));
@@ -222,6 +250,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     );
     ui.set_app_version(format!("{} ({})", env!("CARGO_PKG_VERSION"), build_revision()).into());
     ui.set_workspace_default_path(workspace_default_path.display().to_string().into());
+    set_recent_workspace_paths(&ui, &recent_workspace_paths);
     let font_generation = {
         let mut registry = font_registry
             .lock()
@@ -581,11 +610,12 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         ),
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
-    wire_session_management(ui, state.clone(), runtime.clone(), persistence);
+    wire_session_management(ui, state.clone(), runtime.clone(), persistence.clone());
     wire_workspace_file_actions(
         ui,
         state.clone(),
         runtime.clone(),
+        persistence.clone(),
         font_registry.clone(),
         log_directory.clone(),
         window_router.clone(),
@@ -700,5 +730,45 @@ mod tests {
         assert_eq!(2, super::tokio_worker_thread_count_for_parallelism(2));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(4));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(32));
+    }
+
+    #[test]
+    fn startup_workspace_skips_missing_recent_path_and_restores_next_available() {
+        let root = std::env::temp_dir().join(format!("ax-ssh-startup-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create startup workspace test directory");
+        let config = ConfigStore::new(root.join("sessions.json"));
+        let valid_path = root.join("valid-workspace.json");
+        let missing_path = root.join("missing-workspace.json");
+        let expected = ax_ssh::config::WorkspaceSnapshot {
+            version: ax_ssh::config::WORKSPACE_SNAPSHOT_VERSION,
+            ..Default::default()
+        };
+
+        ConfigStore::save_workspace_file(&valid_path, &expected)
+            .expect("save startup workspace test snapshot");
+        let mut sessions = SessionStore::default();
+        sessions
+            .record_workspace_path(&valid_path)
+            .expect("record valid workspace path");
+        sessions
+            .record_workspace_path(&missing_path)
+            .expect("record missing workspace path");
+
+        let restored = load_startup_workspace(&config, &mut sessions)
+            .expect("restore the next available recent workspace");
+
+        assert_eq!(restored, expected);
+        assert_eq!(
+            sessions.recent_workspace_paths(),
+            &[valid_path.to_string_lossy().into_owned()]
+        );
+        assert_eq!(
+            config
+                .load()
+                .expect("load cleaned session store")
+                .recent_workspaces,
+            sessions.recent_workspaces
+        );
+        std::fs::remove_dir_all(root).expect("remove startup workspace test directory");
     }
 }
