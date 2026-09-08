@@ -150,7 +150,10 @@ host key 和认证流程，已删除的 profile 会跳过。
 私有 `workspace.json`，保存到这里也就确定了 AxSSH 下次启动时恢复的内容。
 **File > Open Workspace** 会先校验选中的 JSON，再停止当前 worker、恢复全部有效
 Tab 与 pane/window 布局，并通过正常的信任与认证流程启动新 worker。自定义路径可
-用于保存命名快照；打开命名快照并正常退出后，当前布局也会成为下次自动启动的工作区。
+用于保存命名快照。成功打开的路径会保存在 **File > Open Recent** 中，最多保留
+八条；下次启动会优先尝试最近且仍可用的路径。不存在或无效的最近文件会自动移除；
+如果没有可用记录，则回退到私有 `workspace.json`。**Clear Recent** 只清除路径历史。
+保存快照不会改变最近打开顺序，Save 弹层仍默认使用私有 `workspace.json`，避免误覆盖。
 
 展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时创建
 空 Group 或 Ungrouped 服务器。展开后的 Group 行显示名称、数量和

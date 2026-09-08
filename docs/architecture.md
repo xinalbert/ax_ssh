@@ -1270,6 +1270,14 @@ host keys still require explicit confirmation. Terminal restore is bounded text
 replay and does not recreate remote processes or alternate-screen state. Missing
 profiles are skipped while the remaining workspace is restored.
 
+The private `sessions.json` also stores at most eight validated, non-secret
+recent workspace paths. A successful user-selected open moves its path to the
+front of this bounded MRU list; **File > Open Recent** and **Clear Recent** only
+operate on these paths. Startup tries the list from newest to oldest, removes
+paths whose files cannot be loaded, and falls back to the private
+`workspace.json` when no recent file is usable. Workspace contents, credentials,
+live handles, and terminal output are never stored in the history metadata.
+
 The File menu exposes the same contract through user-selected workspace paths.
 Slint owns only the modal path input and emits intent; `src/app/workspace/files.rs`
 validates the path, performs bounded file I/O on Tokio's blocking pool, and
@@ -1419,7 +1427,9 @@ text brightness, bold-color, optional semantic highlighting and its status color
     `credential_vault_key_in_keyring` name remains accepted when loading older
     profiles, and older profiles default it to false. New application settings
     default to `encrypted-vault`; selecting `system-keyring` remains an explicit
-    opt-in.
+    opt-in. Schema version 30 adds a bounded `recent_workspaces` path list to
+    the private session store; older files default it to empty, and the list
+    contains no workspace contents or secrets.
     Schema version 27 adds
     `software_presentation` with stable `layer-images` and
     `damage-backing-store` values; missing or invalid values select the default

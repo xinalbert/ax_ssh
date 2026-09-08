@@ -237,8 +237,13 @@ saving it there also defines what the next AxSSH launch restores. **File > Open
 Workspace** validates the selected JSON before changing the current workspace,
 then stops its workers, restores all valid Tabs and pane/window layouts, and
 starts fresh workers through the normal trust and authentication flow. A custom
-path can be used for named snapshots; opening one and exiting normally also
-makes that opened layout the next automatic startup workspace.
+path can be used for named snapshots. Successful opens are kept in **File >
+Open Recent** (up to eight paths), and the next launch tries the most recent
+available path first. Missing or invalid recent files are removed automatically;
+if none remain usable, startup falls back to the private `workspace.json`.
+**Clear Recent** removes only this path history. Saving a snapshot does not
+change the recent-open order, and the Save dialog still defaults to the private
+`workspace.json` to avoid accidental overwrites.
 
 Saved sessions are organized beneath collapsible group rows in the expanded
 navigator. Right-click blank list space to create an empty group or an

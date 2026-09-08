@@ -504,6 +504,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 终端恢复只是有界文本回放，不会恢复远端进程或 alternate screen 状态。
 已删除的 profile 会跳过，其余工作区继续恢复。
 
+私有 `sessions.json` 另外保存最多八条经过校验的非敏感最近工作区路径。
+用户成功打开工作区后，该路径会移到有界 MRU 列表首位；**File > Open Recent**
+和 **Clear Recent** 只操作这些路径。启动时按最新到最旧尝试这些文件，无法读取的
+路径会被移除；如果没有可用的最近文件，则回退到私有 `workspace.json`。历史元数据
+不会保存工作区内容、凭据、活动句柄或终端输出。
+
 File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只拥有路径输入弹层并
 发送用户意图；`src/app/workspace/files.rs` 校验路径，在 Tokio blocking pool 中执行
 有界文件 I/O，并在 UI 线程应用已加载快照。只有快照校验通过后才停止当前 worker 和
@@ -865,7 +871,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
     缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
     改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
-    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 27 增加
+    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 30 增加私有 session store 的有界 `recent_workspaces` 路径列表；旧文件默认为空，列表不包含工作区内容或秘密。schema 版本 27 增加
     `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值采用默认的脏区
     backing store，显式保存的 `layer-images` 仍作为兼容性回退。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用

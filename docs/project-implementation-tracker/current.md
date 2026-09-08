@@ -2,14 +2,15 @@
 
 ## 当前目标
 
-- 目标：修复终端在切换应用窗口或工作区 Tab 后需要鼠标点击才能继续输入的问题，并统一 Settings > General 下拉控件颜色。
-- 交付物：活动终端在无阻塞弹窗时恢复透明 IME 输入代理焦点；General 页面三处下拉统一使用项目主题组件；相应双语使用说明、实施跟踪与离线门禁记录。
+- 目标 ID：20260908-recent-workspaces
+- 目标：增加 workspace 文件 MRU，并在下次启动优先恢复最近一次仍可用的 workspace。
+- 交付物：有界 `sessions.json` 路径历史、File 菜单 Open Recent/Clear Recent、启动回退逻辑、双语契约与离线验证记录。
 
 ## 项目边界
 
-- 根目录：`<repo-root>`
-- 当前范围：`ui/{app,workspace-shell,terminal-pane,settings/general}.slint`、`ui/components/themed-combo-box.slint`、`src/app/{window_bridge,window_router}.rs`、焦点/设置使用说明与实施跟踪。
-- 不在本轮范围内：终端 parser、PTY/SSH transport、凭据、主机密钥信任、持久化 schema、renderer 和参考工程。
+- 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
+- 当前范围：`src/config/{session.rs,tests.rs}`, `src/config.rs`, `src/app.rs`, `src/app/{workspace,diagnostics}.rs`, `ui/app.slint`, `translations/zh-CN/LC_MESSAGES/ax_ssh.po`、双语架构/使用说明和实施跟踪。
+- 不在本轮范围内：workspace snapshot 内容 schema、Tab/Pane DTO、PTY/SSH transport、凭据、host-key trust、renderer、参考工程和 Save Workspace 目标路径语义。
 
 ## 当前状态
 
@@ -22,34 +23,33 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| FOCUS5 | completed | 定位 Tab 标题栏与窗口激活造成的 IME 焦点覆盖链路 | `WorkspaceTitlebar`、`TerminalPane`、`WindowRouter` 静态审阅 | 不涉及 SSH、PTY 或凭据。 |
-| FOCUS6 | completed | 在活动窗口、无模态时延后恢复当前终端的 IME 焦点 | Slint 重编译、窗口路由和定向测试 | 只在活动窗口且无阻塞弹窗时恢复。 |
-| GENERAL1 | completed | 将 General 页面下拉统一为 `ThemedComboBox` | Slint 重编译与设置映射检查 | 保留语言、shell、凭据选择语义。 |
-| FOCUS7 | completed | 完成双语说明、跟踪记录和全量离线门禁 | fmt、check、Clippy、test、tracker、Markdown、diff | 目标平台 GUI 仍待用户验收。 |
+| RWS1 | completed | 为 `SessionStore` 增加有界、校验过的最近 workspace 路径 MRU | `recent_workspace_paths` 定向测试、Cargo check | schema v30；只保存路径，不保存 snapshot/秘密。 |
+| RWS2 | completed | 接入动态 File 菜单、打开成功记录、失败移除和启动优先恢复 | Slint 生成 API、严格 Clippy、启动/回调静态审阅 | 最多 8 条；不可用条目回退到更旧记录或私有 `workspace.json`。 |
+| RWS3 | completed | 同步中英文说明、tracker、翻译和完整离线门禁 | fmt、check、Clippy、test、translation、tracker、diff | 目标平台原生菜单和重启行为仍待用户验收。 |
 
 ## 已完成
 
-- 已完成项目环境预检：Rust 2024、MSRV 1.92.0、Slint 1.17.1、Cargo locked/offline 工具链与 CI 命令均由仓库证据和本机工具链复核。
-- 已确认根因：活动 Tab 的标题栏 `FocusScope` 在其 16ms 延迟任务中覆盖了先前的终端 IME 焦点；原生窗口重新激活仅更新终端呈现路由，未向 Slint 终端输入代理发送重新聚焦请求。
-- 已确认颜色根因：General 使用 Slint 原生 `ComboBox`（`Palette`），其它设置页使用项目 `ThemedComboBox`（`Theme`），两套调色板导致下拉颜色不一致。
+- 已完成配置层 MRU：旧 `sessions.json` 通过 `serde(default)` 兼容，路径有 4096 字符上限、控制字符拒绝、重复路径去重和 8 条上限。
+- 已完成 File 菜单动态 Recent/Clear、成功打开记录、不可用 Recent 移除、启动按新到旧尝试和私有 snapshot 回退；持久化更新复用 `PersistenceCoordinator`。
+- 已完成 Slint 编译、Cargo check、严格 Clippy、完整测试、翻译检查和 diff 校验；tracker validator 仍会报告仓库既有历史记录格式债务。
 
 ## 验证
 
-- 已完成：静态焦点链路、General 控件差异与既有窗口路由/终端 pane 契约审阅；fmt、locked/offline check、严格 Clippy、完整测试（230 库、218 应用、Doc tests 0）和 diff 检查。
-- 未完成：目标平台的实际切换窗口/Tab 输入和下拉视觉验收；tracker 中既有历史条目的格式债务仍未迁移。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、翻译检查、`git diff --check`；MRU 与启动恢复定向测试通过。
+- 未完成：目标平台原生菜单动态列表、Clear Recent 和下次启动恢复行为的用户验收。
 
 ## 风险与阻塞
 
-- 焦点恢复只能在窗口激活且没有阻塞式弹窗时发生，避免截获安全认证或管理对话框输入。
-- GUI 焦点与下拉颜色需要用户在目标平台实测；不捕获应用截图作为验收证据。
+- 近期路径只代表文件来源；退出时的自动私有 `workspace.json` 快照仍与用户命名快照分离，Save Workspace 不会改变 MRU 顺序。
+- 原生菜单动态子菜单和跨平台重启恢复需要用户在目标平台验收；不捕获应用截图作为代理证据。
 
 ## 下一步
 
-- 由用户在目标平台确认窗口/Tab 切换后的首个按键无需点击，并检查 General 下拉及弹出列表的颜色一致性。
+- 由用户在目标平台确认 Open Recent、Clear Recent 和重启恢复；代码路径、持久化边界和离线门禁已完成。
 
 ## 最后更新时间
 
-- 2026-09-06 13:10 +0800
+- 2026-09-08 11:35 +0800
 
 ## 9 项复核映射
 
