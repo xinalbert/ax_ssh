@@ -1,6 +1,15 @@
+use std::cell::Cell;
+
 use ax_ssh::terminal::{TerminalKey, TerminalKeypadKey, TerminalModifiers};
 use slint::platform::Key;
-use slint::winit_030::winit::keyboard::KeyCode;
+use slint::winit_030::winit::keyboard::{Key as WinitKey, KeyCode, NamedKey};
+
+thread_local! {
+    /// Modifier state captured from the native window event immediately before
+    /// Slint dispatches a key event. This preserves the event-scoped state of
+    /// synthetic macOS key events without changing the TextInput/IME path.
+    static NATIVE_EVENT_MODIFIERS: Cell<Option<TerminalModifiers>> = const { Cell::new(None) };
+}
 
 pub(super) struct MenuShortcut {
     pub(super) keys: slint::Keys,
@@ -165,6 +174,107 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
         })
 }
 
+pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey> {
+    let key = match key {
+        WinitKey::Character(text) => return Some(TerminalKey::Text(text.to_string())),
+        WinitKey::Named(key) => key,
+        WinitKey::Dead(_) | WinitKey::Unidentified(_) => return None,
+    };
+    let terminal_key = match key {
+        NamedKey::Enter => TerminalKey::Return,
+        NamedKey::Backspace => TerminalKey::Backspace,
+        NamedKey::Tab => TerminalKey::Tab,
+        NamedKey::Escape => TerminalKey::Escape,
+        NamedKey::ArrowUp => TerminalKey::Up,
+        NamedKey::ArrowDown => TerminalKey::Down,
+        NamedKey::ArrowLeft => TerminalKey::Left,
+        NamedKey::ArrowRight => TerminalKey::Right,
+        NamedKey::Insert => TerminalKey::Insert,
+        NamedKey::Delete => TerminalKey::Delete,
+        NamedKey::Home => TerminalKey::Home,
+        NamedKey::End => TerminalKey::End,
+        NamedKey::PageUp => TerminalKey::PageUp,
+        NamedKey::PageDown => TerminalKey::PageDown,
+        NamedKey::F1 => TerminalKey::Function(1),
+        NamedKey::F2 => TerminalKey::Function(2),
+        NamedKey::F3 => TerminalKey::Function(3),
+        NamedKey::F4 => TerminalKey::Function(4),
+        NamedKey::F5 => TerminalKey::Function(5),
+        NamedKey::F6 => TerminalKey::Function(6),
+        NamedKey::F7 => TerminalKey::Function(7),
+        NamedKey::F8 => TerminalKey::Function(8),
+        NamedKey::F9 => TerminalKey::Function(9),
+        NamedKey::F10 => TerminalKey::Function(10),
+        NamedKey::F11 => TerminalKey::Function(11),
+        NamedKey::F12 => TerminalKey::Function(12),
+        NamedKey::Space => TerminalKey::Text(" ".to_owned()),
+        _ => return None,
+    };
+    Some(terminal_key)
+}
+
+pub(super) fn native_shortcut_key_name(key: &WinitKey) -> Option<String> {
+    let name = match key {
+        WinitKey::Character(text) => {
+            let mut characters = text.chars();
+            let character = characters.next()?;
+            if characters.next().is_some() || character.is_control() {
+                return None;
+            }
+            return Some(match character {
+                '+' => "Plus".to_owned(),
+                character if character.is_ascii_alphabetic() => {
+                    character.to_ascii_uppercase().to_string()
+                }
+                character => character.to_string(),
+            });
+        }
+        WinitKey::Named(key) => match key {
+            NamedKey::Backspace => "Backspace",
+            NamedKey::Tab => "Tab",
+            NamedKey::Enter => "Enter",
+            NamedKey::Escape => "Escape",
+            NamedKey::Delete => "Delete",
+            NamedKey::Space => "Space",
+            NamedKey::ArrowUp => "ArrowUp",
+            NamedKey::ArrowDown => "ArrowDown",
+            NamedKey::ArrowLeft => "ArrowLeft",
+            NamedKey::ArrowRight => "ArrowRight",
+            NamedKey::Insert => "Insert",
+            NamedKey::Home => "Home",
+            NamedKey::End => "End",
+            NamedKey::PageUp => "PageUp",
+            NamedKey::PageDown => "PageDown",
+            NamedKey::F1 => "F1",
+            NamedKey::F2 => "F2",
+            NamedKey::F3 => "F3",
+            NamedKey::F4 => "F4",
+            NamedKey::F5 => "F5",
+            NamedKey::F6 => "F6",
+            NamedKey::F7 => "F7",
+            NamedKey::F8 => "F8",
+            NamedKey::F9 => "F9",
+            NamedKey::F10 => "F10",
+            NamedKey::F11 => "F11",
+            NamedKey::F12 => "F12",
+            _ => return None,
+        },
+        WinitKey::Dead(_) | WinitKey::Unidentified(_) => return None,
+    };
+    Some(name.to_owned())
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn native_shortcut_matches_setting(
+    shortcut: &str,
+    key: &str,
+    modifiers: TerminalModifiers,
+) -> bool {
+    menu_shortcut_from_setting(shortcut).is_ok_and(|parsed| {
+        parsed.native.key.eq_ignore_ascii_case(key) && parsed.native.modifiers == modifiers
+    })
+}
+
 /// Preserve physical numeric-keypad identity until the terminal decides
 /// whether its application-keypad mode is active.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -251,7 +361,32 @@ pub(super) fn normalize_event_modifiers(
     meta: bool,
     shift: bool,
 ) -> TerminalModifiers {
-    normalize_slint_modifiers_with_current(alt, control, meta, shift, current_platform_modifiers())
+    normalize_slint_modifiers_with_current(
+        alt,
+        control,
+        meta,
+        shift,
+        native_event_modifiers().or_else(current_platform_modifiers),
+    )
+}
+
+pub(super) fn update_native_event_modifiers(alt: bool, control: bool, meta: bool, shift: bool) {
+    NATIVE_EVENT_MODIFIERS.with(|state| {
+        state.set(Some(TerminalModifiers {
+            alt,
+            control,
+            meta,
+            shift,
+        }));
+    });
+}
+
+pub(super) fn clear_native_event_modifiers() {
+    NATIVE_EVENT_MODIFIERS.with(|state| state.set(None));
+}
+
+fn native_event_modifiers() -> Option<TerminalModifiers> {
+    NATIVE_EVENT_MODIFIERS.with(Cell::get)
 }
 
 pub(super) fn terminal_input_modifiers(
@@ -501,6 +636,18 @@ mod tests {
     }
 
     #[test]
+    fn maps_native_character_and_navigation_keys_to_terminal_keys() {
+        let character = WinitKey::Character("b".into());
+        assert_eq!(
+            terminal_key_from_native_key(&character),
+            Some(TerminalKey::Text("b".into()))
+        );
+        let up = WinitKey::Named(NamedKey::ArrowUp);
+        assert_eq!(terminal_key_from_native_key(&up), Some(TerminalKey::Up));
+        assert_eq!(native_shortcut_key_name(&up).as_deref(), Some("ArrowUp"));
+    }
+
+    #[test]
     fn normalizes_unshifted_slint_hyphen_text_when_shift_is_pressed() {
         let shift = TerminalModifiers {
             shift: true,
@@ -659,6 +806,23 @@ mod tests {
             ),
             physical_control
         );
+    }
+
+    #[test]
+    fn native_modifier_snapshot_overrides_injected_slint_modifier_state() {
+        clear_native_event_modifiers();
+        update_native_event_modifiers(false, true, false, false);
+        assert_eq!(
+            terminal_input_modifiers(false, false, false, false, true),
+            TerminalModifiers {
+                control: true,
+                ..TerminalModifiers::default()
+            }
+        );
+        assert!(terminal_key_is_direct(
+            "b", false, false, false, false, false, false
+        ));
+        clear_native_event_modifiers();
     }
 
     #[test]
