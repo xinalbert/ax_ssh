@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260908-recent-workspaces
-- 目标：增加 workspace 文件 MRU，并在下次启动优先恢复最近一次仍可用的 workspace。
-- 交付物：有界 `sessions.json` 路径历史、File 菜单 Open Recent/Clear Recent、启动回退逻辑、双语契约与离线验证记录。
+- 目标 ID：20260908-native-shortcut-input
+- 目标：按 native-first 混合架构修复 macOS 合成快捷键输入，并保持原生菜单、普通文本和 IME 边界。
+- 交付物：Winit modifier snapshot、macOS Control 终端组合键原生分发、应用菜单快捷键排除、输入回归测试、双语架构与验证记录。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：`src/config/{session.rs,tests.rs}`, `src/config.rs`, `src/app.rs`, `src/app/{workspace,diagnostics}.rs`, `ui/app.slint`, `translations/zh-CN/LC_MESSAGES/ax_ssh.po`、双语架构/使用说明和实施跟踪。
-- 不在本轮范围内：workspace snapshot 内容 schema、Tab/Pane DTO、PTY/SSH transport、凭据、host-key trust、renderer、参考工程和 Save Workspace 目标路径语义。
+- 当前范围：`src/app/{input,terminal_bridge}.rs`、`ui/terminal-pane.slint` 的现有输入契约、双语架构说明、项目地图和实施跟踪。
+- 不在本轮范围内：SSH/PTY transport、凭据、host-key trust、普通文本/IME TextInput、原生 AppKit 菜单业务语义、参考工程和 vendored Slint API。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -23,33 +23,33 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| RWS1 | completed | 为 `SessionStore` 增加有界、校验过的最近 workspace 路径 MRU | `recent_workspace_paths` 定向测试、Cargo check | schema v30；只保存路径，不保存 snapshot/秘密。 |
-| RWS2 | completed | 接入动态 File 菜单、打开成功记录、失败移除和启动优先恢复 | Slint 生成 API、严格 Clippy、启动/回调静态审阅 | 最多 8 条；不可用条目回退到更旧记录或私有 `workspace.json`。 |
-| RWS3 | completed | 同步中英文说明、tracker、翻译和完整离线门禁 | fmt、check、Clippy、test、translation、tracker、diff | 目标平台原生菜单和重启行为仍待用户验收。 |
+| NATIVE1 | completed | 记录 Winit `ModifiersChanged` 并让输入/快捷键格式化优先使用事件级物理修饰键 | `cargo check --locked --offline`、定向输入测试 | thread-local snapshot 只存在 UI 线程，不进入配置、日志或 transport。 |
+| NATIVE2 | completed | macOS 物理 Control 终端组合键在 Slint 前直接编码，排除应用菜单快捷键 | macOS cfg 编译、终端 bridge 静态审阅 | 普通文本、IME、Cmd 菜单和非 Terminal Tab 继续传播给 Slint/AppKit。 |
+| NATIVE3 | completed | 同步双语契约、项目地图、月度记录并完成完整离线质量门禁 | fmt/check/Clippy/test/diff/tracker | 本次记录通过 tracker 格式检查；历史记录仍有既存格式债务。真实 AppleScript、左右 Control、IME、原生菜单和 detached window 仍需 macOS 用户验收。 |
 
 ## 已完成
 
-- 已完成配置层 MRU：旧 `sessions.json` 通过 `serde(default)` 兼容，路径有 4096 字符上限、控制字符拒绝、重复路径去重和 8 条上限。
-- 已完成 File 菜单动态 Recent/Clear、成功打开记录、不可用 Recent 移除、启动按新到旧尝试和私有 snapshot 回退；持久化更新复用 `PersistenceCoordinator`。
-- 已完成 Slint 编译、Cargo check、严格 Clippy、完整测试、翻译检查和 diff 校验；tracker validator 仍会报告仓库既有历史记录格式债务。
+- 已完成 Winit `ModifiersChanged` 到 UI-thread-local `TerminalModifiers` snapshot 的记录，并让 physical key、terminal input 和 shortcut formatting 优先使用该事件级状态。
+- 已完成 macOS 物理 Control 终端组合键在 Slint 前的 native dispatch；配置中的应用快捷键继续传播给原生菜单，普通文字、IME、Cmd 和非 Terminal Tab 不被截获。
+- 已补充 Rust 输入回归和双语架构/项目地图说明；未修改 transport、凭据、host-key trust 或 vendored Slint。
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、翻译检查、`git diff --check`；MRU 与启动恢复定向测试通过。
-- 未完成：目标平台原生菜单动态列表、Clear Recent 和下次启动恢复行为的用户验收。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、native modifier 定向测试、`git diff --check`。
+- 未完成：macOS AppleScript/左右 Control/IME/菜单/detached window 实机验收。tracker validator 的剩余失败均来自本轮之前的历史记录格式债务。
 
 ## 风险与阻塞
 
-- 近期路径只代表文件来源；退出时的自动私有 `workspace.json` 快照仍与用户命名快照分离，Save Workspace 不会改变 MRU 顺序。
-- 原生菜单动态子菜单和跨平台重启恢复需要用户在目标平台验收；不捕获应用截图作为代理证据。
+- native hook 依赖 winit 在 macOS keyDown 前发布 `ModifiersChanged`；缺失时只回退到 AppKit 当前聚合状态，不能替代真实目标平台验证。
+- native hook 只在 active Terminal Tab 的物理 Control 组合上直接 dispatch；应用菜单 shortcut、普通文本/IME 和 modal/security gate 必须继续由各自边界处理。
 
 ## 下一步
 
-- 由用户在目标平台确认 Open Recent、Clear Recent 和重启恢复；代码路径、持久化边界和离线门禁已完成。
+- 由用户在 macOS 目标环境验证 AppleScript `Ctrl+B`、真实左右 Control、Cmd 菜单快捷键、IME、普通文本和 detached window；历史 tracker 格式债务另行处理。
 
 ## 最后更新时间
 
-- 2026-09-08 11:35 +0800
+- 2026-09-08 12:10 +0800
 
 ## 9 项复核映射
 

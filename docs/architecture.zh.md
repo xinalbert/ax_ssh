@@ -225,8 +225,11 @@ companion 时，新 SFTP Tab 只在运行期保存初始路径，随后仍执行
 色表派生；Settings 中的规范化 `#RRGGBB` 可按状态类别覆盖。语义高亮不会替换显式 ANSI 16/256/真彩色前景。
 渲染器先解析程序颜色和反色，再选择可选语义前景，最后只对最终可见前景执行一次 HSL lightness 调整；
 `dim` 合并进同一次调整，背景、选区和光标保持不变。
-它的 `key-pressed` 只把特殊键和终端控制组合键发送给 Rust；可打印字符、Shift 文字和已提交的
-IME 文本继续通过原生 `TextInput.edited` 路径。
+它的 `key-pressed` 仍作为特殊键和终端控制组合键的 Slint fallback；可打印字符、Shift 文字和已提交的
+IME 文本继续通过原生 `TextInput.edited` 路径。已显示的 Winit 窗口还会在 Slint 分发每个按键前记录
+原生修饰键快照。macOS 的物理 Control 终端组合键从这个原生边界直接分发并阻止再次进入透明文本代理，
+而已配置的应用快捷键继续走原生菜单路径。这样能保留合成 System Events 输入的事件级修饰键，同时不绕过
+普通文本或 IME 组合。
 `AppWindow.log-keyboard-event` 在排除快捷键录制和安全提示后，只上报已处理的临时控件按键。
 原生菜单命令改走独立的固定 ID menu-action 路由，因为 Slint 不提供鼠标或 accelerator 来源。
 diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签，只接受白名单 route/action；
@@ -318,11 +321,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    SS3 序列，以及带修饰键的 xterm 导航/功能键序列。在 Windows 上，已显示的 Winit 窗口仅在活动
    终端通过 `ESC =` 进入 application-keypad 模式时保留物理数字小键盘身份：无修饰且非合成的
    小键盘按下会在该边界编码，并阻止再次进入文本代理。普通模式、NumLock 行为、IME 和带修饰键的
-   小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：
-   特殊键与终端控制组合键走 `key-pressed`，可打印字符、Shift 文字和 IME 提交只通过
-   `edited` 进入；预编辑保留在局部 UI 状态。物理 macOS 按键在应用边界先读取 AppKit 当前聚合的
-   修饰键状态，再还原 Slint Apple 映射中交换的 Control/Command 语义，因此即使缺少某一侧修饰键
-   事件，左右 Control 仍保持一致；已提交的 IME 和粘贴文本显式使用空修饰键，不能继承仍按住的快捷键。
+   小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：特殊键
+   与终端控制组合键优先走原生 Winit 边界，未被原生截获的事件再走 `key-pressed`，可打印字符、Shift
+   文字和 IME 提交只通过 `edited` 进入；预编辑保留在局部 UI 状态。应用边界先记录 Winit
+   `ModifiersChanged` 的事件级状态，再还原物理 Control、Command、Option、Shift 语义。macOS 物理
+   Control 终端组合键使用这份快照，并跳过已配置的应用菜单 accelerator；缺失修饰键更新时才把 AppKit
+   当前聚合状态作为 fallback。这样合成输入与左右 Control 保持一致，又不会让普通文字走终端编码器；
+   已提交的 IME 和粘贴文本显式使用空修饰键，不能继承仍按住的快捷键。
    `TerminalSettings.option_as_meta` 默认关闭，因此 Option
    文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。`TerminalGrid` 只会在
    已连接光标可见时显示这份局部 preedit 值；组合文本不会经由它的手势 callback 跨越组件边界。
@@ -363,7 +368,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    shell 启动按平台判断：`SHELL` 不可用时 macOS 默认使用 `/bin/zsh`；macOS 的 `zsh` 会收到 `-l`，
    由 zsh 正常加载系统/用户的 login 与
    interactive 启动文件；Linux 和其他 Unix shell 保持普通 interactive 启动模式，不强制增加 login
-   参数；Windows 的 `cmd.exe`/PowerShell 不覆盖 profile 参数，保留各自原生启动行为。macOS 的
+   参数。子进程启动前，如果 Unix 的有效 locale 是 `C` 或为空，会规范化为平台 UTF-8 locale
+   （macOS 使用 `en_US.UTF-8`，其它 Unix 使用 `C.UTF-8`）；已有 UTF-8 locale 保持不变。Windows 的
+   `cmd.exe`/PowerShell 不覆盖 profile 参数，保留各自原生启动行为。macOS 的
    `zsh` 还会检查标准 Homebrew 前缀中的可执行 `bin/brew`，仅将已存在的 `bin`/`sbin` 目录前置到
    该 PTY 子进程的 `PATH`。未发现前缀时继承的 PATH 保持不变；AxSSH 不会自行调用 `brew shellenv`，
    也不会修改用户的 shell 启动文件。
@@ -809,8 +816,9 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 分别测量配置主字体的
 50 个 Latin cell；终端网格使用该主字体的 Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
 和盒线字形只在其一格或两格 span 内居中，不再扩大所有列。Rust 保留终端逻辑列，
-继续批量绘制 ASCII 文本，但把非 ASCII cell 发布为独立 render run；grid 将非 ASCII 字形居中放入其一格或两格
-span，避免 fallback shaping 推动后续 ASCII cell。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
+继续批量绘制 ASCII 文本；普通 fallback cell 发布为独立 render run，但同样式相邻盒线字形保持在同一个
+shaping run 中。grid 将 fallback 文本居中放入其一格或两格 span，避免 fallback shaping 推动后续 ASCII cell，
+也避免盒线序列按单个字形逐格光栅化。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
 光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
 避免中文 glyph 被单格覆盖层裁剪。选区背景按选中的逻辑列逐个绘制固定单 cell 矩形，不从混合 Unicode
 run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区光标 cell y 坐标，

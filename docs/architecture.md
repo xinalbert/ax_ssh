@@ -341,9 +341,15 @@ semantic highlighting. The renderer resolves program colors and inverse first,
 selects an optional semantic foreground, and then applies one HSL-lightness
 adjustment to the final visible foreground. `dim` is folded into that adjustment;
 backgrounds, selection, and the cursor remain unchanged.
-Its `key-pressed` handler sends only special keys and terminal control chords to
-Rust; printable keys, Shift text, and committed IME text remain in the native
-`TextInput.edited` path.
+Its `key-pressed` handler remains the fallback for special keys and terminal
+control chords; printable keys, Shift text, and committed IME text remain in
+the native `TextInput.edited` path. The shown Winit window also records the
+native modifier snapshot before Slint dispatches each key event. On macOS,
+physical Control terminal chords are dispatched from that native boundary and
+prevented from reaching the transparent text proxy, while configured
+application shortcuts continue to the native menu path. This preserves
+event-scoped modifiers for synthetic System Events input without bypassing
+ordinary text or IME composition.
 `AppWindow.log-keyboard-event` reports a handled transient-control key after
 shortcut recording and security prompts have been excluded. Native menu
 commands report through the separate fixed-ID menu-action route because Slint
@@ -507,14 +513,17 @@ tab-local terminal connection notice deliberately remains non-blocking.
    second time. Normal mode, NumLock behavior, IME, and any modified keypad
    input continue through Slint's normal path. A transparent, cursor-positioned
    `TextInput` is the native text and IME proxy: special keys and terminal
-   control chords use `key-pressed`, while printable text, Shift text, and IME
-   commits enter only through `edited`; preedit remains local UI state. At the
-   application boundary, physical macOS key events read AppKit's current
-   aggregate modifier state before restoring Control and Command semantics
-   after Slint's Apple mapping; this keeps the two Control keys equivalent
-   when a side-specific modifier event is absent. Committed IME and pasted text
-   explicitly use empty modifiers, so they cannot inherit a still-held shortcut
-   key.
+   control chords use the native Winit boundary or the Slint `key-pressed`
+   fallback, while printable text, Shift text, and IME commits enter only
+   through `edited`; preedit remains local UI state. The application boundary
+   records Winit `ModifiersChanged` state before restoring physical Control,
+   Command, Option, and Shift semantics. On macOS, physical Control terminal
+   chords use that event-scoped snapshot and skip configured application menu
+   accelerators; AppKit's aggregate state remains only a fallback for a missing
+   modifier update. This keeps synthetic and left/right Control input aligned
+   without routing ordinary text through the terminal encoder. Committed IME
+   and pasted text explicitly use empty modifiers, so they cannot inherit a
+   still-held shortcut key.
    `TerminalGrid` displays that local preedit value only while the connected
    cursor is visible; no composition text crosses its gesture callbacks.
    `TerminalSettings.option_as_meta` is disabled by default, so Option text and
@@ -579,7 +588,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    defaults to `/bin/zsh`; macOS `zsh` receives `-l`, so zsh loads
    its normal system/user login and interactive files; Linux and other Unix
    shells keep their normal interactive startup mode without a forced login
-   flag; Windows `cmd.exe`/PowerShell receive no profile override and retain
+   flag. Before the child starts, an effective `C` or empty Unix locale is
+   normalized to a platform UTF-8 locale (`en_US.UTF-8` on macOS,
+   `C.UTF-8` elsewhere); an existing UTF-8 locale is preserved. Windows
+   `cmd.exe`/PowerShell receive no profile override and retain
    their native startup behavior. For macOS `zsh`, AxSSH also checks the
    standard Homebrew prefixes for an executable `bin/brew` and prepends only
    their existing `bin`/`sbin` directories to that child PTY's `PATH`. Missing
@@ -1325,9 +1337,11 @@ grid uses that Latin monospace advance as its logical cell width; registered
 Han fallback and box-drawing glyphs are centered inside their one- or two-cell
 spans instead of enlarging every column. Rust
 preserves the terminal's logical columns, keeps ASCII text batched, and
-publishes non-ASCII cells as independent render runs. The grid centers each
-non-ASCII glyph inside its one- or two-cell span, so fallback shaping cannot
-move a following ASCII cell. This shared cell width and the configured
+publishes fallback cells as independent render runs, except that adjacent
+same-style box-drawing glyphs stay together in one shaping run. The grid
+centers fallback text inside its one- or two-cell span, so fallback shaping
+cannot move a following ASCII cell while a box-drawing sequence is not
+rasterized one glyph at a time. This shared cell width and the configured
 line-height percentage drive rendering, selection, cursor, and floor-based PTY
 dimensions. Cursor snapshots normalize a cursor that lands on a wide-character
 spacer back to the leading cell and carry a one- or two-cell cursor span, so a
