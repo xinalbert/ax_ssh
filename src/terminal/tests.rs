@@ -166,9 +166,9 @@ fn cursor_on_a_wide_cell_uses_its_leading_column_and_width() {
 }
 
 #[test]
-fn non_ascii_single_cell_runs_do_not_shape_across_ascii() {
+fn box_drawing_runs_batch_without_crossing_ascii_or_wide_cells() {
     let mut terminal = TerminalModel::new(80, 24, 10);
-    terminal.process("A┌─┐B".as_bytes());
+    terminal.process("A┌─┐B中C".as_bytes());
     let runs = terminal.snapshot().lines[0].runs.clone();
 
     assert_eq!(runs.len(), 5);
@@ -177,13 +177,15 @@ fn non_ascii_single_cell_runs_do_not_shape_across_ascii() {
             .iter()
             .map(|run| run.text.as_str())
             .collect::<Vec<_>>(),
-        vec!["A", "┌", "─", "┐"]
+        vec!["A", "┌─┐", "B", "中"]
     );
-    assert!(runs[4].text.starts_with('B'));
+    assert!(runs[4].text.starts_with('C'));
     assert_eq!(
         runs.iter().map(|run| run.column).collect::<Vec<_>>(),
-        vec![0, 1, 2, 3, 4]
+        vec![0, 1, 4, 5, 7]
     );
+    assert_eq!(runs[1].cells, 3);
+    assert_eq!(runs[3].cells, 2);
 }
 
 #[test]

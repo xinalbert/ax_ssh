@@ -274,6 +274,27 @@ fn cell_contains_non_ascii(cell: &Cell) -> bool {
             .any(|character| !character.is_ascii())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TextBatchKind {
+    Ascii,
+    BoxDrawing,
+}
+
+fn is_box_drawing_char(character: char) -> bool {
+    ('\u{2500}'..='\u{257f}').contains(&character)
+}
+
+fn text_batch_kind(cell: &Cell) -> Option<TextBatchKind> {
+    if !cell_contains_non_ascii(cell) {
+        return Some(TextBatchKind::Ascii);
+    }
+    (is_box_drawing_char(cell.c)
+        && cell
+            .zerowidth()
+            .is_none_or(|characters| characters.is_empty()))
+    .then_some(TextBatchKind::BoxDrawing)
+}
+
 pub(super) fn styled_line(
     term: &Term<TerminalEventListener>,
     row: usize,
@@ -292,6 +313,7 @@ pub(super) fn styled_line(
         let style = terminal_style(cell);
         let start_column = column;
         let is_wide = cell.flags.contains(Flags::WIDE_CHAR);
+        let batch_kind = (!is_wide).then(|| text_batch_kind(cell)).flatten();
         let mut text = String::new();
         append_cell_text(&mut text, cell);
         let mut cells = if is_wide { 2 } else { 1 };
@@ -303,8 +325,8 @@ pub(super) fn styled_line(
                 if next.flags.contains(Flags::WIDE_CHAR)
                     || is_wide_continuation(next)
                     || terminal_style(next) != style
-                    || cell_contains_non_ascii(cell)
-                    || cell_contains_non_ascii(next)
+                    || batch_kind.is_none()
+                    || text_batch_kind(next) != batch_kind
                 {
                     break;
                 }
