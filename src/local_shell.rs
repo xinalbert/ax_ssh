@@ -2,10 +2,10 @@
 
 use std::collections::BTreeSet;
 use std::env;
-#[cfg(all(not(target_os = "macos"), test))]
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(any(target_os = "macos", test))]
 use std::ffi::OsString;
-#[cfg(target_os = "macos")]
-use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -34,6 +34,11 @@ const CHILD_EXIT_RECHECK_INTERVAL: Duration = Duration::from_millis(25);
 const CHILD_EXIT_RECHECK_ATTEMPTS: u8 = 40;
 const EVENT_BACKPRESSURE_INTERVAL: Duration = Duration::from_millis(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
+
+#[cfg(unix)]
+const MACOS_UTF8_LOCALE: &str = "en_US.UTF-8";
+#[cfg(all(unix, not(target_os = "macos")))]
+const UNIX_UTF8_LOCALE: &str = "C.UTF-8";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalShellEvent {
@@ -359,6 +364,8 @@ fn run_local_shell(task: LocalShellTask) -> Result<()> {
         .context("failed to open local pseudo-terminal")?;
     let mut command = CommandBuilder::new(&shell_path);
     command.env("TERM", "xterm-256color");
+    #[cfg(unix)]
+    configure_local_shell_locale(&mut command);
     configure_local_shell_command(&mut command, &shell_path);
     let mut child = pair
         .slave
@@ -656,6 +663,64 @@ fn configure_local_shell_command(command: &mut CommandBuilder, shell_path: &Path
     let _ = (command, shell_path);
 }
 
+#[cfg(unix)]
+fn configure_local_shell_locale(command: &mut CommandBuilder) {
+    let lc_all = command
+        .get_env("LC_ALL")
+        .and_then(OsStr::to_str)
+        .map(str::to_owned);
+    let lc_ctype = command
+        .get_env("LC_CTYPE")
+        .and_then(OsStr::to_str)
+        .map(str::to_owned);
+    let lang = command
+        .get_env("LANG")
+        .and_then(OsStr::to_str)
+        .map(str::to_owned);
+    configure_local_shell_locale_values(
+        command,
+        lc_all.as_deref(),
+        lc_ctype.as_deref(),
+        lang.as_deref(),
+    );
+}
+
+#[cfg(unix)]
+fn configure_local_shell_locale_values(
+    command: &mut CommandBuilder,
+    lc_all: Option<&str>,
+    lc_ctype: Option<&str>,
+    lang: Option<&str>,
+) {
+    let effective_locale = [lc_all, lc_ctype, lang]
+        .into_iter()
+        .flatten()
+        .find(|locale| !locale.trim().is_empty());
+    if effective_locale.is_some_and(locale_is_utf8) {
+        return;
+    }
+
+    #[cfg(target_os = "macos")]
+    let utf8_locale = MACOS_UTF8_LOCALE;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let utf8_locale = UNIX_UTF8_LOCALE;
+
+    // Finder-launched desktop apps commonly inherit C or no locale. The
+    // terminal parser and native IME exchange UTF-8, so make that contract
+    // explicit for the local child before zsh/readline initializes.
+    command.env("LANG", utf8_locale);
+    command.env("LC_CTYPE", utf8_locale);
+    if lc_all.is_some_and(|locale| !locale.trim().is_empty()) {
+        command.env("LC_ALL", utf8_locale);
+    }
+}
+
+#[cfg(unix)]
+fn locale_is_utf8(locale: &str) -> bool {
+    let locale = locale.to_ascii_lowercase();
+    locale.contains("utf-8") || locale.contains("utf8")
+}
+
 #[cfg(target_os = "macos")]
 fn configure_macos_zsh_command(command: &mut CommandBuilder, shell_path: &Path) {
     if !is_zsh_shell(shell_path) {
@@ -884,6 +949,42 @@ mod tests {
             command.get_argv(),
             &vec![OsString::from("/bin/zsh"), OsString::from("-l")]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_shell_replaces_a_non_utf8_locale() {
+        let mut command = CommandBuilder::new("sh");
+        command.env("LANG", "");
+        command.env("LC_CTYPE", "C");
+        command.env("LC_ALL", "C");
+
+        configure_local_shell_locale(&mut command);
+
+        #[cfg(target_os = "macos")]
+        let expected = MACOS_UTF8_LOCALE;
+        #[cfg(not(target_os = "macos"))]
+        let expected = UNIX_UTF8_LOCALE;
+        let locale = |key| command.get_env(key).and_then(OsStr::to_str);
+        assert_eq!(locale("LANG"), Some(expected));
+        assert_eq!(locale("LC_CTYPE"), Some(expected));
+        assert_eq!(locale("LC_ALL"), Some(expected));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_shell_keeps_an_existing_utf8_locale() {
+        let mut command = CommandBuilder::new("sh");
+        command.env("LANG", "zh_CN.UTF-8");
+        command.env("LC_CTYPE", "C");
+        command.env("LC_ALL", "zh_CN.UTF-8");
+
+        configure_local_shell_locale(&mut command);
+
+        let locale = |key| command.get_env(key).and_then(OsStr::to_str);
+        assert_eq!(locale("LANG"), Some("zh_CN.UTF-8"));
+        assert_eq!(locale("LC_CTYPE"), Some("C"));
+        assert_eq!(locale("LC_ALL"), Some("zh_CN.UTF-8"));
     }
 
     #[cfg(not(target_os = "macos"))]
