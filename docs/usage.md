@@ -177,7 +177,8 @@ default directory. The local browser starts at its configured directory (or the
 platform home directory when that value is empty), and reads only bounded file
 metadata.
 Use **Hidden** and **More** to include dot files or request the next bounded
-remote page. Rows use the target platform's file-type icon when one is available
+remote page. Click **Name**, **Size**, or **Modified** to sort either file list;
+the default is newest Modified first. Rows use the target platform's file-type icon when one is available
 and a built-in folder, link, or generic-file icon otherwise.
 
 Double-click a regular file in the local pane to open the current snapshot entry
@@ -186,6 +187,11 @@ symbolic links are not opened. AxSSH verifies the opened file's platform identit
 outside the UI thread, copies that exact handle into its private bounded cache,
 and opens the completed read-only snapshot. Replacing the original path after
 validation cannot redirect the open request.
+
+Right-click a local row to open a file or folder, reveal a non-link entry in its
+local folder, or upload one regular file. The local and remote list checkboxes,
+including their header controls, update the active SFTP Tab's selection before a
+menu action runs.
 
 Right-click a remote file or folder and choose **Download**. Right-clicking an
 unselected row first makes it the only selected row; right-clicking a selected
@@ -211,15 +217,23 @@ including a file published just before cancellation wins; failures remove the
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
 active download work before closing the browser and SSH transport.
 
+Right-click an active transfer for its applicable Pause, Resume, or Cancel
+action. Right-click a failed, cancelled, or successful record to remove it, or
+to reveal its local source or downloaded file when that path is available.
+After an upload completes, AxSSH refreshes **Remote files** automatically only
+when that pane is still showing the upload's destination directory and no other
+directory request is in progress; it does not interrupt later navigation.
+
 The remote row context menu also supports deleting its selected files and
 directories (directories are non-recursive). Download and Delete no longer
 occupy the directory toolbar. The remaining remote controls support renaming
 one selected entry, editing bounded UTF-8 text, and saving to an explicit
 remote path. While the editor is open, a worker-owned
 poll checks the remote size/mtime fingerprint; a change disables Save and
-reports a conflict. The local toolbar uploads one selected regular file, and
-dropping a local path onto Local files enters the same private-temp-file
-transfer queue. Automatic upload is opt-in, off by default, debounced by 500ms,
+reports a conflict. The local toolbar uploads one selected regular file. Dragging a
+local or Finder file onto Remote files queues an upload into the current remote
+directory. Dragging a remote file or folder onto Local files queues a download
+into the current local directory. Automatic upload is opt-in, off by default, debounced by 500ms,
 and still guarded by the observed fingerprint. Cross-process edit recovery and
 three-way conflict merging remain outside the current scope.
 

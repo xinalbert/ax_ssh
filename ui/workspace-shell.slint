@@ -339,6 +339,8 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback close-tab(string);
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback sort-remote-sftp(string);
+    callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
@@ -349,6 +351,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback open-remote-sftp-file(string);
     callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback reveal-local-sftp-file(string);
     callback toggle-sftp-transfer-selection(string, bool);
     callback pause-sftp-transfer(string);
     callback resume-sftp-transfer(string);
@@ -356,13 +359,17 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback reveal-sftp-transfer-local(string);
+    callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
     callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
+    callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
+    pure callback drag-remote-file-sftp(string) -> data-transfer;
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
@@ -470,6 +477,8 @@ component DetachedWorkspaceContent inherits Rectangle {
             transfers-collapsed <=> root.sftp-transfers-collapsed;
             list-directory(path) => { root.list-sftp-directory(path); }
             load-more => { root.load-more-sftp(); }
+            sort-remote(column) => { root.sort-remote-sftp(column); }
+            sort-local(column) => { root.sort-local-sftp(column); }
             list-local-directory(path) => { root.list-local-sftp-directory(path); }
             navigate-back => { root.navigate-sftp-back(); }
             navigate-forward => { root.navigate-sftp-forward(); }
@@ -484,6 +493,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             open-remote-file(path) => { root.open-remote-sftp-file(path); }
             download-selected-remote => { root.download-selected-remote-sftp(); }
             open-local-file(path) => { root.open-local-sftp-file(path); }
+            reveal-local-file(path) => { root.reveal-local-sftp-file(path); }
             toggle-transfer-selection(id, selected) => {
                 root.toggle-sftp-transfer-selection(id, selected);
             }
@@ -493,6 +503,8 @@ component DetachedWorkspaceContent inherits Rectangle {
             pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
             resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
             cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+            reveal-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
+            remove-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote => { root.remove-selected-remote-sftp(); }
             upload-selected-local => { root.upload-selected-local-sftp(); }
             rename-remote(name) => { root.rename-remote-sftp(name); }
@@ -502,7 +514,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
             toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
             dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
+            dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
             drag-local-file(path) => { return root.drag-local-file-sftp(path); }
+            drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
             close => { root.close-tab(root.view.active_tab_id); }
             write-clipboard(path) => { root.write-clipboard(path); }
         }
@@ -566,6 +580,8 @@ export component WorkspaceShell inherits Rectangle {
     callback open-sftp();
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback sort-remote-sftp(string);
+    callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
@@ -576,6 +592,7 @@ export component WorkspaceShell inherits Rectangle {
     callback open-remote-sftp-file(string);
     callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback reveal-local-sftp-file(string);
     callback toggle-sftp-transfer-selection(string, bool);
     callback pause-sftp-transfer(string);
     callback resume-sftp-transfer(string);
@@ -583,13 +600,17 @@ export component WorkspaceShell inherits Rectangle {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback reveal-sftp-transfer-local(string);
+    callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
     callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
+    callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
+    pure callback drag-remote-file-sftp(string) -> data-transfer;
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
@@ -688,6 +709,8 @@ export component WorkspaceShell inherits Rectangle {
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
         load-more-sftp => { root.load-more-sftp(); }
+        sort-remote-sftp(column) => { root.sort-remote-sftp(column); }
+        sort-local-sftp(column) => { root.sort-local-sftp(column); }
         list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
         navigate-sftp-back => { root.navigate-sftp-back(); }
         navigate-sftp-forward => { root.navigate-sftp-forward(); }
@@ -700,8 +723,32 @@ export component WorkspaceShell inherits Rectangle {
         }
         select-all-local-sftp(selected) => { root.select-all-local-sftp(selected); }
         open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
+        download-selected-remote-sftp => { root.download-selected-remote-sftp(); }
         open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
+        reveal-local-sftp-file(path) => { root.reveal-local-sftp-file(path); }
+        toggle-sftp-transfer-selection(id, selected) => {
+            root.toggle-sftp-transfer-selection(id, selected);
+        }
+        pause-sftp-transfer(id) => { root.pause-sftp-transfer(id); }
+        resume-sftp-transfer(id) => { root.resume-sftp-transfer(id); }
         cancel-sftp-transfer(id) => { root.cancel-sftp-transfer(id); }
+        pause-selected-sftp-transfers => { root.pause-selected-sftp-transfers(); }
+        resume-selected-sftp-transfers => { root.resume-selected-sftp-transfers(); }
+        cancel-selected-sftp-transfers => { root.cancel-selected-sftp-transfers(); }
+        reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
+        remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
+        remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
+        upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
+        rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
+        edit-remote-sftp => { root.edit-remote-sftp(); }
+        load-remote-sftp-file(path) => { root.load-remote-sftp-file(path); }
+        save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
+        editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
+        toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
+        dropped-local-files-sftp(data) => { root.dropped-local-files-sftp(data); }
+        dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
+        drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
+        drag-remote-file-sftp(path) => { return root.drag-remote-file-sftp(path); }
         terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
         }
@@ -914,6 +961,8 @@ export component WorkspaceShell inherits Rectangle {
                         transfers-collapsed <=> root.sftp-transfers-collapsed;
                         list-directory(path) => { root.list-sftp-directory(path); }
                         load-more => { root.load-more-sftp(); }
+                        sort-remote(column) => { root.sort-remote-sftp(column); }
+                        sort-local(column) => { root.sort-local-sftp(column); }
                         list-local-directory(path) => { root.list-local-sftp-directory(path); }
                         navigate-back => { root.navigate-sftp-back(); }
                         navigate-forward => { root.navigate-sftp-forward(); }
@@ -928,6 +977,7 @@ export component WorkspaceShell inherits Rectangle {
                         open-remote-file(path) => { root.open-remote-sftp-file(path); }
                         download-selected-remote => { root.download-selected-remote-sftp(); }
                         open-local-file(path) => { root.open-local-sftp-file(path); }
+                        reveal-local-file(path) => { root.reveal-local-sftp-file(path); }
                         toggle-transfer-selection(id, selected) => {
                             root.toggle-sftp-transfer-selection(id, selected);
                         }
@@ -937,6 +987,8 @@ export component WorkspaceShell inherits Rectangle {
                         pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
                         resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
                         cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+                        reveal-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
+                        remove-transfer(id) => { root.remove-sftp-transfer(id); }
                         remove-selected-remote => { root.remove-selected-remote-sftp(); }
                         upload-selected-local => { root.upload-selected-local-sftp(); }
                         rename-remote(name) => { root.rename-remote-sftp(name); }
@@ -946,7 +998,9 @@ export component WorkspaceShell inherits Rectangle {
                         editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
                         toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
                         dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
+                        dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
                         drag-local-file(path) => { return root.drag-local-file-sftp(path); }
+                        drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
                         close => { root.close-tab(root.view.active_tab_id); }
                         write-clipboard(path) => { root.write-clipboard(path); }
                     }

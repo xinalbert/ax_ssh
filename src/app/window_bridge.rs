@@ -94,6 +94,7 @@ pub(super) fn restore_detached_workspaces(
         install_terminal_keypad_input_hook(
             &detached_ui,
             state.clone(),
+            runtime.clone(),
             window_router.clone(),
             new_window_id,
         );

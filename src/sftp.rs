@@ -33,7 +33,6 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_PATH_CHARS: usize = 4096;
 const MAX_NAME_CHARS: usize = 512;
 const MAX_PAGE_ENTRIES: usize = 250;
-const MAX_DIRECTORY_ENTRIES: usize = 2_000;
 const MAX_DIRECTORY_TEXT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PACKET_BYTES: u32 = 256 * 1024;
 pub(crate) const MAX_EDIT_BYTES: u64 = 4 * 1024 * 1024;
@@ -517,7 +516,6 @@ struct DirectoryCursor {
     path: String,
     handle: String,
     pending: VecDeque<File>,
-    scanned_entries: usize,
     total_text_bytes: usize,
     done: bool,
     truncated: bool,
@@ -787,7 +785,6 @@ async fn open_directory(session: &RawSftpSession, path: String) -> Result<Direct
         path,
         handle,
         pending: VecDeque::new(),
-        scanned_entries: 0,
         total_text_bytes: 0,
         done: false,
         truncated: false,
@@ -843,14 +840,6 @@ async fn read_page(
             let Some(file) = cursor.pending.pop_front() else {
                 break;
             };
-            if cursor.scanned_entries >= MAX_DIRECTORY_ENTRIES {
-                cursor.done = true;
-                cursor.truncated = true;
-                cursor.pending.clear();
-                break;
-            }
-            cursor.scanned_entries += 1;
-            let scan_limit_reached = cursor.scanned_entries == MAX_DIRECTORY_ENTRIES;
             if let Some(entry) = bounded_entry(&cursor.path, file) {
                 let text_bytes = entry.name.len().saturating_add(entry.path.len());
                 if cursor.total_text_bytes.saturating_add(text_bytes) > MAX_DIRECTORY_TEXT_BYTES {
@@ -861,12 +850,6 @@ async fn read_page(
                 }
                 cursor.total_text_bytes += text_bytes;
                 page.push(entry);
-            }
-            if scan_limit_reached {
-                cursor.done = true;
-                cursor.truncated = true;
-                cursor.pending.clear();
-                break;
             }
         }
     }

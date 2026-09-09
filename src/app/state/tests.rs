@@ -1017,7 +1017,12 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
     assert!(sftp.transfers[0].phase.cancellable());
 
-    sftp.start_transfer(transfer_id, "report.txt".to_owned(), 100);
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/report.txt".to_owned(),
+        "report.txt".to_owned(),
+        100,
+    );
     sftp.update_transfer_progress(transfer_id, 150, 100);
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Downloading);
     assert_eq!(sftp.transfers[0].downloaded_bytes, 100);
@@ -1046,7 +1051,12 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
     let failed_id = Uuid::new_v4();
     sftp.queue_transfer(failed_id, "broken.txt".to_owned(), 0)
         .expect("second transfer should be queued");
-    sftp.start_transfer(failed_id, "broken.txt".to_owned(), 0);
+    sftp.start_transfer(
+        failed_id,
+        "/home/alice/broken.txt".to_owned(),
+        "broken.txt".to_owned(),
+        0,
+    );
     sftp.finish_transfer(
         failed_id,
         SftpTransferPhase::Failed,
@@ -1061,15 +1071,125 @@ fn sftp_upload_transfer_does_not_expose_pause_controls() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();
 
-    sftp.queue_upload_transfer(transfer_id, "upload.txt".to_owned(), 10)
-        .expect("upload should be queued");
-    sftp.start_transfer(transfer_id, "upload.txt".to_owned(), 10);
+    sftp.queue_upload_transfer(
+        transfer_id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/home/alice/upload.txt".to_owned(),
+    )
+    .expect("upload should be queued");
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
 
     assert!(!sftp.transfer_is_pausable(transfer_id));
     assert!(!sftp.request_transfer_pause(transfer_id));
     let snapshot = sftp.snapshot(true);
     assert!(!snapshot.transfers[0].pausable);
     assert_eq!(snapshot.transfer_selected_pausable_count, 0);
+}
+
+#[test]
+fn completed_upload_refreshes_only_its_visible_remote_directory() {
+    let mut sftp = SftpBrowserState {
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let transfer_id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        transfer_id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/home/alice/upload.txt".to_owned(),
+    )
+    .expect("upload should be queued");
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+
+    assert_eq!(
+        sftp.finish_uploaded_transfer(transfer_id),
+        Some("/home/alice".to_owned())
+    );
+    assert_eq!(
+        sftp.begin_refresh_after_upload("/home/alice")
+            .expect("refresh intent should be valid"),
+        Some("/home/alice".to_owned())
+    );
+    assert!(sftp.loading);
+    assert_eq!(
+        sftp.completed_transfer_local_path(transfer_id),
+        Some("/tmp/upload.txt".into())
+    );
+    assert!(sftp.remove_finished_transfer(transfer_id));
+    assert!(sftp.transfers.is_empty());
+}
+
+#[test]
+fn completed_upload_does_not_refresh_a_different_remote_directory() {
+    let mut sftp = SftpBrowserState {
+        path: "/home/other".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let transfer_id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        transfer_id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/home/alice/upload.txt".to_owned(),
+    )
+    .expect("upload should be queued");
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+
+    assert_eq!(sftp.finish_uploaded_transfer(transfer_id), None);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Completed);
+    assert!(!sftp.loading);
+}
+
+#[test]
+fn cancelled_upload_does_not_trigger_a_remote_refresh() {
+    let mut sftp = SftpBrowserState {
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let transfer_id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        transfer_id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/home/alice/upload.txt".to_owned(),
+    )
+    .expect("upload should be queued");
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+    assert!(sftp.request_transfer_cancel(transfer_id));
+    sftp.finish_transfer(
+        transfer_id,
+        SftpTransferPhase::Cancelled,
+        "Cancelled".to_owned(),
+    );
+
+    assert_eq!(sftp.finish_uploaded_transfer(transfer_id), None);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelled);
 }
 
 #[test]
@@ -1081,7 +1201,12 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
         .expect("transfer should be queued");
     assert!(sftp.request_transfer_cancel(transfer_id));
 
-    sftp.start_transfer(transfer_id, "report.txt".to_owned(), 100);
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/report.txt".to_owned(),
+        "report.txt".to_owned(),
+        100,
+    );
     sftp.update_transfer_progress(transfer_id, 50, 100);
     assert!(!sftp.complete_download(transfer_id, 100));
 
@@ -1130,7 +1255,7 @@ fn sftp_transfer_selection_counts_only_actionable_active_rows() {
     ] {
         sftp.queue_transfer(id, name.to_owned(), 10)
             .expect("transfer should queue");
-        sftp.start_transfer(id, name.to_owned(), 10);
+        sftp.start_transfer(id, format!("/home/alice/{name}"), name.to_owned(), 10);
     }
     assert!(sftp.request_transfer_pause(paused));
     assert!(sftp.pause_transfer(paused));

@@ -134,6 +134,7 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::SftpTransfer(event) => {
                     let mut completed_open = None;
+                    let mut refresh_after_upload = None;
                     let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -152,13 +153,13 @@ pub(super) fn spawn_session_monitor(
                             }
                             SftpTransferEvent::Started {
                                 transfer_id,
-                                remote_path: _,
+                                remote_path,
                                 name,
                                 total_bytes,
                             } => {
                                 terminal
                                     .sftp
-                                    .start_transfer(transfer_id, name, total_bytes);
+                                    .start_transfer(transfer_id, remote_path, name, total_bytes);
                             }
                             SftpTransferEvent::Progress {
                                 transfer_id,
@@ -209,12 +210,13 @@ pub(super) fn spawn_session_monitor(
                                 total_bytes,
                             } => {
                                 if local_path.as_os_str().is_empty() {
-                                    terminal.sftp.finish_transfer(
-                                        transfer_id,
-                                        SftpTransferPhase::Completed,
-                                        "Uploaded".to_owned(),
-                                    );
-                                } else if terminal.sftp.mark_transfer_opening(transfer_id, total_bytes) {
+                                    refresh_after_upload =
+                                        terminal.sftp.finish_uploaded_transfer(transfer_id);
+                                } else if terminal.sftp.mark_transfer_opening(
+                                    transfer_id,
+                                    total_bytes,
+                                    local_path.clone(),
+                                ) {
                                     completed_open = Some((transfer_id, local_path));
                                 }
                             }
@@ -241,6 +243,48 @@ pub(super) fn spawn_session_monitor(
                     };
                     if active {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(directory) = refresh_after_upload {
+                        let mut refresh_error = None;
+                        let refreshed = mutate_terminal_attempt(
+                            &state,
+                            tab_id,
+                            profile.id,
+                            attempt_id,
+                            |terminal| {
+                                let request_path = match terminal
+                                    .sftp
+                                    .begin_refresh_after_upload(directory.as_str())
+                                {
+                                    Ok(Some(path)) => path,
+                                    Ok(None) => return,
+                                    Err(error) => {
+                                        refresh_error = Some(error);
+                                        return;
+                                    }
+                                };
+                                let result = terminal
+                                    .worker
+                                    .as_ref()
+                                    .context("SFTP tab has no worker")
+                                    .and_then(|worker| worker.request_list_sftp(request_path));
+                                if let Err(error) = result {
+                                    terminal.sftp.cancel_navigation();
+                                    refresh_error = Some(error);
+                                }
+                            },
+                        );
+                        if refreshed == Some(true) {
+                            if let Some(error) = refresh_error {
+                                warn!(
+                                    tab_id = %tab_id,
+                                    session_id = %profile.id,
+                                    %error,
+                                    "could not refresh the current SFTP directory after upload"
+                                );
+                            }
+                            dispatch_active_snapshot(&ui, &state);
+                        }
                     }
                     if let Some((transfer_id, local_path)) = completed_open {
                         open_downloaded_sftp_file(
@@ -789,13 +833,14 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
             } else {
                 state.entries = entries;
             }
+            state.sort_remote_entries();
             state
                 .selected
                 .retain(|selected| state.entries.iter().any(|entry| &entry.path == selected));
             state.has_more = has_more;
             state.truncated = truncated;
             state.status = if truncated {
-                "Directory limit reached".to_owned()
+                "Directory text budget reached".to_owned()
             } else {
                 format!("{} items", state.entries.len())
             };

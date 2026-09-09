@@ -95,14 +95,29 @@ pub(super) fn resume_existing_local_shell(
 pub(super) fn install_terminal_keypad_input_hook(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
+    runtime: Handle,
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
     let modifiers = Rc::new(Cell::new(ModifiersState::default()));
     let modifiers_for_event = modifiers.clone();
     let ui_for_keypad = ui.as_weak();
+    let state_for_drop = state.clone();
+    let runtime_for_drop = runtime.clone();
+    let router_for_drop = window_router.clone();
+    let ui_for_drop = ui.as_weak();
     ui.window().on_winit_window_event(move |_window, event| {
         match event {
+            WindowEvent::DroppedFile(path) => {
+                super::sftp_bridge::handle_native_dropped_file(
+                    &runtime_for_drop,
+                    &state_for_drop,
+                    &ui_for_drop,
+                    &router_for_drop,
+                    window_id,
+                    path,
+                );
+            }
             WindowEvent::ModifiersChanged(next) => {
                 modifiers_for_event.set(next.state());
                 let state = next.state();

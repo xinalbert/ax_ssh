@@ -94,6 +94,8 @@ export component AppWindow inherits Window {
     in property <string> sftp-home: "";
     in property <string> sftp-path: "";
     in property <[SftpEntryRow]> sftp-entries;
+    in property <string> sftp-sort-column: "modified";
+    in property <bool> sftp-sort-descending: true;
     in property <bool> sftp-has-more: false;
     in property <bool> sftp-truncated: false;
     in property <string> sftp-status: "";
@@ -104,6 +106,8 @@ export component AppWindow inherits Window {
     in property <bool> local-sftp-loading: false;
     in property <string> local-sftp-path: "";
     in property <[SftpEntryRow]> local-sftp-entries;
+    in property <string> local-sftp-sort-column: "modified";
+    in property <bool> local-sftp-sort-descending: true;
     in property <bool> local-sftp-truncated: false;
     in property <string> local-sftp-status: "";
     in property <int> local-sftp-selected-count: 0;
@@ -271,11 +275,13 @@ export component AppWindow inherits Window {
         sftp: {
             available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
             home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
+            remote_sort_column: root.sftp-sort-column, remote_sort_descending: root.sftp-sort-descending,
             has_more: root.sftp-has-more, truncated: root.sftp-truncated, status: root.sftp-status,
             can_go_back: root.sftp-can-go-back, can_go_forward: root.sftp-can-go-forward,
             selected_count: root.sftp-selected-count, all_selected: root.sftp-all-selected,
             local_loading: root.local-sftp-loading, local_path: root.local-sftp-path,
-            local_entries: root.local-sftp-entries, local_truncated: root.local-sftp-truncated,
+            local_entries: root.local-sftp-entries, local_sort_column: root.local-sftp-sort-column,
+            local_sort_descending: root.local-sftp-sort-descending, local_truncated: root.local-sftp-truncated,
             local_status: root.local-sftp-status, local_selected_count: root.local-sftp-selected-count,
             local_all_selected: root.local-sftp-all-selected,
             active_transfers: root.sftp-active-transfers,
@@ -435,6 +441,8 @@ export component AppWindow inherits Window {
     callback open-sftp();
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback sort-remote-sftp(string);
+    callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
@@ -445,6 +453,7 @@ export component AppWindow inherits Window {
     callback open-remote-sftp-file(string);
     callback download-selected-remote-sftp();
     callback open-local-sftp-file(string);
+    callback reveal-local-sftp-file(string);
     callback toggle-sftp-transfer-selection(string, bool);
     callback pause-sftp-transfer(string);
     callback resume-sftp-transfer(string);
@@ -452,13 +461,17 @@ export component AppWindow inherits Window {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback reveal-sftp-transfer-local(string);
+    callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
     callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
+    callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
+    pure callback drag-remote-file-sftp(string) -> data-transfer;
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
@@ -850,6 +863,8 @@ export component AppWindow inherits Window {
             open-sftp => { root.open-sftp(); }
             list-sftp-directory(path) => { root.list-sftp-directory(path); }
             load-more-sftp => { root.load-more-sftp(); }
+            sort-remote-sftp(column) => { root.sort-remote-sftp(column); }
+            sort-local-sftp(column) => { root.sort-local-sftp(column); }
             list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
             navigate-sftp-back => { root.navigate-sftp-back(); }
             navigate-sftp-forward => { root.navigate-sftp-forward(); }
@@ -864,6 +879,7 @@ export component AppWindow inherits Window {
             open-remote-sftp-file(path) => { root.open-remote-sftp-file(path); }
             download-selected-remote-sftp => { root.download-selected-remote-sftp(); }
             open-local-sftp-file(path) => { root.open-local-sftp-file(path); }
+            reveal-local-sftp-file(path) => { root.reveal-local-sftp-file(path); }
             toggle-sftp-transfer-selection(id, selected) => {
                 root.toggle-sftp-transfer-selection(id, selected);
             }
@@ -873,13 +889,17 @@ export component AppWindow inherits Window {
             pause-selected-sftp-transfers => { root.pause-selected-sftp-transfers(); }
             resume-selected-sftp-transfers => { root.resume-selected-sftp-transfers(); }
             cancel-selected-sftp-transfers => { root.cancel-selected-sftp-transfers(); }
+            reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
+            remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
             load-remote-sftp-file(path) => { root.load-remote-sftp-file(path); }
             save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
             editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
             toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
             dropped-local-files-sftp(data) => { root.dropped-local-files-sftp(data); }
+            dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
             drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
+            drag-remote-file-sftp(path) => { return root.drag-remote-file-sftp(path); }
             upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
             rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
             edit-remote-sftp => { root.edit-remote-sftp(); }

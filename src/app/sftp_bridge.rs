@@ -3,7 +3,7 @@ use super::local_files::{
     validate_local_file_for_open,
 };
 use super::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -11,6 +11,8 @@ const LOCAL_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_REMOTE_NAME_CHARS: usize = 512;
 const MAX_DROPPED_LOCAL_PATHS: usize = 32;
 const MAX_DROPPED_LOCAL_DATA_BYTES: usize = LOCAL_DIRECTORY_PATH_LIMIT * MAX_DROPPED_LOCAL_PATHS;
+const LOCAL_DRAG_PREFIX: &str = "axssh-local-path:";
+const REMOTE_DRAG_PREFIX: &str = "axssh-remote-path:";
 
 type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
 
@@ -20,9 +22,41 @@ fn local_file_drag_data(path: &str) -> SlintDataTransfer {
         && !path.is_empty()
         && !path.chars().any(char::is_control)
     {
-        data.set_plain_text(path.to_owned().into());
+        data.set_plain_text(format!("{LOCAL_DRAG_PREFIX}{path}").into());
     }
     data
+}
+
+fn remote_file_drag_data(path: &str) -> SlintDataTransfer {
+    let mut data = SlintDataTransfer::default();
+    if path.len() <= LOCAL_DIRECTORY_PATH_LIMIT
+        && !path.is_empty()
+        && !path.chars().any(char::is_control)
+    {
+        data.set_plain_text(format!("{REMOTE_DRAG_PREFIX}{path}").into());
+    }
+    data
+}
+
+enum SftpDragPayload {
+    Local(Vec<PathBuf>),
+    Remote(String),
+}
+
+fn parse_sftp_drag_payload(text: &str) -> Result<SftpDragPayload> {
+    if let Some(path) = text.strip_prefix(REMOTE_DRAG_PREFIX) {
+        if path.is_empty()
+            || path.len() > LOCAL_DIRECTORY_PATH_LIMIT
+            || path.chars().any(char::is_control)
+        {
+            anyhow::bail!("dropped remote path is invalid or too long");
+        }
+        return Ok(SftpDragPayload::Remote(path.to_owned()));
+    }
+    let local_text = text.strip_prefix(LOCAL_DRAG_PREFIX).unwrap_or(text);
+    Ok(SftpDragPayload::Local(parse_dropped_local_paths(
+        local_text,
+    )?))
 }
 
 fn parse_single_dropped_path(raw: &str) -> Result<PathBuf> {
@@ -226,9 +260,13 @@ fn queue_upload_for_tab(
         .to_owned();
     with_sftp_terminal_for_tab(state, tab_id, |terminal| {
         let transfer_id = Uuid::new_v4();
-        terminal
-            .sftp
-            .queue_upload_transfer(transfer_id, name.clone(), total_bytes)?;
+        terminal.sftp.queue_upload_transfer(
+            transfer_id,
+            name.clone(),
+            total_bytes,
+            local_path.clone(),
+            remote_path.clone(),
+        )?;
         let result = match terminal.worker.as_ref() {
             Some(worker) => {
                 worker.request_open_sftp_upload(transfer_id, remote_path, local_path, total_bytes)
@@ -302,6 +340,94 @@ fn queue_local_upload_path(
             Err(error) => set_status(&ui, &format!("Cannot queue dropped upload: {error}")),
         }
     });
+}
+
+pub(super) fn handle_native_dropped_file(
+    runtime: &Handle,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    window_router: &WindowRouter,
+    window_id: Uuid,
+    path: &std::path::Path,
+) {
+    log_ui_action("sftp.drop-native-file");
+    sync_window_active(window_router, window_id, state);
+    match active_sftp_upload_target(state) {
+        Ok((tab_id, remote_directory)) => queue_local_upload_path(
+            runtime,
+            state.clone(),
+            ui.clone(),
+            tab_id,
+            remote_directory,
+            path.to_owned(),
+        ),
+        Err(error) => set_status(ui, &format!("Cannot prepare dropped upload: {error}")),
+    }
+}
+
+fn handle_drop_on_local_pane(
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    text: &str,
+) {
+    match parse_sftp_drag_payload(text) {
+        Ok(SftpDragPayload::Local(_)) => {
+            set_status(ui, "Drop a local file onto the remote pane to upload it");
+        }
+        Ok(SftpDragPayload::Remote(path)) => {
+            let result = with_active_sftp_terminal(state, |terminal| {
+                let entry = terminal
+                    .sftp
+                    .entries
+                    .iter()
+                    .find(|entry| entry.path == path)
+                    .cloned()
+                    .context("remote entry is no longer visible")?;
+                queue_remote_downloads(terminal, vec![entry])
+            });
+            match result {
+                Ok(()) => dispatch_active_snapshot(ui, state),
+                Err(error) => set_status(ui, &format!("Cannot queue remote download: {error}")),
+            }
+        }
+        Err(error) => set_status(ui, &format!("Cannot use dropped path: {error}")),
+    }
+}
+
+fn handle_drop_on_remote_pane(
+    runtime: &Handle,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    text: &str,
+) {
+    let paths = match parse_sftp_drag_payload(text) {
+        Ok(SftpDragPayload::Local(paths)) => paths,
+        Ok(SftpDragPayload::Remote(_)) => {
+            set_status(ui, "Remote files can only be dropped onto the local pane");
+            return;
+        }
+        Err(error) => {
+            set_status(ui, &format!("Cannot use dropped path: {error}"));
+            return;
+        }
+    };
+    let (tab_id, remote_directory) = match active_sftp_upload_target(state) {
+        Ok(target) => target,
+        Err(error) => {
+            set_status(ui, &format!("Cannot prepare dropped upload: {error}"));
+            return;
+        }
+    };
+    for path in paths {
+        queue_local_upload_path(
+            runtime,
+            state.clone(),
+            ui.clone(),
+            tab_id,
+            remote_directory.clone(),
+            path,
+        );
+    }
 }
 
 pub(super) fn wire_sftp(
@@ -385,6 +511,48 @@ pub(super) fn wire_sftp(
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_more, &state_for_more),
             Err(error) => set_status(&ui_for_more, &format!("Cannot load SFTP page: {error}")),
+        }
+    });
+
+    let ui_for_remote_sort = ui.as_weak();
+    let state_for_remote_sort = state.clone();
+    let router_for_remote_sort = window_router.clone();
+    ui.on_sort_remote_sftp(move |column| {
+        log_ui_action("sftp.sort-remote");
+        sync_window_active(&router_for_remote_sort, window_id, &state_for_remote_sort);
+        let result = with_active_sftp_terminal(&state_for_remote_sort, |terminal| {
+            if !terminal.sftp.toggle_sort(column.as_str()) {
+                anyhow::bail!("unknown SFTP sort column");
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_remote_sort, &state_for_remote_sort),
+            Err(error) => set_status(
+                &ui_for_remote_sort,
+                &format!("Cannot sort remote files: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_local_sort = ui.as_weak();
+    let state_for_local_sort = state.clone();
+    let router_for_local_sort = window_router.clone();
+    ui.on_sort_local_sftp(move |column| {
+        log_ui_action("sftp.sort-local");
+        sync_window_active(&router_for_local_sort, window_id, &state_for_local_sort);
+        let result = with_active_sftp_terminal(&state_for_local_sort, |terminal| {
+            if !terminal.sftp.toggle_local_sort(column.as_str()) {
+                anyhow::bail!("unknown local SFTP sort column");
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_local_sort, &state_for_local_sort),
+            Err(error) => set_status(
+                &ui_for_local_sort,
+                &format!("Cannot sort local files: {error}"),
+            ),
         }
     });
 
@@ -715,9 +883,8 @@ pub(super) fn wire_sftp(
     let ui_for_drop = ui.as_weak();
     let state_for_drop = state.clone();
     let router_for_drop = window_router.clone();
-    let runtime_for_drop = runtime.clone();
     ui.on_dropped_local_files_sftp(move |data| {
-        log_ui_action("sftp.drop-local-files");
+        log_ui_action("sftp.drop-on-local-pane");
         sync_window_active(&router_for_drop, window_id, &state_for_drop);
         let text = match data.plain_text() {
             Ok(text) => text.to_string(),
@@ -729,36 +896,36 @@ pub(super) fn wire_sftp(
                 return;
             }
         };
-        let paths = match parse_dropped_local_paths(text.as_str()) {
-            Ok(paths) => paths,
-            Err(error) => {
-                set_status(&ui_for_drop, &format!("Cannot use dropped path: {error}"));
-                return;
-            }
-        };
-        let (tab_id, remote_directory) = match active_sftp_upload_target(&state_for_drop) {
-            Ok(target) => target,
+        handle_drop_on_local_pane(&state_for_drop, &ui_for_drop, text.as_str());
+    });
+
+    ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
+    ui.on_drag_remote_file_sftp(|path| remote_file_drag_data(path.as_str()));
+
+    let ui_for_remote_drop = ui.as_weak();
+    let state_for_remote_drop = state.clone();
+    let router_for_remote_drop = window_router.clone();
+    let runtime_for_remote_drop = runtime.clone();
+    ui.on_dropped_remote_files_sftp(move |data| {
+        log_ui_action("sftp.drop-on-remote-pane");
+        sync_window_active(&router_for_remote_drop, window_id, &state_for_remote_drop);
+        let text = match data.plain_text() {
+            Ok(text) => text.to_string(),
             Err(error) => {
                 set_status(
-                    &ui_for_drop,
-                    &format!("Cannot prepare dropped upload: {error}"),
+                    &ui_for_remote_drop,
+                    &format!("Dropped data is not a readable path: {error}"),
                 );
                 return;
             }
         };
-        for path in paths {
-            queue_local_upload_path(
-                &runtime_for_drop.clone(),
-                state_for_drop.clone(),
-                ui_for_drop.clone(),
-                tab_id,
-                remote_directory.clone(),
-                path,
-            );
-        }
+        handle_drop_on_remote_pane(
+            &runtime_for_remote_drop,
+            &state_for_remote_drop,
+            &ui_for_remote_drop,
+            text.as_str(),
+        );
     });
-
-    ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
 
     let ui_for_upload = ui.as_weak();
     let state_for_upload = state.clone();
@@ -1030,6 +1197,65 @@ pub(super) fn wire_sftp(
 
     wire_selected_transfer_actions(ui, state.clone(), window_router.clone(), window_id);
 
+    let ui_for_reveal_transfer = ui.as_weak();
+    let state_for_reveal_transfer = state.clone();
+    let runtime_for_reveal_transfer = runtime.clone();
+    let router_for_reveal_transfer = window_router.clone();
+    ui.on_reveal_sftp_transfer_local(move |id| {
+        log_ui_action("sftp.reveal-transfer-local");
+        sync_window_active(
+            &router_for_reveal_transfer,
+            window_id,
+            &state_for_reveal_transfer,
+        );
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_reveal_transfer, |terminal| {
+                terminal
+                    .sftp
+                    .completed_transfer_local_path(transfer_id)
+                    .context("SFTP transfer has no local file to show")
+            })
+        });
+        match result {
+            Ok(path) => reveal_local_path(
+                &runtime_for_reveal_transfer,
+                ui_for_reveal_transfer.clone(),
+                path,
+            ),
+            Err(error) => set_status(
+                &ui_for_reveal_transfer,
+                &format!("Cannot show transferred file: {error}"),
+            ),
+        }
+    });
+
+    let ui_for_remove_transfer = ui.as_weak();
+    let state_for_remove_transfer = state.clone();
+    let router_for_remove_transfer = window_router.clone();
+    ui.on_remove_sftp_transfer(move |id| {
+        log_ui_action("sftp.remove-transfer");
+        sync_window_active(
+            &router_for_remove_transfer,
+            window_id,
+            &state_for_remove_transfer,
+        );
+        let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
+            with_active_sftp_terminal(&state_for_remove_transfer, |terminal| {
+                if !terminal.sftp.remove_finished_transfer(transfer_id) {
+                    anyhow::bail!("SFTP transfer is still active or no longer available");
+                }
+                Ok(())
+            })
+        });
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_remove_transfer, &state_for_remove_transfer),
+            Err(error) => set_status(
+                &ui_for_remove_transfer,
+                &format!("Cannot remove SFTP transfer: {error}"),
+            ),
+        }
+    });
+
     let ui_for_local_selection = ui.as_weak();
     let state_for_local_selection = state.clone();
     let router_for_local_selection = window_router.clone();
@@ -1109,6 +1335,24 @@ pub(super) fn wire_sftp(
                 );
                 dispatch_active_snapshot(&ui_for_local_open, &state_for_local_open);
             }
+        }
+    });
+
+    let ui_for_reveal_local = ui.as_weak();
+    let state_for_reveal_local = state.clone();
+    let runtime_for_reveal_local = runtime.clone();
+    let router_for_reveal_local = window_router.clone();
+    ui.on_reveal_local_sftp_file(move |path| {
+        log_ui_action("sftp.reveal-local-file");
+        sync_window_active(&router_for_reveal_local, window_id, &state_for_reveal_local);
+        match prepare_local_entry_reveal(&state_for_reveal_local, path.as_str()) {
+            Ok(path) => {
+                reveal_local_path(&runtime_for_reveal_local, ui_for_reveal_local.clone(), path)
+            }
+            Err(error) => set_status(
+                &ui_for_reveal_local,
+                &format!("Cannot show local file: {error}"),
+            ),
         }
     });
 
@@ -1337,6 +1581,80 @@ struct LocalOpenRequest {
     request_id: u64,
     directory: String,
     entry: LocalDirectoryEntry,
+}
+
+fn prepare_local_entry_reveal(
+    state: &Arc<Mutex<AppState>>,
+    requested_path: &str,
+) -> Result<PathBuf> {
+    with_active_sftp_terminal(state, |terminal| {
+        let entry = terminal
+            .sftp
+            .local
+            .entries
+            .iter()
+            .find(|entry| entry.path == requested_path)
+            .context("local entry is no longer visible")?;
+        if entry.is_symlink {
+            anyhow::bail!("symbolic links cannot be shown from SFTP in this version");
+        }
+        let directory = Path::new(&terminal.sftp.local.path);
+        let path = PathBuf::from(&entry.path);
+        if path.parent() != Some(directory) {
+            anyhow::bail!("local entry is outside the current directory snapshot");
+        }
+        Ok(path)
+    })
+}
+
+fn reveal_local_path(runtime: &Handle, ui: slint::Weak<AppWindow>, path: PathBuf) {
+    runtime.spawn(async move {
+        let revealed = tokio::time::timeout(
+            LOCAL_OPEN_TIMEOUT,
+            tokio::task::spawn_blocking(move || reveal_local_path_blocking(&path)),
+        )
+        .await;
+        match revealed {
+            Ok(Ok(Ok(()))) => set_status(&ui, "Opened local file location"),
+            Ok(Ok(Err(error))) => {
+                set_status(&ui, &format!("Cannot show local file location: {error}"));
+            }
+            Ok(Err(error)) => {
+                set_status(&ui, &format!("Local file location task failed: {error}"));
+            }
+            Err(_) => {
+                set_status(&ui, "Local file location task timed out");
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_local_path_blocking(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path)
+        .with_context(|| format!("cannot inspect local path {path:?}"))?;
+    if metadata.file_type().is_symlink() {
+        anyhow::bail!("local path is a symbolic link");
+    }
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+        .with_context(|| format!("cannot reveal local path {path:?}"))?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reveal_local_path_blocking(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path)
+        .with_context(|| format!("cannot inspect local path {path:?}"))?;
+    if metadata.file_type().is_symlink() {
+        anyhow::bail!("local path is a symbolic link");
+    }
+    let parent = path
+        .parent()
+        .context("local path has no parent directory")?;
+    open::that_detached(parent).with_context(|| format!("cannot open local directory {parent:?}"))
 }
 
 fn prepare_local_file_open(
@@ -1737,5 +2055,17 @@ mod tests {
     fn dropped_local_paths_rejects_oversized_payload() {
         let text = " ".repeat(MAX_DROPPED_LOCAL_DATA_BYTES + 1);
         assert!(parse_dropped_local_paths(&text).is_err());
+    }
+
+    #[test]
+    fn sftp_drag_payload_distinguishes_local_and_remote_paths() {
+        match parse_sftp_drag_payload(&format!("{LOCAL_DRAG_PREFIX}/tmp/a.txt")).unwrap() {
+            SftpDragPayload::Local(paths) => assert_eq!(paths, vec![PathBuf::from("/tmp/a.txt")]),
+            SftpDragPayload::Remote(_) => panic!("local drag payload was classified as remote"),
+        }
+        match parse_sftp_drag_payload(&format!("{REMOTE_DRAG_PREFIX}/var/log/a.txt")).unwrap() {
+            SftpDragPayload::Remote(path) => assert_eq!(path, "/var/log/a.txt"),
+            SftpDragPayload::Local(_) => panic!("remote drag payload was classified as local"),
+        }
     }
 }

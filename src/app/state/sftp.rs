@@ -45,6 +45,7 @@ impl SftpBrowserState {
             home: self.home.clone(),
             path: self.path.clone(),
             entries: self.entries.clone(),
+            sort: self.sort,
             has_more: self.has_more,
             truncated: self.truncated,
             status: self.status.clone(),
@@ -71,13 +72,29 @@ impl SftpBrowserState {
         }
     }
 
+    pub(in crate::app) fn toggle_sort(&mut self, column: &str) -> bool {
+        if !self.sort.toggle_column(column) {
+            return false;
+        }
+        sort_remote_entries(&mut self.entries, self.sort);
+        true
+    }
+
+    pub(in crate::app) fn toggle_local_sort(&mut self, column: &str) -> bool {
+        if !self.local.sort.toggle_column(column) {
+            return false;
+        }
+        sort_local_entries(&mut self.local.entries, self.local.sort);
+        true
+    }
+
     pub(in crate::app) fn queue_transfer(
         &mut self,
         id: Uuid,
         name: String,
         total_bytes: u64,
     ) -> Result<()> {
-        self.queue_transfer_with_pause(id, name, total_bytes, true)
+        self.queue_transfer_with_pause(id, name, total_bytes, true, None, None)
     }
 
     pub(in crate::app) fn queue_upload_transfer(
@@ -85,8 +102,17 @@ impl SftpBrowserState {
         id: Uuid,
         name: String,
         total_bytes: u64,
+        local_path: std::path::PathBuf,
+        remote_path: String,
     ) -> Result<()> {
-        self.queue_transfer_with_pause(id, name, total_bytes, false)
+        self.queue_transfer_with_pause(
+            id,
+            name,
+            total_bytes,
+            false,
+            Some(local_path),
+            Some(remote_path),
+        )
     }
 
     fn queue_transfer_with_pause(
@@ -95,11 +121,19 @@ impl SftpBrowserState {
         name: String,
         total_bytes: u64,
         pausable: bool,
+        local_path: Option<std::path::PathBuf>,
+        remote_path: Option<String>,
     ) -> Result<()> {
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
             if transfer.phase == SftpTransferPhase::Queued {
                 transfer.name = name;
                 transfer.total_bytes = total_bytes;
+                if local_path.is_some() {
+                    transfer.local_path = local_path;
+                }
+                if remote_path.is_some() {
+                    transfer.remote_path = remote_path;
+                }
             }
             return Ok(());
         }
@@ -126,6 +160,8 @@ impl SftpBrowserState {
             bytes_per_second: 0,
             started_at: None,
             status: "Queued".to_owned(),
+            local_path,
+            remote_path,
         });
         Ok(())
     }
@@ -145,7 +181,13 @@ impl SftpBrowserState {
         }
     }
 
-    pub(in crate::app) fn start_transfer(&mut self, id: Uuid, name: String, total_bytes: u64) {
+    pub(in crate::app) fn start_transfer(
+        &mut self,
+        id: Uuid,
+        remote_path: String,
+        name: String,
+        total_bytes: u64,
+    ) {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return;
         };
@@ -156,6 +198,9 @@ impl SftpBrowserState {
             return;
         }
         transfer.name = name;
+        if !remote_path.is_empty() {
+            transfer.remote_path = Some(remote_path);
+        }
         transfer.phase = SftpTransferPhase::Downloading;
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
@@ -218,7 +263,12 @@ impl SftpBrowserState {
         true
     }
 
-    pub(in crate::app) fn mark_transfer_opening(&mut self, id: Uuid, total_bytes: u64) -> bool {
+    pub(in crate::app) fn mark_transfer_opening(
+        &mut self,
+        id: Uuid,
+        total_bytes: u64,
+        local_path: std::path::PathBuf,
+    ) -> bool {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
@@ -229,6 +279,63 @@ impl SftpBrowserState {
         transfer.downloaded_bytes = total_bytes;
         transfer.total_bytes = total_bytes;
         transfer.status = "Opening".to_owned();
+        transfer.local_path = Some(local_path);
+        true
+    }
+
+    pub(in crate::app) fn finish_uploaded_transfer(&mut self, id: Uuid) -> Option<String> {
+        let refresh_path = self
+            .transfers
+            .iter()
+            .find(|transfer| {
+                transfer.id == id
+                    && !transfer.pausable
+                    && matches!(
+                        transfer.phase,
+                        SftpTransferPhase::Downloading
+                            | SftpTransferPhase::Pausing
+                            | SftpTransferPhase::Resuming
+                    )
+            })
+            .and_then(|transfer| transfer.remote_path.as_deref())
+            .and_then(remote_parent)
+            .filter(|directory| !self.loading && *directory == self.path)
+            .map(str::to_owned);
+        self.finish_transfer(id, SftpTransferPhase::Completed, "Uploaded".to_owned());
+        refresh_path
+    }
+
+    pub(in crate::app) fn begin_refresh_after_upload(
+        &mut self,
+        directory: &str,
+    ) -> Result<Option<String>> {
+        if self.loading || self.path != directory {
+            return Ok(None);
+        }
+        self.begin_navigation(SftpNavigation::Direct, Some(directory.to_owned()))
+            .map(Some)
+    }
+
+    pub(in crate::app) fn completed_transfer_local_path(
+        &self,
+        id: Uuid,
+    ) -> Option<std::path::PathBuf> {
+        self.transfers
+            .iter()
+            .find(|transfer| transfer.id == id && !transfer.phase.active())
+            .and_then(|transfer| transfer.local_path.clone())
+    }
+
+    pub(in crate::app) fn remove_finished_transfer(&mut self, id: Uuid) -> bool {
+        let Some(index) = self
+            .transfers
+            .iter()
+            .position(|transfer| transfer.id == id && !transfer.phase.active())
+        else {
+            return false;
+        };
+        self.transfers.remove(index);
+        self.selected_transfers.remove(&id);
         true
     }
 
@@ -501,6 +608,10 @@ impl SftpBrowserState {
         self.path = path;
     }
 
+    pub(in crate::app) fn sort_remote_entries(&mut self) {
+        sort_remote_entries(&mut self.entries, self.sort);
+    }
+
     pub(in crate::app) fn toggle_selection(&mut self, path: &str, selected: bool) -> bool {
         if !self.entries.iter().any(|entry| entry.path == path) {
             return false;
@@ -608,11 +719,12 @@ impl LocalDirectoryState {
         self.loading = false;
         self.path = path;
         self.entries = entries;
+        sort_local_entries(&mut self.entries, self.sort);
         self.selected
             .retain(|selected| self.entries.iter().any(|entry| &entry.path == selected));
         self.truncated = truncated;
         self.status = if truncated {
-            "Local directory limit reached".to_owned()
+            "Local directory text budget reached".to_owned()
         } else {
             format!("{} items", self.entries.len())
         };
@@ -660,12 +772,94 @@ impl LocalDirectoryState {
             loading: self.loading,
             path: self.path.clone(),
             entries: self.entries.clone(),
+            sort: self.sort,
             truncated: self.truncated,
             status: self.status.clone(),
             selected_count: self.selected_count(),
             all_selected: self.all_selected(),
             selected: self.selected.clone(),
         }
+    }
+}
+
+fn sort_remote_entries(entries: &mut [SftpEntry], sort: SftpSortState) {
+    entries.sort_by(|left, right| {
+        let ordering = match sort.column {
+            SftpSortColumn::Name => compare_text(&left.name, &right.name, sort.descending),
+            SftpSortColumn::Size => compare_numeric(left.size, right.size, sort.descending),
+            SftpSortColumn::Modified => {
+                compare_optional_numeric(left.modified, right.modified, sort.descending)
+            }
+        };
+        ordering
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+}
+
+fn sort_local_entries(entries: &mut [LocalDirectoryEntry], sort: SftpSortState) {
+    entries.sort_by(|left, right| {
+        let ordering = match sort.column {
+            SftpSortColumn::Name => compare_text(&left.name, &right.name, sort.descending),
+            SftpSortColumn::Size => compare_numeric(left.size, right.size, sort.descending),
+            SftpSortColumn::Modified => {
+                compare_optional_time(left.modified, right.modified, sort.descending)
+            }
+        };
+        ordering
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+}
+
+fn compare_text(left: &str, right: &str, descending: bool) -> std::cmp::Ordering {
+    let ordering = left.to_lowercase().cmp(&right.to_lowercase());
+    if descending {
+        ordering.reverse()
+    } else {
+        ordering
+    }
+}
+
+fn compare_numeric(left: u64, right: u64, descending: bool) -> std::cmp::Ordering {
+    let ordering = left.cmp(&right);
+    if descending {
+        ordering.reverse()
+    } else {
+        ordering
+    }
+}
+
+fn compare_optional_numeric(
+    left: Option<u32>,
+    right: Option<u32>,
+    descending: bool,
+) -> std::cmp::Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => compare_numeric(left as u64, right as u64, descending),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+fn compare_optional_time(
+    left: Option<std::time::SystemTime>,
+    right: Option<std::time::SystemTime>,
+    descending: bool,
+) -> std::cmp::Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => {
+            let ordering = left.cmp(&right);
+            if descending {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        }
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
     }
 }
 
@@ -733,6 +927,15 @@ impl SftpTransferState {
             bytes_per_second: self.bytes_per_second,
             status: self.status.clone(),
             selected,
+            has_local_path: self.local_path.is_some(),
         }
     }
+}
+
+fn remote_parent(path: &str) -> Option<&str> {
+    let (parent, name) = path.rsplit_once('/')?;
+    if name.is_empty() {
+        return None;
+    }
+    Some(if parent.is_empty() { "/" } else { parent })
 }

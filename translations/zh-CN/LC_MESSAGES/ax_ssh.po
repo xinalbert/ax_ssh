@@ -670,14 +670,14 @@ msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift �
 msgid "Open"
 msgstr "打开"
 
+msgid "Open Recent"
+msgstr "打开最近文件"
+
 msgid "Open Settings"
 msgstr "打开设置"
 
 msgid "Open Settings shortcut"
 msgstr "打开设置快捷键"
-
-msgid "Open Recent"
-msgstr "打开最近工作区"
 
 msgid "Open Workspace"
 msgstr "打开工作区"
@@ -687,6 +687,9 @@ msgstr "打开新的本地 Shell 标签页"
 
 msgid "Open a saved session or create a new tab."
 msgstr "打开已保存的会话或新建标签页。"
+
+msgid "Open folder"
+msgstr "打开文件夹"
 
 msgid "Open local shell"
 msgstr "打开本地 Shell"
@@ -825,6 +828,9 @@ msgstr "远端文件"
 
 msgid "Remote text editor"
 msgstr "远端文本编辑器"
+
+msgid "Remove"
+msgstr "移除"
 
 msgid "Remove revoked record"
 msgstr "移除已撤销记录"
@@ -1051,6 +1057,9 @@ msgstr "快捷键"
 msgid "Show a blinking cursor while the terminal is focused"
 msgstr "终端聚焦时显示闪烁光标"
 
+msgid "Show in Folder"
+msgstr "在文件夹中显示"
+
 msgid "Simplified Chinese"
 msgstr "Simplified Chinese"
 
@@ -1071,6 +1080,15 @@ msgstr "软件呈现块的终端行数"
 
 msgid "Software presentation path"
 msgstr "软件呈现路径"
+
+msgid "Sort by modified time"
+msgstr "按修改时间排序"
+
+msgid "Sort by name"
+msgstr "按名称排序"
+
+msgid "Sort by size"
+msgstr "按大小排序"
 
 msgid "Speed"
 msgstr "速度"

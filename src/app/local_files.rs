@@ -5,9 +5,8 @@ use std::time::SystemTime;
 use anyhow::{Context, Result, bail};
 use directories::UserDirs;
 
-const LOCAL_DIRECTORY_ENTRY_LIMIT: usize = 250;
 const LOCAL_DIRECTORY_NAME_LIMIT: usize = 256;
-const LOCAL_DIRECTORY_NAME_BUDGET: usize = 64 * 1024;
+const LOCAL_DIRECTORY_NAME_BUDGET: usize = 2 * 1024 * 1024;
 pub(super) const LOCAL_DIRECTORY_PATH_LIMIT: usize = 4 * 1024;
 
 #[derive(Clone, Debug)]
@@ -80,10 +79,6 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     let mut truncated = false;
 
     for item in entries {
-        if listed.len() == LOCAL_DIRECTORY_ENTRY_LIMIT {
-            truncated = true;
-            break;
-        }
         let Ok(item) = item else {
             truncated = true;
             continue;

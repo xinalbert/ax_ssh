@@ -1093,7 +1093,9 @@ focus and arrow adjustment, and slider accessibility actions. Double-clicking
 the directory splitter restores equal widths; double-clicking the transfer
 splitter collapses or expands the queue. No splitter state enters Rust, the
 configuration schema, or the SFTP transport, and the Name/Size/Modified columns
-remain fixed responsive columns in this phase.
+remain responsive columns; clicking a header sorts the current snapshot, with
+Modified descending (newest first) as the default. Application state reapplies
+the selected sort after remote pages arrive.
 Each directory header also emits only its current, already-bounded path through
 the existing clipboard callback; the copy button does not read a directory or
 access an SFTP worker.
@@ -1101,8 +1103,9 @@ access an SFTP worker.
 The remote side remains the bounded SFTP browser, while
 `src/app/local_files.rs` reads local directory metadata only on a Tokio blocking
 boundary. Local results carry a Tab-local request identity so late reads cannot
-replace a newer path. They are bounded to 250 entries, 256 characters per name,
-a 64 KiB aggregate name budget, and 4 KiB paths before reaching Slint. The
+replace a newer path. They are bounded to 256 characters per name, a 2 MiB
+aggregate name budget, and 4 KiB paths before reaching Slint; the former fixed
+250-entry cap is removed. The
 remote browser keeps a bounded per-Tab back/forward path history in application
 state. History entries are committed only after a directory page succeeds, so a
 failed request cannot consume a navigation step; navigation controls are disabled
@@ -1112,7 +1115,7 @@ only for entries still present in the current directory snapshot and does not
 start a transfer. Commands and events use bounded channels, requests are
 serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
 `russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
-page. One directory stops at 2,000 accepted entries or 2 MiB of names and paths;
+page. One directory stops when its 2 MiB names-and-paths budget is reached;
 individual paths/names are also validated and bounded before they enter the
 application snapshot. `russh-sftp` still has an internal unbounded packet
 sender, so AxSSH limits the browser exposure to one session with one request in
@@ -1170,6 +1173,14 @@ they do not reserve a second toolbar row or introduce another callback path.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
 and the stream resumes at its current offset only while that worker lives.
 
+Each bounded transfer row retains its optional local path and remote target only
+inside application state. Terminal records can reveal a non-symlink local path
+from a blocking platform opener; Slint receives only a boolean capability and
+the opaque transfer ID. A completed upload may start one fresh listing request
+only when the active remote path still equals its destination parent and no
+navigation is loading. The refresh uses the ordinary SFTP navigation request,
+does not add history, and is skipped for cancelled or stale completions.
+
 The local writer validates every path component, rejects symlink traversal and
 existing targets, creates a task-specific `0600` `.part` file on Unix, then
 flushes, fsyncs, and atomically publishes the final name without replacing a
@@ -1188,7 +1199,12 @@ does not become a resident buffer. Editor monitoring polls a
 remote size/mtime fingerprint while the editor is open. Automatic upload is
 explicit and off by default, debounced, and still guarded by the observed
 fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
-bridge validation and transfer queue.
+bridge validation and transfer queue. Internal drag payloads carry an explicit
+local/remote source prefix: local or Finder files dropped on Remote files queue
+uploads, and remote files or folders dropped on Local files queue downloads.
+macOS Finder drops arrive through Winit's native `DroppedFile` event (and target
+the current remote directory because that event has no reliable pane
+coordinate), while the Slint `DropArea` handles in-process transfers.
 
 ## Telnet and serial transport contract
 

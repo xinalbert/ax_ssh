@@ -1,6 +1,7 @@
 //! Application state, workspace tabs, and connection-attempt transitions.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -204,6 +205,56 @@ pub(super) enum SftpNavigation {
     Forward,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SftpSortColumn {
+    Name,
+    Size,
+    Modified,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct SftpSortState {
+    pub(super) column: SftpSortColumn,
+    pub(super) descending: bool,
+}
+
+impl Default for SftpSortState {
+    fn default() -> Self {
+        Self {
+            column: SftpSortColumn::Modified,
+            descending: true,
+        }
+    }
+}
+
+impl SftpSortState {
+    pub(super) fn toggle_column(&mut self, column: &str) -> bool {
+        let Some(column) = (match column {
+            "name" => Some(SftpSortColumn::Name),
+            "size" => Some(SftpSortColumn::Size),
+            "modified" => Some(SftpSortColumn::Modified),
+            _ => None,
+        }) else {
+            return false;
+        };
+        if self.column == column {
+            self.descending = !self.descending;
+        } else {
+            self.column = column;
+            self.descending = !matches!(column, SftpSortColumn::Name);
+        }
+        true
+    }
+
+    pub(super) fn column_name(self) -> &'static str {
+        match self.column {
+            SftpSortColumn::Name => "name",
+            SftpSortColumn::Size => "size",
+            SftpSortColumn::Modified => "modified",
+        }
+    }
+}
+
 struct PendingSftpNavigation {
     kind: SftpNavigation,
     from: String,
@@ -221,6 +272,7 @@ pub(super) struct SftpBrowserState {
     pub(super) truncated: bool,
     pub(super) status: String,
     pub(super) selected: HashSet<String>,
+    pub(super) sort: SftpSortState,
     back_history: VecDeque<String>,
     forward_history: VecDeque<String>,
     pending_navigation: Option<PendingSftpNavigation>,
@@ -247,6 +299,7 @@ pub(super) struct LocalDirectoryState {
     pub(super) status: String,
     pub(super) request_id: u64,
     pub(super) selected: HashSet<String>,
+    pub(super) sort: SftpSortState,
 }
 
 #[derive(Clone, Default)]
@@ -257,6 +310,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) home: String,
     pub(super) path: String,
     pub(super) entries: Vec<SftpEntry>,
+    pub(super) sort: SftpSortState,
     pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
@@ -283,6 +337,7 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) loading: bool,
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
+    pub(super) sort: SftpSortState,
     pub(super) truncated: bool,
     pub(super) status: String,
     pub(super) selected_count: usize,
@@ -314,6 +369,8 @@ pub(super) struct SftpTransferState {
     pub(super) bytes_per_second: u64,
     started_at: Option<Instant>,
     pub(super) status: String,
+    local_path: Option<PathBuf>,
+    remote_path: Option<String>,
 }
 
 #[derive(Clone)]
@@ -327,6 +384,7 @@ pub(super) struct SftpTransferSnapshot {
     pub(super) bytes_per_second: u64,
     pub(super) status: String,
     pub(super) selected: bool,
+    pub(super) has_local_path: bool,
 }
 
 pub(super) enum TerminalBackend {

@@ -326,7 +326,13 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
     ui.show().context("failed to show main window")?;
-    install_terminal_keypad_input_hook(&ui, state.clone(), window_router.clone(), MAIN_WINDOW_ID);
+    install_terminal_keypad_input_hook(
+        &ui,
+        state.clone(),
+        runtime.handle().clone(),
+        window_router.clone(),
+        MAIN_WINDOW_ID,
+    );
     if let Some(snapshot) = workspace_snapshot.as_ref() {
         restore_detached_workspaces(
             snapshot,

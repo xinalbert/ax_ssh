@@ -920,6 +920,8 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
         snapshot.entries,
         &snapshot.selected,
     ))));
+    ui.set_sftp_sort_column(snapshot.sort.column_name().into());
+    ui.set_sftp_sort_descending(snapshot.sort.descending);
     ui.set_sftp_has_more(snapshot.has_more);
     ui.set_sftp_truncated(snapshot.truncated);
     ui.set_sftp_status(snapshot.status.into());
@@ -933,6 +935,8 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
         snapshot.local.entries,
         &snapshot.local.selected,
     ))));
+    ui.set_local_sftp_sort_column(snapshot.local.sort.column_name().into());
+    ui.set_local_sftp_sort_descending(snapshot.local.sort.descending);
     ui.set_local_sftp_truncated(snapshot.local.truncated);
     ui.set_local_sftp_status(snapshot.local.status.into());
     ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);

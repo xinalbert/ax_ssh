@@ -693,18 +693,19 @@ available 的远端 snapshot，application bridge 也会独立拒绝来自未连
 文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，
 `SftpPane` 则按响应式最小尺寸限制两侧。splitter 提供 resize 光标、键盘焦点与方向键调整，以及 slider
 可访问操作；双击目录 splitter 恢复等宽，双击 Transfers splitter 折叠或展开队列。分栏状态不进入
-Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列在本阶段仍是固定的响应式列。
+Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列保持响应式布局；点击标题会排序当前快照，默认按
+Modified 降序（最新优先），并在远端后续分页到达后由应用状态重新应用。
 两个目录标题栏还只会通过既有 clipboard callback 发出当前已受限路径；复制按钮不读取目录，也不会接触
 SFTP worker。
 
 远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
-本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为 250 条、每个名称
-256 字符、名称总预算 64 KiB 和路径 4 KiB。远端浏览器在应用状态中为每个 Tab 保留有界的
+本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为每个名称 256 字符、
+名称总预算 2 MiB 和路径 4 KiB，移除原先固定 250 条的限制。远端浏览器在应用状态中为每个 Tab 保留有界的
 前进/后退路径历史；只有目录页成功返回后才提交历史，因此失败请求不会消耗导航步骤，加载期间
 导航按钮会禁用。远端和本地行都拥有真实的 Tab 内选中状态，表头可以全选或清空；目录刷新后
 只保留仍存在于当前快照的条目，选中本身不会启动传输。命令/事件 channel 有界，请求串行执行
 并带超时；入站 SFTP frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw
-目录游标每页最多输出 250 条。单目录在接受 2,000 条或名称/路径累计 2 MiB 时停止，单条路径和
+目录游标每页最多输出 250 条。单目录在名称/路径累计 2 MiB 时停止，单条路径和
 名称进入应用快照前也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此
 AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
@@ -740,6 +741,11 @@ subsystem stream。
 活动页的批量操作与 transfer 页签栏共用同一行并位于右侧；不会另占第二条工具栏，也不会引入新的 callback 路径。
 暂停/继续是 worker 生命周期内的契约：writer 保留部分文件，流只在该 worker 存活时从当前 offset 继续。
 
+每条有界 transfer 行只在应用状态中保留可选的本地路径和远端目标。终态记录可由 blocking 平台 opener 显示
+非符号链接的本地路径；Slint 只得到布尔能力和不透明 transfer ID。上传完成时，只有活动远端路径仍等于
+目标父目录且没有导航加载中，才会发起一次新的列表请求。该刷新复用普通 SFTP 导航请求、不写入历史，且
+已取消或迟到的完成事件不会触发刷新。
+
 本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
@@ -748,7 +754,8 @@ Save As。本地 regular file 通过同一 transfer queue 上传。application �
 每次只流式读取一个 64 KiB chunk；进程级最多同时运行 8 个上传，进一步把此边界的常驻 chunk
 内存限制在约 512 KiB，因此 512 MiB 上传不会变成常驻内存缓冲。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
-拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。
+拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：本地或 Finder 文件拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。macOS Finder 拖入通过 Winit 原生
+`DroppedFile` 事件接收；由于该事件没有可靠的 pane 坐标，原生文件落到当前远端目录，Slint `DropArea` 负责进程内拖放。
 
 ## Telnet 与 Serial 传输契约
 
