@@ -130,6 +130,14 @@ Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独�
 递归保留所选目录树。远端符号链接和非 regular 条目会被跳过或拒绝，绝不覆盖已有本地文件；单个文件最多
 512 MiB。递归发现限制为最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本和 1 GiB 总大小。
 
+SFTP 传输可以过滤系统生成的文件。在 **Settings > General** 中开启
+**Filter system files** 后，会使用当前平台的默认规则（macOS 包含 `.DS_Store`、
+`._*`、`.Spotlight-V100`、`.Trashes` 和 `.fseventsd`；Windows、Linux 使用各自常见的
+系统元数据名称）。自定义过滤规则每行填写一个文件名模式，`*` 匹配任意字符。同一规则
+同时用于本地上传、Finder 拖入、远端下载以及递归目录下载的每一层。点击
+**Restore platform defaults** 会清空自定义规则并重新启用平台默认值；配置仍遵循设置页
+草稿和保存流程。
+
 Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。可用勾选框选择活动行并批量暂停、
 继续或取消，操作位于 **Transferring** 页签栏右侧，不再单独占用一行。暂停/继续会由仍存活的 worker
 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
@@ -308,6 +316,7 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 再即时同步到主窗口和独立窗口；保存失败时保持原选择。**Follow system** 在中文系统 locale 下
 使用简体中文，其它 locale 使用英文。AxSSH 会翻译应用自有的 Slint 界面；远端终端内容、用户提供的
 名称/路径、日志和运行时技术错误详情保持原文。
+SFTP 传输过滤规则也在此页面配置。
 
 在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；Renderer 可为
 下一次应用启动选择 **Automatic**、**GPU** 或 **Software**：Automatic 在 macOS 使用 GPU/Skia，在

@@ -204,6 +204,15 @@ may be at most 512 MiB. Recursive discovery is bounded to 4,096 scanned
 entries, 512 files, 256 directories, 16 levels, 512 KiB of path text, and 1
 GiB in total.
 
+SFTP transfers can omit generated system files. In **Settings > General**, enable
+**Filter system files** to use the current platform preset (macOS includes
+`.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd`; Windows and
+Linux have their corresponding common metadata names). Add one custom filename
+pattern per line; `*` matches any characters. The same filter applies to local
+uploads, Finder drops, remote downloads, and every level of a recursive directory
+download. **Restore platform defaults** clears custom patterns and re-enables the
+platform preset; settings changes follow the normal Settings draft/save flow.
+
 The Transfers area has separate **Transferring**, **Failed**, and **Success**
 pages. Select active rows with their checkboxes to pause, resume, or cancel
 them in a batch from the right side of the **Transferring** page bar. These
@@ -508,6 +517,7 @@ keeps the previous selection. **Follow system** uses Simplified Chinese for a
 Chinese system locale and English for every other locale. AxSSH translates its
 application-owned Slint interface; remote terminal content, user-provided
 names/paths, logs, and runtime technical error details remain unchanged.
+The General page also owns the SFTP transfer filter described above.
 
 In **Settings > Appearance**, Font family changes the application interface
 without changing terminal cell metrics. Renderer selects **Automatic**, **GPU**,

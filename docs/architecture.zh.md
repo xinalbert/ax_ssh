@@ -249,6 +249,10 @@ preferred height 显式设置 viewport height，因此内容高于当前窗口�
 密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
 source snapshot。保存 profile 时密码可以留空；保存密码开关和凭据后端只是明确的保存意图，
 未启用保存时后端选择不参与处理。
+`AppSettings` 还持有有界的 `SftpTransferFilterSettings`：平台默认规则、启用开关和用户文件名
+模式。application bridge 将生效的 basename 模式传入上传和下载 intent，SFTP 领域用同一个 `*`
+匹配器处理直接条目和递归发现，因此传输过滤与浏览器的 Hidden 显示开关保持分离。General 草稿
+中的恢复操作会恢复当前平台默认规则并清空自定义模式。
 编辑器还包含 SSH-only、非敏感的 `sftp_remote_path` 和 `sftp_local_path` 字段。
 它们只是本地草稿：修改时不会打开任一目录，保存时也不会改变已经运行的 Tab。
 
@@ -734,6 +738,11 @@ identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证�
 目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总字节，
 每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动或正在打开的 transfer，每个 transfer 独占单独的 SFTP
 subsystem stream。
+
+下载根 intent 还携带有界的生效文件名过滤模式。application bridge 会拒绝匹配的直接上传/下载
+意图，worker 在递归发现时使用同一个仅匹配 basename 的 `*` 匹配器，跳过系统生成的文件和目录。
+浏览器的 Hidden 开关仍只控制显示。`AppSettings` 持久化当前平台预设、启用开关和规范化后的自定义
+模式；General 草稿的恢复操作会恢复该预设并清空自定义列表。
 
 每个请求都会重验远端路径和 handle 元数据，每次最多读取 64 KiB，writer queue 只容纳两个 chunk，
 每个操作 15 秒超时、总时长 30 分钟，并报告自有的队列、状态、进度和终态事件。应用状态拥有有界行，

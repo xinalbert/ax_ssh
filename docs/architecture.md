@@ -378,6 +378,13 @@ editor content's preferred height, so all fields remain reachable when the
 editor is taller than the current window. `in-out` properties remain inside components only where
 two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
+`AppSettings` also owns bounded `SftpTransferFilterSettings`: a platform preset,
+an enable flag, and user filename patterns. The application bridge passes the
+effective basename patterns into upload and download intents; the SFTP domain
+uses the same `*` matcher for direct entries and recursive discovery, keeping
+transfer filtering separate from the browser's Hidden display toggle. Resetting
+the General-page draft restores the current platform preset and clears custom
+patterns.
 Password and vault-password fields are local secret drafts: they are blank on
 every editor open, are cleared after submit, and never enter the read-only
 source snapshot. A password may be left empty when saving a profile, and the
@@ -1161,6 +1168,14 @@ directories, depth 16, 512 KiB of path text, 1 GiB aggregate bytes, and 512
 MiB per file. Each SFTP Tab permits at
 most two active or opening transfers, and each transfer owns a separate SFTP
 subsystem stream.
+
+The transfer root also carries the effective bounded filename-filter patterns.
+The application bridge rejects matching direct upload/download intents, while
+the worker applies the same basename-only `*` matcher during recursive discovery
+to skip generated files and directories. The browser's Hidden toggle remains a
+display-only concern. `AppSettings` persists the current-platform preset, the
+enable flag, and normalized custom patterns; resetting the General-page draft
+restores that preset and clears the custom list.
 
 Each request revalidates remote path and handle metadata, reads at most 64 KiB
 per request, uses a two-chunk writer queue, applies 15-second operation
