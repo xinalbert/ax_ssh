@@ -2,7 +2,9 @@ use std::cell::Cell;
 
 use ax_ssh::terminal::{TerminalKey, TerminalKeypadKey, TerminalModifiers};
 use slint::platform::Key;
-use slint::winit_030::winit::keyboard::{Key as WinitKey, KeyCode, NamedKey};
+use slint::winit_030::winit::keyboard::KeyCode;
+#[cfg(target_os = "macos")]
+use slint::winit_030::winit::keyboard::{Key as WinitKey, NamedKey};
 
 thread_local! {
     /// Modifier state captured from the native window event immediately before
@@ -174,6 +176,7 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
         })
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey> {
     let key = match key {
         WinitKey::Character(text) => return Some(TerminalKey::Text(text.to_string())),
@@ -213,6 +216,7 @@ pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey
     Some(terminal_key)
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn native_shortcut_key_name(key: &WinitKey) -> Option<String> {
     let name = match key {
         WinitKey::Character(text) => {
@@ -635,6 +639,7 @@ mod tests {
         assert_eq!(terminal_key_from_physical_keycode(KeyCode::KeyA), None);
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn maps_native_character_and_navigation_keys_to_terminal_keys() {
         let character = WinitKey::Character("b".into());

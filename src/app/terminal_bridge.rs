@@ -101,6 +101,7 @@ pub(super) fn install_terminal_keypad_input_hook(
 ) {
     let modifiers = Rc::new(Cell::new(ModifiersState::default()));
     let modifiers_for_event = modifiers.clone();
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let ui_for_keypad = ui.as_weak();
     let state_for_drop = state.clone();
     let runtime_for_drop = runtime.clone();
