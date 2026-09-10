@@ -203,6 +203,17 @@ fn active_sftp_upload_target(state: &Arc<Mutex<AppState>>) -> Result<(Uuid, Stri
     Ok((tab_id, remote_directory))
 }
 
+fn active_sftp_transfer_filter_patterns(state: &Arc<Mutex<AppState>>) -> Result<Vec<String>> {
+    let app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    Ok(app
+        .sessions
+        .settings
+        .sftp_transfer_filters
+        .effective_patterns())
+}
+
 fn prepare_selected_local_upload(
     state: &Arc<Mutex<AppState>>,
 ) -> Result<(Uuid, PathBuf, u64, String)> {
@@ -237,6 +248,14 @@ fn prepare_selected_local_upload(
     if entry.size > ax_ssh::sftp::MAX_UPLOAD_BYTES {
         anyhow::bail!("local file exceeds the upload size limit");
     }
+    let filter_patterns = app
+        .sessions
+        .settings
+        .sftp_transfer_filters
+        .effective_patterns();
+    if ax_ssh::sftp::transfer_name_matches_filter(&entry.name, &filter_patterns) {
+        anyhow::bail!("local file is excluded by SFTP transfer filters");
+    }
     Ok((
         tab_id,
         entry.path.clone().into(),
@@ -258,6 +277,10 @@ fn queue_upload_for_tab(
         .filter(|name| !name.is_empty())
         .context("remote upload target is missing a file name")?
         .to_owned();
+    let filter_patterns = active_sftp_transfer_filter_patterns(state)?;
+    if ax_ssh::sftp::transfer_name_matches_filter(&name, &filter_patterns) {
+        anyhow::bail!("file is excluded by SFTP transfer filters");
+    }
     with_sftp_terminal_for_tab(state, tab_id, |terminal| {
         let transfer_id = Uuid::new_v4();
         terminal.sftp.queue_upload_transfer(
@@ -375,6 +398,13 @@ fn handle_drop_on_local_pane(
             set_status(ui, "Drop a local file onto the remote pane to upload it");
         }
         Ok(SftpDragPayload::Remote(path)) => {
+            let filter_patterns = match active_sftp_transfer_filter_patterns(state) {
+                Ok(patterns) => patterns,
+                Err(error) => {
+                    set_status(ui, &format!("Cannot read SFTP transfer filters: {error}"));
+                    return;
+                }
+            };
             let result = with_active_sftp_terminal(state, |terminal| {
                 let entry = terminal
                     .sftp
@@ -383,7 +413,7 @@ fn handle_drop_on_local_pane(
                     .find(|entry| entry.path == path)
                     .cloned()
                     .context("remote entry is no longer visible")?;
-                queue_remote_downloads(terminal, vec![entry])
+                queue_remote_downloads(terminal, vec![entry], &filter_patterns)
             });
             match result {
                 Ok(()) => dispatch_active_snapshot(ui, state),
@@ -635,16 +665,19 @@ pub(super) fn wire_sftp(
     ui.on_open_remote_sftp_file(move |path| {
         log_ui_action("sftp.open-remote-file");
         sync_window_active(&router_for_remote_open, window_id, &state_for_remote_open);
-        let result = with_active_sftp_terminal(&state_for_remote_open, |terminal| {
-            let entry = terminal
-                .sftp
-                .entries
-                .iter()
-                .find(|entry| entry.path == path.as_str())
-                .cloned()
-                .context("remote entry is no longer visible")?;
-            queue_remote_downloads(terminal, vec![entry])?;
-            Ok(())
+        let filter_patterns = active_sftp_transfer_filter_patterns(&state_for_remote_open);
+        let result = filter_patterns.and_then(|filter_patterns| {
+            with_active_sftp_terminal(&state_for_remote_open, |terminal| {
+                let entry = terminal
+                    .sftp
+                    .entries
+                    .iter()
+                    .find(|entry| entry.path == path.as_str())
+                    .cloned()
+                    .context("remote entry is no longer visible")?;
+                queue_remote_downloads(terminal, vec![entry], &filter_patterns)?;
+                Ok(())
+            })
         });
         match result {
             Ok(()) => dispatch_active_snapshot(&ui_for_remote_open, &state_for_remote_open),
@@ -668,15 +701,19 @@ pub(super) fn wire_sftp(
             window_id,
             &state_for_selected_remote_download,
         );
-        let result = with_active_sftp_terminal(&state_for_selected_remote_download, |terminal| {
-            let selected = terminal
-                .sftp
-                .entries
-                .iter()
-                .filter(|entry| terminal.sftp.selected.contains(&entry.path))
-                .cloned()
-                .collect::<Vec<_>>();
-            queue_remote_downloads(terminal, selected)
+        let filter_patterns =
+            active_sftp_transfer_filter_patterns(&state_for_selected_remote_download);
+        let result = filter_patterns.and_then(|filter_patterns| {
+            with_active_sftp_terminal(&state_for_selected_remote_download, |terminal| {
+                let selected = terminal
+                    .sftp
+                    .entries
+                    .iter()
+                    .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                queue_remote_downloads(terminal, selected, &filter_patterns)
+            })
         });
         match result {
             Ok(()) => dispatch_active_snapshot(
@@ -1527,7 +1564,11 @@ fn request_selected_transfer_actions(
     Ok(())
 }
 
-fn queue_remote_downloads(terminal: &mut TerminalTabState, entries: Vec<SftpEntry>) -> Result<()> {
+fn queue_remote_downloads(
+    terminal: &mut TerminalTabState,
+    entries: Vec<SftpEntry>,
+    filter_patterns: &[String],
+) -> Result<()> {
     if entries.is_empty() {
         anyhow::bail!("no remote files or folders are selected");
     }
@@ -1537,7 +1578,12 @@ fn queue_remote_downloads(terminal: &mut TerminalTabState, entries: Vec<SftpEntr
         .as_ref()
         .context("active SFTP tab has no worker")?;
     let mut accepted = 0_usize;
+    let mut filtered = 0_usize;
     for entry in entries {
+        if ax_ssh::sftp::transfer_name_matches_filter(&entry.name, filter_patterns) {
+            filtered += 1;
+            continue;
+        }
         let transfer_id = uuid::Uuid::new_v4();
         if entry.is_symlink {
             terminal
@@ -1555,7 +1601,12 @@ fn queue_remote_downloads(terminal: &mut TerminalTabState, entries: Vec<SftpEntr
                 .sftp
                 .queue_transfer(transfer_id, entry.name.clone(), entry.size)?;
         }
-        match worker.request_open_sftp_file(transfer_id, entry.path, local_directory.clone()) {
+        match worker.request_open_sftp_file(
+            transfer_id,
+            entry.path,
+            local_directory.clone(),
+            filter_patterns.to_vec(),
+        ) {
             Ok(()) => accepted += 1,
             Err(error) => {
                 let _ = terminal
@@ -1571,6 +1622,9 @@ fn queue_remote_downloads(terminal: &mut TerminalTabState, entries: Vec<SftpEntr
         }
     }
     if accepted == 0 {
+        if filtered > 0 {
+            anyhow::bail!("all selected entries are excluded by SFTP transfer filters");
+        }
         anyhow::bail!("no selected entries could be queued for download");
     }
     Ok(())

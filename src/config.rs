@@ -29,7 +29,7 @@ pub use self::session::{
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
     AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
-    ShortcutSettings, SoftwarePresentationMode, TerminalSemanticColors,
+    SftpTransferFilterSettings, ShortcutSettings, SoftwarePresentationMode, TerminalSemanticColors,
     TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, UiLanguage,
     WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
 };

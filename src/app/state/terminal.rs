@@ -452,9 +452,12 @@ impl TerminalWorker {
         transfer_id: Uuid,
         path: String,
         local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
     ) -> Result<()> {
         match self {
-            Self::Ssh(worker) => worker.request_open_sftp_file(transfer_id, path, local_directory),
+            Self::Ssh(worker) => {
+                worker.request_open_sftp_file(transfer_id, path, local_directory, filter_patterns)
+            }
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }

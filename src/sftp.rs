@@ -9,6 +9,7 @@ pub(crate) use transfer::{
 };
 pub use transfer::{
     SftpTransferEvent, cleanup_stale_sftp_open_cache, snapshot_local_file_for_open,
+    transfer_name_matches_filter,
 };
 
 use std::collections::VecDeque;

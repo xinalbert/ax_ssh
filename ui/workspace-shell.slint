@@ -564,7 +564,7 @@ export component WorkspaceShell inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, string, bool,
+        string, bool, bool, string, string, bool,
     );
     callback save-ui-language(int);
     callback connect-session(string);
@@ -1027,6 +1027,7 @@ export component WorkspaceShell inherits Rectangle {
                              x11-provider, x11-app-path, x11-launch, x11-no-auth, shell,
                              scrollback, columns, rows, sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key,
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
+                             sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
                              settings-tab-id, close-after-save) => {
                             root.save-settings(
                                 application-font, renderer-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
@@ -1043,7 +1044,9 @@ export component WorkspaceShell inherits Rectangle {
                                 x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                                 sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                                 toggle-sidebar-key, copy-key,
-                                paste-key, open-sftp-key, credential-storage, settings-tab-id, close-after-save,
+                                paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
+                                sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
+                                settings-tab-id, close-after-save,
                             );
                         }
                         save-ui-language(index) => { root.save-ui-language(index); }

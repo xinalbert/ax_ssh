@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 49] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 52] = [
     (
         "General",
         "Language",
@@ -21,6 +21,21 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 49] = [
         "General",
         "Default terminal size",
         "10-300 columns, 3-100 rows",
+    ),
+    (
+        "General",
+        "Filter system files",
+        "Skip matching names during SFTP uploads and downloads",
+    ),
+    (
+        "General",
+        "Custom filename patterns",
+        "One pattern per line; * matches any characters",
+    ),
+    (
+        "General",
+        "Platform defaults",
+        "Restore the default filters for this platform",
     ),
     ("Appearance", "Font family", "Application interface font"),
     (
@@ -284,7 +299,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 49] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 52] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -308,6 +323,24 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 49] = [
         "10-300 columns, 3-100 rows",
         "默认终端大小",
         "10-300 列，3-100 行",
+    ),
+    (
+        "Filter system files",
+        "Skip matching names during SFTP uploads and downloads",
+        "过滤系统文件",
+        "SFTP 上传和下载时跳过匹配的名称",
+    ),
+    (
+        "Custom filename patterns",
+        "One pattern per line; * matches any characters",
+        "自定义文件名过滤模式",
+        "每行一个模式；* 匹配任意字符",
+    ),
+    (
+        "Platform defaults",
+        "Restore the default filters for this platform",
+        "平台默认值",
+        "恢复此平台的默认过滤规则",
     ),
     (
         "Font family",
@@ -711,6 +744,9 @@ pub(super) fn wire_settings(
               paste_shortcut,
               open_sftp_shortcut,
               credential_storage,
+              sftp_filter_enabled,
+              sftp_filter_use_platform_defaults,
+              sftp_filter_custom_patterns,
               settings_tab_id,
               close_after_save| {
             let is_preview = !close_after_save && settings_tab_id.is_empty();
@@ -809,6 +845,11 @@ pub(super) fn wire_settings(
                 ui_language: ui_language.as_setting(),
             });
             let mut settings = settings;
+            settings.sftp_transfer_filters = SftpTransferFilterSettings::normalized(
+                sftp_filter_enabled,
+                sftp_filter_use_platform_defaults,
+                sftp_filter_custom_patterns.as_str(),
+            );
             settings.x11 = X11Settings::normalized(
                 x11_server_provider.as_str(),
                 x11_server_app_path.as_str(),

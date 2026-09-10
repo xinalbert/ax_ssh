@@ -280,8 +280,14 @@ msgstr "此 SSH 连接使用的凭据。"
 msgid "Custom"
 msgstr "自定义"
 
+msgid "Custom SFTP filename patterns"
+msgstr "自定义 SFTP 文件名过滤模式"
+
 msgid "Custom executable"
 msgstr "自定义可执行文件"
+
+msgid "Custom filename patterns"
+msgstr "自定义文件名过滤模式"
 
 msgid "Cut"
 msgstr "剪切"
@@ -438,6 +444,9 @@ msgstr "文件传输"
 
 msgid "Files and transfers area sizes"
 msgstr "文件和传输区域大小"
+
+msgid "Filter system files"
+msgstr "过滤系统文件"
 
 msgid "Flow control"
 msgstr "流控制"
@@ -667,6 +676,9 @@ msgstr "没有正在传输的文件"
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择"
 
+msgid "One pattern per line; * matches any characters"
+msgstr "每行一个模式；* 匹配任意字符"
+
 msgid "Open"
 msgstr "打开"
 
@@ -756,6 +768,9 @@ msgstr "暂停所选"
 
 msgid "Pause {0}"
 msgstr "暂停 {0}"
+
+msgid "Platform defaults"
+msgstr "平台默认值"
 
 msgid "Platform home directory"
 msgstr "平台主目录"
@@ -856,6 +871,15 @@ msgstr "报告问题"
 msgid "Reset defaults"
 msgstr "恢复默认值"
 
+msgid "Reset filters"
+msgstr "重置过滤规则"
+
+msgid "Restore platform defaults"
+msgstr "恢复平台默认值"
+
+msgid "Restore the default filters for this platform"
+msgstr "恢复此平台的默认过滤规则"
+
 msgid "Resume"
 msgstr "继续"
 
@@ -888,6 +912,9 @@ msgstr "运行日志"
 
 msgid "SEMANTIC HIGHLIGHTING"
 msgstr "语义高亮"
+
+msgid "SFTP TRANSFERS"
+msgstr "SFTP 传输"
 
 msgid "SFTP directories"
 msgstr "SFTP 目录"
@@ -1066,6 +1093,9 @@ msgstr "Simplified Chinese"
 msgid "Size"
 msgstr "大小"
 
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 上传和下载时跳过匹配的名称"
+
 msgid "Software"
 msgstr "软件"
 
@@ -1242,6 +1272,9 @@ msgstr "上传"
 
 msgid "Upload selected local files"
 msgstr "上传选中的本地文件"
+
+msgid "Use platform default filters"
+msgstr "使用平台默认过滤规则"
 
 msgid "Use the bright ANSI palette for bold text"
 msgstr "为粗体文字使用明亮 ANSI 调色板"

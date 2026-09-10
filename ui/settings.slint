@@ -90,6 +90,10 @@ export struct SettingsViewState {
     local_shell: string,
     local_shell_index: int,
     credential_storage: string,
+    sftp_filter_enabled: bool,
+    sftp_filter_use_platform_defaults: bool,
+    sftp_filter_custom_patterns: string,
+    sftp_filter_platform_defaults: string,
     sidebar_width: int,
     tab_width: int,
     session_mask_character: string,
@@ -198,6 +202,13 @@ export component SettingsPane inherits Rectangle {
     private property <string> local-shell: root.source.local_shell;
     private property <int> local-shell-index: root.source.local_shell_index;
     private property <string> credential-storage: root.source.credential_storage;
+    private property <bool> sftp-filter-enabled: root.source.sftp_filter_enabled;
+    private property <bool> sftp-filter-use-platform-defaults:
+        root.source.sftp_filter_use_platform_defaults;
+    private property <string> sftp-filter-custom-patterns:
+        root.source.sftp_filter_custom_patterns;
+    private property <string> sftp-filter-platform-defaults:
+        root.source.sftp_filter_platform_defaults;
     private property <int> sidebar-width: root.source.sidebar_width;
     private property <int> tab-width: root.source.tab_width;
     private property <string> session-mask-character: root.source.session_mask_character;
@@ -225,7 +236,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, string, bool,
+        string, bool, bool, string, string, bool,
     );
     callback save-ui-language(int);
     callback format-shortcut(string, bool, bool, bool, bool) -> string;
@@ -309,6 +320,11 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-local-shell: root.local-shell;
     private property <int> draft-local-shell-index: root.local-shell-index;
     private property <string> draft-credential-storage: root.credential-storage;
+    private property <bool> draft-sftp-filter-enabled: root.sftp-filter-enabled;
+    private property <bool> draft-sftp-filter-use-platform-defaults:
+        root.sftp-filter-use-platform-defaults;
+    private property <string> draft-sftp-filter-custom-patterns:
+        root.sftp-filter-custom-patterns;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
     private property <string> draft-session-mask-character: root.session-mask-character;
@@ -432,6 +448,9 @@ export component SettingsPane inherits Rectangle {
             root.draft-paste-shortcut,
             root.draft-open-sftp-shortcut,
             root.draft-credential-storage,
+            root.draft-sftp-filter-enabled,
+            root.draft-sftp-filter-use-platform-defaults,
+            root.draft-sftp-filter-custom-patterns,
             "",
             false,
         );
@@ -513,6 +532,9 @@ export component SettingsPane inherits Rectangle {
             root.draft-paste-shortcut,
             root.draft-open-sftp-shortcut,
             root.draft-credential-storage,
+            root.draft-sftp-filter-enabled,
+            root.draft-sftp-filter-use-platform-defaults,
+            root.draft-sftp-filter-custom-patterns,
             root.tab-id,
             close-after-save,
         );
@@ -579,6 +601,9 @@ export component SettingsPane inherits Rectangle {
     changed draft-rows => { root.schedule-preview(); }
     changed draft-local-shell => { root.schedule-preview(); }
     changed draft-credential-storage => { root.schedule-preview(); }
+    changed draft-sftp-filter-enabled => { root.schedule-preview(); }
+    changed draft-sftp-filter-use-platform-defaults => { root.schedule-preview(); }
+    changed draft-sftp-filter-custom-patterns => { root.schedule-preview(); }
     changed draft-sidebar-width => { root.schedule-preview(); }
     changed draft-tab-width => { root.schedule-preview(); }
     changed draft-session-mask-character => { root.schedule-preview(); }
@@ -765,6 +790,15 @@ export component SettingsPane inherits Rectangle {
                         draft-columns <=> root.draft-columns;
                         draft-rows <=> root.draft-rows;
                         draft-credential-storage <=> root.draft-credential-storage;
+                        draft-sftp-filter-enabled <=> root.draft-sftp-filter-enabled;
+                        draft-sftp-filter-use-platform-defaults <=> root.draft-sftp-filter-use-platform-defaults;
+                        draft-sftp-filter-custom-patterns <=> root.draft-sftp-filter-custom-patterns;
+                        sftp-filter-platform-defaults: root.sftp-filter-platform-defaults;
+                        restore-sftp-filter-defaults => {
+                            root.draft-sftp-filter-enabled = true;
+                            root.draft-sftp-filter-use-platform-defaults = true;
+                            root.draft-sftp-filter-custom-patterns = "";
+                        }
                         ui-language: root.ui-language;
                         save-ui-language(index) => { root.save-ui-language(index); }
                     }

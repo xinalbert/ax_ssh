@@ -112,6 +112,18 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         .unwrap_or(0);
     ui.set_local_shell_index(local_shell_index.min(i32::MAX as usize) as i32);
     ui.set_credential_storage(settings.credential_storage.as_setting().into());
+    ui.set_sftp_filter_enabled(settings.sftp_transfer_filters.enabled);
+    ui.set_sftp_filter_use_platform_defaults(settings.sftp_transfer_filters.use_platform_defaults);
+    ui.set_sftp_filter_custom_patterns(
+        settings
+            .sftp_transfer_filters
+            .custom_patterns
+            .join("\n")
+            .into(),
+    );
+    ui.set_sftp_filter_platform_defaults(
+        ax_ssh::config::SftpTransferFilterSettings::platform_default_patterns_text().into(),
+    );
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
     ui.set_session_mask_character(settings.workspace.session_mask_character.clone().into());

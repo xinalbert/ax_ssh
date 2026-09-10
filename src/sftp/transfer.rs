@@ -155,8 +155,7 @@ impl SftpUploadRequest {
             .next()
             .filter(|name| !name.is_empty())
             .context("remote upload target is missing a file name")?;
-        if name.starts_with('.')
-            || name == "."
+        if name == "."
             || name == ".."
             || name.chars().any(char::is_control)
             || name.contains(['/', '\\'])
@@ -252,6 +251,7 @@ pub(crate) struct SftpDownloadRoot {
     remote_path: String,
     local_directory: PathBuf,
     name: String,
+    filter_patterns: Vec<String>,
 }
 
 impl SftpDownloadRoot {
@@ -259,6 +259,7 @@ impl SftpDownloadRoot {
         transfer_id: Uuid,
         remote_path: String,
         local_directory: PathBuf,
+        filter_patterns: Vec<String>,
     ) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         if local_directory.as_os_str().is_empty() {
@@ -269,6 +270,7 @@ impl SftpDownloadRoot {
             remote_path,
             local_directory,
             name,
+            filter_patterns,
         })
     }
 
@@ -278,6 +280,10 @@ impl SftpDownloadRoot {
 
     pub(crate) fn name(&self) -> &str {
         &self.name
+    }
+
+    pub(crate) fn filter_patterns(&self) -> &[String] {
+        &self.filter_patterns
     }
 }
 
@@ -1561,6 +1567,46 @@ where
     result
 }
 
+/// Returns whether a single SFTP entry name matches one of the configured
+/// transfer-filter patterns. Patterns use `*` as a zero-or-more wildcard.
+pub fn transfer_name_matches_filter(name: &str, patterns: &[String]) -> bool {
+    patterns
+        .iter()
+        .any(|pattern| wildcard_matches(pattern, name))
+}
+
+fn wildcard_matches(pattern: &str, value: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let value = value.as_bytes();
+    let mut pattern_index = 0;
+    let mut value_index = 0;
+    let mut star_index = None;
+    let mut star_value_index = 0;
+    while value_index < value.len() {
+        if pattern_index < pattern.len()
+            && pattern[pattern_index] != b'*'
+            && pattern[pattern_index] == value[value_index]
+        {
+            pattern_index += 1;
+            value_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            star_index = Some(pattern_index);
+            pattern_index += 1;
+            star_value_index = value_index;
+        } else if let Some(star) = star_index {
+            pattern_index = star + 1;
+            star_value_index += 1;
+            value_index = star_value_index;
+        } else {
+            return false;
+        }
+    }
+    while pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+        pattern_index += 1;
+    }
+    pattern_index == pattern.len()
+}
+
 async fn discover_initialized_download_requests(
     session: &RawSftpSession,
     root: &SftpDownloadRoot,
@@ -1573,6 +1619,9 @@ async fn discover_initialized_download_requests(
         anyhow::bail!("remote symbolic links cannot be downloaded");
     }
     if attrs.attrs.is_regular() {
+        if transfer_name_matches_filter(&root.name, root.filter_patterns()) {
+            anyhow::bail!("remote path is excluded by SFTP transfer filters");
+        }
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
         return Ok(vec![SftpDownloadRequest::for_local_download(
             root.transfer_id,
@@ -1661,6 +1710,9 @@ async fn discover_directory_entries(
             else {
                 continue;
             };
+            if transfer_name_matches_filter(&name, root.filter_patterns()) {
+                continue;
+            }
             *total_text_bytes = total_text_bytes
                 .saturating_add(name.len())
                 .saturating_add(path.len());
@@ -1781,6 +1833,15 @@ mod tests {
     use std::sync::Mutex;
 
     use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status};
+
+    #[test]
+    fn transfer_filter_patterns_match_exact_names_and_wildcards() {
+        let patterns = vec![".DS_Store".to_owned(), "._*".to_owned(), "*.tmp".to_owned()];
+        assert!(transfer_name_matches_filter(".DS_Store", &patterns));
+        assert!(transfer_name_matches_filter("._notes", &patterns));
+        assert!(transfer_name_matches_filter("report.tmp", &patterns));
+        assert!(!transfer_name_matches_filter("report.txt", &patterns));
+    }
 
     #[tokio::test]
     async fn local_upload_reads_bounded_chunks_and_rejects_size_changes() {

@@ -27,9 +27,9 @@ use ax_ssh::config::{
     ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
     MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, RendererPreference, SerialDataBits,
     SerialFlowControl, SerialParity, SerialStopBits, SessionProfile, SessionStore,
-    ShortcutSettings, SoftwarePresentationMode, TerminalColorScheme, TerminalSemanticColorsInput,
-    TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage, WorkspaceSettingsInput,
-    X11Settings, normalize_group_name,
+    SftpTransferFilterSettings, ShortcutSettings, SoftwarePresentationMode, TerminalColorScheme,
+    TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage,
+    WorkspaceSettingsInput, X11Settings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::serial::{

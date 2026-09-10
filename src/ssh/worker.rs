@@ -374,8 +374,9 @@ impl SshSessionHandle {
         transfer_id: Uuid,
         path: String,
         local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
     ) -> Result<()> {
-        let root = SftpDownloadRoot::new(transfer_id, path, local_directory)?;
+        let root = SftpDownloadRoot::new(transfer_id, path, local_directory, filter_patterns)?;
         self.command_tx
             .try_send(SshCommand::OpenSftpFile { root })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))

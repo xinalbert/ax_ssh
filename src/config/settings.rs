@@ -754,6 +754,118 @@ impl Default for ShortcutSettings {
     }
 }
 
+const MAX_SFTP_TRANSFER_FILTER_PATTERNS: usize = 64;
+const MAX_SFTP_TRANSFER_FILTER_PATTERN_CHARS: usize = 256;
+const MAX_SFTP_TRANSFER_FILTER_TEXT_CHARS: usize = 16 * 1024;
+
+/// Controls which file names are omitted from SFTP uploads and downloads.
+///
+/// Patterns are matched against a single file or directory name. `*` matches
+/// any sequence of characters; path separators are deliberately not accepted.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct SftpTransferFilterSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub use_platform_defaults: bool,
+    #[serde(default)]
+    pub custom_patterns: Vec<String>,
+}
+
+impl SftpTransferFilterSettings {
+    pub fn normalized(enabled: bool, use_platform_defaults: bool, custom_text: &str) -> Self {
+        Self {
+            enabled,
+            use_platform_defaults,
+            custom_patterns: normalize_sftp_transfer_filter_patterns(custom_text),
+        }
+    }
+
+    pub fn effective_patterns(&self) -> Vec<String> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        let mut patterns = if self.use_platform_defaults {
+            platform_default_sftp_transfer_filter_patterns()
+        } else {
+            Vec::new()
+        };
+        for pattern in &self.custom_patterns {
+            if !patterns.iter().any(|existing| existing == pattern) {
+                patterns.push(pattern.clone());
+            }
+        }
+        patterns
+    }
+
+    pub fn platform_default_patterns_text() -> String {
+        platform_default_sftp_transfer_filter_patterns().join("\n")
+    }
+
+    pub fn reset_to_platform_defaults() -> Self {
+        Self::default()
+    }
+
+    fn normalize_in_place(&mut self) {
+        *self = Self {
+            enabled: self.enabled,
+            use_platform_defaults: self.use_platform_defaults,
+            custom_patterns: normalize_sftp_transfer_filter_patterns(
+                &self.custom_patterns.join("\n"),
+            ),
+        };
+    }
+}
+
+impl Default for SftpTransferFilterSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            use_platform_defaults: true,
+            custom_patterns: Vec::new(),
+        }
+    }
+}
+
+fn normalize_sftp_transfer_filter_patterns(text: &str) -> Vec<String> {
+    if text.chars().count() > MAX_SFTP_TRANSFER_FILTER_TEXT_CHARS {
+        return Vec::new();
+    }
+    let mut patterns = Vec::new();
+    for raw in text.lines() {
+        let pattern = raw.trim();
+        if pattern.is_empty()
+            || pattern.chars().count() > MAX_SFTP_TRANSFER_FILTER_PATTERN_CHARS
+            || pattern.chars().any(char::is_control)
+            || pattern.contains(['/', '\\'])
+            || patterns.iter().any(|existing| existing == pattern)
+        {
+            continue;
+        }
+        if patterns.len() >= MAX_SFTP_TRANSFER_FILTER_PATTERNS {
+            break;
+        }
+        patterns.push(pattern.to_owned());
+    }
+    patterns
+}
+
+fn platform_default_sftp_transfer_filter_patterns() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    let patterns = [
+        ".DS_Store",
+        "._*",
+        ".Spotlight-V100",
+        ".Trashes",
+        ".fseventsd",
+    ];
+    #[cfg(target_os = "windows")]
+    let patterns = ["Thumbs.db", "desktop.ini", "$RECYCLE.BIN"];
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let patterns = [".directory", ".Trash-*", ".thumbnails"];
+    patterns.into_iter().map(str::to_owned).collect()
+}
+
 fn validate_shortcut(label: &str, shortcut: &str) -> Result<()> {
     let shortcut = shortcut.trim();
     if shortcut.is_empty() {
@@ -809,6 +921,8 @@ pub struct AppSettings {
     /// Backend used when the user chooses to remember a password after login.
     #[serde(default)]
     pub credential_storage: CredentialStorage,
+    #[serde(default)]
+    pub sftp_transfer_filters: SftpTransferFilterSettings,
 }
 
 impl AppSettings {
@@ -821,6 +935,7 @@ impl AppSettings {
             shortcuts: ShortcutSettings::normalized(input.shortcuts),
             x11: X11Settings::default(),
             credential_storage: CredentialStorage::from_setting(input.credential_storage),
+            sftp_transfer_filters: SftpTransferFilterSettings::default(),
         }
     }
 
@@ -844,6 +959,7 @@ impl AppSettings {
         self.x11.normalize_in_place();
         self.credential_storage =
             CredentialStorage::from_setting(self.credential_storage.as_setting());
+        self.sftp_transfer_filters.normalize_in_place();
     }
 }
 
@@ -1051,4 +1167,29 @@ pub(super) fn default_paste_shortcut() -> String {
 
 fn default_open_sftp_shortcut() -> String {
     "Ctrl+M".to_owned()
+}
+
+#[cfg(test)]
+mod sftp_transfer_filter_tests {
+    use super::*;
+
+    #[test]
+    fn custom_patterns_are_trimmed_deduplicated_and_bounded() {
+        let settings = SftpTransferFilterSettings::normalized(
+            true,
+            false,
+            "  .DS_Store  \n*.tmp\n.DS_Store\nfolder/name\n",
+        );
+        assert_eq!(settings.custom_patterns, [".DS_Store", "*.tmp"]);
+        assert_eq!(settings.effective_patterns(), [".DS_Store", "*.tmp"]);
+    }
+
+    #[test]
+    fn reset_uses_current_platform_defaults() {
+        let settings = SftpTransferFilterSettings::reset_to_platform_defaults();
+        assert!(settings.enabled);
+        assert!(settings.use_platform_defaults);
+        assert!(settings.custom_patterns.is_empty());
+        assert!(!settings.effective_patterns().is_empty());
+    }
 }

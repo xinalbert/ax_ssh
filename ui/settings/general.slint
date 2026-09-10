@@ -1,6 +1,7 @@
-import { SpinBox } from "std-widgets.slint";
+import { CheckBox, SpinBox, TextEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { SftpActionButton } from "../components/sftp-controls.slint";
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
@@ -12,7 +13,12 @@ export component GeneralSettingsPage inherits SettingsPage {
     in-out property <int> draft-columns;
     in-out property <int> draft-rows;
     in-out property <string> draft-credential-storage;
+    in-out property <bool> draft-sftp-filter-enabled;
+    in-out property <bool> draft-sftp-filter-use-platform-defaults;
+    in-out property <string> draft-sftp-filter-custom-patterns;
+    in property <string> sftp-filter-platform-defaults;
     callback save-ui-language(int);
+    callback restore-sftp-filter-defaults();
     init => { root.restore-ui-language-selection(); }
     changed ui-language => { root.restore-ui-language-selection(); }
     function restore-ui-language-selection() {
@@ -51,6 +57,52 @@ export component GeneralSettingsPage inherits SettingsPage {
                 current-index <=> root.draft-local-shell-index;
                 accessible-label: @tr("Local shell");
                 selected(value, _index) => { root.draft-local-shell = value; }
+            }
+        }
+    }
+    SettingsSectionHeading { label: @tr("SFTP TRANSFERS"); }
+    SettingsRow {
+        label: @tr("Filter system files");
+        description: @tr("Skip matching names during SFTP uploads and downloads");
+        SettingsField {
+            CheckBox {
+                checked <=> root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Filter system files");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Platform defaults");
+        description: root.sftp-filter-platform-defaults;
+        SettingsField {
+            CheckBox {
+                checked <=> root.draft-sftp-filter-use-platform-defaults;
+                enabled: root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Use platform default filters");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Custom filename patterns");
+        description: @tr("One pattern per line; * matches any characters");
+        SettingsField {
+            filter-editor := TextEdit {
+                width: Theme.settings-field-width;
+                height: 88px;
+                text <=> root.draft-sftp-filter-custom-patterns;
+                enabled: root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Custom SFTP filename patterns");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Reset filters");
+        description: @tr("Restore the default filters for this platform");
+        show-divider: false;
+        SettingsField {
+            SftpActionButton {
+                text: @tr("Restore platform defaults");
+                clicked => { root.restore-sftp-filter-defaults(); }
             }
         }
     }
