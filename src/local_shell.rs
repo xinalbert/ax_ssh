@@ -35,7 +35,7 @@ const CHILD_EXIT_RECHECK_ATTEMPTS: u8 = 40;
 const EVENT_BACKPRESSURE_INTERVAL: Duration = Duration::from_millis(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 const MACOS_UTF8_LOCALE: &str = "en_US.UTF-8";
 #[cfg(all(unix, not(target_os = "macos")))]
 const UNIX_UTF8_LOCALE: &str = "C.UTF-8";
