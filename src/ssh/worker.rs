@@ -431,7 +431,10 @@ impl SshSessionHandle {
         if !self.task.is_finished()
             && let Err(error) = queue_disconnect(&self.command_tx)
         {
-            debug!(%error, "SSH worker disconnect command was not queued during shutdown");
+            debug!(
+                ?error,
+                "SSH worker disconnect command was not queued during shutdown"
+            );
         }
 
         match timeout(WORKER_SHUTDOWN_TIMEOUT, &mut self.task).await {
@@ -451,10 +454,21 @@ impl SshSessionHandle {
     }
 }
 
+#[derive(Debug)]
+enum DisconnectQueueError {
+    Full,
+    Closed,
+}
+
 fn queue_disconnect(
     command_tx: &mpsc::Sender<SshCommand>,
-) -> Result<(), mpsc::error::TrySendError<SshCommand>> {
-    command_tx.try_send(SshCommand::Disconnect)
+) -> std::result::Result<(), DisconnectQueueError> {
+    command_tx
+        .try_send(SshCommand::Disconnect)
+        .map_err(|error| match error {
+            mpsc::error::TrySendError::Full(_) => DisconnectQueueError::Full,
+            mpsc::error::TrySendError::Closed(_) => DisconnectQueueError::Closed,
+        })
 }
 
 fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
@@ -711,7 +725,7 @@ mod tests {
         }
         assert!(matches!(
             queue_disconnect(&sender),
-            Err(mpsc::error::TrySendError::Full(SshCommand::Disconnect))
+            Err(DisconnectQueueError::Full)
         ));
     }
 
