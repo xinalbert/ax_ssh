@@ -80,6 +80,8 @@ mod font_bridge;
 mod input;
 mod local_files;
 #[cfg(target_os = "macos")]
+mod macos_file_drag;
+#[cfg(target_os = "macos")]
 mod macos_window;
 mod panes;
 mod platform_support;

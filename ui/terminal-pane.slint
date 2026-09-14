@@ -1,5 +1,8 @@
 import { Theme } from "theme.slint";
-import { ElidedButton } from "components/elided-controls.slint";
+import {
+    ElidedButton,
+    ElidedTooltipContent,
+} from "components/elided-controls.slint";
 import {
     TerminalGrid,
     TerminalGridView,
@@ -117,11 +120,8 @@ component TerminalPaneCloseButton inherits FocusScope {
         }
 
         Tooltip {
-            Text {
+            ElidedTooltipContent {
                 text: @tr("Close terminal pane");
-                color: Theme.text;
-                font-family: Theme.application-font-family;
-                font-size: Theme.font-caption;
             }
         }
     }

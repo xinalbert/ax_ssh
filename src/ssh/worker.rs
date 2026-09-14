@@ -20,8 +20,8 @@ use zeroize::Zeroizing;
 
 use crate::config::{SessionProfile, X11Settings};
 use crate::sftp::{
-    SftpBrowserEvent, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest, SftpWriteEvent,
-    SftpWriteOperation, validate_remote_path,
+    SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest,
+    SftpWriteEvent, SftpWriteOperation, validate_remote_path,
 };
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
 use crate::terminal_input::try_queue_tokio_motion;
@@ -98,6 +98,9 @@ pub(crate) enum SshCommand {
     CloseSftp,
     OpenSftpFile {
         root: SftpDownloadRoot,
+    },
+    OpenSftpFileAtLocalPath {
+        request: SftpDownloadRequest,
     },
     OpenSftpUpload {
         request: SftpUploadRequest,
@@ -383,6 +386,24 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
     }
 
+    pub fn request_open_sftp_file_at_local_path(
+        &self,
+        transfer_id: Uuid,
+        path: String,
+        local_path: std::path::PathBuf,
+        total_bytes: u64,
+    ) -> Result<()> {
+        let request = SftpDownloadRequest::for_explicit_local_path(
+            transfer_id,
+            path,
+            local_path,
+            total_bytes,
+        )?;
+        self.command_tx
+            .try_send(SshCommand::OpenSftpFileAtLocalPath { request })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
+    }
+
     pub fn request_cancel_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
         self.command_tx
             .try_send(SshCommand::CancelSftpTransfer { transfer_id })
@@ -519,6 +540,7 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::LoadMoreSftp)
                     | Some(SshCommand::CloseSftp)
                     | Some(SshCommand::OpenSftpFile { .. })
+                    | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
                     | Some(SshCommand::OpenSftpUpload { .. })
                     | Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })

@@ -425,6 +425,21 @@ fn with_native_window<T>(
     window: &slint::Window,
     operation: impl FnOnce(&NSWindow) -> Result<T>,
 ) -> Result<T> {
+    with_native_view(window, |view| {
+        let native_window = view.window().context("AppKit view has no NSWindow")?;
+        operation(&native_window)
+    })
+}
+
+/// Borrow Slint's live AppKit view for a synchronous main-thread operation.
+///
+/// The raw handle's lifetime is limited to this call, so callers must not
+/// retain the borrowed view. Native child views may be retained by AppKit
+/// only when they are explicitly removed by their owning operation.
+pub(super) fn with_native_view<T>(
+    window: &slint::Window,
+    operation: impl FnOnce(&NSView) -> Result<T>,
+) -> Result<T> {
     let handle = window.window_handle();
     let raw = handle
         .window_handle()
@@ -437,8 +452,7 @@ fn with_native_window<T>(
     // SAFETY: raw-window-handle guarantees that `ns_view` points to the live
     // NSView owned by this window for the lifetime of the borrowed handle.
     let view = unsafe { appkit.ns_view.cast::<NSView>().as_ref() };
-    let native_window = view.window().context("AppKit view has no NSWindow")?;
-    operation(&native_window)
+    operation(view)
 }
 
 pub(super) fn is_key_window(window: &slint::Window) -> Result<bool> {

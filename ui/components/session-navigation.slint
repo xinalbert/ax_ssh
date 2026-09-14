@@ -60,7 +60,10 @@ component SessionProfileTooltipContent inherits Rectangle {
         Theme.sidebar-session-tooltip-max-width,
     );
     height: tooltip-layout.preferred-height;
-    background: transparent;
+    background: Theme.tooltip-background;
+    border-width: Theme.hairline;
+    border-color: Theme.tooltip-border;
+    border-radius: Theme.radius-small;
 
     tooltip-layout := VerticalLayout {
         width: parent.width;

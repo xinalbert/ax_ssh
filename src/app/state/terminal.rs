@@ -464,6 +464,26 @@ impl TerminalWorker {
         }
     }
 
+    pub(in crate::app) fn request_open_sftp_file_at_local_path(
+        &self,
+        transfer_id: Uuid,
+        path: String,
+        local_path: std::path::PathBuf,
+        total_bytes: u64,
+    ) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_open_sftp_file_at_local_path(
+                transfer_id,
+                path,
+                local_path,
+                total_bytes,
+            ),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
     pub(in crate::app) fn request_open_sftp_upload(
         &self,
         transfer_id: Uuid,

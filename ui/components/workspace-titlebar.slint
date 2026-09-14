@@ -1,6 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { ElidedLabel } from "elided-controls.slint";
+import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 
 export struct WorkspaceTabRow {
     id: string,
@@ -391,11 +391,8 @@ export component TerminalSplitButton inherits FocusScope {
         }
 
         if !root.tooltip-text.is-empty : Tooltip {
-            Text {
+            ElidedTooltipContent {
                 text: root.tooltip-text;
-                color: Theme.text;
-                font-family: Theme.application-font-family;
-                font-size: Theme.font-caption;
             }
         }
     }

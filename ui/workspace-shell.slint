@@ -330,6 +330,7 @@ component TerminalPaneGroup inherits Rectangle {
 // Its title and return control belong to the native window chrome.
 component DetachedWorkspaceContent inherits Rectangle {
     in property <WorkspaceViewState> view;
+    in property <bool> apple-platform: false;
     in property <string> terminal-edit-command;
     in property <int> terminal-edit-command-revision: 0;
     in property <int> terminal-focus-revision: 0;
@@ -345,6 +346,8 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
+    callback navigate-local-sftp-back();
+    callback navigate-local-sftp-forward();
     callback toggle-remote-sftp-selection(string, bool);
     callback select-all-remote-sftp(bool);
     callback toggle-local-sftp-selection(string, bool);
@@ -371,6 +374,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
     pure callback drag-remote-file-sftp(string) -> data-transfer;
+    callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
@@ -472,6 +476,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             width: parent.width;
             height: parent.height;
             standalone: true;
+            native-file-drag-enabled: root.apple-platform;
             view: root.view.sftp;
             directory-split-ratio <=> root.sftp-directory-split-ratio;
             files-split-ratio <=> root.sftp-files-split-ratio;
@@ -484,6 +489,8 @@ component DetachedWorkspaceContent inherits Rectangle {
             list-local-directory(path) => { root.list-local-sftp-directory(path); }
             navigate-back => { root.navigate-sftp-back(); }
             navigate-forward => { root.navigate-sftp-forward(); }
+            navigate-local-back => { root.navigate-local-sftp-back(); }
+            navigate-local-forward => { root.navigate-local-sftp-forward(); }
             toggle-remote-selection(path, selected) => {
                 root.toggle-remote-sftp-selection(path, selected);
             }
@@ -519,6 +526,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
             drag-local-file(path) => { return root.drag-local-file-sftp(path); }
             drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
+            begin-native-remote-file-drag(path) => {
+                root.begin-native-remote-file-drag-sftp(path);
+            }
             close => { root.close-tab(root.view.active_tab_id); }
             write-clipboard(path) => { root.write-clipboard(path); }
         }
@@ -530,6 +540,7 @@ export component WorkspaceShell inherits Rectangle {
     in property <string> requested-settings-section: "General";
     in property <int> settings-section-request-revision: 0;
     in property <bool> detached-window: false;
+    in property <bool> apple-platform: false;
     in property <bool> window-active: true;
     in property <bool> input-blocked: false;
     in property <int> terminal-focus-request-revision: 0;
@@ -588,6 +599,8 @@ export component WorkspaceShell inherits Rectangle {
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
+    callback navigate-local-sftp-back();
+    callback navigate-local-sftp-forward();
     callback toggle-remote-sftp-selection(string, bool);
     callback select-all-remote-sftp(bool);
     callback toggle-local-sftp-selection(string, bool);
@@ -614,6 +627,7 @@ export component WorkspaceShell inherits Rectangle {
     callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
     pure callback drag-remote-file-sftp(string) -> data-transfer;
+    callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
@@ -704,6 +718,7 @@ export component WorkspaceShell inherits Rectangle {
         width: parent.width;
         height: parent.height;
         view: root.view;
+        apple-platform: root.apple-platform;
         terminal-edit-command: root.terminal-edit-command;
         terminal-edit-command-revision: root.terminal-edit-command-revision;
         terminal-focus-revision: root.terminal-focus-revision;
@@ -753,6 +768,9 @@ export component WorkspaceShell inherits Rectangle {
         dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
         drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
         drag-remote-file-sftp(path) => { return root.drag-remote-file-sftp(path); }
+        begin-native-remote-file-drag-sftp(path) => {
+            root.begin-native-remote-file-drag-sftp(path);
+        }
         terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
             return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
         }
@@ -959,6 +977,7 @@ export component WorkspaceShell inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         standalone: true;
+                        native-file-drag-enabled: root.apple-platform;
                         view: root.view.sftp;
                         directory-split-ratio <=> root.sftp-directory-split-ratio;
                         files-split-ratio <=> root.sftp-files-split-ratio;
@@ -971,6 +990,8 @@ export component WorkspaceShell inherits Rectangle {
                         list-local-directory(path) => { root.list-local-sftp-directory(path); }
                         navigate-back => { root.navigate-sftp-back(); }
                         navigate-forward => { root.navigate-sftp-forward(); }
+                        navigate-local-back => { root.navigate-local-sftp-back(); }
+                        navigate-local-forward => { root.navigate-local-sftp-forward(); }
                         toggle-remote-selection(path, selected) => {
                             root.toggle-remote-sftp-selection(path, selected);
                         }
@@ -1006,6 +1027,9 @@ export component WorkspaceShell inherits Rectangle {
                         dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
                         drag-local-file(path) => { return root.drag-local-file-sftp(path); }
                         drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
+                        begin-native-remote-file-drag(path) => {
+                            root.begin-native-remote-file-drag-sftp(path);
+                        }
                         close => { root.close-tab(root.view.active_tab_id); }
                         write-clipboard(path) => { root.write-clipboard(path); }
                     }

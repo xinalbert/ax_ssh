@@ -302,6 +302,9 @@ pub(super) struct LocalDirectoryState {
     pub(super) request_id: u64,
     pub(super) selected: HashSet<String>,
     pub(super) sort: SftpSortState,
+    back_history: VecDeque<String>,
+    forward_history: VecDeque<String>,
+    pending_navigation: Option<PendingSftpNavigation>,
     pending_entries: VecDeque<LocalDirectoryEntry>,
 }
 
@@ -344,6 +347,8 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
+    pub(super) can_go_back: bool,
+    pub(super) can_go_forward: bool,
     pub(super) selected_count: usize,
     pub(super) all_selected: bool,
     pub(super) selected: HashSet<String>,

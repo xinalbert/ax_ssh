@@ -1,7 +1,7 @@
 import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
-component ElidedTooltipContent inherits Rectangle {
+export component ElidedTooltipContent inherits Rectangle {
     in property <string> text;
     private property <length> natural-width: tooltip-probe.preferred-width;
 
@@ -10,7 +10,10 @@ component ElidedTooltipContent inherits Rectangle {
         Theme.text-tooltip-max-width,
     );
     height: tooltip-label.preferred-height;
-    background: transparent;
+    background: Theme.tooltip-background;
+    border-width: Theme.hairline;
+    border-color: Theme.tooltip-border;
+    border-radius: Theme.radius-small;
 
     tooltip-label := Text {
         width: parent.width;

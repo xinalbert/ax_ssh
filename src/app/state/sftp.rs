@@ -698,12 +698,39 @@ fn push_sftp_history(history: &mut VecDeque<String>, path: String) {
 }
 
 impl LocalDirectoryState {
-    pub(in crate::app) fn begin_load(&mut self, path: String) -> u64 {
-        if self.path != path {
-            self.selected.clear();
+    pub(in crate::app) fn begin_navigation(
+        &mut self,
+        kind: SftpNavigation,
+        path: Option<String>,
+    ) -> Result<(u64, String)> {
+        if self.loading {
+            anyhow::bail!("local directory request already in progress");
         }
+        let requested = match kind {
+            SftpNavigation::Direct => path
+                .context("local directory path is missing")?
+                .trim()
+                .to_owned(),
+            SftpNavigation::Back => self
+                .back_history
+                .back()
+                .cloned()
+                .context("no previous local directory")?,
+            SftpNavigation::Forward => self
+                .forward_history
+                .back()
+                .cloned()
+                .context("no next local directory")?,
+        };
+        if requested.is_empty() {
+            anyhow::bail!("local directory path is empty");
+        }
+        self.pending_navigation = Some(PendingSftpNavigation {
+            kind,
+            from: self.path.clone(),
+            requested: requested.clone(),
+        });
         self.request_id = self.request_id.wrapping_add(1);
-        self.path = path;
         self.loading = true;
         self.entries.clear();
         self.pending_entries.clear();
@@ -711,7 +738,7 @@ impl LocalDirectoryState {
         self.truncated = false;
         self.skipped_entries = 0;
         self.status = "Loading local directory...".to_owned();
-        self.request_id
+        Ok((self.request_id, requested))
     }
 
     pub(in crate::app) fn complete(
@@ -721,6 +748,35 @@ impl LocalDirectoryState {
         truncated: bool,
         skipped_entries: usize,
     ) {
+        if let Some(pending) = self.pending_navigation.take() {
+            match pending.kind {
+                SftpNavigation::Direct if pending.from != path => {
+                    push_sftp_history(&mut self.back_history, pending.from);
+                    self.forward_history.clear();
+                }
+                SftpNavigation::Back => {
+                    if self
+                        .back_history
+                        .back()
+                        .is_some_and(|candidate| candidate == &pending.requested)
+                    {
+                        self.back_history.pop_back();
+                        push_sftp_history(&mut self.forward_history, pending.from);
+                    }
+                }
+                SftpNavigation::Forward => {
+                    if self
+                        .forward_history
+                        .back()
+                        .is_some_and(|candidate| candidate == &pending.requested)
+                    {
+                        self.forward_history.pop_back();
+                        push_sftp_history(&mut self.back_history, pending.from);
+                    }
+                }
+                SftpNavigation::Direct => {}
+            }
+        }
         if self.path != path {
             self.selected.clear();
         }
@@ -789,6 +845,7 @@ impl LocalDirectoryState {
     }
 
     pub(in crate::app) fn fail(&mut self, message: String) {
+        self.pending_navigation = None;
         self.loading = false;
         self.status = message;
     }
@@ -825,7 +882,7 @@ impl LocalDirectoryState {
         !self.entries.is_empty() && self.selected_count() == self.entries.len()
     }
 
-    fn snapshot(&self) -> LocalDirectorySnapshot {
+    pub(in crate::app) fn snapshot(&self) -> LocalDirectorySnapshot {
         LocalDirectorySnapshot {
             loading: self.loading,
             path: self.path.clone(),
@@ -834,6 +891,8 @@ impl LocalDirectoryState {
             has_more: self.has_more,
             truncated: self.truncated,
             status: self.status.clone(),
+            can_go_back: !self.loading && !self.back_history.is_empty(),
+            can_go_forward: !self.loading && !self.forward_history.is_empty(),
             selected_count: self.selected_count(),
             all_selected: self.all_selected(),
             selected: self.selected.clone(),

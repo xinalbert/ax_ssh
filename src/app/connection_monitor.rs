@@ -133,6 +133,19 @@ pub(super) fn spawn_session_monitor(
                     prewarm_file_icons(&runtime_for_monitor, icon_keys, &ui, &state);
                 }
                 SshSessionEvent::SftpTransfer(event) => {
+                    #[cfg(target_os = "macos")]
+                    let native_file_promise = match &event {
+                        SftpTransferEvent::Completed { transfer_id, .. } => {
+                            super::macos_file_drag::complete_file_promise_transfer(*transfer_id, true)
+                        }
+                        SftpTransferEvent::Cancelled { transfer_id }
+                        | SftpTransferEvent::Failed { transfer_id, .. } => {
+                            super::macos_file_drag::complete_file_promise_transfer(*transfer_id, false)
+                        }
+                        _ => false,
+                    };
+                    #[cfg(not(target_os = "macos"))]
+                    let native_file_promise = false;
                     let mut completed_open = None;
                     let mut refresh_after_upload = None;
                     let Some(active) = mutate_terminal_attempt(
@@ -212,6 +225,12 @@ pub(super) fn spawn_session_monitor(
                                 if local_path.as_os_str().is_empty() {
                                     refresh_after_upload =
                                         terminal.sftp.finish_uploaded_transfer(transfer_id);
+                                } else if native_file_promise {
+                                    terminal.sftp.finish_transfer(
+                                        transfer_id,
+                                        SftpTransferPhase::Completed,
+                                        "Downloaded".to_owned(),
+                                    );
                                 } else if terminal.sftp.mark_transfer_opening(
                                     transfer_id,
                                     total_bytes,

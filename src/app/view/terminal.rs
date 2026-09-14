@@ -940,6 +940,8 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_local_sftp_has_more(snapshot.local.has_more);
     ui.set_local_sftp_truncated(snapshot.local.truncated);
     ui.set_local_sftp_status(snapshot.local.status.into());
+    ui.set_local_sftp_can_go_back(snapshot.local.can_go_back);
+    ui.set_local_sftp_can_go_forward(snapshot.local.can_go_forward);
     ui.set_local_sftp_selected_count(snapshot.local.selected_count as i32);
     ui.set_local_sftp_all_selected(snapshot.local.all_selected);
     let mut active = Vec::new();

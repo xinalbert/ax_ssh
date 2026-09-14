@@ -58,6 +58,8 @@ export struct SftpViewState {
     local_has_more: bool,
     local_truncated: bool,
     local_status: string,
+    local_can_go_back: bool,
+    local_can_go_forward: bool,
     local_selected_count: int,
     local_all_selected: bool,
     active_transfers: [SftpTransferRow],
@@ -335,8 +337,14 @@ component SftpEntry inherits Rectangle {
     callback remove-selected();
     callback upload-selected();
     callback reveal-local(string);
+    callback begin-native-file-drag(string);
     pure callback drag-data(string) -> data-transfer;
     in property <bool> drag-enabled: false;
+    in property <bool> native-file-drag-enabled: false;
+    private property <bool> native-drag-started: false;
+    private property <length> native-drag-start-x: 0px;
+    private property <length> native-drag-start-y: 0px;
+    private property <length> native-drag-threshold: Theme.space-sm;
 
     function action(action-id: string, title: string, enabled: bool) -> ActionMenuItem {
         {
@@ -510,9 +518,37 @@ component SftpEntry inherits Rectangle {
         height: parent.height;
         enabled: root.shown && root.interactive && root.drag-enabled
             && (root.entry.kind == "file"
-                || (root.entry.kind == "folder" && root.remote-actions));
+                || (root.entry.kind == "folder" && root.remote-actions))
+            && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
         allow-copy: true;
         data: root.drag-data(root.entry.path);
+    }
+    TouchArea {
+        x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        width: max(0px, parent.width - self.x);
+        height: parent.height;
+        enabled: root.shown && root.interactive && root.native-file-drag-enabled
+            && root.remote-actions && root.entry.kind == "file";
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.native-drag-started = false;
+                root.native-drag-start-x = self.mouse-x;
+                root.native-drag-start-y = self.mouse-y;
+            }
+        }
+        moved => {
+            if self.pressed && !root.native-drag-started
+                && (self.mouse-x - root.native-drag-start-x > root.native-drag-threshold
+                    || root.native-drag-start-x - self.mouse-x > root.native-drag-threshold
+                    || self.mouse-y - root.native-drag-start-y > root.native-drag-threshold
+                    || root.native-drag-start-y - self.mouse-y > root.native-drag-threshold)
+            {
+                root.native-drag-started = true;
+                root.begin-native-file-drag(root.entry.path);
+            }
+        }
+        double-clicked => { root.open-file(root.entry.path); }
     }
     FlatActionMenu {
         actions: root.context-actions;
@@ -559,6 +595,7 @@ component SftpDirectoryPane inherits Rectangle {
     in property <bool> allow-drag: false;
     in property <bool> allow-drop: false;
     in property <bool> local-actions: false;
+    in property <bool> native-file-drag-enabled: false;
     in property <string> sort-column: "modified";
     in property <bool> sort-descending: true;
     callback list-directory(string);
@@ -578,6 +615,7 @@ component SftpDirectoryPane inherits Rectangle {
     callback reveal-local(string);
     callback sort(string);
     callback dropped(data-transfer);
+    callback begin-native-file-drag(string);
     pure callback drag-data(string) -> data-transfer;
     private property <string> rename-name-draft: "";
 
@@ -665,6 +703,7 @@ component SftpDirectoryPane inherits Rectangle {
                 if root.allow-navigation && root.selection-count == 1 : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Edit");
+                    subtle: true;
                     accessible-name: @tr("Edit selected remote file");
                     enabled: root.interactive && !root.loading;
                     clicked => { root.edit-selected(); }
@@ -679,6 +718,7 @@ component SftpDirectoryPane inherits Rectangle {
                 if root.allow-navigation && root.selection-count == 1 : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Rename");
+                    subtle: true;
                     accessible-name: @tr("Rename selected remote entry");
                     enabled: root.interactive && !root.loading;
                     clicked => { root.rename-selected(root.rename-name-draft); }
@@ -686,6 +726,7 @@ component SftpDirectoryPane inherits Rectangle {
                 if !root.allow-navigation && root.selection-count > 0 : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Upload");
+                    subtle: true;
                     accessible-name: @tr("Upload selected local files");
                     enabled: root.interactive && !root.loading;
                     clicked => { root.upload-selected(); }
@@ -724,6 +765,7 @@ component SftpDirectoryPane inherits Rectangle {
                     width: Theme.sftp-nav-icon-button-width;
                     height: root.control-height;
                     text: @tr("<");
+                    subtle: true;
                     accessible-name: @tr("Back");
                     enabled: root.interactive && !root.loading && root.can-go-back;
                     clicked => { root.navigate-back(); }
@@ -732,6 +774,7 @@ component SftpDirectoryPane inherits Rectangle {
                     width: Theme.sftp-nav-icon-button-width;
                     height: root.control-height;
                     text: @tr(">");
+                    subtle: true;
                     accessible-name: @tr("Forward");
                     enabled: root.interactive && !root.loading && root.can-go-forward;
                     clicked => { root.navigate-forward(); }
@@ -748,8 +791,10 @@ component SftpDirectoryPane inherits Rectangle {
                     accepted(path) => { root.list-directory(path); }
                 }
                 SftpActionButton {
+                    width: Theme.sftp-open-button-width;
                     height: root.control-height;
                     text: @tr("Open");
+                    prominent: true;
                     enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
                 }
@@ -757,6 +802,7 @@ component SftpDirectoryPane inherits Rectangle {
                     width: Theme.sftp-refresh-button-width;
                     height: root.control-height;
                     text: @tr("Refresh");
+                    subtle: true;
                     enabled: root.interactive && !root.loading && !root.current-path.is-empty;
                     clicked => { root.refresh(); }
                 }
@@ -798,6 +844,7 @@ component SftpDirectoryPane inherits Rectangle {
                     shown: root.show-hidden || !entry.hidden;
                     interactive: root.interactive && !root.loading;
                     drag-enabled: root.allow-drag;
+                    native-file-drag-enabled: root.native-file-drag-enabled;
                     remote-actions: root.allow-navigation;
                     local-actions: root.local-actions;
                     open-directory(path) => { root.list-directory(path); }
@@ -811,6 +858,7 @@ component SftpDirectoryPane inherits Rectangle {
                     remove-selected => { root.remove-selected(); }
                     upload-selected => { root.upload-selected(); }
                     reveal-local(path) => { root.reveal-local(path); }
+                    begin-native-file-drag(path) => { root.begin-native-file-drag(path); }
                     drag-data(path) => { return root.drag-data(path); }
                 }
             }
@@ -1306,6 +1354,7 @@ component SftpTransferQueue inherits Rectangle {
 export component SftpPane inherits Rectangle {
     in property <SftpViewState> view;
     in property <bool> standalone: false;
+    in property <bool> native-file-drag-enabled: false;
     in-out property <float> directory-split-ratio: 0.5;
     in-out property <float> files-split-ratio: 0.7;
     in-out property <bool> transfers-collapsed: false;
@@ -1315,6 +1364,8 @@ export component SftpPane inherits Rectangle {
     callback load-more-local();
     callback navigate-back();
     callback navigate-forward();
+    callback navigate-local-back();
+    callback navigate-local-forward();
     callback toggle-remote-selection(string, bool);
     callback select-all-remote(bool);
     callback toggle-local-selection(string, bool);
@@ -1346,6 +1397,7 @@ export component SftpPane inherits Rectangle {
     callback toggle-editor-auto-upload(bool);
     callback dropped-local-files(data-transfer);
     callback dropped-remote-files(data-transfer);
+    callback begin-native-remote-file-drag(string);
     pure callback drag-local-file(string) -> data-transfer;
     pure callback drag-remote-file(string) -> data-transfer;
     private property <string> editor-path-draft: root.view.editor_path;
@@ -1455,6 +1507,7 @@ export component SftpPane inherits Rectangle {
                 allow-navigation: true;
                 allow-drag: true;
                 allow-drop: true;
+                native-file-drag-enabled: root.native-file-drag-enabled;
                 can-go-back: root.view.can_go_back;
                 can-go-forward: root.view.can_go_forward;
                 list-directory(path) => { root.list-directory(path); }
@@ -1474,6 +1527,7 @@ export component SftpPane inherits Rectangle {
                 select-all(selected) => { root.select-all-remote(selected); }
                 sort(column) => { root.sort-remote(column); }
                 copy-path(path) => { root.write-clipboard(path); }
+                begin-native-file-drag(path) => { root.begin-native-remote-file-drag(path); }
                 drag-data(path) => { return root.drag-remote-file(path); }
                 dropped(data) => { root.dropped-remote-files(data); }
             }
@@ -1511,6 +1565,7 @@ export component SftpPane inherits Rectangle {
                 allow-drag: true;
                 allow-drop: true;
                 local-actions: true;
+                allow-navigation: true;
                 allow-hidden: false;
                 entries: root.view.local_entries;
                 loading: root.view.local_loading;
@@ -1524,6 +1579,10 @@ export component SftpPane inherits Rectangle {
                 sort-descending: root.view.local_sort_descending;
                 list-directory(path) => { root.list-local-directory(path); }
                 load-more => { root.load-more-local(); }
+                navigate-back => { root.navigate-local-back(); }
+                navigate-forward => { root.navigate-local-forward(); }
+                can-go-back: root.view.local_can_go_back;
+                can-go-forward: root.view.local_can_go_forward;
                 open-file(path) => { root.open-local-file(path); }
                 reveal-local(path) => { root.reveal-local-file(path); }
                 drag-data(path) => { return root.drag-local-file(path); }

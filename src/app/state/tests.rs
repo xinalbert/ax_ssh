@@ -1320,6 +1320,41 @@ fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
 }
 
 #[test]
+fn local_navigation_history_survives_failures_and_resets_forward_branch() {
+    let mut local = LocalDirectoryState {
+        path: "/Users/alice".to_owned(),
+        ..LocalDirectoryState::default()
+    };
+
+    let (_, path) = local
+        .begin_navigation(SftpNavigation::Direct, Some("/tmp".to_owned()))
+        .expect("direct local navigation should be queued");
+    assert_eq!(path, "/tmp");
+    local.complete("/tmp".to_owned(), Vec::new(), false, 0);
+    assert!(local.snapshot().can_go_back);
+
+    let (_, path) = local
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("local back navigation should be available");
+    assert_eq!(path, "/Users/alice");
+    local.pending_navigation = None;
+    local.loading = false;
+    assert!(local.begin_navigation(SftpNavigation::Back, None).is_ok());
+    local.complete("/Users/alice".to_owned(), Vec::new(), false, 0);
+    assert!(local.snapshot().can_go_forward);
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some("/var".to_owned()))
+        .expect("new direct local navigation should be queued");
+    local.complete("/var".to_owned(), Vec::new(), false, 0);
+    assert!(
+        local
+            .begin_navigation(SftpNavigation::Forward, None)
+            .is_err()
+    );
+}
+
+#[test]
 fn sftp_selection_tracks_rows_and_select_all() {
     let mut sftp = SftpBrowserState {
         entries: vec![

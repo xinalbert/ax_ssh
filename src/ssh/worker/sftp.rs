@@ -328,6 +328,58 @@ pub(super) async fn run_sftp_session(
                             Ok(())
                         }
                     }
+                    Some(SshCommand::OpenSftpFileAtLocalPath { request }) => {
+                        let transfer_id = request.transfer_id();
+                        let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
+                            || pending_by_transfer.contains_key(&transfer_id)
+                            || discovery_by_transfer.contains_key(&transfer_id)
+                            || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id);
+                        if already_active {
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Failed {
+                                    transfer_id,
+                                    message: "SFTP transfer is already active".to_owned(),
+                                },
+                                session_id,
+                            )
+                            .await;
+                        } else if available_sftp_transfer_slots(
+                            &transfers,
+                            &pending_by_transfer,
+                            &queued_requests,
+                            &discovery_by_transfer,
+                        ) == 0
+                        {
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Failed {
+                                    transfer_id,
+                                    message: "SFTP transfer queue is full".to_owned(),
+                                },
+                                session_id,
+                            )
+                            .await;
+                        } else {
+                            let event = SftpTransferEvent::Queued {
+                                transfer_id,
+                                remote_path: request.remote_path().to_owned(),
+                                name: request.name().to_owned(),
+                                total_bytes: request.total_bytes(),
+                            };
+                            if send_sftp_transfer_event(&event_tx, event, session_id).await {
+                                queued_requests.push_back(request);
+                                start_queued_sftp_transfers(
+                                    &mut queued_requests,
+                                    &mut pending_openings,
+                                    &mut pending_by_transfer,
+                                    &connection,
+                                    transfers.len(),
+                                );
+                            }
+                        }
+                        Ok(())
+                    }
                     Some(SshCommand::OpenSftpUpload { request }) => {
                         let transfer_id = request.transfer_id();
                         let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)

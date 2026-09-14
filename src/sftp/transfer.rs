@@ -228,6 +228,41 @@ impl SftpDownloadRequest {
         })
     }
 
+    /// Construct a single-file request for an explicit local final path.
+    ///
+    /// The worker still validates and canonicalizes the parent directory at
+    /// publication time through `LocalDownloadTarget`; this constructor only
+    /// decomposes the owned destination so the existing anti-traversal and
+    /// no-overwrite writer path remains authoritative.
+    pub(crate) fn for_explicit_local_path(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+    ) -> Result<Self> {
+        if !local_path.is_absolute() {
+            anyhow::bail!("local download target must be an absolute path");
+        }
+        let local_directory = local_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .context("local download target has no parent directory")?
+            .to_owned();
+        let name = local_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .context("local download target has no UTF-8 file name")?
+            .to_owned();
+        Self::for_local_download(
+            transfer_id,
+            remote_path,
+            local_directory,
+            vec![name],
+            total_bytes,
+        )
+    }
+
     pub(crate) fn transfer_id(&self) -> Uuid {
         self.transfer_id
     }
@@ -2274,6 +2309,40 @@ mod tests {
             event_rx.try_recv(),
             Ok(SftpTransferEvent::Progress { .. })
         ));
+    }
+
+    #[test]
+    fn explicit_local_path_download_uses_the_existing_local_target_validation() {
+        let request = SftpDownloadRequest::for_explicit_local_path(
+            Uuid::new_v4(),
+            "/srv/report.bin".to_owned(),
+            PathBuf::from("/private/tmp/axssh-native-drag/report.bin"),
+            17,
+        )
+        .expect("absolute file target should be decomposed into a safe local target");
+
+        assert_eq!(request.name(), "report.bin");
+        assert_eq!(request.total_bytes(), 17);
+        assert!(
+            SftpDownloadRequest::for_explicit_local_path(
+                Uuid::new_v4(),
+                "/srv/report.bin".to_owned(),
+                PathBuf::from("report.bin"),
+                17,
+            )
+            .is_err(),
+            "a bare file name must not silently select a process working directory"
+        );
+        assert!(
+            SftpDownloadRequest::for_explicit_local_path(
+                Uuid::new_v4(),
+                "/srv/report.bin".to_owned(),
+                PathBuf::from("relative/report.bin"),
+                17,
+            )
+            .is_err(),
+            "a relative nested path must not silently select a process working directory"
+        );
     }
 
     #[tokio::test]

@@ -89,6 +89,11 @@ export global Theme {
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
     out property <color> selected: accent.with-alpha(0.16);
+    // Tooltip surfaces belong to the application theme rather than the
+    // standard-widget palette. This keeps popup hints aligned with panels and
+    // controls in both light and dark modes.
+    out property <color> tooltip-background: panel-alt;
+    out property <color> tooltip-border: control-border;
 
     // Type scale.
     out property <length> font-micro: 10px;
@@ -310,6 +315,7 @@ export global Theme {
     out property <length> sftp-hidden-control-width: 84px;
     out property <length> sftp-toolbar-action-reserve-width: 78px;
     out property <length> sftp-transfer-action-width: 72px;
+    out property <length> sftp-open-button-width: 60px;
     out property <length> sftp-refresh-button-width: 72px;
     out property <length> sftp-nav-icon-button-width: 32px;
     out property <length> sftp-more-button-width: 84px;

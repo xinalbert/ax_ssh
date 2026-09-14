@@ -466,6 +466,112 @@ fn handle_drop_on_remote_pane(
     }
 }
 
+#[cfg(target_os = "macos")]
+fn begin_native_remote_file_drag(
+    state: &Arc<Mutex<AppState>>,
+    ui: &AppWindow,
+    router: &WindowRouter,
+    window_id: Uuid,
+    remote_path: &str,
+) -> Result<()> {
+    let filter_patterns = active_sftp_transfer_filter_patterns(state)?;
+    let tab_id = router
+        .active_tab(window_id)
+        .context("no active SFTP tab for this window")?;
+    let (file_name, remote_path, total_bytes, local_target) =
+        with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+            let entry = terminal
+                .sftp
+                .entries
+                .iter()
+                .find(|entry| entry.path == remote_path)
+                .cloned()
+                .context("remote entry is no longer visible")?;
+            if entry.is_dir || entry.is_symlink {
+                anyhow::bail!("only regular remote files support native dragging")
+            }
+            if ax_ssh::sftp::transfer_name_matches_filter(&entry.name, &filter_patterns) {
+                anyhow::bail!("file is excluded by SFTP transfer filters")
+            }
+            let local_directory = PathBuf::from(&terminal.sftp.local.path);
+            if local_directory.as_os_str().is_empty() {
+                anyhow::bail!("local SFTP directory is not ready")
+            }
+            Ok((
+                entry.name.clone(),
+                entry.path,
+                entry.size,
+                local_directory.join(entry.name),
+            ))
+        })?;
+
+    let state_for_transfer = state.clone();
+    let ui_for_transfer = ui.as_weak();
+    super::macos_file_drag::begin_file_promise_drag(
+        ui.window(),
+        file_name,
+        local_target,
+        move |transfer_id, target| {
+            let result = queue_native_remote_download(
+                &state_for_transfer,
+                tab_id,
+                transfer_id,
+                remote_path.clone(),
+                total_bytes,
+                target,
+            );
+            if result.is_err() {
+                set_status(
+                    &ui_for_transfer,
+                    "Cannot queue the native SFTP file download",
+                );
+            }
+            result
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn queue_native_remote_download(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    transfer_id: Uuid,
+    remote_path: String,
+    total_bytes: u64,
+    local_target: PathBuf,
+) -> Result<()> {
+    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        let name = remote_path
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .context("remote download target is missing a file name")?
+            .to_owned();
+        terminal
+            .sftp
+            .queue_transfer(transfer_id, name, total_bytes)?;
+        let result = terminal
+            .worker
+            .as_ref()
+            .context("SFTP tab has no worker")?
+            .request_open_sftp_file_at_local_path(
+                transfer_id,
+                remote_path,
+                local_target,
+                total_bytes,
+            );
+        if let Err(error) = result {
+            terminal.sftp.finish_transfer(
+                transfer_id,
+                SftpTransferPhase::Failed,
+                "Native download request was rejected".to_owned(),
+            );
+            return Err(error);
+        }
+        Ok(())
+    })
+}
+
 pub(super) fn wire_sftp(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -538,6 +644,80 @@ pub(super) fn wire_sftp(
                     &format!("Cannot go forward in SFTP: {error}"),
                 );
                 dispatch_active_snapshot(&ui_for_forward, &state_for_forward);
+            }
+        }
+    });
+
+    let ui_for_local_back = ui.as_weak();
+    let state_for_local_back = state.clone();
+    let router_for_local_back = window_router.clone();
+    let runtime_for_local_back = runtime.clone();
+    ui.on_navigate_local_sftp_back(move || {
+        log_ui_action("sftp.navigate-local-back");
+        sync_window_active(&router_for_local_back, window_id, &state_for_local_back);
+        match queue_local_navigation(
+            &state_for_local_back,
+            &router_for_local_back,
+            window_id,
+            SftpNavigation::Back,
+            None,
+        ) {
+            Ok((tab_id, request_id, path)) => {
+                dispatch_active_snapshot(&ui_for_local_back, &state_for_local_back);
+                load_local_directory(
+                    &runtime_for_local_back,
+                    state_for_local_back.clone(),
+                    ui_for_local_back.clone(),
+                    tab_id,
+                    request_id,
+                    path,
+                );
+            }
+            Err(error) => {
+                set_status(
+                    &ui_for_local_back,
+                    &format!("Cannot go back in local files: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_local_back, &state_for_local_back);
+            }
+        }
+    });
+
+    let ui_for_local_forward = ui.as_weak();
+    let state_for_local_forward = state.clone();
+    let router_for_local_forward = window_router.clone();
+    let runtime_for_local_forward = runtime.clone();
+    ui.on_navigate_local_sftp_forward(move || {
+        log_ui_action("sftp.navigate-local-forward");
+        sync_window_active(
+            &router_for_local_forward,
+            window_id,
+            &state_for_local_forward,
+        );
+        match queue_local_navigation(
+            &state_for_local_forward,
+            &router_for_local_forward,
+            window_id,
+            SftpNavigation::Forward,
+            None,
+        ) {
+            Ok((tab_id, request_id, path)) => {
+                dispatch_active_snapshot(&ui_for_local_forward, &state_for_local_forward);
+                load_local_directory(
+                    &runtime_for_local_forward,
+                    state_for_local_forward.clone(),
+                    ui_for_local_forward.clone(),
+                    tab_id,
+                    request_id,
+                    path,
+                );
+            }
+            Err(error) => {
+                set_status(
+                    &ui_for_local_forward,
+                    &format!("Cannot go forward in local files: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_local_forward, &state_for_local_forward);
             }
         }
     });
@@ -1038,6 +1218,33 @@ pub(super) fn wire_sftp(
 
     ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
     ui.on_drag_remote_file_sftp(|path| remote_file_drag_data(path.as_str()));
+
+    #[cfg(target_os = "macos")]
+    {
+        let ui_for_native_drag = ui.as_weak();
+        let state_for_native_drag = state.clone();
+        let router_for_native_drag = window_router.clone();
+        ui.on_begin_native_remote_file_drag_sftp(move |path| {
+            log_ui_action("sftp.drag-native-remote-file");
+            sync_window_active(&router_for_native_drag, window_id, &state_for_native_drag);
+            let Some(ui) = ui_for_native_drag.upgrade() else {
+                return;
+            };
+            let result = begin_native_remote_file_drag(
+                &state_for_native_drag,
+                &ui,
+                &router_for_native_drag,
+                window_id,
+                path.as_str(),
+            );
+            if let Err(error) = result {
+                set_status(
+                    &ui_for_native_drag,
+                    &format!("Cannot start native SFTP drag: {error}"),
+                );
+            }
+        });
+    }
 
     let ui_for_remote_drop = ui.as_weak();
     let state_for_remote_drop = state.clone();
@@ -1562,30 +1769,20 @@ pub(super) fn wire_sftp(
             set_status(&ui_for_local, "Choose a valid local directory path");
             return;
         }
-        let tab_id = match router_for_local.active_tab(window_id) {
-            Some(tab_id) => tab_id,
-            None => {
-                set_status(&ui_for_local, "No active SFTP tab");
-                return;
-            }
-        };
-        let request_id = match state_for_local.lock() {
-            Ok(mut app) => {
-                let Some(terminal) = app.terminal_mut(tab_id) else {
-                    set_status(&ui_for_local, "No active SFTP tab");
-                    return;
-                };
-                if !terminal.is_sftp() {
-                    set_status(
-                        &ui_for_local,
-                        "Local files are available only in an SFTP tab",
-                    );
-                    return;
-                }
-                terminal.sftp.local.begin_load(path.clone())
-            }
-            Err(_) => {
-                set_status(&ui_for_local, "Cannot read local directory state");
+        let (tab_id, request_id, request_path) = match queue_local_navigation(
+            &state_for_local,
+            &router_for_local,
+            window_id,
+            SftpNavigation::Direct,
+            Some(path),
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                set_status(
+                    &ui_for_local,
+                    &format!("Cannot browse local files: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_local, &state_for_local);
                 return;
             }
         };
@@ -1596,7 +1793,7 @@ pub(super) fn wire_sftp(
             ui_for_local.clone(),
             tab_id,
             request_id,
-            path,
+            request_path,
         );
     });
 }
@@ -2065,6 +2262,25 @@ fn queue_remote_navigation(
     with_window_sftp_terminal(state, router, window_id, |terminal| {
         queue_remote_navigation_for_terminal(terminal, kind, path)
     })
+}
+
+fn queue_local_navigation(
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+    window_id: Uuid,
+    kind: SftpNavigation,
+    path: Option<String>,
+) -> Result<(Uuid, u64, String)> {
+    let tab_id = router
+        .active_tab(window_id)
+        .context("no active SFTP tab for this window")?;
+    let (request_id, request_path) = with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        if !terminal.is_sftp() {
+            anyhow::bail!("local files are available only in an SFTP tab");
+        }
+        terminal.sftp.local.begin_navigation(kind, path)
+    })?;
+    Ok((tab_id, request_id, request_path))
 }
 
 pub(super) fn navigate_sftp_tab_to_path(
