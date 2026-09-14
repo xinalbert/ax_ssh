@@ -1,5 +1,17 @@
 # 项目研究记录
 
+## 2026-09-14 macOS SFTP 原生 file-promise 拖放
+
+- 时间：2026-09-14 14:10 +0800
+- 检索问题：如何让尚未落地到本机的远端 SFTP 普通文件作为 macOS 原生拖放目标交给 Finder，同时把同一次拖动返回 AxSSH 时安全下载到开始时的 Local files 目录？
+- 检索原因：Slint 的进程内 `DataTransfer` 文本 payload 不能成为 Finder 可接收的文件；将内容提前写到公开临时目录会扩大泄露与清理边界。
+- 来源列表：Apple `NSFilePromiseProviderDelegate` 的 [`filePromiseProvider:writePromiseToURL:completionHandler:`](https://developer.apple.com/documentation/appkit/nsfilepromiseproviderdelegate/filepromiseprovider%28_%3Awritepromiseto%3Acompletionhandler%3A%29) 文档；锁定的 `objc2-app-kit 0.3.2` `NSFilePromiseProvider`、`NSDraggingSource`、`NSDraggingDestination` 绑定；本仓库 `src/sftp/transfer/{local,}.rs` 的 `LocalDownloadTarget` 和下载 writer。
+- 关键结论：AppKit 在目标接受拖放后才由 delegate 获得承诺文件的最终 URL，delegate 应异步完成写入并调用 completion；可指定 delegate operation queue。实现将该队列限定为 AppKit 主队列，使原生对象和 registry 不跨线程；它只快速排入 owned SFTP 请求，网络和文件写入仍由 worker 完成。原生 source 为 copy-only，发起窗口的 destination 只接受同一 source，并使用开始时捕获的 local target。
+- 安全与所有权：不产生公开预下载副本；最终路径仍进入既有 `SftpDownloadRequest`/`LocalDownloadTarget`，继续执行目录重验、拒绝符号链接和既有目标、`.part` fsync 与原子无覆盖发布。Slint 只发出路径 intent；AppKit bridge 不接触 russh handle，SFTP worker 不接触 AppKit/Slint 对象。目录、符号链接和被过滤条目不启用 file promise。
+- 对实施计划的影响：SFTPDND1 采用单文件 `NSFilePromiseProvider` 与 copy-only source；SFTPDND2 在 worker 排队前将传输 ID 映射到 native drag ID，以回送异步 completion，且将 NSURL 转为绝对 final path 后复用现有安全 writer。
+- 未解决问题：Finder 目标、跨应用取消、返回源窗口的命中区域和原生错误显示只能在目标 macOS GUI 中验收；本地测试不代替这些行为。
+- 验证边界：离线编译、Clippy 和 Rust 回归可验证类型、队列和本地目标构造；Finder 目标、跨应用取消和将同一拖动返回当前 AxSSH 窗口需要在目标 macOS 上由用户手动验收。
+
 ## 2026-08-26 russh 客户端稳定性与主机密钥回调升级
 
 - 时间：2026-08-26 19:00 +0800

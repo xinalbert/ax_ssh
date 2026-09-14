@@ -244,7 +244,12 @@ poll checks the remote size/mtime fingerprint; a change disables Save and
 reports a conflict. The local toolbar uploads one selected regular file. Dragging a
 local or Finder file onto Remote files queues an upload into the current remote
 directory. Dragging a remote file or folder onto Local files queues a download
-into the current local directory. Automatic upload is opt-in, off by default, debounced by 500ms,
+into the current local directory. On macOS, dragging a remote regular file can
+also be dropped into Finder as a native file: AxSSH downloads it only after the
+target accepts the drop. Returning that same drag to its originating AxSSH SFTP
+window downloads it into the Local files directory that was visible when the
+drag started. Folders, links, and filtered entries retain the in-app drag
+behavior; Finder-to-Remote uploads are unchanged. Automatic upload is opt-in, off by default, debounced by 500ms,
 and still guarded by the observed fingerprint. Cross-process edit recovery and
 three-way conflict merging remain outside the current scope.
 

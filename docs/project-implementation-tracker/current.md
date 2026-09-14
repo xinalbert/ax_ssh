@@ -2,57 +2,58 @@
 
 ## 当前目标
 
-- 目标 ID：20260914-local-exit-close
-- 目标：本地 shell 或远端 SSH shell 正常 `exit` 后关闭其对应的终端 Tab，并按现有 Tab 关闭约定聚焦后一个 Tab；若不存在后一个则聚焦前一个。
-- 交付物：根终端 Tab 的退出关闭路由、SSH EOF/Close 与传输断开的语义区分、邻接 Tab 聚焦回归测试、双语用户/架构说明和实施跟踪记录。
+- 目标 ID：20260914-macos-sftp-native-file-drag
+- 目标：macOS 上将 SFTP 远端普通文件的拖动升级为 Finder 可接收的原生 file-promise 拖放；拖回发起 AxSSH 窗口时将同一文件安全下载到发起时捕获的 Local files 目录。
+- 交付物：Slint 手势和平台开关、受控 AppKit file-promise/source/destination 桥、明确本地目标的 SFTP 下载请求、回归测试、双语架构/使用说明和实施跟踪记录。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：本地与 SSH shell worker 退出事件、workspace Tab 关闭与窗口路由、双语用户/架构说明和实施跟踪。
-- 不在本轮范围内：Slint 布局/渲染、Telnet/Serial 断开与重连语义、SSH trust/认证、凭据、SFTP 业务、参考工程和 vendored Slint API。
+- 当前范围：SFTP 远端普通文件的 macOS 原生拖放、Slint 用户意图、窗口原生视图桥、SFTP 下载目标、传输完成反馈、双语文档和实施跟踪。
+- 不在本轮范围内：目录/符号链接的 Finder 承诺拖放、非 macOS 平台原生拖放、SSH trust/认证、凭据、远端文件写入、参考工程和 vendored Slint API。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| EXIT1 | completed | 复核本地 shell 退出、workspace 关闭和焦点路由 | 源码逐项静态审阅 | 现有 `AppState::close_tab` 已定义为优先后一个 Tab、否则前一个；子 pane 已有独立关闭路径，根 Tab 在本地 shell 退出后仍被保留。 |
-| EXIT2 | completed | 将根 shell 的正常退出路由到既有 workspace Tab 关闭流程，并补聚焦回归 | 定向单元/异步测试 | Local 退出、SSH EOF/Close 正常退出与 Tab 关闭/邻接聚焦均已覆盖；transport 无消息结束继续重连。 |
-| EXIT3 | completed | 同步双语文档、项目地图和月度变更记录，并完成离线质量门禁 | fmt/check/Clippy/test/diff/tracker | GUI 实机行为仍由用户验收。 |
+| SFTPDND1 | completed | 原生拖放边界、Slint 手势和 AppKit 桥 | 锁定依赖与 Apple API 审阅、macOS 编译 | 仅远端普通文件进入原生拖放；目录和符号链接保留现有内部意图。 |
+| SFTPDND2 | completed | 将 file promise / AxSSH 本地落点接到受控下载请求和完成反馈 | 定向回归、传输状态审阅 | transfer ID 在排入 worker 前映射回 drag ID；目标路径在 application/worker 边界校验，Slint 不获得文件系统或原生对象。 |
+| SFTPDND3 | completed | 双语文档、追踪和完整离线门禁 | fmt/check/Clippy/test/diff/tracker | Finder 和发起窗口落点仍由用户在 macOS 手动验收。 |
 
 ## 已完成
 
-- 已确认既有 `AppState::close_tab` 的焦点约定：移除当前 Tab 后优先保留同一索引的后一个 Tab；若已是末项则选择前一个 Tab。
-- 已确认本地 shell 子 pane 正常退出会走 child-pane close；根 workspace Tab 仅刷新为完成状态，尚未关闭，需复用 workspace close 流程。
-- 根 local shell 的 `LocalShellEvent::Exited` 现在在 child-pane close 未处理时进入既有 `close_workspace_tab`；该路径重验窗口路由、释放整棵 pane tree 的其他 worker，并通过 `AppState::close_tab` 应用现有邻接聚焦约定。
-- 已新增真实本地 shell `exit` 回归，覆盖根 workspace Tab 被移除并聚焦后一个 Tab；既有状态回归扩展为覆盖优先后一个、末项再回退前一个。
-- SSH worker 现将 `ChannelMsg::Eof`/`Close` 作为 `ShellExited`，而 event stream 的 `None` 仍为 `Disconnected`；两者都会结束 worker，故不重引入关闭 stream 的立即轮询。
-- SSH monitor 仅在当前 attempt 收到 `ShellExited` 时 retire 后复用 child/workspace close 路由；无 EOF/Close 的断开仍进入既有重连。回环 russh 服务器、SSH monitor 与 Local PTY 回归均覆盖正常退出后的 Tab 移除及后一个 Tab 聚焦。
+- 已确认当前远端拖放仅使用 Slint 的进程内 `DataTransfer` 文本 payload；无法被 Finder 识别为可拖出的文件。
+- 已确认现有 SFTP 下载 writer 已有目录重验、拒绝符号链接/既有目标、0600 `.part`、fsync 和原子无覆盖发布；本轮复用该安全路径，不导出远端内容到临时公开位置。
+- 已确认 native Finder 拖入仍会通过 Winit `DroppedFile` 上传到当前远端目录；本轮不会改变该反向路径。
+- 已确认下载 worker、应用状态和 Slint 的所有权边界可用一个有明确本地目标的 owned request 保持；AppKit 对象只留在 `src/app/` 的 macOS 模块且在主线程上存活。
+- 已实现 copy-only `NSFilePromiseProvider`、匹配 source 的透明 AppKit destination 和 Slint 的阈值手势；Finder 仅在接受 drop 后请求下载，返回发起窗口时使用拖动开始时捕获的 Local files 路径。
+- 已让明确本地目标拒绝相对路径，复用 `LocalDownloadTarget` 的目录重验、符号链接/冲突拒绝、0600 `.part`、fsync 和无覆盖原子发布。
+- 已将 transfer ID 在 worker 排队前登记为 drag ID；完成、取消和失败都在 UI 事件循环回调对应的 AppKit completion，避免快速传输或不同 UUID 造成 promise 悬挂。
 
 ## 验证
 
-- 已完成：本地与 SSH shell 根 Tab 退出关闭、AxSSH Rust/Slint 边界、架构文档和 Tab/窗口/worker 路由审阅、定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 245、应用 240、Doc tests 0）和 `git diff --check`。
-- 未完成：目标平台 GUI 实机行为验收；tracker validator 的其余失败均为本轮之前的历史格式债务。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`git diff --check` 和 Markdown 相对链接检查；追踪校验已运行，本轮记录通过，但仍报告既有 8/9 月历史格式债务。
+- 未完成：用户在 macOS Finder、跨应用取消和返回发起 AxSSH SFTP 窗口时的真实拖放验收。
 
 ## 风险与阻塞
 
-- 根 pane 退出将关闭其所属可见 workspace Tab；若该 Tab 有 split 子 pane，既有 workspace close 流程会一并释放该树中的 terminal worker。
-- SSH 只能把协议明确送达的 channel EOF/Close 归类为正常 shell 结束；没有消息即结束、连接/认证失败仍必须保留既有断开/重连语义。Telnet/Serial 缺少可等价区分的协议事件。
+- 无代码阻塞。拖放期间远端会话断开、目标已有文件或路径重验失败会使 transfer 失败并以错误完成 promise；真实 Finder 错误呈现需要用户实测。
+- AppKit destination 覆盖发起拖动的 AxSSH 窗口，并把同一拖放路由到开始时捕获的 Local files 目录；视觉落区和跨应用取消仍需用户确认。
 
 ## 下一步
 
-- 请用户在目标平台验证：local 或 SSH shell 输入 `exit` 后，根 pane 关闭整个可见 Terminal Tab 并聚焦右侧 Tab（没有右侧时左侧）；child pane 的正常退出只关闭自身。SSH 网络/transport 中断仍应保留 Tab 并重连。
+- 在 macOS 上用一个小型远端普通文件分别拖到 Finder、拖回同一 AxSSH SFTP 窗口，并验证取消、已有同名文件和断开连接时的提示与清理。
 
 ## 最后更新时间
 
-- 2026-09-14 09:49 +0800
+- 2026-09-14 15:03 +0800
 
 ## 9 项复核映射
 

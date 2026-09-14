@@ -153,7 +153,7 @@ Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。�
 
 远端文件行右键菜单支持删除选中条目（目录不递归）；**Download** 和 **Delete** 不再占用目录顶部工具栏。
 其余远端控件保留重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地 regular file 可通过上传按钮，或将本地/Finder
-文件拖到 Remote files 区上传到当前远端目录。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。打开编辑器期间会按远端 size/mtime fingerprint 轮询；
+文件拖到 Remote files 区上传到当前远端目录。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。在 macOS 上，远端普通文件还可作为原生文件拖到 Finder；只有目标接受拖放后 AxSSH 才会下载。将同一次拖动返回发起它的 AxSSH SFTP 窗口时，文件会下载到开始拖动时可见的 Local files 目录。目录、链接和被过滤条目仍采用应用内拖动；Finder 拖入 Remote files 的上传行为不变。打开编辑器期间会按远端 size/mtime fingerprint 轮询；
 发现变化会禁用保存并提示冲突。自动上传需要勾选 **Auto upload**，默认关闭，且会经过 500ms 防抖与 fingerprint
 校验。跨进程恢复和更复杂的冲突合并仍未提供。
 
