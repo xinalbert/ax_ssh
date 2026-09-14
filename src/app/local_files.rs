@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use directories::UserDirs;
 
 const LOCAL_DIRECTORY_NAME_LIMIT: usize = 256;
-const LOCAL_DIRECTORY_NAME_BUDGET: usize = 2 * 1024 * 1024;
+const LOCAL_DIRECTORY_TEXT_BUDGET: usize = 2 * 1024 * 1024;
 pub(super) const LOCAL_DIRECTORY_PATH_LIMIT: usize = 4 * 1024;
 
 #[derive(Clone, Debug)]
@@ -45,6 +45,7 @@ pub(super) struct LocalDirectoryListing {
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
     pub(super) truncated: bool,
+    pub(super) skipped_entries: usize,
 }
 
 pub(super) fn default_local_directory() -> String {
@@ -77,38 +78,40 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     let mut listed = Vec::new();
     let mut name_budget = 0usize;
     let mut truncated = false;
+    let mut skipped_entries = 0usize;
 
     for item in entries {
         let Ok(item) = item else {
-            truncated = true;
+            skipped_entries = skipped_entries.saturating_add(1);
             continue;
         };
         let name = item.file_name().to_string_lossy().to_string();
         let name_len = name.chars().count();
-        if name_len == 0
-            || !is_safe_display_text(&name)
-            || name_len > LOCAL_DIRECTORY_NAME_LIMIT
-            || name_budget.saturating_add(name_len) > LOCAL_DIRECTORY_NAME_BUDGET
-        {
-            truncated = true;
+        if name_len == 0 || !is_safe_display_text(&name) || name_len > LOCAL_DIRECTORY_NAME_LIMIT {
+            skipped_entries = skipped_entries.saturating_add(1);
             continue;
         }
         let path = item.path().display().to_string();
         if !is_safe_display_text(&path) || path.len() > LOCAL_DIRECTORY_PATH_LIMIT {
-            truncated = true;
+            skipped_entries = skipped_entries.saturating_add(1);
             continue;
+        }
+        let text_bytes = name.len().saturating_add(path.len());
+        if name_budget.saturating_add(text_bytes) > LOCAL_DIRECTORY_TEXT_BUDGET {
+            truncated = true;
+            break;
         }
         let file_type = match item.file_type() {
             Ok(file_type) => file_type,
             Err(_) => {
-                truncated = true;
+                skipped_entries = skipped_entries.saturating_add(1);
                 continue;
             }
         };
         let metadata = match item.metadata() {
             Ok(metadata) => metadata,
             Err(_) => {
-                truncated = true;
+                skipped_entries = skipped_entries.saturating_add(1);
                 continue;
             }
         };
@@ -116,14 +119,14 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             let file = match File::open(&path) {
                 Ok(file) => file,
                 Err(_) => {
-                    truncated = true;
+                    skipped_entries = skipped_entries.saturating_add(1);
                     continue;
                 }
             };
             match local_file_fingerprint(&file) {
                 Ok(fingerprint) => Some(fingerprint),
                 Err(_) => {
-                    truncated = true;
+                    skipped_entries = skipped_entries.saturating_add(1);
                     continue;
                 }
             }
@@ -131,7 +134,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             None
         };
 
-        name_budget = name_budget.saturating_add(name_len);
+        name_budget = name_budget.saturating_add(text_bytes);
         listed.push(LocalDirectoryEntry {
             name,
             path,
@@ -153,6 +156,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
         path: resolved.display().to_string(),
         entries: listed,
         truncated,
+        skipped_entries,
     })
 }
 

@@ -108,6 +108,7 @@ export component AppWindow inherits Window {
     in property <[SftpEntryRow]> local-sftp-entries;
     in property <string> local-sftp-sort-column: "modified";
     in property <bool> local-sftp-sort-descending: true;
+    in property <bool> local-sftp-has-more: false;
     in property <bool> local-sftp-truncated: false;
     in property <string> local-sftp-status: "";
     in property <int> local-sftp-selected-count: 0;
@@ -285,7 +286,8 @@ export component AppWindow inherits Window {
             selected_count: root.sftp-selected-count, all_selected: root.sftp-all-selected,
             local_loading: root.local-sftp-loading, local_path: root.local-sftp-path,
             local_entries: root.local-sftp-entries, local_sort_column: root.local-sftp-sort-column,
-            local_sort_descending: root.local-sftp-sort-descending, local_truncated: root.local-sftp-truncated,
+            local_sort_descending: root.local-sftp-sort-descending, local_has_more: root.local-sftp-has-more,
+            local_truncated: root.local-sftp-truncated,
             local_status: root.local-sftp-status, local_selected_count: root.local-sftp-selected-count,
             local_all_selected: root.local-sftp-all-selected,
             active_transfers: root.sftp-active-transfers,
@@ -450,6 +452,7 @@ export component AppWindow inherits Window {
     callback open-sftp();
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback load-more-local-sftp();
     callback sort-remote-sftp(string);
     callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
@@ -875,6 +878,7 @@ export component AppWindow inherits Window {
             open-sftp => { root.open-sftp(); }
             list-sftp-directory(path) => { root.list-sftp-directory(path); }
             load-more-sftp => { root.load-more-sftp(); }
+            load-more-local-sftp => { root.load-more-local-sftp(); }
             sort-remote-sftp(column) => { root.sort-remote-sftp(column); }
             sort-local-sftp(column) => { root.sort-local-sftp(column); }
             list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }

@@ -138,7 +138,10 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   reads run in a bounded blocking task and return only name, path, type, size,
   and modification metadata; Slint must not access the filesystem. Reject stale
   results by Tab and request identity, and preserve entry, name, and path limits
-  before data reaches the UI. A local open intent must match the current active
+  before data reaches the UI. Accepted names remain complete in Rust DTOs, while
+  Slint elides them to the column width and exposes a wrapped hover tooltip.
+  The application exposes local snapshots in bounded 250-entry pages and keeps
+  Modified descending as the default sort. A local open intent must match the current active
   Tab snapshot, open a non-symlink regular-file handle on a blocking worker,
   compare its platform identity and length, modification-time, and creation-time
   fingerprint with the listing snapshot, and copy from that handle into the

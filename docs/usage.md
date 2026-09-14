@@ -176,9 +176,11 @@ a folder to enter it. The remote browser starts at the SSH profile's configured
 default directory. The local browser starts at its configured directory (or the
 platform home directory when that value is empty), and reads only bounded file
 metadata.
-Use **Hidden** and **More** to include dot files or request the next bounded
-remote page. Click **Name**, **Size**, or **Modified** to sort either file list;
-the default is newest Modified first. Rows use the target platform's file-type icon when one is available
+Use **Hidden** to include dot files. Use **More** to release the next 250-item
+local page or request the next bounded remote page. Click **Name**, **Size**, or
+**Modified** to sort either file list; the default is newest Modified first.
+Long names are elided to the available column width; hover an elided name to
+see the complete name with wrapping. Rows use the target platform's file-type icon when one is available
 and a built-in folder, link, or generic-file icon otherwise.
 
 Double-click a regular file in the local pane to open the current snapshot entry

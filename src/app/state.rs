@@ -295,11 +295,14 @@ pub(super) struct LocalDirectoryState {
     pub(super) loading: bool,
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
+    pub(super) has_more: bool,
     pub(super) truncated: bool,
+    pub(super) skipped_entries: usize,
     pub(super) status: String,
     pub(super) request_id: u64,
     pub(super) selected: HashSet<String>,
     pub(super) sort: SftpSortState,
+    pending_entries: VecDeque<LocalDirectoryEntry>,
 }
 
 #[derive(Clone, Default)]
@@ -338,6 +341,7 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
     pub(super) sort: SftpSortState,
+    pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
     pub(super) selected_count: usize,

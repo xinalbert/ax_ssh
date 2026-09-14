@@ -694,6 +694,11 @@ russh handle 或 worker。
 只有 SFTP Tab 报告 connected 后，远端导航和选择控件才可交互。此前 `AppState` 不发布
 available 的远端 snapshot，application bridge 也会独立拒绝来自未连接或非 SFTP Tab 的操作。
 
+所有 SFTP 界面意图都会在 callback 执行时，按其来源窗口从 `WindowRouter` 解析活动 Tab。
+随后 bridge 始终把该路由 Tab UUID 传入状态变更或 worker 请求；进程级 `AppState` 的活动 Tab
+不再作为操作上下文。工作区标题栏的动作同样携带每一行的 Tab UUID，因此其它窗口的焦点切换
+或异步刷新不会把 SFTP 操作重定向到错误的 Tab。
+
 创建新的 SFTP Tab 时，SSH profile 会把初始远端目录交给 worker 所有的浏览器，把初始本地目录
 交给 application-owned 的本地 snapshot。旧 profile 缺少远端值时使用 `~`，本地值为空时解析为
 平台 home 目录。这些默认值只在 Tab 初始化时使用，之后的导航仍属于各自 Tab。
@@ -703,20 +708,22 @@ available 的远端 snapshot，application bridge 也会独立拒绝来自未连
 `SftpPane` 则按响应式最小尺寸限制两侧。splitter 提供 resize 光标、键盘焦点与方向键调整，以及 slider
 可访问操作；双击目录 splitter 恢复等宽，双击 Transfers splitter 折叠或展开队列。分栏状态不进入
 Rust、配置 schema 或 SFTP transport，Name/Size/Modified 列保持响应式布局；点击标题会排序当前快照，默认按
-Modified 降序（最新优先），并在远端后续分页到达后由应用状态重新应用。
+Modified 降序（最新优先），并在远端后续分页到达或本地页面释放前由应用状态重新应用。
+进入有界行 DTO 的名称保留完整文本；UI 会按名称列可用宽度省略，只有发生溢出时才在鼠标悬浮提示中按字符换行显示完整名称。
 两个目录标题栏还只会通过既有 clipboard callback 发出当前已受限路径；复制按钮不读取目录，也不会接触
 SFTP worker。
 
 远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
-本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；进入 Slint 前限制为每个名称 256 字符、
-名称总预算 2 MiB 和路径 4 KiB，移除原先固定 250 条的限制。远端浏览器在应用状态中为每个 Tab 保留有界的
+本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；blocking 读取在进入 Slint 前构造有界快照，
+每个可接受名称限制为 256 字符，名称/路径文本总预算为 2 MiB，路径为 4 KiB；无法读取的条目与预算截断分开计数。
+移除原先固定 250 条的读取上限，application state 再把完整有界快照按每页 250 条释放给 UI，以保证分页前后的全局排序一致。远端浏览器在应用状态中为每个 Tab 保留有界的
 前进/后退路径历史；只有目录页成功返回后才提交历史，因此失败请求不会消耗导航步骤，加载期间
 导航按钮会禁用。远端和本地行都拥有真实的 Tab 内选中状态，表头可以全选或清空；目录刷新后
 只保留仍存在于当前快照的条目，选中本身不会启动传输。命令/事件 channel 有界，请求串行执行
 并带超时；入站 SFTP frame 在进入 `russh-sftp` parser 前拒绝超过 256 KiB 的 packet；raw
 目录游标每页最多输出 250 条。单目录在名称/路径累计 2 MiB 时停止，单条路径和
-名称进入应用快照前也会校验并限制。`russh-sftp` 内部仍使用 unbounded packet sender，因此
-AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
+名称进入应用快照前也会校验并限制。只要还有条目，**More** 会释放下一页本地条目或请求下一页远端条目。
+`russh-sftp` 内部仍使用 unbounded packet sender，因此 AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
 每行从 `src/app/file_icons.rs` 接收 24x24 的自有 RGBA 图标。UI 只读取内存结果或内建的目录、
 链接、通用文件 fallback；平台查询与图片解码都在 blocking worker 中运行，每批最多预热 64 个

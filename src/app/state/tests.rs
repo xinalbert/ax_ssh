@@ -1354,6 +1354,99 @@ fn sftp_selection_tracks_rows_and_select_all() {
 }
 
 #[test]
+fn sftp_file_sort_defaults_to_newest_modified_first() {
+    let sort = SftpSortState::default();
+    assert_eq!(sort.column, SftpSortColumn::Modified);
+    assert!(sort.descending);
+}
+
+#[test]
+fn local_directory_pages_are_bounded_and_keep_global_sort_order() {
+    let directory = std::env::temp_dir().join(format!("ax-ssh-local-pages-{}", Uuid::new_v4()));
+    std::fs::create_dir(&directory).expect("test directory should be created");
+    for index in 0..501 {
+        std::fs::create_dir(directory.join(format!("entry-{index:03}")))
+            .expect("test entry should be created");
+    }
+
+    let listing = crate::app::local_files::read_local_directory(&directory.display().to_string())
+        .expect("test directory should be listed");
+    let mut local = LocalDirectoryState::default();
+    assert!(local.sort.toggle_column("name"));
+    local.complete(
+        listing.path,
+        listing.entries,
+        listing.truncated,
+        listing.skipped_entries,
+    );
+
+    assert_eq!(local.entries.len(), 250);
+    assert!(local.has_more);
+    assert_eq!(local.entries[0].name, "entry-000");
+    assert_eq!(local.entries[249].name, "entry-249");
+
+    assert!(local.load_more());
+    assert_eq!(local.entries.len(), 500);
+    assert!(local.has_more);
+    assert!(local.load_more());
+    assert_eq!(local.entries.len(), 501);
+    assert!(!local.has_more);
+    assert!(!local.load_more());
+
+    std::fs::remove_dir_all(&directory).expect("test directory should be removed");
+}
+
+#[test]
+fn local_directory_refresh_retains_selection_in_a_pending_page() {
+    let directory = std::env::temp_dir().join(format!("ax-ssh-local-selection-{}", Uuid::new_v4()));
+    std::fs::create_dir(&directory).expect("test directory should be created");
+    for index in 0..251 {
+        std::fs::create_dir(directory.join(format!("entry-{index:03}")))
+            .expect("test entry should be created");
+    }
+
+    let listing = crate::app::local_files::read_local_directory(&directory.display().to_string())
+        .expect("test directory should be listed");
+    let pending_path = listing
+        .entries
+        .iter()
+        .find(|entry| entry.name == "entry-250")
+        .expect("last entry should be listed")
+        .path
+        .clone();
+    let mut local = LocalDirectoryState::default();
+    assert!(local.sort.toggle_column("name"));
+    local.complete(
+        listing.path,
+        listing.entries,
+        listing.truncated,
+        listing.skipped_entries,
+    );
+    local.selected.insert(pending_path.clone());
+
+    let refreshed = crate::app::local_files::read_local_directory(&directory.display().to_string())
+        .expect("test directory should be relisted");
+    local.complete(
+        refreshed.path,
+        refreshed.entries,
+        refreshed.truncated,
+        refreshed.skipped_entries,
+    );
+    assert!(local.selected.contains(&pending_path));
+    assert!(!local.entries.iter().any(|entry| entry.path == pending_path));
+
+    assert!(local.load_more());
+    assert!(
+        local
+            .entries
+            .iter()
+            .any(|entry| entry.path == pending_path && local.selected.contains(&entry.path))
+    );
+
+    std::fs::remove_dir_all(&directory).expect("test directory should be removed");
+}
+
+#[test]
 fn sftp_tab_is_a_separate_ssh_target() {
     let mut state = test_state();
     let mut profile = SessionProfile::new("server", "server.example", "alice");

@@ -339,6 +339,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback close-tab(string);
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback load-more-local-sftp();
     callback sort-remote-sftp(string);
     callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
@@ -477,6 +478,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             transfers-collapsed <=> root.sftp-transfers-collapsed;
             list-directory(path) => { root.list-sftp-directory(path); }
             load-more => { root.load-more-sftp(); }
+            load-more-local => { root.load-more-local-sftp(); }
             sort-remote(column) => { root.sort-remote-sftp(column); }
             sort-local(column) => { root.sort-local-sftp(column); }
             list-local-directory(path) => { root.list-local-sftp-directory(path); }
@@ -580,6 +582,7 @@ export component WorkspaceShell inherits Rectangle {
     callback open-sftp();
     callback list-sftp-directory(string);
     callback load-more-sftp();
+    callback load-more-local-sftp();
     callback sort-remote-sftp(string);
     callback sort-local-sftp(string);
     callback list-local-sftp-directory(string);
@@ -709,6 +712,7 @@ export component WorkspaceShell inherits Rectangle {
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
         load-more-sftp => { root.load-more-sftp(); }
+        load-more-local-sftp => { root.load-more-local-sftp(); }
         sort-remote-sftp(column) => { root.sort-remote-sftp(column); }
         sort-local-sftp(column) => { root.sort-local-sftp(column); }
         list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
@@ -961,6 +965,7 @@ export component WorkspaceShell inherits Rectangle {
                         transfers-collapsed <=> root.sftp-transfers-collapsed;
                         list-directory(path) => { root.list-sftp-directory(path); }
                         load-more => { root.load-more-sftp(); }
+                        load-more-local => { root.load-more-local-sftp(); }
                         sort-remote(column) => { root.sort-remote-sftp(column); }
                         sort-local(column) => { root.sort-local-sftp(column); }
                         list-local-directory(path) => { root.list-local-sftp-directory(path); }

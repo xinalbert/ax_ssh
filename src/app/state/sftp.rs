@@ -1,5 +1,7 @@
 use super::*;
 
+const LOCAL_DIRECTORY_PAGE_SIZE: usize = 250;
+
 impl SftpBrowserState {
     pub(super) fn for_standalone_tab(local_path: &str) -> Self {
         let local_path = local_path.trim();
@@ -84,7 +86,7 @@ impl SftpBrowserState {
         if !self.local.sort.toggle_column(column) {
             return false;
         }
-        sort_local_entries(&mut self.local.entries, self.local.sort);
+        self.local.resort();
         true
     }
 
@@ -703,6 +705,11 @@ impl LocalDirectoryState {
         self.request_id = self.request_id.wrapping_add(1);
         self.path = path;
         self.loading = true;
+        self.entries.clear();
+        self.pending_entries.clear();
+        self.has_more = false;
+        self.truncated = false;
+        self.skipped_entries = 0;
         self.status = "Loading local directory...".to_owned();
         self.request_id
     }
@@ -712,19 +719,70 @@ impl LocalDirectoryState {
         path: String,
         entries: Vec<LocalDirectoryEntry>,
         truncated: bool,
+        skipped_entries: usize,
     ) {
         if self.path != path {
             self.selected.clear();
         }
         self.loading = false;
         self.path = path;
-        self.entries = entries;
-        sort_local_entries(&mut self.entries, self.sort);
-        self.selected
-            .retain(|selected| self.entries.iter().any(|entry| &entry.path == selected));
+        self.entries.clear();
+        self.pending_entries = entries.into();
         self.truncated = truncated;
-        self.status = if truncated {
+        self.skipped_entries = skipped_entries;
+        self.resort();
+        self.selected.retain(|selected| {
+            self.entries.iter().any(|entry| &entry.path == selected)
+                || self
+                    .pending_entries
+                    .iter()
+                    .any(|entry| &entry.path == selected)
+        });
+        self.update_status();
+    }
+
+    pub(in crate::app) fn load_more(&mut self) -> bool {
+        if self.loading || self.pending_entries.is_empty() {
+            return false;
+        }
+        for _ in 0..LOCAL_DIRECTORY_PAGE_SIZE {
+            let Some(entry) = self.pending_entries.pop_front() else {
+                break;
+            };
+            self.entries.push(entry);
+        }
+        self.has_more = !self.pending_entries.is_empty();
+        self.update_status();
+        true
+    }
+
+    fn resort(&mut self) {
+        let mut entries = std::mem::take(&mut self.entries);
+        entries.extend(self.pending_entries.drain(..));
+        sort_local_entries(&mut entries, self.sort);
+        self.pending_entries = entries.into();
+        self.entries.clear();
+        self.has_more = false;
+        self.load_more();
+    }
+
+    fn update_status(&mut self) {
+        self.status = if self.has_more {
+            format!("{} items shown", self.entries.len())
+        } else if self.truncated && self.skipped_entries > 0 {
+            format!(
+                "{} items ({} unavailable; text budget reached)",
+                self.entries.len(),
+                self.skipped_entries
+            )
+        } else if self.truncated {
             "Local directory text budget reached".to_owned()
+        } else if self.skipped_entries > 0 {
+            format!(
+                "{} items ({} unavailable)",
+                self.entries.len(),
+                self.skipped_entries
+            )
         } else {
             format!("{} items", self.entries.len())
         };
@@ -773,6 +831,7 @@ impl LocalDirectoryState {
             path: self.path.clone(),
             entries: self.entries.clone(),
             sort: self.sort,
+            has_more: self.has_more,
             truncated: self.truncated,
             status: self.status.clone(),
             selected_count: self.selected_count(),

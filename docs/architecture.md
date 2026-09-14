@@ -1094,6 +1094,13 @@ Tab reports connected. `AppState` publishes no available remote snapshot before
 then, and the application bridge independently rejects operations from a
 disconnected or non-SFTP Tab.
 
+Every SFTP UI intent is resolved against the `WindowRouter` route for the
+originating window at callback time. The route's active Tab UUID is then passed
+through the bridge and used for the state mutation or worker request; the
+process-wide `AppState` active Tab is not an operation context. Workspace
+titlebar actions likewise carry each row's Tab UUID, so an asynchronous refresh
+or a focus change in another window cannot retarget an SFTP operation.
+
 When a new SFTP Tab is created, its SSH profile supplies the initial remote
 directory to the worker-owned browser and the initial local directory to the
 application-owned local snapshot. Missing legacy remote values use `~`; an
@@ -1111,7 +1118,10 @@ splitter collapses or expands the queue. No splitter state enters Rust, the
 configuration schema, or the SFTP transport, and the Name/Size/Modified columns
 remain responsive columns; clicking a header sorts the current snapshot, with
 Modified descending (newest first) as the default. Application state reapplies
-the selected sort after remote pages arrive.
+the selected sort after remote pages arrive and before local pages are released.
+Accepted names remain complete in the bounded row DTO; the UI elides a name to
+the available column width and shows the full name in a character-wrapped hover
+tooltip when it overflows.
 Each directory header also emits only its current, already-bounded path through
 the existing clipboard callback; the copy button does not read a directory or
 access an SFTP worker.
@@ -1119,9 +1129,12 @@ access an SFTP worker.
 The remote side remains the bounded SFTP browser, while
 `src/app/local_files.rs` reads local directory metadata only on a Tokio blocking
 boundary. Local results carry a Tab-local request identity so late reads cannot
-replace a newer path. They are bounded to 256 characters per name, a 2 MiB
-aggregate name budget, and 4 KiB paths before reaching Slint; the former fixed
-250-entry cap is removed. The
+replace a newer path. The blocking read builds a bounded snapshot with 256
+characters per accepted name, a 2 MiB aggregate name/path text budget, and
+4 KiB paths before reaching Slint; unavailable entries are counted separately
+from budget truncation. The former fixed 250-entry read cap is removed, and
+application state releases the local snapshot in 250-entry pages while keeping
+the complete bounded snapshot available for sorting. The
 remote browser keeps a bounded per-Tab back/forward path history in application
 state. History entries are committed only after a directory page succeeds, so a
 failed request cannot consume a navigation step; navigation controls are disabled
@@ -1133,9 +1146,10 @@ serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
 `russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
 page. One directory stops when its 2 MiB names-and-paths budget is reached;
 individual paths/names are also validated and bounded before they enter the
-application snapshot. `russh-sftp` still has an internal unbounded packet
-sender, so AxSSH limits the browser exposure to one session with one request in
-flight.
+application snapshot. `More` releases another bounded local page or requests
+another remote page while one is available. `russh-sftp` still has an internal
+unbounded packet sender, so AxSSH limits the browser exposure to one session
+with one request in flight.
 
 Each row receives a 24x24 owned RGBA icon from `src/app/file_icons.rs`. The UI
 only reads an in-memory result or a built-in folder, symlink, or generic-file

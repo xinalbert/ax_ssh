@@ -271,6 +271,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_sftp_all_selected(false);
     ui.set_local_sftp_loading(false);
     ui.set_local_sftp_path("".into());
+    ui.set_local_sftp_has_more(false);
     ui.set_local_sftp_truncated(false);
     ui.set_local_sftp_status("".into());
     ui.set_local_sftp_selected_count(0);

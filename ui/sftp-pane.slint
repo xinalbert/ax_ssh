@@ -1,5 +1,6 @@
 import { CheckBox, ListView, TextEdit } from "std-widgets.slint";
 import { ActionMenuItem, FlatActionMenu } from "components/flat-action-menu.slint";
+import { ElidedLabel } from "components/elided-controls.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
 import { SftpActionButton, SftpCopyPathButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
@@ -54,6 +55,7 @@ export struct SftpViewState {
     local_entries: [SftpEntryRow],
     local_sort_column: string,
     local_sort_descending: bool,
+    local_has_more: bool,
     local_truncated: bool,
     local_status: string,
     local_selected_count: int,
@@ -432,15 +434,15 @@ component SftpEntry inherits Rectangle {
         source: root.entry.icon;
         image-fit: contain;
     }
-    Text {
+    ElidedLabel {
         x: root.name-x;
         width: max(0px, root.name-right - self.x);
         height: parent.height;
         text: root.entry.name;
-        color: Theme.text;
+        tooltip-text: root.entry.name;
+        text-color: Theme.text;
         font-size: Theme.font-body;
         font-weight: root.entry.kind == "folder" ? 600 : 400;
-        overflow: elide;
         vertical-alignment: center;
     }
     Text {
@@ -1310,6 +1312,7 @@ export component SftpPane inherits Rectangle {
     callback list-directory(string);
     callback load-more();
     callback list-local-directory(string);
+    callback load-more-local();
     callback navigate-back();
     callback navigate-forward();
     callback toggle-remote-selection(string, bool);
@@ -1512,6 +1515,7 @@ export component SftpPane inherits Rectangle {
                 entries: root.view.local_entries;
                 loading: root.view.local_loading;
                 path: root.view.local_path;
+                has-more: root.view.local_has_more;
                 truncated: root.view.local_truncated;
                 status: root.view.local_status;
                 selection-all: root.view.local_all_selected;
@@ -1519,6 +1523,7 @@ export component SftpPane inherits Rectangle {
                 sort-column: root.view.local_sort_column;
                 sort-descending: root.view.local_sort_descending;
                 list-directory(path) => { root.list-local-directory(path); }
+                load-more => { root.load-more-local(); }
                 open-file(path) => { root.open-local-file(path); }
                 reveal-local(path) => { root.reveal-local-file(path); }
                 drag-data(path) => { return root.drag-local-file(path); }

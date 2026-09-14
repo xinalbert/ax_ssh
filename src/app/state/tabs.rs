@@ -989,10 +989,6 @@ impl AppState {
         &self.serial_ports
     }
 
-    pub(in crate::app) fn active_terminal(&self) -> Option<&TerminalTabState> {
-        self.active_tab_id.and_then(|id| self.terminal(id))
-    }
-
     pub(in crate::app) fn active_terminal_mut(&mut self) -> Option<&mut TerminalTabState> {
         self.active_tab_id.and_then(|id| self.terminal_mut(id))
     }
