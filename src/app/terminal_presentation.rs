@@ -166,23 +166,27 @@ fn terminal_presentation_policy() -> TerminalPresentationPolicy {
 }
 
 async fn wait_for_route_change(route_changes: &mut Option<watch::Receiver<u64>>) {
-    match route_changes {
-        Some(route_changes) => {
-            let _ = route_changes.changed().await;
-        }
-        None => pending::<()>().await,
-    }
+    wait_for_watch_change(route_changes).await;
 }
 
 async fn wait_for_policy_change(
     policy_changes: &mut Option<watch::Receiver<TerminalPresentationPolicy>>,
 ) {
-    match policy_changes {
-        Some(policy_changes) => {
-            let _ = policy_changes.changed().await;
+    wait_for_watch_change(policy_changes).await;
+}
+
+/// Wait once for a watch update, permanently disabling a receiver whose sender
+/// has gone away. `watch::Receiver::changed` immediately returns an error once
+/// its sender is dropped; retaining that receiver in a repeating `select!`
+/// would otherwise turn an idle monitor into a busy loop.
+async fn wait_for_watch_change<T>(changes: &mut Option<watch::Receiver<T>>) {
+    if let Some(receiver) = changes.as_mut() {
+        if receiver.changed().await.is_err() {
+            *changes = None;
         }
-        None => pending::<()>().await,
+        return;
     }
+    pending::<()>().await;
 }
 
 #[derive(Debug, Default)]
@@ -483,5 +487,16 @@ mod tests {
             ),
             Some(started_at + software_policy.unfocused_interval())
         );
+    }
+
+    #[tokio::test]
+    async fn closed_watch_is_disabled_after_one_wakeup() {
+        let (sender, receiver) = watch::channel(0_u8);
+        drop(sender);
+        let mut changes = Some(receiver);
+
+        wait_for_watch_change(&mut changes).await;
+
+        assert!(changes.is_none());
     }
 }

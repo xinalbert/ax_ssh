@@ -668,8 +668,14 @@ fn closing_active_tab_selects_a_neighbor() {
     let profile = SessionProfile::new("Local", "localhost", "alice");
     let first = state.open_terminal_tab(&profile);
     let second = state.open_terminal_tab(&profile);
+    let third = state.open_terminal_tab(&profile);
 
+    assert!(state.activate_tab(second));
     state.close_tab(second).expect("second tab should close");
+
+    assert_eq!(state.active_tab_id(), Some(third));
+
+    state.close_tab(third).expect("third tab should close");
 
     assert_eq!(state.active_tab_id(), Some(first));
 }

@@ -134,6 +134,26 @@ fn interactive_pty_requests_crlf_output_mode() {
 }
 
 #[test]
+fn closed_shell_event_channel_is_a_disconnect() {
+    assert_eq!(
+        terminal_event_from_channel_message(None),
+        Some(SshEvent::Disconnected)
+    );
+}
+
+#[test]
+fn shell_eof_or_close_is_a_normal_exit() {
+    assert_eq!(
+        terminal_event_from_channel_message(Some(ChannelMsg::Eof)),
+        Some(SshEvent::ShellExited)
+    );
+    assert_eq!(
+        terminal_event_from_channel_message(Some(ChannelMsg::Close)),
+        Some(SshEvent::ShellExited)
+    );
+}
+
+#[test]
 fn ssh_agent_identity_attempts_are_bounded() {
     assert_eq!(ssh_agent_attempt_count(0), 0);
     assert_eq!(ssh_agent_attempt_count(3), 3);
@@ -451,11 +471,110 @@ impl server::Handler for TestServer {
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
         let command = String::from_utf8_lossy(data).trim().to_owned();
+        if command == "exit" {
+            session.eof(channel)?;
+            session.close(channel)?;
+            return Ok(());
+        }
         session.data(
             channel,
             format!("\r\necho: {command}\r\nax-test$ ").into_bytes(),
         )?;
         Ok(())
+    }
+}
+
+#[tokio::test]
+async fn remote_shell_exit_reports_a_normal_shell_exit() {
+    let mut rng = StdRng::seed_from_u64(85);
+    let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
+        .expect("test host key should be generated");
+    let server_config = Arc::new(server::Config {
+        auth_rejection_time: Duration::from_millis(1),
+        auth_rejection_time_initial: Some(Duration::ZERO),
+        keys: vec![host_key],
+        ..server::Config::default()
+    });
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("test SSH listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("test SSH listener should have an address");
+    let server_task = tokio::spawn(async move {
+        let mut sessions = Vec::new();
+        for _ in 0..2 {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .expect("test SSH connection should be accepted");
+            let session =
+                server::run_stream(server_config.clone(), stream, TestServer::password_only())
+                    .await
+                    .expect("test SSH session should start");
+            sessions.push(tokio::spawn(session));
+        }
+        sessions
+    });
+
+    let mut profile = test_profile("remote-exit", address.ip().to_string());
+    profile.ssh_mut().expect("test profile should use SSH").port = address.port();
+    profile
+        .ssh_mut()
+        .expect("test profile should use SSH")
+        .host_key_fingerprint = Some(
+        probe_host_key(&profile)
+            .await
+            .expect("unknown host-key probe should return the rejected fingerprint")
+            .fingerprint,
+    );
+
+    let (worker, mut events) = SshSessionHandle::spawn(
+        &Handle::current(),
+        Uuid::new_v4(),
+        profile,
+        Zeroizing::new(TEST_PASSWORD.to_owned()),
+        120,
+        36,
+    );
+    let connected = timeout(Duration::from_secs(2), async {
+        loop {
+            if let Some(SshSessionEvent::Connected) = events.recv().await {
+                break true;
+            }
+        }
+    })
+    .await
+    .expect("SSH worker should connect promptly");
+    assert!(connected);
+    worker
+        .request_send(b"exit\r".to_vec())
+        .expect("SSH worker should accept exit input");
+    let exited = timeout(Duration::from_secs(2), async {
+        loop {
+            match events.recv().await {
+                Some(SshSessionEvent::ShellExited) => break true,
+                Some(SshSessionEvent::Failed(message)) => {
+                    panic!("SSH worker failed while exiting shell: {message}")
+                }
+                Some(_) => {}
+                None => break false,
+            }
+        }
+    })
+    .await
+    .expect("SSH worker should report normal shell exit promptly");
+    assert!(exited);
+    worker
+        .shutdown()
+        .await
+        .expect("SSH worker should join cleanly after normal shell exit");
+
+    let sessions = server_task
+        .await
+        .expect("test SSH accept task should finish");
+    for session in sessions {
+        let _ = session.await;
     }
 }
 

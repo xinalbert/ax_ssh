@@ -105,6 +105,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut x11_relays = JoinSet::new();
     let mut x11_unavailable_reported = false;
     let mut failed = false;
+    let mut shell_exited = false;
     loop {
         tokio::select! {
             command = command_rx.recv() => {
@@ -348,7 +349,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
             }
             event = shell.next_event() => {
                 match event {
-                    Ok(Some(SshEvent::Output(data))) => {
+                    Ok(SshEvent::Output(data)) => {
                         let received_at = Instant::now();
                         let arm_output_flush = output.is_empty();
                         output_received_at.get_or_insert(received_at);
@@ -383,11 +384,15 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             break;
                         }
                     }
-                    Ok(Some(SshEvent::Disconnected)) => {
+                    Ok(SshEvent::ShellExited) => {
                         info!(session_id = %session_id, "SSH shell closed by remote peer");
+                        shell_exited = true;
                         break;
                     }
-                    Ok(None) => {}
+                    Ok(SshEvent::Disconnected) => {
+                        info!(session_id = %session_id, "SSH transport closed while waiting for shell output");
+                        break;
+                    }
                     Err(error) => {
                         warn!(session_id = %session_id, %error, "SSH shell receive failed");
                         send_event(
@@ -500,7 +505,12 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         warn!(session_id = %session_id, %error, "SSH transport disconnect failed");
     }
     if !failed {
-        send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
+        let event = if shell_exited {
+            SshSessionEvent::ShellExited
+        } else {
+            SshSessionEvent::Disconnected
+        };
+        send_event(&event_tx, event, session_id).await;
     }
 }
 

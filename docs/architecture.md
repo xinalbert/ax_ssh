@@ -254,7 +254,9 @@ last published snapshot, it never enters the Slint queue; control-only terminal
 sequences therefore do not cause a redraw. Settings preview and save publish the
 new non-software policy through `WindowRouter`, waking monitors with pending
 output immediately. Route revisions wake only monitors with pending output, so a
-pane focus or Tab change applies the new policy without polling. Native window activation is runtime-only: the
+pane focus or Tab change applies the new policy without polling. If either
+route/policy watch sender is gone, its receiver is removed after that one wakeup
+and no closed wait branch is retried. Native window activation is runtime-only: the
 Slint `WindowActiveChanged` event hook matches each event's native window handle
 to its `AppWindow` route and publishes changes through the same route revision.
 On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 500 ms
@@ -295,10 +297,14 @@ platform backends do not consume this value.
 Only non-root leaves of a `PaneTree` are independently closable. Their close
 intent is revalidated against the owning window route, collapses that leaf in
 the tree, removes exactly that runtime Tab, cancels a pending probe, and shuts
-down any surviving worker asynchronously. A normal local-shell exit or SSH or
-Telnet disconnect uses the same path for a child pane. The workspace root and
-connection, authentication, or transport failures remain visible; closing the
-visible Terminal Tab still owns whole-tree shutdown.
+down any surviving worker asynchronously. A normal local-shell exit, or an SSH
+shell's explicit protocol EOF/close, uses the same path for a child pane. The
+same normal exit from the workspace root closes its visible Terminal Tab and its
+entire pane tree; the regular Tab-close selection then chooses the following
+Tab, or the preceding Tab when no following Tab exists. An SSH event stream that
+ends without EOF/close remains a transport disconnect, so connection,
+authentication, and transport failures remain visible; closing a visible
+Terminal Tab still owns whole-tree shutdown.
 Its internal `TerminalGrid` receives the smaller `TerminalGridView` and
 `TerminalSelectionView` DTOs: it renders the bounded snapshot and turns
 pointer, semantic double-click, logical-line triple-click, scroll, and context-menu gestures into callbacks, while `TerminalPane`
@@ -1042,6 +1048,9 @@ Authenticated connections follow this lifecycle:
   eight relay tasks; SFTP-only mode has no X11 dispatcher;
 - terminal output is capped per batch and backpressured through a bounded event
   channel before entering the bounded terminal model;
+- a terminal channel that ends without an EOF or close message is normalized as
+  `Disconnected`, so its worker releases the session rather than polling a
+  permanently closed stream;
 - worker events report connected, resize, output, disconnected, host-key
   rejection, credential failure, or a capped error message;
 - each SSH Tab independently owns probe cancellation and its authentication

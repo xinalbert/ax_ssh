@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260908-native-shortcut-input
-- 目标：按 native-first 混合架构修复 macOS 合成快捷键输入，并保持原生菜单、普通文本和 IME 边界。
-- 交付物：Winit modifier snapshot、macOS Control 终端组合键原生分发、应用菜单快捷键排除、输入回归测试、双语架构与验证记录。
+- 目标 ID：20260914-local-exit-close
+- 目标：本地 shell 或远端 SSH shell 正常 `exit` 后关闭其对应的终端 Tab，并按现有 Tab 关闭约定聚焦后一个 Tab；若不存在后一个则聚焦前一个。
+- 交付物：根终端 Tab 的退出关闭路由、SSH EOF/Close 与传输断开的语义区分、邻接 Tab 聚焦回归测试、双语用户/架构说明和实施跟踪记录。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：`src/app/{input,terminal_bridge}.rs`、`ui/terminal-pane.slint` 的现有输入契约、双语架构说明、项目地图和实施跟踪。
-- 不在本轮范围内：SSH/PTY transport、凭据、host-key trust、普通文本/IME TextInput、原生 AppKit 菜单业务语义、参考工程和 vendored Slint API。
+- 当前范围：本地与 SSH shell worker 退出事件、workspace Tab 关闭与窗口路由、双语用户/架构说明和实施跟踪。
+- 不在本轮范围内：Slint 布局/渲染、Telnet/Serial 断开与重连语义、SSH trust/认证、凭据、SFTP 业务、参考工程和 vendored Slint API。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -23,33 +23,36 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| NATIVE1 | completed | 记录 Winit `ModifiersChanged` 并让输入/快捷键格式化优先使用事件级物理修饰键 | `cargo check --locked --offline`、定向输入测试 | thread-local snapshot 只存在 UI 线程，不进入配置、日志或 transport。 |
-| NATIVE2 | completed | macOS 物理 Control 终端组合键在 Slint 前直接编码，排除应用菜单快捷键 | macOS cfg 编译、终端 bridge 静态审阅 | 普通文本、IME、Cmd 菜单和非 Terminal Tab 继续传播给 Slint/AppKit。 |
-| NATIVE3 | completed | 同步双语契约、项目地图、月度记录并完成完整离线质量门禁 | fmt/check/Clippy/test/diff/tracker | 本次记录通过 tracker 格式检查；历史记录仍有既存格式债务。真实 AppleScript、左右 Control、IME、原生菜单和 detached window 仍需 macOS 用户验收。 |
+| EXIT1 | completed | 复核本地 shell 退出、workspace 关闭和焦点路由 | 源码逐项静态审阅 | 现有 `AppState::close_tab` 已定义为优先后一个 Tab、否则前一个；子 pane 已有独立关闭路径，根 Tab 在本地 shell 退出后仍被保留。 |
+| EXIT2 | completed | 将根 shell 的正常退出路由到既有 workspace Tab 关闭流程，并补聚焦回归 | 定向单元/异步测试 | Local 退出、SSH EOF/Close 正常退出与 Tab 关闭/邻接聚焦均已覆盖；transport 无消息结束继续重连。 |
+| EXIT3 | completed | 同步双语文档、项目地图和月度变更记录，并完成离线质量门禁 | fmt/check/Clippy/test/diff/tracker | GUI 实机行为仍由用户验收。 |
 
 ## 已完成
 
-- 已完成 Winit `ModifiersChanged` 到 UI-thread-local `TerminalModifiers` snapshot 的记录，并让 physical key、terminal input 和 shortcut formatting 优先使用该事件级状态。
-- 已完成 macOS 物理 Control 终端组合键在 Slint 前的 native dispatch；配置中的应用快捷键继续传播给原生菜单，普通文字、IME、Cmd 和非 Terminal Tab 不被截获。
-- 已补充 Rust 输入回归和双语架构/项目地图说明；未修改 transport、凭据、host-key trust 或 vendored Slint。
+- 已确认既有 `AppState::close_tab` 的焦点约定：移除当前 Tab 后优先保留同一索引的后一个 Tab；若已是末项则选择前一个 Tab。
+- 已确认本地 shell 子 pane 正常退出会走 child-pane close；根 workspace Tab 仅刷新为完成状态，尚未关闭，需复用 workspace close 流程。
+- 根 local shell 的 `LocalShellEvent::Exited` 现在在 child-pane close 未处理时进入既有 `close_workspace_tab`；该路径重验窗口路由、释放整棵 pane tree 的其他 worker，并通过 `AppState::close_tab` 应用现有邻接聚焦约定。
+- 已新增真实本地 shell `exit` 回归，覆盖根 workspace Tab 被移除并聚焦后一个 Tab；既有状态回归扩展为覆盖优先后一个、末项再回退前一个。
+- SSH worker 现将 `ChannelMsg::Eof`/`Close` 作为 `ShellExited`，而 event stream 的 `None` 仍为 `Disconnected`；两者都会结束 worker，故不重引入关闭 stream 的立即轮询。
+- SSH monitor 仅在当前 attempt 收到 `ShellExited` 时 retire 后复用 child/workspace close 路由；无 EOF/Close 的断开仍进入既有重连。回环 russh 服务器、SSH monitor 与 Local PTY 回归均覆盖正常退出后的 Tab 移除及后一个 Tab 聚焦。
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、native modifier 定向测试、`git diff --check`。
-- 未完成：macOS AppleScript/左右 Control/IME/菜单/detached window 实机验收。tracker validator 的剩余失败均来自本轮之前的历史记录格式债务。
+- 已完成：本地与 SSH shell 根 Tab 退出关闭、AxSSH Rust/Slint 边界、架构文档和 Tab/窗口/worker 路由审阅、定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 245、应用 240、Doc tests 0）和 `git diff --check`。
+- 未完成：目标平台 GUI 实机行为验收；tracker validator 的其余失败均为本轮之前的历史格式债务。
 
 ## 风险与阻塞
 
-- native hook 依赖 winit 在 macOS keyDown 前发布 `ModifiersChanged`；缺失时只回退到 AppKit 当前聚合状态，不能替代真实目标平台验证。
-- native hook 只在 active Terminal Tab 的物理 Control 组合上直接 dispatch；应用菜单 shortcut、普通文本/IME 和 modal/security gate 必须继续由各自边界处理。
+- 根 pane 退出将关闭其所属可见 workspace Tab；若该 Tab 有 split 子 pane，既有 workspace close 流程会一并释放该树中的 terminal worker。
+- SSH 只能把协议明确送达的 channel EOF/Close 归类为正常 shell 结束；没有消息即结束、连接/认证失败仍必须保留既有断开/重连语义。Telnet/Serial 缺少可等价区分的协议事件。
 
 ## 下一步
 
-- 由用户在 macOS 目标环境验证 AppleScript `Ctrl+B`、真实左右 Control、Cmd 菜单快捷键、IME、普通文本和 detached window；历史 tracker 格式债务另行处理。
+- 请用户在目标平台验证：local 或 SSH shell 输入 `exit` 后，根 pane 关闭整个可见 Terminal Tab 并聚焦右侧 Tab（没有右侧时左侧）；child pane 的正常退出只关闭自身。SSH 网络/transport 中断仍应保留 Tab 并重连。
 
 ## 最后更新时间
 
-- 2026-09-08 12:10 +0800
+- 2026-09-14 09:49 +0800
 
 ## 9 项复核映射
 

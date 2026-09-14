@@ -427,6 +427,30 @@ pub(super) fn spawn_session_monitor(
                 // The resize callback updates the active model immediately after its request is
                 // accepted. A delayed worker acknowledgement must not restore an older grid.
                 SshSessionEvent::Resized { .. } => {}
+                SshSessionEvent::ShellExited => {
+                    terminal_event = true;
+                    presentation.clear_pending_output();
+                    if retire_session_attempt(&state, tab_id, profile.id, attempt_id)
+                        && !global_window_router().is_some_and(|router| {
+                            close_terminal_child_pane(
+                                &router,
+                                None,
+                                tab_id,
+                                &state,
+                                &ui,
+                                &runtime_for_monitor,
+                            )
+                        })
+                    {
+                        close_workspace_tab(
+                            tab_id,
+                            &state,
+                            &ui,
+                            &runtime_for_monitor,
+                        );
+                    }
+                    break;
+                }
                 SshSessionEvent::Disconnected => {
                     terminal_event = true;
                     let _ = mutate_terminal_attempt(
@@ -1092,5 +1116,60 @@ mod tests {
         let (phase, status) = classify_downloaded_file_open(Ok(()));
         assert_eq!(phase, SftpTransferPhase::Completed);
         assert_eq!(status, "Opened");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn normal_ssh_shell_exit_closes_the_workspace_tab_and_selects_following_tab() {
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("axssh-ssh-exit-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        )));
+        let profile = SessionProfile::new("Remote", "example.com", "alice");
+        let attempt_id = Uuid::new_v4();
+        let (exited_tab_id, following_tab_id) = {
+            let mut app = state.lock().expect("state should lock");
+            let _preceding_tab_id = app.open_terminal_tab(&profile);
+            let exited_tab_id = app.open_terminal_tab(&profile);
+            let following_tab_id = app.open_terminal_tab(&profile);
+            assert!(app.activate_tab(exited_tab_id));
+            app.terminal_mut(exited_tab_id)
+                .expect("SSH terminal should exist")
+                .set_ssh_attempt(Some(attempt_id));
+            (exited_tab_id, following_tab_id)
+        };
+        let (events_tx, events_rx) = tokio::sync::mpsc::channel(1);
+        spawn_session_monitor(
+            &Handle::current(),
+            state.clone(),
+            slint::Weak::<AppWindow>::default(),
+            exited_tab_id,
+            profile,
+            attempt_id,
+            events_rx,
+            None,
+            false,
+            ConnectionTarget::Terminal,
+        );
+        events_tx
+            .send(SshSessionEvent::ShellExited)
+            .await
+            .expect("normal shell exit should reach monitor");
+
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let closed_and_focused = state.lock().is_ok_and(|app| {
+                    app.terminal(exited_tab_id).is_none()
+                        && app.active_tab_id() == Some(following_tab_id)
+                });
+                if closed_and_focused {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("normal SSH shell exit should close its tab and focus the following tab");
     }
 }

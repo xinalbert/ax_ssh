@@ -66,6 +66,7 @@ pub enum SshSessionEvent {
     SftpWrite(SftpWriteEvent),
     X11ForwardingEnabled,
     X11ForwardingUnavailable(String),
+    ShellExited,
     Disconnected,
     AuthenticationFailed,
     PrivateKeyFailed(String),

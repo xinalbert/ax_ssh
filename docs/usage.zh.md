@@ -229,11 +229,13 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 每个 pane 都有自己的 local PTY 或 profile connection；SSH pane 会重新执行正常的信任与认证，
 包括可能需要的密码或 passphrase 提示。SFTP 不能拆成 terminal pane，并继续作为独立可见 Tab。
 每个非根 pane 的右上角都有一个小型关闭控件；点击后只关闭该 pane 及其会话，并自动折叠剩余布局，
-根 pane 不提供独立关闭控件。在子 pane 的 local shell 中正常执行 `exit`，或子 SSH/Telnet 正常断开，
-也会执行相同的关闭。连接和认证失败会继续保留在界面上便于排查。关闭可见 Terminal Tab 仍会关闭
-其布局中的全部 terminal pane。连接尝试失败或非主动断开达到重试上限时，对应 pane 内显示非阻塞提示，
-提供 **Retry** 和 **Close**；本地 shell 失败则提供 **Restart**。host-key、认证和 vault 解锁仍只使用该 Tab
-自己的阻塞式安全弹窗。
+根 pane 不提供独立关闭控件。根 local 或 SSH shell 正常执行 `exit` 会关闭其可见 Terminal Tab，随后优先
+聚焦后一个可见 Tab；若原 Tab 已在末位则聚焦前一个。子 pane 收到同一正常退出时只关闭该 pane。SSH 只有在
+服务器明确发送 shell channel EOF/Close 时才将其识别为正常退出。主动 Disconnect 会执行相应关闭。没有
+EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都会保留 Tab 和终端回滚内容、显示当前
+重试倒计时，并用新的 worker 重试。没有可读凭据的 password SSH 会话会停留在认证提示；encrypted-vault
+会话要求解锁。未知或变化的 host key 始终会停在已有的显式确认流程。达到重试上限后，Tab 保持打开并显示
+手动恢复提示。
 
 每个 split 都有可见分隔线。拖动竖线可调整 pane 宽度，拖动横线可调整 pane 高度；双击会恢复
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。

@@ -60,6 +60,7 @@ type RuntimeAgentClient = AgentClient<Box<dyn AgentStream + Send + Unpin>>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshEvent {
     Output(Vec<u8>),
+    ShellExited,
     Disconnected,
 }
 
@@ -767,6 +768,17 @@ pub struct SshShell {
     channel: Channel<russh::client::Msg>,
 }
 
+fn terminal_event_from_channel_message(message: Option<ChannelMsg>) -> Option<SshEvent> {
+    match message {
+        Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+            Some(SshEvent::Output(data.to_vec()))
+        }
+        Some(ChannelMsg::Eof | ChannelMsg::Close) => Some(SshEvent::ShellExited),
+        None => Some(SshEvent::Disconnected),
+        Some(_) => None,
+    }
+}
+
 impl SshShell {
     pub async fn send(&self, data: impl Into<Vec<u8>>) -> Result<()> {
         self.channel.data_bytes(data.into()).await?;
@@ -783,20 +795,14 @@ impl SshShell {
         Ok(())
     }
 
-    pub async fn next_event(&mut self) -> Result<Option<SshEvent>> {
+    /// Wait for the next terminal event. A protocol EOF/close is a normal shell
+    /// exit, while an exhausted event stream is a transport disconnect; neither
+    /// is an idle state that a caller should poll again.
+    pub async fn next_event(&mut self) -> Result<SshEvent> {
         loop {
             // Transport keepalive/inactivity owns liveness. A quiet interactive shell is valid.
-            let Some(message) = self.channel.wait().await else {
-                return Ok(None);
-            };
-            match message {
-                ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
-                    return Ok(Some(SshEvent::Output(data.to_vec())));
-                }
-                ChannelMsg::Eof | ChannelMsg::Close => {
-                    return Ok(Some(SshEvent::Disconnected));
-                }
-                _ => {}
+            if let Some(event) = terminal_event_from_channel_message(self.channel.wait().await) {
+                return Ok(event);
             }
         }
     }

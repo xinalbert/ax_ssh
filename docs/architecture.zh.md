@@ -174,6 +174,7 @@ damage 合并进最新 snapshot，避免遗漏 burst 前段已经变化的脏行
 viewport 与 mouse-reporting 状态均与最近一次已发布 snapshot 一致，就不进入 Slint queue，因此只有控制序列的输出
 不会触发重绘。Settings 预览和保存会通过 `WindowRouter` 发布新的 non-software 策略，并立即唤醒仍有 pending 输出的
 monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。
+任一路由/策略 watch sender 消失时，receiver 会在这一次唤醒后移除，不会重试已关闭的等待分支。
 原生窗口激活状态只在运行时维护：Slint
 `WindowActiveChanged` 事件钩子通过 native window handle 将事件精确匹配到对应 `AppWindow` 路由，并通过同一路由
 revision 发布变化；macOS UI 线程另以 500ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
@@ -199,8 +200,10 @@ surface 前将 `layer-images` 或 `damage-backing-store` 映射到进程内 soft
 绝不热切换，其它平台 backend 不读取该值。
 只有 `PaneTree` 的非根叶节点可以单独关闭。关闭意图会按所属窗口路由重新校验，随后折叠该叶节点、
 只移除对应运行时 Tab、取消 pending probe，并异步 shutdown 仍存在的 worker。子 pane 中 local shell
-正常退出或 SSH/Telnet 断开会复用同一路径。workspace 根节点以及连接、认证或 transport 失败状态
-继续可见；关闭可见 Terminal Tab 仍负责关闭整棵树。
+正常退出，或 SSH shell 收到明确的协议 EOF/close，都会复用同一路径。workspace 根节点收到同一正常退出
+会关闭其可见 Terminal Tab 及整棵 pane 树；随后复用普通 Tab 关闭选中规则，优先聚焦后一个 Tab，没有
+后一个时聚焦前一个。SSH event stream 没有 EOF/close 即结束时仍是 transport 断开，因此连接、认证和
+transport 失败状态继续可见；关闭可见 Terminal Tab 仍负责关闭整棵树。
 其内部 `TerminalGrid` 接收更小的 `TerminalGridView` 和 `TerminalSelectionView` DTO：它绘制
 有界 snapshot，并把指针、语义双击、逻辑行三击、滚动和上下文菜单手势转换成 callback；焦点、IME 输入、选区草稿和
 resize 生命周期仍由 `TerminalPane` 保留。指针 callback 同时携带所在单元格和最近的插入边界；
@@ -660,6 +663,8 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 启用 X11 的 Terminal 拥有一个有界服务端 channel receiver 和最多 8 个 relay task；
   SFTP-only mode 不创建 X11 dispatcher；
 - 终端输出按批次限制大小，并通过有界事件 channel 反压后进入有界终端模型；
+- 没有 EOF 或 close 消息即结束的 terminal channel 会规范化为 `Disconnected`，worker 会释放会话，
+  而不会轮询一个永久关闭的 stream；
 - worker 事件报告 connected、resize、output、disconnected、host-key rejection、
   凭据失败或截断后的错误；
 - 每个 SSH Tab 独立拥有 probe 取消和认证阶段；每个 UI callback 以及迟到的 probe、凭据

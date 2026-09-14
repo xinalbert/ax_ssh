@@ -1331,7 +1331,12 @@ pub(super) fn spawn_local_shell_monitor(
                                 &runtime_for_monitor,
                             )
                         }) {
-                            refresh_workspace(&ui, &state);
+                            close_workspace_tab(
+                                tab_id,
+                                &state,
+                                &ui,
+                                &runtime_for_monitor,
+                            );
                         }
                     }
                     break;
@@ -1500,5 +1505,56 @@ mod tests {
             .await
             .expect("worker shutdown must remain bounded")
             .expect("finished local worker should shut down cleanly");
+    }
+
+    #[cfg(not(windows))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn local_shell_exit_closes_its_workspace_tab_and_selects_following_tab() {
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("axssh-local-exit-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        )));
+        let (exited_tab_id, following_tab_id, events) = {
+            let mut app = state.lock().expect("state should lock");
+            let _preceding_tab_id = app.open_local_shell_tab();
+            let exited_tab_id = app.open_local_shell_tab();
+            let following_tab_id = app.open_local_shell_tab();
+            assert!(app.activate_tab(exited_tab_id));
+
+            let (worker, events) =
+                LocalShellHandle::spawn(ax_ssh::local_shell::SYSTEM_SHELL.into(), 80, 24);
+            worker
+                .request_send(b"exit\n".to_vec())
+                .expect("exit command should queue");
+            app.terminal_mut(exited_tab_id)
+                .expect("local terminal should exist")
+                .worker = Some(TerminalWorker::Local(worker));
+            (exited_tab_id, following_tab_id, events)
+        };
+
+        spawn_local_shell_monitor(
+            &Handle::current(),
+            state.clone(),
+            slint::Weak::<AppWindow>::default(),
+            exited_tab_id,
+            events,
+        );
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let closed_and_focused = state.lock().is_ok_and(|app| {
+                    app.terminal(exited_tab_id).is_none()
+                        && app.active_tab_id() == Some(following_tab_id)
+                });
+                if closed_and_focused {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("local exit should close its tab and focus the following tab");
     }
 }

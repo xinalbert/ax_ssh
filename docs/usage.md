@@ -357,9 +357,13 @@ and authentication, including any required password or passphrase prompt. SFTP
 cannot be split into a terminal pane and remains an independent visible Tab.
 Each non-root pane has a small close control in its upper-right corner. Closing
 it removes only that pane and its session, then collapses the remaining layout;
-the root pane has no independent close control. A normal `exit` from a child
-local shell or an intentional Disconnect performs the same close. An unexpected
-SSH/Telnet/Serial disconnect keeps the Tab and terminal scrollback, shows the
+the root pane has no independent close control. A normal `exit` from a local or
+SSH shell closes its root visible Terminal Tab and selects the following visible
+Tab, or the preceding Tab if it was last; the same normal exit from a child
+closes only that pane. SSH recognizes this only when the server explicitly sends
+the shell channel EOF/Close. An intentional Disconnect performs the matching
+close. An SSH transport disconnect without EOF/Close, or an unexpected
+Telnet/Serial disconnect, keeps the Tab and terminal scrollback, shows the
 current retry countdown, and retries with a fresh worker. Password SSH sessions
 without a readable credential stay at an authentication prompt; encrypted-vault
 sessions require an unlock. Unknown or changed host keys always stop for the
