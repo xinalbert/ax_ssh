@@ -1134,6 +1134,13 @@ impl WinitWindowAdapter {
 
             winit_window.set_visible(true);
 
+            // The first frame above was rendered while the native window was
+            // hidden and may only contain the initial empty component. Force a
+            // complete software presentation after mapping the window so a
+            // persistent CoreAnimation surface cannot retain stale tiles.
+            self.renderer().invalidate();
+            self.request_redraw();
+
             // Refresh the SlintContext color-scheme now that the window is mapped: on some platforms
             // `winit_window.theme()` only reports a real value once the window is shown.
             if let Some(theme) = winit_window.theme() {

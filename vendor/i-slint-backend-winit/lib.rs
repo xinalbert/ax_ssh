@@ -72,6 +72,9 @@ mod renderer {
         fn render(&self, window: &i_slint_core::api::Window) -> Result<DrawOutcome, PlatformError>;
 
         fn as_core_renderer(&self) -> &dyn i_slint_core::renderer::Renderer;
+        // The native window has just become visible or has been restored. A
+        // persistent presentation surface must not reuse the pre-show buffer.
+        fn invalidate(&self) {}
         // Got WindowEvent::Occluded
         fn occluded(&self, _: bool) {}
 

@@ -203,14 +203,18 @@ impl super::WinitCompatibleRenderer for WinitSoftwareRenderer {
         &self.renderer
     }
 
-    fn occluded(&self, _: bool) {
-        // On X11 and Windows, the buffer is completely cleared when the window is hidden
-        // and the buffer age doesn't respect that, so clean the partial rendering cache
+    fn invalidate(&self) {
         self.renderer
             .set_repaint_buffer_type(RepaintBufferType::NewBuffer);
         if let Some(surface) = self.surface.borrow_mut().as_mut() {
             surface.invalidate();
         }
+    }
+
+    fn occluded(&self, _: bool) {
+        // On X11 and Windows, the buffer is completely cleared when the window is hidden
+        // and the buffer age doesn't respect that, so clean the partial rendering cache
+        self.invalidate();
     }
 
     fn resume(

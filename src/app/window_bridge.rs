@@ -98,10 +98,29 @@ pub(super) fn restore_detached_workspaces(
             window_router.clone(),
             new_window_id,
         );
+        refresh_workspace(&detached_ui.as_weak(), state);
+        schedule_detached_presentation_refresh(&detached_ui, new_window_id);
         detached_windows
             .borrow_mut()
             .insert(new_window_id, detached_ui);
     }
+}
+
+fn schedule_detached_presentation_refresh(ui: &AppWindow, window_id: Uuid) {
+    if !software_presentation::is_enabled() {
+        return;
+    }
+    let ui = ui.as_weak();
+    slint::Timer::single_shot(Duration::from_millis(16), move || {
+        let Some(ui) = ui.upgrade() else {
+            return;
+        };
+        software_presentation::refresh_layout(&ui, window_id);
+        use slint::winit_030::WinitWindowAccessor;
+        let _ = ui
+            .window()
+            .with_winit_window(|window| window.request_redraw());
+    });
 }
 
 fn pane_root_tab_id(snapshot: &ax_ssh::config::PaneNodeSnapshot) -> Option<Uuid> {
@@ -470,6 +489,8 @@ pub(super) fn wire_window_actions(
             }
             #[cfg(target_os = "macos")]
             schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_titlebar_actions);
+            refresh_workspace(&detached_ui.as_weak(), &state_for_show);
+            schedule_detached_presentation_refresh(&detached_ui, detached_id);
             windows_for_show
                 .borrow_mut()
                 .insert(detached_id, detached_ui);
