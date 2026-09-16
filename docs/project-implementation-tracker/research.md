@@ -1,5 +1,16 @@
 # 项目研究记录
 
+## 2026-09-15 全应用键盘事件与终端输入协议
+
+- 检索问题：终端输入、快捷键录制、普通文本/IME、物理数字小键盘和日志是否应共享同一个应用级键盘事件；AxSSH 应如何参考 AxShell 以及其它终端程序的输入分层？
+- 检索原因：原实现的 Slint callback 仍拆成多个 `bool` 与原始文本，`log_keyboard_event` 会重新构造终端键，`NormalizedKeyboardInput.key` 也直接使用终端专用 `TerminalKey`，导致物理键身份、逻辑键语义和终端编码边界混在一起。
+- 来源列表：W3C UI Events 的 `KeyboardEvent` 模型（`key`、`code`、`location`、`repeat`、`isComposing`）；锁定 `winit 0.30.13` 的 `KeyEvent`（`logical_key`、`physical_key`、`text`、`location`、`repeat`）和 `WindowEvent::KeyboardInput.is_synthetic`；本仓库锁定的 Slint 1.17.1 struct type mapping；本地 `third_package/axshell` 的 `KeyDownEvent.keystroke`、terminal action、key encoding 和 backend input 分层；kitty keyboard protocol 的 progressive CSI-u 事件；xterm.js 的 `onKey` 事件与 `onData` 终端字节边界；Alacritty/WezTerm 的按键绑定到终端输入编码路径。
+- 关键结论：应用层应保留通用逻辑键/文本、物理 `code`/`location`、修饰键快照、composing/repeat/synthetic 元数据；快捷键、日志、终端路由和录制器都消费同一个事件对象。终端 emulator 的最后一步才把通用键映射成控制字节、CSI/SS3、application-cursor 或 application-keypad 序列；application-keypad 不能反过来污染应用层键值。
+- AxShell 对照：AxShell 的 `KeyDownEvent.keystroke` 是应用内统一入口，workspace keybinding、密码提示、字符直发和 `encode_key` 都消费同一个事件；AxSSH 采用同样的边界思想，但额外保留 Winit physical code/location 以支持 NumLock 与 DEC application-keypad，不引入参考工程代码或依赖。
+- 其它终端对照：成熟终端通常把“平台键事件”与“送往 PTY 的字节流”分层；配置快捷键在前，未被消费的键进入终端编码器。普通模式依赖文本/逻辑键，特殊键依赖规范化名称，application modes 决定导航和小键盘的最终序列；Kitty 的扩展键盘协议属于终端协议输出能力，不应成为 UI callback 的参数形状。
+- AxSSH 落地：新增 `ui/components/keyboard-input.slint` 的 `KeyboardEvent`、终端上下文 DTO 和日志 DTO；`src/app.rs` 只做一次 UI DTO -> `NormalizedKeyboardInput` 转换；`NormalizedKeyboardInput.key` 改为 `ApplicationKeyboardKey`；只有 `src/app/terminal_bridge.rs` 在调用 `src/terminal/input.rs` 前转换为 `TerminalKey`。物理小键盘通过独立的 `physical_keycode`/`location` 保留，并在所有桌面平台由活动终端的 application-keypad 模式决定是否发送 SS3。
+- 未解决问题：Winit/Slint 在各目标平台实际报告的 `physical_keycode`、`location`、IME dead-key 和合成事件细节仍需 Windows/macOS/Linux 实机验证；Kitty CSI-u 等扩展协议暂不默认启用，避免改变现有远端 TUI 兼容性。
+
 ## 2026-09-14 macOS SFTP 原生 file-promise 拖放
 
 - 时间：2026-09-14 14:10 +0800

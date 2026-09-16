@@ -144,23 +144,20 @@ rows whose source or settings changed and resets the same model only when the
 visible row count changes; it does not replace the dynamic line repeater on
 every output snapshot. This optimization is UI-model ownership only and does
 not change selection, worker, or transport contracts.
-The first local semantic-selection gesture is a left-button double-click when
+The first local logical-line selection gesture is a left-button double-click when
 the gesture is not owned by mouse reporting, a Shift bypass, or primary-modifier
 target activation. `TerminalModel` creates a temporary
-`alacritty_terminal::SelectionType::Semantic` and returns only a bounded,
+`alacritty_terminal::SelectionType::Lines` and returns only a bounded,
 viewport-relative range DTO; it does not retain the upstream `Selection`.
-The range preserves wide cells, soft-wrap and bracket-pair semantics and is
-clipped before crossing the application callback. `TerminalPane` keeps an
-explicit local-valid bit so a one-cell word remains copyable even when its
-anchor and focus coordinates are equal. Slint's `double-clicked` event then
-overrides the preceding ordinary click state, and the existing copy-on-select
-preference applies once to the semantic range. A third left click in the same
-short sequence requests a second bounded DTO computed with
-`alacritty_terminal::SelectionType::Lines`; it selects the complete logical
-line across soft wraps. `TerminalGrid` owns only a bounded, same-cell click
-sequence and expires it at the platform double-click interval. Four or more
-clicks do not repeat the line action, and reporting, Shift, target activation,
-focus, refresh, and Copy retain the same priority rules.
+The range preserves wide cells, joins soft-wrapped physical rows into one
+logical line, keeps hard line boundaries intact, and is clipped before crossing
+the application callback. `TerminalPane` keeps an explicit local-valid bit so
+a one-cell line remains copyable even when its anchor and focus coordinates
+are equal. Slint's `double-clicked` event then overrides the preceding ordinary
+click state, and the existing copy-on-select preference applies once to the
+logical-line range. `TerminalGrid` owns only a bounded, same-cell click sequence
+and expires it at the platform double-click interval; reporting, Shift, target
+activation, focus, refresh, and Copy retain the same priority rules.
 Terminal panes intentionally have no visual frame, and `AppWindow` does not add
 an additional client-area frame around the application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection
@@ -180,16 +177,23 @@ carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Mouse input follows the same ownership boundary. `TerminalModel` exposes
 separate button and wheel capabilities from the active private mouse modes and
-emits bounded SGR, UTF-8, or legacy X10 events. The protocol encoder is
-independent from the UI interaction policy: SGR 1006 release preserves the
-pressed button, reads modifiers from the release event, and terminates with
-lowercase `m`, while legacy X10/UTF-8 release uses button code 3. Settings expose
-two policies. Standard xterm mode forwards reporting gestures normally and uses
-`Shift` as the local-selection bypass; `Alt`/`Option` remains only the xterm
-modifier bit. The default **Local selection priority** mode keeps direct left
-dragging local and requires `Alt`/`Option` to start a remote button gesture.
-Wheel events still follow active reporting in either mode, while `Shift` + wheel
-uses local scrollback. `TerminalPane` chooses the gesture owner at button down;
+emits bounded SGR, UTF-8, URXVT 1015, or legacy X10 events. The terminal parser
+does not expose 1015, so a small raw DEC-private-mode tracker keeps 1005, 1006,
+and 1015 mutually exclusive even when their escape sequences arrive in separate
+transport reads. URXVT compatibility uses decimal `CSI Cb;Cx;CyM`; SGR 1006
+release preserves the pressed button, reads modifiers from the release event,
+and terminates with lowercase `m`, while legacy X10/UTF-8/URXVT release uses
+button code 3. Vertical wheel maps to xterm buttons 4/5, horizontal wheel to
+6/7, and Winit's portable Back/Forward side buttons to 8/9. The domain encoder
+also bounds the standard auxiliary 10/11 codes, but unclassified platform
+buttons have no portable identity and are never guessed. The protocol encoder
+is independent from the UI interaction policy. Settings expose two policies.
+Standard xterm mode forwards reporting gestures normally and uses `Shift` as
+the local-selection bypass; `Alt`/`Option` remains only the xterm modifier bit.
+The default **Local selection priority** mode keeps direct left dragging local
+and requires `Alt`/`Option` to start a remote button gesture. Wheel events still
+follow active reporting in either mode, while `Shift` + wheel uses local
+scrollback. `TerminalPane` chooses the gesture owner at button down;
 Slint pointer capture preserves that owner through motion and release outside the
 grid, and cancellation emits the matching release at the last bounded cell before
 clearing the owner. Cancellation uses the modifiers from the last pointer event.
@@ -514,17 +518,20 @@ tab-local terminal connection notice deliberately remains non-blocking.
    Credential reads have a bounded timeout. Credential mutations use a soft
    deadline only for observability and still await the uncancellable blocking
    operation before releasing the persistence gate, preserving write ordering.
-5. The terminal surface maps Slint special keys, including F1-F12, to
-   UI-independent terminal key values and applies a narrow shifted-hyphen
-   fallback when the platform still reports `-` for `Shift+-`.
-   `src/terminal/input.rs` emits control bytes, normal CSI, application-cursor
-   SS3 arrow/Home/End sequences, application-keypad SS3 sequences, and modified
-   xterm navigation/function-key sequences. On Windows, a shown Winit window
-   preserves the physical numeric-keypad identity only while the active terminal
-   has entered application-keypad mode through `ESC =`: unmodified, non-synthetic
-   keypad presses are encoded there and prevented from reaching the text proxy a
-   second time. Normal mode, NumLock behavior, IME, and any modified keypad
-   input continue through Slint's normal path. A transparent, cursor-positioned
+5. The terminal surface uses one application keyboard boundary for both Slint
+   and native Winit input. The normalized event retains logical key/text,
+   physical `KeyCode`, `KeyLocation`, modifier snapshot, composing, repeat, and
+   synthetic state. Slint `key-pressed`, committed `edited`, and paste events
+   construct the same boundary object as Winit `KeyEvent`; committed text and
+   paste intentionally have no physical identity. `src/terminal/input.rs`
+   emits control bytes, normal CSI, application-cursor SS3 arrow/Home/End
+   sequences, application-keypad SS3 sequences, and modified xterm
+   navigation/function-key sequences. When a shown Winit window receives a
+   non-synthetic, unmodified physical numeric-keypad event, the active terminal
+   may preserve its keypad identity while application-keypad mode is enabled by
+   `ESC =`; this rule is platform-independent. Normal mode, NumLock behavior,
+   IME, and modified keypad input continue through Slint's normal path. A
+   transparent, cursor-positioned
    `TextInput` is the native text and IME proxy: special keys and terminal
    control chords use the native Winit boundary or the Slint `key-pressed`
    fallback, while printable text, Shift text, and IME commits enter only
@@ -537,6 +544,13 @@ tab-local terminal connection notice deliberately remains non-blocking.
    without routing ordinary text through the terminal encoder. Committed IME
    and pasted text explicitly use empty modifiers, so they cannot inherit a
    still-held shortcut key.
+   All keyboard callbacks crossing the Slint boundary use typed DTOs from
+   `ui/components/keyboard-input.slint`: `KeyboardEvent` is the shared
+   logical/physical event, while terminal routing and diagnostics add only
+   their owned context. Rust converts each DTO once into
+   `NormalizedKeyboardInput`; shortcut formatting, direct-terminal routing,
+   logging, and terminal encoding do not reconstruct an event from separate
+   text and modifier arguments.
    `TerminalGrid` displays that local preedit value only while the connected
    cursor is visible; no composition text crosses its gesture callbacks.
    `TerminalSettings.option_as_meta` is disabled by default, so Option text and
@@ -633,7 +647,13 @@ tab-local terminal connection notice deliberately remains non-blocking.
    state; each visible pane contributes only its bounded cell snapshot across
    the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
-   keep a window alive.
+   keep a window alive. A DEC cursor-visibility redraw (`CSI ?25l` followed by
+   `CSI ?25h`) is a short presentation transaction: parsing and protocol
+   responses continue immediately, while the last published bounded frame is
+   retained until the completed redraw or a 250ms deadline. This prevents
+   multi-write progress UIs from visibly moving the cursor through intermediate
+   rows; it neither buffers unbounded output nor changes soft-wrap/reflow,
+   mouse-reporting, worker, or SSH transport semantics.
    The small-screen window floor is `520x360`; terminal layout, persisted
    default sizes, and the model use the same non-zero `10x3` grid floor. The
    Rust `terminal_dimensions` module is the source for the model, settings,
@@ -649,7 +669,26 @@ tab-local terminal connection notice deliberately remains non-blocking.
    that same coalesced update, so an already-connected pane reaches its settled
    initial grid without waiting for a later window or divider resize. This keeps
    a Settings font change and a later return to a connected terminal on the
-   same current-grid path as a window resize. Its vertical row count rounds down
+   same current-grid path as a window resize. Its column count is
+   `floor(grid-content-width / cell-width)`,
+   clamped to the shared 10–300 limit. `grid-content-width` is the horizontally
+   stretched `grid-clip` content item of the pane's `VerticalLayout`, after that
+   layout's left and right padding; it is not the outer window, Tab, or normalized
+   `PaneTree` width. This keeps every split and detached pane's measurement local
+   to its actual drawable terminal area.
+   After the same coalesced layout pass, `TerminalPane` emits a bounded
+   `terminal-geometry` callback carrying pane/grid coordinates, measured cell
+   size, and the resulting columns/rows. `WorkspaceShell` forwards it with the
+   same main-window or detached offsets used by presentation geometry. The Rust
+   bridge compares the Slint physical window size with the Winit inner size and
+   logs only changed signatures under `ax_ssh::diagnostics`; right/bottom gaps
+   and fractional cell remainders make a blank strip distinguishable from
+   normal cell rounding. This diagnostic payload contains no terminal text,
+   host/path, profile label, or credential.
+   The measured dimensions then travel only through the UUID-directed
+   `resize-terminal` callback to `AppState`, its worker, and the next bounded
+   terminal snapshot; neither the worker nor the router derives UI cell geometry.
+   The vertical row count rounds down
    to complete rows. Fractional height becomes a nonnegative top offset, so the
    first row remains complete while the final row still meets the pane bottom;
    only a pane below the three-row floor clips older top rows. Height beyond the
@@ -1312,12 +1351,16 @@ leaks; a single sample or peak value is not proof of a leak.
 Application-owned window resources are renderer-independent. On detached return,
 detached close, and process shutdown, `release_window_resources` replaces all
 bounded Slint models with empty models, clears editor/SFTP/security strings and
-counts, hides the native window, and drops the strong `AppWindow` handle before
-Tokio shutdown. The selected Software or GPU/Skia/Metal renderer therefore gets
-the same application cleanup order; only the renderer's own surface and
-platform-level caches differ. Slint, Fontique, CoreAnimation, Metal and the
-macOS allocator do not expose a contract that immediately returns every byte of
-RSS to the operating system.
+counts, then removes the strong `AppWindow` handle. Before Slint starts any
+thread, AxSSH enables the winit backend's `SLINT_DESTROY_WINDOW_ON_HIDE` lifecycle
+option. The ensuing hide suspends the renderer and destroys the native Winit
+window, releasing detached Metal/CAMetalLayer drawables instead of merely making
+them invisible. A native close first removes the workspace route and releases
+application models; it returns `HideWindow` so Slint performs that destruction
+exactly once. SSH/SFTP workers remain owned by their tabs and are neither
+disconnected nor re-authenticated by a detached-window return or close. Shared
+Skia, Fontique, CoreAnimation, Metal, and macOS allocator caches can still retain
+process-level memory, so an immediate RSS decrease is not a contract.
 
 ## Logging lifecycle
 

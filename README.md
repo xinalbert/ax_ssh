@@ -17,8 +17,9 @@ together with independent Terminal and SFTP Tabs in one native application.
 - Connect over SSH with a password, private key, or runtime agent, with explicit
   SHA-256 host-key confirmation before a host is trusted.
 - Work in local or remote terminals with bounded scrollback, ANSI rendering,
-  selection, clipboard, and native input-method support. Windows physical numeric
-  keypads also reach terminal applications, including DEC application-keypad mode.
+  selection, clipboard, native input-method support, and one normalized keyboard
+  boundary. Physical numeric keypads also reach terminal applications, including
+  DEC application-keypad mode, on supported desktop platforms.
 - Browse local and remote files in a dedicated SFTP Tab, with bounded directory
   listing, recursive downloads, uploads, rename, delete, and remote text editing.
 - Use split panes and detached native workspace windows. Settings exposes both

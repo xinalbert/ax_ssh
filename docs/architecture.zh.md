@@ -116,13 +116,12 @@ damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复�
 revision 与覆盖全部渲染设置的 64-bit key 缓存结果，再复用已有外层 `TerminalRenderLine` model 及其
 嵌套 run model；只更新来源或设置确实变化的行，只有可见行数变化时才 reset 同一 model，不会在每次
 输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变选区、worker 或 transport 契约。
-第一版本地语义选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
-`TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
-不保留上游 `Selection`；宽字符、软换行和括号配对语义由终端核心处理，范围在进入 application callback 前裁剪。
-`TerminalPane` 另持有显式的局部有效位，因此单字符选区即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
-`double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好只对该语义范围执行一次。同一短点击序列内第三次左键点击会请求第二个
-有界 DTO，由 `alacritty_terminal::SelectionType::Lines` 计算完整逻辑行并跨越软换行。`TerminalGrid` 只拥有有界的同一 cell 点击序列，
-并在平台双击间隔后过期；第四次及以后不会重复行选取。reporting、Shift、目标激活、焦点、刷新和 Copy 继续使用相同优先级。
+第一版本地逻辑行选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
+`TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Lines`，只返回有界、相对当前视口的范围 DTO，
+不保留上游 `Selection`；宽字符保持原有 cell 语义，连续软换行的物理行会合并为一条逻辑行，硬换行仍保持边界，范围在进入 application callback 前裁剪。
+`TerminalPane` 另持有显式的局部有效位，因此单字符逻辑行即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
+`double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好只对该逻辑行范围执行一次。`TerminalGrid` 只拥有有界的同一 cell 点击序列，
+并在平台双击间隔后过期；reporting、Shift、目标激活、焦点、刷新和 Copy 继续使用相同优先级。
 Terminal pane 不绘制自身框线；`AppWindow` 也不在整个应用窗口客户区额外绘制框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
 重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。
@@ -131,9 +130,12 @@ Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 从当前私有 mouse mode 分别暴露 button 与 wheel 能力，
-并生成有界的 SGR、UTF-8 或传统 X10 事件。协议编码与 UI 交互策略分离：SGR 1006 的 release 保留按下时的
-按钮、读取 release 事件发生时的修饰键，并以小写 `m` 结束；传统 X10/UTF-8 release 才使用按钮码 3。
-Settings 提供两种策略：标准 xterm 模式按 reporting
+并生成有界的 SGR、UTF-8、URXVT 1015 或传统 X10 事件。锁定的终端 parser 不暴露 1015，因此小型原始
+DEC 私有模式跟踪器会使 1005、1006 与 1015 即使跨 transport read 到达也保持互斥。URXVT 兼容格式为十进制
+`CSI Cb;Cx;CyM`；SGR 1006 的 release 保留按下时的按钮、读取 release 事件发生时的修饰键，并以小写 `m`
+结束；传统 X10/UTF-8/URXVT release 使用按钮码 3。纵向滚轮映射 xterm 按钮 4/5，横向滚轮映射 6/7，Winit
+可跨平台识别的 Back/Forward 侧键映射 8/9。领域编码器也有界支持标准辅助按键 10/11，但没有可移植身份的
+平台 `Other` 按键绝不猜测映射。协议编码与 UI 交互策略分离。Settings 提供两种策略：标准 xterm 模式按 reporting
 原样转发 button 手势，`Shift` 作为本地选区绕过键，`Alt`/`Option` 只作为 xterm modifier bit；默认开启的
 **Local selection priority** 模式让普通左键拖动保持本地选区，按住 `Alt`/`Option` 才开始远端 button 手势。
 两种模式下滚轮都继续遵循 reporting，`Shift` + 滚轮使用本地 scrollback。`TerminalPane` 在 button down
@@ -322,19 +324,26 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    顺序保证部分失败时仍保持默认拒绝。保存完成后也只关闭发起该操作且 Tab/draft identity 仍匹配的编辑器。
    重连计时器只保留 profile UUID；延迟结束时重新读取当前 profile，SSH、Telnet 和 Serial worker 启动都会拒绝已经不再与该定义相等的旧 snapshot。
    Serial 在异步串口发现完成后、真正创建 worker 前还会再次校验；凭据读取有明确的超时，凭据写入的超时只作为可观测的软截止，仍会等待不可取消的 blocking 操作完成后才释放持久化闸门，以保持写入顺序。
-5. 终端表面把 Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对
-   `Shift+-` 仍上报 `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs`
-   生成控制字节、普通 CSI、application-cursor SS3 方向/Home/End 序列、application-keypad
-   SS3 序列，以及带修饰键的 xterm 导航/功能键序列。在 Windows 上，已显示的 Winit 窗口仅在活动
-   终端通过 `ESC =` 进入 application-keypad 模式时保留物理数字小键盘身份：无修饰且非合成的
-   小键盘按下会在该边界编码，并阻止再次进入文本代理。普通模式、NumLock 行为、IME 和带修饰键的
-   小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：特殊键
+5. 终端表面让 Slint 与原生 Winit 输入共用一个应用层键盘边界。归一化事件
+   保留逻辑键/文本、物理 `KeyCode`、`KeyLocation`、修饰键快照、composing、repeat
+   和 synthetic 状态。Slint 的 `key-pressed`、已提交的 `edited` 与粘贴事件和 Winit
+   `KeyEvent` 构造同一种边界对象；已提交文本和粘贴故意不携带物理身份。终端表面把
+   Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
+   `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI、
+   application-cursor SS3 方向/Home/End 序列、application-keypad SS3 序列，以及带修饰键的
+   xterm 导航/功能键序列。已显示的 Winit 窗口收到非合成、无修饰的物理数字小键盘事件时，若活动
+   终端通过 `ESC =` 进入 application-keypad 模式，就保留物理小键盘身份；该规则不区分平台。
+   普通模式、NumLock 行为、IME 和带修饰键的小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：特殊键
    与终端控制组合键优先走原生 Winit 边界，未被原生截获的事件再走 `key-pressed`，可打印字符、Shift
    文字和 IME 提交只通过 `edited` 进入；预编辑保留在局部 UI 状态。应用边界先记录 Winit
    `ModifiersChanged` 的事件级状态，再还原物理 Control、Command、Option、Shift 语义。macOS 物理
    Control 终端组合键使用这份快照，并跳过已配置的应用菜单 accelerator；缺失修饰键更新时才把 AppKit
    当前聚合状态作为 fallback。这样合成输入与左右 Control 保持一致，又不会让普通文字走终端编码器；
    已提交的 IME 和粘贴文本显式使用空修饰键，不能继承仍按住的快捷键。
+   所有跨越 Slint 边界的键盘 callback 都使用
+   `ui/components/keyboard-input.slint` 中的有类型 DTO：`KeyboardEvent` 统一承载逻辑/物理事件，
+   终端路由和诊断只增加各自所有的上下文。Rust 每次只把 DTO 转换一次为
+   `NormalizedKeyboardInput`；快捷键格式化、终端直发判断、日志和终端编码不再从独立的文本与修饰键参数重构事件。
    `TerminalSettings.option_as_meta` 默认关闭，因此 Option
    文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。`TerminalGrid` 只会在
    已连接光标可见时显示这份局部 preedit 值；组合文本不会经由它的手势 callback 跨越组件边界。
@@ -395,6 +404,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
+   一次 DEC 光标可见性重绘（`CSI ?25l` 后接 `CSI ?25h`）属于短暂的呈现事务：解析和协议应答
+   仍立即执行，但 UI 会保留最后已发布的有界帧，直到完整重绘结束或达到 250ms deadline。这样多次
+   写入的进度类 TUI 不会让光标在中间行之间可见地跳动；它不缓存无界输出，也不改变软换行/reflow、
+   mouse reporting、worker 或 SSH transport 语义。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
    网格下限。Rust 的 `terminal_dimensions` 模块是模型、设置和各后端最大值的共享来源；由于
    Slint 不能导入 Rust 常量，Theme 保留编译期镜像。PTY 和 worker 入口继续保留独立的非零
@@ -403,7 +416,19 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
    下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
    pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
-   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。纵向行数向下取整为完整行，
+   字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。列数为
+   `floor(grid-content-width / cell-width)`，并夹位到共享的 10–300 范围。
+   `grid-content-width` 指 pane `VerticalLayout` 中横向 stretch 的 `grid-clip` 内容项宽度，
+   已扣除该布局左右 padding；它不是外层窗口、Tab 或标准化 `PaneTree` 的宽度。这样分屏与
+   detached pane 都只按自身真实可绘制终端区测量。
+   `TerminalPane` 在同一轮合并布局后还会发出有界的 `terminal-geometry` callback，携带 pane/grid
+   坐标、实测 cell 尺寸和最终列行数；`WorkspaceShell` 使用与 presentation geometry 相同的主窗口/独立窗口
+   offset 转发。Rust bridge 会把 Slint physical window size 与 Winit inner size 放在一起比较，并仅在签名变化时
+   通过 `ax_ssh::diagnostics` 记录；右侧/底部余量和 fractional cell remainder 可以区分真正的空白条与正常的
+   cell 取整。该诊断 payload 不包含终端文字、主机/路径、profile 标签或凭据。测得的尺寸只经 UUID 定向的
+   `resize-terminal` callback 送至 `AppState`、对应 worker 与下一份有界 terminal snapshot；
+   worker 和 router 都不推导 UI 字符格几何。
+   纵向行数向下取整为完整行，
    不足一格的高度成为非负顶部偏移，因此第一行保持完整且最后一行仍贴住 pane 底边；只有 pane
    低于三行保底时才裁切较旧的顶部行，超过最大行数后的高度也保留在网格上方。同一内容区原点
    同时用于字符格、光标/IME 预编辑和指针行映射，完整行数也会沿既有 PTY resize 请求发送。
@@ -806,9 +831,12 @@ SFTP 图标预热只在需要时运行，每批最多 64 个唯一 key，进程�
 
 应用拥有的窗口资源与 renderer 无关。在 detached 返回、detached 关闭和进程退出时，
 `release_window_resources` 将所有有界 Slint model 替换为空 model，清空编辑器/SFTP/安全提示文本
-和计数，隐藏原生窗口，并在 Tokio shutdown 前丢弃 `AppWindow` 强引用。因此 Software 与
-GPU/Skia/Metal 使用相同的应用清理顺序；差异只在 renderer surface 和平台级缓存。Slint、Fontique、
-CoreAnimation、Metal 以及 macOS allocator 都没有保证把每个 RSS 字节立即归还系统的接口。
+和计数，然后移除 `AppWindow` 强引用。Slint 启动任何线程之前，AxSSH 会启用 winit backend 的
+`SLINT_DESTROY_WINDOW_ON_HIDE` 生命周期选项。随后的 hide 会 suspend renderer 并销毁原生 Winit
+window，释放 detached 窗口的 Metal/CAMetalLayer drawable，而不是只让它不可见。原生关闭会先移除
+workspace route 并释放应用 model，再返回 `HideWindow`，由 Slint 恰好执行一次销毁。SSH/SFTP worker
+仍由各自 Tab 拥有；detached 窗口返回或关闭不会断开连接，也不会重新认证。共享的 Skia、Fontique、
+CoreAnimation、Metal 和 macOS allocator cache 仍可能保留进程级内存，因此不承诺 RSS 会立刻下降。
 
 ## 日志生命周期
 

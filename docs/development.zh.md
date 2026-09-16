@@ -284,6 +284,13 @@ RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn
 `ui_apply_us` 及可选的 output-to-UI 时间。这些字段均不包含按键文字、终端内容、主机、路径、
 profile 标签或凭据。
 
+`terminal-geometry` 只在可见 pane 的几何签名变化时记录一次：包括终端 UUID、活动 Tab 类型、
+detached/renderer 状态、scale factor、native 与 logical 窗口尺寸、pane 和 grid 的位置/尺寸、
+右侧/底部余量、cell 尺寸、终端列行数，以及未被完整 cell 使用的余量。Rust bridge 会同时采样
+Slint 的 physical window size 和 Winit inner size，因此两者不一致时可以在同一条记录中看出。
+记录按 0.1 logical pixel 的变化合并，内存去重表最多保留 256 个 pane 条目。payload 不包含终端文字、
+主机/路径、profile 标签或凭据。
+
 diagnostics 只使用固定的 `event`、`key`、`route`、`action` 和 `outcome` 字段。F5、
 ArrowUp 等特殊键使用稳定名称；所有可打印文字、IME、密码和粘贴值都只记录为 `Text`，
 不记录内容或长度。路径、profile 标签、主机、剪贴板内容和凭据不会进入 diagnostics 字段。

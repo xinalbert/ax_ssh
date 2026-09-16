@@ -374,6 +374,16 @@ RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn
 optional output-to-UI time. These fields contain no key text, terminal content,
 host, path, profile label, or credential.
 
+`terminal-geometry` reports one changed geometry signature per visible pane:
+the terminal UUID, active-tab kind, detached/renderer state, scale factor,
+native and logical window size, pane and grid positions/sizes, right/bottom
+gaps, cell size, terminal columns/rows, and the unused fractional cell
+remainder. The Rust bridge samples both Slint's physical window size and the
+Winit inner size, so a mismatch between them is visible in the same record.
+Records are coalesced to changes of 0.1 logical pixels and the in-memory
+deduplication table is capped at 256 pane entries. The payload never includes
+terminal text, host/path values, profile labels, or credentials.
+
 Diagnostic records use fixed `event`, `key`, `route`, `action`, and `outcome`
 fields. Special keys have stable names such as `F5` or `ArrowUp`; every
 printable, IME, password, or pasted value is recorded only as `Text`, without

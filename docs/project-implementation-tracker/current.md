@@ -2,58 +2,56 @@
 
 ## 当前目标
 
-- 目标 ID：20260914-macos-sftp-native-file-drag
-- 目标：macOS 上将 SFTP 远端普通文件的拖动升级为 Finder 可接收的原生 file-promise 拖放；拖回发起 AxSSH 窗口时将同一文件安全下载到发起时捕获的 Local files 目录。
-- 交付物：Slint 手势和平台开关、受控 AppKit file-promise/source/destination 桥、明确本地目标的 SFTP 下载请求、回归测试、双语架构/使用说明和实施跟踪记录。
+- 目标 ID：20260915-terminal-geometry-diagnostics
+- 目标：为 terminal pane 偶发的右侧空白问题补齐可复现、低噪声且不泄露终端内容的窗口/网格几何诊断。
+- 交付物：`terminal-geometry` 有界 callback、主窗口与 detached 窗口的统一 offset 转发、Slint/Winit 尺寸对照日志、pane/grid 余量与 fractional cell remainder、量化去重测试、双语架构说明和实施跟踪记录。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：SFTP 远端普通文件的 macOS 原生拖放、Slint 用户意图、窗口原生视图桥、SFTP 下载目标、传输完成反馈、双语文档和实施跟踪。
-- 不在本轮范围内：目录/符号链接的 Finder 承诺拖放、非 macOS 平台原生拖放、SSH trust/认证、凭据、远端文件写入、参考工程和 vendored Slint API。
+- 当前范围：TerminalPane/WorkspaceShell 的终端几何 callback、主窗口与 detached 窗口 offset、Rust diagnostics 采样与去重、以及双语架构/追踪；此前完成的终端帧事务、双击选择和 mouse reporting 改动仍保留在历史记录中。
+- 不在本轮范围内：SSH trust/认证、凭据、持久化 schema、终端协议字节语义、参考工程依赖或源码、GUI 视觉自动验收。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| SFTPDND1 | completed | 原生拖放边界、Slint 手势和 AppKit 桥 | 锁定依赖与 Apple API 审阅、macOS 编译 | 仅远端普通文件进入原生拖放；目录和符号链接保留现有内部意图。 |
-| SFTPDND2 | completed | 将 file promise / AxSSH 本地落点接到受控下载请求和完成反馈 | 定向回归、传输状态审阅 | transfer ID 在排入 worker 前映射回 drag ID；目标路径在 application/worker 边界校验，Slint 不获得文件系统或原生对象。 |
-| SFTPDND3 | completed | 双语文档、追踪和完整离线门禁 | fmt/check/Clippy/test/diff/tracker | Finder 和发起窗口落点仍由用户在 macOS 手动验收。 |
+| GEOM1 | completed | TerminalPane/WorkspaceShell 几何 callback 与 Rust 脱敏诊断 | Slint 重编译、量化单测、locked/offline Cargo 门禁和差异检查 | 记录 Slint/Winit 窗口尺寸、pane/grid 余量与 cell remainder；不记录终端内容或连接秘密。 |
 
 ## 已完成
 
-- 已确认当前远端拖放仅使用 Slint 的进程内 `DataTransfer` 文本 payload；无法被 Finder 识别为可拖出的文件。
-- 已确认现有 SFTP 下载 writer 已有目录重验、拒绝符号链接/既有目标、0600 `.part`、fsync 和原子无覆盖发布；本轮复用该安全路径，不导出远端内容到临时公开位置。
-- 已确认 native Finder 拖入仍会通过 Winit `DroppedFile` 上传到当前远端目录；本轮不会改变该反向路径。
-- 已确认下载 worker、应用状态和 Slint 的所有权边界可用一个有明确本地目标的 owned request 保持；AppKit 对象只留在 `src/app/` 的 macOS 模块且在主线程上存活。
-- 已实现 copy-only `NSFilePromiseProvider`、匹配 source 的透明 AppKit destination 和 Slint 的阈值手势；Finder 仅在接受 drop 后请求下载，返回发起窗口时使用拖动开始时捕获的 Local files 路径。
-- 已让明确本地目标拒绝相对路径，复用 `LocalDownloadTarget` 的目录重验、符号链接/冲突拒绝、0600 `.part`、fsync 和无覆盖原子发布。
-- 已将 transfer ID 在 worker 排队前登记为 drag ID；完成、取消和失败都在 UI 事件循环回调对应的 AppKit completion，避免快速传输或不同 UUID 造成 promise 悬挂。
+- 已核对参考实现的行为思路；未引入其依赖、路径或源码。
+- 已确认 AxSSH 已有软换行/reflow、宽字符、SGR/X10/UTF-8 mouse reporting、滚轮与可靠/可丢弃 worker 入队的完整边界，故本轮不重复实现这些契约。
+- 已实现跨 transport read 的 `CSI ?25l`/`CSI ?25h` 检测；仅在最多 250ms 内保留最后已发布的有界 terminal frame，parser 和 `PtyWrite` 协议应答即时执行。
+- 已将 hold deadline 接入 Local、SSH、Telnet 与 Serial monitor，完成后以现有 latest-frame snapshot 路径发布最新内容。
+- 已将左键双击从语义单词选择改接为既有的逻辑行选择；连续软换行的物理行会一并选中，硬换行仍为边界。
+- 已实现互斥的 1005/1006/1015 鼠标编码状态、xterm 横向滚轮 6/7、Back/Forward 侧键 8/9 与有界辅助按键 10/11 编码；未分类硬件按键不作不可靠猜测。
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`git diff --check` 和 Markdown 相对链接检查；追踪校验已运行，本轮记录通过，但仍报告既有 8/9 月历史格式债务。
-- 未完成：用户在 macOS Finder、跨应用取消和返回发起 AxSSH SFTP 窗口时的真实拖放验收。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 250、应用 245、Doc tests 0）和 `git diff --check`。
+- 已完成：新增 geometry 量化测试通过；Slint `ui/app.slint` 已随 Cargo check 重新编译；新增 tracker 条目格式正确。
+- 受阻但不影响代码门禁：tracker validator 仍被既有 2026-08/09 历史条目格式债务阻挡；全仓 Markdown 相对链接检查已通过（49 个文件链接）。
+- 未完成：用户需在目标平台复现右侧空白，并提供 `ax_ssh::diagnostics` 的 `terminal-geometry` 记录确认具体分支。
 
 ## 风险与阻塞
 
-- 无代码阻塞。拖放期间远端会话断开、目标已有文件或路径重验失败会使 transfer 失败并以错误完成 promise；真实 Finder 错误呈现需要用户实测。
-- AppKit destination 覆盖发起拖动的 AxSSH 窗口，并把同一拖放路由到开始时捕获的 Local files 目录；视觉落区和跨应用取消仍需用户确认。
+- 无代码阻塞。tracker validator 的失败来自既有历史条目格式，不是本轮 geometry 条目；实际 GUI 视觉验收仍需要用户执行。
 
 ## 下一步
 
-- 在 macOS 上用一个小型远端普通文件分别拖到 Finder、拖回同一 AxSSH SFTP 窗口，并验证取消、已有同名文件和断开连接时的提示与清理。
+- 用日志中的 `pane_right_gap`、`grid_right_gap`、`cell_remainder_width` 和 Slint/Winit 尺寸差定位空白来源；若只在 detached 窗口出现，再对照 `detached_window` 与 `pane_y` offset。
 
 ## 最后更新时间
 
-- 2026-09-14 15:03 +0800
+- 2026-09-15 16:45 +0800：完成 terminal pane 几何诊断 callback、窗口尺寸对照日志和代码门禁；等待用户复现并提供 `terminal-geometry` 日志。
 
 ## 9 项复核映射
 
@@ -98,6 +96,7 @@
 | KPAD2 | completed | 双语输入契约、项目地图、月度记录和离线质量门禁 | fmt/check/Clippy/test、tracker/Markdown、`git diff --check` | 不改变 SSH transport、host-key trust、凭据或持久化。 |
 | SHORT1 | completed | 在设置页展示所有应用层快捷键，包括固定的平台快捷键 | Slint 编译、设置搜索回归、翻译检查和完整 Cargo 门禁 | 可配置快捷键保持现有保存契约；固定的 Terminal Select All、Previous Tab、Next Tab 只读展示。 |
 | INPUT1 | completed | 统一普通输入框的复制/粘贴入口，并为密码输入提供安全的粘贴菜单 | Slint 编译、输入组件静态审阅、完整 Cargo 门禁 | 普通文本/路径/编辑器支持系统 Copy/Cut/Paste/Select All；SecretTextInput 仍禁止复制，仅允许粘贴，不改变凭据生命周期。 |
+| INPUT2 | completed | 统一全应用 Slint/Winit 键盘事件边界，并跨平台保留 application-keypad 物理小键盘身份 | 输入归一化回归、Slint/Cargo 离线门禁、双语契约和 tracker 检查 | `KeyboardEvent`/终端上下文 DTO 统一 callback 载荷；`NormalizedKeyboardInput.key` 使用应用级逻辑键，普通文本/IME 不携带物理身份，application-keypad 仅消费无修饰物理小键盘，`TerminalKey` 只在终端编码边界生成。 |
 | CRED1 | completed | 加密保险库缺少用户口令时生成隐藏逐服务器解锁密钥，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | 默认使用应用私有 `0600` 文件自动解锁，不访问系统密钥库；旧 profile 仅在本地解锁文件缺失时迁移一次旧 keyring 条目。随机解锁密钥不进入 profile JSON、UI 或日志。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。
