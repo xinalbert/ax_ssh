@@ -2313,10 +2313,13 @@ mod tests {
 
     #[test]
     fn explicit_local_path_download_uses_the_existing_local_target_validation() {
+        let local_path = std::env::temp_dir()
+            .join(format!("axssh-native-drag-{}", Uuid::new_v4()))
+            .join("report.bin");
         let request = SftpDownloadRequest::for_explicit_local_path(
             Uuid::new_v4(),
             "/srv/report.bin".to_owned(),
-            PathBuf::from("/private/tmp/axssh-native-drag/report.bin"),
+            local_path,
             17,
         )
         .expect("absolute file target should be decomposed into a safe local target");
