@@ -37,8 +37,9 @@ pub(super) fn build_revision() -> &'static str {
 }
 
 pub(super) fn diagnostic_info() -> String {
+    let renderer = renderer_diagnostics();
     format!(
-        "AxSSH diagnostics\nversion: {}\nbuild-revision: {}\nos: {}\narch: {}\nprofile: {}\n",
+        "AxSSH diagnostics\nversion: {}\nbuild-revision: {}\nos: {}\narch: {}\nprofile: {}\nrenderer-requested: {}\nrenderer-selected: {}\nrenderer-source: {}\nrenderer-fallback-reason: {}\nmetal-device: {}\nrenderer-window-count: {}\nrenderer-fault-count: {}\nrenderer-shader-faults-observed: {}\nrenderer-shader-error-capture: application-errors-only\n",
         env!("CARGO_PKG_VERSION"),
         build_revision(),
         std::env::consts::OS,
@@ -48,6 +49,14 @@ pub(super) fn diagnostic_info() -> String {
         } else {
             "release"
         },
+        renderer.requested_backend,
+        renderer.selected_backend,
+        renderer.source,
+        renderer.fallback_reason,
+        renderer.metal_device,
+        renderer.window_count,
+        renderer.fault_count,
+        renderer.shader_fault_count,
     )
 }
 
@@ -149,6 +158,10 @@ mod tests {
         assert!(diagnostics.contains("os: "));
         assert!(diagnostics.contains("arch: "));
         assert!(diagnostics.contains("profile: "));
+        assert!(diagnostics.contains("renderer-selected: "));
+        assert!(diagnostics.contains("metal-device: "));
+        assert!(diagnostics.contains("renderer-window-count: "));
+        assert!(diagnostics.contains("renderer-shader-error-capture: application-errors-only"));
         for forbidden in ["host:", "password", "session-id", "sessions.json"] {
             assert!(!diagnostics.contains(forbidden));
         }

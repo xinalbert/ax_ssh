@@ -188,8 +188,19 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let config = ConfigStore::new(config_path);
     let mut sessions = config.load().context("failed to load session profiles")?;
     configure_software_presentation(sessions.settings.appearance.software_presentation);
-    select_slint_renderer(sessions.settings.appearance.renderer_preference)
+    let renderer_preference = sessions.settings.appearance.renderer_preference;
+    let renderer_selection = select_slint_renderer(renderer_preference, &log_directory)
         .context("failed to select Slint renderer")?;
+    info!(
+        target: "ax_ssh::diagnostics",
+        event = "renderer-selection",
+        requested_renderer = renderer_selection.requested_backend,
+        selected_renderer = renderer_selection.selected_backend,
+        source = renderer_selection.source,
+        fallback_reason = renderer_selection.fallback_reason.unwrap_or("none"),
+        metal_device = renderer_selection.metal_device.as_deref().unwrap_or("unavailable"),
+        "Slint renderer selected"
+    );
     let workspace_snapshot = load_startup_workspace(&config, &mut sessions);
     let workspace_default_path = config.workspace_path();
     let tokio_worker_threads = tokio_worker_thread_count();
@@ -205,13 +216,19 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
     let initial_fonts =
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
-    let software_renderer =
-        software_renderer_selected(sessions.settings.appearance.renderer_preference);
+    let software_renderer = renderer_selection.uses_software();
     software_presentation::set_enabled(software_renderer);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let restore_font_registry = font_registry.clone();
     let restore_terminal_font_started = Arc::new(AtomicBool::new(false));
-    let ui = AppWindow::new().context("failed to create Slint window")?;
+    let ui = AppWindow::new()
+        .inspect_err(|error| {
+            if log_renderer_fault("create-main-window", error) {
+                persist_renderer_fallback(&log_directory, renderer_preference, error);
+            }
+        })
+        .context("failed to create Slint window")?;
+    renderer_window_created("main");
     ui.set_software_presentation_enabled(software_presentation::is_enabled());
     let window_router = WindowRouter::new(ui.as_weak());
     window_router.set_terminal_presentation_software_renderer(software_renderer);
@@ -358,7 +375,13 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             }
         }
     }
-    ui.show().context("failed to show main window")?;
+    if let Err(error) = ui.show() {
+        if log_renderer_fault("show-main-window", &error) {
+            persist_renderer_fallback(&log_directory, renderer_preference, &error);
+        }
+        renderer_window_destroyed("main");
+        return Err(error).context("failed to show main window");
+    }
     install_terminal_keypad_input_hook(
         &ui,
         state.clone(),
@@ -404,6 +427,13 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     }
     info!("AxSSH UI initialized");
     let ui_result = slint::run_event_loop().context("Slint event loop failed");
+    if let Err(error) = &ui_result {
+        if log_renderer_fault("event-loop", error) {
+            persist_renderer_fallback(&log_directory, renderer_preference, error);
+        }
+    } else if renderer_selection.selected_backend == "winit-skia" {
+        clear_renderer_fallback(&log_directory);
+    }
 
     if let Ok(app) = state.lock() {
         let snapshot = window_router.snapshot(&app);
@@ -466,6 +496,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     software_presentation::remove_layout(&ui, MAIN_WINDOW_ID);
     release_window_resources(&ui);
     hide_window_for_release(&ui);
+    renderer_window_destroyed("main");
     drop(ui);
     drop(restore_font_registry);
     drop(restore_terminal_font_started);

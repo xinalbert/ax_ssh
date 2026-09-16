@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260915-terminal-geometry-diagnostics
-- 目标：为 terminal pane 偶发的右侧空白问题补齐可复现、低噪声且不泄露终端内容的窗口/网格几何诊断。
-- 交付物：`terminal-geometry` 有界 callback、主窗口与 detached 窗口的统一 offset 转发、Slint/Winit 尺寸对照日志、pane/grid 余量与 fractional cell remainder、量化去重测试、双语架构说明和实施跟踪记录。
+- 目标 ID：20260916-renderer-fault-diagnostics
+- 目标：为 macOS Skia/Metal shader 编译超时补齐可操作的 renderer 诊断，以及与 Slint 生命周期兼容的 software 回退。
+- 交付物：启动 renderer 选择来源与 Metal device 记录、主/分离窗口计数、有界 GPU/Skia/Metal fault 分类、Automatic 模式的下一次启动 software 回退、复制诊断字段、回归测试和双语说明。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：TerminalPane/WorkspaceShell 的终端几何 callback、主窗口与 detached 窗口 offset、Rust diagnostics 采样与去重、以及双语架构/追踪；此前完成的终端帧事务、双击选择和 mouse reporting 改动仍保留在历史记录中。
-- 不在本轮范围内：SSH trust/认证、凭据、持久化 schema、终端协议字节语义、参考工程依赖或源码、GUI 视觉自动验收。
+- 当前范围：`src/app/runtime.rs` 的 renderer 选择/诊断、`src/app.rs` 启动和事件循环边界、主/分离窗口生命周期计数、复制诊断和双语 renderer 契约。
+- 不在本轮范围内：SSH trust/认证、凭据、终端协议字节语义、Slint/Skia vendor patch、运行中替换已活跃的 process-global renderer、GUI 视觉自动验收。
 
 ## 当前状态
 
@@ -23,10 +23,13 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| GEOM1 | completed | TerminalPane/WorkspaceShell 几何 callback 与 Rust 脱敏诊断 | Slint 重编译、量化单测、locked/offline Cargo 门禁和差异检查 | 记录 Slint/Winit 窗口尺寸、pane/grid 余量与 cell remainder；不记录终端内容或连接秘密。 |
+| RENDERER1 | completed | renderer 选择/回退、Metal/窗口/fault 诊断与双语契约 | Rust 定向回归、locked/offline Cargo 门禁和差异检查 | Skia stderr-only shader source 不伪装成可拦截错误；只记录有界应用侧 fault。 |
 
 ## 已完成
 
+- 已实现启动阶段 Skia 选择失败时的单次 `winit-software` 重试；显式 `SLINT_BACKEND` 仍保持最高优先级。
+- 已实现 Automatic macOS 的非秘密 renderer fallback marker：创建、显示或 event loop 向上报告 GPU/Skia/Metal fault 后，下次 Automatic 使用 software；正常 Skia 退出会清除标记。
+- 已加入 renderer 请求/实际选择/来源/回退原因、Metal device、实时窗口数及有界 fault 计数；raw Skia stderr shader source 明确标为 application-errors-only，避免把不可观测错误伪造成统计数据。
 - 已核对参考实现的行为思路；未引入其依赖、路径或源码。
 - 已确认 AxSSH 已有软换行/reflow、宽字符、SGR/X10/UTF-8 mouse reporting、滚轮与可靠/可丢弃 worker 入队的完整边界，故本轮不重复实现这些契约。
 - 已实现跨 transport read 的 `CSI ?25l`/`CSI ?25h` 检测；仅在最多 250ms 内保留最后已发布的有界 terminal frame，parser 和 `PtyWrite` 协议应答即时执行。
@@ -36,22 +39,22 @@
 
 ## 验证
 
-- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 250、应用 245、Doc tests 0）和 `git diff --check`。
-- 已完成：新增 geometry 量化测试通过；Slint `ui/app.slint` 已随 Cargo check 重新编译；新增 tracker 条目格式正确。
-- 受阻但不影响代码门禁：tracker validator 仍被既有 2026-08/09 历史条目格式债务阻挡；全仓 Markdown 相对链接检查已通过（49 个文件链接）。
-- 未完成：用户需在目标平台复现右侧空白，并提供 `ax_ssh::diagnostics` 的 `terminal-geometry` 记录确认具体分支。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 251、应用 250、Doc tests 0）和 `git diff --check`。
+- 已完成：新增 renderer fault 分类、有界错误文本和实际 software 选择回归通过；`ui/app.slint` 已随 Cargo check 重新编译。
+- 受阻但不影响本轮实现：tracker validator 已运行，但仍被既有 2026-08/09 历史记录字段/时间格式债务阻断；本轮 RENDERER1 条目字段齐全。
+- 未完成：目标平台需要用户在出现或复现 Skia shader timeout 后提供 `ax_ssh::diagnostics` 记录及 stderr，以确认 fault 是否能从 Slint 返回到应用边界。
 
 ## 风险与阻塞
 
-- 无代码阻塞。tracker validator 的失败来自既有历史条目格式，不是本轮 geometry 条目；实际 GUI 视觉验收仍需要用户执行。
+- 无代码阻塞。Slint renderer 为 process-global，已活跃 Metal surface 不能安全热切换；这不是未实现路径，而是通过启动回退和下一次 Automatic fallback marker 明确处理的生命周期边界。GUI 视觉验收仍需要用户执行。
 
 ## 下一步
 
-- 用日志中的 `pane_right_gap`、`grid_right_gap`、`cell_remainder_width` 和 Slint/Winit 尺寸差定位空白来源；若只在 detached 窗口出现，再对照 `detached_window` 与 `pane_y` offset。
+- 在目标平台复现时，通过 Help > Copy Diagnostic Info 查看 `renderer-selected`、`renderer-source`、`metal-device`、window/fault 计数；同时保存 `ax_ssh::diagnostics` 和 Skia stderr，判断是否需要稳定保留 software renderer。
 
 ## 最后更新时间
 
-- 2026-09-15 16:45 +0800：完成 terminal pane 几何诊断 callback、窗口尺寸对照日志和代码门禁；等待用户复现并提供 `terminal-geometry` 日志。
+- 2026-09-16 09:34 +0800：完成 renderer/Metal diagnostics、启动与下次启动 software fallback、双语说明和离线 Cargo 门禁；等待目标平台用户复现确认。
 
 ## 9 项复核映射
 

@@ -45,6 +45,17 @@ store；独立拥有的图层 `CGImage` 路径保留为兼容性回退。两项�
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
+未设置 `SLINT_BACKEND` 覆盖时，若配置的 Skia 在 Slint 绑定平台前选择失败，AxSSH 会只重试一次
+`winit-software`。应用也会记录在创建窗口、显示窗口或运行 UI 时向上返回的 renderer fault。macOS
+Automatic 模式若出现 GPU/Skia/Metal fault，下一次 Automatic 启动会使用 software renderer；一次干净的
+Skia 运行会清除该标记，而明确的 GPU 或 `SLINT_BACKEND` 选择仍具有最高优先级。Metal surface 已激活后，
+Skia 直接写到 stderr 的 shader 诊断不能被此机制截获，因为此时 Slint 的进程级 renderer 无法安全替换。
+
+**Help > Copy Diagnostic Info** 会包含请求和实际选中的 renderer、选择来源/回退原因、Skia 激活时的
+Metal device 名称、实时窗口数，以及有界的应用侧 renderer/shader fault 计数。
+`renderer-shader-error-capture: application-errors-only` 表示该计数不包含 Skia 直接输出的原始 shader
+source；报告此类故障时，请同时提供对应的 `ax_ssh::diagnostics` 日志行和 stderr 输出。
+
 存在 `AXSSH_EXPERIMENT_CA_BACKING_STORE` 时，它会覆盖已保存的 Software presentation：`1`、
 `true`、`yes` 和 `on` 选择脏区 backing store，其它值为当前进程选择图层图像回退路径。
 
@@ -61,7 +72,8 @@ XShm、Wayland 协议 4+ 和 Core Graphics tile；Web 使用 `BoundingRect`，KM
 锁定时机回退。winit bridge 会据此在回退路径直接调用 `present()`。该 API 只描述呈现行为；持久化的
 Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 
-环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告。
+环境变量和已保存偏好会在首次创建 `AppWindow` 前生效，因此 renderer 初始化失败会在启动阶段直接报告，
+并可使用上述有界 software 回退。
 
 开发 profile 禁用 rustc 增量代码生成。AxSSH 较大的 Slint 生成应用单元在 macOS 反复构建后，
 可能累积互不兼容的 code-generation 对象，并在最终 arm64 链接时报告内部

@@ -52,6 +52,23 @@ collecting a comparison sample:
 SLINT_BACKEND=winit-software cargo run --locked
 ```
 
+When no `SLINT_BACKEND` override is present, a configured Skia selection that
+fails before Slint binds a platform is retried once with `winit-software`.
+AxSSH also records renderer faults surfaced while creating, showing, or running
+the UI. If Automatic on macOS surfaces a GPU/Skia/Metal fault, the next
+Automatic launch uses the software renderer; a clean Skia run clears that
+marker, and an explicit GPU or `SLINT_BACKEND` choice remains authoritative.
+This cannot intercept Skia's own stderr-only shader diagnostics after a Metal
+surface is already active, because Slint cannot replace its process-wide
+renderer at that point.
+
+**Help > Copy Diagnostic Info** includes the requested and selected renderer,
+selection source/fallback reason, Metal device name when Skia is active, live
+window count, and bounded application-observed renderer/shader fault counts.
+`renderer-shader-error-capture: application-errors-only` means the count does
+not include raw shader source emitted directly by Skia; attach the matching
+`ax_ssh::diagnostics` log lines and stderr output when reporting such a fault.
+
 `AXSSH_EXPERIMENT_CA_BACKING_STORE` overrides the saved Software presentation
 mode when present. `1`, `true`, `yes`, and `on` select the damage backing store;
 any other value selects the layer-image fallback for that process.
@@ -78,7 +95,7 @@ the pane layout hint remain macOS-only.
 
 The environment override and saved preference are consumed before the first
 `AppWindow` is created, so renderer initialization failures are reported during
-startup.
+startup and can use the bounded software fallback described above.
 
 The development profile disables rustc incremental code generation. AxSSH's
 large generated Slint application unit can otherwise accumulate incompatible

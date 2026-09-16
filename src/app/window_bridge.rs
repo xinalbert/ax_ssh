@@ -59,10 +59,12 @@ pub(super) fn restore_detached_workspaces(
                 .map_err(|error| slint::PlatformError::from(error.to_string()))?;
             ui.set_detached_window(true);
             ui.set_software_presentation_enabled(software_presentation::is_enabled());
+            renderer_window_created("detached");
             Ok(ui)
         }) {
             Ok(ui) => ui,
             Err(error) => {
+                log_renderer_fault("create-restored-detached-window", &error);
                 warn!(%error, window_id = %window.id, "failed to recreate detached workspace");
                 continue;
             }
@@ -87,8 +89,10 @@ pub(super) fn restore_detached_workspaces(
             },
         );
         if let Err(error) = detached_ui.show() {
+            log_renderer_fault("show-restored-detached-window", &error);
             warn!(%error, window_id = %new_window_id, "failed to show restored detached workspace");
             software_presentation::remove_layout(&detached_ui, new_window_id);
+            renderer_window_destroyed("detached");
             continue;
         }
         install_terminal_keypad_input_hook(
@@ -324,6 +328,7 @@ pub(super) fn hide_window_for_release(ui: &AppWindow) {
 fn prepare_detached_window_for_release(ui: &AppWindow, window_id: Uuid) {
     software_presentation::remove_layout(ui, window_id);
     release_window_resources(ui);
+    renderer_window_destroyed("detached");
 }
 
 pub(super) fn release_detached_windows(detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>) {
@@ -435,10 +440,12 @@ pub(super) fn wire_window_actions(
                     detached_ui.set_detached_window(true);
                     detached_ui
                         .set_software_presentation_enabled(software_presentation::is_enabled());
+                    renderer_window_created("detached");
                     Ok(detached_ui)
                 }) {
                 Ok(detached_ui) => detached_ui,
                 Err(error) => {
+                    log_renderer_fault("create-detached-window", &error);
                     let active_tab_id = router_for_show.restore_detached(&DetachedRoute {
                         transfer: transfer.clone(),
                         pane_tree: pane_tree.clone(),
@@ -475,8 +482,10 @@ pub(super) fn wire_window_actions(
                 },
             );
             if let Err(error) = detached_ui.show() {
+                log_renderer_fault("show-detached-window", &error);
                 warn!(%error, "failed to show detached workspace window");
                 software_presentation::remove_layout(&detached_ui, detached_id);
+                renderer_window_destroyed("detached");
                 if let Some(detached) = router_for_show.remove_detached(detached_id) {
                     let active_tab_id = router_for_show.restore_detached(&detached);
                     if let Some(active_tab_id) = active_tab_id

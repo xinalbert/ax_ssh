@@ -196,7 +196,13 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 选择会在首个 `AppWindow` 创建前结束，因此 Settings 草稿可保存并显示偏好，但不能热切换已运行的
 renderer；它会在重启后生效。显式 `SLINT_BACKEND` 的优先级更高，选择权交给 Slint，因此仍可用
 `SLINT_BACKEND=winit-software` 做有界诊断回退，且不会改变终端 model 或 worker 链路。macOS 的
-Skia 默认表面使用 Metal，并由 Slint 的 softbuffer 提供回退。
+Skia 默认表面使用 Metal，并由 Slint 的 softbuffer 提供回退。未设置环境变量覆盖时，若 Skia 在
+Slint 绑定全局 platform 前选择失败，会只重试一次 `winit-software`。窗口创建、显示或 event loop
+启动向上返回的 renderer fault 会写成有界的 `ax_ssh::diagnostics` 记录；macOS Automatic 仅在
+GPU/Skia/Metal fault 后持久化一个不含秘密的本地回退标记，并在下一次 Automatic 启动时使用 software。
+一次干净的 Skia 运行会清除该标记。这里明确不宣称能捕获 Skia 仅写到 stderr 的生成 Metal shader source：
+Slint 的 renderer 是进程全局状态，Metal surface 存活后不能安全热切换。可复制诊断因此会把 shader
+fault count 标记为 application-errors-only，并包含 renderer 来源、回退原因、Metal device 和实时窗口数。
 `AppearanceSettings::software_presentation` 独立选择 macOS CPU 呈现实现。启动过程在首个窗口创建
 surface 前将 `layer-images` 或 `damage-backing-store` 映射到进程内 softbuffer 开关。已有 surface
 绝不热切换，其它平台 backend 不读取该值。

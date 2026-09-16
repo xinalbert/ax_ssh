@@ -292,7 +292,18 @@ display the preference but cannot hot-switch an active renderer; it takes effect
 after restart. An explicit `SLINT_BACKEND` environment value takes priority and
 is left to Slint, so `SLINT_BACKEND=winit-software` remains a bounded diagnostic
 fallback without changing terminal models or worker flow. The macOS Skia default
-uses Metal and retains Slint's softbuffer fallback.
+uses Metal and retains Slint's softbuffer fallback. Without an environment
+override, a Skia backend-selection failure before Slint has bound its global
+platform is retried once with `winit-software`. Renderer faults propagated by
+window creation, show, or event-loop startup are classified into bounded
+`ax_ssh::diagnostics` records; Automatic macOS persists only a non-secret local
+fallback marker after a GPU/Skia/Metal fault and uses software on the next
+Automatic launch. A clean Skia run clears the marker. This deliberately does
+not claim to capture Skia's stderr-only generated Metal shader source: Slint's
+renderer is process-global and cannot be safely switched once a Metal surface
+is live. The copyable diagnostics report therefore labels shader fault counts
+as application-errors-only and includes the renderer source, fallback reason,
+Metal device, and live window count.
 `AppearanceSettings::software_presentation` independently selects the macOS
 CPU presentation implementation. Startup maps `layer-images` or
 `damage-backing-store` into a process-local softbuffer switch before the first
