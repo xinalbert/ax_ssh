@@ -302,22 +302,22 @@ fn spawn_telnet_monitor(
                 }
                 TelnetSessionEvent::Output(data) => {
                     let mut response_error = None;
+                    let mut presentation_hold = None;
                     if mutate_direct_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
                         DirectProtocol::Telnet,
-                        |terminal| {
-                            if let Err(error) = process_terminal_output(terminal, &data) {
-                                response_error = Some(error);
-                            }
+                        |terminal| match process_terminal_output(terminal, &data) {
+                            Ok(hold) => presentation_hold = hold,
+                            Err(error) => response_error = Some(error),
                         },
                     )
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None);
+                        presentation.record_output(None, presentation_hold);
                     }
                     if let Some(error) = response_error {
                         warn!(
@@ -455,22 +455,22 @@ fn spawn_serial_monitor(
                 }
                 SerialSessionEvent::Output(data) => {
                     let mut response_error = None;
+                    let mut presentation_hold = None;
                     if mutate_direct_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
                         DirectProtocol::Serial,
-                        |terminal| {
-                            if let Err(error) = process_terminal_output(terminal, &data) {
-                                response_error = Some(error);
-                            }
+                        |terminal| match process_terminal_output(terminal, &data) {
+                            Ok(hold) => presentation_hold = hold,
+                            Err(error) => response_error = Some(error),
                         },
                     )
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None);
+                        presentation.record_output(None, presentation_hold);
                     }
                     if let Some(error) = response_error {
                         warn!(

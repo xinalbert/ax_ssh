@@ -6,6 +6,21 @@ pub(super) const MAX_TOKIO_WORKER_THREADS: usize = 4;
 pub(super) const MAX_TOKIO_BLOCKING_THREADS: usize = 8;
 pub(super) const TOKIO_BLOCKING_THREAD_KEEP_ALIVE: Duration = Duration::from_secs(2);
 
+/// Makes every retired Slint winit window release its native surface on hide.
+///
+/// Slint's winit backend otherwise only makes a macOS window invisible. Its
+/// `SLINT_DESTROY_WINDOW_ON_HIDE` opt-in suspends the renderer and drops the
+/// native Winit window, which releases the associated Metal layer/drawables.
+/// This must run before logging, Slint, or Tokio can create another thread.
+pub(super) fn enable_slint_destroy_window_on_hide() {
+    // SAFETY: `main` invokes this before logging initializes its writer thread
+    // and before Slint or Tokio are initialized, so no concurrent environment
+    // reads or writes can race with this process-wide update.
+    unsafe {
+        std::env::set_var("SLINT_DESTROY_WINDOW_ON_HIDE", "1");
+    }
+}
+
 pub(super) fn select_slint_renderer(preference: RendererPreference) -> Result<()> {
     let selector = if std::env::var_os("SLINT_BACKEND").is_some() {
         // Keep the standard Slint environment override available for diagnostics

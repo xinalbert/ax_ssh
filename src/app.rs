@@ -47,7 +47,7 @@ use self::credential_tasks::{
 };
 use self::input::{
     format_shortcut_event_with_current_modifiers, menu_shortcut_from_setting,
-    terminal_input_modifiers, terminal_key_from_slint, terminal_key_is_direct,
+    normalized_keyboard_input_from_ui, terminal_input_modifiers, terminal_key_is_direct_for_input,
 };
 use self::panes::{
     MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PaneDividerPlacement, PaneLayout,
@@ -118,7 +118,38 @@ use self::workspace::*;
 
 slint::include_modules!();
 
+fn normalized_keyboard_input_from_slint_event(
+    event: &KeyboardEvent,
+) -> self::input::NormalizedKeyboardInput {
+    normalized_keyboard_input_from_ui(
+        event.text.as_str(),
+        event.logical_key.as_str(),
+        terminal_input_modifiers(
+            event.alt,
+            event.control,
+            event.meta,
+            event.shift,
+            event.uses_native_modifiers,
+        ),
+        event.is_composing,
+        event.is_repeat,
+        event.is_synthetic,
+        event.uses_native_modifiers,
+    )
+}
+
+fn normalized_keyboard_input_from_terminal_direct_event(
+    event: &TerminalDirectKeyboardEvent,
+) -> self::input::NormalizedKeyboardInput {
+    normalized_keyboard_input_from_slint_event(&event.event)
+}
+
 const MAIN_WINDOW_ID: Uuid = Uuid::from_u128(0);
+
+/// Configures process-wide Slint window behavior before any application thread starts.
+pub(crate) fn configure_window_lifecycle() {
+    enable_slint_destroy_window_on_hide();
+}
 
 fn load_startup_workspace(
     config: &ConfigStore,
@@ -469,16 +500,9 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         window_id,
         detached_windows,
     } = context;
-    ui.on_log_keyboard_event(move |text, alt, control, meta, shift, route, action| {
-        log_keyboard_event(
-            text.as_str(),
-            alt,
-            control,
-            meta,
-            shift,
-            route.as_str(),
-            action.as_str(),
-        );
+    ui.on_log_keyboard_event(move |request| {
+        let input = normalized_keyboard_input_from_slint_event(&request.event);
+        log_keyboard_event(&input, request.route.as_str(), request.action.as_str());
     });
     ui.on_menu_action(move |action| log_menu_action(action.as_str()));
     #[cfg(target_os = "macos")]
@@ -490,23 +514,14 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
             }
         });
     }
-    ui.on_format_shortcut(move |text, alt, control, meta, shift| {
-        format_shortcut_event_with_current_modifiers(text.as_str(), alt, control, meta, shift)
-            .into()
+    ui.on_format_shortcut(move |event| {
+        let input = normalized_keyboard_input_from_slint_event(&event);
+        format_shortcut_event_with_current_modifiers(&input).into()
     });
-    ui.on_terminal_key_direct(
-        move |text, alt, control, meta, shift, option_as_meta, preedit_active| {
-            terminal_key_is_direct(
-                text.as_str(),
-                alt,
-                control,
-                meta,
-                shift,
-                option_as_meta,
-                preedit_active,
-            )
-        },
-    );
+    ui.on_terminal_key_direct(move |request| {
+        let input = normalized_keyboard_input_from_terminal_direct_event(&request);
+        terminal_key_is_direct_for_input(&input, request.option_as_meta, request.preedit_active)
+    });
     let ui_for_clipboard_write = ui.as_weak();
     ui.on_write_clipboard(move |text| {
         log_ui_action("clipboard.write");

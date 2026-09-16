@@ -1,29 +1,201 @@
-use std::{cell::Cell, rc::Rc};
-
-#[cfg(target_os = "windows")]
-use super::input::terminal_key_from_physical_keycode;
-use super::input::{clear_native_event_modifiers, update_native_event_modifiers};
-#[cfg(target_os = "macos")]
-use super::input::{
-    native_shortcut_key_name, native_shortcut_matches_setting, terminal_key_from_native_key,
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+    time::Duration,
 };
+
+use super::input::{
+    clear_native_event_modifiers, normalized_keyboard_input_from_winit,
+    update_native_event_modifiers,
+};
+#[cfg(target_os = "macos")]
+use super::input::{native_shortcut_key_name, native_shortcut_matches_setting};
 use super::*;
 use crate::app::state::PaneSessionSource;
-use crate::app::terminal_targets::{
-    TerminalTarget, terminal_target_at_cell, terminal_target_span_at_cell,
-};
+use crate::app::terminal_targets::{TerminalTarget, terminal_target_match_at_context};
 use ax_ssh::terminal::{
-    TerminalKey, TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
-    TerminalMouseEventKind, TerminalMouseModifiers, encode_key_with_modes,
+    TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
+    TerminalMouseEventKind, TerminalMouseModifiers, TerminalTargetContext, encode_key_with_modes,
 };
-#[cfg(any(target_os = "windows", target_os = "macos"))]
 use slint::winit_030::winit::event::ElementState;
-#[cfg(target_os = "windows")]
-use slint::winit_030::winit::keyboard::PhysicalKey;
 use slint::winit_030::{
     EventResult, WinitWindowAccessor,
     winit::{event::WindowEvent, keyboard::ModifiersState},
 };
+
+#[derive(Clone, Copy, Debug)]
+struct TerminalGeometrySample {
+    pane_x: f32,
+    pane_y: f32,
+    pane_width: f32,
+    pane_height: f32,
+    grid_x: f32,
+    grid_y: f32,
+    grid_width: f32,
+    grid_height: f32,
+    cell_width: f32,
+    cell_height: f32,
+    columns: i32,
+    rows: i32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TerminalGeometrySignature {
+    window_physical_width: u32,
+    window_physical_height: u32,
+    winit_physical_width: u32,
+    winit_physical_height: u32,
+    scale_milli: u32,
+    pane_x: i32,
+    pane_y: i32,
+    pane_width: i32,
+    pane_height: i32,
+    grid_x: i32,
+    grid_y: i32,
+    grid_width: i32,
+    grid_height: i32,
+    cell_width: i32,
+    cell_height: i32,
+    columns: i32,
+    rows: i32,
+    detached_window: bool,
+    software_presentation_enabled: bool,
+}
+
+#[derive(Default)]
+struct TerminalGeometryDiagnostics {
+    last: HashMap<String, TerminalGeometrySignature>,
+}
+
+impl TerminalGeometryDiagnostics {
+    fn record(
+        &mut self,
+        ui: &AppWindow,
+        window_id: Uuid,
+        terminal_id: &str,
+        sample: TerminalGeometrySample,
+    ) {
+        let window_size = ui.window().size();
+        let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
+        let (winit_physical_width, winit_physical_height) = ui
+            .window()
+            .with_winit_window(|window| {
+                let size = window.inner_size();
+                (size.width, size.height)
+            })
+            .unwrap_or((0, 0));
+        let detached_window = ui.get_detached_window();
+        let software_presentation_enabled = ui.get_software_presentation_enabled();
+        let signature = TerminalGeometrySignature {
+            window_physical_width: window_size.width,
+            window_physical_height: window_size.height,
+            winit_physical_width,
+            winit_physical_height,
+            scale_milli: quantize_scale(scale_factor),
+            pane_x: quantize_logical(sample.pane_x),
+            pane_y: quantize_logical(sample.pane_y),
+            pane_width: quantize_logical(sample.pane_width),
+            pane_height: quantize_logical(sample.pane_height),
+            grid_x: quantize_logical(sample.grid_x),
+            grid_y: quantize_logical(sample.grid_y),
+            grid_width: quantize_logical(sample.grid_width),
+            grid_height: quantize_logical(sample.grid_height),
+            cell_width: quantize_logical(sample.cell_width),
+            cell_height: quantize_logical(sample.cell_height),
+            columns: sample.columns,
+            rows: sample.rows,
+            detached_window,
+            software_presentation_enabled,
+        };
+        let key = format!("{window_id}:{terminal_id}");
+        if self
+            .last
+            .get(&key)
+            .is_some_and(|previous| *previous == signature)
+        {
+            return;
+        }
+        if !self.last.contains_key(&key) && self.last.len() >= 256 {
+            self.last.clear();
+        }
+        self.last.insert(key, signature);
+
+        let active_tab_kind = ui.get_active_tab_kind();
+        let renderer_preference = ui.get_renderer_preference();
+        let window_logical_width = f64::from(window_size.width) / scale_factor;
+        let window_logical_height = f64::from(window_size.height) / scale_factor;
+        let pane_right_gap =
+            window_logical_width - f64::from(sample.pane_x) - f64::from(sample.pane_width);
+        let pane_bottom_gap =
+            window_logical_height - f64::from(sample.pane_y) - f64::from(sample.pane_height);
+        let grid_right_gap = f64::from(sample.pane_width)
+            - (f64::from(sample.grid_x) - f64::from(sample.pane_x))
+            - f64::from(sample.grid_width);
+        let grid_bottom_gap = f64::from(sample.pane_height)
+            - (f64::from(sample.grid_y) - f64::from(sample.pane_y))
+            - f64::from(sample.grid_height);
+        let terminal_columns = sample.columns.max(0);
+        let terminal_rows = sample.rows.max(0);
+        let cell_remainder_width = f64::from(sample.grid_width)
+            - f64::from(sample.cell_width) * f64::from(terminal_columns);
+        let cell_remainder_height = f64::from(sample.grid_height)
+            - f64::from(sample.cell_height) * f64::from(terminal_rows);
+
+        tracing::debug!(
+            target: "ax_ssh::diagnostics",
+            event = "terminal-geometry",
+            window_id = %window_id,
+            terminal_id,
+            active_tab_kind = active_tab_kind.as_str(),
+            detached_window,
+            renderer_preference = renderer_preference.as_str(),
+            software_presentation_enabled,
+            scale_factor,
+            window_physical_width = window_size.width,
+            window_physical_height = window_size.height,
+            winit_physical_width,
+            winit_physical_height,
+            window_logical_width,
+            window_logical_height,
+            pane_x = sample.pane_x,
+            pane_y = sample.pane_y,
+            pane_width = sample.pane_width,
+            pane_height = sample.pane_height,
+            pane_right_gap,
+            pane_bottom_gap,
+            grid_x = sample.grid_x,
+            grid_y = sample.grid_y,
+            grid_width = sample.grid_width,
+            grid_height = sample.grid_height,
+            grid_right_gap,
+            grid_bottom_gap,
+            cell_width = sample.cell_width,
+            cell_height = sample.cell_height,
+            terminal_columns = sample.columns,
+            terminal_rows = sample.rows,
+            cell_remainder_width,
+            cell_remainder_height,
+            "terminal geometry changed"
+        );
+    }
+}
+
+fn quantize_logical(value: f32) -> i32 {
+    if !value.is_finite() {
+        return i32::MIN;
+    }
+    (f64::from(value) * 10.0)
+        .round()
+        .clamp(f64::from(i32::MIN + 1), f64::from(i32::MAX)) as i32
+}
+
+fn quantize_scale(value: f64) -> u32 {
+    if !value.is_finite() || value <= 0.0 {
+        return 0;
+    }
+    (value * 1000.0).round().clamp(0.0, f64::from(u32::MAX)) as u32
+}
 
 pub(super) fn start_local_shell(
     runtime: &Handle,
@@ -89,9 +261,9 @@ pub(super) fn resume_existing_local_shell(
 /// Register after a Slint window is shown, when its Winit adapter exists.
 ///
 /// Native modifier snapshots are recorded for every platform before Slint
-/// dispatches the corresponding key event. Windows additionally uses this
-/// boundary for physical application-keypad input. Normal text and IME input
-/// continue through Slint's TextInput path.
+/// dispatches the corresponding key event. Physical Winit key identity is
+/// normalized at this boundary for application-keypad input on every desktop
+/// platform. Normal text and IME input continue through Slint's TextInput path.
 pub(super) fn install_terminal_keypad_input_hook(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -101,7 +273,6 @@ pub(super) fn install_terminal_keypad_input_hook(
 ) {
     let modifiers = Rc::new(Cell::new(ModifiersState::default()));
     let modifiers_for_event = modifiers.clone();
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let ui_for_keypad = ui.as_weak();
     let state_for_drop = state.clone();
     let runtime_for_drop = runtime.clone();
@@ -133,7 +304,6 @@ pub(super) fn install_terminal_keypad_input_hook(
                 modifiers_for_event.set(ModifiersState::default());
                 clear_native_event_modifiers();
             }
-            #[cfg(target_os = "macos")]
             WindowEvent::KeyboardInput {
                 event,
                 is_synthetic,
@@ -155,6 +325,7 @@ pub(super) fn install_terminal_keypad_input_hook(
                     meta: modifiers.super_key(),
                     shift: modifiers.shift_key(),
                 };
+                #[cfg(target_os = "macos")]
                 if !physical_modifiers.control {
                     let current = super::macos_window::current_modifier_state();
                     if current.control || current.meta || current.alt || current.shift {
@@ -167,72 +338,68 @@ pub(super) fn install_terminal_keypad_input_hook(
                         );
                     }
                 }
-                if !physical_modifiers.control || physical_modifiers.meta {
-                    return EventResult::Propagate;
+
+                #[cfg(target_os = "macos")]
+                if physical_modifiers.control && !physical_modifiers.meta {
+                    let Some(key_name) = native_shortcut_key_name(&event.logical_key) else {
+                        return EventResult::Propagate;
+                    };
+                    let settings = match state.lock() {
+                        Ok(app) => app.sessions.settings.shortcuts.clone(),
+                        Err(_) => return EventResult::Propagate,
+                    };
+                    let application_shortcut = [
+                        settings.open_settings.as_str(),
+                        settings.new_session.as_str(),
+                        settings.import_sessions.as_str(),
+                        settings.export_selected.as_str(),
+                        settings.toggle_sidebar.as_str(),
+                        settings.copy_selection.as_str(),
+                        settings.paste.as_str(),
+                        settings.open_sftp.as_str(),
+                    ]
+                    .into_iter()
+                    .any(|shortcut| {
+                        native_shortcut_matches_setting(shortcut, &key_name, physical_modifiers)
+                    });
+                    if application_shortcut {
+                        return EventResult::Propagate;
+                    }
+                    let Some(input_event) = normalized_keyboard_input_from_winit(
+                        event,
+                        physical_modifiers,
+                        *is_synthetic,
+                    ) else {
+                        return EventResult::Propagate;
+                    };
+                    let Some(tab_id) = window_router.active_tab(window_id) else {
+                        return EventResult::Propagate;
+                    };
+                    let input = TerminalInputContext {
+                        ui: &ui_for_keypad,
+                        state: &state,
+                        window_router: &window_router,
+                        window_id,
+                    };
+                    if input.dispatch(tab_id, input_event) {
+                        return EventResult::PreventDefault;
+                    }
                 }
-                let Some(key_name) = native_shortcut_key_name(&event.logical_key) else {
+
+                let Some(input_event) =
+                    normalized_keyboard_input_from_winit(event, physical_modifiers, *is_synthetic)
+                else {
                     return EventResult::Propagate;
                 };
-                let settings = match state.lock() {
-                    Ok(app) => app.sessions.settings.shortcuts.clone(),
-                    Err(_) => return EventResult::Propagate,
-                };
-                let application_shortcut = [
-                    settings.open_settings.as_str(),
-                    settings.new_session.as_str(),
-                    settings.import_sessions.as_str(),
-                    settings.export_selected.as_str(),
-                    settings.toggle_sidebar.as_str(),
-                    settings.copy_selection.as_str(),
-                    settings.paste.as_str(),
-                    settings.open_sftp.as_str(),
-                ]
-                .into_iter()
-                .any(|shortcut| {
-                    native_shortcut_matches_setting(shortcut, &key_name, physical_modifiers)
-                });
-                if application_shortcut {
-                    return EventResult::Propagate;
-                }
-                let Some(key) = terminal_key_from_native_key(&event.logical_key) else {
-                    return EventResult::Propagate;
-                };
-                let Some(tab_id) = window_router.active_tab(window_id) else {
-                    return EventResult::Propagate;
-                };
-                let input = TerminalInputContext {
-                    ui: &ui_for_keypad,
-                    state: &state,
-                    window_router: &window_router,
-                    window_id,
-                };
-                if input.dispatch(tab_id, key, physical_modifiers, true) {
-                    return EventResult::PreventDefault;
-                }
-            }
-            #[cfg(target_os = "windows")]
-            WindowEvent::KeyboardInput {
-                event,
-                is_synthetic,
-                ..
-            } => {
-                if *is_synthetic || event.state != ElementState::Pressed {
-                    return EventResult::Propagate;
-                }
-                let modifiers = modifiers_for_event.get();
-                if modifiers.shift_key()
-                    || modifiers.control_key()
-                    || modifiers.alt_key()
-                    || modifiers.super_key()
+                let modifiers = input_event.modifiers;
+                if !input_event.is_physical_keypad()
+                    || modifiers.alt
+                    || modifiers.control
+                    || modifiers.meta
+                    || modifiers.shift
                 {
                     return EventResult::Propagate;
                 }
-                let PhysicalKey::Code(keycode) = event.physical_key else {
-                    return EventResult::Propagate;
-                };
-                let Some(key) = terminal_key_from_physical_keycode(keycode) else {
-                    return EventResult::Propagate;
-                };
                 let Some(tab_id) = window_router.active_tab(window_id) else {
                     return EventResult::Propagate;
                 };
@@ -245,7 +412,7 @@ pub(super) fn install_terminal_keypad_input_hook(
                 if !input.application_keypad_active(tab_id) {
                     return EventResult::Propagate;
                 }
-                if input.dispatch(tab_id, key, TerminalModifiers::default(), true) {
+                if input.dispatch(tab_id, input_event) {
                     return EventResult::PreventDefault;
                 }
             }
@@ -263,7 +430,6 @@ struct TerminalInputContext<'a> {
 }
 
 impl TerminalInputContext<'_> {
-    #[cfg(target_os = "windows")]
     fn application_keypad_active(&self, tab_id: Uuid) -> bool {
         self.state.lock().is_ok_and(|app| {
             !self
@@ -277,22 +443,16 @@ impl TerminalInputContext<'_> {
                         && terminal
                             .terminal
                             .as_ref()
-                            .is_some_and(TerminalModel::application_keypad)
+                            .is_some_and(|model| model.application_keypad())
                 })
         })
     }
 
-    fn dispatch(
-        &self,
-        tab_id: Uuid,
-        key: TerminalKey,
-        modifiers: TerminalModifiers,
-        physical_key_event: bool,
-    ) -> bool {
+    fn dispatch(&self, tab_id: Uuid, input: super::input::NormalizedKeyboardInput) -> bool {
         let input_started_at = std::time::Instant::now();
         let mut state_lock_elapsed = None;
         let mut worker_request_elapsed = None;
-        log_terminal_input(&key, modifiers, physical_key_event);
+        log_terminal_input(&input);
         let state_lock_started_at = std::time::Instant::now();
         let result = self
             .state
@@ -317,10 +477,10 @@ impl TerminalInputContext<'_> {
                 {
                     TerminalModifiers {
                         alt: false,
-                        ..modifiers
+                        ..input.modifiers
                     }
                 } else {
-                    modifiers
+                    input.modifiers
                 };
                 let terminal = app.terminal(tab_id).context("terminal tab not found")?;
                 if !terminal.connected {
@@ -332,6 +492,9 @@ impl TerminalInputContext<'_> {
                     .context("active tab has no terminal model")?;
                 let application_cursor = model.application_cursor();
                 let application_keypad = model.application_keypad();
+                let Some(key) = super::input::terminal_key_from_normalized_input(&input) else {
+                    return Ok((false, false));
+                };
                 let Some(data) =
                     encode_key_with_modes(&key, modifiers, application_cursor, application_keypad)
                 else {
@@ -401,6 +564,47 @@ pub(super) fn wire_terminal(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
+    let geometry_diagnostics = Rc::new(RefCell::new(TerminalGeometryDiagnostics::default()));
+    let geometry_diagnostics_for_callback = geometry_diagnostics.clone();
+    let ui_for_geometry = ui.as_weak();
+    ui.on_terminal_geometry(
+        move |terminal_id,
+              pane_x,
+              pane_y,
+              pane_width,
+              pane_height,
+              grid_x,
+              grid_y,
+              grid_width,
+              grid_height,
+              cell_width,
+              cell_height,
+              columns,
+              rows| {
+            if let Some(ui) = ui_for_geometry.upgrade() {
+                geometry_diagnostics_for_callback.borrow_mut().record(
+                    &ui,
+                    window_id,
+                    terminal_id.as_str(),
+                    TerminalGeometrySample {
+                        pane_x,
+                        pane_y,
+                        pane_width,
+                        pane_height,
+                        grid_x,
+                        grid_y,
+                        grid_width,
+                        grid_height,
+                        cell_width,
+                        cell_height,
+                        columns,
+                        rows,
+                    },
+                );
+            }
+        },
+    );
+
     let ui_for_presentation = ui.as_weak();
     ui.on_terminal_presentation_layout(move |terminal_id, x, y, width, height, row_height| {
         if let Some(ui) = ui_for_presentation.upgrade() {
@@ -437,24 +641,19 @@ pub(super) fn wire_terminal(
     let ui_for_key = ui.as_weak();
     let state_for_key = state.clone();
     let router_for_key = window_router.clone();
-    ui.on_terminal_key(
-        move |tab_id, text, alt, control, meta, shift, physical_key_event| {
-            let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_key) else {
-                return true;
-            };
-            // Committed TextInput and pasted text are not physical key events, so
-            // they must not inherit a still-held shortcut modifier such as Cmd+V.
-            let modifiers = terminal_input_modifiers(alt, control, meta, shift, physical_key_event);
-            let key = terminal_key_from_slint(text.as_str(), modifiers);
-            TerminalInputContext {
-                ui: &ui_for_key,
-                state: &state_for_key,
-                window_router: &router_for_key,
-                window_id,
-            }
-            .dispatch(tab_id, key, modifiers, physical_key_event)
-        },
-    );
+    ui.on_terminal_key(move |request| {
+        let Some(tab_id) = parse_uuid(request.terminal_id.as_str(), "terminal", &ui_for_key) else {
+            return true;
+        };
+        let input_event = super::normalized_keyboard_input_from_slint_event(&request.event);
+        TerminalInputContext {
+            ui: &ui_for_key,
+            state: &state_for_key,
+            window_router: &router_for_key,
+            window_id,
+        }
+        .dispatch(tab_id, input_event)
+    });
 
     let ui_for_resize = ui.as_weak();
     let state_for_resize = state.clone();
@@ -554,7 +753,11 @@ pub(super) fn wire_terminal(
                 2 => TerminalMouseButton::Right,
                 3 => TerminalMouseButton::WheelUp,
                 4 => TerminalMouseButton::WheelDown,
-                5 => TerminalMouseButton::None,
+                5 => TerminalMouseButton::WheelLeft,
+                6 => TerminalMouseButton::WheelRight,
+                7 => TerminalMouseButton::Auxiliary8,
+                8 => TerminalMouseButton::Auxiliary9,
+                9 => TerminalMouseButton::None,
                 _ => return,
             };
             let kind = match kind {
@@ -1095,11 +1298,11 @@ fn terminal_target_for_pane(
     if !terminal.connected {
         return None;
     }
-    let (text, text_column) = terminal
+    let context = terminal
         .terminal
         .as_ref()?
-        .visible_row_text_at_cell(row, column)?;
-    terminal_target_at_cell(&text, text_column)
+        .visible_logical_line_target_context_at_cell(row, column)?;
+    terminal_target_match_at_context(&context).map(|target_match| target_match.target)
 }
 
 fn terminal_target_highlight_for_pane(
@@ -1121,15 +1324,31 @@ fn terminal_target_highlight_for_pane(
         return None;
     }
     let terminal = terminal.terminal.as_ref()?;
-    let (text, text_column) = terminal.visible_row_text_at_cell(row, column)?;
-    let span = terminal_target_span_at_cell(&text, text_column)?;
-    let (start_column, end_column) =
-        terminal.visible_row_cell_span_for_characters(row, span.start, span.end)?;
+    let context: TerminalTargetContext =
+        terminal.visible_logical_line_target_context_at_cell(row, column)?;
+    let target_match = terminal_target_match_at_context(&context)?;
+    let segments = target_match
+        .segments
+        .into_iter()
+        .filter_map(|segment| {
+            let (start_column, end_column) = terminal.visible_row_cell_span_for_characters(
+                segment.row,
+                segment.start,
+                segment.end,
+            )?;
+            Some(TerminalTargetHighlightSegment {
+                row: i32::try_from(segment.row).ok()?,
+                start_column: i32::try_from(start_column).ok()?,
+                end_column: i32::try_from(end_column).ok()?,
+            })
+        })
+        .collect::<Vec<_>>();
+    if segments.is_empty() {
+        return None;
+    }
     Some(TerminalTargetHighlight {
         active: true,
-        row: i32::try_from(row).ok()?,
-        start_column: i32::try_from(start_column).ok()?,
-        end_column: i32::try_from(end_column).ok()?,
+        segments: ModelRc::new(VecModel::from(segments)),
     })
 }
 
@@ -1295,15 +1514,17 @@ pub(super) fn spawn_local_shell_monitor(
                 }
                 LocalShellEvent::Output(data) => {
                     let mut response_error = None;
+                    let mut presentation_hold = None;
                     if mutate_local_terminal(&state, tab_id, |terminal| {
-                        if let Err(error) = process_terminal_output(terminal, &data) {
-                            response_error = Some(error);
+                        match process_terminal_output(terminal, &data) {
+                            Ok(hold) => presentation_hold = hold,
+                            Err(error) => response_error = Some(error),
                         }
                     })
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None);
+                        presentation.record_output(None, presentation_hold);
                     }
                     if let Some(error) = response_error {
                         warn!(tab_id = %tab_id, %error, "failed to send local terminal protocol response");
@@ -1374,14 +1595,18 @@ pub(super) fn spawn_local_shell_monitor(
     });
 }
 
-pub(super) fn process_terminal_output(terminal: &mut TerminalTabState, data: &[u8]) -> Result<()> {
-    let responses = terminal
+pub(super) fn process_terminal_output(
+    terminal: &mut TerminalTabState,
+    data: &[u8],
+) -> Result<Option<Duration>> {
+    let model = terminal
         .terminal
         .as_mut()
-        .context("terminal tab has no terminal model")?
-        .process_with_responses(data);
+        .context("terminal tab has no terminal model")?;
+    let responses = model.process_with_responses(data);
+    let presentation_hold = model.output_frame_hold_remaining();
     if responses.is_empty() {
-        return Ok(());
+        return Ok(presentation_hold);
     }
     let worker = terminal
         .worker
@@ -1392,7 +1617,7 @@ pub(super) fn process_terminal_output(terminal: &mut TerminalTabState, data: &[u
             .request_send(response)
             .context("cannot queue terminal protocol response")?;
     }
-    Ok(())
+    Ok(presentation_hold)
 }
 
 pub(super) fn mutate_local_terminal(
@@ -1438,6 +1663,15 @@ mod tests {
     fn terminal_target_uses_slint_primary_shortcut_modifier() {
         assert!(terminal_target_modifier_held(true, false));
         assert!(!terminal_target_modifier_held(false, true));
+    }
+
+    #[test]
+    fn terminal_geometry_quantization_is_stable_for_diagnostics() {
+        assert_eq!(quantize_logical(12.34), 123);
+        assert_eq!(quantize_logical(12.36), 124);
+        assert_eq!(quantize_logical(f32::NAN), i32::MIN);
+        assert_eq!(quantize_scale(2.0), 2_000);
+        assert_eq!(quantize_scale(f64::NAN), 0);
     }
 
     #[test]

@@ -11,6 +11,9 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 
+const MAX_TARGET_CONTEXT_ROWS: usize = 32;
+const MAX_TARGET_CONTEXT_CHARS: usize = 2_048;
+
 impl TerminalModel {
     /// Returns text for an inclusive, viewport-relative cell selection.
     pub fn selection_text(
@@ -94,7 +97,7 @@ impl TerminalModel {
         })
     }
 
-    /// Returns the visible cell range for a semantic double-click selection.
+    /// Returns the visible cell range for a semantic selection.
     ///
     /// The temporary alacritty selection is used only for its boundary
     /// semantics. It is never stored in the terminal model, so local Slint
@@ -107,7 +110,7 @@ impl TerminalModel {
         self.selection_range(row, column, SelectionType::Semantic)
     }
 
-    /// Returns the visible cell range for a triple-click line selection.
+    /// Returns the visible cell range for a logical-line selection.
     ///
     /// Alacritty's line search follows logical lines across soft wraps and
     /// keeps hard line boundaries intact. The range is clipped to the current
@@ -118,6 +121,77 @@ impl TerminalModel {
         column: usize,
     ) -> Option<TerminalSelectionRange> {
         self.selection_range(row, column, SelectionType::Lines)
+    }
+
+    /// Returns a bounded logical-line context for URL/path recognition.
+    ///
+    /// Physical rows joined by `WRAPLINE` are concatenated without a newline;
+    /// hard line breaks remain outside the context. The result is clipped to
+    /// the visible viewport and rejects oversized logical lines so a target
+    /// cannot be recognized from a truncated prefix or suffix.
+    pub fn visible_logical_line_target_context_at_cell(
+        &self,
+        row: usize,
+        column: usize,
+    ) -> Option<TerminalTargetContext> {
+        let grid = self.term.grid();
+        if grid.columns() == 0 || row >= grid.screen_lines() || column >= grid.columns() {
+            return None;
+        }
+        let (_, clicked_character) = self.visible_row_text_at_cell(row, column)?;
+
+        let display_offset = grid.display_offset() as i32;
+        let mut first_row = row;
+        while first_row > 0 {
+            let line = Line(first_row as i32 - display_offset);
+            if !line_wraps_to_next(grid, line) {
+                break;
+            }
+            first_row -= 1;
+        }
+        let starts_mid_logical_line = first_row == 0
+            && line_wraps_to_previous_visible_row_or_history(grid, Line(-display_offset));
+
+        let mut last_row = row;
+        while last_row + 1 < grid.screen_lines()
+            && last_row - first_row + 1 < MAX_TARGET_CONTEXT_ROWS
+        {
+            let line = Line(last_row as i32 - display_offset);
+            if !line_wraps_to_next(grid, line) {
+                break;
+            }
+            last_row += 1;
+        }
+        let ends_mid_logical_line = (last_row + 1 >= grid.screen_lines()
+            && line_wraps_to_next(grid, Line(last_row as i32 - display_offset)))
+            || last_row - first_row + 1 >= MAX_TARGET_CONTEXT_ROWS;
+
+        let mut rows = Vec::with_capacity(last_row - first_row + 1);
+        let mut character_count = 0usize;
+        for visible_row in first_row..=last_row {
+            let text = self.visible_row_text(visible_row)?;
+            character_count = character_count.saturating_add(text.chars().count());
+            if character_count > MAX_TARGET_CONTEXT_CHARS {
+                return None;
+            }
+            rows.push(TerminalTargetRow {
+                row: visible_row,
+                text,
+            });
+        }
+
+        let clicked_row_offset = rows
+            .iter()
+            .take_while(|target_row| target_row.row != row)
+            .map(|target_row| target_row.text.chars().count())
+            .sum::<usize>();
+        Some(TerminalTargetContext {
+            rows,
+            clicked_row: row,
+            clicked_character: clicked_row_offset.saturating_add(clicked_character),
+            starts_mid_logical_line,
+            ends_mid_logical_line,
+        })
     }
 
     /// Returns a bounded visible row and the text position at a terminal cell.
@@ -153,6 +227,18 @@ impl TerminalModel {
             character = character.saturating_add(cell_character_count(cell));
         }
         target_character.map(|target_character| (contents, target_character))
+    }
+
+    fn visible_row_text(&self, row: usize) -> Option<String> {
+        let grid = self.term.grid();
+        if row >= grid.screen_lines() || grid.columns() == 0 {
+            return None;
+        }
+        let line = Line(row as i32 - grid.display_offset() as i32);
+        let last_column = grid.columns() - 1;
+        let mut contents = String::new();
+        append_occupied_cells(&mut contents, grid, line, 0, last_column);
+        Some(contents)
     }
 
     /// Converts a bounded character range in a visible row back to terminal cells.
@@ -196,4 +282,22 @@ impl TerminalModel {
         }
         Some((start_column?, end_column?))
     }
+}
+
+fn line_wraps_to_next(
+    grid: &alacritty_terminal::Grid<alacritty_terminal::term::cell::Cell>,
+    line: Line,
+) -> bool {
+    grid.columns() > 0
+        && grid[line][Column(grid.columns() - 1)]
+            .flags
+            .contains(Flags::WRAPLINE)
+}
+
+fn line_wraps_to_previous_visible_row_or_history(
+    grid: &alacritty_terminal::Grid<alacritty_terminal::term::cell::Cell>,
+    first_visible_line: Line,
+) -> bool {
+    first_visible_line > grid.topmost_line()
+        && line_wraps_to_next(grid, Line(first_visible_line.0 - 1))
 }

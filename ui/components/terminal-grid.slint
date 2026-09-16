@@ -66,11 +66,15 @@ export struct TerminalSelectionView {
     last_column: int,
 }
 
-export struct TerminalTargetHighlight {
-    active: bool,
+export struct TerminalTargetHighlightSegment {
     row: int,
     start_column: int,
     end_column: int,
+}
+
+export struct TerminalTargetHighlight {
+    active: bool,
+    segments: [TerminalTargetHighlightSegment],
 }
 
 export component TerminalGrid inherits Rectangle {
@@ -99,7 +103,7 @@ export component TerminalGrid inherits Rectangle {
     callback pointer-cancel();
     callback semantic-selection-request(int, int);
     callback line-selection-request(int, int);
-    callback scrolled(int, int, int, bool, bool, bool);
+    callback scrolled(int, int, int, int, bool, bool, bool);
     callback copy-request();
     callback paste-request();
     callback select-all-request();
@@ -118,7 +122,8 @@ export component TerminalGrid inherits Rectangle {
     private property <int> click-boundary-column: -1;
     private property <bool> click-pressed: false;
     // Trackpad scroll events arrive as small pixel deltas. Keep the residual
-    // in the grid so a complete terminal row is dispatched as one command.
+    // in the grid so complete terminal-wheel units are dispatched together.
+    private property <length> scroll-accumulator-x: 0px;
     private property <length> scroll-accumulator-y: 0px;
 
     background: root.view.background;
@@ -251,16 +256,21 @@ export component TerminalGrid inherits Rectangle {
     // stable while the cursor/target moves between rows, so movement updates
     // geometry and visibility without creating or destroying row children.
     target-overlay := Rectangle {
-        x: max(0, root.target-highlight.start_column) * root.cell-width;
-        y: root.top-offset + root.target-highlight.row * root.cell-height
-            + root.cell-height - Theme.terminal-underline-offset;
-        width: max(
-            1,
-            root.target-highlight.end_column - root.target-highlight.start_column,
-        ) * root.cell-width;
-        height: Theme.hairline;
-        visible: root.target-highlight.active;
-        background: Theme.accent;
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        for segment in root.target-highlight.segments : Rectangle {
+            x: max(0, segment.start_column) * root.cell-width;
+            y: root.top-offset + segment.row * root.cell-height
+                + root.cell-height - Theme.terminal-underline-offset;
+            width: max(
+                1,
+                segment.end_column - segment.start_column,
+            ) * root.cell-width;
+            height: Theme.hairline;
+            visible: root.target-highlight.active;
+            background: Theme.accent;
+        }
     }
 
     cursor-overlay := Rectangle {
@@ -360,7 +370,9 @@ export component TerminalGrid inherits Rectangle {
                     boundary-column,
                     event.button == PointerEventButton.left ? 0
                         : event.button == PointerEventButton.middle ? 1
-                        : event.button == PointerEventButton.right ? 2 : 5,
+                        : event.button == PointerEventButton.right ? 2
+                        : event.button == PointerEventButton.back ? 7
+                        : event.button == PointerEventButton.forward ? 8 : 9,
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control,
@@ -379,7 +391,9 @@ export component TerminalGrid inherits Rectangle {
                     boundary-column,
                     event.button == PointerEventButton.left ? 0
                     : event.button == PointerEventButton.middle ? 1
-                    : event.button == PointerEventButton.right ? 2 : 5,
+                    : event.button == PointerEventButton.right ? 2
+                    : event.button == PointerEventButton.back ? 7
+                    : event.button == PointerEventButton.forward ? 8 : 9,
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control);
@@ -417,18 +431,14 @@ export component TerminalGrid inherits Rectangle {
             }
         }
         clicked => {
-            // Slint emits clicked before double-clicked, so the third click
-            // can replace the ordinary selection with a logical line range.
-            root.click-sequence = root.click-sequence >= 3
-                ? 4 : root.click-sequence + 1;
+            // Slint emits clicked before double-clicked. Retain only the
+            // bounded same-cell sequence needed to validate that event.
+            root.click-sequence = min(3, root.click-sequence + 1);
             root.click-timeout-ticks = 5;
-            if root.click-sequence == 3 {
-                root.line-selection-request(root.click-cell-row, root.click-cell-column);
-            }
         }
         double-clicked => {
             if root.click-sequence == 2 {
-                root.semantic-selection-request(
+                root.line-selection-request(
                     max(0, min(root.view.row_count - 1,
                         floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,
@@ -437,21 +447,27 @@ export component TerminalGrid inherits Rectangle {
             }
         }
         scroll-event(event) => {
-            if event.delta-y == 0px {
+            if event.delta-x == 0px && event.delta-y == 0px {
                 return EventResult.reject;
             }
+            root.scroll-accumulator-x += event.delta-x;
             root.scroll-accumulator-y += event.delta-y;
-            let lines = round(root.scroll-accumulator-y / max(1px, root.cell-height));
-            if lines == 0 {
+            let horizontal-lines = round(
+                root.scroll-accumulator-x / max(1px, root.cell-width));
+            let vertical-lines = round(
+                root.scroll-accumulator-y / max(1px, root.cell-height));
+            if horizontal-lines == 0 && vertical-lines == 0 {
                 return EventResult.accept;
             }
-            root.scroll-accumulator-y -= lines * root.cell-height;
+            root.scroll-accumulator-x -= horizontal-lines * root.cell-width;
+            root.scroll-accumulator-y -= vertical-lines * root.cell-height;
             root.scrolled(
                 max(0, min(root.view.row_count - 1,
                     floor((self.mouse-y - root.top-offset) / root.cell-height))),
                 max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width))),
-                lines,
+                vertical-lines,
+                horizontal-lines,
                 event.modifiers.shift, event.modifiers.alt, event.modifiers.control);
             accept
         }

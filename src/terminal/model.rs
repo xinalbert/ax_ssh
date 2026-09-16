@@ -27,6 +27,8 @@ impl TerminalModel {
             snapshot_display_offset: 0,
             next_line_revision: 0,
             viewport_detached: false,
+            output_frame_hold: OutputFrameHold::default(),
+            mouse_encoding: MouseEncodingTracker::default(),
         }
     }
 
@@ -36,6 +38,9 @@ impl TerminalModel {
 
     /// Parse live output and return bounded protocol responses for the same transport.
     pub fn process_with_responses(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
+        self.output_frame_hold
+            .observe(bytes, std::time::Instant::now());
+        self.mouse_encoding.observe(bytes);
         let was_alternate_screen = self.is_alternate_screen();
         self.processor.advance(&mut self.term, bytes);
         let is_alternate_screen = self.is_alternate_screen();
@@ -49,6 +54,14 @@ impl TerminalModel {
             self.viewport_detached = false;
         }
         self.protocol_responses.try_iter().collect()
+    }
+
+    /// Returns the remaining presentation hold for a cursor-hidden redraw.
+    ///
+    /// The hold is intentionally short and is released even if a program does
+    /// not send the matching cursor-show sequence.
+    pub fn output_frame_hold_remaining(&mut self) -> Option<std::time::Duration> {
+        self.output_frame_hold.remaining(std::time::Instant::now())
     }
 
     /// Rebuild a bounded text-only view from a workspace snapshot.
@@ -73,8 +86,9 @@ impl TerminalModel {
             click: mode.contains(TermMode::MOUSE_REPORT_CLICK),
             drag: mode.contains(TermMode::MOUSE_DRAG),
             motion: mode.contains(TermMode::MOUSE_MOTION),
-            sgr: mode.contains(TermMode::SGR_MOUSE),
-            utf8: mode.contains(TermMode::UTF8_MOUSE),
+            sgr: self.mouse_encoding.encoding == MouseEncoding::Sgr,
+            utf8: self.mouse_encoding.encoding == MouseEncoding::Utf8,
+            urxvt: self.mouse_encoding.encoding == MouseEncoding::Urxvt,
             alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
         }
     }
@@ -94,7 +108,10 @@ impl TerminalModel {
         let reporting = self.mouse_reporting();
         let is_wheel = matches!(
             event.button,
-            TerminalMouseButton::WheelUp | TerminalMouseButton::WheelDown
+            TerminalMouseButton::WheelUp
+                | TerminalMouseButton::WheelDown
+                | TerminalMouseButton::WheelLeft
+                | TerminalMouseButton::WheelRight
         );
         let alternate_scroll = reporting.alternate_scroll
             && self.term.mode().contains(TermMode::ALT_SCREEN)
@@ -150,6 +167,12 @@ impl TerminalModel {
             TerminalMouseButton::Right => 2,
             TerminalMouseButton::WheelUp => 64,
             TerminalMouseButton::WheelDown => 65,
+            TerminalMouseButton::WheelLeft => 66,
+            TerminalMouseButton::WheelRight => 67,
+            TerminalMouseButton::Auxiliary8 => 128,
+            TerminalMouseButton::Auxiliary9 => 129,
+            TerminalMouseButton::Auxiliary10 => 130,
+            TerminalMouseButton::Auxiliary11 => 131,
         };
         if matches!(event.kind, TerminalMouseEventKind::Release) && !reporting.sgr {
             code = 3;
@@ -172,6 +195,9 @@ impl TerminalModel {
                 'M'
             };
             return Some(format!("\x1b[<{};{};{}{}", code, column, row, suffix).into_bytes());
+        }
+        if reporting.urxvt {
+            return Some(format!("\x1b[{};{};{}M", code, column, row).into_bytes());
         }
         let encode = |value: usize| -> Option<Vec<u8>> {
             let value = value + 32;
@@ -321,5 +347,104 @@ fn terminal_config(scrollback_lines: usize) -> TermConfig {
     TermConfig {
         scrolling_history: scrollback_lines,
         ..TermConfig::default()
+    }
+}
+
+impl OutputFrameHold {
+    pub(super) fn observe(&mut self, bytes: &[u8], now: std::time::Instant) {
+        self.expire(now);
+        for &byte in bytes {
+            match self.cursor_visibility_prefix {
+                0 if byte == 0x1b => self.cursor_visibility_prefix = 1,
+                1 if byte == b'[' => self.cursor_visibility_prefix = 2,
+                2 if byte == b'?' => self.cursor_visibility_prefix = 3,
+                3 if byte == b'2' => self.cursor_visibility_prefix = 4,
+                4 if byte == b'5' => self.cursor_visibility_prefix = 5,
+                5 if byte == b'l' => {
+                    self.active = true;
+                    self.started_at = Some(now);
+                    self.cursor_visibility_prefix = 0;
+                }
+                5 if byte == b'h' => {
+                    self.active = false;
+                    self.started_at = None;
+                    self.cursor_visibility_prefix = 0;
+                }
+                _ => self.cursor_visibility_prefix = u8::from(byte == 0x1b),
+            }
+        }
+    }
+
+    pub(super) fn remaining(&mut self, now: std::time::Instant) -> Option<std::time::Duration> {
+        self.expire(now);
+        if !self.active {
+            return None;
+        }
+        self.started_at.map(|started_at| {
+            OUTPUT_FRAME_HOLD_MAX.saturating_sub(now.saturating_duration_since(started_at))
+        })
+    }
+
+    fn expire(&mut self, now: std::time::Instant) {
+        if self.started_at.is_some_and(|started_at| {
+            now.saturating_duration_since(started_at) >= OUTPUT_FRAME_HOLD_MAX
+        }) {
+            self.active = false;
+            self.started_at = None;
+        }
+    }
+}
+
+impl MouseEncodingTracker {
+    fn observe(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            match self.parser_state {
+                0 if byte == 0x1b => self.parser_state = 1,
+                1 if byte == b'[' => self.parser_state = 2,
+                1 if byte == b'c' => {
+                    self.encoding = MouseEncoding::Default;
+                    self.parser_state = 0;
+                }
+                2 if byte == b'?' => {
+                    self.parser_state = 3;
+                    self.parameter = 0;
+                    self.has_parameter = false;
+                }
+                3 if byte.is_ascii_digit() => {
+                    self.parameter = self
+                        .parameter
+                        .saturating_mul(10)
+                        .saturating_add(u16::from(byte - b'0'));
+                    self.has_parameter = true;
+                }
+                3 if byte == b';' => self.finish_parameter(None),
+                3 if matches!(byte, b'h' | b'l') => {
+                    self.finish_parameter(Some(byte == b'h'));
+                    self.parser_state = 0;
+                }
+                _ => self.parser_state = u8::from(byte == 0x1b),
+            }
+        }
+    }
+
+    fn finish_parameter(&mut self, enabled: Option<bool>) {
+        let parameter = self.has_parameter.then_some(self.parameter);
+        self.parameter = 0;
+        self.has_parameter = false;
+        let Some(parameter) = parameter else {
+            return;
+        };
+        let requested = match parameter {
+            1005 => MouseEncoding::Utf8,
+            1006 => MouseEncoding::Sgr,
+            1015 => MouseEncoding::Urxvt,
+            _ => return,
+        };
+        match enabled {
+            Some(true) => self.encoding = requested,
+            Some(false) if self.encoding == requested => self.encoding = MouseEncoding::Default,
+            None => {}
+            Some(false) => {}
+        }
     }
 }

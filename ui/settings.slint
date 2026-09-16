@@ -13,6 +13,7 @@ import { X11SettingsPage } from "settings/x11.slint";
 import { WorkspaceSettingsPage } from "settings/workspace.slint";
 import { ShortcutsSettingsPage } from "settings/shortcuts.slint";
 import { AboutSettingsPage } from "settings/about.slint";
+import { KeyboardEvent } from "components/keyboard-input.slint";
 
 // Rust supplies one immutable settings snapshot. The pane owns its editable
 // draft, emits a coalesced in-memory preview while it changes, and commits the
@@ -239,7 +240,7 @@ export component SettingsPane inherits Rectangle {
         string, bool, bool, string, string, bool,
     );
     callback save-ui-language(int);
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback format-shortcut(KeyboardEvent) -> string;
     callback shortcut-recording-changed(bool);
     callback report-bug();
     callback open-log-directory();
@@ -918,9 +919,9 @@ export component SettingsPane inherits Rectangle {
                         default-paste-shortcut: root.default-paste-shortcut;
                         default-open-sftp-shortcut: root.default-open-sftp-shortcut;
                         apple-platform: root.apple-platform;
-                        format-shortcut(text, alt, control, meta, shift) => {
-                            return root.format-shortcut(text, alt, control, meta, shift);
-                        }
+                        format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                         shortcut-recording-changed(recording) => {
                             root.shortcut-recording-changed(recording);
                         }

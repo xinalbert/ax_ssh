@@ -1759,6 +1759,48 @@ fn pending_terminal_snapshot_merges_later_dirty_rows_before_ui_consumes_it() {
 }
 
 #[test]
+fn cursor_hidden_redraw_keeps_the_last_published_terminal_frame() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"before");
+    let before = terminal
+        .terminal_snapshot_for_ui()
+        .expect("initial terminal frame should be available");
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[?25l\rafter");
+    assert!(
+        !terminal.prepare_terminal_output_snapshot(),
+        "cursor-hidden intermediate redraws must not enter the UI queue"
+    );
+    let held = terminal
+        .terminal_snapshot_for_ui()
+        .expect("the last published frame should remain available");
+    assert_eq!(held.lines, before.lines);
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[?25h");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let after = terminal
+        .terminal_snapshot_for_ui()
+        .expect("completed redraw should be available");
+    assert_ne!(after.lines, before.lines);
+}
+
+#[test]
 fn terminal_resize_discards_a_stale_pending_output_snapshot() {
     let mut state = test_state();
     let profile = SessionProfile::new_telnet("console", "127.0.0.1");

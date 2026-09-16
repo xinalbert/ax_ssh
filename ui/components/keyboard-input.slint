@@ -1,0 +1,34 @@
+// Application-wide keyboard DTO. Logical identity is kept separate from
+// physical identity so terminal modes can consume keypad information without
+// changing shortcut, IME, or text-input semantics.
+export struct KeyboardEvent {
+    text: string,
+    logical_key: string,
+    physical_code: string,
+    location: string,
+    alt: bool,
+    control: bool,
+    meta: bool,
+    shift: bool,
+    is_composing: bool,
+    is_repeat: bool,
+    is_synthetic: bool,
+    uses_native_modifiers: bool,
+}
+
+export struct TerminalKeyboardEvent {
+    terminal_id: string,
+    event: KeyboardEvent,
+}
+
+export struct TerminalDirectKeyboardEvent {
+    event: KeyboardEvent,
+    option_as_meta: bool,
+    preedit_active: bool,
+}
+
+export struct KeyboardLogEvent {
+    event: KeyboardEvent,
+    route: string,
+    action: string,
+}

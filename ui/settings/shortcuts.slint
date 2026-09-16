@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { ElidedButton } from "../components/elided-controls.slint";
 import { SettingsField, SettingsInfoRow, SettingsPage, SettingsRow, SettingsSectionHeading, ShortcutRecorder } from "../components/settings-controls.slint";
+import { KeyboardEvent } from "../components/keyboard-input.slint";
 
 export component ShortcutsSettingsPage inherits SettingsPage {
     in-out property <string> draft-open-settings-shortcut;
@@ -27,7 +28,7 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     private property <string> next-tab-shortcut: root.apple-platform
         ? "Cmd+Shift+]" : "Ctrl+Shift+]";
 
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback format-shortcut(KeyboardEvent) -> string;
     callback shortcut-recording-changed(bool);
     HorizontalLayout {
         height: Theme.settings-nav-title-height;
@@ -59,9 +60,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-open-settings-shortcut;
                 accessible-name: @tr("Open Settings shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -76,9 +77,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-new-session-shortcut;
                 accessible-name: @tr("New Server shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -93,9 +94,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-import-sessions-shortcut;
                 accessible-name: @tr("Import from Clipboard shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -110,9 +111,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-export-selected-shortcut;
                 accessible-name: @tr("Export Selected shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -127,9 +128,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-toggle-sidebar-shortcut;
                 accessible-name: @tr("Toggle Session Sidebar shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -146,9 +147,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-open-sftp-shortcut;
                 accessible-name: @tr("Switch SSH/SFTP Tab shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -164,9 +165,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-copy-selection-shortcut;
                 accessible-name: @tr("Copy Terminal Selection shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
@@ -181,9 +182,9 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 width: Theme.settings-field-width;
                 shortcut <=> root.draft-paste-shortcut;
                 accessible-name: @tr("Paste Into Terminal shortcut");
-                format-shortcut(text, alt, control, meta, shift) => {
-                    return root.format-shortcut(text, alt, control, meta, shift);
-                }
+                format-shortcut(event) => {
+                return root.format-shortcut(event);
+            }
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }

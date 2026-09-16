@@ -79,6 +79,7 @@ pub(super) struct TerminalPresentation {
     route_changes: Option<watch::Receiver<u64>>,
     policy_changes: Option<watch::Receiver<TerminalPresentationPolicy>>,
     earliest_output_received_at: Option<StdInstant>,
+    output_hold_until: Option<Instant>,
 }
 
 impl TerminalPresentation {
@@ -90,11 +91,17 @@ impl TerminalPresentation {
             policy_changes: global_window_router()
                 .map(|router| router.subscribe_terminal_presentation_policy()),
             earliest_output_received_at: None,
+            output_hold_until: None,
         }
     }
 
-    pub(super) fn record_output(&mut self, output_received_at: Option<StdInstant>) {
+    pub(super) fn record_output(
+        &mut self,
+        output_received_at: Option<StdInstant>,
+        hold_for: Option<Duration>,
+    ) {
         self.state.record_output(Instant::now());
+        self.output_hold_until = hold_for.map(|duration| Instant::now() + duration);
         if let Some(received_at) = output_received_at {
             self.earliest_output_received_at = Some(
                 self.earliest_output_received_at
@@ -110,6 +117,7 @@ impl TerminalPresentation {
     pub(super) fn clear_pending_output(&mut self) {
         self.state.clear_pending();
         self.earliest_output_received_at = None;
+        self.output_hold_until = None;
     }
 
     pub(super) async fn wait_until_ready(&mut self, tab_id: Uuid) -> TerminalPresentationReady {
@@ -117,7 +125,7 @@ impl TerminalPresentation {
             let now = Instant::now();
             let mode = terminal_presentation_mode(tab_id);
             let policy = terminal_presentation_policy();
-            let deadline = self.state.deadline(mode, policy, now);
+            let deadline = self.deadline(mode, policy, now);
             if deadline.is_some_and(|deadline| deadline <= now) {
                 self.state.mark_presented(now);
                 return TerminalPresentationReady {
@@ -131,7 +139,7 @@ impl TerminalPresentation {
                             let now = Instant::now();
                             let mode = terminal_presentation_mode(tab_id);
                             let policy = terminal_presentation_policy();
-                            if self.state.is_ready(mode, policy, now) {
+                            if self.is_ready(mode, policy, now) {
                                 self.state.mark_presented(now);
                                 return TerminalPresentationReady {
                                     output_received_at: self.earliest_output_received_at.take(),
@@ -150,6 +158,28 @@ impl TerminalPresentation {
                 }
             }
         }
+    }
+
+    fn deadline(
+        &mut self,
+        mode: TerminalPresentationMode,
+        policy: TerminalPresentationPolicy,
+        now: Instant,
+    ) -> Option<Instant> {
+        let deadline = self.state.deadline(mode, policy, now)?;
+        let hold_until = self.output_hold_until.filter(|until| *until > now);
+        self.output_hold_until = hold_until;
+        Some(hold_until.map_or(deadline, |until| deadline.max(until)))
+    }
+
+    fn is_ready(
+        &mut self,
+        mode: TerminalPresentationMode,
+        policy: TerminalPresentationPolicy,
+        now: Instant,
+    ) -> bool {
+        self.deadline(mode, policy, now)
+            .is_some_and(|deadline| deadline <= now)
     }
 }
 
@@ -245,16 +275,6 @@ impl TerminalPresentationState {
                 }))
             }
         }
-    }
-
-    fn is_ready(
-        &self,
-        mode: TerminalPresentationMode,
-        policy: TerminalPresentationPolicy,
-        now: Instant,
-    ) -> bool {
-        self.deadline(mode, policy, now)
-            .is_some_and(|deadline| deadline <= now)
     }
 
     fn mark_presented(&mut self, now: Instant) {

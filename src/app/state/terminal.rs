@@ -8,6 +8,16 @@ impl TerminalTabState {
     /// UI sees the newest frame without losing rows that changed earlier in the
     /// burst. Control-only terminal writes still do not enter the Slint queue.
     pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
+        if self
+            .terminal
+            .as_mut()
+            .and_then(TerminalModel::output_frame_hold_remaining)
+            .is_some()
+            && (self.published_terminal_snapshot.is_some()
+                || self.pending_terminal_snapshot.is_some())
+        {
+            return false;
+        }
         if self.pending_terminal_snapshot.is_some() {
             return true;
         }
@@ -28,6 +38,17 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn terminal_snapshot_for_ui(&mut self) -> Option<TerminalSnapshot> {
+        if self
+            .terminal
+            .as_mut()
+            .and_then(TerminalModel::output_frame_hold_remaining)
+            .is_some()
+        {
+            return self
+                .published_terminal_snapshot
+                .clone()
+                .or_else(|| self.pending_terminal_snapshot.clone());
+        }
         let current_snapshot = self.terminal.as_mut().map(TerminalModel::snapshot);
         let snapshot = match (self.pending_terminal_snapshot.take(), current_snapshot) {
             (Some(pending), Some(current)) => merge_terminal_snapshots(pending, current),
@@ -36,6 +57,7 @@ impl TerminalTabState {
             (None, None) => return None,
         };
         self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
+        self.published_terminal_snapshot = Some(snapshot.clone());
         Some(snapshot)
     }
 

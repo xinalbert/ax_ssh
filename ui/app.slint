@@ -14,6 +14,12 @@ import {
     WorkspaceViewState,
 } from "workspace-shell.slint";
 import { SettingsSearchEntry } from "settings.slint";
+import {
+    KeyboardEvent,
+    KeyboardLogEvent,
+    TerminalDirectKeyboardEvent,
+    TerminalKeyboardEvent,
+} from "components/keyboard-input.slint";
 
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
@@ -494,9 +500,10 @@ export component AppWindow inherits Window {
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
     callback close-sftp();
-    callback terminal-key(string, string, bool, bool, bool, bool, bool) -> bool;
-    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key(TerminalKeyboardEvent) -> bool;
+    callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
     callback resize-terminal(string, int, int);
+    callback terminal-geometry(string, length, length, length, length, length, length, length, length, length, length, int, int);
     callback terminal-presentation-layout(string, length, length, length, length, length);
     callback terminal-presentation-layout-reset();
     callback scroll-terminal(string, int);
@@ -509,8 +516,8 @@ export component AppWindow inherits Window {
     callback terminal-pane-focus(string);
     callback terminal-pane-command(string, string) -> bool;
     callback resize-terminal-divider(int, float) -> bool;
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
-    callback log-keyboard-event(string, bool, bool, bool, bool, string, string);
+    callback format-shortcut(KeyboardEvent) -> string;
+    callback log-keyboard-event(KeyboardLogEvent);
     callback menu-action(string);
     callback workspace-file-action(string, string);
     callback workspace-file-loaded();
@@ -550,7 +557,7 @@ export component AppWindow inherits Window {
         if root.window-active {
             root.terminal-focus-request-revision = root.terminal-focus-request-revision == 2147483647
                 ? 1 : root.terminal-focus-request-revision + 1;
-        }
+        };
     }
     changed terminal-color-scheme => { root.schedule-terminal-appearance-refresh(); }
     changed terminal-appearance-revision => { root.schedule-terminal-appearance-refresh(); }
@@ -788,11 +795,24 @@ export component AppWindow inherits Window {
                 return EventResult.reject;
             }
             if event.text == Key.Escape && workspace-shell.dismiss-transient-controls() {
-                root.log-keyboard-event(
-                    event.text, event.modifiers.alt, event.modifiers.control,
-                    event.modifiers.meta, event.modifiers.shift,
-                    "transient-control", "dismiss-transient",
-                );
+                root.log-keyboard-event({
+                    event: {
+                        text: event.text,
+                        logical_key: event.text,
+                        physical_code: "",
+                        location: "standard",
+                        alt: event.modifiers.alt,
+                        control: event.modifiers.control,
+                        meta: event.modifiers.meta,
+                        shift: event.modifiers.shift,
+                        is_composing: false,
+                        is_repeat: false,
+                        is_synthetic: false,
+                        uses_native_modifiers: true,
+                    },
+                    route: "transient-control",
+                    action: "dismiss-transient",
+                });
                 return EventResult.accept;
             }
             return EventResult.reject;
@@ -932,15 +952,30 @@ export component AppWindow inherits Window {
             rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
             edit-remote-sftp => { root.edit-remote-sftp(); }
             close-sftp => { root.close-sftp(); }
-            terminal-key(id, text, alt, control, meta, shift, physical-key-event) => {
-                return root.terminal-key(id, text, alt, control, meta, shift, physical-key-event);
+            terminal-key(request) => {
+                return root.terminal-key(request);
             }
-            terminal-key-direct(text, alt, control, meta, shift, option-as-meta, preedit-active) => {
-                return root.terminal-key-direct(
-                    text, alt, control, meta, shift, option-as-meta, preedit-active,
-                );
-            }
+            terminal-key-direct(request) => {
+                return root.terminal-key-direct(request);
+        }
         resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+        terminal-geometry(id, pane-x, pane-y, pane-width, pane-height, grid-x, grid-y, grid-width, grid-height, cell-width, cell-height, columns, rows) => {
+            root.terminal-geometry(
+                id,
+                pane-x,
+                pane-y,
+                pane-width,
+                pane-height,
+                grid-x,
+                grid-y,
+                grid-width,
+                grid-height,
+                cell-width,
+                cell-height,
+                columns,
+                rows,
+            );
+        }
         terminal-presentation-layout(id, x, y, width, height, cell-height) => {
             root.terminal-presentation-layout(id, x, y, width, height, cell-height);
         }
@@ -971,8 +1006,8 @@ export component AppWindow inherits Window {
             resize-terminal-divider(id, ratio) => {
                 return root.resize-terminal-divider(id, ratio);
             }
-            format-shortcut(text, alt, control, meta, shift) => {
-                return root.format-shortcut(text, alt, control, meta, shift);
+            format-shortcut(event) => {
+                return root.format-shortcut(event);
             }
             write-clipboard(text) => { root.write-clipboard(text); }
             read-clipboard() => { return root.read-clipboard(); }

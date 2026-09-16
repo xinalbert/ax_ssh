@@ -15,9 +15,12 @@ impl TerminalModel {
         let grid = self.term.grid();
         let columns = grid.columns();
         let (cursor, cursor_cells) = cursor_geometry(grid, content.cursor.point);
+        let cursor_row = usize::try_from(cursor.line.0).unwrap_or(0);
         let cursor_column = cursor.column.0;
-        let cursor_visible =
-            content.display_offset == 0 && !matches!(content.cursor.shape, CursorShape::Hidden);
+        let cursor_visible = content.display_offset == 0
+            && cursor.line.0 >= 0
+            && cursor_row < grid.screen_lines()
+            && !matches!(content.cursor.shape, CursorShape::Hidden);
         let cursor_text = cursor_visible
             .then(|| &grid[cursor])
             .filter(|cell| !is_wide_continuation(cell))
@@ -30,7 +33,7 @@ impl TerminalModel {
             dirty_rows: damage.dirty_rows,
             full_refresh: damage.full_refresh,
             max_columns: columns,
-            cursor_row: cursor.line.0.max(0) as usize,
+            cursor_row,
             cursor_column,
             cursor_cells,
             cursor_visible,

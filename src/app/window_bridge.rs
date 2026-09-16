@@ -317,15 +317,19 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
 
 pub(super) fn hide_window_for_release(ui: &AppWindow) {
     if let Err(error) = ui.window().hide() {
-        tracing::debug!(%error, "window was already hidden during resource release");
+        tracing::debug!(%error, "failed to hide released window");
     }
+}
+
+fn prepare_detached_window_for_release(ui: &AppWindow, window_id: Uuid) {
+    software_presentation::remove_layout(ui, window_id);
+    release_window_resources(ui);
 }
 
 pub(super) fn release_detached_windows(detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>) {
     let windows = detached_windows.borrow_mut().drain().collect::<Vec<_>>();
     for (window_id, ui) in &windows {
-        software_presentation::remove_layout(ui, *window_id);
-        release_window_resources(ui);
+        prepare_detached_window_for_release(ui, *window_id);
         hide_window_for_release(ui);
     }
     if !windows.is_empty() {
@@ -530,12 +534,10 @@ pub(super) fn wire_window_actions(
         }
         let detached_ui = windows_for_return.borrow_mut().remove(&window_id);
         if let Some(detached_ui) = detached_ui {
-            software_presentation::remove_layout(&detached_ui, window_id);
-            release_window_resources(&detached_ui);
+            prepare_detached_window_for_release(&detached_ui, window_id);
             hide_window_for_release(&detached_ui);
         } else if let Some(ui) = ui_for_return.upgrade() {
-            software_presentation::remove_layout(&ui, window_id);
-            release_window_resources(&ui);
+            prepare_detached_window_for_release(&ui, window_id);
             hide_window_for_release(&ui);
         }
         refresh_workspace(&ui_for_return, &state_for_return);
@@ -559,15 +561,14 @@ pub(super) fn wire_window_actions(
                 }
                 let detached_ui = windows_for_close.borrow_mut().remove(&window_id);
                 if let Some(detached_ui) = detached_ui {
-                    software_presentation::remove_layout(&detached_ui, window_id);
-                    release_window_resources(&detached_ui);
-                    hide_window_for_release(&detached_ui);
+                    prepare_detached_window_for_release(&detached_ui, window_id);
                 } else if let Some(ui) = ui_for_close.upgrade() {
-                    software_presentation::remove_layout(&ui, window_id);
-                    release_window_resources(&ui);
-                    hide_window_for_release(&ui);
+                    prepare_detached_window_for_release(&ui, window_id);
                 }
             }
+            // Returning HideWindow lets Slint perform exactly one hide after
+            // this callback. With the startup lifecycle setting, that hide
+            // suspends the renderer and destroys the native Winit window.
             slint::CloseRequestResponse::HideWindow
         });
     }

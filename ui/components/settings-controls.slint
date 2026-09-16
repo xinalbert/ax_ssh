@@ -2,6 +2,7 @@ import { CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ElidedButton, ElidedLabel } from "elided-controls.slint";
 import { FlatTextInput } from "flat-text-input.slint";
+import { KeyboardEvent } from "keyboard-input.slint";
 
 export enum SettingsNavIcon {
     General,
@@ -618,7 +619,7 @@ export component ShortcutRecorder inherits FocusScope {
     in property <string> accessible-name;
     private property <string> candidate-shortcut;
 
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback format-shortcut(KeyboardEvent) -> string;
     callback recording-changed(bool);
 
     height: Theme.settings-control-height;
@@ -634,13 +635,21 @@ export component ShortcutRecorder inherits FocusScope {
             root.clear-focus();
             return EventResult.accept;
         }
-        root.candidate-shortcut = root.format-shortcut(
-            event.text,
-            event.modifiers.alt,
-            event.modifiers.control,
-            event.modifiers.meta,
-            event.modifiers.shift,
-        );
+        let input = {
+            text: event.text,
+            logical_key: event.text,
+            physical_code: "",
+            location: "standard",
+            alt: event.modifiers.alt,
+            control: event.modifiers.control,
+            meta: event.modifiers.meta,
+            shift: event.modifiers.shift,
+            is_composing: false,
+            is_repeat: false,
+            is_synthetic: false,
+            uses_native_modifiers: true,
+        };
+        root.candidate-shortcut = root.format-shortcut(input);
         if !root.candidate-shortcut.is-empty {
             root.shortcut = root.candidate-shortcut;
             root.clear-focus();

@@ -10,6 +10,11 @@ import {
     TerminalTargetHighlight,
     TerminalSelectionView,
 } from "components/terminal-grid.slint";
+import {
+    KeyboardEvent,
+    TerminalDirectKeyboardEvent,
+    TerminalKeyboardEvent,
+} from "components/keyboard-input.slint";
 
 // Rust owns the rendered terminal snapshot and connection lifecycle. The pane
 // owns only selection, focus, cursor blink, and measured layout state.
@@ -225,9 +230,10 @@ export component TerminalPane inherits Rectangle {
     private property <bool> mouse-local-selection-priority:
         root.view.mouse_local_selection_priority;
 
-    callback terminal-key(string, bool, bool, bool, bool, bool) -> bool;
-    callback terminal-key-direct(string, bool, bool, bool, bool, bool, bool) -> bool;
+    callback terminal-key(KeyboardEvent) -> bool;
+    callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
     callback resized(int, int);
+    callback geometry(length, length, length, length, length, length, length, length, length, length, int, int);
     callback presentation-layout(length, length, length, length, length);
     callback scrolled(int);
     callback mouse-event(int, int, int, int, bool, bool, bool);
@@ -236,7 +242,7 @@ export component TerminalPane inherits Rectangle {
     callback line-selection-range(int, int) -> TerminalSemanticSelection;
     callback terminal-target-at-cell(int, int, bool, bool) -> TerminalTargetHighlight;
     callback activate-terminal-target(int, int, bool, bool) -> bool;
-    callback format-shortcut(string, bool, bool, bool, bool) -> string;
+    callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
     callback pane-focus(string);
@@ -253,6 +259,8 @@ export component TerminalPane inherits Rectangle {
     private property <length> cell-height:
         max(root.font-cell-height,
             root.font-cell-height * root.terminal-line-height-percent / 100);
+    // grid-clip is the VerticalLayout's stretched content item, so this uses
+    // the pane's actual inner width after its horizontal padding.
     private property <int> terminal-columns:
         max(Theme.terminal-grid-min-columns,
             min(Theme.terminal-grid-max-columns, floor(grid-clip.width / root.cell-width)));
@@ -288,6 +296,7 @@ export component TerminalPane inherits Rectangle {
         max(1, min(root.cursor-cells,
             root.terminal-columns - root.cursor-column-in-grid));
     private property <bool> terminal-resize-pending: false;
+    private property <bool> geometry-report-pending: false;
     private property <bool> presentation-layout-pending: false;
     // A newly created pane cannot own native focus until Slint has completed
     // the current layout pass. Existing split panes focus directly.
@@ -319,7 +328,9 @@ export component TerminalPane inherits Rectangle {
     private property <int> target-pointer-column: 0;
     private property <bool> target-pointer-in-grid: false;
     private property <TerminalTargetHighlight> terminal-target-highlight: {
-        active: false, row: 0, start_column: 0, end_column: 0,
+        active: false, segments: [
+            { row: 0, start_column: 0, end_column: 0 },
+        ],
     };
     private property <bool> selection-active: root.selection-valid;
     private property <int> selection-column-count: max(1, root.content-columns);
@@ -381,9 +392,31 @@ export component TerminalPane inherits Rectangle {
         }
     }
 
+    function update-geometry-report() {
+        root.geometry(
+            root.x,
+            root.y,
+            root.width,
+            root.height,
+            grid-clip.x,
+            grid-clip.y,
+            grid-clip.width,
+            grid-clip.height,
+            root.cell-width,
+            root.cell-height,
+            root.terminal-columns,
+            root.terminal-rows,
+        );
+    }
+
     function schedule-terminal-size-update() {
         root.terminal-resize-pending = true;
+        root.geometry-report-pending = true;
         root.schedule-presentation-layout-update();
+    }
+
+    function schedule-geometry-report() {
+        root.geometry-report-pending = true;
     }
 
     function schedule-presentation-layout-update() {
@@ -414,7 +447,9 @@ export component TerminalPane inherits Rectangle {
 
     function clear-terminal-target-highlight() {
         root.terminal-target-highlight = {
-            active: false, row: 0, start_column: 0, end_column: 0,
+            active: false, segments: [
+                { row: 0, start_column: 0, end_column: 0 },
+            ],
         };
     }
 
@@ -455,7 +490,20 @@ export component TerminalPane inherits Rectangle {
         let text = root.read-clipboard();
         if root.connected && !text.is-empty {
             root.clear-selection();
-            root.terminal-key(text, false, false, false, false, false);
+            root.terminal-key({
+                text: text,
+                logical_key: text,
+                physical_code: "",
+                location: "standard",
+                alt: false,
+                control: false,
+                meta: false,
+                shift: false,
+                is_composing: false,
+                is_repeat: false,
+                is_synthetic: true,
+                uses_native_modifiers: false,
+            });
         }
         ime-input.focus();
     }
@@ -544,6 +592,8 @@ export component TerminalPane inherits Rectangle {
     changed terminal-font-size => { root.schedule-terminal-size-update(); }
     changed terminal-line-height-percent => { root.schedule-terminal-size-update(); }
     changed terminal-layout-revision => { root.schedule-terminal-size-update(); }
+    changed x => { root.schedule-geometry-report(); }
+    changed y => { root.schedule-geometry-report(); }
     changed width => { root.schedule-terminal-size-update(); }
     changed height => { root.schedule-terminal-size-update(); }
     changed terminal-id => {
@@ -566,7 +616,10 @@ export component TerminalPane inherits Rectangle {
             root.focus-input();
         }
     }
-    changed notice => { root.schedule-presentation-layout-update(); }
+    changed notice => {
+        root.schedule-geometry-report();
+        root.schedule-presentation-layout-update();
+    }
     changed presentation-layout-revision => { root.schedule-presentation-layout-update(); }
     changed software-presentation-enabled => {
         if root.software-presentation-enabled {
@@ -598,6 +651,7 @@ export component TerminalPane inherits Rectangle {
         }
     }
     changed visible => {
+        root.schedule-geometry-report();
         if root.visible && root.focused && root.connected {
             root.focus-input();
         }
@@ -646,11 +700,17 @@ export component TerminalPane inherits Rectangle {
     // display frame while the native window is being dragged. The terminal
     // keeps its current snapshot between these bounded resize requests.
     Timer {
-        running: root.terminal-resize-pending;
+        running: root.terminal-resize-pending || root.geometry-report-pending;
         interval: 16ms;
         triggered => {
-            root.terminal-resize-pending = false;
-            root.update-terminal-size();
+            if root.geometry-report-pending {
+                root.geometry-report-pending = false;
+                root.update-geometry-report();
+            }
+            if root.terminal-resize-pending {
+                root.terminal-resize-pending = false;
+                root.update-terminal-size();
+            }
         }
     }
 
@@ -735,13 +795,20 @@ export component TerminalPane inherits Rectangle {
             if !root.connected {
                 return EventResult.reject;
             }
-            let shortcut = root.format-shortcut(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-            );
+            let shortcut = root.format-shortcut({
+                text: event.text,
+                logical_key: event.text,
+                physical_code: "",
+                location: "standard",
+                alt: event.modifiers.alt,
+                control: event.modifiers.control,
+                meta: event.modifiers.meta,
+                shift: event.modifiers.shift,
+                is_composing: self.preedit-text != "",
+                is_repeat: false,
+                is_synthetic: false,
+                uses_native_modifiers: true,
+            });
             if shortcut == root.copy-selection-shortcut && root.selection-active {
                 root.copy-selection();
                 return EventResult.accept;
@@ -754,27 +821,42 @@ export component TerminalPane inherits Rectangle {
                 root.select-all-visible();
                 return EventResult.accept;
             }
-            let direct-terminal-key = root.terminal-key-direct(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-                root.option-as-meta,
-                self.preedit-text != "",
-            );
+            let direct-terminal-key = root.terminal-key-direct({
+                event: {
+                    text: event.text,
+                    logical_key: event.text,
+                    physical_code: "",
+                    location: "standard",
+                    alt: event.modifiers.alt,
+                    control: event.modifiers.control,
+                    meta: event.modifiers.meta,
+                    shift: event.modifiers.shift,
+                    is_composing: self.preedit-text != "",
+                    is_repeat: false,
+                    is_synthetic: false,
+                    uses_native_modifiers: true,
+                },
+                option_as_meta: root.option-as-meta,
+                preedit_active: self.preedit-text != "",
+            });
             if !direct-terminal-key {
                 return EventResult.reject;
             }
             root.clear-selection();
-            if root.terminal-key(
-                event.text,
-                event.modifiers.alt,
-                event.modifiers.control,
-                event.modifiers.meta,
-                event.modifiers.shift,
-                true,
-            ) {
+            if root.terminal-key({
+                text: event.text,
+                logical_key: event.text,
+                physical_code: "",
+                location: "standard",
+                alt: event.modifiers.alt,
+                control: event.modifiers.control,
+                meta: event.modifiers.meta,
+                shift: event.modifiers.shift,
+                is_composing: self.preedit-text != "",
+                is_repeat: false,
+                is_synthetic: false,
+                uses_native_modifiers: true,
+            }) {
                 return EventResult.accept;
             }
             return EventResult.reject;
@@ -790,7 +872,20 @@ export component TerminalPane inherits Rectangle {
                 self.text = "";
             } else if self.preedit-text == "" && self.text != "" {
                 root.clear-selection();
-                root.terminal-key(self.text, false, false, false, false, false);
+                root.terminal-key({
+                    text: self.text,
+                    logical_key: self.text,
+                    physical_code: "",
+                    location: "standard",
+                    alt: false,
+                    control: false,
+                    meta: false,
+                    shift: false,
+                    is_composing: false,
+                    is_repeat: false,
+                    is_synthetic: true,
+                    uses_native_modifiers: false,
+                });
                 self.text = "";
             }
         }
@@ -820,6 +915,7 @@ export component TerminalPane inherits Rectangle {
         }
 
         grid-clip := Rectangle {
+            horizontal-stretch: 1;
             vertical-stretch: 1;
             background: root.terminal-background;
             clip: true;
@@ -859,7 +955,7 @@ export component TerminalPane inherits Rectangle {
                     root.pressed-button = -1;
                     if report-mouse {
                         root.selecting = false;
-                        if button <= 2 {
+                        if button <= 2 || (button >= 7 && button <= 8) {
                             root.pressed-button = button;
                             root.mouse-event(row, column, root.pressed-button, 0,
                                 shift, alt, control);
@@ -979,15 +1075,23 @@ export component TerminalPane inherits Rectangle {
                 line-selection-request(row, column) => {
                     root.apply-line-selection(row, column);
                 }
-                scrolled(row, column, lines, shift, alt, control) => {
+                scrolled(row, column, vertical-lines, horizontal-lines, shift, alt, control) => {
                     if root.view.mouse_wheel_reporting && !shift {
-                        root.mouse-event(
-                            row,
-                            column,
-                            lines > 0 ? 3 : 4, 0, shift, alt, control);
-                    } else {
+                        if vertical-lines != 0 {
+                            root.mouse-event(
+                                row,
+                                column,
+                                vertical-lines > 0 ? 3 : 4, 0, shift, alt, control);
+                        }
+                        if horizontal-lines != 0 {
+                            root.mouse-event(
+                                row,
+                                column,
+                                horizontal-lines > 0 ? 6 : 5, 0, shift, alt, control);
+                        }
+                    } else if vertical-lines != 0 {
                         root.clear-selection();
-                        root.scrolled(lines);
+                        root.scrolled(vertical-lines);
                     }
                 }
                 copy-request => { root.copy-selection(); }

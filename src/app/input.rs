@@ -2,9 +2,10 @@ use std::cell::Cell;
 
 use ax_ssh::terminal::{TerminalKey, TerminalKeypadKey, TerminalModifiers};
 use slint::platform::Key;
-use slint::winit_030::winit::keyboard::KeyCode;
-#[cfg(target_os = "macos")]
-use slint::winit_030::winit::keyboard::{Key as WinitKey, NamedKey};
+use slint::winit_030::winit::{
+    event::KeyEvent as WinitKeyEvent,
+    keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey, PhysicalKey},
+};
 
 thread_local! {
     /// Modifier state captured from the native window event immediately before
@@ -23,6 +24,69 @@ pub(super) struct MenuShortcut {
 pub(super) struct NativeMenuShortcut {
     pub(super) key: String,
     pub(super) modifiers: TerminalModifiers,
+}
+
+/// Layout-independent key identity used by every application input consumer.
+/// Terminal encoding is deliberately deferred until the event crosses into
+/// `src/terminal/input.rs`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum ApplicationKeyboardKey {
+    Text(String),
+    Named(ApplicationKeyboardNamedKey),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ApplicationKeyboardNamedKey {
+    Return,
+    Backspace,
+    Tab,
+    Escape,
+    Up,
+    Down,
+    Right,
+    Left,
+    Insert,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Function(u8),
+    Space,
+    Shift,
+    Control,
+    Alt,
+    AltGraph,
+    CapsLock,
+    Meta,
+}
+
+/// The application-wide keyboard boundary shared by Slint and native Winit
+/// events. Logical text is layout/IME-aware; the physical code and location
+/// are retained for controls whose identity must survive NumLock and layouts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct NormalizedKeyboardInput {
+    pub(super) text: String,
+    pub(super) key: ApplicationKeyboardKey,
+    pub(super) modifiers: TerminalModifiers,
+    pub(super) physical_keycode: Option<KeyCode>,
+    pub(super) location: KeyLocation,
+    pub(super) is_composing: bool,
+    pub(super) is_repeat: bool,
+    pub(super) is_synthetic: bool,
+    pub(super) uses_native_modifiers: bool,
+}
+
+impl NormalizedKeyboardInput {
+    pub(super) fn is_physical_key_event(&self) -> bool {
+        self.uses_native_modifiers
+    }
+
+    pub(super) fn is_physical_keypad(&self) -> bool {
+        self.physical_keycode
+            .and_then(terminal_key_from_physical_keycode)
+            .is_some()
+    }
 }
 
 pub(super) fn menu_shortcut_from_setting(shortcut: &str) -> anyhow::Result<MenuShortcut> {
@@ -126,6 +190,7 @@ fn slint_menu_key_name(key: &str) -> String {
     }
 }
 
+#[cfg(test)]
 pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) -> TerminalKey {
     let special = [
         (Key::Return, TerminalKey::Return),
@@ -176,7 +241,223 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
         })
 }
 
-#[cfg(target_os = "macos")]
+fn application_key_from_slint(text: &str) -> ApplicationKeyboardKey {
+    let named_keys = [
+        (Key::Return, ApplicationKeyboardNamedKey::Return),
+        (Key::Backspace, ApplicationKeyboardNamedKey::Backspace),
+        (Key::Tab, ApplicationKeyboardNamedKey::Tab),
+        (Key::Backtab, ApplicationKeyboardNamedKey::Tab),
+        (Key::Escape, ApplicationKeyboardNamedKey::Escape),
+        (Key::UpArrow, ApplicationKeyboardNamedKey::Up),
+        (Key::DownArrow, ApplicationKeyboardNamedKey::Down),
+        (Key::RightArrow, ApplicationKeyboardNamedKey::Right),
+        (Key::LeftArrow, ApplicationKeyboardNamedKey::Left),
+        (Key::Insert, ApplicationKeyboardNamedKey::Insert),
+        (Key::Delete, ApplicationKeyboardNamedKey::Delete),
+        (Key::Home, ApplicationKeyboardNamedKey::Home),
+        (Key::End, ApplicationKeyboardNamedKey::End),
+        (Key::PageUp, ApplicationKeyboardNamedKey::PageUp),
+        (Key::PageDown, ApplicationKeyboardNamedKey::PageDown),
+        (Key::F1, ApplicationKeyboardNamedKey::Function(1)),
+        (Key::F2, ApplicationKeyboardNamedKey::Function(2)),
+        (Key::F3, ApplicationKeyboardNamedKey::Function(3)),
+        (Key::F4, ApplicationKeyboardNamedKey::Function(4)),
+        (Key::F5, ApplicationKeyboardNamedKey::Function(5)),
+        (Key::F6, ApplicationKeyboardNamedKey::Function(6)),
+        (Key::F7, ApplicationKeyboardNamedKey::Function(7)),
+        (Key::F8, ApplicationKeyboardNamedKey::Function(8)),
+        (Key::F9, ApplicationKeyboardNamedKey::Function(9)),
+        (Key::F10, ApplicationKeyboardNamedKey::Function(10)),
+        (Key::F11, ApplicationKeyboardNamedKey::Function(11)),
+        (Key::F12, ApplicationKeyboardNamedKey::Function(12)),
+        (Key::Space, ApplicationKeyboardNamedKey::Space),
+        (Key::Shift, ApplicationKeyboardNamedKey::Shift),
+        (Key::ShiftR, ApplicationKeyboardNamedKey::Shift),
+        (Key::Control, ApplicationKeyboardNamedKey::Control),
+        (Key::ControlR, ApplicationKeyboardNamedKey::Control),
+        (Key::Alt, ApplicationKeyboardNamedKey::Alt),
+        (Key::AltGr, ApplicationKeyboardNamedKey::AltGraph),
+        (Key::CapsLock, ApplicationKeyboardNamedKey::CapsLock),
+        (Key::Meta, ApplicationKeyboardNamedKey::Meta),
+        (Key::MetaR, ApplicationKeyboardNamedKey::Meta),
+    ];
+    named_keys
+        .into_iter()
+        .find_map(|(slint_key, key)| matches_slint_key(text, slint_key).then_some(key))
+        .map(ApplicationKeyboardKey::Named)
+        .unwrap_or_else(|| ApplicationKeyboardKey::Text(text.to_owned()))
+}
+
+fn application_key_from_native_key(key: &WinitKey) -> Option<ApplicationKeyboardKey> {
+    let named = match key {
+        WinitKey::Character(text) => return Some(ApplicationKeyboardKey::Text(text.to_string())),
+        WinitKey::Named(key) => key,
+        WinitKey::Dead(_) | WinitKey::Unidentified(_) => return None,
+    };
+    let key = match named {
+        NamedKey::Enter => ApplicationKeyboardNamedKey::Return,
+        NamedKey::Backspace => ApplicationKeyboardNamedKey::Backspace,
+        NamedKey::Tab => ApplicationKeyboardNamedKey::Tab,
+        NamedKey::Escape => ApplicationKeyboardNamedKey::Escape,
+        NamedKey::ArrowUp => ApplicationKeyboardNamedKey::Up,
+        NamedKey::ArrowDown => ApplicationKeyboardNamedKey::Down,
+        NamedKey::ArrowLeft => ApplicationKeyboardNamedKey::Left,
+        NamedKey::ArrowRight => ApplicationKeyboardNamedKey::Right,
+        NamedKey::Insert => ApplicationKeyboardNamedKey::Insert,
+        NamedKey::Delete => ApplicationKeyboardNamedKey::Delete,
+        NamedKey::Home => ApplicationKeyboardNamedKey::Home,
+        NamedKey::End => ApplicationKeyboardNamedKey::End,
+        NamedKey::PageUp => ApplicationKeyboardNamedKey::PageUp,
+        NamedKey::PageDown => ApplicationKeyboardNamedKey::PageDown,
+        NamedKey::F1 => ApplicationKeyboardNamedKey::Function(1),
+        NamedKey::F2 => ApplicationKeyboardNamedKey::Function(2),
+        NamedKey::F3 => ApplicationKeyboardNamedKey::Function(3),
+        NamedKey::F4 => ApplicationKeyboardNamedKey::Function(4),
+        NamedKey::F5 => ApplicationKeyboardNamedKey::Function(5),
+        NamedKey::F6 => ApplicationKeyboardNamedKey::Function(6),
+        NamedKey::F7 => ApplicationKeyboardNamedKey::Function(7),
+        NamedKey::F8 => ApplicationKeyboardNamedKey::Function(8),
+        NamedKey::F9 => ApplicationKeyboardNamedKey::Function(9),
+        NamedKey::F10 => ApplicationKeyboardNamedKey::Function(10),
+        NamedKey::F11 => ApplicationKeyboardNamedKey::Function(11),
+        NamedKey::F12 => ApplicationKeyboardNamedKey::Function(12),
+        NamedKey::Space => ApplicationKeyboardNamedKey::Space,
+        NamedKey::Shift => ApplicationKeyboardNamedKey::Shift,
+        NamedKey::Control => ApplicationKeyboardNamedKey::Control,
+        NamedKey::Alt => ApplicationKeyboardNamedKey::Alt,
+        NamedKey::AltGraph => ApplicationKeyboardNamedKey::AltGraph,
+        NamedKey::CapsLock => ApplicationKeyboardNamedKey::CapsLock,
+        NamedKey::Meta => ApplicationKeyboardNamedKey::Meta,
+        _ => return None,
+    };
+    Some(ApplicationKeyboardKey::Named(key))
+}
+
+pub(super) fn terminal_key_from_normalized_input(
+    input: &NormalizedKeyboardInput,
+) -> Option<TerminalKey> {
+    if let Some(key) = input
+        .physical_keycode
+        .and_then(terminal_key_from_physical_keycode)
+    {
+        return Some(key);
+    }
+
+    match &input.key {
+        ApplicationKeyboardKey::Text(text) => {
+            let text = if text == "-"
+                && input.modifiers.shift
+                && !input.modifiers.alt
+                && !input.modifiers.control
+                && !input.modifiers.meta
+            {
+                "_"
+            } else {
+                text
+            };
+            Some(TerminalKey::Text(text.to_owned()))
+        }
+        ApplicationKeyboardKey::Named(key) => Some(match key {
+            ApplicationKeyboardNamedKey::Return => TerminalKey::Return,
+            ApplicationKeyboardNamedKey::Backspace => TerminalKey::Backspace,
+            ApplicationKeyboardNamedKey::Tab => TerminalKey::Tab,
+            ApplicationKeyboardNamedKey::Escape => TerminalKey::Escape,
+            ApplicationKeyboardNamedKey::Up => TerminalKey::Up,
+            ApplicationKeyboardNamedKey::Down => TerminalKey::Down,
+            ApplicationKeyboardNamedKey::Right => TerminalKey::Right,
+            ApplicationKeyboardNamedKey::Left => TerminalKey::Left,
+            ApplicationKeyboardNamedKey::Insert => TerminalKey::Insert,
+            ApplicationKeyboardNamedKey::Delete => TerminalKey::Delete,
+            ApplicationKeyboardNamedKey::Home => TerminalKey::Home,
+            ApplicationKeyboardNamedKey::End => TerminalKey::End,
+            ApplicationKeyboardNamedKey::PageUp => TerminalKey::PageUp,
+            ApplicationKeyboardNamedKey::PageDown => TerminalKey::PageDown,
+            ApplicationKeyboardNamedKey::Function(number) => TerminalKey::Function(*number),
+            ApplicationKeyboardNamedKey::Space => TerminalKey::Text(" ".to_owned()),
+            ApplicationKeyboardNamedKey::Shift
+            | ApplicationKeyboardNamedKey::Control
+            | ApplicationKeyboardNamedKey::Alt
+            | ApplicationKeyboardNamedKey::AltGraph
+            | ApplicationKeyboardNamedKey::CapsLock
+            | ApplicationKeyboardNamedKey::Meta => return None,
+        }),
+    }
+}
+
+#[cfg(test)]
+pub(super) fn normalized_keyboard_input_from_slint(
+    text: &str,
+    modifiers: TerminalModifiers,
+    physical_key_event: bool,
+    is_composing: bool,
+) -> NormalizedKeyboardInput {
+    normalized_keyboard_input_from_ui(
+        text,
+        text,
+        modifiers,
+        is_composing,
+        false,
+        false,
+        physical_key_event,
+    )
+}
+
+pub(super) fn normalized_keyboard_input_from_ui(
+    text: &str,
+    logical_key: &str,
+    modifiers: TerminalModifiers,
+    is_composing: bool,
+    is_repeat: bool,
+    is_synthetic: bool,
+    uses_native_modifiers: bool,
+) -> NormalizedKeyboardInput {
+    NormalizedKeyboardInput {
+        text: text.to_owned(),
+        key: application_key_from_slint(if logical_key.is_empty() {
+            text
+        } else {
+            logical_key
+        }),
+        modifiers,
+        physical_keycode: None,
+        location: KeyLocation::Standard,
+        is_composing,
+        is_repeat,
+        is_synthetic,
+        uses_native_modifiers,
+    }
+}
+
+pub(super) fn normalized_keyboard_input_from_winit(
+    event: &WinitKeyEvent,
+    modifiers: TerminalModifiers,
+    is_synthetic: bool,
+) -> Option<NormalizedKeyboardInput> {
+    let physical_keycode = match event.physical_key {
+        PhysicalKey::Code(keycode) => Some(keycode),
+        PhysicalKey::Unidentified(_) => None,
+    };
+    let key = application_key_from_native_key(&event.logical_key)?;
+    let text = event
+        .text
+        .as_ref()
+        .map(ToString::to_string)
+        .or_else(|| event.logical_key.to_text().map(str::to_owned))
+        .unwrap_or_default();
+    Some(NormalizedKeyboardInput {
+        text,
+        key,
+        modifiers,
+        physical_keycode,
+        location: event.location,
+        is_composing: false,
+        is_repeat: event.repeat,
+        is_synthetic,
+        uses_native_modifiers: true,
+    })
+}
+
+#[cfg(test)]
 pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey> {
     let key = match key {
         WinitKey::Character(text) => return Some(TerminalKey::Text(text.to_string())),
@@ -313,13 +594,9 @@ fn format_shortcut_event(text: &str, alt: bool, control: bool, meta: bool, shift
 }
 
 pub(super) fn format_shortcut_event_with_current_modifiers(
-    text: &str,
-    alt: bool,
-    control: bool,
-    meta: bool,
-    shift: bool,
+    input: &NormalizedKeyboardInput,
 ) -> String {
-    format_shortcut_event_with_modifiers(text, normalize_event_modifiers(alt, control, meta, shift))
+    format_shortcut_event_with_modifiers(&input.text, input.modifiers)
 }
 
 fn format_shortcut_event_with_modifiers(text: &str, modifiers: TerminalModifiers) -> String {
@@ -427,6 +704,20 @@ fn current_platform_modifiers() -> Option<TerminalModifiers> {
     None
 }
 
+pub(super) fn terminal_key_is_direct_for_input(
+    input: &NormalizedKeyboardInput,
+    option_as_meta: bool,
+    preedit_active: bool,
+) -> bool {
+    terminal_key_is_direct_for_input_with_platform(
+        input,
+        option_as_meta,
+        preedit_active,
+        cfg!(target_os = "macos"),
+    )
+}
+
+#[cfg(test)]
 pub(super) fn terminal_key_is_direct(
     text: &str,
     alt: bool,
@@ -436,19 +727,45 @@ pub(super) fn terminal_key_is_direct(
     option_as_meta: bool,
     preedit_active: bool,
 ) -> bool {
-    let modifiers = normalize_event_modifiers(alt, control, meta, shift);
-    terminal_key_is_direct_for_platform(
+    let input = normalized_keyboard_input_from_ui(
         text,
-        modifiers,
-        option_as_meta,
+        text,
+        normalize_event_modifiers(alt, control, meta, shift),
         preedit_active,
-        cfg!(target_os = "macos"),
-    )
+        false,
+        false,
+        true,
+    );
+    terminal_key_is_direct_for_input(&input, option_as_meta, preedit_active)
 }
 
+#[cfg(test)]
 fn terminal_key_is_direct_for_platform(
     text: &str,
     modifiers: TerminalModifiers,
+    option_as_meta: bool,
+    preedit_active: bool,
+    apple_platform: bool,
+) -> bool {
+    let input = normalized_keyboard_input_from_ui(
+        text,
+        text,
+        modifiers,
+        preedit_active,
+        false,
+        false,
+        true,
+    );
+    terminal_key_is_direct_for_input_with_platform(
+        &input,
+        option_as_meta,
+        preedit_active,
+        apple_platform,
+    )
+}
+
+fn terminal_key_is_direct_for_input_with_platform(
+    input: &NormalizedKeyboardInput,
     option_as_meta: bool,
     preedit_active: bool,
     apple_platform: bool,
@@ -457,20 +774,22 @@ fn terminal_key_is_direct_for_platform(
     // is U+0011). A modifier press carries its own modifier state, which would
     // otherwise make it look like a terminal control chord such as Ctrl+Q.
     // Only a following non-modifier key may produce terminal input.
-    if is_slint_modifier_key(text) {
+    if is_application_modifier_key(&input.key) {
         return false;
     }
 
     let direct_modifier = if apple_platform {
-        modifiers.control || modifiers.meta || option_as_meta && modifiers.alt
+        input.modifiers.control || input.modifiers.meta || option_as_meta && input.modifiers.alt
     } else {
-        modifiers.control || modifiers.alt || modifiers.meta
+        input.modifiers.control || input.modifiers.alt || input.modifiers.meta
     };
     if preedit_active && !direct_modifier {
         return false;
     }
 
-    let key = terminal_key_from_slint(text, modifiers);
+    let Some(key) = terminal_key_from_normalized_input(input) else {
+        return false;
+    };
     if !matches!(key, TerminalKey::Text(_)) {
         return true;
     }
@@ -480,26 +799,24 @@ fn terminal_key_is_direct_for_platform(
     }
 
     // Ctrl+Alt printable text is commonly AltGr and must stay on TextInput.
-    if modifiers.control && modifiers.alt {
-        return text.is_empty() || modifiers.meta;
+    if input.modifiers.control && input.modifiers.alt {
+        return input.text.is_empty() || input.modifiers.meta;
     }
-    modifiers.control || modifiers.alt || modifiers.meta
+    input.modifiers.control || input.modifiers.alt || input.modifiers.meta
 }
 
-fn is_slint_modifier_key(text: &str) -> bool {
-    [
-        Key::Shift,
-        Key::ShiftR,
-        Key::Control,
-        Key::ControlR,
-        Key::Alt,
-        Key::AltGr,
-        Key::CapsLock,
-        Key::Meta,
-        Key::MetaR,
-    ]
-    .into_iter()
-    .any(|key| matches_slint_key(text, key))
+fn is_application_modifier_key(key: &ApplicationKeyboardKey) -> bool {
+    matches!(
+        key,
+        ApplicationKeyboardKey::Named(
+            ApplicationKeyboardNamedKey::Shift
+                | ApplicationKeyboardNamedKey::Control
+                | ApplicationKeyboardNamedKey::Alt
+                | ApplicationKeyboardNamedKey::AltGraph
+                | ApplicationKeyboardNamedKey::CapsLock
+                | ApplicationKeyboardNamedKey::Meta
+        )
+    )
 }
 
 fn normalize_slint_modifiers_for_platform(
@@ -637,6 +954,17 @@ mod tests {
             Some(TerminalKey::Keypad(TerminalKeypadKey::Enter))
         );
         assert_eq!(terminal_key_from_physical_keycode(KeyCode::KeyA), None);
+    }
+
+    #[test]
+    fn normalizes_slint_text_without_inventing_physical_identity() {
+        let input =
+            normalized_keyboard_input_from_slint("x", TerminalModifiers::default(), false, false);
+        assert_eq!(input.key, ApplicationKeyboardKey::Text("x".to_owned()));
+        assert_eq!(input.physical_keycode, None);
+        assert_eq!(input.location, KeyLocation::Standard);
+        assert!(!input.is_physical_key_event());
+        assert!(!input.is_physical_keypad());
     }
 
     #[cfg(target_os = "macos")]
@@ -927,7 +1255,8 @@ mod tests {
 
         for modifier_key in modifier_keys {
             let text = SharedString::from(modifier_key);
-            assert!(is_slint_modifier_key(text.as_str()));
+            let input = normalized_keyboard_input_from_slint(text.as_str(), modifiers, true, false);
+            assert!(is_application_modifier_key(&input.key));
             assert!(!terminal_key_is_direct_for_platform(
                 text.as_str(),
                 modifiers,

@@ -13,6 +13,7 @@ mod tests;
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
+use std::time::Duration;
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::term::Term;
@@ -22,6 +23,9 @@ use crate::terminal_dimensions::TerminalSize;
 
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
+/// A cursor-hidden redraw is normally emitted as several small PTY writes.
+/// Bound the time that its intermediate frames may remain unpublished.
+const OUTPUT_FRAME_HOLD_MAX: Duration = Duration::from_millis(250);
 
 #[derive(Clone)]
 struct TerminalEventListener {
@@ -119,6 +123,28 @@ pub struct TerminalSelectionRange {
     pub end_column: usize,
 }
 
+/// One bounded physical row participating in a logical terminal line used
+/// for short-lived target recognition.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TerminalTargetRow {
+    pub row: usize,
+    pub text: String,
+}
+
+/// Bounded logical-line text around a clicked terminal cell.
+///
+/// Consecutive rows are joined without inserting a newline when the terminal
+/// marked them with `WRAPLINE`. The context is clipped to the visible
+/// viewport and does not retain or expose the terminal grid itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TerminalTargetContext {
+    pub rows: Vec<TerminalTargetRow>,
+    pub clicked_row: usize,
+    pub clicked_character: usize,
+    pub starts_mid_logical_line: bool,
+    pub ends_mid_logical_line: bool,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerminalMouseReporting {
     pub click: bool,
@@ -126,6 +152,7 @@ pub struct TerminalMouseReporting {
     pub motion: bool,
     pub sgr: bool,
     pub utf8: bool,
+    pub urxvt: bool,
     pub alternate_scroll: bool,
 }
 
@@ -143,6 +170,12 @@ pub enum TerminalMouseButton {
     Right,
     WheelUp,
     WheelDown,
+    WheelLeft,
+    WheelRight,
+    Auxiliary8,
+    Auxiliary9,
+    Auxiliary10,
+    Auxiliary11,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,4 +211,40 @@ pub struct TerminalModel {
     snapshot_display_offset: usize,
     next_line_revision: u64,
     viewport_detached: bool,
+    output_frame_hold: OutputFrameHold,
+    mouse_encoding: MouseEncodingTracker,
+}
+
+/// The three extended mouse coordinate encodings selected through DEC private
+/// modes. `1015` is not exposed by the locked terminal parser, so AxSSH tracks
+/// all three raw mode changes to preserve their mutually-exclusive contract.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum MouseEncoding {
+    #[default]
+    Default,
+    Utf8,
+    Sgr,
+    Urxvt,
+}
+
+#[derive(Default)]
+struct MouseEncodingTracker {
+    encoding: MouseEncoding,
+    parser_state: u8,
+    parameter: u16,
+    has_parameter: bool,
+}
+
+/// Tracks DEC cursor-visibility sequences without retaining terminal output.
+///
+/// Full-screen progress applications often hide the cursor, rewrite several
+/// rows across separate transport reads, then show it again. Publishing those
+/// partial grids makes the cursor appear to jump between the rows being
+/// rewritten. This only controls presentation timing; the terminal parser
+/// continues to consume every byte immediately.
+#[derive(Default)]
+struct OutputFrameHold {
+    active: bool,
+    started_at: Option<std::time::Instant>,
+    cursor_visibility_prefix: u8,
 }

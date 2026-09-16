@@ -78,21 +78,23 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::Output { data, received_at } => {
                     let mut response_error = None;
+                    let mut presentation_hold = None;
                     if mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
                         |terminal| {
-                            if let Err(error) = process_terminal_output(terminal, &data) {
-                                response_error = Some(error);
+                            match process_terminal_output(terminal, &data) {
+                                Ok(hold) => presentation_hold = hold,
+                                Err(error) => response_error = Some(error),
                             }
                         },
                     )
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(Some(received_at));
+                        presentation.record_output(Some(received_at), presentation_hold);
                     }
                     if let Some(error) = response_error {
                         warn!(

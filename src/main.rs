@@ -3,6 +3,7 @@
 mod app;
 
 fn main() -> anyhow::Result<()> {
+    app::configure_window_lifecycle();
     let logging = ax_ssh::logging::LoggingGuard::init()?;
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),

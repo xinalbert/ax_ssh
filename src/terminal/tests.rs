@@ -20,6 +20,32 @@ fn parses_colored_output_and_carriage_return_updates() {
 }
 
 #[test]
+fn cursor_hidden_redraw_hold_survives_split_escape_sequences() {
+    let mut terminal = TerminalModel::new(20, 3, 10);
+    terminal.process(b"before");
+    assert_eq!(terminal.output_frame_hold_remaining(), None);
+
+    terminal.process(b"\x1b[?25");
+    assert_eq!(terminal.output_frame_hold_remaining(), None);
+
+    terminal.process(b"l\rafter");
+    assert!(terminal.output_frame_hold_remaining().is_some());
+
+    terminal.process(b"\x1b[?25h");
+    assert_eq!(terminal.output_frame_hold_remaining(), None);
+}
+
+#[test]
+fn cursor_hidden_redraw_hold_has_a_fixed_deadline() {
+    let mut hold = OutputFrameHold::default();
+    let started_at = std::time::Instant::now();
+    hold.observe(b"\x1b[?25l", started_at);
+
+    assert!(hold.remaining(started_at).is_some());
+    assert_eq!(hold.remaining(started_at + OUTPUT_FRAME_HOLD_MAX), None);
+}
+
+#[test]
 fn snapshots_reuse_undamaged_visible_line_identities() {
     let mut terminal = TerminalModel::new(20, 3, 10);
     terminal.process(b"first\r\nsecond");
@@ -510,6 +536,87 @@ fn encodes_x10_and_utf8_coordinates_with_bounds() {
 }
 
 #[test]
+fn urxvt_mouse_encoding_tracks_split_private_modes_and_stays_exclusive() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b[?1000h\x1b[?10");
+    assert!(!terminal.mouse_reporting().urxvt);
+
+    terminal.process(b"15h");
+    assert_eq!(
+        terminal.mouse_reporting(),
+        TerminalMouseReporting {
+            click: true,
+            drag: false,
+            motion: false,
+            sgr: false,
+            utf8: false,
+            urxvt: true,
+            alternate_scroll: true,
+        }
+    );
+    let event = TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button: TerminalMouseButton::Right,
+        column: 2,
+        row: 3,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[2;3;4M".to_vec())
+    );
+
+    terminal.process(b"\x1b[?1006h");
+    assert!(terminal.mouse_reporting().sgr);
+    assert!(!terminal.mouse_reporting().urxvt);
+
+    terminal.process(b"\x1b[?1015h\x1b[?1015l");
+    assert!(!terminal.mouse_reporting().sgr);
+    assert!(!terminal.mouse_reporting().utf8);
+    assert!(!terminal.mouse_reporting().urxvt);
+}
+
+#[test]
+fn encodes_horizontal_wheel_and_auxiliary_mouse_buttons() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b[?1000h\x1b[?1006h");
+    let event = |button| TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button,
+        column: 2,
+        row: 3,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::WheelLeft)),
+        Some(b"\x1b[<66;3;4M".to_vec())
+    );
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::WheelRight)),
+        Some(b"\x1b[<67;3;4M".to_vec())
+    );
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::Auxiliary8)),
+        Some(b"\x1b[<128;3;4M".to_vec())
+    );
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::Auxiliary11)),
+        Some(b"\x1b[<131;3;4M".to_vec())
+    );
+
+    terminal.process(b"\x1b[?1015h");
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::WheelLeft)),
+        Some(b"\x1b[66;3;4M".to_vec())
+    );
+    assert_eq!(
+        terminal.encode_mouse_event(event(TerminalMouseButton::Auxiliary9)),
+        Some(b"\x1b[129;3;4M".to_vec())
+    );
+}
+
+#[test]
 fn mouse_reporting_modes_gate_press_drag_and_motion_independently() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     let press = TerminalMouseEvent {
@@ -840,6 +947,28 @@ fn line_selection_preserves_soft_wrapped_lines() {
         ),
         "abcdefghijk"
     );
+}
+
+#[test]
+fn target_context_joins_soft_wraps_but_not_hard_breaks() {
+    let mut terminal = TerminalModel::new(16, 4, 10);
+    terminal.process(b"https://example.test/very-long/path\r\nnext");
+
+    let hard_break = terminal
+        .visible_logical_line_target_context_at_cell(3, 1)
+        .expect("hard-break line context");
+    assert_eq!(hard_break.rows.len(), 1);
+
+    let mut wrapped = TerminalModel::new(24, 4, 10);
+    wrapped.process(b"https://example.test/very-long/path");
+    let context = wrapped
+        .visible_logical_line_target_context_at_cell(0, 2)
+        .expect("soft-wrap context");
+    assert_eq!(context.rows.len(), 2);
+    assert_eq!(context.rows[0].row, 0);
+    assert_eq!(context.rows[1].row, 1);
+    assert_eq!(context.rows[0].text, "https://example.test/ver");
+    assert_eq!(context.rows[1].text, "y-long/path");
 }
 
 #[test]

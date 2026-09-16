@@ -139,6 +139,7 @@ pub(super) struct TerminalTabState {
     pub(super) worker: Option<TerminalWorker>,
     pub(super) terminal: Option<TerminalModel>,
     pending_terminal_snapshot: Option<TerminalSnapshot>,
+    published_terminal_snapshot: Option<TerminalSnapshot>,
     published_terminal_state: Option<TerminalVisibleState>,
     pub(super) status: String,
     pub(super) connected: bool,

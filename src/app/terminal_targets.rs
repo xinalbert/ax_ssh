@@ -1,8 +1,10 @@
 //! Bounded recognition of actionable terminal text.
 //!
-//! This module deliberately receives one visible terminal row at a time. It
-//! must not retain terminal content, make network requests, or inspect a
-//! worker-owned terminal buffer.
+//! This module deliberately receives only a bounded visible logical-line
+//! context. It must not retain terminal content, make network requests, or
+//! inspect a worker-owned terminal buffer.
+
+use ax_ssh::terminal::TerminalTargetContext;
 
 const MAX_TARGET_LINE_CHARS: usize = 2_048;
 const MAX_TARGET_CHARS: usize = 1_024;
@@ -20,8 +22,17 @@ pub(super) struct TerminalTargetSpan {
     pub(super) end: usize,
 }
 
-pub(super) fn terminal_target_at_cell(text: &str, column: usize) -> Option<TerminalTarget> {
-    terminal_target_span_at_cell(text, column).map(|span| span.target)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct TerminalTargetSegment {
+    pub(super) row: usize,
+    pub(super) start: usize,
+    pub(super) end: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct TerminalTargetMatch {
+    pub(super) target: TerminalTarget,
+    pub(super) segments: Vec<TerminalTargetSegment>,
 }
 
 pub(super) fn terminal_target_span_at_cell(
@@ -41,6 +52,53 @@ pub(super) fn terminal_target_span_at_cell(
 
     find_url_target(&token, start, column)
         .or_else(|| find_remote_path_target(&token, start, column))
+}
+
+pub(super) fn terminal_target_match_at_context(
+    context: &TerminalTargetContext,
+) -> Option<TerminalTargetMatch> {
+    if context.rows.is_empty() {
+        return None;
+    }
+
+    let mut text = String::new();
+    let mut clicked_row_present = false;
+    let mut row_offsets = Vec::with_capacity(context.rows.len());
+    for row in &context.rows {
+        let start = text.chars().count();
+        text.push_str(&row.text);
+        let end = text.chars().count();
+        row_offsets.push((row.row, start, end));
+        clicked_row_present |= row.row == context.clicked_row;
+    }
+
+    if !clicked_row_present || context.clicked_character >= text.chars().count() {
+        return None;
+    }
+    let span = terminal_target_span_at_cell(&text, context.clicked_character)?;
+    let total_characters = text.chars().count();
+    if (context.starts_mid_logical_line && span.start == 0)
+        || (context.ends_mid_logical_line && span.end == total_characters)
+    {
+        return None;
+    }
+
+    let mut segments = Vec::new();
+    for (row, row_start, row_end) in row_offsets {
+        let segment_start = span.start.max(row_start).saturating_sub(row_start);
+        let segment_end = span.end.min(row_end).saturating_sub(row_start);
+        if segment_start < segment_end {
+            segments.push(TerminalTargetSegment {
+                row,
+                start: segment_start,
+                end: segment_end,
+            });
+        }
+    }
+    (!segments.is_empty()).then_some(TerminalTargetMatch {
+        target: span.target,
+        segments,
+    })
 }
 
 fn token_bounds(characters: &[char], column: usize) -> Option<(usize, usize)> {
@@ -186,7 +244,8 @@ mod tests {
     #[test]
     fn identifies_web_urls_and_omits_terminal_punctuation() {
         assert_eq!(
-            terminal_target_at_cell("See https://example.test/releases/v1.2).", 16),
+            terminal_target_span_at_cell("See https://example.test/releases/v1.2).", 16)
+                .map(|span| span.target),
             Some(TerminalTarget::Url(
                 "https://example.test/releases/v1.2".to_owned()
             ))
@@ -204,33 +263,34 @@ mod tests {
     #[test]
     fn identifies_absolute_and_relative_remote_paths() {
         assert_eq!(
-            terminal_target_at_cell("open /srv/app/src/main.rs:42:7", 16),
+            terminal_target_span_at_cell("open /srv/app/src/main.rs:42:7", 16)
+                .map(|span| span.target),
             Some(TerminalTarget::RemotePath(
                 "/srv/app/src/main.rs".to_owned()
             ))
         );
         assert_eq!(
-            terminal_target_at_cell("open ../logs/service.log", 10),
+            terminal_target_span_at_cell("open ../logs/service.log", 10).map(|span| span.target),
             Some(TerminalTarget::RemotePath("../logs/service.log".to_owned()))
         );
         assert_eq!(
-            terminal_target_at_cell("open ./build/output", 8),
+            terminal_target_span_at_cell("open ./build/output", 8).map(|span| span.target),
             Some(TerminalTarget::RemotePath("./build/output".to_owned()))
         );
     }
 
     #[test]
     fn rejects_non_target_text_and_clicks_on_trimmed_suffixes() {
-        assert_eq!(terminal_target_at_cell("https://", 4), None);
-        assert_eq!(terminal_target_at_cell("relative/file.txt", 4), None);
-        assert_eq!(terminal_target_at_cell("/srv/app.rs:42", 12), None);
+        assert_eq!(terminal_target_span_at_cell("https://", 4), None);
+        assert_eq!(terminal_target_span_at_cell("relative/file.txt", 4), None);
+        assert_eq!(terminal_target_span_at_cell("/srv/app.rs:42", 12), None);
     }
 
     #[test]
     fn bounds_and_controls_prevent_untrusted_terminal_text_from_being_parsed() {
         let long = format!("/{}", "a".repeat(MAX_TARGET_CHARS + 1));
-        assert_eq!(terminal_target_at_cell(&long, 1), None);
-        assert_eq!(terminal_target_at_cell("/srv/\u{1b}[31mfile", 2), None);
+        assert_eq!(terminal_target_span_at_cell(&long, 1), None);
+        assert_eq!(terminal_target_span_at_cell("/srv/\u{1b}[31mfile", 2), None);
     }
 
     #[test]
@@ -243,5 +303,61 @@ mod tests {
                 end: 25,
             })
         );
+    }
+
+    #[test]
+    fn joins_soft_wrapped_url_and_maps_each_physical_row() {
+        let context = TerminalTargetContext {
+            rows: vec![
+                ax_ssh::terminal::TerminalTargetRow {
+                    row: 0,
+                    text: "https://example.test/very-long/".to_owned(),
+                },
+                ax_ssh::terminal::TerminalTargetRow {
+                    row: 1,
+                    text: "path?q=1".to_owned(),
+                },
+            ],
+            clicked_row: 1,
+            clicked_character: 33,
+            starts_mid_logical_line: false,
+            ends_mid_logical_line: false,
+        };
+
+        let target = terminal_target_match_at_context(&context).expect("wrapped URL");
+        assert_eq!(
+            target.target,
+            TerminalTarget::Url("https://example.test/very-long/path?q=1".to_owned())
+        );
+        assert_eq!(
+            target.segments,
+            vec![
+                TerminalTargetSegment {
+                    row: 0,
+                    start: 0,
+                    end: 31,
+                },
+                TerminalTargetSegment {
+                    row: 1,
+                    start: 0,
+                    end: 8,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn refuses_target_truncated_by_viewport_edge() {
+        let context = TerminalTargetContext {
+            rows: vec![ax_ssh::terminal::TerminalTargetRow {
+                row: 0,
+                text: "https://example.test/partial".to_owned(),
+            }],
+            clicked_row: 0,
+            clicked_character: 10,
+            starts_mid_logical_line: false,
+            ends_mid_logical_line: true,
+        };
+        assert_eq!(terminal_target_match_at_context(&context), None);
     }
 }
