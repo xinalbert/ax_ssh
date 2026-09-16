@@ -80,6 +80,10 @@ impl TerminalModel {
         self.term.mode().contains(TermMode::APP_KEYPAD)
     }
 
+    pub fn encode_paste(&self, text: &str) -> Option<Vec<u8>> {
+        super::input::encode_paste(text, self.term.mode().contains(TermMode::BRACKETED_PASTE))
+    }
+
     pub fn mouse_reporting(&self) -> TerminalMouseReporting {
         let mode = self.term.mode();
         TerminalMouseReporting {
@@ -224,7 +228,24 @@ impl TerminalModel {
         if grid.columns() == dimensions.columns && grid.screen_lines() == dimensions.rows {
             return false;
         }
+        let previous_display_offset = grid.display_offset();
+        let preserve_viewport =
+            !self.is_alternate_screen() && (self.viewport_detached || previous_display_offset > 0);
         self.term.resize(dimensions);
+        if preserve_viewport {
+            let grid = self.term.grid();
+            let target_display_offset =
+                previous_display_offset.min(grid.total_lines().saturating_sub(grid.screen_lines()));
+            let current_display_offset = grid.display_offset();
+            let target = target_display_offset.min(i32::MAX as usize) as i32;
+            let current = current_display_offset.min(i32::MAX as usize) as i32;
+            if target != current {
+                self.term.scroll_display(Scroll::Delta(target - current));
+            }
+            self.viewport_detached = target_display_offset > 0;
+        } else if self.term.grid().display_offset() == 0 {
+            self.viewport_detached = false;
+        }
         true
     }
 

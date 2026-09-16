@@ -424,6 +424,15 @@ impl TerminalWorker {
         }
     }
 
+    pub(in crate::app) fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_send_paste(data),
+            Self::Telnet(worker) => worker.request_send_paste(data),
+            Self::Serial(worker) => worker.request_send_paste(data),
+            Self::Local(worker) => worker.request_send_paste(data),
+        }
+    }
+
     pub(in crate::app) fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
         match self {
             Self::Ssh(worker) => worker.request_send_motion(data),

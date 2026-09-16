@@ -24,7 +24,9 @@ use crate::sftp::{
     SftpWriteEvent, SftpWriteOperation, validate_remote_path,
 };
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
-use crate::terminal_input::try_queue_tokio_motion;
+use crate::terminal_input::{
+    TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
+};
 
 use super::x11::{X11Dispatcher, X11Forwarding};
 use super::{SshConnection, SshError};
@@ -299,6 +301,24 @@ impl SshSessionHandle {
                 Err(anyhow::anyhow!("cannot queue terminal input: {error}"))
             }
         }
+    }
+
+    pub fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        if data.len() > TERMINAL_PASTE_MAX_BYTES {
+            anyhow::bail!("terminal paste cannot exceed {TERMINAL_PASTE_MAX_BYTES} bytes");
+        }
+        let input_sequence = self.next_input_sequence.fetch_add(1, Ordering::Relaxed);
+        let command = SshCommand::Send {
+            input_sequence,
+            queued_at: Instant::now(),
+            data,
+        };
+        self.command_tx
+            .try_send(command)
+            .map_err(|error| anyhow::anyhow!("cannot queue SSH terminal paste: {error}"))
     }
 
     /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.

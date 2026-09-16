@@ -1026,6 +1026,21 @@ fn detached_view_preserves_its_position_while_output_arrives() {
 }
 
 #[test]
+fn detached_view_preserves_its_position_across_resize() {
+    let mut terminal = TerminalModel::new(20, 3, 20);
+    for index in 0..10 {
+        terminal.process(format!("line-{index}\r\n").as_bytes());
+    }
+    assert!(terminal.scroll(2));
+    let before = terminal.snapshot();
+
+    assert!(terminal.resize(20, 4));
+    let after = terminal.snapshot();
+    assert_eq!(after.viewport_mode, TerminalViewportMode::Detached);
+    assert_eq!(after.display_offset, before.display_offset);
+}
+
+#[test]
 fn alternate_screen_resets_local_viewport_state() {
     let mut terminal = TerminalModel::new(20, 3, 20);
     terminal.process(b"one\r\ntwo\r\nthree\r\nfour");

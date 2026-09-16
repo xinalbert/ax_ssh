@@ -15,7 +15,9 @@ use uuid::Uuid;
 use crate::config::{
     SerialConfig, SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits,
 };
-use crate::terminal_input::try_queue_tokio_motion;
+use crate::terminal_input::{
+    TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
+};
 
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
 const COMMAND_CAPACITY: usize = 32;
@@ -164,6 +166,18 @@ impl SerialSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue serial input: {error}"))
     }
 
+    pub fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        if data.len() > TERMINAL_PASTE_MAX_BYTES {
+            anyhow::bail!("terminal paste cannot exceed {TERMINAL_PASTE_MAX_BYTES} bytes");
+        }
+        self.command_tx
+            .try_send(SerialCommand::Send(data))
+            .map_err(|error| anyhow::anyhow!("cannot queue serial terminal paste: {error}"))
+    }
+
     /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
     pub fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
         if data.is_empty() {
@@ -261,7 +275,14 @@ async fn run_serial_session(
             command = command_rx.recv() => {
                 match command {
                     Some(SerialCommand::Send(data)) => {
-                        if let Err(error) = port.write_all(&data).await {
+                        let write_result = async {
+                            for chunk in data.chunks(TERMINAL_INPUT_CHUNK_BYTES) {
+                                port.write_all(chunk).await?;
+                            }
+                            Ok::<_, std::io::Error>(())
+                        }
+                        .await;
+                        if let Err(error) = write_result {
                             send_serial_event(
                                 &event_tx,
                                 SerialSessionEvent::Failed(bounded_error(&error)),

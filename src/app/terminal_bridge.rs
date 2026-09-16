@@ -490,25 +490,39 @@ impl TerminalInputContext<'_> {
                     .terminal
                     .as_ref()
                     .context("active tab has no terminal model")?;
-                let application_cursor = model.application_cursor();
-                let application_keypad = model.application_keypad();
-                let Some(key) = super::input::terminal_key_from_normalized_input(&input) else {
-                    return Ok((false, false));
-                };
-                let Some(data) =
-                    encode_key_with_modes(&key, modifiers, application_cursor, application_keypad)
-                else {
-                    return Ok((false, false));
+                let data = if input.is_paste {
+                    model
+                        .encode_paste(&input.text)
+                        .context("terminal paste exceeds the bounded input limit")?
+                } else {
+                    let application_cursor = model.application_cursor();
+                    let application_keypad = model.application_keypad();
+                    let Some(key) = super::input::terminal_key_from_normalized_input(&input) else {
+                        return Ok((false, false));
+                    };
+                    let Some(data) = encode_key_with_modes(
+                        &key,
+                        modifiers,
+                        application_cursor,
+                        application_keypad,
+                    ) else {
+                        return Ok((false, false));
+                    };
+                    data
                 };
                 let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
                 {
                     let terminal = app.terminal(tab_id).context("terminal tab not found")?;
                     let worker_request_started_at = std::time::Instant::now();
-                    let request_result = terminal
+                    let worker = terminal
                         .worker
                         .as_ref()
-                        .context("active terminal has no worker")?
-                        .request_send(data);
+                        .context("active terminal has no worker")?;
+                    let request_result = if input.is_paste {
+                        worker.request_send_paste(data)
+                    } else {
+                        worker.request_send(data)
+                    };
                     worker_request_elapsed = Some(worker_request_started_at.elapsed());
                     request_result?;
                 }

@@ -21,6 +21,7 @@ pub(super) fn log_keyboard_event(input: &NormalizedKeyboardInput, route: &str, a
         composing = input.is_composing,
         repeat = input.is_repeat,
         synthetic = input.is_synthetic,
+        paste = input.is_paste,
         route,
         action,
         "keyboard event routed"
@@ -41,6 +42,7 @@ pub(super) fn log_terminal_input(input: &super::input::NormalizedKeyboardInput) 
         location = ?input.location,
         composing = input.is_composing,
         repeat = input.is_repeat,
+        paste = input.is_paste,
         route = "terminal",
         action = "send-input",
         "terminal input recognized"

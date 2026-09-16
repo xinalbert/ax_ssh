@@ -20,7 +20,9 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
-use crate::terminal_input::try_queue_sync_motion;
+use crate::terminal_input::{
+    TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_sync_motion,
+};
 
 pub const SYSTEM_SHELL: &str = "System default";
 
@@ -159,6 +161,18 @@ impl LocalShellHandle {
         self.command_tx
             .try_send(LocalShellCommand::Send(data))
             .map_err(|error| anyhow::anyhow!("cannot queue local terminal input: {error}"))
+    }
+
+    pub fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        if data.len() > TERMINAL_PASTE_MAX_BYTES {
+            anyhow::bail!("terminal paste cannot exceed {TERMINAL_PASTE_MAX_BYTES} bytes");
+        }
+        self.command_tx
+            .try_send(LocalShellCommand::Send(data))
+            .map_err(|error| anyhow::anyhow!("cannot queue local terminal paste: {error}"))
     }
 
     /// Returns `false` when a pointer-motion frame is dropped under normal backpressure.
@@ -512,10 +526,12 @@ fn drive_local_shell(
         };
         match command_rx.recv_timeout(poll_interval) {
             Ok(LocalShellCommand::Send(data)) => {
-                writer
-                    .write_all(&data)
-                    .and_then(|_| writer.flush())
-                    .context("failed to write local PTY input")?;
+                for chunk in data.chunks(TERMINAL_INPUT_CHUNK_BYTES) {
+                    writer
+                        .write_all(chunk)
+                        .context("failed to write local PTY input")?;
+                }
+                writer.flush().context("failed to flush local PTY input")?;
             }
             Ok(LocalShellCommand::Wake) => {}
             Ok(LocalShellCommand::ReaderClosed) => {

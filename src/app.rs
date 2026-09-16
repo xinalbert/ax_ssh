@@ -46,8 +46,9 @@ use self::credential_tasks::{
     save_password,
 };
 use self::input::{
-    format_shortcut_event_with_current_modifiers, menu_shortcut_from_setting,
-    normalized_keyboard_input_from_ui, terminal_input_modifiers, terminal_key_is_direct_for_input,
+    UiKeyboardInputMetadata, format_shortcut_event_with_current_modifiers,
+    menu_shortcut_from_setting, normalized_keyboard_input_from_ui, terminal_input_modifiers,
+    terminal_key_is_direct_for_input,
 };
 use self::panes::{
     MAX_TERMINAL_PANES, PaneCommand, PaneDirection, PaneDividerPlacement, PaneLayout,
@@ -131,10 +132,13 @@ fn normalized_keyboard_input_from_slint_event(
             event.shift,
             event.uses_native_modifiers,
         ),
-        event.is_composing,
-        event.is_repeat,
-        event.is_synthetic,
-        event.uses_native_modifiers,
+        UiKeyboardInputMetadata {
+            is_composing: event.is_composing,
+            is_repeat: event.is_repeat,
+            is_synthetic: event.is_synthetic,
+            is_paste: event.is_paste,
+            uses_native_modifiers: event.uses_native_modifiers,
+        },
     )
 }
 

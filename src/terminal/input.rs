@@ -1,5 +1,7 @@
 //! Terminal key encoding independent from the Slint input event types.
 
+use crate::terminal_input::TERMINAL_PASTE_MAX_BYTES;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalKey {
     Text(String),
@@ -85,6 +87,48 @@ pub fn encode_key_with_modes(
         application_keypad,
         TerminalPlatform::current(),
     )
+}
+
+/// Encode a clipboard paste as one bounded terminal input transaction.
+///
+/// DEC bracketed paste keeps the wrapper around the complete payload, rather
+/// than around individual transport chunks. Newlines are normalized to CR and
+/// ESC is removed before the bytes cross the worker boundary.
+pub fn encode_paste(text: &str, bracketed: bool) -> Option<Vec<u8>> {
+    let mut normalized = String::with_capacity(text.len());
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '\x1b' => {}
+            '\r' => {
+                normalized.push('\r');
+                if characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+            }
+            '\n' => normalized.push('\r'),
+            character => normalized.push(character),
+        }
+    }
+    if normalized.is_empty() || normalized.len() > TERMINAL_PASTE_MAX_BYTES {
+        return None;
+    }
+
+    let wrapper_bytes = if bracketed { 12 } else { 0 };
+    let total_bytes = normalized.len().checked_add(wrapper_bytes)?;
+    if total_bytes > TERMINAL_PASTE_MAX_BYTES {
+        return None;
+    }
+
+    let mut bytes = Vec::with_capacity(total_bytes);
+    if bracketed {
+        bytes.extend_from_slice(b"\x1b[200~");
+    }
+    bytes.extend_from_slice(normalized.as_bytes());
+    if bracketed {
+        bytes.extend_from_slice(b"\x1b[201~");
+    }
+    Some(bytes)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,6 +405,29 @@ fn encode_control_text(text: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paste_normalizes_lines_and_removes_escape_bytes() {
+        assert_eq!(
+            encode_paste("one\r\ntwo\nthree\x1b", false),
+            Some(b"one\rtwo\rthree".to_vec())
+        );
+    }
+
+    #[test]
+    fn bracketed_paste_wraps_the_complete_payload() {
+        assert_eq!(
+            encode_paste("one\ntwo", true),
+            Some(b"\x1b[200~one\rtwo\x1b[201~".to_vec())
+        );
+    }
+
+    #[test]
+    fn paste_rejects_empty_or_overlarge_payloads() {
+        assert_eq!(encode_paste("\x1b", false), None);
+        let over_limit = "x".repeat(TERMINAL_PASTE_MAX_BYTES + 1);
+        assert_eq!(encode_paste(&over_limit, false), None);
+    }
 
     #[test]
     fn encodes_text_return_backspace_and_navigation() {

@@ -3,6 +3,9 @@ use std::sync::mpsc::{SyncSender, TrySendError};
 use anyhow::Result;
 use tokio::sync::mpsc;
 
+pub(crate) const TERMINAL_INPUT_CHUNK_BYTES: usize = 16 * 1024;
+pub(crate) const TERMINAL_PASTE_MAX_BYTES: usize = 4 * 1024 * 1024;
+
 /// Queue lossy pointer motion without consuming the last Tokio command slot.
 pub(crate) fn try_queue_tokio_motion<T>(
     sender: &mpsc::Sender<T>,

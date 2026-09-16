@@ -125,7 +125,14 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             "SSH worker dequeued terminal input"
                         );
                         let send_started_at = Instant::now();
-                        if let Err(error) = shell.send(data).await {
+                        let send_result = async {
+                            for chunk in data.chunks(TERMINAL_INPUT_CHUNK_BYTES) {
+                                shell.send(chunk.to_vec()).await?;
+                            }
+                            Ok::<_, anyhow::Error>(())
+                        }
+                        .await;
+                        if let Err(error) = send_result {
                             tracing::debug!(
                                 target: LATENCY_TARGET,
                                 event = "ssh-input",

@@ -74,6 +74,16 @@ pub(super) struct NormalizedKeyboardInput {
     pub(super) is_composing: bool,
     pub(super) is_repeat: bool,
     pub(super) is_synthetic: bool,
+    pub(super) is_paste: bool,
+    pub(super) uses_native_modifiers: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct UiKeyboardInputMetadata {
+    pub(super) is_composing: bool,
+    pub(super) is_repeat: bool,
+    pub(super) is_synthetic: bool,
+    pub(super) is_paste: bool,
     pub(super) uses_native_modifiers: bool,
 }
 
@@ -395,10 +405,11 @@ pub(super) fn normalized_keyboard_input_from_slint(
         text,
         text,
         modifiers,
-        is_composing,
-        false,
-        false,
-        physical_key_event,
+        UiKeyboardInputMetadata {
+            is_composing,
+            uses_native_modifiers: physical_key_event,
+            ..UiKeyboardInputMetadata::default()
+        },
     )
 }
 
@@ -406,10 +417,7 @@ pub(super) fn normalized_keyboard_input_from_ui(
     text: &str,
     logical_key: &str,
     modifiers: TerminalModifiers,
-    is_composing: bool,
-    is_repeat: bool,
-    is_synthetic: bool,
-    uses_native_modifiers: bool,
+    metadata: UiKeyboardInputMetadata,
 ) -> NormalizedKeyboardInput {
     NormalizedKeyboardInput {
         text: text.to_owned(),
@@ -421,10 +429,11 @@ pub(super) fn normalized_keyboard_input_from_ui(
         modifiers,
         physical_keycode: None,
         location: KeyLocation::Standard,
-        is_composing,
-        is_repeat,
-        is_synthetic,
-        uses_native_modifiers,
+        is_composing: metadata.is_composing,
+        is_repeat: metadata.is_repeat,
+        is_synthetic: metadata.is_synthetic,
+        is_paste: metadata.is_paste,
+        uses_native_modifiers: metadata.uses_native_modifiers,
     }
 }
 
@@ -453,6 +462,7 @@ pub(super) fn normalized_keyboard_input_from_winit(
         is_composing: false,
         is_repeat: event.repeat,
         is_synthetic,
+        is_paste: false,
         uses_native_modifiers: true,
     })
 }
@@ -731,10 +741,11 @@ pub(super) fn terminal_key_is_direct(
         text,
         text,
         normalize_event_modifiers(alt, control, meta, shift),
-        preedit_active,
-        false,
-        false,
-        true,
+        UiKeyboardInputMetadata {
+            is_composing: preedit_active,
+            uses_native_modifiers: true,
+            ..UiKeyboardInputMetadata::default()
+        },
     );
     terminal_key_is_direct_for_input(&input, option_as_meta, preedit_active)
 }
@@ -751,10 +762,11 @@ fn terminal_key_is_direct_for_platform(
         text,
         text,
         modifiers,
-        preedit_active,
-        false,
-        false,
-        true,
+        UiKeyboardInputMetadata {
+            is_composing: preedit_active,
+            uses_native_modifiers: true,
+            ..UiKeyboardInputMetadata::default()
+        },
     );
     terminal_key_is_direct_for_input_with_platform(
         &input,
