@@ -141,6 +141,10 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   Inline main-window actions must pass their Tab UUID directly to that handler
   rather than relying on callback order.
 - Keep terminal input, output batches, event queues, and scrollback bounded.
+  Clipboard paste is a single typed `KeyboardEvent` transaction with a 4 MiB
+  encoded limit. Normalize CRLF/LF to CR, strip ESC, apply DEC 2004 wrappers
+  around the complete payload, and let each transport write the accepted bytes
+  in bounded 16 KiB chunks.
 - Keep SFTP on a child subsystem channel of the authenticated SSH worker. Do
   not expose the russh handle or `RawSftpSession` to application state or Slint.
   SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
@@ -183,6 +187,10 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   Never open or probe a device during automatic discovery; only an explicit
   connect action may resolve the saved identity and create a device worker.
   Serial resize changes the local terminal grid only.
+- Preserve a detached main-screen terminal viewport's bounded display offset
+  across model resize. A newly mounted `TerminalPane` must settle its layout
+  before its first resize callback so a transient minimum grid cannot reset a
+  retained Tab's scroll position.
 - `vendor/vt100` is the minimal local patch for locked `vt100 0.16.2` wide-cell
   shrinking. Keep its MIT files, change only the documented resize path with a
   regression test, and remove the patch when an upstream release contains it.
@@ -430,7 +438,8 @@ bounded scrollback, terminal control/navigation encoding, legacy appearance
 migration into versioned settings, duplicate-profile tab isolation, local key
 discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
 application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
-events, Apple modifier normalization, Telnet negotiation/CRLF/NAWS behavior,
+events, Apple modifier normalization, bracketed-paste normalization and size
+limits, detached viewport preservation across resize, Telnet negotiation/CRLF/NAWS behavior,
 stable Serial USB identity matching, and duplicate direct-connection attempt
 isolation. SFTP tests cover remote-path/name validation, fragmented and
 oversized packet frames, per-Tab snapshot isolation, browser event recovery,

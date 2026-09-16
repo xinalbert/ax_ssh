@@ -105,7 +105,9 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
   detached 原生标题显示连接名，macOS 同一行标题栏的纯图标返回按钮通过 Tooltip/无障碍描述说明
   用途，并调用既有路由 handler。主窗口
   Tab 内联动作必须把 Tab UUID 直接传入该 handler，不得依赖多个 callback 的调用顺序。
-- 终端输入、输出批次、事件队列和 scrollback 都必须有上限。
+- 终端输入、输出批次、事件队列和 scrollback 都必须有上限。剪贴板粘贴必须作为一个有类型的
+  `KeyboardEvent` 事务，编码后上限为 4 MiB；CRLF/LF 规范化为 CR、移除 ESC，DEC 2004 时把完整
+  payload 包在 bracketed-paste wrapper 中，各 transport 再按有界 16 KiB 分块写出。
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
   `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
   必须保留与终端 Tab 相同的主机密钥和凭据门禁。增加文件操作时必须保留入站 packet、路径/名称、
@@ -130,6 +132,8 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
   只有对端接受后才发送 NAWS。Telnet profile 不得新增凭据持久化。
 - Serial 枚举必须只读取元数据并在 UI 线程外运行；自动发现期间绝不打开或探测设备，
   只有用户明确连接后才能解析已保存身份并创建设备 worker。Serial resize 只改变本地终端网格。
+- 主屏 Detached 终端在模型 resize 后必须保留有界 display offset。新建 `TerminalPane` 必须先等待布局稳定再发
+  首个 resize callback，避免瞬时最小网格重置已保留 Tab 的滚动位置。
 - `vendor/vt100` 是锁定 `vt100 0.16.2` 宽字符缩窄问题的最小本地补丁。保留其中的 MIT
   文件；只可在有回归测试时调整已说明的 resize 路径，并在上游发布对应修复后移除该补丁。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
@@ -322,7 +326,8 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
 发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
-方向键、Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键还原、Telnet
+方向键、bracketed-paste 规范化与上限、resize 后 Detached 视口保持、
+Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键还原、Telnet
 协商/CRLF/NAWS、Serial USB 稳定身份匹配和直连 attempt 隔离。SFTP 测试覆盖远端
 路径/名称校验、分片与超大 packet frame、逐 Tab 快照隔离、浏览事件恢复、regular file
 元数据/路径检查、有界分块下载、截断、取消、私有缓存发布/权限/清理、transfer 状态、pending

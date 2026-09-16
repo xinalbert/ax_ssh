@@ -24,6 +24,7 @@
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
 | RENDERER1 | completed | renderer 选择/回退、Metal/窗口/fault 诊断与双语契约 | Rust 定向回归、locked/offline Cargo 门禁和差异检查 | Skia stderr-only shader source 不伪装成可拦截错误；只记录有界应用侧 fault。 |
+| TERMVIEW1 | completed | Tab 切换时保留终端 detached viewport，并统一长文本粘贴事务 | 终端/输入定向回归、Slint/Cargo 离线门禁和差异检查 | Rust `TerminalModel` 保留 resize 后的 `display_offset`；paste 通过统一 `KeyboardEvent`，各 transport 以 16 KiB 分块写出。 |
 
 ## 已完成
 
@@ -36,6 +37,8 @@
 - 已将 hold deadline 接入 Local、SSH、Telnet 与 Serial monitor，完成后以现有 latest-frame snapshot 路径发布最新内容。
 - 已将左键双击从语义单词选择改接为既有的逻辑行选择；连续软换行的物理行会一并选中，硬换行仍为边界。
 - 已实现互斥的 1005/1006/1015 鼠标编码状态、xterm 横向滚轮 6/7、Back/Forward 侧键 8/9 与有界辅助按键 10/11 编码；未分类硬件按键不作不可靠猜测。
+- 已修复大量输出 Tab 切换后的视口回退：主屏 Detached `TerminalModel` 在 resize 后恢复有界 `display_offset`，新建 `TerminalPane` 首次 resize 等待两个 frame，避免瞬时最小网格触发重排。
+- 已将长文本粘贴接入统一 `KeyboardEvent.is_paste`；终端模型执行 CRLF/LF 到 CR、ESC 清理和 DEC 2004 完整 wrapper，4 MiB 上限跨越四类 transport，底层写出按 16 KiB 分块。
 
 ## 验证
 

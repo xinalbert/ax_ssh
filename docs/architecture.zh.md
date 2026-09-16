@@ -110,6 +110,9 @@ mouse reporting 的 TUI；指针一旦移动就取消该候选并保持本地选
 `AlternateScreen` 视口策略。输出在 Detached 时保持用户查看的历史位置，键盘输入/粘贴回到底部，进入或
 退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
 和 mode，UI 不需要从几何值猜测用户意图，也可以据此提供返回底部或未读输出提示。
+Rust 模型在 Tab 激活和 pane 重建之间仍是视口状态的 owner；主屏 Detached 视口发生 resize 后会在
+`Term::resize` 完成后恢复有界 `display_offset`，不会把用户重置到实时底部或最旧可用行。新建
+`TerminalPane` 会等待两个 frame 再首次上报 resize，避免布局稳定前的最小网格先改写终端模型。
 对于 identity 不变的可见终端，`TerminalModel` 使用上游 `TermDamage` 和稳定的
 `Arc<TerminalStyledLine>` identity，只重建受损的可见行。resize、scrollback offset 变化和上游 full
 damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复用旧行。UI renderer 按 64-bit 行
@@ -356,8 +359,11 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    Windows/Linux 保持 Alt
    终端输入，同时 Ctrl+Alt 的可打印文字可保留为 AltGr 文本。普通 `Ctrl+C` 保留为 PTY
    输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
-   使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为
-   有界 shell 输入发送；默认的可选右键行为根据是否存在选区选择复制或粘贴。启用
+   使用 `Ctrl+Shift+C/V`。工作区命令使用平台主修饰键。选区复制留在 UI，粘贴内容作为有界 shell 输入发送。
+   粘贴是一个 `KeyboardEvent` 事务：终端模型移除 ESC 字节，把 CRLF/LF 规范化为 CR；DEC 2004 激活时，
+   将完整 payload 包在 `CSI 200~`/`CSI 201~` 中。空 payload 和超过 4 MiB 的 payload 会被拒绝；worker
+   队列只接收一次有界事务，各 transport 再按 16 KiB 分块写出，因此分块不会破坏 bracketed-paste 的完整包围语义。
+   默认的可选右键行为根据是否存在选区选择复制或粘贴。启用
    `copy_selection_on_select` 后，完成鼠标选区和 Select All 都在本地复制，直接右击始终粘贴；
    此模式覆盖独立的右键偏好，选区和剪贴板文字仍不会离开 Slint。
    活动终端报告 connected 前，原生文字/IME 和应用终端按键路由都不可交互；Rust bridge 会再次
@@ -403,7 +409,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 补丁保持锁定
    的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
    同时覆盖普通与备用屏幕。`TerminalModel` 将高度变化交给锁定的
-   `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。
+   `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。主屏 Detached
+   视口在 resize 后也恢复有界 display offset；Follow 和备用屏继续保留各自的底部/备用屏语义。
    历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
    空白历史来强制将光标置于新底边。缩小时、备用屏、活动滚动区域、非底行光标和用户正在查看
    scrollback 时保持上游 resize 语义。`TerminalSnapshot` 只携带有样式的可见行及光标/mouse 元数据，
@@ -420,8 +427,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    `1x1` 最小值，但共享 `300x100` 最大值，既允许窗口紧凑缩小，也不会向 PTY 发出非法的零尺寸 resize。窄屏时可通过
    现有侧栏收起动作优先为终端让出列数。
    `TerminalPane` 会把测得的网格、配置字体度量、终端 Tab 身份和连接状态变化合并到
-   下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，因此已连接
-   pane 在首次稳定布局时无需等待后续窗口或分隔线 resize 就会使用最终网格。Settings 修改
+   下一次 UI 轮转后，再请求一次最终 PTY 尺寸。初始化也会安排同一合并同步，并等待两个 frame
+   后再发送，因此已连接 pane 在首次稳定布局时不会先用瞬时最小尺寸 resize 模型。Settings 修改
    字体后返回已连接终端时，与窗口缩放仍走同一条当前网格更新路径。列数为
    `floor(grid-content-width / cell-width)`，并夹位到共享的 10–300 范围。
    `grid-content-width` 指 pane `VerticalLayout` 中横向 stretch 的 `grid-clip` 内容项宽度，

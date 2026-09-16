@@ -133,6 +133,12 @@ leaving alternate screen clears local scrollback follow state, and mouse
 reporting does not change the local viewport. The snapshot exposes bounded
 offset and mode metadata so the UI can add return-to-bottom or unread-output
 affordances without inferring user intent from geometry alone.
+The Rust model remains the owner across Tab activation and pane recreation;
+when a main-screen detached viewport is resized, it restores the bounded
+`display_offset` after `Term::resize` instead of resetting the user to the
+live bottom or the oldest available row. A new `TerminalPane` delays its
+initial resize report for two frames so a transient minimum grid cannot
+rewrite the terminal model during layout settlement.
 For an identity-preserving visible terminal, `TerminalModel` uses upstream
 `TermDamage` and stable `Arc<TerminalStyledLine>` identities to rebuild only
 damaged visible rows. Resize, scrollback-offset changes, and full upstream
@@ -571,7 +577,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    the terminal is focused; `Ctrl+C` remains PTY input. Clipboard actions keep
    `Cmd+C/V` on macOS and `Ctrl+Shift+C/V` elsewhere. Workspace commands use the
    platform modifier. Selection copy remains local while paste becomes bounded
-   shell input. The default optional right-click action chooses between them
+   shell input. Paste is one `KeyboardEvent` transaction: the terminal model
+   removes ESC bytes, normalizes CRLF/LF to CR, and, when DEC 2004 is active,
+   wraps the complete payload in `CSI 200~`/`CSI 201~`. Empty payloads and
+   payloads over 4 MiB are rejected; the worker queue accepts the bounded
+   transaction once and each transport writes it in 16 KiB chunks, so chunking
+   never splits the bracketed-paste semantic wrapper. The default optional right-click action chooses between them
    based on selection state. When `copy_selection_on_select` is enabled, a
    completed pointer selection and Select All copy locally, and direct
    right-click always pastes; this mode supersedes the separate right-click
@@ -647,7 +658,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    API but clears a wide character whose continuation cell would be removed
    during a column shrink, for both normal and alternate screens. `TerminalModel`
    delegates height changes to the locked `alacritty_terminal::Term::resize`:
-   growth restores only actual scrollback rows above the viewport. When history
+   growth restores only actual scrollback rows above the viewport. A detached
+   main-screen viewport also restores its bounded display offset after resize;
+   Follow and alternate-screen views retain their existing bottom/alternate
+   semantics. When history
    is exhausted, existing primary-screen content remains top-aligned and newly
    exposed blank rows stay below it; the model must not scroll content down or
    synthesize blank history to force the cursor to the new bottom edge. Shrinks,
@@ -677,8 +691,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
    `TerminalPane` coalesces changes to its measured grid, configured font
    metrics, terminal-tab identity, and connection state until the next
    UI turn, then requests one final PTY size. Its initialization also schedules
-   that same coalesced update, so an already-connected pane reaches its settled
-   initial grid without waiting for a later window or divider resize. This keeps
+   that same coalesced update and waits two frames before sending it, so an
+   already-connected pane reaches its settled initial grid without allowing a
+   transient minimum size to resize the model first. This keeps
    a Settings font change and a later return to a connected terminal on the
    same current-grid path as a window resize. Its column count is
    `floor(grid-content-width / cell-width)`,

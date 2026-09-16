@@ -159,6 +159,7 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-09-16 终端 Tab 激活不应因短暂 Pane 重建而丢失视口；`TerminalModel` 是每个运行时 Tab 的 scrollback/display offset owner，主屏 Detached resize 后恢复有界 offset，`TerminalPane` 首次 resize 延迟两个 frame。粘贴沿统一 `KeyboardEvent.is_paste` 进入终端模型，DEC 2004 wrapper 包住完整 payload，四类 worker 以 16 KiB 分块写出并共享 4 MiB 上限；不改变 SSH trust、凭据或 transport 所有权。
 - 最近依据：2026-09-15 为间歇性 terminal pane 右侧空白增加 `terminal-geometry` 诊断；`TerminalPane` 在合并布局后报告 pane/grid 坐标、cell 尺寸与列行数，`WorkspaceShell` 按主窗口或 detached offset 转发，`src/app/terminal_bridge.rs` 对照 Slint physical 与 Winit inner window size，并按 0.1 logical pixel 去重记录右/下余量和 fractional cell remainder。记录上限为 256 个 pane，且不包含终端文字、主机/路径、profile 标签或凭据。
 - 最近依据：2026-08-12 macOS detached 窗口保留原生标题栏但将其设为透明并染为当前客户区表面色，Terminal 使用 `terminal-background`、SFTP 使用 `Theme.background`，消除标题栏断层；Return 使用系统 `rectangle.on.rectangle` 和 AppKit 多文档 fallback，与 Tab 的窗口转移语义一致。Settings preview/save 将既有 `AppSettings` 同步到 live detached UI，再仅以其解析后的 `Color` 刷新 AppKit 标题栏。该外观桥接不持有主题、window router、worker、terminal buffer、SSH trust 或凭据。
 - 最近依据：2026-08-12 `TerminalPane` 取消自身 focused 边框；复用组件的 terminal identity、分屏 focused、连接、可见性和 divider release 直接聚焦既有透明 IME proxy，仅新建 pane 在首轮布局后执行一次状态重验和聚焦。`AppWindow` 不绘制额外客户区窗口框线；分屏 pane、worker、终端缓冲区、SSH trust 和凭据边界不变。
