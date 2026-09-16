@@ -1536,10 +1536,14 @@ metadata validator. There is no Create or Retry workflow, tag CI dispatch, or
 polling chain. The release workflow builds Windows x86_64, Linux
 x86_64/aarch64, and arm64/x86_64 macOS binaries; it assembles a universal macOS
 bundle and retains `assets/fonts/`, icons, and the independent license notices
-in each applicable package. CI writes the shared target-specific Cargo cache
-only after a successful default-branch run; failed, pull-request, and tag jobs
-cannot save it, while release jobs restore but never write the cache. The
-workflow does not read or package
+in each applicable package. CI independently checks, lints, and links the
+Windows x86_64, Linux x86_64/aarch64, and macOS arm64/x86_64 targets. Each
+matrix job runs target-specific `cargo check`, strict all-target Clippy, and
+`cargo build`; tests run only when the target is native to its GitHub runner,
+so the Intel macOS job compiles but does not execute on an Apple Silicon
+runner. CI writes the shared target-specific Cargo cache only after a
+successful default-branch run; failed, pull-request, and tag jobs cannot save
+it, while release jobs restore but never write the cache. The workflow does not read or package
 `third_package/axshell`. Before publication, the workflow gives
 `scripts/generate_release_highlights.py` only the checked-out tag history and
 repository URL; the script returns Markdown, not application state or release

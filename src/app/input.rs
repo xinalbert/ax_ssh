@@ -467,7 +467,7 @@ pub(super) fn normalized_keyboard_input_from_winit(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey> {
     let key = match key {
         WinitKey::Character(text) => return Some(TerminalKey::Text(text.to_string())),

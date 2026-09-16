@@ -352,6 +352,12 @@ failed jobs and pull-request/tag runs cannot save it. Release jobs restore that
 cache but never save into it. The cache key includes the target triple, Rust
 version, and `Cargo.lock` fingerprint, so a changed lockfile or different
 architecture cannot reuse an incompatible cache.
+CI independently checks, lints, and links Windows x86_64, Linux x86_64/aarch64,
+and macOS arm64/x86_64. Every matrix job runs `cargo check --target`, strict
+`cargo clippy --all-targets --target`, and `cargo build --target`; tests use
+`cargo test --target` only when that target is native to its GitHub runner. The
+Intel macOS job therefore compiles but does not execute x86_64 tests on the
+Apple Silicon runner.
 Releases always compile a fresh `--release --locked` binary and never publish
 CI's check or debug artifacts.
 

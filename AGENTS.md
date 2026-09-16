@@ -49,6 +49,29 @@ Tokio receivers, locks, or unbounded terminal buffers to Slint.
   ownership, cancellation, and shutdown behavior; use bounded channels for
   streams and terminal data.
 
+## Platform Compilation And CI
+
+- Treat every target in `.github/workflows/ci.yml` as a first-class build
+  surface. A platform-specific change must remain warning-free when its item,
+  test target, and binary target are compiled for every CI target.
+- Keep a platform-specific item's declaration, imports, callers, and tests in
+  the same `cfg` boundary. If an internal method is only called by one
+  platform path, gate the method itself; do not retain a cross-platform wrapper
+  solely for that caller.
+- Make `mut` platform-specific when assignment only exists in a platform `cfg`
+  block. Use mutually exclusive cfg bindings instead of a universally mutable
+  binding that is unused on other targets.
+- Do not suppress `dead_code` or `unused_mut` with `allow`/`expect` merely to
+  satisfy another platform. Remove obsolete code or express its true platform
+  boundary with `cfg`.
+- CI must keep target-specific `cargo check`, strict `cargo clippy
+  --all-targets`, and `cargo build` steps for every matrix target. Run `cargo
+  test --target` only on a runner native to that target; a non-native target
+  must still compile and link, but is not treated as a runnable test target.
+- When local tooling lacks another platform's SDK or linker, run the applicable
+  native checks and record that limitation. Do not weaken the target matrix or
+  replace its native CI validation with an unverified cross-compile claim.
+
 ## Slint Rules
 
 - Compile the single UI entry `ui/app.slint` from `build.rs`; compose additional

@@ -265,6 +265,11 @@ git push origin 2026-08-12
 CI 只在默认分支成功后写入共享 Cargo cache，失败、PR 和 tag job 不会写入；发布 job 只恢复
 该 cache，不会写回。缓存键包含 target triple、Rust 版本和 `Cargo.lock` 指纹，所以锁文件变更
 或架构不同都不会复用不兼容的缓存。
+CI 会分别检查、lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64。
+每个 matrix job 都执行 `cargo check --target`、严格的
+`cargo clippy --all-targets --target` 和 `cargo build --target`；只有 target 与 GitHub runner
+原生匹配时才执行 `cargo test --target`。因此 Intel macOS job 会编译，但不会在 Apple Silicon
+runner 上执行 x86_64 测试。
 发布仍会重新执行 `--release --locked` 编译，绝不把 CI 的 check 或 debug 产物作为发行物。
 
 构建前会校验推送的 tag 确实是 annotated release tag，并确认 Cargo package、锁文件和 macOS bundle

@@ -921,9 +921,12 @@ version 保持 `YYYY.M.D`。`scripts/release_version.py sync` 会在提交前更
 再由 `scripts/release_version.py` 严格校验日期和所有版本表示后构建。不存在 Create 或 Retry workflow、tag CI
 dispatch 或轮询链路；失败时可在 GitHub Actions 中重跑同一 tag 的 Release run，tag 不会被移动。
 发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，以及 arm64/x86_64 macOS 二进制；随后合并
-macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 只在默认分支
-成功后写入按 target 隔离的共享 Cargo cache，失败、PR 和 tag job 不会写入；发布 job 只恢复该缓存，
-并重新构建锁定的 release 二进制。构建前会校验所有版本表示一致，且不会读取或打包
+macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 会分别检查、
+lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64 target。每个 matrix job
+执行 target 专属的 `cargo check`、严格的 all-target Clippy 与 `cargo build`；仅当 target 与 GitHub
+runner 原生匹配时运行测试，因此 Intel macOS job 会编译，但不会在 Apple Silicon runner 上执行。
+CI 只在默认分支成功后写入按 target 隔离的共享 Cargo cache，失败、PR 和 tag job 不会写入；发布 job
+只恢复该缓存，并重新构建锁定的 release 二进制。构建前会校验所有版本表示一致，且不会读取或打包
 `third_package/axshell`。
 发布前，workflow 只向 `scripts/generate_release_highlights.py` 提供已检出的 tag 历史和仓库 URL；
 该脚本只返回 Markdown，不拥有应用状态或发行资产。其去重的分类提交摘要作为 Release 正文前缀，

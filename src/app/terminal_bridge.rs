@@ -319,7 +319,15 @@ pub(super) fn install_terminal_keypad_input_hook(
                     return EventResult::Propagate;
                 }
                 let modifiers = modifiers_for_event.get();
+                #[cfg(target_os = "macos")]
                 let mut physical_modifiers = TerminalModifiers {
+                    alt: modifiers.alt_key(),
+                    control: modifiers.control_key(),
+                    meta: modifiers.super_key(),
+                    shift: modifiers.shift_key(),
+                };
+                #[cfg(not(target_os = "macos"))]
+                let physical_modifiers = TerminalModifiers {
                     alt: modifiers.alt_key(),
                     control: modifiers.control_key(),
                     meta: modifiers.super_key(),

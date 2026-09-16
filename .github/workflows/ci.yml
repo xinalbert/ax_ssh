@@ -63,9 +63,11 @@ jobs:
         run: cargo check --locked --target ${{ matrix.target }}
       - name: Clippy
         run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+      - name: Build
+        run: cargo build --locked --target ${{ matrix.target }}
       - name: Test
         if: matrix.run_tests
-        run: cargo test --locked
+        run: cargo test --locked --target ${{ matrix.target }}
       - name: Test release helper scripts
         run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
 

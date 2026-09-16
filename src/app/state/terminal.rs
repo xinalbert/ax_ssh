@@ -495,6 +495,7 @@ impl TerminalWorker {
         }
     }
 
+    #[cfg(target_os = "macos")]
     pub(in crate::app) fn request_open_sftp_file_at_local_path(
         &self,
         transfer_id: Uuid,
