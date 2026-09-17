@@ -149,12 +149,12 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   not expose the russh handle or `RawSftpSession` to application state or Slint.
   SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
   the same host-key and credential gates as terminal Tabs. Preserve the inbound
-  packet, path/name, page, directory-budget, request, and shutdown limits. The
-  read-only download-to-open path must retain its 512 MiB file cap, 64 KiB
-  request chunks, bounded writer/event queues, per-operation and overall
-  timeouts, per-Tab concurrency cap, cancellation, private-cache publication,
-  and owned joins. Future upload/delete/rename/edit work requires separate
-  confirmation, conflict, and mutation tests.
+  packet, path/name, page, directory-budget, request, and shutdown limits.
+  Regular downloads must retain their 512 MiB file cap, 64 KiB request chunks,
+  bounded writer/event queues, per-operation and overall timeouts, per-Tab
+  concurrency cap, cancellation, validated no-replace local publication, and
+  owned joins. A completed download remains in Local files; only an explicit
+  local-file action may invoke the platform opener through its private cache.
 - The SFTP local-file pane is a read-only application-bridge snapshot. Directory
   reads run in a bounded blocking task and return only name, path, type, size,
   and modification metadata; Slint must not access the filesystem. Reject stale

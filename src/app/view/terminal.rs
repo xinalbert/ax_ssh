@@ -954,8 +954,7 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
             | SftpTransferPhase::Pausing
             | SftpTransferPhase::Paused
             | SftpTransferPhase::Resuming
-            | SftpTransferPhase::Cancelling
-            | SftpTransferPhase::Opening => active.push(transfer),
+            | SftpTransferPhase::Cancelling => active.push(transfer),
             SftpTransferPhase::Failed | SftpTransferPhase::Cancelled => failed.push(transfer),
             SftpTransferPhase::Completed => completed.push(transfer),
         }

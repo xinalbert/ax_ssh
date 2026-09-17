@@ -111,9 +111,10 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
   `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
   必须保留与终端 Tab 相同的主机密钥和凭据门禁。增加文件操作时必须保留入站 packet、路径/名称、
-  分页、目录预算、请求和 shutdown 上限。只读 download-to-open 必须保持 512 MiB 文件上限、
-  64 KiB 请求 chunk、有界 writer/event queue、逐操作与总超时、逐 Tab 并发上限、取消、私有缓存
-  发布和 owned join。未来上传/删除/重命名/编辑必须另行建立确认、冲突与修改测试。
+  分页、目录预算、请求和 shutdown 上限。普通下载必须保持 512 MiB 文件上限、64 KiB 请求
+  chunk、有界 writer/event queue、逐操作与总超时、逐 Tab 并发上限、取消、经过校验的不替换本地
+  发布和 owned join。成功下载保留在 Local files；只有用户显式打开本地文件时，才可经私有缓存调用
+  平台 opener。
 - SFTP 本地文件栏是只读 application bridge 快照。目录读取必须放在有界 blocking task 中，且只返回
   名称、路径、类型、大小和修改时间元数据；Slint 不得访问文件系统。结果回到 UI 前按 Tab 和请求 identity
   丢弃过期项，并保留条目、名称和路径上限。Rust DTO 保留可接受名称的完整文本，Slint 按列宽省略并提供

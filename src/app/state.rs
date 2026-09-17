@@ -363,7 +363,6 @@ pub(super) enum SftpTransferPhase {
     Paused,
     Resuming,
     Cancelling,
-    Opening,
     Completed,
     Cancelled,
     Failed,

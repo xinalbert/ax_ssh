@@ -244,8 +244,12 @@ impl SftpBrowserState {
         };
     }
 
-    #[cfg(test)]
-    pub(in crate::app) fn complete_download(&mut self, id: Uuid, total_bytes: u64) -> bool {
+    pub(in crate::app) fn finish_downloaded_transfer(
+        &mut self,
+        id: Uuid,
+        total_bytes: u64,
+        local_path: std::path::PathBuf,
+    ) -> bool {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
@@ -262,26 +266,8 @@ impl SftpBrowserState {
         transfer.total_bytes = total_bytes;
         transfer.bytes_per_second = 0;
         transfer.status = "Downloaded".to_owned();
-        true
-    }
-
-    pub(in crate::app) fn mark_transfer_opening(
-        &mut self,
-        id: Uuid,
-        total_bytes: u64,
-        local_path: std::path::PathBuf,
-    ) -> bool {
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return false;
-        };
-        if transfer.phase != SftpTransferPhase::Downloading {
-            return false;
-        }
-        transfer.phase = SftpTransferPhase::Opening;
-        transfer.downloaded_bytes = total_bytes;
-        transfer.total_bytes = total_bytes;
-        transfer.status = "Opening".to_owned();
         transfer.local_path = Some(local_path);
+        self.selected_transfers.remove(&id);
         true
     }
 
@@ -496,8 +482,6 @@ impl SftpBrowserState {
                 | (SftpTransferPhase::Resuming, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Opening, SftpTransferPhase::Completed)
-                | (SftpTransferPhase::Opening, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
@@ -990,7 +974,6 @@ impl SftpTransferPhase {
             Self::Paused => "paused",
             Self::Resuming => "resuming",
             Self::Cancelling => "cancelling",
-            Self::Opening => "opening",
             Self::Completed => "completed",
             Self::Cancelled => "cancelled",
             Self::Failed => "failed",
@@ -1021,7 +1004,6 @@ impl SftpTransferPhase {
                 | Self::Paused
                 | Self::Resuming
                 | Self::Cancelling
-                | Self::Opening
         )
     }
 

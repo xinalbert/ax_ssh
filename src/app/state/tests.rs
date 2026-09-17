@@ -1073,6 +1073,31 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
 }
 
 #[test]
+fn completed_sftp_download_is_retained_without_opening() {
+    let mut sftp = SftpBrowserState::default();
+    let transfer_id = Uuid::new_v4();
+    let local_path = std::path::PathBuf::from("/tmp/report.txt");
+
+    sftp.queue_transfer(transfer_id, "report.txt".to_owned(), 100)
+        .expect("transfer should be queued");
+    sftp.start_transfer(
+        transfer_id,
+        "/home/alice/report.txt".to_owned(),
+        "report.txt".to_owned(),
+        100,
+    );
+
+    assert!(sftp.finish_downloaded_transfer(transfer_id, 100, local_path.clone()));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Completed);
+    assert_eq!(sftp.transfers[0].status, "Downloaded");
+    assert!(!sftp.transfers[0].phase.active());
+    assert_eq!(
+        sftp.completed_transfer_local_path(transfer_id),
+        Some(local_path)
+    );
+}
+
+#[test]
 fn sftp_upload_transfer_does_not_expose_pause_controls() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();
@@ -1214,7 +1239,7 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
         100,
     );
     sftp.update_transfer_progress(transfer_id, 50, 100);
-    assert!(!sftp.complete_download(transfer_id, 100));
+    assert!(!sftp.finish_downloaded_transfer(transfer_id, 100, "/tmp/report.txt".into()));
 
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
     assert_eq!(sftp.transfers[0].downloaded_bytes, 0);
@@ -1265,7 +1290,7 @@ fn sftp_transfer_selection_counts_only_actionable_active_rows() {
     }
     assert!(sftp.request_transfer_pause(paused));
     assert!(sftp.pause_transfer(paused));
-    assert!(sftp.complete_download(completed, 10));
+    assert!(sftp.finish_downloaded_transfer(completed, 10, "/tmp/completed.txt".into()));
     sftp.record_transfer_failure(failed, "failed.txt".to_owned(), "remote error".to_owned());
 
     for id in [downloading, paused] {

@@ -797,7 +797,7 @@ identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证�
 小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
 拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
 目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总字节，
-每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动或正在打开的 transfer，每个 transfer 独占单独的 SFTP
+每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动 transfer，每个 transfer 独占单独的 SFTP
 subsystem stream。
 
 下载根 intent 还携带有界的生效文件名过滤模式。application bridge 会拒绝匹配的直接上传/下载
@@ -824,7 +824,7 @@ Save As。本地 regular file 通过同一 transfer queue 上传。application �
 每次只流式读取一个 64 KiB chunk；进程级最多同时运行 8 个上传，进一步把此边界的常驻 chunk
 内存限制在约 512 KiB，因此 512 MiB 上传不会变成常驻内存缓冲。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
-拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部 Finder 上传遵循同一目标契约：Winit 报告外部文件悬停期间，bridge 记录最新的 `CursorMoved` 坐标，并询问声明式 SFTP 几何该坐标是否位于已启用的 Remote files 目标。只有该答案会创建上传 intent。`DroppedFile` 本身不带坐标，缺少悬停坐标、落在其他目标、目标仍在 loading，或多文件悬停已经失效时都会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。
+拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部 Finder 上传遵循同一目标契约：外部文件 hover 仍有效时，macOS 在 `DroppedFile` 到达时读取当前 AppKit 光标坐标；其他平台使用最新的 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于已启用的 Remote files 目标。只有该答案会创建上传 intent。`DroppedFile` 本身不带坐标，缺少悬停坐标、落在其他目标、目标仍在 loading，或多文件悬停已经失效时都会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。
 
 在 macOS 上，从可见远端普通文件开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。远端目录、链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
 
@@ -1106,7 +1106,7 @@ presentation-layout revision、timer 或 callback 链路。
 
 当前应用可校验并持久化 SSH、Telnet 与 Serial profile，读取用户的 OpenSSH
 `~/.ssh/known_hosts` 作为有界共享信任来源，并确认逐 profile 的 SSH 主机指纹，
-使用临时密码、本机私钥或有界运行时 SSH agent 完成 SSH 认证，为已认证 SSH Tab 提供有界远端 SFTP、本地元数据目录浏览和 regular file 下载后打开，并持有多个逐 Tab 隔离的 transport 或本地 shell
+使用临时密码、本机私钥或有界运行时 SSH agent 完成 SSH 认证，为已认证 SSH Tab 提供有界远端 SFTP、本地元数据目录浏览和下载到所选 Local files 目录的 regular file，并持有多个逐 Tab 隔离的 transport 或本地 shell
 终端，相同目标也可重复打开。新建会话编辑器和单例 Settings 工作台都属于可见工作区 Tab；只有短期信任和
 secret 提示保留为覆盖层。
 以下内容仍作为独立步骤：

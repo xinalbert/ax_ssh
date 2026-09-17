@@ -26,10 +26,10 @@ use slint::winit_030::{
 
 const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
 
-/// The only coordinates Winit supplies for an external file drop are cursor
-/// moves. A `DroppedFile` itself has no location, so a transfer is allowed
-/// only while the window still has an external file hover and that last cursor
-/// position can be resolved by Slint to the declared Remote files target.
+/// A `DroppedFile` has no location. On macOS, the native bridge obtains the
+/// current AppKit cursor position at drop time; other platforms rely on the
+/// latest Winit cursor move. Both routes require a live external-file hover
+/// before Slint can resolve the declared Remote files target.
 #[derive(Default)]
 struct NativeFileDropPointer {
     hovered_file_count: u16,
@@ -60,6 +60,10 @@ impl NativeFileDropPointer {
     fn clear(&mut self) {
         self.hovered_file_count = 0;
         self.last_physical_position = None;
+    }
+
+    fn is_external_file_hovering(&self) -> bool {
+        self.hovered_file_count > 0
     }
 
     fn logical_position(&self, scale_factor: f64) -> Option<(f32, f32)> {
@@ -347,8 +351,20 @@ pub(super) fn install_terminal_keypad_input_hook(
                 let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
                 let target = {
                     let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
-                    let target = pointer
-                        .logical_position(scale_factor)
+                    let logical_position = pointer.is_external_file_hovering().then(|| {
+                        #[cfg(target_os = "macos")]
+                        {
+                            super::macos_window::current_cursor_position(ui.window())
+                                .ok()
+                                .or_else(|| pointer.logical_position(scale_factor))
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            pointer.logical_position(scale_factor)
+                        }
+                    });
+                    let target = logical_position
+                        .flatten()
                         .map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
                     pointer.complete_external_file_drop();
                     target
@@ -1908,8 +1924,10 @@ mod tests {
         let mut pointer = NativeFileDropPointer::default();
         pointer.record_cursor_position(80.0, 48.0);
         assert_eq!(pointer.logical_position(2.0), None);
+        assert!(!pointer.is_external_file_hovering());
 
         pointer.begin_external_file_hover();
+        assert!(pointer.is_external_file_hovering());
         assert_eq!(pointer.logical_position(2.0), None);
         pointer.record_cursor_position(80.0, 48.0);
         assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
@@ -1920,6 +1938,7 @@ mod tests {
         assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
         pointer.complete_external_file_drop();
         assert_eq!(pointer.logical_position(2.0), None);
+        assert!(!pointer.is_external_file_hovering());
 
         pointer.begin_external_file_hover();
         pointer.clear();

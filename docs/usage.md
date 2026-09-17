@@ -222,7 +222,7 @@ actions share the page bar instead of reserving a separate row. Pause/resume
 preserves the downloaded prefix through the live
 worker and continues from that offset; it is available only while this
 application and SFTP worker remain running. Each SFTP Tab runs at most two
-active or opening downloads at once. Cancel removes the task's partial content,
+active downloads at once. Cancel removes the task's partial content,
 including a file published just before cancellation wins; failures remove the
 `.part` file, while completed local downloads remain in the chosen directory.
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
@@ -244,7 +244,8 @@ poll checks the remote size/mtime fingerprint; a change disables Save and
 reports a conflict. The local toolbar uploads one selected regular file. Dragging a
 local or Finder file onto Remote files queues an upload into the current remote
 directory. Dragging a remote file or folder onto Local files queues a download
-into the current local directory. On macOS, dragging a remote regular file can
+into the current local directory. Completed downloads remain there and never
+open automatically. On macOS, dragging a remote regular file can
 also be dropped into Finder as a native file: AxSSH downloads it only after the
 target accepts the drop. Returning that same drag to its originating AxSSH SFTP
 window downloads it into the Local files directory that was visible when the

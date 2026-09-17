@@ -275,6 +275,37 @@ pub(super) fn current_modifier_state() -> TerminalModifiers {
     }
 }
 
+/// Return the current cursor position in Slint's top-left logical coordinates.
+///
+/// AppKit reports a window-relative point in its bottom-left coordinate system.
+/// The live Winit view converts that point into its own coordinates, which are
+/// then normalized to the top-left convention used by Slint's SFTP geometry.
+/// This must run synchronously on the UI thread while the window is alive.
+pub(super) fn current_cursor_position(window: &slint::Window) -> Result<(f32, f32)> {
+    with_native_view(window, |view| {
+        let native_window = view.window().context("AppKit view has no NSWindow")?;
+        let point =
+            view.convertPoint_fromView(native_window.mouseLocationOutsideOfEventStream(), None);
+        let bounds = view.bounds();
+        let x = point.x - bounds.origin.x;
+        let y = if view.isFlipped() {
+            point.y - bounds.origin.y
+        } else {
+            bounds.size.height - (point.y - bounds.origin.y)
+        };
+        if !x.is_finite()
+            || !y.is_finite()
+            || x < f64::from(f32::MIN)
+            || x > f64::from(f32::MAX)
+            || y < f64::from(f32::MIN)
+            || y > f64::from(f32::MAX)
+        {
+            anyhow::bail!("AppKit cursor position is not representable in Slint coordinates");
+        }
+        Ok((x as f32, y as f32))
+    })
+}
+
 pub(super) fn configure_application_menu(
     shortcut: &NativeMenuShortcut,
     shortcut_enabled: bool,

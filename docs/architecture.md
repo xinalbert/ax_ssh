@@ -1274,8 +1274,8 @@ links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
 Discovery scans at most 4,096 entries and is bounded to 512 files, 256
 directories, depth 16, 512 KiB of path text, 1 GiB aggregate bytes, and 512
-MiB per file. Each SFTP Tab permits at
-most two active or opening transfers, and each transfer owns a separate SFTP
+MiB per file. Each SFTP Tab permits at most two active transfers, and each
+transfer owns a separate SFTP
 subsystem stream.
 
 The transfer root also carries the effective bounded filename-filter patterns.
@@ -1326,12 +1326,14 @@ fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
 local/remote source prefix: local paths dropped on Remote files queue uploads,
 and remote files or folders dropped on Local files queue downloads. External
-Finder uploads use the same target contract: while Winit reports an external
-file hover, the bridge records its latest `CursorMoved` position and asks the
-declarative SFTP geometry whether it is inside the enabled Remote files target.
-Only that answer creates an upload intent. `DroppedFile` has no position, so a
-missing hover coordinate, any other target, a loading target, or a stale
-multi-file hover is rejected rather than guessed from the active directory.
+Finder uploads use the same target contract. While an external file hover is
+live, macOS reads the current AppKit cursor position at `DroppedFile` time;
+other platforms use the latest Winit `CursorMoved` position. The bridge asks
+the declarative SFTP geometry whether that position is inside the enabled
+Remote files target. Only that answer creates an upload intent. `DroppedFile`
+has no position, so a missing hover coordinate, any other target, a loading
+target, or a stale multi-file hover is rejected rather than guessed from the
+active directory.
 Slint `DropArea` continues to handle the in-process paths.
 
 On macOS, beginning a drag on a visible remote regular file instead creates an
@@ -1876,8 +1878,8 @@ The current application validates and persists SSH, Telnet, and Serial profiles;
 confirms per-profile SSH host fingerprints and reads the user's OpenSSH
 `~/.ssh/known_hosts` as a bounded shared trust source; authenticates SSH with transient
 passwords, local private keys, or a bounded runtime SSH agent; provides bounded remote SFTP and local metadata
-directory browsing plus regular-file download-to-open for an authenticated SSH
-Tab; and owns multiple independent transport or
+directory browsing plus regular-file downloads into the selected Local files
+directory for an authenticated SSH Tab; and owns multiple independent transport or
 local-shell terminal tabs, including duplicate targets. New-session editing and the singleton Settings
 workbench remain visible workspace tabs; only short-lived trust and secret
 prompts remain overlays. The following remain
