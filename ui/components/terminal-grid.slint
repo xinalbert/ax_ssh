@@ -431,14 +431,19 @@ export component TerminalGrid inherits Rectangle {
             }
         }
         clicked => {
-            // Slint emits clicked before double-clicked. Retain only the
-            // bounded same-cell sequence needed to validate that event.
-            root.click-sequence = min(3, root.click-sequence + 1);
+            // Slint emits clicked before double-clicked. The second click
+            // selects the semantic unit; the third click replaces it with the
+            // logical line. Further clicks do not repeat the line action.
+            root.click-sequence = root.click-sequence >= 3
+                ? 4 : root.click-sequence + 1;
             root.click-timeout-ticks = 5;
+            if root.click-sequence == 3 {
+                root.line-selection-request(root.click-cell-row, root.click-cell-column);
+            }
         }
         double-clicked => {
             if root.click-sequence == 2 {
-                root.line-selection-request(
+                root.semantic-selection-request(
                     max(0, min(root.view.row_count - 1,
                         floor((self.mouse-y - root.top-offset) / root.cell-height))),
                     max(0, min(root.view.content_columns - 1,

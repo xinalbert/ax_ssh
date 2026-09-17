@@ -433,12 +433,14 @@ motion outside the grid, so one drag is never handled by both AxSSH and the
 remote program. Release reports the current modifier state; cancellation uses
 the last observed pointer state. High-frequency motion keeps only the newest
 cell per display frame, while the final motion is flushed before release.
-When reporting does not own the gesture, left-button double-click selects one
-semantic terminal word using the terminal core's boundaries, including wide
-characters, soft-wrapped cells, and matching brackets. The range stays local to
-the pane and is not sent to the remote program. Shift bypasses this behavior,
-and Cmd/Ctrl target activation and remote mouse reporting retain priority. The
-existing copy-on-select preference also applies to the resulting semantic
+When reporting does not own the gesture, left-button double-click selects a
+complete valid HTTP(S) URL first, including across soft-wrapped cells while
+omitting trailing terminal punctuation. Otherwise it selects one semantic
+terminal word using the terminal core's punctuation, whitespace, wide-character,
+and matching-bracket boundaries. The range stays local to the pane and is not
+sent to the remote program. Shift bypasses this behavior, and Cmd/Ctrl target
+activation and remote mouse reporting retain priority. The existing
+copy-on-select preference also applies to the resulting URL or semantic
 selection. A third left click in the same short click sequence selects the
 complete logical terminal line, including soft-wrapped cells; the terminal core
 provides the line boundaries. The line selection remains local and uses the same

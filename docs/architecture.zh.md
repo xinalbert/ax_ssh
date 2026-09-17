@@ -119,11 +119,13 @@ damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复�
 revision 与覆盖全部渲染设置的 64-bit key 缓存结果，再复用已有外层 `TerminalRenderLine` model 及其
 嵌套 run model；只更新来源或设置确实变化的行，只有可见行数变化时才 reset 同一 model，不会在每次
 输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变选区、worker 或 transport 契约。
-第一版本地逻辑行选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
-`TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Lines`，只返回有界、相对当前视口的范围 DTO，
-不保留上游 `Selection`；宽字符保持原有 cell 语义，连续软换行的物理行会合并为一条逻辑行，硬换行仍保持边界，范围在进入 application callback 前裁剪。
-`TerminalPane` 另持有显式的局部有效位，因此单字符逻辑行即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
-`double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好只对该逻辑行范围执行一次。`TerminalGrid` 只拥有有界的同一 cell 点击序列，
+第一版本地选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
+双击会优先选中完整、有效的 HTTP(S) URL：连续软换行会合并，末尾终端标点不会纳入选区。若当前位置不是 URL，
+`TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
+不保留上游 `Selection`；终端核心负责标点、空白和配对括号等语义边界。相同短点击序列中的第三次左键点击会改用
+临时 `SelectionType::Lines` 范围：连续软换行的物理行会合并为一条逻辑行，硬换行仍保持边界，范围在进入 application callback 前裁剪。
+`TerminalPane` 另持有显式的局部有效位，因此单字符选区即使 anchor/focus 坐标相同也仍可 Copy。Slint 的
+`double-clicked` 会覆盖此前普通 click 的状态，既有 copy-on-select 偏好会分别对最终语义/URL 或逻辑行范围执行一次。`TerminalGrid` 只拥有有界的同一 cell 点击序列，
 并在平台双击间隔后过期；reporting、Shift、目标激活、焦点、刷新和 Copy 继续使用相同优先级。
 Terminal pane 不绘制自身框线；`AppWindow` 也不在整个应用窗口客户区额外绘制框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、

@@ -946,6 +946,12 @@ fn target_context_joins_soft_wraps_but_not_hard_breaks() {
     assert_eq!(context.rows[1].row, 1);
     assert_eq!(context.rows[0].text, "https://example.test/ver");
     assert_eq!(context.rows[1].text, "y-long/path");
+
+    let continued_context = wrapped
+        .visible_logical_line_target_context_at_cell(1, 2)
+        .expect("soft-wrap continuation context");
+    assert_eq!(continued_context.rows, context.rows);
+    assert_eq!(continued_context.clicked_character, 26);
 }
 
 #[test]

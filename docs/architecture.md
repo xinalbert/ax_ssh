@@ -150,20 +150,24 @@ rows whose source or settings changed and resets the same model only when the
 visible row count changes; it does not replace the dynamic line repeater on
 every output snapshot. This optimization is UI-model ownership only and does
 not change selection, worker, or transport contracts.
-The first local logical-line selection gesture is a left-button double-click when
-the gesture is not owned by mouse reporting, a Shift bypass, or primary-modifier
-target activation. `TerminalModel` creates a temporary
-`alacritty_terminal::SelectionType::Lines` and returns only a bounded,
-viewport-relative range DTO; it does not retain the upstream `Selection`.
-The range preserves wide cells, joins soft-wrapped physical rows into one
-logical line, keeps hard line boundaries intact, and is clipped before crossing
-the application callback. `TerminalPane` keeps an explicit local-valid bit so
-a one-cell line remains copyable even when its anchor and focus coordinates
-are equal. Slint's `double-clicked` event then overrides the preceding ordinary
-click state, and the existing copy-on-select preference applies once to the
-logical-line range. `TerminalGrid` owns only a bounded, same-cell click sequence
-and expires it at the platform double-click interval; reporting, Shift, target
-activation, focus, refresh, and Copy retain the same priority rules.
+The first local selection gesture is a left-button double-click when the gesture
+is not owned by mouse reporting, a Shift bypass, or primary-modifier target
+activation. It selects a complete valid HTTP(S) URL first, including across soft
+wraps but excluding trailing terminal punctuation. Otherwise `TerminalModel`
+creates a temporary `alacritty_terminal::SelectionType::Semantic` and returns
+only a bounded, viewport-relative range DTO; it does not retain the upstream
+`Selection`. Semantic boundaries include the terminal core's punctuation,
+whitespace, and matching-bracket rules. A third left click in the same short
+sequence replaces that range with a temporary `SelectionType::Lines` range: it
+joins soft-wrapped physical rows into one logical line, keeps hard line boundaries
+intact, and is clipped before crossing the application callback. `TerminalPane`
+keeps an explicit local-valid bit so a one-cell selection remains copyable even
+when its anchor and focus coordinates are equal. Slint's `double-clicked` event
+overrides the preceding ordinary click state, and the existing copy-on-select
+preference applies once to each resulting range. `TerminalGrid` owns only a
+bounded, same-cell click sequence and expires it at the platform double-click
+interval; reporting, Shift, target activation, focus, refresh, and Copy retain
+the same priority rules.
 Terminal panes intentionally have no visual frame, and `AppWindow` does not add
 an additional client-area frame around the application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection

@@ -16,7 +16,8 @@ use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{TerminalTarget, terminal_target_match_at_context};
 use ax_ssh::terminal::{
     TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
-    TerminalMouseEventKind, TerminalMouseModifiers, TerminalTargetContext, encode_key_with_modes,
+    TerminalMouseEventKind, TerminalMouseModifiers, TerminalSelectionRange, TerminalTargetContext,
+    encode_key_with_modes,
 };
 use slint::winit_030::winit::event::ElementState;
 use slint::winit_030::{
@@ -1116,17 +1117,13 @@ pub(super) fn wire_terminal(
                 app.terminal(tab_id)
                     .and_then(|terminal| terminal.terminal.as_ref())
                     .and_then(|terminal| {
-                        terminal
-                            .semantic_selection_range(row.max(0) as usize, column.max(0) as usize)
+                        let row = row.max(0) as usize;
+                        let column = column.max(0) as usize;
+                        terminal_url_selection_range(terminal, row, column)
+                            .or_else(|| terminal.semantic_selection_range(row, column))
                     })
             })
-            .map(|range| TerminalSemanticSelection {
-                active: true,
-                anchor_row: range.start_row as i32,
-                anchor_column: range.start_column as i32,
-                focus_row: range.end_row as i32,
-                focus_column: range.end_column as i32,
-            })
+            .map(terminal_semantic_selection)
             .unwrap_or_default()
     });
 
@@ -1151,13 +1148,7 @@ pub(super) fn wire_terminal(
                         terminal.line_selection_range(row.max(0) as usize, column.max(0) as usize)
                     })
             })
-            .map(|range| TerminalSemanticSelection {
-                active: true,
-                anchor_row: range.start_row as i32,
-                anchor_column: range.start_column as i32,
-                focus_row: range.end_row as i32,
-                focus_column: range.end_column as i32,
-            })
+            .map(terminal_semantic_selection)
             .unwrap_or_default()
     });
 
@@ -1523,6 +1514,43 @@ fn terminal_target_modifier_held(control: bool, _meta: bool) -> bool {
     // Slint normalizes the platform primary shortcut modifier into `control`:
     // Cmd on macOS and Ctrl elsewhere.
     control
+}
+
+fn terminal_semantic_selection(range: TerminalSelectionRange) -> TerminalSemanticSelection {
+    TerminalSemanticSelection {
+        active: true,
+        anchor_row: range.start_row as i32,
+        anchor_column: range.start_column as i32,
+        focus_row: range.end_row as i32,
+        focus_column: range.end_column as i32,
+    }
+}
+
+fn terminal_url_selection_range(
+    terminal: &TerminalModel,
+    row: usize,
+    column: usize,
+) -> Option<TerminalSelectionRange> {
+    let context = terminal.visible_logical_line_target_context_at_cell(row, column)?;
+    let target_match = terminal_target_match_at_context(&context)?;
+    if !matches!(target_match.target, TerminalTarget::Url(_)) {
+        return None;
+    }
+
+    let first = target_match.segments.first()?;
+    let last = target_match.segments.last()?;
+    let (start_column, _) =
+        terminal.visible_row_cell_span_for_characters(first.row, first.start, first.end)?;
+    let (_, end_column_exclusive) =
+        terminal.visible_row_cell_span_for_characters(last.row, last.start, last.end)?;
+    let end_column = end_column_exclusive.checked_sub(1)?;
+
+    Some(TerminalSelectionRange {
+        start_row: first.row,
+        start_column,
+        end_row: last.row,
+        end_column,
+    })
 }
 
 fn terminal_target_for_pane(
@@ -1908,6 +1936,42 @@ mod tests {
     fn terminal_target_uses_slint_primary_shortcut_modifier() {
         assert!(terminal_target_modifier_held(true, false));
         assert!(!terminal_target_modifier_held(false, true));
+    }
+
+    #[test]
+    fn semantic_selection_prefers_complete_url_and_omits_trailing_punctuation() {
+        let mut terminal = TerminalModel::new(80, 3, 10);
+        terminal.process(b"See https://example.test/releases/v1.2).\r\n");
+
+        let range = terminal_url_selection_range(&terminal, 0, 12)
+            .expect("URL should provide a bounded selection range");
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            "https://example.test/releases/v1.2"
+        );
+    }
+
+    #[test]
+    fn semantic_selection_keeps_soft_wrapped_url_in_one_range() {
+        let mut terminal = TerminalModel::new(24, 3, 10);
+        terminal.process(b"https://example.test/very-long/path?q=1");
+
+        let range = terminal_url_selection_range(&terminal, 1, 2)
+            .expect("soft-wrapped URL should provide a bounded selection range");
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            "https://example.test/very-long/path?q=1"
+        );
     }
 
     #[test]

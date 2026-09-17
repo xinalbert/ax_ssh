@@ -143,8 +143,8 @@ impl TerminalModel {
         let display_offset = grid.display_offset() as i32;
         let mut first_row = row;
         while first_row > 0 {
-            let line = Line(first_row as i32 - display_offset);
-            if !line_wraps_to_next(grid, line) {
+            let previous_line = Line(first_row as i32 - display_offset - 1);
+            if !line_wraps_to_next(grid, previous_line) {
                 break;
             }
             first_row -= 1;
