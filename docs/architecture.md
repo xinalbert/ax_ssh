@@ -183,23 +183,27 @@ carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Mouse input follows the same ownership boundary. `TerminalModel` exposes
 separate button and wheel capabilities from the active private mouse modes and
-emits bounded SGR, UTF-8, URXVT 1015, or legacy X10 events. The terminal parser
-does not expose 1015, so a small raw DEC-private-mode tracker keeps 1005, 1006,
-and 1015 mutually exclusive even when their escape sequences arrive in separate
-transport reads. URXVT compatibility uses decimal `CSI Cb;Cx;CyM`; SGR 1006
-release preserves the pressed button, reads modifiers from the release event,
-and terminates with lowercase `m`, while legacy X10/UTF-8/URXVT release uses
-button code 3. Vertical wheel maps to xterm buttons 4/5, horizontal wheel to
-6/7, and Winit's portable Back/Forward side buttons to 8/9. The domain encoder
-also bounds the standard auxiliary 10/11 codes, but unclassified platform
-buttons have no portable identity and are never guessed. The protocol encoder
-is independent from the UI interaction policy. Settings expose two policies.
+emits bounded SGR 1006 or legacy X10 events. A small raw DEC-private-mode
+tracker suppresses output while a program requests UTF-8 1005, URXVT 1015, or
+pixel-coordinate SGR 1016: AxSSH never substitutes a different wire format or
+reports character cells as pixels. The tracker survives split transport reads
+and returns to the terminal parser's actual 1006 mode when that incompatible
+request is cleared or reset. SGR 1006 release preserves the pressed button,
+reads modifiers from the release event, and terminates with lowercase `m`, while
+legacy X10 release uses button code 3. Vertical wheel maps to xterm buttons
+4/5, horizontal wheel to 6/7, and Winit's portable Back/Forward side buttons to
+8/9. The domain encoder also bounds the standard auxiliary 10/11 codes, but
+unclassified platform buttons have no portable identity and are never guessed.
+The protocol encoder is independent from the UI interaction policy. Settings
+expose two policies.
 Standard xterm mode forwards reporting gestures normally and uses `Shift` as
 the local-selection bypass; `Alt`/`Option` remains only the xterm modifier bit.
-The default **Local selection priority** mode keeps direct left dragging local
-and requires `Alt`/`Option` to start a remote button gesture. Wheel events still
-follow active reporting in either mode, while `Shift` + wheel uses local
-scrollback. `TerminalPane` chooses the gesture owner at button down;
+The default is standard xterm mode. The opt-in **Local selection priority** mode
+keeps direct left dragging local and requires `Alt`/`Option` to start a remote
+button gesture. Wheel events still follow active reporting in either mode, while
+`Shift` + wheel uses local scrollback. Each normalized wheel unit emits one
+standards-compatible xterm wheel report; the UI-to-application input is bounded
+to 256 reports per source event. `TerminalPane` chooses the gesture owner at button down;
 Slint pointer capture preserves that owner through motion and release outside the
 grid, and cancellation emits the matching release at the last bounded cell before
 clearing the owner. Cancellation uses the modifiers from the last pointer event.
@@ -216,6 +220,14 @@ right-click in Local selection priority mode; `Alt`/`Option` + right-click remai
 remote in the latter mode.
 Alternate-screen alternate-scroll enables only the wheel capability while the
 terminal is on its alternate screen; it never enables button reporting.
+Focus tracking is separate from pointer reporting. When the terminal requests
+DEC private mode 1004, only its visible, connected, focused pane in an active
+non-modal window reports xterm `CSI I` on focus-in and `CSI O` on focus-out.
+`TerminalPane` publishes only the terminal UUID and a boolean; the application
+bridge validates window/pane ownership and sends the fixed bytes through the
+reliable worker path. Switching tabs or panes, losing window activation,
+opening a blocking modal, disconnecting, and removing a detached workspace all
+clear the previously reported focus state.
 Terminal Edit-menu intent stays in Slint as a validated command plus bounded
 revision. Every pane observes that signal, but only the focused pane invokes its
 existing local copy, paste, or select-all operation; selection coordinates and
@@ -1593,10 +1605,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     a compatibility fallback. Schema version 24 adds the `RendererPreference` field with stable
     `automatic`, `gpu`, and `software` values; missing or invalid values select
     Automatic. The preference is read before the first window and never switches
-    an active renderer. Schema version 23 adds the default-enabled
-    `terminal_mouse_local_selection_priority` policy; disabling it selects standard
-    xterm mouse routing, and older files preserve the prior local-selection-first
-    behavior. Schema version 22 adds `terminal_text_brightness_percent`, stored from
+    an active renderer. Schema version 23 adds the
+    `terminal_mouse_local_selection_priority` policy. The default and a missing
+    legacy field select standard xterm mouse routing; an explicitly saved `true`
+    retains local-selection-first behavior. Schema version 22 adds `terminal_text_brightness_percent`, stored from
     60 through 120 with a default of 100, and the default-disabled
     `terminal_semantic_highlighting` switch. Versions through 21 discard the old
     minimum-contrast field and migrate to 100 because there is no safe numeric

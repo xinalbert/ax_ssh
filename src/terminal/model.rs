@@ -84,31 +84,43 @@ impl TerminalModel {
         super::input::encode_paste(text, self.term.mode().contains(TermMode::BRACKETED_PASTE))
     }
 
+    /// Returns whether the active terminal application requested xterm focus reports.
+    pub fn focus_reporting_active(&self) -> bool {
+        self.term.mode().contains(TermMode::FOCUS_IN_OUT)
+    }
+
+    /// Encodes one xterm FocusIn or FocusOut report when that mode is active.
+    pub fn encode_focus_event(&self, focused: bool) -> Option<Vec<u8>> {
+        self.focus_reporting_active()
+            .then(|| (if focused { b"\x1b[I" } else { b"\x1b[O" }).to_vec())
+    }
+
     pub fn mouse_reporting(&self) -> TerminalMouseReporting {
         let mode = self.term.mode();
         TerminalMouseReporting {
             click: mode.contains(TermMode::MOUSE_REPORT_CLICK),
             drag: mode.contains(TermMode::MOUSE_DRAG),
             motion: mode.contains(TermMode::MOUSE_MOTION),
-            sgr: self.mouse_encoding.encoding == MouseEncoding::Sgr,
-            utf8: self.mouse_encoding.encoding == MouseEncoding::Utf8,
-            urxvt: self.mouse_encoding.encoding == MouseEncoding::Urxvt,
+            sgr: mode.contains(TermMode::SGR_MOUSE) && !self.mouse_encoding.suppresses_reports(),
             alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
         }
     }
 
     pub fn mouse_button_reporting_active(&self) -> bool {
-        self.mouse_reporting().enabled()
+        self.mouse_reporting().enabled() && !self.mouse_encoding.suppresses_reports()
     }
 
     pub fn mouse_wheel_reporting_active(&self) -> bool {
         let reporting = self.mouse_reporting();
-        reporting.enabled()
+        (reporting.enabled() && !self.mouse_encoding.suppresses_reports())
             || (reporting.alternate_scroll && self.term.mode().contains(TermMode::ALT_SCREEN))
     }
 
     /// Encode one bounded terminal mouse event according to the active private modes.
     pub fn encode_mouse_event(&self, event: TerminalMouseEvent) -> Option<Vec<u8>> {
+        if self.mouse_encoding.suppresses_reports() {
+            return None;
+        }
         let reporting = self.mouse_reporting();
         let is_wheel = matches!(
             event.button,
@@ -200,20 +212,9 @@ impl TerminalModel {
             };
             return Some(format!("\x1b[<{};{};{}{}", code, column, row, suffix).into_bytes());
         }
-        if reporting.urxvt {
-            return Some(format!("\x1b[{};{};{}M", code, column, row).into_bytes());
-        }
         let encode = |value: usize| -> Option<Vec<u8>> {
             let value = value + 32;
-            if reporting.utf8 {
-                let mut output = String::new();
-                char::from_u32(value as u32).map(|ch| {
-                    output.push(ch);
-                    output.into_bytes()
-                })
-            } else {
-                (value <= u8::MAX as usize).then_some(vec![value as u8])
-            }
+            (value <= u8::MAX as usize).then_some(vec![value as u8])
         };
         let mut output = vec![0x1b, b'[', b'M'];
         output.extend(encode(code)?);
@@ -417,13 +418,19 @@ impl OutputFrameHold {
 }
 
 impl MouseEncodingTracker {
+    fn suppresses_reports(&self) -> bool {
+        self.utf8_coordinates || self.urxvt_coordinates || self.pixel_coordinates
+    }
+
     fn observe(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             match self.parser_state {
                 0 if byte == 0x1b => self.parser_state = 1,
                 1 if byte == b'[' => self.parser_state = 2,
                 1 if byte == b'c' => {
-                    self.encoding = MouseEncoding::Default;
+                    self.utf8_coordinates = false;
+                    self.urxvt_coordinates = false;
+                    self.pixel_coordinates = false;
                     self.parser_state = 0;
                 }
                 2 if byte == b'?' => {
@@ -455,17 +462,21 @@ impl MouseEncodingTracker {
         let Some(parameter) = parameter else {
             return;
         };
-        let requested = match parameter {
-            1005 => MouseEncoding::Utf8,
-            1006 => MouseEncoding::Sgr,
-            1015 => MouseEncoding::Urxvt,
-            _ => return,
-        };
-        match enabled {
-            Some(true) => self.encoding = requested,
-            Some(false) if self.encoding == requested => self.encoding = MouseEncoding::Default,
-            None => {}
-            Some(false) => {}
+        match (parameter, enabled) {
+            (1005, Some(true)) => self.utf8_coordinates = true,
+            (1005, Some(false)) => self.utf8_coordinates = false,
+            (1015, Some(true)) => self.urxvt_coordinates = true,
+            (1015, Some(false)) => self.urxvt_coordinates = false,
+            // Alacritty owns the actual 1006 mode. An explicit 1006 request
+            // selects the supported report format; 1016 intentionally remains
+            // separate because it changes the coordinate unit to pixels.
+            (1006, Some(true)) => {
+                self.utf8_coordinates = false;
+                self.urxvt_coordinates = false;
+            }
+            (1016, Some(true)) => self.pixel_coordinates = true,
+            (1016, Some(false)) => self.pixel_coordinates = false,
+            _ => {}
         }
     }
 }

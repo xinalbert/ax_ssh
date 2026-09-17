@@ -151,8 +151,6 @@ pub struct TerminalMouseReporting {
     pub drag: bool,
     pub motion: bool,
     pub sgr: bool,
-    pub utf8: bool,
-    pub urxvt: bool,
     pub alternate_scroll: bool,
 }
 
@@ -215,21 +213,16 @@ pub struct TerminalModel {
     mouse_encoding: MouseEncodingTracker,
 }
 
-/// The three extended mouse coordinate encodings selected through DEC private
-/// modes. `1015` is not exposed by the locked terminal parser, so AxSSH tracks
-/// all three raw mode changes to preserve their mutually-exclusive contract.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum MouseEncoding {
-    #[default]
-    Default,
-    Utf8,
-    Sgr,
-    Urxvt,
-}
-
+/// The accepted mouse-coordinate encodings selected through DEC private modes.
+///
+/// AxSSH emits only default xterm coordinates and SGR 1006. Legacy UTF-8 1005,
+/// URXVT 1015, and SGR-pixel 1016 are tracked only to suppress an incompatible
+/// report; the locked parser does not expose every one of those mode changes.
 #[derive(Default)]
 struct MouseEncodingTracker {
-    encoding: MouseEncoding,
+    utf8_coordinates: bool,
+    urxvt_coordinates: bool,
+    pixel_coordinates: bool,
     parser_state: u8,
     parameter: u16,
     has_parameter: bool,

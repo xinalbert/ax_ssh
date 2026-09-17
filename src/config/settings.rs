@@ -266,8 +266,8 @@ pub struct AppearanceSettings {
     #[serde(default)]
     pub copy_selection_on_select: bool,
     /// Prefer local text selection while terminal mouse reporting is active.
-    /// Holding Alt/Option sends the gesture to the remote application.
-    #[serde(default = "default_true")]
+    /// Disabled by default so reporting applications receive standard xterm input.
+    #[serde(default)]
     pub terminal_mouse_local_selection_priority: bool,
 }
 
@@ -397,7 +397,7 @@ impl Default for AppearanceSettings {
             bright_bold_text: true,
             right_click_copy_or_paste: false,
             copy_selection_on_select: false,
-            terminal_mouse_local_selection_priority: true,
+            terminal_mouse_local_selection_priority: false,
         }
     }
 }

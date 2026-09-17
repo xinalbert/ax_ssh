@@ -6,7 +6,7 @@ import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-tit
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
-import { TerminalSemanticSelection } from "terminal-pane.slint";
+import { TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
 import {
     TerminalPaneDividerView,
     TerminalPaneView,
@@ -138,7 +138,7 @@ export component AppWindow inherits Window {
     in property <int> sftp-editor-revision: 0;
     in property <[TerminalPaneView]> terminal-panes;
     in property <[TerminalPaneDividerView]> terminal-dividers;
-    in property <bool> terminal-mouse-local-selection-priority: true;
+    in property <bool> terminal-mouse-local-selection-priority: false;
     in property <string> application-font-family: "JetBrains Mono";
     // Incremented when runtime font resources are registered so text layout
     // bindings can invalidate cached fallback shaping.
@@ -507,7 +507,8 @@ export component AppWindow inherits Window {
     callback terminal-presentation-layout(string, length, length, length, length, length);
     callback terminal-presentation-layout-reset();
     callback scroll-terminal(string, int);
-    callback mouse-event(string, int, int, int, int, bool, bool, bool);
+    callback terminal-pointer-input(string, TerminalPointerInput);
+    callback terminal-focus-state(string, bool);
     callback terminal-selection-text(string, int, int, int, int) -> string;
     callback terminal-semantic-selection-range(string, int, int) -> TerminalSemanticSelection;
     callback terminal-line-selection-range(string, int, int) -> TerminalSemanticSelection;
@@ -982,9 +983,10 @@ export component AppWindow inherits Window {
         }
         terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
         scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
-        mouse-event(id, row, column, button, kind, shift, alt, control) => {
-                root.mouse-event(id, row, column, button, kind, shift, alt, control);
+        terminal-pointer-input(id, input) => {
+                root.terminal-pointer-input(id, input);
         }
+        terminal-focus-state(id, active) => { root.terminal-focus-state(id, active); }
             terminal-selection-text(id, anchor-row, anchor-column, focus-row, focus-column) => {
                 return root.terminal-selection-text(
                     id, anchor-row, anchor-column, focus-row, focus-column,

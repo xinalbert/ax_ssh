@@ -133,15 +133,17 @@ Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 从当前私有 mouse mode 分别暴露 button 与 wheel 能力，
-并生成有界的 SGR、UTF-8、URXVT 1015 或传统 X10 事件。锁定的终端 parser 不暴露 1015，因此小型原始
-DEC 私有模式跟踪器会使 1005、1006 与 1015 即使跨 transport read 到达也保持互斥。URXVT 兼容格式为十进制
-`CSI Cb;Cx;CyM`；SGR 1006 的 release 保留按下时的按钮、读取 release 事件发生时的修饰键，并以小写 `m`
-结束；传统 X10/UTF-8/URXVT release 使用按钮码 3。纵向滚轮映射 xterm 按钮 4/5，横向滚轮映射 6/7，Winit
-可跨平台识别的 Back/Forward 侧键映射 8/9。领域编码器也有界支持标准辅助按键 10/11，但没有可移植身份的
-平台 `Other` 按键绝不猜测映射。协议编码与 UI 交互策略分离。Settings 提供两种策略：标准 xterm 模式按 reporting
-原样转发 button 手势，`Shift` 作为本地选区绕过键，`Alt`/`Option` 只作为 xterm modifier bit；默认开启的
-**Local selection priority** 模式让普通左键拖动保持本地选区，按住 `Alt`/`Option` 才开始远端 button 手势。
-两种模式下滚轮都继续遵循 reporting，`Shift` + 滚轮使用本地 scrollback。`TerminalPane` 在 button down
+并生成有界的 SGR 1006 或传统 X10 事件。小型原始 DEC 私有模式跟踪器会在程序请求 UTF-8 1005、URXVT 1015
+或像素坐标 SGR 1016 时抑制上报：AxSSH 绝不替换成另一种 wire format，也不会把字符格坐标冒充像素。
+该跟踪器可跨 transport read，并在不兼容请求被关闭或重置后回到终端 parser 实际的 1006 mode。SGR 1006 的
+release 保留按下时的按钮、读取 release 事件发生时的修饰键，并以小写 `m` 结束；传统 X10 release 使用按钮码 3。
+纵向滚轮映射 xterm 按钮 4/5，横向滚轮映射 6/7，Winit 可跨平台识别的 Back/Forward 侧键映射 8/9。领域编码器
+也有界支持标准辅助按键 10/11，但没有可移植身份的平台 `Other` 按键绝不猜测映射。协议编码与 UI 交互策略分离。
+Settings 提供两种策略：标准 xterm 模式按 reporting
+原样转发 button 手势，`Shift` 作为本地选区绕过键，`Alt`/`Option` 只作为 xterm modifier bit；默认即为标准
+xterm 模式。选择加入的 **Local selection priority** 模式让普通左键拖动保持本地选区，按住 `Alt`/`Option`
+才开始远端 button 手势。两种模式下滚轮都继续遵循 reporting，`Shift` + 滚轮使用本地 scrollback；每个归一化
+滚轮单位都会生成一条标准 xterm wheel report，UI 到 application 的单一源事件最多有界为 256 条。`TerminalPane` 在 button down
 时确定唯一 owner；Slint pointer capture 使指针离开 grid 后的 motion/release 仍沿用该 owner，cancel 时则在
 最后一个有界 cell 使用最近一次 pointer 事件的修饰键发送匹配 release，再清理 owner。motion 每个显示帧只
 保留最新 cell；bridge 重验 pane UUID 后才把字节发送给对应 worker，motion 队列满属于可丢弃的正常背压，
@@ -151,6 +153,10 @@ press、release、worker 关闭和路由失败仍保持可观察。Tokio command
 reporting 开启时只为本地 owner 显式打开该菜单：标准模式使用 `Shift` + 右键，本地选区优先模式使用普通右键；
 后者的 `Alt`/`Option` + 右键仍属于远端。
 alternate-scroll 只在终端确实处于备用屏时启用 wheel 能力，绝不会启用 button reporting。
+焦点跟踪与 pointer reporting 分离。终端请求 DEC 私有 mode 1004 时，只有活动且非 modal 窗口中可见、
+已连接且 focused 的 pane 才会在 focus-in 上报 xterm `CSI I`、在 focus-out 上报 `CSI O`。`TerminalPane`
+只发布 terminal UUID 和布尔值；application bridge 重验窗口/pane 所有权后，才经可靠 worker 路径发送固定字节。
+切换 Tab 或 pane、窗口失去激活、打开阻塞 modal、断开连接或移除 detached workspace 都会清理此前已上报的焦点状态。
 Terminal Edit 菜单意图以经过校验的 command + 有界 revision 留在 Slint。所有 pane 都观察该信号，
 但只有 focused pane 调用既有局部复制、粘贴或全选操作；菜单路由不会把选区坐标或文字提升到
 应用状态。
@@ -937,8 +943,9 @@ GitHub 自动生成的 notes 继续保留完整提交列表。
 scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存、macOS 的
     Option-as-Meta 偏好、侧栏/Tab 宽度、会话遮蔽字符、收起组名字符数、快捷键、`ThemeSettings`、
     非秘密的 X11 provider/path/启动/兼容设置、SSH 认证方式（可选择 agent，但不包含 agent 端点或
-    identity），以及记住密码的默认后端和界面语言策略。schema 版本 23 新增默认开启的
-    `terminal_mouse_local_selection_priority`；关闭后使用标准 xterm 鼠标路由，旧文件保持此前的本地选区优先行为。
+    identity），以及记住密码的默认后端和界面语言策略。schema 版本 23 新增
+    `terminal_mouse_local_selection_priority`；默认值与缺失的旧字段均使用标准 xterm 鼠标路由，显式保存的 `true`
+    则保留本地选区优先行为。
     schema 版本 22 新增
     `terminal_text_brightness_percent`，保存范围为 60-120、默认 100，并新增默认关闭的
     `terminal_semantic_highlighting`。版本 21 及更早文件会丢弃旧最小对比度字段并迁移为 100，

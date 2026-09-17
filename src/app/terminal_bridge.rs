@@ -24,6 +24,8 @@ use slint::winit_030::{
     winit::{event::WindowEvent, keyboard::ModifiersState},
 };
 
+const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
+
 #[derive(Clone, Copy, Debug)]
 struct TerminalGeometrySample {
     pane_x: f32,
@@ -577,6 +579,40 @@ impl TerminalInputContext<'_> {
     }
 }
 
+fn report_terminal_focus_state(
+    state: &Arc<Mutex<AppState>>,
+    window_router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    focused: bool,
+) -> Result<bool> {
+    let app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if focused && !window_router.owns_terminal_pane(window_id, tab_id, &app) {
+        return Ok(false);
+    }
+    let Some(terminal) = app.terminal(tab_id) else {
+        return Ok(false);
+    };
+    if !terminal.connected {
+        return Ok(false);
+    }
+    let model = terminal
+        .terminal
+        .as_ref()
+        .context("active terminal has no terminal model")?;
+    let Some(data) = model.encode_focus_event(focused) else {
+        return Ok(true);
+    };
+    let worker = terminal
+        .worker
+        .as_ref()
+        .context("active terminal has no worker")?;
+    worker.request_send(data)?;
+    Ok(true)
+}
+
 pub(super) fn wire_terminal(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -764,83 +800,168 @@ pub(super) fn wire_terminal(
     let ui_for_mouse = ui.as_weak();
     let state_for_mouse = state.clone();
     let router_for_mouse = window_router.clone();
-    ui.on_mouse_event(
-        move |tab_id, row, column, button, kind, shift, alt, control| {
-            let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_mouse) else {
+    ui.on_terminal_pointer_input(move |tab_id, input| {
+        let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_mouse) else {
+            return;
+        };
+        let button = match input.button {
+            0 => TerminalMouseButton::Left,
+            1 => TerminalMouseButton::Middle,
+            2 => TerminalMouseButton::Right,
+            3 => TerminalMouseButton::WheelUp,
+            4 => TerminalMouseButton::WheelDown,
+            5 => TerminalMouseButton::WheelLeft,
+            6 => TerminalMouseButton::WheelRight,
+            7 => TerminalMouseButton::Auxiliary8,
+            8 => TerminalMouseButton::Auxiliary9,
+            9 => TerminalMouseButton::None,
+            _ => return,
+        };
+        let kind = match input.kind {
+            0 => TerminalMouseEventKind::Press,
+            1 => TerminalMouseEventKind::Release,
+            2 => TerminalMouseEventKind::Motion,
+            _ => return,
+        };
+        let repeat_count = input.repeat_count.clamp(1, MAX_MOUSE_WHEEL_REPORTS) as usize;
+        let wheel = matches!(
+            button,
+            TerminalMouseButton::WheelUp
+                | TerminalMouseButton::WheelDown
+                | TerminalMouseButton::WheelLeft
+                | TerminalMouseButton::WheelRight
+        );
+        if repeat_count > 1 && (kind != TerminalMouseEventKind::Press || !wheel) {
+            debug!(%tab_id, "discarded invalid repeated terminal mouse event");
+            return;
+        }
+        let result = state_for_mouse
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))
+            .and_then(|mut app| {
+                if !router_for_mouse.owns_terminal_pane(window_id, tab_id, &app) {
+                    anyhow::bail!("terminal pane is no longer visible in this window");
+                }
+                let terminal = app.terminal_mut(tab_id).context("terminal tab not found")?;
+                if !terminal.connected {
+                    return Ok(true);
+                }
+                let model = terminal
+                    .terminal
+                    .as_ref()
+                    .context("active tab has no terminal model")?;
+                let Some(data) = model.encode_mouse_event(TerminalMouseEvent {
+                    kind,
+                    button,
+                    column: input.column.max(0) as usize,
+                    row: input.row.max(0) as usize,
+                    modifiers: TerminalMouseModifiers {
+                        shift: input.shift,
+                        alt: input.alt,
+                        control: input.control,
+                    },
+                }) else {
+                    return Ok(true);
+                };
+                let data = if repeat_count == 1 {
+                    data
+                } else {
+                    let mut repeated = Vec::with_capacity(data.len() * repeat_count);
+                    for _ in 0..repeat_count {
+                        repeated.extend_from_slice(&data);
+                    }
+                    repeated
+                };
+                let worker = terminal
+                    .worker
+                    .as_ref()
+                    .context("active terminal has no worker")?;
+                if kind == TerminalMouseEventKind::Motion {
+                    worker.request_send_motion(data)
+                } else {
+                    worker.request_send(data).map(|()| true)
+                }
+            });
+        match result {
+            Ok(true) => {}
+            Ok(false) => {
+                debug!(%tab_id, "terminal mouse motion dropped under worker backpressure");
+            }
+            Err(error) => {
+                debug!(%error, "terminal mouse event failed");
+                set_status(
+                    &ui_for_mouse,
+                    &format!("Cannot send terminal mouse event: {error}"),
+                );
+            }
+        }
+    });
+
+    let focused_terminal = Rc::new(RefCell::new(None));
+    let focused_terminal_for_callback = focused_terminal.clone();
+    let ui_for_focus_report = ui.as_weak();
+    let state_for_focus_report = state.clone();
+    let router_for_focus_report = window_router.clone();
+    ui.on_terminal_focus_state(move |tab_id, focused| {
+        let requested_tab_id = if tab_id.is_empty() {
+            None
+        } else {
+            let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_focus_report) else {
                 return;
             };
-            let button = match button {
-                0 => TerminalMouseButton::Left,
-                1 => TerminalMouseButton::Middle,
-                2 => TerminalMouseButton::Right,
-                3 => TerminalMouseButton::WheelUp,
-                4 => TerminalMouseButton::WheelDown,
-                5 => TerminalMouseButton::WheelLeft,
-                6 => TerminalMouseButton::WheelRight,
-                7 => TerminalMouseButton::Auxiliary8,
-                8 => TerminalMouseButton::Auxiliary9,
-                9 => TerminalMouseButton::None,
-                _ => return,
+            Some(tab_id)
+        };
+        if focused {
+            let Some(tab_id) = requested_tab_id else {
+                return;
             };
-            let kind = match kind {
-                0 => TerminalMouseEventKind::Press,
-                1 => TerminalMouseEventKind::Release,
-                2 => TerminalMouseEventKind::Motion,
-                _ => return,
-            };
-            let result = state_for_mouse
-                .lock()
-                .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-                .and_then(|mut app| {
-                    if !router_for_mouse.owns_terminal_pane(window_id, tab_id, &app) {
-                        anyhow::bail!("terminal pane is no longer visible in this window");
-                    }
-                    let terminal = app.terminal_mut(tab_id).context("terminal tab not found")?;
-                    if !terminal.connected {
-                        return Ok(true);
-                    }
-                    let model = terminal
-                        .terminal
-                        .as_ref()
-                        .context("active tab has no terminal model")?;
-                    let Some(data) = model.encode_mouse_event(TerminalMouseEvent {
-                        kind,
-                        button,
-                        column: column.max(0) as usize,
-                        row: row.max(0) as usize,
-                        modifiers: TerminalMouseModifiers {
-                            shift,
-                            alt,
-                            control,
-                        },
-                    }) else {
-                        return Ok(true);
-                    };
-                    let worker = terminal
-                        .worker
-                        .as_ref()
-                        .context("active terminal has no worker")?;
-                    if kind == TerminalMouseEventKind::Motion {
-                        worker.request_send_motion(data)
-                    } else {
-                        worker.request_send(data).map(|()| true)
-                    }
-                });
-            match result {
-                Ok(true) => {}
-                Ok(false) => {
-                    debug!(%tab_id, "terminal mouse motion dropped under worker backpressure");
-                }
+            let previous_tab_id = *focused_terminal_for_callback.borrow();
+            if previous_tab_id == Some(tab_id) {
+                return;
+            }
+            if let Some(previous_tab_id) = focused_terminal_for_callback.replace(None)
+                && let Err(error) = report_terminal_focus_state(
+                    &state_for_focus_report,
+                    &router_for_focus_report,
+                    window_id,
+                    previous_tab_id,
+                    false,
+                )
+            {
+                debug!(%error, %previous_tab_id, "terminal focus-out report failed");
+            }
+            match report_terminal_focus_state(
+                &state_for_focus_report,
+                &router_for_focus_report,
+                window_id,
+                tab_id,
+                true,
+            ) {
+                Ok(true) => focused_terminal_for_callback.replace(Some(tab_id)),
+                Ok(false) => None,
                 Err(error) => {
-                    debug!(%error, "terminal mouse event failed");
-                    set_status(
-                        &ui_for_mouse,
-                        &format!("Cannot send terminal mouse event: {error}"),
-                    );
+                    debug!(%error, %tab_id, "terminal focus-in report failed");
+                    None
+                }
+            };
+        } else {
+            let previous_tab_id = *focused_terminal_for_callback.borrow();
+            if let Some(previous_tab_id) = previous_tab_id
+                && (requested_tab_id.is_none() || requested_tab_id == Some(previous_tab_id))
+            {
+                focused_terminal_for_callback.replace(None);
+                if let Err(error) = report_terminal_focus_state(
+                    &state_for_focus_report,
+                    &router_for_focus_report,
+                    window_id,
+                    previous_tab_id,
+                    false,
+                ) {
+                    debug!(%error, %previous_tab_id, "terminal focus-out report failed");
                 }
             }
-        },
-    );
+        }
+    });
 
     let ui_for_selection = ui.as_weak();
     let state_for_selection = state.clone();

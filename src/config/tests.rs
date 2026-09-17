@@ -954,7 +954,7 @@ fn copy_selection_on_select_defaults_disabled_and_round_trips() {
     assert!(legacy.settings.appearance.right_click_copy_or_paste);
     assert!(!legacy.settings.appearance.copy_selection_on_select);
     assert!(
-        legacy
+        !legacy
             .settings
             .appearance
             .terminal_mouse_local_selection_priority

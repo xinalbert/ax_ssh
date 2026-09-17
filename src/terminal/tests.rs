@@ -502,7 +502,7 @@ fn encodes_sgr_click_release_wheel_drag_and_modifiers() {
 }
 
 #[test]
-fn encodes_x10_and_utf8_coordinates_with_bounds() {
+fn rejects_legacy_utf8_mouse_coordinates() {
     let mut terminal = TerminalModel::new(300, 100, 10);
     terminal.process(b"\x1b[?1000h");
     let event = TerminalMouseEvent {
@@ -514,46 +514,13 @@ fn encodes_x10_and_utf8_coordinates_with_bounds() {
     };
     assert_eq!(terminal.encode_mouse_event(event), None);
     terminal.process(b"\x1b[?1005h");
-    assert_eq!(
-        terminal.encode_mouse_event(event),
-        Some(vec![27, 91, 77, 34, 197, 140, 194, 132])
-    );
-
-    assert_eq!(
-        terminal.encode_mouse_event(TerminalMouseEvent {
-            kind: TerminalMouseEventKind::Release,
-            button: TerminalMouseButton::Right,
-            column: 2,
-            row: 3,
-            modifiers: TerminalMouseModifiers {
-                shift: true,
-                alt: true,
-                control: true,
-            },
-        }),
-        Some(vec![27, 91, 77, 63, 35, 36])
-    );
+    assert_eq!(terminal.encode_mouse_event(event), None);
 }
 
 #[test]
-fn urxvt_mouse_encoding_tracks_split_private_modes_and_stays_exclusive() {
+fn rejects_legacy_urxvt_and_sgr_pixel_mouse_encodings() {
     let mut terminal = TerminalModel::new(80, 24, 10);
-    terminal.process(b"\x1b[?1000h\x1b[?10");
-    assert!(!terminal.mouse_reporting().urxvt);
-
-    terminal.process(b"15h");
-    assert_eq!(
-        terminal.mouse_reporting(),
-        TerminalMouseReporting {
-            click: true,
-            drag: false,
-            motion: false,
-            sgr: false,
-            utf8: false,
-            urxvt: true,
-            alternate_scroll: true,
-        }
-    );
+    terminal.process(b"\x1b[?1000h\x1b[?1006h");
     let event = TerminalMouseEvent {
         kind: TerminalMouseEventKind::Press,
         button: TerminalMouseButton::Right,
@@ -563,17 +530,22 @@ fn urxvt_mouse_encoding_tracks_split_private_modes_and_stays_exclusive() {
     };
     assert_eq!(
         terminal.encode_mouse_event(event),
-        Some(b"\x1b[2;3;4M".to_vec())
+        Some(b"\x1b[<2;3;4M".to_vec())
     );
 
-    terminal.process(b"\x1b[?1006h");
+    terminal.process(b"\x1b[?1016h");
+    assert!(!terminal.mouse_button_reporting_active());
+    assert_eq!(terminal.encode_mouse_event(event), None);
+    terminal.process(b"\x1b[?1016l");
     assert!(terminal.mouse_reporting().sgr);
-    assert!(!terminal.mouse_reporting().urxvt);
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[<2;3;4M".to_vec())
+    );
 
-    terminal.process(b"\x1b[?1015h\x1b[?1015l");
-    assert!(!terminal.mouse_reporting().sgr);
-    assert!(!terminal.mouse_reporting().utf8);
-    assert!(!terminal.mouse_reporting().urxvt);
+    terminal.process(b"\x1b[?1015h");
+    assert!(!terminal.mouse_button_reporting_active());
+    assert_eq!(terminal.encode_mouse_event(event), None);
 }
 
 #[test]
@@ -604,16 +576,21 @@ fn encodes_horizontal_wheel_and_auxiliary_mouse_buttons() {
         terminal.encode_mouse_event(event(TerminalMouseButton::Auxiliary11)),
         Some(b"\x1b[<131;3;4M".to_vec())
     );
+}
 
-    terminal.process(b"\x1b[?1015h");
-    assert_eq!(
-        terminal.encode_mouse_event(event(TerminalMouseButton::WheelLeft)),
-        Some(b"\x1b[66;3;4M".to_vec())
-    );
-    assert_eq!(
-        terminal.encode_mouse_event(event(TerminalMouseButton::Auxiliary9)),
-        Some(b"\x1b[129;3;4M".to_vec())
-    );
+#[test]
+fn encodes_focus_reports_only_when_requested() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    assert_eq!(terminal.encode_focus_event(true), None);
+
+    terminal.process(b"\x1b[?1004h");
+    assert!(terminal.focus_reporting_active());
+    assert_eq!(terminal.encode_focus_event(true), Some(b"\x1b[I".to_vec()));
+    assert_eq!(terminal.encode_focus_event(false), Some(b"\x1b[O".to_vec()));
+
+    terminal.process(b"\x1b[?1004l");
+    assert!(!terminal.focus_reporting_active());
+    assert_eq!(terminal.encode_focus_event(false), None);
 }
 
 #[test]
