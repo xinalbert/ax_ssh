@@ -1315,26 +1315,34 @@ remote size/mtime fingerprint while the editor is open. Automatic upload is
 explicit and off by default, debounced, and still guarded by the observed
 fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
-local/remote source prefix: local or Finder files dropped on Remote files queue
-uploads, and remote files or folders dropped on Local files queue downloads.
+local/remote source prefix: local paths dropped on Remote files queue uploads,
+and remote files or folders dropped on Local files queue downloads. External
+Finder uploads use the same target contract: while Winit reports an external
+file hover, the bridge records its latest `CursorMoved` position and asks the
+declarative SFTP geometry whether it is inside the enabled Remote files target.
+Only that answer creates an upload intent. `DroppedFile` has no position, so a
+missing hover coordinate, any other target, a loading target, or a stale
+multi-file hover is rejected rather than guessed from the active directory.
+Slint `DropArea` continues to handle the in-process paths.
+
 On macOS, beginning a drag on a visible remote regular file instead creates an
 AppKit `NSFilePromiseProvider` with copy-only semantics. Its main-thread
 delegate receives the selected final URL only after a drop target accepts it,
 then hands that owned path to the ordinary bounded SFTP transfer request. The
 delegate never reads remote content or writes files; the SFTP worker still owns
-the network stream and secure local writer. While that drag is active, the
-originating AxSSH window accepts its exact native source and routes it to the
-Local files directory captured at drag start, so a returned drop cannot be
-retargeted by a focus or navigation change. It completes as a normal
+the network stream and secure local writer. During that drag, the temporary
+AppKit destination is a child view clipped to the enabled Local files geometry
+captured at drag start, and accepts only the exact originating native source.
+A return anywhere else in the AxSSH window is rejected; a drop in the Local
+files region uses the captured Local files directory, so focus or navigation
+changes cannot retarget it. If that region is unavailable, Finder destinations
+still work but a return to AxSSH is rejected. It completes as a normal
 `Downloaded` transfer and does not auto-open the resulting file. Remote
 directories, links, filtered entries, and every non-macOS platform retain the
-internal drag path. Finder-to-Remote uploads remain Winit `DroppedFile` events
-and target the current remote directory because that event has no reliable pane
-coordinate; Slint `DropArea` continues to handle the other in-process paths.
-The temporary native destination detaches as soon as the request is queued, so
-it cannot intercept normal AxSSH input while the transfer runs; the provider
-and delegate stay retained only until that terminal transfer event completes the
-promise.
+internal drag path. The temporary native destination detaches as soon as the
+request is queued, so it cannot intercept normal AxSSH input while the transfer
+runs; the provider and delegate stay retained only until that terminal transfer
+event completes the promise.
 
 ## Telnet and serial transport contract
 

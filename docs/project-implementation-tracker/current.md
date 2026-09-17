@@ -2,32 +2,35 @@
 
 ## 当前目标
 
-- 目标 ID：20260916-renderer-fault-diagnostics
-- 目标：为 macOS Skia/Metal shader 编译超时补齐可操作的 renderer 诊断，以及与 Slint 生命周期兼容的 software 回退。
-- 交付物：启动 renderer 选择来源与 Metal device 记录、主/分离窗口计数、有界 GPU/Skia/Metal fault 分类、Automatic 模式的下一次启动 software 回退、复制诊断字段、回归测试和双语说明。
+- 目标 ID：20260917-sftp-native-drop-targeting
+- 目标：将 SFTP 外部文件拖入和 macOS 原生回拖改为标准的、目标区域驱动的 copy/drop 路由，删除以活动目录猜测落点的上报路径。
+- 交付物：Slint Remote/Local files 目标命中契约、Winit 外部文件坐标门控、受限于 Local files 的 AppKit promise destination、定向回归、双语说明和实现跟踪。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：`src/app/runtime.rs` 的 renderer 选择/诊断、`src/app.rs` 启动和事件循环边界、主/分离窗口生命周期计数、复制诊断和双语 renderer 契约。
-- 不在本轮范围内：SSH trust/认证、凭据、终端协议字节语义、Slint/Skia vendor patch、运行中替换已活跃的 process-global renderer、GUI 视觉自动验收。
+- 当前范围：`ui/sftp-pane.slint`、`ui/workspace-shell.slint`、`ui/app.slint` 的 SFTP 可接收区域；`src/app/terminal_bridge.rs` 的 Winit 文件事件桥；`src/app/sftp_bridge.rs` 的有界上传 intent；以及 `src/app/macos_file_drag.rs` 的 AppKit promise drop destination。
+- 不在本轮范围内：SSH trust/认证、凭据、SFTP worker/队列协议、覆盖同名文件策略、终端鼠标协议字节语义、GUI 视觉自动验收。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| RENDERER1 | completed | renderer 选择/回退、Metal/窗口/fault 诊断与双语契约 | Rust 定向回归、locked/offline Cargo 门禁和差异检查 | Skia stderr-only shader source 不伪装成可拦截错误；只记录有界应用侧 fault。 |
-| TERMVIEW1 | completed | Tab 切换时保留终端 detached viewport，并统一长文本粘贴事务 | 终端/输入定向回归、Slint/Cargo 离线门禁和差异检查 | Rust `TerminalModel` 保留 resize 后的 `display_offset`；paste 通过统一 `KeyboardEvent`，各 transport 以 16 KiB 分块写出。 |
+| SFTPDRAG1 | completed | 目标命中、Winit/AppKit 路由和标准 copy/drop 契约 | SFTP 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 外部文件只可投到 Remote files；原生远端回拖只可落到 Local files；缺少可靠目标一律拒绝。 |
 
 ## 已完成
 
+- 已将 SFTP 原生拖放改为目标区域驱动的 copy/drop 路由：Slint 为 Remote/Local files 发布只读、有限的窗口坐标几何 DTO；主窗口和 detached 窗口共享该契约。
+- 已删除以活动 SFTP Tab 或当前目录猜测外部落点的上传入口。Winit 仅在当前外部 hover 的最后 `CursorMoved` 坐标命中已启用 Remote files 区域时才排入上传；坐标缺失、失效、加载中或命中其它区域均拒绝。
+- 已将 macOS file-promise 的接收视图从全窗口收窄为拖动启动时经校验的 Local files 矩形；区域不可用时 Finder 仍可接收 promise，但回拖至 AxSSH 会被拒绝。
+- 已复用既有有界 SFTP intent/worker 和安全本地 writer；未改变 SSH host-key 信任、凭据生命周期、远端写入或传输并发上限。
 - 已实现启动阶段 Skia 选择失败时的单次 `winit-software` 重试；显式 `SLINT_BACKEND` 仍保持最高优先级。
 - 已实现 Automatic macOS 的非秘密 renderer fallback marker：创建、显示或 event loop 向上报告 GPU/Skia/Metal fault 后，下次 Automatic 使用 software；正常 Skia 退出会清除标记。
 - 已加入 renderer 请求/实际选择/来源/回退原因、Metal device、实时窗口数及有界 fault 计数；raw Skia stderr shader source 明确标为 application-errors-only，避免把不可观测错误伪造成统计数据。
@@ -42,6 +45,9 @@
 
 ## 验证
 
+- 已完成：SFTP bridge 11 项、Winit 外部文件命中 2 项、macOS native drop region 2 项定向回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings` 均通过，`ui/app.slint` 已由 Cargo 重新编译。
+- 已完成：`cargo test --locked --offline -- --skip local_pty_output_modes_translate_linefeeds_before_shell_start` 通过，以及 `git diff --check`。未跳过的完整测试会在既有、非本轮改动的 `src/local_shell.rs` PTY 子进程等待中卡住；已用 macOS `sample` 确认阻塞位置，未修改该用户工作区改动。
+- 已完成：tracker validator 已运行；本轮新增条目通过，但校验仍由既有 2026-08/09 历史条目格式债务阻断。新增 Markdown 链接均为外部标准来源，未新增相对链接；目标 macOS 的 Finder/外部拖入手工验收待执行。
 - 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 251、应用 250、Doc tests 0）和 `git diff --check`。
 - 已完成：新增 renderer fault 分类、有界错误文本和实际 software 选择回归通过；`ui/app.slint` 已随 Cargo check 重新编译。
 - 受阻但不影响本轮实现：tracker validator 已运行，但仍被既有 2026-08/09 历史记录字段/时间格式债务阻断；本轮 RENDERER1 条目字段齐全。
@@ -49,15 +55,17 @@
 
 ## 风险与阻塞
 
+- 无本轮代码阻塞。外部文件拖放的 Winit 事件没有 drop 坐标，因此只能使用同一外部 hover 序列的最新光标坐标；坐标不可用时明确拒绝，而不回退到活动目录。窗口 resize 后才发生的 native promise 回拖仍需用户在目标 macOS 手工确认。
 - 无代码阻塞。Slint renderer 为 process-global，已活跃 Metal surface 不能安全热切换；这不是未实现路径，而是通过启动回退和下一次 Automatic fallback marker 明确处理的生命周期边界。GUI 视觉验收仍需要用户执行。
 
 ## 下一步
 
+- 在主窗口和 detached SFTP 窗口分别验证：(1) 从 Finder 拖文件到 Remote files 才上传；(2) 拖到 Local/终端/标题栏/分隔条不上传；(3) 从 Remote files 拖到 Finder 可下载；(4) 回拖只在 Local files 下载，并覆盖 resize、取消和多个文件情形。
 - 在目标平台复现时，通过 Help > Copy Diagnostic Info 查看 `renderer-selected`、`renderer-source`、`metal-device`、window/fault 计数；同时保存 `ax_ssh::diagnostics` 和 Skia stderr，判断是否需要稳定保留 software renderer。
 
 ## 最后更新时间
 
-- 2026-09-16 09:34 +0800：完成 renderer/Metal diagnostics、启动与下次启动 software fallback、双语说明和离线 Cargo 门禁；等待目标平台用户复现确认。
+- 2026-09-17 13:58 +0800：完成 SFTP 原生拖放目标路由；定向回归、fmt/check/Clippy、跳过既有卡住 PTY 用例的完整测试、tracker 与 Markdown 检查均已完成，等待用户目标 macOS 验收。
 
 ## 9 项复核映射
 

@@ -377,3 +377,12 @@
 - 关键结论：Slint/softbuffer damage 和 CPU framebuffer 使用左上原点物理像素，而 macOS standalone `CALayer` 自身坐标默认使用左下原点。原型只除以 Retina scale，未在 `setNeedsDisplayInRect` 和 delegate clip 读取之间翻转 tile-local Y，因此完整 block 首帧正常，局部 cursor damage 在 block 内上下镜像；`geometryFlipped` 不改变 layer 内容渲染，不能代替本次局部矩形转换。
 - 对实施计划的影响：只在实验 delegate 边界双向转换 tile-local Y；完整矩形、底边、顶部和 Retina clip 往返由 focused tests 覆盖。默认 `setContents`、pane/fallback layer 顺序、Slint dirty region、终端模型和 SSH 边界不变；目标机重新验收连续输出、光标 blink、1/4/8/16 行、跨 block、Retina/resize 和分屏后，才进行 CPU/sample A/B。
 - 未解决问题：静态坐标往返已验证，但目标机 Core Animation 实际 clip 合并、连续 blink 残影和性能收益仍需用户视觉复验与同负载 sample。
+## 2026-09-17 SFTP 原生拖放目标路由
+
+- 时间：2026-09-17 00:00 +0800
+- 检索问题：当前外部文件拖入按活动 SFTP 目录上传、macOS promise 回拖在整个窗口接收，如何与标准拖放的目标协商语义对齐。
+- 检索原因：用户要求删除旧的目录猜测上报并按标准接口处理 SFTP 上传、下载拖动，以避免跨平台和跨窗口的不兼容行为。
+- 来源列表：[Winit 0.30.13 WindowEvent](https://docs.rs/winit/0.30.13/winit/event/enum.WindowEvent.html)；[Slint DragArea](https://docs.slint.dev/latest/docs/slint/reference/drag-and-drop/dragarea/)；[Slint DragAction](https://docs.slint.dev/latest/docs/rust/slint/language/enum.DragAction)；[Apple Drag Destinations](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragandDrop/Concepts/dragdestination.html)；[Apple draggingLocation](https://developer.apple.com/documentation/appkit/nsdragginginfo/dragginglocation)；[Apple file promise destination](https://developer.apple.com/documentation/appkit/nsfilepromiseproviderdelegate/filepromiseprovider%28_%3Awritepromiseto%3Acompletionhandler%3A%29?changes=l_3&language=objc)。
+- 关键结论：标准流程由实际 drop target 在拖入/悬停时协商 copy 或拒绝，并在释放位置生成意图；Winit 的 `DroppedFile(PathBuf)` 没有坐标，必须使用同一外部文件悬停期间最新的 `CursorMoved` 坐标，缺失时不能猜测。Slint `DropArea` 已对进程内拖放提供目标局部位置和 action 协商。AppKit destination 应只覆盖可接受区域并在 enter/update/perform 都拒绝区域外的操作。
+- 对实施计划的影响：UI 声明 Remote/Local files 的纯命中与几何契约。Winit bridge 只在有效外部 hover 坐标命中 Remote files 时调用现有上传 queue；macOS promise destination 的原生子视图仅附着到启动时的 Local files 矩形，区域外的回拖由 AppKit 拒绝。既有有界 intent、worker 和同名文件拒绝策略不变。
+- 未解决问题：Winit 无法向所有平台原生文件拖入提供 Slint `DropArea` 同等的 hover 光标反馈；需要用户在目标平台手工确认 Remote/Local 区域、分离窗口、窗口缩放和 Finder 回拖的视觉与交互反馈。

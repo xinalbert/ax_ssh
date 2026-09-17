@@ -26,6 +26,59 @@ use slint::winit_030::{
 
 const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
 
+/// The only coordinates Winit supplies for an external file drop are cursor
+/// moves. A `DroppedFile` itself has no location, so a transfer is allowed
+/// only while the window still has an external file hover and that last cursor
+/// position can be resolved by Slint to the declared Remote files target.
+#[derive(Default)]
+struct NativeFileDropPointer {
+    hovered_file_count: u16,
+    last_physical_position: Option<(f64, f64)>,
+}
+
+impl NativeFileDropPointer {
+    fn begin_external_file_hover(&mut self) {
+        self.hovered_file_count = self.hovered_file_count.saturating_add(1);
+    }
+
+    fn complete_external_file_drop(&mut self) {
+        self.hovered_file_count = self.hovered_file_count.saturating_sub(1);
+        if self.hovered_file_count == 0 {
+            self.last_physical_position = None;
+        }
+    }
+
+    fn record_cursor_position(&mut self, x: f64, y: f64) {
+        if x.is_finite() && y.is_finite() {
+            self.last_physical_position = Some((x, y));
+        }
+    }
+
+    fn clear(&mut self) {
+        self.hovered_file_count = 0;
+        self.last_physical_position = None;
+    }
+
+    fn logical_position(&self, scale_factor: f64) -> Option<(f32, f32)> {
+        if self.hovered_file_count == 0 || !scale_factor.is_finite() || scale_factor <= 0.0 {
+            return None;
+        }
+        let (x, y) = self.last_physical_position?;
+        let x = x / scale_factor;
+        let y = y / scale_factor;
+        if !x.is_finite()
+            || !y.is_finite()
+            || x < f64::from(f32::MIN)
+            || x > f64::from(f32::MAX)
+            || y < f64::from(f32::MIN)
+            || y > f64::from(f32::MAX)
+        {
+            return None;
+        }
+        Some((x as f32, y as f32))
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct TerminalGeometrySample {
     pane_x: f32,
@@ -280,17 +333,46 @@ pub(super) fn install_terminal_keypad_input_hook(
     let runtime_for_drop = runtime.clone();
     let router_for_drop = window_router.clone();
     let ui_for_drop = ui.as_weak();
+    let native_file_drop_pointer = Rc::new(RefCell::new(NativeFileDropPointer::default()));
+    let native_file_drop_pointer_for_event = native_file_drop_pointer.clone();
     ui.window().on_winit_window_event(move |_window, event| {
         match event {
             WindowEvent::DroppedFile(path) => {
-                super::sftp_bridge::handle_native_dropped_file(
-                    &runtime_for_drop,
-                    &state_for_drop,
-                    &ui_for_drop,
-                    &router_for_drop,
-                    window_id,
-                    path,
-                );
+                let Some(ui) = ui_for_drop.upgrade() else {
+                    return EventResult::Propagate;
+                };
+                let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
+                let target = {
+                    let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
+                    let target = pointer
+                        .logical_position(scale_factor)
+                        .map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
+                    pointer.complete_external_file_drop();
+                    target
+                };
+                if target.is_some_and(|target| target.as_str() == "remote") {
+                    super::sftp_bridge::handle_native_dropped_file_on_remote_pane(
+                        &runtime_for_drop,
+                        &state_for_drop,
+                        &ui_for_drop,
+                        &router_for_drop,
+                        window_id,
+                        path,
+                    );
+                }
+            }
+            WindowEvent::HoveredFile(_) => {
+                native_file_drop_pointer_for_event
+                    .borrow_mut()
+                    .begin_external_file_hover();
+            }
+            WindowEvent::HoveredFileCancelled => {
+                native_file_drop_pointer_for_event.borrow_mut().clear();
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                native_file_drop_pointer_for_event
+                    .borrow_mut()
+                    .record_cursor_position(position.x, position.y);
             }
             WindowEvent::ModifiersChanged(next) => {
                 modifiers_for_event.set(next.state());
@@ -305,6 +387,7 @@ pub(super) fn install_terminal_keypad_input_hook(
             WindowEvent::Focused(false) => {
                 modifiers_for_event.set(ModifiersState::default());
                 clear_native_event_modifiers();
+                native_file_drop_pointer_for_event.borrow_mut().clear();
             }
             WindowEvent::KeyboardInput {
                 event,
@@ -1815,6 +1898,35 @@ mod tests {
         assert_eq!(quantize_logical(f32::NAN), i32::MIN);
         assert_eq!(quantize_scale(2.0), 2_000);
         assert_eq!(quantize_scale(f64::NAN), 0);
+    }
+
+    #[test]
+    fn native_file_drop_requires_current_external_hover_and_coordinates() {
+        let mut pointer = NativeFileDropPointer::default();
+        pointer.record_cursor_position(80.0, 48.0);
+        assert_eq!(pointer.logical_position(2.0), None);
+
+        pointer.begin_external_file_hover();
+        assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
+        assert_eq!(pointer.logical_position(0.0), None);
+
+        pointer.begin_external_file_hover();
+        pointer.complete_external_file_drop();
+        assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
+        pointer.complete_external_file_drop();
+        assert_eq!(pointer.logical_position(2.0), None);
+
+        pointer.begin_external_file_hover();
+        pointer.clear();
+        assert_eq!(pointer.logical_position(2.0), None);
+    }
+
+    #[test]
+    fn native_file_drop_rejects_non_finite_pointer_coordinates() {
+        let mut pointer = NativeFileDropPointer::default();
+        pointer.begin_external_file_hover();
+        pointer.record_cursor_position(f64::NAN, 12.0);
+        assert_eq!(pointer.logical_position(1.0), None);
     }
 
     #[test]

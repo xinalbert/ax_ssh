@@ -33,6 +33,57 @@ const MAX_FILE_NAME_CHARS: usize = 512;
 
 type PromiseCompletion = RcBlock<dyn Fn(*mut NSError)>;
 
+/// Logical coordinates of the Local files target, relative to the Slint
+/// content area. This is an owned UI DTO; AppKit receives only the resulting
+/// clipped native frame and never sees generated Slint types.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct NativeDropRegion {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl NativeDropRegion {
+    pub(super) fn from_logical(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+        let region = Self {
+            x: f64::from(x),
+            y: f64::from(y),
+            width: f64::from(width),
+            height: f64::from(height),
+        };
+        (region.x.is_finite()
+            && region.y.is_finite()
+            && region.width.is_finite()
+            && region.height.is_finite()
+            && region.x >= 0.0
+            && region.y >= 0.0
+            && region.width > 0.0
+            && region.height > 0.0)
+            .then_some(region)
+    }
+
+    fn frame_in_view(self, view: &NSView) -> Option<NSRect> {
+        let bounds = view.bounds();
+        let max_x = (self.x + self.width).min(bounds.size.width);
+        let max_y = (self.y + self.height).min(bounds.size.height);
+        let min_x = self.x.max(0.0);
+        let min_y = self.y.max(0.0);
+        if max_x <= min_x || max_y <= min_y {
+            return None;
+        }
+        let y = if view.isFlipped() {
+            bounds.origin.y + min_y
+        } else {
+            bounds.origin.y + bounds.size.height - max_y
+        };
+        Some(NSRect::new(
+            NSPoint::new(bounds.origin.x + min_x, y),
+            NSSize::new(max_x - min_x, max_y - min_y),
+        ))
+    }
+}
+
 #[derive(Default)]
 struct PromiseTransferRegistry {
     drag_by_transfer: HashMap<Uuid, Uuid>,
@@ -63,7 +114,7 @@ struct NativeFilePromiseDrag {
     _provider: Retained<NSFilePromiseProvider>,
     _delegate: Retained<NativeFilePromiseDelegate>,
     _source: Retained<NativeFilePromiseDragSource>,
-    destination: Retained<NativeFilePromiseDropDestination>,
+    destination: Option<Retained<NativeFilePromiseDropDestination>>,
 }
 
 thread_local! {
@@ -201,8 +252,8 @@ struct NativeFilePromiseDropDestinationIvars {
 }
 
 define_class!(
-    // SAFETY: The destination is a transparent NSView that exists only for
-    // one active drag. It accepts only its matching source object.
+    // SAFETY: The destination is a transparent NSView limited to the Local
+    // files frame for one active drag. It accepts only its matching source.
     #[unsafe(super(NSView))]
     #[name = "AxSSHSftpFilePromiseDropDestination"]
     #[thread_kind = MainThreadOnly]
@@ -270,12 +321,16 @@ impl NativeFilePromiseDropDestination {
 /// Begin a copy-only native drag for one remote regular file.
 ///
 /// `queue_download` receives either Finder's promised file path or the
-/// captured Local files destination when the drag returns to this AxSSH window.
-/// It must enqueue only an owned SFTP worker request and return the transfer ID.
+/// captured Local files destination when the drag returns to the declared
+/// local target. `local_drop_region` is absent when that target is unavailable;
+/// Finder destinations still work, while a return to AxSSH is rejected.
+/// The closure must enqueue only an owned SFTP worker request and return the
+/// transfer ID.
 pub(super) fn begin_file_promise_drag(
     window: &slint::Window,
     file_name: String,
     local_target: PathBuf,
+    local_drop_region: Option<NativeDropRegion>,
     queue_download: impl Fn(Uuid, PathBuf) -> Result<()> + 'static,
 ) -> Result<()> {
     validate_file_name(&file_name)?;
@@ -300,9 +355,13 @@ pub(super) fn begin_file_promise_drag(
         );
         item.setDraggingFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(48.0, 24.0)));
         let source = NativeFilePromiseDragSource::new(mtm, drag_id);
-        let destination = NativeFilePromiseDropDestination::new(mtm, drag_id, view.bounds());
-        destination.registerForDraggedTypes(&NSFilePromiseReceiver::readableDraggedTypes());
-        view.addSubview(&destination);
+        let destination = local_drop_region.and_then(|region| {
+            let frame = region.frame_in_view(view)?;
+            let destination = NativeFilePromiseDropDestination::new(mtm, drag_id, frame);
+            destination.registerForDraggedTypes(&NSFilePromiseReceiver::readableDraggedTypes());
+            view.addSubview(&destination);
+            Some(destination)
+        });
 
         ACTIVE_DRAGS.with(|drags| {
             drags.borrow_mut().insert(
@@ -426,15 +485,19 @@ fn queue_drag_download(
 
 fn discard_drag(drag_id: Uuid) {
     let drag = remove_drag(drag_id);
-    if let Some(drag) = drag {
-        drag.destination.removeFromSuperview();
+    if let Some(drag) = drag
+        && let Some(destination) = drag.destination
+    {
+        destination.removeFromSuperview();
     }
 }
 
 fn remove_drop_destination(drag_id: Uuid) {
     ACTIVE_DRAGS.with(|drags| {
-        if let Some(drag) = drags.borrow().get(&drag_id) {
-            drag.destination.removeFromSuperview();
+        if let Some(drag) = drags.borrow().get(&drag_id)
+            && let Some(destination) = &drag.destination
+        {
+            destination.removeFromSuperview();
         }
     });
 }
@@ -444,7 +507,9 @@ fn complete_drag(drag_id: Uuid, succeeded: bool) {
     let Some(drag) = drag else {
         return;
     };
-    drag.destination.removeFromSuperview();
+    if let Some(destination) = drag.destination {
+        destination.removeFromSuperview();
+    }
     let Some(completion) = drag.completion else {
         return;
     };
@@ -473,6 +538,14 @@ fn remove_drag(drag_id: Uuid) -> Option<NativeFilePromiseDrag> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_drop_region_requires_finite_non_empty_logical_geometry() {
+        assert!(NativeDropRegion::from_logical(10.0, 20.0, 30.0, 40.0).is_some());
+        assert!(NativeDropRegion::from_logical(-1.0, 0.0, 30.0, 40.0).is_none());
+        assert!(NativeDropRegion::from_logical(0.0, 0.0, 0.0, 40.0).is_none());
+        assert!(NativeDropRegion::from_logical(0.0, 0.0, f32::NAN, 40.0).is_none());
+    }
 
     #[test]
     fn promise_completion_resolves_the_originating_drag() {

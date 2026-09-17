@@ -5,7 +5,12 @@ import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
-import { SftpEntryRow, SftpTransferRow, SftpViewState } from "sftp-pane.slint";
+import {
+    SftpEntryRow,
+    SftpNativeDropRegion,
+    SftpTransferRow,
+    SftpViewState,
+} from "sftp-pane.slint";
 import { TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
 import {
     TerminalPaneDividerView,
@@ -537,6 +542,14 @@ export component AppWindow inherits Window {
     public function request-settings-section(section: string) {
         root.settings-section = section;
         root.settings-section-request-revision += 1;
+    }
+
+    public function native-sftp-drop-target-at(x: length, y: length) -> string {
+        return workspace-shell.native-sftp-drop-target-at(x, y);
+    }
+
+    public function native-sftp-local-drop-region() -> SftpNativeDropRegion {
+        return workspace-shell.native-sftp-local-drop-region();
     }
 
     init => { Palette.color-scheme = root.standard-widget-color-scheme; }

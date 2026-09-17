@@ -7,7 +7,7 @@ import {
     TerminalSemanticSelection,
     TerminalViewState,
 } from "terminal-pane.slint";
-import { SftpPane, SftpViewState } from "sftp-pane.slint";
+import { SftpNativeDropRegion, SftpPane, SftpViewState } from "sftp-pane.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { SessionGroupRow, SessionNavigation } from "components/session-navigation.slint";
 import {
@@ -435,6 +435,8 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    in-out property <SftpNativeDropRegion> native-sftp-remote-region: { accepts: false };
+    in-out property <SftpNativeDropRegion> native-sftp-local-region: { accepts: false };
 
     private property <float> sftp-directory-split-ratio: 0.5;
     private property <float> sftp-files-split-ratio: 0.7;
@@ -529,12 +531,14 @@ component DetachedWorkspaceContent inherits Rectangle {
             read-clipboard() => { return root.read-clipboard(); }
         }
 
-        if root.view.active_tab_kind == "sftp" : SftpPane {
+        if root.view.active_tab_kind == "sftp" : sftp-pane := SftpPane {
             width: parent.width;
             height: parent.height;
             standalone: true;
             native-file-drag-enabled: root.apple-platform;
             view: root.view.sftp;
+            native-remote-drop-region <=> root.native-sftp-remote-region;
+            native-local-drop-region <=> root.native-sftp-local-region;
             directory-split-ratio <=> root.sftp-directory-split-ratio;
             files-split-ratio <=> root.sftp-files-split-ratio;
             transfers-collapsed <=> root.sftp-transfers-collapsed;
@@ -616,6 +620,8 @@ export component WorkspaceShell inherits Rectangle {
     private property <int> terminal-focus-pending-revision: 0;
     private property <int> terminal-focus-consumed-revision: 0;
     private property <bool> terminal-tab-active: root.view.active_tab_kind == "terminal";
+    private property <SftpNativeDropRegion> native-sftp-remote-region: { accepts: false };
+    private property <SftpNativeDropRegion> native-sftp-local-region: { accepts: false };
 
     callback new-session();
     callback new-session-in-group(string);
@@ -753,6 +759,34 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
+    public function native-sftp-drop-target-at(x: length, y: length) -> string {
+        if root.view.active_tab_kind != "sftp" || !root.native-sftp-remote-region.accepts {
+            return "";
+        }
+        let content-x = root.detached-window ? x : x - session-navigation.width;
+        let content-y = root.detached-window ? y : y - workspace-titlebar.height;
+        let region = root.native-sftp-remote-region;
+        if content-x >= region.x && content-x < region.x + region.width
+                && content-y >= region.y && content-y < region.y + region.height {
+            return "remote";
+        }
+        return "";
+    }
+
+    public function native-sftp-local-drop-region() -> SftpNativeDropRegion {
+        if root.view.active_tab_kind != "sftp" || !root.native-sftp-local-region.accepts {
+            return { accepts: false };
+        }
+        let region = root.native-sftp-local-region;
+        return {
+            x: root.detached-window ? region.x : region.x + session-navigation.width,
+            y: root.detached-window ? region.y : region.y + workspace-titlebar.height,
+            width: region.width,
+            height: region.height,
+            accepts: region.accepts,
+        };
+    }
+
     changed terminal-focus-request-revision => {
         root.terminal-focus-pending-revision = root.terminal-focus-request-revision;
     }
@@ -780,7 +814,7 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
-    if root.detached-window : DetachedWorkspaceContent {
+    if root.detached-window : detached-content := DetachedWorkspaceContent {
         width: parent.width;
         height: parent.height;
         view: root.view;
@@ -792,6 +826,8 @@ export component WorkspaceShell inherits Rectangle {
         software-presentation-enabled: root.software-presentation-enabled;
         window-active: root.window-active;
         input-blocked: root.input-blocked;
+        native-sftp-remote-region <=> root.native-sftp-remote-region;
+        native-sftp-local-region <=> root.native-sftp-local-region;
         terminal-focus-state(id, active) => { root.terminal-focus-state(id, active); }
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
@@ -1075,12 +1111,14 @@ export component WorkspaceShell inherits Rectangle {
                         read-clipboard() => { return root.read-clipboard(); }
                     }
 
-                    if root.view.active_tab_kind == "sftp" : SftpPane {
+                    if root.view.active_tab_kind == "sftp" : sftp-pane := SftpPane {
                         width: parent.width;
                         height: parent.height;
                         standalone: true;
                         native-file-drag-enabled: root.apple-platform;
                         view: root.view.sftp;
+                        native-remote-drop-region <=> root.native-sftp-remote-region;
+                        native-local-drop-region <=> root.native-sftp-local-region;
                         directory-split-ratio <=> root.sftp-directory-split-ratio;
                         files-split-ratio <=> root.sftp-files-split-ratio;
                         transfers-collapsed <=> root.sftp-transfers-collapsed;

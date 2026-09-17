@@ -195,6 +195,9 @@ fn active_sftp_upload_target(
     let mut remote_directory = String::new();
     with_sftp_terminal_for_tab(state, tab_id, |terminal| {
         remote_directory = terminal.sftp.path.trim().to_owned();
+        if terminal.sftp.loading {
+            anyhow::bail!("remote SFTP directory is still loading");
+        }
         if remote_directory.is_empty() {
             anyhow::bail!("remote SFTP directory is not ready");
         }
@@ -367,7 +370,10 @@ fn queue_local_upload_path(
     });
 }
 
-pub(super) fn handle_native_dropped_file(
+/// Queue an external local file only after the UI bridge has resolved the
+/// current pointer to the declared Remote files drop target. This deliberately
+/// has no active-directory fallback: Winit's `DroppedFile` carries no target.
+pub(super) fn handle_native_dropped_file_on_remote_pane(
     runtime: &Handle,
     state: &Arc<Mutex<AppState>>,
     ui: &slint::Weak<AppWindow>,
@@ -507,10 +513,23 @@ fn begin_native_remote_file_drag(
 
     let state_for_transfer = state.clone();
     let ui_for_transfer = ui.as_weak();
+    let local_drop_region = ui.invoke_native_sftp_local_drop_region();
+    let local_drop_region = local_drop_region
+        .accepts
+        .then(|| {
+            super::macos_file_drag::NativeDropRegion::from_logical(
+                local_drop_region.x,
+                local_drop_region.y,
+                local_drop_region.width,
+                local_drop_region.height,
+            )
+        })
+        .flatten();
     super::macos_file_drag::begin_file_promise_drag(
         ui.window(),
         file_name,
         local_target,
+        local_drop_region,
         move |transfer_id, target| {
             let result = queue_native_remote_download(
                 &state_for_transfer,

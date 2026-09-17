@@ -34,6 +34,16 @@ export struct SftpTransferRow {
     has_local_path: bool,
 }
 
+// The Rust native-drag bridge uses this owned geometry only to place the
+// platform destination over the visible Local files DropArea.
+export struct SftpNativeDropRegion {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    accepts: bool,
+}
+
 export struct SftpViewState {
     available: bool,
     open: bool,
@@ -1404,6 +1414,27 @@ export component SftpPane inherits Rectangle {
     private property <string> editor-text-draft: root.view.editor_text;
     private property <string> rename-name-draft: root.view.rename_name;
 
+    // Native file events do not carry Slint's DropArea target. These bound
+    // regions let the application bridge query the same target geometry
+    // before it creates an external transfer intent.
+    in-out property <SftpNativeDropRegion> native-remote-drop-region: {
+        x: remote-pane.x,
+        y: files-area.y + remote-pane.y,
+        width: remote-pane.width,
+        height: remote-pane.height,
+        accepts: root.view.available && !root.view.loading
+            && remote-pane.width > 0px && remote-pane.height > 0px,
+    };
+    in-out property <SftpNativeDropRegion> native-local-drop-region: {
+            x: local-pane.x,
+            y: files-area.y + local-pane.y,
+            width: local-pane.width,
+            height: local-pane.height,
+            accepts: root.view.available && !root.view.local_loading
+                && !root.view.local_path.is-empty
+                && local-pane.width > 0px && local-pane.height > 0px,
+    };
+
     changed view => {
         root.editor-text-draft = root.view.editor_text;
         root.editor-path-draft = root.view.editor_path;
@@ -1557,7 +1588,7 @@ export component SftpPane inherits Rectangle {
                 activated => { root.directory-split-ratio = 0.5; }
             }
 
-            SftpDirectoryPane {
+            local-pane := SftpDirectoryPane {
                 x: directory-splitter.x + directory-splitter.width;
                 width: max(0px, parent.width - self.x);
                 height: parent.height;
