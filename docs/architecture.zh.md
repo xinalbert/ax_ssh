@@ -399,6 +399,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    资源，并异步等待 worker 可 join。与最后已应用行列数相同的重复尺寸会在调用平台 PTY resize
    前丢弃；满事件队列的反压可响应取消，不会卡住 reader。worker shutdown 使用固定超时，不会
    无限等待；controller 会保留 child-killer 兜底，直到 worker 收尾明确清除它。
+   Unix 上，native PTY 创建后、shell 启动前，AxSSH 会在 PTY 行规程中启用
+   `OPOST | ONLCR`。普通子进程输出的 `LF` 因而以 `CRLF` 到达终端；刻意将
+   terminal 切换为 raw 输出的程序仍自行负责控制字节。
    shell 启动按平台判断：`SHELL` 不可用时 macOS 默认使用 `/bin/zsh`；macOS 的 `zsh` 会收到 `-l`，
    由 zsh 正常加载系统/用户的 login 与
    interactive 启动文件；Linux 和其他 Unix shell 保持普通 interactive 启动模式，不强制增加 login
@@ -420,6 +423,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
    空白历史来强制将光标置于新底边。缩小时、备用屏、活动滚动区域、非底行光标和用户正在查看
    scrollback 时保持上游 resize 语义。`TerminalSnapshot` 只携带有样式的可见行及光标/mouse 元数据，
+   transport 输出会原样进入该模型：裸 `LF` 只推进到下一行而不复位列，reflow 保留由此产生的状态。
+   AxSSH 不会在终端 renderer 或 presentation 路径改写终端输出。
    不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
@@ -860,10 +865,10 @@ CoreAnimation、Metal 和 macOS allocator cache 仍可能保留进程级内存�
 
 `src/main.rs` 在创建 UI 前建立唯一的 `LoggingGuard`，并保持到 Slint 与 Tokio 生命周期
 结束之后。`src/logging.rs` 通过有界无损队列写入按 UTC 日期滚动的文件，最多保留
-15 个，同时把 `INFO` 及以上事件镜像到 stderr。guard 释放时先写退出事件，再排空
-队列、刷新当前文件并 join writer 线程。运行字段可以包含 session ID、host、port 和
-主机指纹；禁止记录凭据和终端内容。About 只接收 guard 已创建的日志目录 owned path，
-通过应用 bridge 打开它，不改变日志模块的所有权。
+15 个，同时把 `INFO` 及以上事件镜像到 stderr。stderr 接收原始日志字节；`src/logging.rs`
+不规范化行结束符。guard 释放时先写退出事件，再排空队列、刷新当前文件并 join writer 线程。运行字段可以包含 session ID、host、port 和主机指纹；禁止记录
+凭据和终端内容。About 只接收 guard 已创建的日志目录 owned path，通过应用 bridge 打开它，
+不改变日志模块的所有权。
 同一目录还由 `LoggingGuard` 创建私有的 `ax_ssh-crash.log` 并安装进程级 panic hook。
 hook 会在转交 Rust 默认 panic hook 前同步写入 panic 内容、源码位置、线程/进程/平台元数据、
 renderer 环境变量和强制采集的 Rust backtrace。它与有缓冲的滚动 writer 分离，因而 Objective-C

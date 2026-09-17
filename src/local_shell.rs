@@ -6,7 +6,11 @@ use std::env;
 use std::ffi::OsStr;
 #[cfg(any(target_os = "macos", test))]
 use std::ffi::OsString;
+#[cfg(all(unix, test))]
+use std::io::ErrorKind;
 use std::io::{Read, Write};
+#[cfg(unix)]
+use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
@@ -15,6 +19,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+#[cfg(unix)]
+use portable_pty::MasterPty;
 use portable_pty::{ChildKiller, CommandBuilder, PtySize, native_pty_system};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -376,6 +382,8 @@ fn run_local_shell(task: LocalShellTask) -> Result<()> {
     let pair = pty_system
         .openpty(pty_size(initial_size))
         .context("failed to open local pseudo-terminal")?;
+    #[cfg(unix)]
+    configure_local_pty_output_modes(pair.master.as_ref())?;
     let mut command = CommandBuilder::new(&shell_path);
     command.env("TERM", "xterm-256color");
     #[cfg(unix)]
@@ -672,6 +680,131 @@ fn pty_size(size: TerminalSize) -> PtySize {
     }
 }
 
+#[cfg(unix)]
+fn configure_local_pty_output_modes(master: &(dyn MasterPty + Send)) -> Result<()> {
+    let fd = master
+        .as_raw_fd()
+        .context("native local PTY does not expose a terminal file descriptor")?;
+    let mut termios = local_pty_termios(fd)?;
+    termios.c_oflag |= libc::OPOST | libc::ONLCR;
+    set_local_pty_termios(fd, &termios)
+}
+
+#[cfg(unix)]
+fn local_pty_termios(fd: portable_pty::unix::RawFd) -> Result<libc::termios> {
+    let mut termios = MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: `fd` comes from the live native `MasterPty` and the pointer
+    // names writable storage for exactly one `libc::termios` value.
+    if unsafe { libc::tcgetattr(fd, termios.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to read local PTY termios");
+    }
+    // SAFETY: `tcgetattr` above returned success, so it initialized `termios`.
+    Ok(unsafe { termios.assume_init() })
+}
+
+#[cfg(unix)]
+fn set_local_pty_termios(fd: portable_pty::unix::RawFd, termios: &libc::termios) -> Result<()> {
+    // SAFETY: `fd` comes from the live native `MasterPty`; `termios` is a
+    // valid immutable pointer for the duration of this immediate syscall.
+    if unsafe { libc::tcsetattr(fd, libc::TCSANOW, termios) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to set local PTY termios");
+    }
+    Ok(())
+}
+
+#[cfg(all(unix, test))]
+fn set_local_pty_nonblocking(fd: portable_pty::unix::RawFd) -> Result<()> {
+    // SAFETY: `fd` comes from the live native `MasterPty`; this test-only
+    // change affects only the PTY file description that will be closed with it.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags == -1 {
+        return Err(std::io::Error::last_os_error())
+            .context("failed to read local PTY file status flags");
+    }
+    // SAFETY: `fd` is the same live PTY descriptor and `flags | O_NONBLOCK`
+    // is the documented `F_SETFL` bitmask for that descriptor.
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+        return Err(std::io::Error::last_os_error())
+            .context("failed to make local PTY nonblocking for test");
+    }
+    Ok(())
+}
+
+#[cfg(all(unix, test))]
+fn read_local_pty_output_with_timeout(
+    reader: &mut dyn Read,
+    expected_len: usize,
+) -> Result<Vec<u8>> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let mut output = Vec::with_capacity(expected_len);
+    let mut buffer = [0_u8; 64];
+    while output.len() < expected_len {
+        match reader.read(&mut buffer) {
+            Ok(0) => anyhow::bail!("local PTY output ended before the expected test bytes arrived"),
+            Ok(read) => output.extend_from_slice(&buffer[..read]),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if std::time::Instant::now() >= deadline {
+                    anyhow::bail!("timed out waiting for local PTY test output");
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => {
+                return Err(error).context("failed to read local PTY test output");
+            }
+        }
+    }
+    Ok(output)
+}
+
+#[cfg(all(unix, test))]
+fn wait_for_local_pty_test_child_exit(
+    child: &mut (dyn portable_pty::Child + Send + Sync),
+) -> Result<()> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        match child
+            .try_wait()
+            .context("failed to poll local PTY test child")?
+        {
+            Some(status) if status.success() => return Ok(()),
+            Some(status) => anyhow::bail!("local PTY test child exited unsuccessfully: {status:?}"),
+            None if std::time::Instant::now() >= deadline => {
+                anyhow::bail!("timed out waiting for local PTY test child to exit");
+            }
+            None => thread::sleep(Duration::from_millis(5)),
+        }
+    }
+}
+
+#[cfg(all(unix, test))]
+fn stop_local_pty_test_child(child: &mut (dyn portable_pty::Child + Send + Sync)) -> Result<()> {
+    if child
+        .try_wait()
+        .context("failed to poll local PTY test child before cleanup")?
+        .is_some()
+    {
+        return Ok(());
+    }
+    child
+        .kill()
+        .context("failed to terminate timed-out local PTY test child")?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if child
+            .try_wait()
+            .context("failed to poll terminated local PTY test child")?
+            .is_some()
+        {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!("timed out reaping terminated local PTY test child");
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
 fn configure_local_shell_command(command: &mut CommandBuilder, shell_path: &Path) {
     #[cfg(target_os = "macos")]
     configure_macos_zsh_command(command, shell_path);
@@ -939,6 +1072,61 @@ mod tests {
         let shells = discover_shells();
         assert!(!shells.is_empty());
         assert!(shells.iter().all(|shell| resolve_shell(shell).is_ok()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_pty_output_modes_translate_linefeeds_before_shell_start() {
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 3,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("test PTY should open");
+        let fd = pair
+            .master
+            .as_raw_fd()
+            .expect("native test PTY should expose a terminal descriptor");
+        let mut termios = local_pty_termios(fd).expect("test PTY termios should be readable");
+        termios.c_oflag &= !(libc::OPOST | libc::ONLCR);
+        set_local_pty_termios(fd, &termios).expect("test PTY output modes should be configurable");
+
+        configure_local_pty_output_modes(pair.master.as_ref())
+            .expect("local PTY output modes should be enabled");
+        let termios = local_pty_termios(fd).expect("configured PTY termios should be readable");
+        assert_ne!(termios.c_oflag & libc::OPOST, 0);
+        assert_ne!(termios.c_oflag & libc::ONLCR, 0);
+
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.arg("-c");
+        command.arg("printf 'first\\nsecond\\n'");
+        let mut child = pair
+            .slave
+            .spawn_command(command)
+            .expect("test shell should start in PTY");
+        drop(pair.slave);
+
+        set_local_pty_nonblocking(fd).expect("test PTY should support nonblocking reads");
+        let mut reader = pair
+            .master
+            .try_clone_reader()
+            .expect("test PTY output should be readable");
+        let expected = b"first\r\nsecond\r\n";
+        let output = match read_local_pty_output_with_timeout(reader.as_mut(), expected.len()) {
+            Ok(output) => output,
+            Err(error) => {
+                let _ = stop_local_pty_test_child(child.as_mut());
+                panic!("test PTY output should arrive before the deadline: {error:#}");
+            }
+        };
+        if let Err(error) = wait_for_local_pty_test_child_exit(child.as_mut()) {
+            let _ = stop_local_pty_test_child(child.as_mut());
+            panic!("test shell should exit before the deadline: {error:#}");
+        }
+        assert_eq!(output, expected);
     }
 
     #[test]

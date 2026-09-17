@@ -90,7 +90,7 @@
 | `src/terminal_input.rs` | 跨 transport 的有界 motion 入队策略 | `try_queue_tokio_motion`、`try_queue_sync_motion` | motion 队列满时静默丢弃中间帧，closed/disconnected 仍返回错误；Tokio command queue 为 press/release 等可靠事件保留一个槽位 |
 | `src/terminal_dimensions.rs` | 终端模型、设置和后端共享的尺寸契约 | `MIN_TERMINAL_*`、`MAX_TERMINAL_*` | 统一 `10x3..300x100` UI/模型边界与 worker 的 `300x100` 最大值；PTY 入口仍单独允许 `1x1`；完整可见行数向下取整，测试镜像底部锚定和极小 pane 裁切几何 |
 | `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalKeypadKey`、`TerminalModifiers`、`encode_key`、`encode_key_with_modes` | 控制字节、application-cursor Home/End、application-keypad SS3、导航/Function 键和 xterm 修饰序列 |
-| `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation`、`configure_local_shell_command`、`configure_local_shell_locale` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；输入/resize/shutdown/reader close 通过有界命令通道唤醒，空闲 child 每秒兜底检查，reader EOF 后最多一秒使用 25ms 快速确认；相同行列不唤醒 worker，取消优先放弃未投递事件，process-group 终止成功后不等待 child-killer，shutdown 不遗留 detached blocking join；shell 启动按平台判断：macOS 缺失 `SHELL` 时回退 `/bin/zsh`，zsh 使用 `-l` 加载 login 配置并按需补 Homebrew PATH；Unix 子进程的 C/空 locale 在启动前规范化为 UTF-8，已有 UTF-8 locale 保持不变；Linux/其他 Unix 不强制 login 参数，Windows 保留 cmd/PowerShell 原生 profile 行为 |
+| `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation`、`configure_local_pty_output_modes`、`configure_local_shell_command`、`configure_local_shell_locale` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；Unix 在 native PTY 创建后、shell 启动前启用 `OPOST | ONLCR`，由 PTY 行规程将普通输出的 `LF` 映射为 `CRLF`；输入/resize/shutdown/reader close 通过有界命令通道唤醒，空闲 child 每秒兜底检查，reader EOF 后最多一秒使用 25ms 快速确认；相同行列不唤醒 worker，取消优先放弃未投递事件，process-group 终止成功后不等待 child-killer，shutdown 不遗留 detached blocking join；shell 启动按平台判断：macOS 缺失 `SHELL` 时回退 `/bin/zsh`，zsh 使用 `-l` 加载 login 配置并按需补 Homebrew PATH；Unix 子进程的 C/空 locale 在启动前规范化为 UTF-8，已有 UTF-8 locale 保持不变；Linux/其他 Unix 不强制 login 参数，Windows 保留 cmd/PowerShell 原生 profile 行为 |
 | `src/logging.rs` | 进程级 tracing 与 crash 诊断生命周期 | `LoggingGuard`、滚动 writer、panic hook | 日志目录、过滤、保留、退出 flush、私有 `ax_ssh-crash.log` 同步报告，以及向 About 提供已创建目录 |
 | `src/x_server.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`XServerPlan` | macOS bundle/Windows PATH 与 Program Files 系统发现、只读已知位置快照、Custom executable、display 候选和首个 X11 channel 时的有界启动；不持有 SSH channel、cookie 或 UI 状态 |
 | `src/ssh.rs` | russh 0.63.1 传输与 host-key trust 边界 | `ClientHandler`、`PublicKeyOrCertificate`、`SshConnection`、`SshSessionHandle`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、证书 deny-by-default、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；不保存 agent 端点/identity，不把静默 shell 当作断连 |
@@ -192,6 +192,7 @@
 
 ## 最近依据
 
+- 2026-09-17：移除日志 writer 的 CRLF 重写。Unix Local PTY 在 shell 启动前通过 termios 启用 `OPOST | ONLCR`；SSH 保持既有 `pty-req` 同一模式。终端模型和 reflow 继续按原始字节语义处理裸 `LF`。
 - 2026-09-11：SFTP/Local 行名称保留完整有界 DTO，列宽不足时由共享 `ElidedLabel` 省略，并在溢出悬浮提示中按字符换行显示全文；本地 blocking 目录读取保持 2 MiB 名称/路径文本预算和独立 unavailable 计数，AppState 对完整有界快照按 250 条分页，远端继续使用 raw cursor 分页；远端与本地默认均为 Modified 降序，排序先于分页释放。
 - 2026-08-28：`softbuffer::Surface::damage_support()` 将 native damage 消费能力显式化；Win32、Wayland protocol 4+、X11 XShm 和 Core Graphics tiles 可直接转发矩形，Web 合并为 bounding rectangle，KMS 由驱动决定，X11 Wire/旧 Wayland/Orbital 使用整帧，Android 标记 lock-time 约束。winit software bridge 对 full-frame/lock-time backend 直接调用 `present()`；应用层 `TermDamage`/Slint dirty region 和 macOS 专属 `SoftwarePresentationMode` 不变。
 - 2026-08-27：SSH/Telnet 的 16ms transport flush 改为输出缓冲区非空时才启动的一次性 timer；Local PTY reader EOF/错误通过有界命令通道唤醒 owner，空闲 child 检查降为 1s，EOF 后 25ms 快速确认最多持续一秒；macOS `WindowActiveChanged` 保持快速路径，`isKeyWindow` 兜底放宽到 500ms。队列容量、16 KiB 输出上限、输入/resize/shutdown、SSH trust/凭据和终端 parser 不变。
@@ -203,6 +204,7 @@
 
 ## 最后更新时间
 
+- 2026-09-17：终端换行责任下移至 PTY 行规程：Unix Local PTY 在 shell exec 前启用 `OPOST | ONLCR`，SSH 保持 `pty-req` 同一模式；移除 logging writer 的 CRLF 改写，TerminalModel/reflow 保留原始 `LF` 语义。
 - 2026-09-15 09:27 +0800：终端持续输出的 DEC cursor-hide/show 帧事务只保留最后已发布的有界 snapshot，最多 250ms；解析、协议应答、soft-wrap/reflow、mouse reporting 和 transport 边界不变。
 - 2026-09-01 21:57 +0800：Shortcuts 页面补齐固定的 Select All、Previous Tab、Next Tab 平台快捷键展示；普通 FlatTextInput 与原生 TextEdit 保留 Copy/Cut/Paste/Select All，SecretTextInput 增加仅粘贴的右键操作并继续阻止秘密复制。
 - 2026-09-01 18:37 +0800：Windows 已显示 Winit 窗口只在活动 terminal 的 `ESC =` application-keypad 模式下捕获无修饰、非合成的物理数字小键盘，并经既有 terminal input security/route 边界发送 SS3 序列；普通 NumLock、IME 和快捷键仍由 Slint 处理。

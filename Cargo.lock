@@ -530,6 +530,7 @@ dependencies = [
  "i-slint-core",
  "image",
  "keyring",
+ "libc",
  "libmudtelnet-rs",
  "mime_guess",
  "objc2 0.6.4",

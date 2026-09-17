@@ -645,6 +645,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    PTY resize operation. A full event queue is cancellation-aware and cannot
    strand the reader. Worker shutdown has a fixed timeout and never waits forever;
    the controller retains its child-killer fallback until worker cleanup clears it.
+   On Unix, immediately after native PTY creation and before the shell starts,
+   AxSSH enables `OPOST | ONLCR` in the PTY line discipline. Ordinary child
+   `LF` output therefore reaches the terminal as `CRLF`; applications that
+   deliberately switch their terminal to raw output remain responsible for
+   their own control bytes.
    Shell startup is platform-specific: when `SHELL` is unavailable, macOS
    defaults to `/bin/zsh`; macOS `zsh` receives `-l`, so zsh loads
    its normal system/user login and interactive files; Linux and other Unix
@@ -678,7 +683,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    exposed blank rows stay below it; the model must not scroll content down or
    synthesize blank history to force the cursor to the new bottom edge. Shrinks,
    alternate screens, an active scroll region, a non-bottom cursor, and a user
-   viewing scrollback retain upstream resize semantics. `TerminalSnapshot`
+   viewing scrollback retain upstream resize semantics. Transport output reaches
+   the model unchanged: a bare `LF` advances the row without resetting the
+   column, and reflow preserves that resulting state. AxSSH does not rewrite
+   terminal output in its renderer or presentation path.
+   `TerminalSnapshot`
    contains styled visible rows and cursor/mouse metadata only; it does not
    duplicate a flattened text copy. Output for inactive tabs stays in Rust
    state; each visible pane contributes only its bounded cell snapshot across
@@ -1413,12 +1422,14 @@ process-level memory, so an immediate RSS decrease is not a contract.
 `src/main.rs` creates exactly one `LoggingGuard` before constructing the UI and
 keeps it alive until after the Slint and Tokio lifecycles finish. `src/logging.rs`
 writes through a bounded non-lossy queue to daily UTC files, retains at most 15
-files, and mirrors `INFO` and higher events to stderr. Dropping the guard writes
-the shutdown event, drains the queue, flushes the active file, and joins the
-writer thread. Operational fields may include session ID, host, port, and host
-fingerprint; credentials and terminal contents are forbidden. About receives
-the guard's already-created log directory as an owned path and can open it
-through the application bridge without changing the logging owner.
+files, and mirrors `INFO` and higher events to stderr. stderr receives the
+original logging bytes; `src/logging.rs` does not normalize line endings.
+Dropping the guard writes the shutdown event, drains the queue, flushes the
+active file, and joins the writer thread.
+Operational fields may include session ID, host, port, and host fingerprint;
+credentials and terminal contents are forbidden. About receives the guard's
+already-created log directory as an owned path and can open it through the
+application bridge without changing the logging owner.
 In the same directory, `LoggingGuard` creates a private `ax_ssh-crash.log` and
 installs a process panic hook. The hook writes panic payload, source location,
 thread/process/platform metadata, selected renderer environment, and a forced
