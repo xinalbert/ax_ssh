@@ -38,6 +38,9 @@ struct NativeFileDropPointer {
 
 impl NativeFileDropPointer {
     fn begin_external_file_hover(&mut self) {
+        if self.hovered_file_count == 0 {
+            self.last_physical_position = None;
+        }
         self.hovered_file_count = self.hovered_file_count.saturating_add(1);
     }
 
@@ -1907,6 +1910,8 @@ mod tests {
         assert_eq!(pointer.logical_position(2.0), None);
 
         pointer.begin_external_file_hover();
+        assert_eq!(pointer.logical_position(2.0), None);
+        pointer.record_cursor_position(80.0, 48.0);
         assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
         assert_eq!(pointer.logical_position(0.0), None);
 
