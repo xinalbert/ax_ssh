@@ -532,6 +532,28 @@ component SftpEntry inherits Rectangle {
             && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
         allow-copy: true;
         data: root.drag-data(root.entry.path);
+
+        // DragArea owns a file-row press for drag initiation. Keep activation
+        // in its child so a double-click still reaches the same directory/file
+        // callbacks instead of being swallowed by the drag hit target.
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.shown && root.interactive && root.drag-enabled
+                && (root.entry.kind == "file"
+                    || (root.entry.kind == "folder" && root.remote-actions))
+                && !(root.native-file-drag-enabled && root.remote-actions
+                    && root.entry.kind == "file");
+            mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
+                ? pointer : default;
+            double-clicked => {
+                if root.entry.kind == "folder" {
+                    root.open-directory(root.entry.path);
+                } else if root.entry.kind == "file" {
+                    root.open-file(root.entry.path);
+                }
+            }
+        }
     }
     TouchArea {
         x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
