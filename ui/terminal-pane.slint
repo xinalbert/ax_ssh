@@ -271,9 +271,9 @@ export component TerminalPane inherits Rectangle {
     callback pane-command(string, string) -> bool;
 
     // The terminal model defines columns from the selected monospace font's
-    // Latin advance. Wide and fallback glyphs are centered inside one or two
-    // of these cells; letting a fallback enlarge every cell makes text runs
-    // drift away from cursor, selection, pointer, and IME coordinates.
+    // Latin advance. Wide and fallback glyphs draw from the left edge of their
+    // one- or two-cell spans; letting a fallback enlarge every cell makes text
+    // runs drift away from cursor, selection, pointer, and IME coordinates.
     private property <length> font-cell-width:
         max(1px, cell-probe.preferred-width / 50);
     private property <length> font-cell-height: max(1px, cell-probe.preferred-height);

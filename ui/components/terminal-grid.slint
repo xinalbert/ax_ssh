@@ -7,7 +7,6 @@ export struct TerminalRenderRun {
     foreground: color,
     bold: bool,
     italic: bool,
-    centered: bool,
 }
 
 export struct TerminalBackgroundRun {
@@ -178,7 +177,7 @@ export component TerminalGrid inherits Rectangle {
                         run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
                     letter-spacing: 0px;
-                    horizontal-alignment: run.centered ? center : left;
+                    horizontal-alignment: left;
                     vertical-alignment: center;
                     overflow: clip;
                 }
@@ -203,7 +202,7 @@ export component TerminalGrid inherits Rectangle {
                         run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
                     letter-spacing: 0px;
-                    horizontal-alignment: run.centered ? center : left;
+                    horizontal-alignment: left;
                     vertical-alignment: center;
                     overflow: clip;
                 }
@@ -290,7 +289,7 @@ export component TerminalGrid inherits Rectangle {
             font-family: root.view.font_family;
             font-size: root.view.font_size;
             letter-spacing: 0px;
-            horizontal-alignment: root.view.cursor_cells > 1 ? center : left;
+            horizontal-alignment: left;
             vertical-alignment: center;
             overflow: clip;
         }

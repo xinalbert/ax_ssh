@@ -1518,14 +1518,14 @@ rendering; Iosevka Term and Monaspace Neon remain optional primary families,
 and all font notices remain required.
 Slint measures the configured primary font with 50 Latin cells. The terminal
 grid uses that Latin monospace advance as its logical cell width; registered
-Han fallback and box-drawing glyphs are centered inside their one- or two-cell
-spans instead of enlarging every column. Rust
-preserves the terminal's logical columns, keeps ASCII text batched, and
-publishes fallback cells as independent render runs, except that adjacent
-same-style box-drawing glyphs stay together in one shaping run. The grid
-centers fallback text inside its one- or two-cell span, so fallback shaping
-cannot move a following ASCII cell while a box-drawing sequence is not
-rasterized one glyph at a time. This shared cell width and the configured
+Han fallback and box-drawing glyphs draw from the left edge of their allocated
+one- or two-cell spans instead of enlarging every column. Rust preserves the
+terminal's logical columns, keeps ASCII text batched, and publishes fallback
+cells as independent render runs, except that adjacent same-style box-drawing
+glyphs stay together in one shaping run. The grid applies no per-run alignment
+heuristic, so every run starts at its protocol-defined cell column while a
+box-drawing sequence is not rasterized one glyph at a time. This shared cell
+width and the configured
 line-height percentage drive rendering, selection, cursor, and floor-based PTY
 dimensions. Cursor snapshots normalize a cursor that lands on a wide-character
 spacer back to the leading cell and carry a one- or two-cell cursor span, so a

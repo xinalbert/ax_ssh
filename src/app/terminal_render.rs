@@ -189,7 +189,6 @@ pub(super) struct RenderedTerminalRun {
     pub(super) italic: bool,
     pub(super) underline: bool,
     pub(super) strikethrough: bool,
-    pub(super) centered: bool,
 }
 
 pub(super) struct TerminalRenderer {
@@ -351,7 +350,6 @@ fn render_run(
     let column = run.column;
     let cells = run.cells;
     let style = run.style;
-    let centered = !text.is_ascii();
     let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
     let rendered = RenderedTerminalRun {
@@ -364,7 +362,6 @@ fn render_run(
         italic: style.italic,
         underline: style.underline,
         strikethrough: style.strikethrough,
-        centered,
     };
     let mut rendered_runs =
         if let (Some(highlights), Some(semantic_palette)) = (highlights, semantic_palette) {
@@ -584,7 +581,6 @@ fn split_semantic_run(
             italic: run.italic,
             underline: run.underline,
             strikethrough: run.strikethrough,
-            centered: run.centered,
         });
         start = end;
     }
@@ -875,7 +871,7 @@ mod tests {
     }
 
     #[test]
-    fn non_ascii_runs_use_fixed_cell_alignment() {
+    fn non_ascii_runs_preserve_terminal_cell_spans() {
         let rendered = render_terminal(
             snapshot_line(vec![
                 TerminalStyledRun {
@@ -896,9 +892,12 @@ mod tests {
         );
         let runs = &rendered.lines[0].runs;
 
-        assert!(runs[0].centered);
-        assert!(runs[1].centered);
-        assert!(!runs[2].centered);
+        assert_eq!(
+            runs.iter()
+                .map(|run| (run.text.as_str(), run.column, run.cells))
+                .collect::<Vec<_>>(),
+            vec![("中", 0, 2), ("┌", 2, 1), ("A", 3, 1)],
+        );
     }
 
     #[test]
@@ -916,7 +915,6 @@ mod tests {
             italic: false,
             underline,
             strikethrough,
-            centered: false,
         };
         let runs = [
             run(0, default_background, false, false),

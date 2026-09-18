@@ -117,7 +117,7 @@
 | `ui/components/flat-text-input.slint` | AxSSH 主题化共享非秘密文本输入 | `FlatTextInput` | Settings、会话编辑器和管理弹窗的单行编辑、原生文本选择以及 Copy/Cut/Paste/Select All 和编辑菜单 |
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、仅允许粘贴，禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`ModalFrame`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
-| `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalTargetHighlight`、`TerminalRenderLine` | 按 pane 的底部锚定原点绘制 Rust 可见字符格；单层 repeater 直接遍历行，紧凑分支直接绘制 Text 和合并背景/装饰 span，旧分支用于配置 A/B；可选 layer 只缓存静态行内容，逐格选区、光标、目标高亮和 IME 在层外；pointer callback 同时发送所在格与最近插入边界，remote mouse 使用前者、本地选区使用后者；Slint 的 Back/Forward 侧键映射为 8/9，滚动事件独立累计 x/y 并为远端带上 6/7 横向滚轮；非 ASCII run 在固定 span 内居中，网格、preedit 和指针共享同一原点；不持有终端数据、worker 状态或焦点 |
+| `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalTargetHighlight`、`TerminalRenderLine` | 按 pane 的底部锚定原点绘制 Rust 可见字符格；单层 repeater 直接遍历行，紧凑分支直接绘制 Text 和合并背景/装饰 span，旧分支用于配置 A/B；可选 layer 只缓存静态行内容，逐格选区、光标、目标高亮和 IME 在层外；pointer callback 同时发送所在格与最近插入边界，remote mouse 使用前者、本地选区使用后者；Slint 的 Back/Forward 侧键映射为 8/9，滚动事件独立累计 x/y 并为远端带上 6/7 横向滚轮；所有 run 和光标文字从其协议定义 cell span 的左边缘绘制，网格、preedit 和指针共享同一原点；不持有终端数据、worker 状态或焦点 |
 | `ui/terminal-pane.slint` | 单一终端 pane 视图 | `TerminalPane`、`TerminalNoticeBanner`、`TerminalViewState`、`presentation-layout`、`selection-revision`、`font-cell-width`、`grid-top-offset`、`cursor-cell-y`、`initial-input-focus-pending`、`terminal-target-highlight`、`terminal-focus-state`、`pane-command` | 只读终端 snapshot、notice、字符格/焦点/Slint-local 选择/光标和尺寸；TerminalViewState 只保留单层行 model；鼠标选区用行优先半开边界索引保存，绘制与复制共用规范化的包含式首末格，Rust 语义/逻辑行范围显式转换；`presentation-layout` 在 resize、font/line-height、split 和 pane identity 变化后发布 window-relative pane 几何与实测行高；terminal identity、断开、失焦或 Rust selection revision 变化时清除局部选区；可见性、连接、pane/window 焦点或 modal 状态变化时只上报一次 UUID + 布尔焦点状态，旧 identity 先显式清理；标准 xterm/本地选区优先 mouse owner、motion 合并和 wheel capability 保持既有边界；本地选区优先模式下未移动的 reporting 单击在释放时转发给 TUI，发生有效边界拖选后由本地选区接管；字符格、pointer、cursor、preedit 和 PTY resize 共用逻辑 cell geometry |
 | `ui/sftp-pane.slint` | 独立 SFTP 双栏文件工作区 | `SftpPane`、`SftpNativeDropRegion`、`SftpEntryRow`、`SftpTransferRow`、`SftpTransferQueue`、私有 `SftpSplitHandle` | 远端选择下载、本地行 Open/Show in Folder/Upload 菜单、活动/失败/成功三页、行勾选和批量暂停/继续/取消、终态记录的 Show in Folder/Remove、splitter、选中/过滤/分页；同时声明随布局变化的 Remote/Local files 原生接收几何，loading/不可用面板不会成为目标；不执行文件系统、opener、网络或传输 |
 | `ui/theme.slint` | 运行时视觉 token 解析器 | `Theme` Light/Dark 双侧 palette、`application-font-family`、`resolved-dark`、terminal split/divider、`terminal-top-gap`/`terminal-bottom-gap`、状态/type/spacing/geometry tokens | 修改应用字体、系统色响应、语义色、边框/焦点/hover/selected 状态或标准界面尺寸 |
@@ -160,6 +160,7 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-09-18 移除终端 renderer/Slint DTO 的非 ASCII 居中状态；所有文本 run 和一格/两格光标文字均从协议定义的 cell span 左边缘绘制。宽字符仍占两格，逻辑列、选区、pointer、preedit、IME、PTY resize、worker、SSH trust 和凭据边界不变。
 - 最近依据：2026-09-17 鼠标协议只生成 xterm 默认或 SGR 1006；UTF-8 1005、URXVT 1015 和像素坐标 1016 被显式抑制，绝不以另一种坐标格式替代。新增 DEC 1004 焦点链路：Slint 只在可用 pane 发 UUID+布尔值，bridge 重验路由并经可靠 worker 发送固定 `CSI I`/`CSI O`；不引入 worker handle、终端文本、SSH 状态或秘密到 UI。
 - 最近依据：2026-09-16 终端 Tab 激活不应因短暂 Pane 重建而丢失视口；`TerminalModel` 是每个运行时 Tab 的 scrollback/display offset owner，主屏 Detached resize 后恢复有界 offset，`TerminalPane` 首次 resize 延迟两个 frame。粘贴沿统一 `KeyboardEvent.is_paste` 进入终端模型，DEC 2004 wrapper 包住完整 payload，四类 worker 以 16 KiB 分块写出并共享 4 MiB 上限；不改变 SSH trust、凭据或 transport 所有权。
 - 最近依据：2026-09-15 为间歇性 terminal pane 右侧空白增加 `terminal-geometry` 诊断；`TerminalPane` 在合并布局后报告 pane/grid 坐标、cell 尺寸与列行数，`WorkspaceShell` 按主窗口或 detached offset 转发，`src/app/terminal_bridge.rs` 对照 Slint physical 与 Winit inner window size，并按 0.1 logical pixel 去重记录右/下余量和 fractional cell remainder。记录上限为 256 个 pane，且不包含终端文字、主机/路径、profile 标签或凭据。
@@ -192,6 +193,7 @@
 
 ## 最近依据
 
+- 2026-09-18：终端文本 run 和一格/两格光标内容按协议 cell span 左边缘绘制；删除非 ASCII 的本地强制居中，不改变宽字符占格、逻辑列或输入/传输安全边界。
 - 2026-09-17：移除日志 writer 的 CRLF 重写。Unix Local PTY 在 shell 启动前通过 termios 启用 `OPOST | ONLCR`；SSH 保持既有 `pty-req` 同一模式。终端模型和 reflow 继续按原始字节语义处理裸 `LF`。
 - 2026-09-18：SSH profile 的 X11 forwarding 改为 Off、Untrusted (`-X`) 与 Trusted (`-Y`)；旧 bool 缺失/true 保持 Trusted，false 为 Off。全局 X11 Settings 只选择本机 provider/path。Trusted 保持首个 channel 的惰性本机准备；Untrusted 在已完成 host-key/认证后创建私有短时 `xauth generate … untrusted` 授权，20 分钟后拒绝新的 channel，不得使用 no-auth 或可信 cookie 回退。
 - 2026-09-11：SFTP/Local 行名称保留完整有界 DTO，列宽不足时由共享 `ElidedLabel` 省略，并在溢出悬浮提示中按字符换行显示全文；本地 blocking 目录读取保持 2 MiB 名称/路径文本预算和独立 unavailable 计数，AppState 对完整有界快照按 250 条分页，远端继续使用 raw cursor 分页；远端与本地默认均为 Modified 降序，排序先于分页释放。

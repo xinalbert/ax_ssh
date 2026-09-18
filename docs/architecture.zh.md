@@ -900,10 +900,10 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
 Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 分别测量配置主字体的
 50 个 Latin cell；终端网格使用该主字体的 Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
-和盒线字形只在其一格或两格 span 内居中，不再扩大所有列。Rust 保留终端逻辑列，
+和盒线字形从其分配的一格或两格 span 左边缘绘制，不扩大所有列。Rust 保留终端逻辑列，
 继续批量绘制 ASCII 文本；普通 fallback cell 发布为独立 render run，但同样式相邻盒线字形保持在同一个
-shaping run 中。grid 将 fallback 文本居中放入其一格或两格 span，避免 fallback shaping 推动后续 ASCII cell，
-也避免盒线序列按单个字形逐格光栅化。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
+shaping run 中。grid 不再对每个 run 使用对齐启发式，因此所有 run 都从协议定义的 cell 列开始，
+同时盒线序列不按单个字形逐格光栅化。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
 光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
 避免中文 glyph 被单格覆盖层裁剪。选区背景按选中的逻辑列逐个绘制固定单 cell 矩形，不从混合 Unicode
 run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区光标 cell y 坐标，
