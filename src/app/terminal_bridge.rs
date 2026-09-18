@@ -34,11 +34,13 @@ const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
 #[derive(Default)]
 struct NativeFileDropPointer {
     hovered_file_count: u16,
+    #[cfg(not(target_os = "macos"))]
     last_physical_position: Option<(f64, f64)>,
 }
 
 impl NativeFileDropPointer {
     fn begin_external_file_hover(&mut self) {
+        #[cfg(not(target_os = "macos"))]
         if self.hovered_file_count == 0 {
             self.last_physical_position = None;
         }
@@ -47,17 +49,25 @@ impl NativeFileDropPointer {
 
     fn complete_external_file_drop(&mut self) {
         self.hovered_file_count = self.hovered_file_count.saturating_sub(1);
+        #[cfg(not(target_os = "macos"))]
         if self.hovered_file_count == 0 {
             self.last_physical_position = None;
         }
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn record_cursor_position(&mut self, x: f64, y: f64) {
         if x.is_finite() && y.is_finite() {
             self.last_physical_position = Some((x, y));
         }
     }
 
+    #[cfg(target_os = "macos")]
+    fn clear(&mut self) {
+        self.hovered_file_count = 0;
+    }
+
+    #[cfg(not(target_os = "macos"))]
     fn clear(&mut self) {
         self.hovered_file_count = 0;
         self.last_physical_position = None;
@@ -67,6 +77,7 @@ impl NativeFileDropPointer {
         self.hovered_file_count > 0
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn logical_position(&self, scale_factor: f64) -> Option<(f32, f32)> {
         if self.hovered_file_count == 0 || !scale_factor.is_finite() || scale_factor <= 0.0 {
             return None;
@@ -85,6 +96,17 @@ impl NativeFileDropPointer {
         }
         Some((x as f32, y as f32))
     }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_file_drop_position(
+    pointer: &NativeFileDropPointer,
+    read_current_position: impl FnOnce() -> Option<(f32, f32)>,
+) -> Option<(f32, f32)> {
+    if !pointer.is_external_file_hovering() {
+        return None;
+    }
+    read_current_position()
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -349,24 +371,17 @@ pub(super) fn install_terminal_keypad_input_hook(
                 let Some(ui) = ui_for_drop.upgrade() else {
                     return EventResult::Propagate;
                 };
-                let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
                 let target = {
                     let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
-                    let logical_position = pointer.is_external_file_hovering().then(|| {
-                        #[cfg(target_os = "macos")]
-                        {
-                            super::macos_window::current_cursor_position(ui.window())
-                                .ok()
-                                .or_else(|| pointer.logical_position(scale_factor))
-                        }
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            pointer.logical_position(scale_factor)
-                        }
+                    #[cfg(target_os = "macos")]
+                    let logical_position = macos_file_drop_position(&pointer, || {
+                        super::macos_window::current_cursor_position(ui.window()).ok()
                     });
-                    let target = logical_position
-                        .flatten()
-                        .map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
+                    #[cfg(not(target_os = "macos"))]
+                    let logical_position =
+                        pointer.logical_position(f64::from(ui.window().scale_factor()).max(0.01));
+                    let target =
+                        logical_position.map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
                     pointer.complete_external_file_drop();
                     target
                 };
@@ -389,6 +404,7 @@ pub(super) fn install_terminal_keypad_input_hook(
             WindowEvent::HoveredFileCancelled => {
                 native_file_drop_pointer_for_event.borrow_mut().clear();
             }
+            #[cfg(not(target_os = "macos"))]
             WindowEvent::CursorMoved { position, .. } => {
                 native_file_drop_pointer_for_event
                     .borrow_mut()
@@ -1983,6 +1999,7 @@ mod tests {
         assert_eq!(quantize_scale(f64::NAN), 0);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn native_file_drop_requires_current_external_hover_and_coordinates() {
         let mut pointer = NativeFileDropPointer::default();
@@ -2009,12 +2026,32 @@ mod tests {
         assert_eq!(pointer.logical_position(2.0), None);
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn native_file_drop_rejects_non_finite_pointer_coordinates() {
         let mut pointer = NativeFileDropPointer::default();
         pointer.begin_external_file_hover();
         pointer.record_cursor_position(f64::NAN, 12.0);
         assert_eq!(pointer.logical_position(1.0), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_file_drop_rejects_native_cursor_read_failure_without_winit_fallback() {
+        let mut pointer = NativeFileDropPointer::default();
+        pointer.begin_external_file_hover();
+
+        assert_eq!(macos_file_drop_position(&pointer, || None), None);
+        assert_eq!(
+            macos_file_drop_position(&pointer, || Some((30.0, 20.0))),
+            Some((30.0, 20.0))
+        );
+
+        pointer.complete_external_file_drop();
+        assert_eq!(
+            macos_file_drop_position(&pointer, || Some((30.0, 20.0))),
+            None
+        );
     }
 
     #[test]
