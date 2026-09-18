@@ -16,8 +16,8 @@ cargo run --locked
 1. 选择 **File > New Server**，在 macOS 按 `Cmd+N`、Windows/Linux 按 `Ctrl+N`，
    或右击侧栏列表空白区域并选择 **New Server**。可在 **Settings > Shortcuts** 修改该快捷键。
 2. 选择 **SSH**、**Telnet** 或 **Serial**，再填写对应字段。SSH 使用 host、port、
-   username 和密码、私钥或 **SSH agent** 认证；**Forward X11 applications** 只适用于 SSH，新 profile
-   默认开启；Telnet 使用 host、port，并显示未加密警告；Serial 使用
+   username 和密码、私钥或 **SSH agent** 认证；每个服务器的 **X11 forwarding** 专用字段可选择
+   **Off**、**Untrusted (-X)** 和 **Trusted (-Y)**；新 profile 默认 Trusted，以保持原有已开启行为；Telnet 使用 host、port，并显示未加密警告；Serial 使用
    端口名、baud rate、data bits、stop bits、parity 和 flow control。会话编辑器进入 Serial
    模式时才列出已检测端口；设备插入后可点 **Refresh**，也可以手工输入端口路径或名称。SSH-only 的
    **SFTP directories** 区域可以设置新 SFTP Tab 首次打开的远端和本地目录；默认分别是 `~` 与平台 home 目录。
@@ -52,8 +52,9 @@ cargo run --locked
 在 **Settings > X11** 选择本机 server。macOS 提供 Auto、XQuartz、MacXServer、Custom；
 Windows 提供 Auto、VcXsrv、Xming、Custom；Linux 提供 System DISPLAY、Custom。已知 provider
 由 macOS 应用数据库或 Windows executable 搜索路径与 Program Files 自动定位，只有 Custom
-会显示检测到的安装位置；选择 Custom 后可自行提供 executable 路径。首个 X11 application 时启动
-默认开启：打开 SSH shell 只向服务端申请 forwarding，不会启动本机 X server。安全默认仍要求
+会显示检测到的安装位置；选择 Custom 后可自行提供 executable 路径。Trusted（`-Y`）模式的首个 X11 application 时启动
+默认开启：打开 SSH shell 只向服务端申请 forwarding，不会启动本机 X server。Untrusted（`-X`）模式在 host-key 验证和 SSH 认证完成后、发送 X11 forwarding request 前要求本机 X server 生成短时受限 authorization，
+因此可能在 shell 打开前准备或启动选中的本机 server；它绝不回退到 no-auth 或真实的 trusted cookie。Trusted 模式仍要求
 `xauth` 中存在精确的 `MIT-MAGIC-COOKIE-1`，XQuartz 和系统 X.Org/Xwayland 应使用该模式。
 **Allow local connections without X authority** 默认关闭，仅在 MacXServer 或由 AxSSH 启动的
 VcXsrv/Xming 确实需要时开启；这些兼容启动只连接 loopback，Windows server 也只有在用户明确
@@ -62,7 +63,7 @@ VcXsrv/Xming 确实需要时开启；这些兼容启动只连接 loopback，Wind
 远端 SSH server 还必须允许 X11 forwarding，通常需要 `X11Forwarding yes` 和可用的服务端
 `xauth`；AxSSH 不修改 `sshd_config`。远端 `DISPLAY` 为空表示 forwarding request 没有建立，
 常见原因是 `sshd` 拒绝。如果远端图形应用打开时本机准备失败，AxSSH 只拒绝该图形 channel；
-Terminal shell 仍保持连接并提示 X11 不可用；关闭 Tab 会取消全部活动 X11 relay。
+Terminal shell 仍保持连接并提示 X11 不可用。Untrusted authorization 在 20 分钟后过期；只有信任远端程序可以完整访问本机 X display 时才应选择 Trusted。关闭 Tab 会取消全部活动 X11 relay。
 
 Telnet 流量不加密，在终端中输入的登录信息也会明文传输；AxSSH 不会自动填写 Telnet
 凭据。Serial 扫描只读取操作系统提供的可用端口元数据，不会打开端口、发送探测字节、
@@ -378,8 +379,8 @@ AxSSH 把 profile、非敏感 Group 名称和设置写入平台应用配置目�
 `sessions.json`。Linux 默认会解析到 `~/.config/ax_ssh/sessions.json`，同时遵守
 `XDG_CONFIG_HOME`；macOS 和 Windows 使用各自的标准应用目录。每个 profile 明确包含一份
 SSH、Telnet 或 Serial 配置；只有 SSH 可以
-包含已确认的主机密钥指纹、私钥路径、指向已记住密码后端的非敏感引用，以及非敏感的 X11
-forwarding 开关；X11 cookie 永远不会保存。Serial 可以保存
+包含已确认的主机密钥指纹、私钥路径、指向已记住密码后端的非敏感引用，以及非敏感的逐服务器 X11
+forwarding 方式；X11 cookie 永远不会保存。Serial 可以保存
 用于稳定匹配的非敏感 USB 身份元数据。profile 不包含密码、保险库口令、私钥 passphrase、
 私钥内容、终端输出或运行中的进程状态。
 

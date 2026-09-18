@@ -174,7 +174,7 @@ pub(in crate::app) fn apply_active_snapshot(
             ui.set_editor_private_key_path(editor.private_key_path.into());
             ui.set_editor_sftp_remote_path(editor.sftp_remote_path.into());
             ui.set_editor_sftp_local_path(editor.sftp_local_path.into());
-            ui.set_editor_x11_forwarding(editor.x11_forwarding);
+            ui.set_editor_x11_forwarding_mode(editor.x11_forwarding_mode.into());
             ui.set_editor_serial_port(editor.serial_port.into());
             ui.set_editor_serial_baud_rate(editor.serial_baud_rate.into());
             ui.set_editor_serial_data_bits(editor.serial_data_bits.into());

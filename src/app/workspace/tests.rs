@@ -16,7 +16,7 @@ fn editing_without_a_password_preserves_an_existing_credential() {
     let ssh = existing.ssh_mut().expect("profile should be SSH");
     ssh.credential_storage = Some(CredentialStorage::EncryptedVault);
     ssh.host_key_fingerprint = Some("SHA256:trusted".into());
-    ssh.x11_forwarding = true;
+    ssh.x11_forwarding = X11ForwardingMode::Trusted;
 
     let (profile, change) = profile_from_editor(
         Some(&existing),
@@ -28,7 +28,7 @@ fn editing_without_a_password_preserves_an_existing_credential() {
         "alice",
         "Password",
         "",
-        true,
+        X11ForwardingMode::Untrusted,
         "",
         "115200",
         "8",
@@ -57,11 +57,12 @@ fn editing_without_a_password_preserves_an_existing_credential() {
             .expect("existing profile should be SSH")
             .host_key_fingerprint
     );
-    assert!(
+    assert_eq!(
         profile
             .ssh()
             .expect("updated profile should be SSH")
-            .x11_forwarding
+            .x11_forwarding,
+        X11ForwardingMode::Untrusted
     );
     assert!(matches!(change, CredentialChange::None));
 }
@@ -88,7 +89,7 @@ fn remembering_a_password_updates_the_existing_credential_backend() {
         true,
         "system-keyring",
         "",
-        true,
+        "trusted",
         "",
         "115200",
         "8",
@@ -150,7 +151,7 @@ fn new_password_is_one_time_by_default() {
         false,
         "encrypted-vault",
         "",
-        true,
+        "off",
         "",
         "115200",
         "8",
@@ -189,7 +190,7 @@ fn session_editor_saves_trimmed_sftp_default_paths() {
         false,
         "system-keyring",
         "",
-        true,
+        "trusted",
         "",
         "115200",
         "8",
@@ -223,7 +224,7 @@ fn remembering_new_password_without_vault_password_generates_hidden_unlock_key()
         true,
         "encrypted-vault",
         "",
-        true,
+        "trusted",
         "",
         "115200",
         "8",
@@ -284,7 +285,7 @@ fn remembering_with_a_user_vault_password_does_not_enable_automatic_unlock_marke
         true,
         "encrypted-vault",
         "vault-password",
-        true,
+        "trusted",
         "",
         "115200",
         "8",
@@ -343,7 +344,7 @@ fn one_time_password_preserves_an_existing_remembered_credential() {
         false,
         "encrypted-vault",
         "",
-        true,
+        "trusted",
         "",
         "115200",
         "8",
@@ -379,7 +380,7 @@ fn non_ssh_editor_protocols_cannot_retain_x11_state() {
         "",
         "Password",
         "",
-        true,
+        X11ForwardingMode::Trusted,
         "",
         "115200",
         "8",
@@ -410,7 +411,7 @@ fn switching_to_private_key_preserves_trust_and_deletes_the_credential() {
         "alice",
         "Private key",
         "/tmp/id_ed25519",
-        false,
+        X11ForwardingMode::Off,
         "",
         "115200",
         "8",
@@ -471,7 +472,7 @@ fn switching_to_ssh_agent_discards_password_input_and_credential_reference() {
         true,
         "system-keyring",
         "must-not-be-used",
-        false,
+        "off",
         "",
         "115200",
         "8",
@@ -546,7 +547,7 @@ fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
     let source_ssh = source.ssh_mut().expect("profile should be SSH");
     source_ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     source_ssh.host_key_fingerprint = Some("SHA256:trusted".into());
-    source_ssh.x11_forwarding = true;
+    source_ssh.x11_forwarding = X11ForwardingMode::Untrusted;
     sessions.upsert(source.clone());
     let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
 
@@ -568,7 +569,7 @@ fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
     assert_eq!(duplicate_ssh.port, source_ssh.port);
     assert_eq!(duplicate_ssh.username, source_ssh.username);
     assert_eq!(duplicate_ssh.auth, source_ssh.auth);
-    assert!(duplicate_ssh.x11_forwarding);
+    assert_eq!(duplicate_ssh.x11_forwarding, X11ForwardingMode::Untrusted);
     assert_eq!(duplicate_ssh.credential_storage, None);
     assert_eq!(
         duplicate_ssh.host_key_fingerprint.as_deref(),
@@ -590,7 +591,7 @@ fn server_export_removes_identity_credentials_and_host_trust() {
     let source_ssh = source.ssh_mut().expect("profile should be SSH");
     source_ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     source_ssh.host_key_fingerprint = Some("SHA256:trusted".into());
-    source_ssh.x11_forwarding = true;
+    source_ssh.x11_forwarding = X11ForwardingMode::Untrusted;
     sessions.upsert(source.clone());
 
     let text =
@@ -608,7 +609,7 @@ fn server_export_removes_identity_credentials_and_host_trust() {
     let ssh = profile.ssh().expect("exported profile should be SSH");
     assert_eq!(ssh.credential_storage, None);
     assert_eq!(ssh.host_key_fingerprint, None);
-    assert!(ssh.x11_forwarding);
+    assert_eq!(ssh.x11_forwarding, X11ForwardingMode::Untrusted);
 }
 
 #[test]
@@ -624,7 +625,7 @@ fn group_export_round_trips_profiles_and_empty_groups_without_security_state() {
     let source_ssh = source.ssh_mut().expect("profile should be SSH");
     source_ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     source_ssh.host_key_fingerprint = Some("SHA256:trusted".into());
-    source_ssh.x11_forwarding = true;
+    source_ssh.x11_forwarding = X11ForwardingMode::Untrusted;
     sessions.upsert(source);
 
     let text =
@@ -641,7 +642,7 @@ fn group_export_round_trips_profiles_and_empty_groups_without_security_state() {
         .expect("exported profile should be SSH");
     assert_eq!(exported_ssh.credential_storage, None);
     assert_eq!(exported_ssh.host_key_fingerprint, None);
-    assert!(exported_ssh.x11_forwarding);
+    assert_eq!(exported_ssh.x11_forwarding, X11ForwardingMode::Untrusted);
 
     let mut imported = SessionStore::default();
     let (count, imported_group) =
@@ -661,7 +662,7 @@ fn group_export_round_trips_profiles_and_empty_groups_without_security_state() {
         .expect("imported profile should be SSH");
     assert_eq!(imported_ssh.credential_storage, None);
     assert_eq!(imported_ssh.host_key_fingerprint, None);
-    assert!(imported_ssh.x11_forwarding);
+    assert_eq!(imported_ssh.x11_forwarding, X11ForwardingMode::Untrusted);
 
     let empty_text = export_session_group(&sessions, "Empty").expect("empty group should export");
     let empty_export: SessionTransferEnvelope =

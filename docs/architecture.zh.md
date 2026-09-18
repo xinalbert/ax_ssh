@@ -669,8 +669,8 @@ identity 和签署认证请求，client 始终由 russh worker 独占。AxSSH �
 解锁或确认界面仍由系统 agent 自己拥有。这只是客户端认证，不包含 agent forwarding 或 agent
 密钥管理。
 
-X11 forwarding 是逐 SSH profile 的设置；新 profile 和旧配置缺失该字段时默认开启，已经明确
-保存为 `false` 的 profile 仍保持关闭。它只适用于 Terminal mode，SFTP-only、Telnet 和 Serial
+X11 forwarding 是逐 SSH profile 的方式：`off`、`untrusted`（`-X`）或 `trusted`（`-Y`）。新 profile
+默认 `trusted`；旧配置缺失字段和 legacy `true` 迁移为 `trusted`，legacy `false` 迁移为 `off`。它只适用于 Terminal mode，SFTP-only、Telnet 和 Serial
 worker 永远不会申请 X11。全局 `X11Settings` 只保存非秘密的 provider、仅供 Custom 使用的
 应用路径、启动偏好和显式 no-auth 兼容选择。`src/x_server.rs` 负责按平台解析 Auto：macOS 通过
 `NSWorkspace` 和 bundle identifier 发现应用，Windows 先搜索进程 `PATH` 再检查 Program Files；
@@ -679,17 +679,19 @@ macOS Auto 依次选择 XQuartz、MacXServer；Windows Auto 依次选择 VcXsrv�
 `DISPLAY` 和 Custom。所有已知 provider 都忽略保存的 Custom 路径，AxSSH 不下载或安装任何
 provider。Custom 不经命令 shell 启动，且必须是普通文件；Unix 上还必须具有 executable 权限。
 
-创建 shell 时只会带着随机 128-bit fake cookie 发送 X11 forwarding request，不读取本机
+Trusted 模式只会带着随机 128-bit fake cookie 发送 X11 forwarding request，不读取本机
 `DISPLAY`、不运行 `xauth`、不探测本机端点，也不启动 X server。只有远端 server 打开 X11
 channel 时，relay 才解析本机 display 候选、在超时和输出上限内执行 `xauth list <DISPLAY>`，并在
-需要且启用时启动选定 provider、轮询其就绪状态。MacXServer 只有在显式开启 no-auth 兼容时才会以
+需要且启用时启动选定 provider、轮询其就绪状态。Untrusted 模式在完成 host-key 验证和 SSH
+认证后、发送 X11 forwarding request 前准备：它运行 `xauth -f <private-file> generate <DISPLAY> MIT-MAGIC-COOKIE-1 untrusted timeout 1260`，只读取该临时 authority，随后删除私有目录。
+AxSSH 在 20 分钟后拒绝 untrusted channel；多出的 60 秒可避免 X server 的 fail-open timing。Untrusted 模式要求本机 X server 支持 X11 SECURITY，且绝不回退到 no-auth 或真实 cookie。MacXServer 只有在显式开启 no-auth 兼容时才会以
 `127.0.0.1:6000` 启动；VcXsrv/Xming 也只有在该选择下才接收 `-multiwindow -clipboard -ac`。
 relay 仍只连接本机端点，并先验证 SSH fake cookie，之后才为兼容 server 去除 X authority。
 本机准备、channel 或服务端请求失败时，只会拒绝对应 X11 channel，SSH shell 仍保持连接并显示
 X11 不可用。AxSSH 不修改远端 `sshd`；远端必须独立允许 X11 forwarding 并接受请求，才会设置
 远端 `DISPLAY`。
 
-启用后，每个 Terminal 为 SSH 请求生成随机 128-bit fake cookie。`ClientHandler` 默认拒绝
+每个 Trusted Terminal 为 SSH request 创建随机 128-bit fake cookie；Untrusted Terminal 使用短时受限 cookie。`ClientHandler` 默认拒绝
 服务端发起的 X11 channel，只有 forwarding 请求成功后才允许进入有界分发。等待队列和活动
 relay 都最多 8 个；禁用/已关闭时按 administratively prohibited 拒绝，资源超限时明确返回
 resource shortage。relay 连接预验证的本机端点，在超时和长度上限内读取 X11 setup，只接受
@@ -966,7 +968,7 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
     缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
     改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
-    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 30 增加私有 session store 的有界 `recent_workspaces` 路径列表；旧文件默认为空，列表不包含工作区内容或秘密。schema 版本 27 增加
+    已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 30 增加私有 session store 的有界 `recent_workspaces` 路径列表；旧文件默认为空，列表不包含工作区内容或秘密。schema 版本 31 将 SSH profile 的 X11 布尔值改为 `off`、`untrusted` 或 `trusted`；legacy `false` 和 `true` 分别迁移为 `off` 和 `trusted`，profile 不含任何 X11 cookie。schema 版本 27 增加
     `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值采用默认的脏区
     backing store，显式保存的 `layer-images` 仍作为兼容性回退。schema 版本 24 增加
     `RendererPreference`，稳定值为 `automatic`、`gpu` 和 `software`；缺失或无效值使用

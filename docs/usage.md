@@ -18,8 +18,9 @@ cargo run --locked
    Change this shortcut in **Settings > Shortcuts**.
 2. Choose **SSH**, **Telnet**, or **Serial**, then enter the fields for that
    protocol. SSH accepts host, port, username, and password, private-key, or
-   **SSH agent** authentication. **Forward X11 applications** is SSH-only and defaults to on
-   for new profiles. Telnet accepts host and port and displays an unencrypted
+   **SSH agent** authentication. Its per-server **X11 forwarding** field offers
+   **Off**, **Untrusted (-X)**, and **Trusted (-Y)**; new profiles default to
+   Trusted to preserve the previous enabled behavior. Telnet accepts host and port and displays an unencrypted
    transport warning. Serial accepts a port name, baud rate, data bits, stop
    bits, parity, and flow control. AxSSH lists detected ports when the editor
    enters Serial mode; use **Refresh** after a device is attached, or enter a
@@ -82,9 +83,14 @@ MacXServer, and Custom; Windows offers Auto, VcXsrv, Xming, and Custom; Linux
 offers System DISPLAY and Custom. AxSSH locates known providers through the
 macOS application database or the Windows executable search path and Program
 Files and displays the detected locations in Settings; choose Custom to provide
-an executable path yourself. Start for first X11 application is enabled by
-default: opening an SSH shell only asks the server for forwarding and never
-starts a local X server. The secure default still requires an exact
+an executable path yourself. Trusted (`-Y`) forwarding keeps first-X11-
+application startup enabled by default: opening an SSH shell only asks the
+server for forwarding and never starts a local X server. Untrusted (`-X`)
+forwarding asks the local X server to generate a short-lived restricted
+authorization after host-key verification and SSH authentication but before the
+X11 forwarding request, so it may prepare or start the selected local server
+before the shell opens. It never falls back to no-auth or a real trusted cookie.
+The trusted mode still requires an exact
 `MIT-MAGIC-COOKIE-1` from `xauth`; XQuartz and system X.Org/Xwayland should use
 this mode. **Allow local
 connections without X authority** is off by default and should be enabled only
@@ -97,7 +103,9 @@ The remote SSH server must also allow X11 forwarding, normally through
 `sshd_config`. A remote empty `DISPLAY` means that the forwarding request was not
 established, commonly because `sshd` rejected it. If local preparation fails when
 the remote graphical application opens, AxSSH rejects that graphical channel;
-the shell remains connected and reports X11 as unavailable.
+the shell remains connected and reports X11 as unavailable. An untrusted
+authorization expires after 20 minutes; use Trusted only for remote programs
+you trust with full access to the local X display.
 Closing the Tab cancels every active X11 relay.
 
 Telnet traffic, including any login text entered in the terminal, is sent
@@ -623,7 +631,7 @@ Linux this normally resolves to `~/.config/ax_ssh/sessions.json` while respectin
 profile contains one explicit SSH, Telnet, or Serial configuration. Only SSH
 may contain a confirmed host-key fingerprint, private-key path, or non-secret
 reference to the backend holding a remembered password, plus the non-secret
-X11 forwarding toggle. X11 cookies are never stored. A Serial profile may
+per-profile X11 forwarding mode. X11 cookies are never stored. A Serial profile may
 store non-secret USB identity metadata for stable matching. Profiles do not
 contain passwords, vault passwords, private-key passphrases, private-key
 contents, terminal output, or live process state.

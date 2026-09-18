@@ -24,7 +24,7 @@ export struct SessionEditorViewState {
     sftp_local_path: string,
     credential_storage: string,
     default_credential_storage: string,
-    x11_forwarding: bool,
+    x11_forwarding_mode: string,
     serial_port: string,
     serial_baud_rate: string,
     serial_data_bits: string,
@@ -41,7 +41,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, string, bool, string, string, bool, string, string, string, string, string, string, bool,
+        string, string, string, bool, string, string, string, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -71,7 +71,12 @@ export component SessionEditorPane inherits Rectangle {
         @tr("System credential store"),
         @tr("Encrypted application vault"),
     ];
-    private property <bool> x11-forwarding-draft: false;
+    private property <string> x11-forwarding-mode-draft: "trusted";
+    private property <[string]> x11-forwarding-mode-options: [
+        @tr("Off"),
+        @tr("Untrusted (-X)"),
+        @tr("Trusted (-Y)"),
+    ];
     private property <string> serial-port-draft;
     private property <string> serial-baud-rate: "115200";
     private property <string> serial-data-bits: "8";
@@ -96,7 +101,7 @@ export component SessionEditorPane inherits Rectangle {
             root.remember-password-draft,
             root.credential-storage-draft,
             root.vault-password-draft,
-            root.x11-forwarding-draft,
+            root.x11-forwarding-mode-draft,
             root.serial-port-draft,
             root.serial-baud-rate,
             root.serial-data-bits,
@@ -127,7 +132,7 @@ export component SessionEditorPane inherits Rectangle {
             ? root.source.default_credential_storage
             : root.source.credential_storage;
         root.vault-password-draft = "";
-        root.x11-forwarding-draft = root.source.x11_forwarding;
+        root.x11-forwarding-mode-draft = root.source.x11_forwarding_mode;
         root.serial-port-draft = root.source.serial_port;
         root.serial-baud-rate = root.source.serial_baud_rate;
         root.serial-data-bits = root.source.serial_data_bits;
@@ -558,10 +563,20 @@ export component SessionEditorPane inherits Rectangle {
                         }
                     }
 
-                    CheckBox {
-                        text: @tr("Forward X11 applications");
-                        checked <=> root.x11-forwarding-draft;
-                        accessible-label: @tr("Enable SSH X11 forwarding");
+                    SessionEditorField {
+                        label: @tr("X11 forwarding");
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.editor-input-row-height;
+                            model: root.x11-forwarding-mode-options;
+                            current-index: root.x11-forwarding-mode-draft == "off" ? 0
+                                : root.x11-forwarding-mode-draft == "untrusted" ? 1 : 2;
+                            accessible-label: @tr("SSH X11 forwarding mode");
+                            selected(_value, index) => {
+                                root.x11-forwarding-mode-draft = index == 0 ? "off"
+                                    : index == 1 ? "untrusted" : "trusted";
+                            }
+                        }
                     }
 
                     if root.auth-method == "Private key" : VerticalLayout {

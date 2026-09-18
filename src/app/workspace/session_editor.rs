@@ -80,7 +80,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
               remember_password,
               credential_storage,
               vault_password,
-              x11_forwarding,
+              x11_forwarding_mode,
               serial_port,
               serial_baud_rate,
               serial_data_bits,
@@ -140,7 +140,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                 remember_password,
                 credential_storage.as_str(),
                 vault_password.as_str(),
-                x11_forwarding,
+                x11_forwarding_mode.as_str(),
                 serial_port.as_str(),
                 serial_baud_rate.as_str(),
                 serial_data_bits.as_str(),
@@ -568,7 +568,7 @@ pub(super) fn profile_from_editor(
     username: &str,
     auth_method: &str,
     private_key_path: &str,
-    x11_forwarding: bool,
+    x11_forwarding_mode: X11ForwardingMode,
     serial_port: &str,
     serial_baud_rate: &str,
     serial_data_bits: &str,
@@ -593,7 +593,7 @@ pub(super) fn profile_from_editor(
         false,
         CredentialStorage::SystemKeyring.as_setting(),
         "",
-        x11_forwarding,
+        x11_forwarding_mode.as_setting(),
         serial_port,
         serial_baud_rate,
         serial_data_bits,
@@ -623,7 +623,7 @@ pub(super) fn profile_from_editor_with_password(
     remember_password: bool,
     credential_storage: &str,
     vault_password: &str,
-    x11_forwarding: bool,
+    x11_forwarding_mode: &str,
     serial_port: &str,
     serial_baud_rate: &str,
     serial_data_bits: &str,
@@ -720,7 +720,7 @@ pub(super) fn profile_from_editor_with_password(
                 false
             };
         ssh.host_key_fingerprint = preserved_fingerprint;
-        ssh.x11_forwarding = x11_forwarding;
+        ssh.x11_forwarding = X11ForwardingMode::from_setting(x11_forwarding_mode);
         ssh.sftp_remote_path = sftp_remote_path.trim().to_owned();
         ssh.sftp_local_path = sftp_local_path.trim().to_owned();
         profile

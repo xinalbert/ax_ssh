@@ -149,7 +149,6 @@ TRANSLATIONS = {
     "Save As remote path": "另存为远端路径",
     "Upload": "上传",
     "Upload selected local files": "上传选中的本地文件",
-    "Enable SSH X11 forwarding": "启用 SSH X11 转发",
     "Endpoint": "端点",
     "Enable semantic highlighting": "启用语义高亮",
     "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved.": "输入 #RRGGBB 或 #RRGGBBAA。保存时，对比度不足的颜色会回退为可读颜色。",
@@ -184,8 +183,10 @@ TRANSLATIONS = {
     "Font size": "字体大小",
     "Foreground": "前景",
     "Forward": "前进",
-    "Forward X11 applications": "转发 X11 应用",
     "Full name": "完整名称",
+    "SSH X11 forwarding mode": "SSH X11 转发方式",
+    "Trusted (-Y)": "受信任（-Y）",
+    "Untrusted (-X)": "非信任（-X）",
     "General": "通用",
     "GPU": "GPU",
     "Group": "组",
@@ -246,6 +247,7 @@ TRANSLATIONS = {
     "No failed transfers": "没有失败的传输",
     "No successful transfers": "没有成功的传输",
     "No transfers in progress": "没有正在传输的文件",
+    "Off": "关闭",
     "Open": "打开",
     "Open folder": "打开文件夹",
     "Open Recent": "打开最近文件",
@@ -450,6 +452,7 @@ TRANSLATIONS = {
     "{0} terminal foreground color": "{0} 终端前景色",
     "{0} terminal selection color": "{0} 终端选择颜色",
     "{0} text color": "{0} 文字颜色",
+    "X11 forwarding": "X11 转发",
 }
 
 UNCHANGED = {

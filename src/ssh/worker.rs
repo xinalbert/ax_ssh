@@ -4,7 +4,7 @@ mod sftp;
 mod shell;
 
 use self::sftp::run_sftp_session;
-use self::shell::{TerminalSessionTask, run_terminal_session, x11_requested_for};
+use self::shell::{TerminalSessionTask, run_terminal_session, x11_mode_for};
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -28,7 +28,7 @@ use crate::terminal_input::{
     TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
 };
 
-use super::x11::{X11Dispatcher, X11Forwarding};
+use super::x11::X11Dispatcher;
 use super::{SshConnection, SshError};
 
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -528,21 +528,19 @@ async fn run_session(task: SshSessionTask) {
         resize_rx,
         event_tx,
     } = task;
-    let x11_requested = x11_requested_for(mode, &profile);
+    let x11_mode = x11_mode_for(mode, &profile);
     let initial_sftp_path = initial_sftp_path(&profile);
-    let connect = async {
-        let mut x11_forwarding = None;
-        let mut x11_dispatcher = None;
-        let mut x11_requests = None;
-        if x11_requested {
-            let (dispatcher, requests) = X11Dispatcher::channel();
-            x11_forwarding = Some(X11Forwarding::new(x11_settings));
-            x11_dispatcher = Some(dispatcher);
-            x11_requests = Some(requests);
-        }
+    let (x11_dispatcher, x11_requests) = if x11_mode.is_some() {
+        let (dispatcher, requests) = X11Dispatcher::channel();
+        (Some(dispatcher), Some(requests))
+    } else {
+        (None, None)
+    };
+    let x11_dispatcher_for_connect = x11_dispatcher.clone();
+    let connect = async move {
         let connection =
-            SshConnection::connect_with_x11(&profile, secret, x11_dispatcher.clone()).await?;
-        Ok::<_, anyhow::Error>((connection, x11_forwarding, x11_dispatcher, x11_requests))
+            SshConnection::connect_with_x11(&profile, secret, x11_dispatcher_for_connect).await?;
+        Ok::<_, anyhow::Error>(connection)
     };
     tokio::pin!(connect);
     let connection_result = loop {
@@ -580,8 +578,8 @@ async fn run_session(task: SshSessionTask) {
         send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
         return;
     };
-    let (connection, x11_forwarding, x11_dispatcher, x11_requests) = match connection_result {
-        Ok(startup) => startup,
+    let connection = match connection_result {
+        Ok(connection) => connection,
         Err(error) => {
             if let Some(SshError::HostKeyRevoked { actual, public_key }) =
                 error.downcast_ref::<SshError>()
@@ -654,8 +652,8 @@ async fn run_session(task: SshSessionTask) {
     run_terminal_session(TerminalSessionTask {
         connection,
         session_id,
-        x11_requested,
-        x11_forwarding,
+        x11_mode,
+        x11_settings,
         x11_dispatcher,
         x11_requests,
         command_rx,

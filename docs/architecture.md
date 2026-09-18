@@ -1073,10 +1073,11 @@ data; any unlock or confirmation UI remains owned by the system agent. This is
 client authentication only and does not implement agent forwarding or agent key
 management.
 
-X11 forwarding is an SSH-profile setting that defaults on for new profiles and
-for legacy data that omitted the field; an explicit saved `false` remains off.
-It applies only to terminal mode: SFTP-only, Telnet, and Serial workers never
-request X11. Global `X11Settings` stores only the non-secret provider,
+X11 forwarding is an SSH-profile mode: `off`, `untrusted` (`-X`), or `trusted`
+(`-Y`). New profiles default to `trusted`; legacy absent values and legacy
+`true` migrate to `trusted`, while legacy `false` migrates to `off`. It applies
+only to terminal mode: SFTP-only, Telnet, and Serial workers never request X11.
+Global `X11Settings` stores only the non-secret provider,
 Custom-only application path, launch preference, and explicit no-auth
 compatibility choice. `src/x_server.rs` resolves Auto to platform providers,
 discovers macOS applications by bundle identifier through `NSWorkspace`,
@@ -1089,12 +1090,19 @@ Custom path, and no provider is downloaded or installed. A Custom target is
 launched without a command shell and must be a regular file with executable
 permission on Unix.
 
-The shell creation phase sends an X11 forwarding request with one random 128-bit
-fake cookie, but it does not read local `DISPLAY`, run `xauth`, probe a local
-endpoint, or start an X server. Only when the remote server opens an X11 channel
-does the relay resolve local display candidates, run a timed, output-limited
-`xauth list <DISPLAY>`, and, if needed and enabled, launch and poll the selected
-provider behind the existing timeout. MacXServer is started only with explicit
+Trusted mode sends an X11 forwarding request with one random 128-bit fake cookie,
+but it does not read local `DISPLAY`, run `xauth`, probe a local endpoint, or
+start an X server. Only when the remote server opens an X11 channel does the
+relay resolve local display candidates, run a timed, output-limited `xauth list
+<DISPLAY>`, and, if needed and enabled, launch and poll the selected provider
+behind the existing timeout. Untrusted mode prepares after host-key verification
+and SSH authentication, but before its X11 forwarding request: it uses `xauth -f
+<private-file> generate <DISPLAY> MIT-MAGIC-COOKIE-1 untrusted timeout 1260`,
+reads only that temporary authority, then removes the private directory. AxSSH
+stops accepting untrusted channels after 20 minutes, while the extra 60 seconds
+avoids X server fail-open timing. Untrusted mode requires an X11
+SECURITY-capable local server and never falls back to no-auth or the real cookie.
+MacXServer is started only with explicit
 no-auth compatibility and forced to `127.0.0.1:6000`; VcXsrv and Xming receive
 `-multiwindow -clipboard -ac` only under the same explicit choice. The relay
 still accepts only local endpoints and validates the SSH fake cookie before
@@ -1104,8 +1112,9 @@ connected, and publishes a persistent unavailable status. Remote `sshd` policy
 is not modified: it must independently allow X11 forwarding and accept the
 request before it assigns remote `DISPLAY`.
 
-Each enabled terminal creates a random 128-bit fake cookie for the SSH request.
-`ClientHandler` rejects server-opened X11 channels by default and dispatches
+Each trusted terminal creates a random 128-bit fake cookie for the SSH request;
+an untrusted terminal uses its short-lived restricted cookie. `ClientHandler`
+rejects server-opened X11 channels by default and dispatches
 them only after the request succeeds. The dispatch queue and active relay set
 are both capped at eight; disabled/closed channels are administratively rejected
 and resource exhaustion is reported explicitly. A relay connects to the
@@ -1622,7 +1631,10 @@ text brightness, bold-color, optional semantic highlighting and its status color
     default to `encrypted-vault`; selecting `system-keyring` remains an explicit
     opt-in. Schema version 30 adds a bounded `recent_workspaces` path list to
     the private session store; older files default it to empty, and the list
-    contains no workspace contents or secrets.
+    contains no workspace contents or secrets. Schema version 31 replaces the
+    SSH profile's X11 boolean with `off`, `untrusted`, or `trusted`; legacy
+    `false` and `true` migrate to `off` and `trusted` respectively, and no X11
+    cookie enters the profile.
     Schema version 27 adds
     `software_presentation` with stable `layer-images` and
     `damage-backing-store` values; missing or invalid values select the default

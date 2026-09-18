@@ -29,7 +29,7 @@ use ax_ssh::config::{
     SerialFlowControl, SerialParity, SerialStopBits, SessionProfile, SessionStore,
     SftpTransferFilterSettings, ShortcutSettings, SoftwarePresentationMode, TerminalColorScheme,
     TerminalSemanticColorsInput, TerminalSettingsInput, ThemePalette, ThemeSettings, UiLanguage,
-    WorkspaceSettingsInput, X11Settings, normalize_group_name,
+    WorkspaceSettingsInput, X11ForwardingMode, X11Settings, normalize_group_name,
 };
 use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle, discover_shells};
 use ax_ssh::serial::{

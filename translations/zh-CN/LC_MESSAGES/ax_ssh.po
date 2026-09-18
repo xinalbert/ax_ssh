@@ -373,9 +373,6 @@ msgstr "编辑"
 msgid "Edit selected remote file"
 msgstr "编辑选中的远端文件"
 
-msgid "Enable SSH X11 forwarding"
-msgstr "启用 SSH X11 转发"
-
 msgid "Enable semantic highlighting"
 msgstr "启用语义高亮"
 
@@ -474,9 +471,6 @@ msgstr "前景"
 
 msgid "Forward"
 msgstr "前进"
-
-msgid "Forward X11 applications"
-msgstr "转发 X11 应用"
 
 msgid "Full name"
 msgstr "完整名称"
@@ -672,6 +666,9 @@ msgstr "没有成功的传输"
 
 msgid "No transfers in progress"
 msgstr "没有正在传输的文件"
+
+msgid "Off"
+msgstr "关闭"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择"
@@ -936,6 +933,9 @@ msgstr "SLINT"
 
 msgid "SSH"
 msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "SSH X11 转发方式"
 
 msgid "SSH agent"
 msgstr "SSH agent"
@@ -1252,6 +1252,9 @@ msgstr "信任并继续"
 msgid "Trust new key"
 msgstr "信任新密钥"
 
+msgid "Trusted (-Y)"
+msgstr "受信任（-Y）"
+
 msgid "Unfocused refresh rate"
 msgstr "非聚焦刷新率"
 
@@ -1263,6 +1266,9 @@ msgstr "未知 SSH 主机密钥"
 
 msgid "Unlock encrypted credentials"
 msgstr "解锁加密凭据"
+
+msgid "Untrusted (-X)"
+msgstr "非信任（-X）"
 
 msgid "Update session"
 msgstr "更新会话"
@@ -1326,6 +1332,9 @@ msgstr "转发图形应用使用的 X server"
 
 msgid "X11"
 msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "X11 转发"
 
 msgid "lines"
 msgstr "行"

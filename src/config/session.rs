@@ -82,6 +82,83 @@ impl SessionProtocol {
     }
 }
 
+/// Per-SSH-profile X11 forwarding authority policy.
+///
+/// The setting intentionally belongs to the remote server profile. Local X
+/// server discovery and launch preferences remain application settings.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum X11ForwardingMode {
+    Off,
+    Untrusted,
+    #[default]
+    Trusted,
+}
+
+impl X11ForwardingMode {
+    pub const fn enabled(self) -> bool {
+        !matches!(self, Self::Off)
+    }
+
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Untrusted => "untrusted",
+            Self::Trusted => "trusted",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "off" => Self::Off,
+            "untrusted" | "-x" => Self::Untrusted,
+            "trusted" | "-y" => Self::Trusted,
+            _ => Self::default(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum X11ForwardingModeWire {
+    Mode(X11ForwardingMode),
+    LegacyToggle(bool),
+}
+
+impl From<X11ForwardingModeWire> for X11ForwardingMode {
+    fn from(value: X11ForwardingModeWire) -> Self {
+        match value {
+            X11ForwardingModeWire::Mode(mode) => mode,
+            // Existing `true` used a real local authority cookie, so preserving
+            // it as trusted avoids changing an established profile's behavior.
+            X11ForwardingModeWire::LegacyToggle(true) => Self::Trusted,
+            X11ForwardingModeWire::LegacyToggle(false) => Self::Off,
+        }
+    }
+}
+
+fn deserialize_x11_forwarding_mode<'de, D>(
+    deserializer: D,
+) -> std::result::Result<X11ForwardingMode, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    X11ForwardingModeWire::deserialize(deserializer).map(Into::into)
+}
+
+fn deserialize_optional_x11_forwarding_mode<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<X11ForwardingMode>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<X11ForwardingModeWire>::deserialize(deserializer).map(|value| value.map(Into::into))
+}
+
+const fn default_x11_forwarding_mode() -> X11ForwardingMode {
+    X11ForwardingMode::Trusted
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SshConfig {
     pub host: String,
@@ -106,10 +183,13 @@ pub struct SshConfig {
     /// the SSH layer must refuse the connection until it is trusted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_key_fingerprint: Option<String>,
-    /// Whether this profile may request X11 forwarding for terminal sessions.
-    /// Authentication cookies remain worker-local and are never persisted.
-    #[serde(default = "default_true")]
-    pub x11_forwarding: bool,
+    /// X11 forwarding policy for terminal sessions. Authentication cookies
+    /// remain worker-local and are never persisted.
+    #[serde(
+        default = "default_x11_forwarding_mode",
+        deserialize_with = "deserialize_x11_forwarding_mode"
+    )]
+    pub x11_forwarding: X11ForwardingMode,
     /// Initial remote directory for a dedicated SFTP tab.
     #[serde(default = "default_sftp_remote_path")]
     pub sftp_remote_path: String,
@@ -309,8 +389,8 @@ struct SessionProfileWire {
     credential_stored: Option<bool>,
     #[serde(default)]
     host_key_fingerprint: Option<String>,
-    #[serde(default)]
-    x11_forwarding: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_x11_forwarding_mode")]
+    x11_forwarding: Option<X11ForwardingMode>,
 }
 
 impl<'de> Deserialize<'de> for SessionProfile {
@@ -356,7 +436,9 @@ impl<'de> Deserialize<'de> for SessionProfile {
                 credential_storage,
                 credential_vault_key_saved: false,
                 host_key_fingerprint: wire.host_key_fingerprint,
-                x11_forwarding: wire.x11_forwarding.unwrap_or(true),
+                x11_forwarding: wire
+                    .x11_forwarding
+                    .unwrap_or_else(default_x11_forwarding_mode),
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
             })
@@ -390,7 +472,7 @@ impl SessionProfile {
                 credential_storage: None,
                 credential_vault_key_saved: false,
                 host_key_fingerprint: None,
-                x11_forwarding: true,
+                x11_forwarding: X11ForwardingMode::default(),
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
             }),
@@ -463,10 +545,6 @@ impl SessionProfile {
         validate_connection_consistency(&self.connection)?;
         Ok(())
     }
-}
-
-const fn default_true() -> bool {
-    true
 }
 
 const fn is_false(value: &bool) -> bool {

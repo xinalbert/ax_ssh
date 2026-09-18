@@ -1593,7 +1593,7 @@ fn legacy_ssh_profile_migrates_to_explicit_protocol_config() {
         serde_json::from_str(&json).expect("legacy SSH profile should migrate");
 
     assert_eq!(profile.protocol(), SessionProtocol::Ssh);
-    assert!(ssh(&profile).x11_forwarding);
+    assert_eq!(ssh(&profile).x11_forwarding, X11ForwardingMode::Trusted);
     assert_eq!(ssh(&profile).sftp_remote_path, "~");
     assert!(ssh(&profile).sftp_local_path.is_empty());
     let serialized = serde_json::to_value(profile).expect("profile should serialize");
@@ -1618,9 +1618,9 @@ fn sftp_default_paths_round_trip_without_secrets() {
 }
 
 #[test]
-fn x11_forwarding_defaults_on_and_round_trips_without_becoming_a_secret() {
+fn x11_forwarding_mode_migrates_legacy_toggles_and_round_trips_without_a_secret() {
     let mut profile = SessionProfile::new("x11", "host.example", "alice");
-    assert!(ssh(&profile).x11_forwarding);
+    assert_eq!(ssh(&profile).x11_forwarding, X11ForwardingMode::Trusted);
     let mut legacy_value = serde_json::to_value(&profile).expect("profile should serialize");
     legacy_value["connection"]["config"]
         .as_object_mut()
@@ -1628,14 +1628,31 @@ fn x11_forwarding_defaults_on_and_round_trips_without_becoming_a_secret() {
         .remove("x11_forwarding");
     let legacy_profile: SessionProfile =
         serde_json::from_value(legacy_value).expect("old SSH config should default X11 on");
-    assert!(ssh(&legacy_profile).x11_forwarding);
-    ssh_mut(&mut profile).x11_forwarding = false;
+    assert_eq!(
+        ssh(&legacy_profile).x11_forwarding,
+        X11ForwardingMode::Trusted
+    );
+    let mut legacy_enabled = serde_json::to_value(&profile).expect("profile should serialize");
+    legacy_enabled["connection"]["config"]["x11_forwarding"] = serde_json::Value::Bool(true);
+    let legacy_enabled: SessionProfile =
+        serde_json::from_value(legacy_enabled).expect("legacy enabled X11 should migrate");
+    assert_eq!(
+        ssh(&legacy_enabled).x11_forwarding,
+        X11ForwardingMode::Trusted
+    );
+    ssh_mut(&mut profile).x11_forwarding = X11ForwardingMode::Untrusted;
     let encoded = serde_json::to_string(&profile).expect("SSH profile should serialize");
     assert!(encoded.contains("x11_forwarding"));
     let decoded: SessionProfile =
         serde_json::from_str(&encoded).expect("SSH profile should deserialize");
-    assert!(!ssh(&decoded).x11_forwarding);
+    assert_eq!(ssh(&decoded).x11_forwarding, X11ForwardingMode::Untrusted);
     assert!(!encoded.contains("MAGIC-COOKIE"));
+
+    let mut legacy_disabled = serde_json::to_value(&profile).expect("profile should serialize");
+    legacy_disabled["connection"]["config"]["x11_forwarding"] = serde_json::Value::Bool(false);
+    let legacy_disabled: SessionProfile =
+        serde_json::from_value(legacy_disabled).expect("legacy disabled X11 should migrate");
+    assert_eq!(ssh(&legacy_disabled).x11_forwarding, X11ForwardingMode::Off);
 }
 
 #[test]

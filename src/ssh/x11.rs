@@ -1,11 +1,15 @@
 //! Secure, bounded X11 forwarding for one SSH terminal worker.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{error::Error as StdError, fmt};
+
+#[cfg(unix)]
+use std::os::unix::fs::DirBuilderExt;
 
 use anyhow::{Context, Result};
 use russh::client;
@@ -16,10 +20,11 @@ use tokio::net::TcpStream;
 use tokio::net::UnixStream;
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep, timeout};
+use tokio::time::{Duration, Instant, sleep, timeout};
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::config::X11Settings;
+use crate::config::{X11ForwardingMode, X11Settings};
 use crate::x_server::XServerPlan;
 
 pub(super) const X11_AUTH_PROTOCOL: &str = "MIT-MAGIC-COOKIE-1";
@@ -48,6 +53,9 @@ const MAX_XAUTH_OUTPUT_BYTES: usize = 4 * 1_024;
 const MAX_AUTH_PROTOCOL_BYTES: usize = 64;
 const MAX_AUTH_DATA_BYTES: usize = 256;
 const X11_SETUP_HEADER_BYTES: usize = 12;
+const UNTRUSTED_X11_FORWARDING_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const UNTRUSTED_X11_COOKIE_TIMEOUT_SECONDS: &str = "1260";
+const PRIVATE_XAUTH_DIRECTORY_ATTEMPTS: usize = 8;
 
 trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin + Send {}
 
@@ -158,16 +166,40 @@ struct X11Credentials {
 }
 
 #[derive(Clone)]
+enum X11ForwardingKind {
+    Trusted {
+        settings: X11Settings,
+    },
+    Untrusted {
+        session: Arc<X11Session>,
+        expires_at: Instant,
+    },
+}
+
+#[derive(Clone)]
 pub(super) struct X11Forwarding {
-    settings: X11Settings,
     fake_cookie: Zeroizing<[u8; X11_COOKIE_BYTES]>,
+    kind: X11ForwardingKind,
 }
 
 impl X11Forwarding {
-    pub(super) fn new(settings: X11Settings) -> Self {
-        Self {
-            settings,
-            fake_cookie: Zeroizing::new(rand::random::<[u8; X11_COOKIE_BYTES]>()),
+    pub(super) async fn prepare(settings: X11Settings, mode: X11ForwardingMode) -> Result<Self> {
+        match mode {
+            X11ForwardingMode::Off => anyhow::bail!("X11 forwarding is disabled for this profile"),
+            X11ForwardingMode::Trusted => Ok(Self {
+                fake_cookie: Zeroizing::new(rand::random::<[u8; X11_COOKIE_BYTES]>()),
+                kind: X11ForwardingKind::Trusted { settings },
+            }),
+            X11ForwardingMode::Untrusted => {
+                let (session, fake_cookie) = X11Session::prepare_untrusted(settings).await?;
+                Ok(Self {
+                    fake_cookie,
+                    kind: X11ForwardingKind::Untrusted {
+                        session: Arc::new(session),
+                        expires_at: Instant::now() + UNTRUSTED_X11_FORWARDING_TIMEOUT,
+                    },
+                })
+            }
         }
     }
 
@@ -180,17 +212,35 @@ impl X11Forwarding {
     }
 
     pub(super) async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
-        let session =
-            match X11Session::prepare(self.settings.clone(), self.fake_cookie.clone()).await {
-                Ok(session) => session,
-                Err(error) => {
-                    request.reject(ChannelOpenFailure::ConnectFailed).await;
-                    return Err(error
-                        .context("cannot prepare the local X server")
-                        .context(X11PreparationError));
+        match &self.kind {
+            X11ForwardingKind::Trusted { settings } => {
+                let session =
+                    match X11Session::prepare_trusted(settings.clone(), self.fake_cookie.clone())
+                        .await
+                    {
+                        Ok(session) => session,
+                        Err(error) => {
+                            request.reject(ChannelOpenFailure::ConnectFailed).await;
+                            return Err(error
+                                .context("cannot prepare the local X server")
+                                .context(X11PreparationError));
+                        }
+                    };
+                session.relay(request).await
+            }
+            X11ForwardingKind::Untrusted {
+                session,
+                expires_at,
+            } => {
+                if Instant::now() >= *expires_at {
+                    request
+                        .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                        .await;
+                    anyhow::bail!("untrusted X11 forwarding has expired")
                 }
-            };
-        session.relay(request).await
+                session.relay(request).await
+            }
+        }
     }
 }
 
@@ -200,7 +250,7 @@ struct X11Session {
 }
 
 impl X11Session {
-    async fn prepare(
+    async fn prepare_trusted(
         settings: X11Settings,
         fake_cookie: Zeroizing<[u8; X11_COOKIE_BYTES]>,
     ) -> Result<Self> {
@@ -226,6 +276,45 @@ impl X11Session {
         let result = timeout(SERVER_START_TIMEOUT, async {
             loop {
                 match prepare_existing_server(&plan, &fake_cookie, Some(&launched_display)).await {
+                    Ok(session) => return session,
+                    Err(error) => last_error = Some(error),
+                }
+                sleep(SERVER_START_POLL_INTERVAL).await;
+            }
+        })
+        .await;
+        match result {
+            Ok(session) => Ok(session),
+            Err(_) => Err(last_error.unwrap_or(initial_error))
+                .context("local X server did not become ready before its timeout"),
+        }
+    }
+
+    async fn prepare_untrusted(
+        settings: X11Settings,
+    ) -> Result<(Self, Zeroizing<[u8; X11_COOKIE_BYTES]>)> {
+        let plan = XServerPlan::resolve(settings).await?;
+        let initial_error = match prepare_existing_untrusted_server(&plan, None).await {
+            Ok(session) => return Ok(session),
+            Err(error) => error,
+        };
+        if !plan.launch_on_x11_request() {
+            return Err(initial_error)
+                .context("local X server is not ready and automatic startup is disabled");
+        }
+
+        let _launch_lock = X_SERVER_LAUNCH_LOCK
+            .get_or_init(|| tokio::sync::Mutex::new(()))
+            .lock()
+            .await;
+        if let Ok(session) = prepare_existing_untrusted_server(&plan, None).await {
+            return Ok(session);
+        }
+        let launched_display = plan.launch().await?;
+        let mut last_error = None;
+        let result = timeout(SERVER_START_TIMEOUT, async {
+            loop {
+                match prepare_existing_untrusted_server(&plan, Some(&launched_display)).await {
                     Ok(session) => return session,
                     Err(error) => last_error = Some(error),
                 }
@@ -298,6 +387,29 @@ async fn prepare_existing_server(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no local X display candidate is available")))
 }
 
+async fn prepare_existing_untrusted_server(
+    plan: &XServerPlan,
+    preferred_display: Option<&str>,
+) -> Result<(X11Session, Zeroizing<[u8; X11_COOKIE_BYTES]>)> {
+    let mut displays = Vec::new();
+    if let Some(display) = preferred_display {
+        displays.push(display.to_owned());
+    }
+    for display in plan.display_candidates().await {
+        if !displays.contains(&display) {
+            displays.push(display);
+        }
+    }
+    let mut last_error = None;
+    for display in displays {
+        match prepare_untrusted_display(&display).await {
+            Ok(session) => return Ok(session),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("no local X display candidate is available")))
+}
+
 async fn prepare_display(
     plan: &XServerPlan,
     fake_cookie: &Zeroizing<[u8; X11_COOKIE_BYTES]>,
@@ -317,6 +429,28 @@ async fn prepare_display(
             local_auth,
         }),
     })
+}
+
+async fn prepare_untrusted_display(
+    display: &str,
+) -> Result<(X11Session, Zeroizing<[u8; X11_COOKIE_BYTES]>)> {
+    let display = DisplayTarget::parse(display)?;
+    let endpoint = probe_endpoints(&display.endpoints).await?;
+    let generated_cookie = Zeroizing::new(generate_untrusted_xauth_cookie(&display.query).await?);
+    let fake_cookie: [u8; X11_COOKIE_BYTES] = generated_cookie
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("untrusted X11 authorization has an invalid length"))?;
+    let fake_cookie = Zeroizing::new(fake_cookie);
+    let local_auth = LocalX11Auth::Cookie(Zeroizing::new(fake_cookie.to_vec()));
+    let session = X11Session {
+        endpoint,
+        credentials: Arc::new(X11Credentials {
+            fake_cookie: fake_cookie.clone(),
+            local_auth,
+        }),
+    };
+    Ok((session, fake_cookie))
 }
 
 pub(super) struct X11ChannelRequest {
@@ -389,7 +523,7 @@ impl X11Dispatcher {
 
 async fn load_xauth_cookie(display: &str) -> Result<Vec<u8>> {
     for executable in xauth_candidates() {
-        let Ok(output) = run_xauth(&executable, display).await else {
+        let Ok(output) = run_xauth(&executable, &["list", display]).await else {
             continue;
         };
         if let Ok(cookie) = parse_xauth_output(&output) {
@@ -397,6 +531,86 @@ async fn load_xauth_cookie(display: &str) -> Result<Vec<u8>> {
         }
     }
     anyhow::bail!("no exact MIT-MAGIC-COOKIE-1 authorization is available")
+}
+
+async fn generate_untrusted_xauth_cookie(display: &str) -> Result<Vec<u8>> {
+    for executable in xauth_candidates() {
+        let temporary = PrivateXauthDirectory::create()?;
+        let authority_path = temporary.authority_file();
+        let authority_file = authority_path
+            .to_str()
+            .context("private X11 authority path is not valid UTF-8")?;
+        let generate_arguments = untrusted_xauth_generate_arguments(authority_file, display);
+        if run_xauth(&executable, &generate_arguments).await.is_err() {
+            continue;
+        }
+        let Ok(output) = run_xauth(&executable, &["-f", authority_file, "list", display]).await
+        else {
+            continue;
+        };
+        if let Ok(cookie) = parse_xauth_output(&output) {
+            return Ok(cookie);
+        }
+    }
+    anyhow::bail!("local X server could not generate untrusted X11 authorization")
+}
+
+fn untrusted_xauth_generate_arguments<'a>(
+    authority_file: &'a str,
+    display: &'a str,
+) -> [&'a str; 8] {
+    [
+        "-f",
+        authority_file,
+        "generate",
+        display,
+        X11_AUTH_PROTOCOL,
+        "untrusted",
+        "timeout",
+        UNTRUSTED_X11_COOKIE_TIMEOUT_SECONDS,
+    ]
+}
+
+struct PrivateXauthDirectory {
+    path: PathBuf,
+}
+
+impl PrivateXauthDirectory {
+    fn create() -> Result<Self> {
+        for _ in 0..PRIVATE_XAUTH_DIRECTORY_ATTEMPTS {
+            let path = std::env::temp_dir().join(format!("ax-ssh-x11-{}", Uuid::new_v4()));
+            #[cfg(unix)]
+            let created = {
+                let mut builder = fs::DirBuilder::new();
+                // Set the mode at creation time so another local user cannot
+                // race a file into the authority directory before xauth opens it.
+                builder.mode(0o700);
+                builder.create(&path)
+            };
+            #[cfg(not(unix))]
+            let created = fs::create_dir(&path);
+            match created {
+                Ok(()) => {
+                    return Ok(Self { path });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    return Err(error).context("failed to create private X11 authority directory");
+                }
+            }
+        }
+        anyhow::bail!("failed to allocate private X11 authority directory")
+    }
+
+    fn authority_file(&self) -> PathBuf {
+        self.path.join("authority")
+    }
+}
+
+impl Drop for PrivateXauthDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -413,10 +627,9 @@ fn xauth_candidates() -> Vec<PathBuf> {
     vec![PathBuf::from("xauth")]
 }
 
-async fn run_xauth(executable: &PathBuf, display: &str) -> Result<Vec<u8>> {
+async fn run_xauth(executable: &Path, arguments: &[&str]) -> Result<Vec<u8>> {
     let mut child = Command::new(executable)
-        .arg("list")
-        .arg(display)
+        .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -727,6 +940,37 @@ mod tests {
                   host/unix:0 MIT-MAGIC-COOKIE-1 00112233445566778899aabbccddeeff\n"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn untrusted_xauth_generation_uses_a_private_authority_file_and_expiry() {
+        assert_eq!(
+            untrusted_xauth_generate_arguments("/private/authority", "unix:0"),
+            [
+                "-f",
+                "/private/authority",
+                "generate",
+                "unix:0",
+                X11_AUTH_PROTOCOL,
+                "untrusted",
+                "timeout",
+                UNTRUSTED_X11_COOKIE_TIMEOUT_SECONDS,
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_xauth_directory_is_created_owner_only() {
+        let directory =
+            PrivateXauthDirectory::create().expect("private directory should be created");
+        let permissions = fs::metadata(&directory.path)
+            .expect("private directory metadata should be available")
+            .permissions();
+        assert_eq!(
+            std::os::unix::fs::PermissionsExt::mode(&permissions) & 0o777,
+            0o700
         );
     }
 

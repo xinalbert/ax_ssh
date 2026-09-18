@@ -11,7 +11,7 @@ use tokio::time::{advance, pause, resume};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::config::{X11ServerProvider, X11Settings};
+use crate::config::{X11ForwardingMode, X11ServerProvider, X11Settings};
 
 use super::worker::{MAX_ERROR_CHARS, bounded_error_message};
 
@@ -23,7 +23,7 @@ fn test_profile(name: &str, host: String) -> SessionProfile {
     profile
         .ssh_mut()
         .expect("test profile should use SSH")
-        .x11_forwarding = false;
+        .x11_forwarding = X11ForwardingMode::Off;
     profile
 }
 
@@ -1045,7 +1045,7 @@ async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_ope
     {
         let ssh = profile.ssh_mut().expect("test profile should use SSH");
         ssh.port = address.port();
-        ssh.x11_forwarding = true;
+        ssh.x11_forwarding = X11ForwardingMode::Trusted;
     }
     let fingerprint = probe_host_key(&profile)
         .await

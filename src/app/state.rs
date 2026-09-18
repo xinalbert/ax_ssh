@@ -10,7 +10,9 @@ use tokio::sync::oneshot;
 use tracing::error;
 use uuid::Uuid;
 
-use ax_ssh::config::{ConfigStore, SessionProfile, SessionStore, normalize_group_name};
+use ax_ssh::config::{
+    ConfigStore, SessionProfile, SessionStore, X11ForwardingMode, normalize_group_name,
+};
 use ax_ssh::local_shell::LocalShellHandle;
 use ax_ssh::serial::{SerialPortDescriptor, SerialSessionHandle};
 use ax_ssh::sftp::SftpEntry;
@@ -538,7 +540,7 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) sftp_local_path: String,
     pub(super) credential_storage: String,
     pub(super) default_credential_storage: String,
-    pub(super) x11_forwarding: bool,
+    pub(super) x11_forwarding_mode: String,
     pub(super) serial_port: String,
     pub(super) serial_baud_rate: String,
     pub(super) serial_data_bits: &'static str,
@@ -564,7 +566,7 @@ impl Default for SessionEditorSnapshot {
             sftp_local_path: default_local_directory(),
             credential_storage: String::new(),
             default_credential_storage: "encrypted-vault".to_owned(),
-            x11_forwarding: true,
+            x11_forwarding_mode: X11ForwardingMode::default().as_setting().to_owned(),
             serial_port: String::new(),
             serial_baud_rate: "115200".to_owned(),
             serial_data_bits: "8",

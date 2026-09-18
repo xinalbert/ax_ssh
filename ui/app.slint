@@ -60,7 +60,7 @@ export component AppWindow inherits Window {
     in property <string> editor-sftp-local-path;
     in property <string> editor-credential-storage;
     in property <string> editor-default-credential-storage: "encrypted-vault";
-    in property <bool> editor-x11-forwarding: false;
+    in property <string> editor-x11-forwarding-mode: "trusted";
     in property <string> editor-serial-port;
     in property <string> editor-serial-baud-rate: "115200";
     in property <string> editor-serial-data-bits: "8";
@@ -406,7 +406,7 @@ export component AppWindow inherits Window {
             username: root.editor-username, auth_method: root.editor-auth-method,
             private_key_path: root.editor-private-key-path,
             sftp_remote_path: root.editor-sftp-remote-path, sftp_local_path: root.editor-sftp-local-path,
-            x11_forwarding: root.editor-x11-forwarding,
+            x11_forwarding_mode: root.editor-x11-forwarding-mode,
             credential_storage: root.editor-credential-storage,
             default_credential_storage: root.editor-default-credential-storage,
             serial_port: root.editor-serial-port,
@@ -452,7 +452,7 @@ export component AppWindow inherits Window {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, string, bool, string, string, bool, string, string, string, string, string, string, bool,
+        string, string, string, bool, string, string, string, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);

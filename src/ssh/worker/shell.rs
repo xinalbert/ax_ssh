@@ -13,8 +13,8 @@ use super::*;
 pub(super) struct TerminalSessionTask {
     pub(super) connection: SshConnection,
     pub(super) session_id: Uuid,
-    pub(super) x11_requested: bool,
-    pub(super) x11_forwarding: Option<X11Forwarding>,
+    pub(super) x11_mode: Option<crate::config::X11ForwardingMode>,
+    pub(super) x11_settings: crate::config::X11Settings,
     pub(super) x11_dispatcher: Option<X11Dispatcher>,
     pub(super) x11_requests: Option<mpsc::Receiver<X11ChannelRequest>>,
     pub(super) command_rx: mpsc::Receiver<SshCommand>,
@@ -26,14 +26,28 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let TerminalSessionTask {
         connection,
         session_id,
-        x11_requested,
-        mut x11_forwarding,
+        x11_mode,
+        x11_settings,
         x11_dispatcher,
         mut x11_requests,
         mut command_rx,
         mut resize_rx,
         event_tx,
     } = task;
+    let (mut x11_forwarding, x11_unavailable) = match x11_mode {
+        Some(mode) => match X11Forwarding::prepare(x11_settings, mode).await {
+            Ok(forwarding) => (Some(forwarding), None),
+            Err(error) => {
+                warn!(session_id = %session_id, %error, "SSH X11 forwarding preparation failed");
+                (None, Some(bounded_error_message(&error)))
+            }
+        },
+        None => (None, None),
+    };
+    if x11_forwarding.is_none() {
+        x11_requests = None;
+    }
+    let x11_requested = x11_forwarding.is_some();
     let initial_size = *resize_rx.borrow_and_update();
     let (mut shell, x11_request_status) = match connection
         .open_shell(
@@ -76,7 +90,18 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         close_shell(&shell, session_id).await;
         return;
     }
-    if x11_request_status == X11RequestStatus::Enabled {
+    if let Some(message) = x11_unavailable {
+        if !send_event(
+            &event_tx,
+            SshSessionEvent::X11ForwardingUnavailable(message),
+            session_id,
+        )
+        .await
+        {
+            close_shell(&shell, session_id).await;
+            return;
+        }
+    } else if x11_request_status == X11RequestStatus::Enabled {
         if !send_event(&event_tx, SshSessionEvent::X11ForwardingEnabled, session_id).await {
             close_shell(&shell, session_id).await;
             return;
@@ -534,8 +559,14 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     }
 }
 
-pub(super) fn x11_requested_for(mode: SshSessionMode, profile: &SessionProfile) -> bool {
-    mode == SshSessionMode::Terminal && profile.ssh().is_some_and(|config| config.x11_forwarding)
+pub(super) fn x11_mode_for(
+    mode: SshSessionMode,
+    profile: &SessionProfile,
+) -> Option<crate::config::X11ForwardingMode> {
+    (mode == SshSessionMode::Terminal)
+        .then(|| profile.ssh().map(|config| config.x11_forwarding))
+        .flatten()
+        .filter(|mode| mode.enabled())
 }
 
 async fn receive_x11_request(
@@ -596,16 +627,21 @@ mod x11_tests {
     use super::*;
 
     #[test]
-    fn x11_is_requested_only_for_opted_in_terminal_profiles() {
+    fn x11_mode_is_requested_only_for_opted_in_terminal_profiles() {
         let mut ssh = SessionProfile::new("ssh", "host.example", "alice");
-        assert!(x11_requested_for(SshSessionMode::Terminal, &ssh));
-        ssh.ssh_mut().expect("profile should be SSH").x11_forwarding = false;
-        assert!(!x11_requested_for(SshSessionMode::Terminal, &ssh));
-        ssh.ssh_mut().expect("profile should be SSH").x11_forwarding = true;
-        assert!(!x11_requested_for(SshSessionMode::Sftp, &ssh));
+        assert_eq!(
+            x11_mode_for(SshSessionMode::Terminal, &ssh),
+            Some(crate::config::X11ForwardingMode::Trusted)
+        );
+        ssh.ssh_mut().expect("profile should be SSH").x11_forwarding =
+            crate::config::X11ForwardingMode::Off;
+        assert_eq!(x11_mode_for(SshSessionMode::Terminal, &ssh), None);
+        ssh.ssh_mut().expect("profile should be SSH").x11_forwarding =
+            crate::config::X11ForwardingMode::Untrusted;
+        assert_eq!(x11_mode_for(SshSessionMode::Sftp, &ssh), None);
 
         let telnet = SessionProfile::new_telnet("telnet", "host.example");
-        assert!(!x11_requested_for(SshSessionMode::Terminal, &telnet));
+        assert_eq!(x11_mode_for(SshSessionMode::Terminal, &telnet), None);
     }
 
     #[tokio::test]

@@ -240,7 +240,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_editor_sftp_local_path("".into());
     ui.set_editor_credential_storage("".into());
     ui.set_editor_default_credential_storage("".into());
-    ui.set_editor_x11_forwarding(false);
+    ui.set_editor_x11_forwarding_mode("off".into());
     ui.set_editor_serial_port("".into());
     ui.set_editor_serial_baud_rate("".into());
     ui.set_editor_serial_data_bits("".into());

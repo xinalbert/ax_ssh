@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20260918-macos-drop-fail-closed
-- 目标：让 macOS Finder 拖入在无法读取当前 AppKit 光标时明确拒绝，绝不回退到可能过期的 Winit 坐标。
-- 交付物：macOS fail-closed 坐标分支、定向回归、实施记录与 locked/offline Cargo 门禁。
+- 目标 ID：20260918-profile-x11-forwarding-mode
+- 目标：让每个 SSH 服务器档案显式选择关闭、`-X` 非信任或 `-Y` 信任 X11 转发，并保持旧布尔配置的安全迁移。
+- 交付物：版本化 profile 枚举、专用 Slint 选择控件、受限/信任 SSH X11 授权路径、定向回归与 locked/offline Cargo 门禁。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：`src/app/terminal_bridge.rs` 的 macOS `DroppedFile` 坐标决策与同文件定向回归，以及实施跟踪记录。
-- 不在本轮范围内：SSH trust/认证、凭据、SFTP worker/队列协议、覆盖同名文件策略、非 macOS Winit 坐标路径、终端鼠标协议字节语义、GUI 视觉自动验收。
+- 当前范围：SSH profile 持久化与迁移、Session Editor 的 X11 专用选择控件、SSH worker 的 X11 授权准备/relay，以及配套中英文文档、翻译和回归。
+- 不在本轮范围内：全局 X server provider/path/启动设置、远端 `sshd_config`、host-key trust、凭据、SFTP worker/队列协议、X11 cookie 持久化、GUI 视觉自动验收。
 
 ## 当前状态
 
@@ -26,9 +26,15 @@
 | SFTPDRAG1 | completed | 目标命中、Winit/AppKit 路由和标准 copy/drop 契约 | SFTP 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 外部文件只可投到 Remote files；原生远端回拖只可落到 Local files；缺少可靠目标一律拒绝。 |
 | SFTPFOLLOW1 | completed | macOS 原生 drop 坐标和普通下载完成语义 | 状态回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 仍要求外部 hover；macOS 在 drop 时读取 AppKit 坐标，普通下载仅完成并保留文件。 |
 | MACDROP2 | completed | macOS 原生坐标读取失败时 fail-closed | macOS 定向回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 只接受同一外部 hover 内当前 AppKit 位置；读取失败不得回退到旧 Winit 坐标。 |
+| X11MODE1 | completed | 每服务器 X11 模式枚举、旧布尔迁移与编辑器 DTO | 配置/编辑器定向回归、Slint/Cargo 重新编译 | `true` 迁移到原有的 trusted 行为，`false` 迁移为关闭；不保存 cookie。 |
+| X11MODE2 | completed | `-X` 受限授权与 `-Y` 既有信任转写 | X11 unit/loopback 回归、worker 生命周期审阅 | `-X` 使用短时 `xauth generate … untrusted`，`-Y` 保持惰性真实 cookie 转写。 |
+| X11MODE3 | completed | 中英文用法/架构、翻译、月度记录和完整门禁 | 翻译/Markdown/tracker、fmt/check/Clippy/test/diff | GUI 控件和目标平台 X server 行为由用户验收。 |
 
 ## 已完成
 
+- 已将 SSH profile 的 X11 转发从布尔开关改为专用的 Off、Untrusted (`-X`)、Trusted (`-Y`) 枚举；旧的缺失/true 值迁移为 Trusted，false 迁移为 Off，cookie 与凭据均不进入 profile。
+- 已让 Session Editor 只为 SSH profile 提供 X11 forwarding 下拉框；X server provider/path 继续属于全局本机环境设置，不再以其决定某个服务器的 `-X`/`-Y`。
+- 已让 `-X` 在 host key 已被接受且认证完成后才创建私有短生命周期 xauth authority，受限 cookie 在 20 分钟后拒绝新的远端 X11 channel；准备失败只报告 X11 不可用，不阻断 shell。Trusted (`-Y`) 仍保持首个 X11 channel 才准备本机 X server/cookie 的惰性路径。
 - 已将 SFTP 原生拖放改为目标区域驱动的 copy/drop 路由：Slint 为 Remote/Local files 发布只读、有限的窗口坐标几何 DTO；主窗口和 detached 窗口共享该契约。
 - 已删除以活动 SFTP Tab 或当前目录猜测外部落点的上传入口。非 macOS 平台仅在当前外部 hover 的最后 `CursorMoved` 坐标命中已启用 Remote files 区域时才排入上传；macOS 在同一 hover 的 drop 时读取当前 AppKit 坐标；坐标缺失、失效、加载中或命中其它区域均拒绝。
 - 已让 macOS `DroppedFile` 严格 fail-closed：仅在当前外部 hover 中使用 drop 时读取的 AppKit 位置；读取失败即拒绝，macOS 不再编译 Winit 光标缓存、`CursorMoved` 事件路径或其回退转换。
@@ -59,20 +65,23 @@
 - 已完成：下载终态和外部文件指针定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 257、应用 253、Doc tests 0）、462 条中文翻译检查、Markdown 相对链接检查和 `git diff --check`。macOS Finder 拖入与系统 opener 行为仍需用户手工验收。
 - 未完成：本机对 `x86_64-pc-windows-msvc` 的离线 `cargo check` 在 `aws-lc-sys` C 探测阶段因缺少 Windows SDK 的 `stdlib.h`/`windows.h` 终止，未进入 Rust 代码层；Windows CI/目标机仍需完成 check、Clippy、build 和 native test。
 - 已完成：MACDROP2 的 AppKit 读取失败、有效位置和 hover 结束定向回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 257、应用 254、Doc tests 0）均通过，`ui/app.slint` 已由 Cargo 重新编译；462 条中文翻译、Markdown 新增相对链接和 `git diff --check` 通过。tracker validator 已运行，本轮条目未新增问题，但仍报告既有 2026-08/09 历史记录与 research 的字段/时间格式债务。
+- 已完成：X11MODE1–3 的配置迁移、编辑器转换、worker 授权生命周期与受限 xauth 参数回归通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings` 和完整 `cargo test --locked --offline` 通过，`ui/app.slint` 已由 Cargo 重新编译；465 条中文翻译、Markdown 相对链接和 `git diff --check` 通过。tracker validator 已运行，本轮条目字段有效，但仍由既有 2026-08/09 历史记录与 research 的字段/时间格式债务报告失败。
 
 ## 风险与阻塞
 
 - 已修正：macOS `DroppedFile` 的 AppKit 读取失败不再回退到旧 Winit 坐标，而是拒绝该文件；Finder/原生窗口坐标变换仍需目标 macOS 手工确认。
 - 无代码阻塞。Slint renderer 为 process-global，已活跃 Metal surface 不能安全热切换；这不是未实现路径，而是通过启动回退和下一次 Automatic fallback marker 明确处理的生命周期边界。GUI 视觉验收仍需要用户执行。
+- 无代码阻塞。真实 `-X` 依赖目标本机安装 `xauth`、可连接 DISPLAY 和支持 X11 SECURITY 的 X server；真实远端图形程序与 UI 下拉框的视觉/可访问性仍需要用户在目标平台验收。
 
 ## 下一步
 
+- 在目标平台为一个 SSH profile 分别保存 Off、Untrusted (`-X`) 和 Trusted (`-Y`)，再以远端 X client 验证：Off 不请求 X11、`-X` 在受限授权过期后拒绝新连接、`-Y` 维持既有可信访问。全局 Settings > X11 只需按本机 X server 调整。
 - 在主窗口和 detached SFTP 窗口分别验证：(1) 从 Finder 拖文件到 Remote files 才上传；(2) 拖到 Local/终端/标题栏/分隔条不上传；(3) AppKit 坐标不可用时不上传；(4) 普通远端 Download、Remote-to-Local 和 Remote-to-Finder 下载都保留文件且不自动打开；(5) 回拖只在 Local files 下载，并覆盖 resize、取消和多个文件情形。
 - 在目标平台复现时，通过 Help > Copy Diagnostic Info 查看 `renderer-selected`、`renderer-source`、`metal-device`、window/fault 计数；同时保存 `ax_ssh::diagnostics` 和 Skia stderr，判断是否需要稳定保留 software renderer。
 
 ## 最后更新时间
 
-- 2026-09-18 08:42 +0800：完成 MACDROP2。macOS 只接受当前 AppKit 坐标，读取失败一律拒绝；移除 macOS 的旧 Winit 缓存/回退路径，定向回归和完整 locked/offline Cargo 门禁通过。
+- 2026-09-18：完成 X11MODE1–3。X11 provider 仍是全局的本机环境设置；转发方式由每个 SSH profile 决定。Off/`-X`/`-Y` 均有明确的持久化、授权和失败语义，未持久化 cookie 或凭据。
 
 ## 9 项复核映射
 
