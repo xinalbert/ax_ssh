@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260918-profile-x11-forwarding-mode
-- 目标：让每个 SSH 服务器档案显式选择关闭、`-X` 非信任或 `-Y` 信任 X11 转发，并保持旧布尔配置的安全迁移。
-- 交付物：版本化 profile 枚举、专用 Slint 选择控件、受限/信任 SSH X11 授权路径、定向回归与 locked/offline Cargo 门禁。
+- 目标 ID：20260919-terminal-vt-standards
+- 目标：将终端展示、滚动、鼠标编码和窗口/查询应答收敛到 xterm/VT 标准语义，移除以光标可见性驱动的本地强制对齐与刷新策略。
+- 交付物：标准同步输出、光标和 SGR 绘制状态、鼠标编码、字符/像素尺寸上报、滚动语义、定向回归和双语契约说明。
 
 ## 项目边界
 
 - 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：SSH profile 持久化与迁移、Session Editor 的 X11 专用选择控件、SSH worker 的 X11 授权准备/relay，以及配套中英文文档、翻译和回归。
-- 不在本轮范围内：全局 X server provider/path/启动设置、远端 `sshd_config`、host-key trust、凭据、SFTP worker/队列协议、X11 cookie 持久化、GUI 视觉自动验收。
+- 当前范围：终端模型、Slint 终端 DTO 与布局、Local/SSH PTY 尺寸、标准 VT 查询应答，以及配套中英文架构与实施记录。
+- 不在本轮范围内：SFTP worker/队列协议、远端文件写入、host-key trust、凭据、Telnet NAWS 以外的协议扩展、路径/主机/文件内容日志、GUI 自动验收。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -24,20 +24,33 @@
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
 | SFTPDRAG1 | completed | 目标命中、Winit/AppKit 路由和标准 copy/drop 契约 | SFTP 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 外部文件只可投到 Remote files；原生远端回拖只可落到 Local files；缺少可靠目标一律拒绝。 |
-| SFTPFOLLOW1 | completed | macOS 原生 drop 坐标和普通下载完成语义 | 状态回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 仍要求外部 hover；macOS 在 drop 时读取 AppKit 坐标，普通下载仅完成并保留文件。 |
-| MACDROP2 | completed | macOS 原生坐标读取失败时 fail-closed | macOS 定向回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 只接受同一外部 hover 内当前 AppKit 位置；读取失败不得回退到旧 Winit 坐标。 |
+| SFTPFOLLOW1 | completed | macOS 原生 drop 坐标和普通下载完成语义 | 状态回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | macOS 在 drop 时读取 AppKit 坐标，普通下载仅完成并保留文件；hover 前置条件已由 MACDROP3 移除。 |
+| MACDROP2 | completed | macOS 原生坐标读取失败时 fail-closed | macOS 定向回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 读取失败不得回退到旧 Winit 坐标；MACDROP3 仅移除不可靠 hover 前置条件。 |
 | X11MODE1 | completed | 每服务器 X11 模式枚举、旧布尔迁移与编辑器 DTO | 配置/编辑器定向回归、Slint/Cargo 重新编译 | `true` 迁移到原有的 trusted 行为，`false` 迁移为关闭；不保存 cookie。 |
 | X11MODE2 | completed | `-X` 受限授权与 `-Y` 既有信任转写 | X11 unit/loopback 回归、worker 生命周期审阅 | `-X` 使用短时 `xauth generate … untrusted`，`-Y` 保持惰性真实 cookie 转写。 |
 | X11MODE3 | completed | 中英文用法/架构、翻译、月度记录和完整门禁 | 翻译/Markdown/tracker、fmt/check/Clippy/test/diff | GUI 控件和目标平台 X server 行为由用户验收。 |
+| SFTPDIAG1 | completed | 脱敏内部拖放生命周期、落点和入队诊断 | SFTP payload 定向测试、Slint 重新编译、fmt/check/Clippy/test/diff | 不记录路径、主机、文件内容或凭据；macOS 实际拖放仍待用户复现。 |
+| MACDROP3 | completed | macOS `DroppedFile` 以实时 AppKit 坐标命中 Remote files，不依赖前置 hover；固定拒绝阶段 | macOS 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 仍拒绝无坐标、非 SFTP/未启用/区域外目标；不按活动目录回退。 |
+| MACDROP4 | completed | 原生拖放以可见 Remote files 几何命中，上传入口以实时 SFTP 状态最终校验 | SFTP 状态定向回归、Slint 重新编译、locked/offline Cargo 门禁、构建和差异检查 | UI 快照滞后不能静默拒绝；未连接、loading 或空目录仍由 Rust 拒绝且不入队。 |
+| SFTPTRANSFER1 | completed | SFTP transfer 显式区分上传/下载状态和列表显示 | 状态定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 上传不再复用 `Downloading`；每条记录显示 `Upload` 或 `Download` 方向；上传 admission 也计算正在打开的下载 subsystem，保持每 Tab 最多两个 active/opening transfer。 |
+| TERMSTD1 | completed | 终端模型采用标准同步输出、光标/SGR 状态和鼠标编码 | `terminal` 定向回归、完整 Cargo 门禁 | `?25` 仅控制光标可见性；`?2026` 使用标准结束序列或上游超时释放；查询应答保持有界并回写原 transport。 |
+| TERMSTD2 | completed | Slint 传递网格几何和指针像素坐标，Local/SSH PTY 上报字符与物理像素尺寸 | UI DTO/状态定向回归、Slint 重新编译、完整 Cargo 门禁 | Telnet 仍只发送 RFC 1073 NAWS 字符尺寸；Serial 只调整本地模型。 |
+| TERMSTD3 | completed | 滚动与网格锚点、双语架构说明、研究记录和完整门禁 | fmt/check/clippy/test/diff、Markdown/tracker 检查 | 代码与文档交付完成；GUI 视觉、真实终端程序和目标平台 PTY 行为由用户验收。 |
 
 ## 已完成
 
+- 已为 SFTP 内部拖动增加 `ax_ssh::sftp_drag` debug target：记录 Local/Remote 来源、开始、copy/非 copy 结束、远端落点收到/解析载荷、目标确认、本地文件校验与上传入队结果；字段只含固定阶段、面板、文件数和字节数。
+- 已从用户的最新运行日志确认：内部 Local-to-Remote 已经到达 `upload-queued`；Finder 的尝试没有到达既有 `sftp.drop-native-file` action，因此 SFTP worker、路径校验和上传队列不是该失败点。
+- 已完成 MACDROP3：macOS 每次收到原生 `DroppedFile` 都以当前 AppKit 位置命中 Slint 的 Remote files 区域，不再因缺少前置 `HoveredFile` 而拒绝；仍严格拒绝无位置、未启用、非 SFTP 或其他区域。`ax_ssh::sftp_drag` 现可在上传前记录原生事件、位置可用性和固定目标结果，不含路径、主机、坐标或秘密。
+- 用户最新复现已确认 `DroppedFile` 和 AppKit 命中均到达，但三次均被 Slint 返回的 `remote-unavailable` 拒绝；该结果来自 presentation snapshot，而 Rust 上传入口仍有独立的实时连接、loading 和远端目录校验。
+- 已完成 MACDROP4：原生路由只以可见 Remote files 的有限几何选择目标；`handle_native_dropped_file_on_remote_pane` 在入队前重新校验当前窗口的 SFTP Tab、连接、loading 和远端目录。被实时状态拒绝时会显示明确状态并记录 `native-upload-target-rejected`，不会静默失败或按活动目录回退。
+- 已完成 SFTPTRANSFER1：SFTP transfer 状态增加显式上传/下载方向；上传使用独立的 `Uploading` 活动阶段，状态快照和 Slint 行 DTO 传递 `Upload`/`Download`，列表文件名前固定显示方向，终态继续分别显示 `Uploaded`/`Downloaded`。
 - 已将 SSH profile 的 X11 转发从布尔开关改为专用的 Off、Untrusted (`-X`)、Trusted (`-Y`) 枚举；旧的缺失/true 值迁移为 Trusted，false 迁移为 Off，cookie 与凭据均不进入 profile。
 - 已让 Session Editor 只为 SSH profile 提供 X11 forwarding 下拉框；X server provider/path 继续属于全局本机环境设置，不再以其决定某个服务器的 `-X`/`-Y`。
 - 已让 `-X` 在 host key 已被接受且认证完成后才创建私有短生命周期 xauth authority，受限 cookie 在 20 分钟后拒绝新的远端 X11 channel；准备失败只报告 X11 不可用，不阻断 shell。Trusted (`-Y`) 仍保持首个 X11 channel 才准备本机 X server/cookie 的惰性路径。
 - 已将 SFTP 原生拖放改为目标区域驱动的 copy/drop 路由：Slint 为 Remote/Local files 发布只读、有限的窗口坐标几何 DTO；主窗口和 detached 窗口共享该契约。
-- 已删除以活动 SFTP Tab 或当前目录猜测外部落点的上传入口。非 macOS 平台仅在当前外部 hover 的最后 `CursorMoved` 坐标命中已启用 Remote files 区域时才排入上传；macOS 在同一 hover 的 drop 时读取当前 AppKit 坐标；坐标缺失、失效、加载中或命中其它区域均拒绝。
-- 已让 macOS `DroppedFile` 严格 fail-closed：仅在当前外部 hover 中使用 drop 时读取的 AppKit 位置；读取失败即拒绝，macOS 不再编译 Winit 光标缓存、`CursorMoved` 事件路径或其回退转换。
+- 已删除以活动 SFTP Tab 或当前目录猜测外部落点的上传入口。非 macOS 平台仅在当前外部 hover 的最后 `CursorMoved` 坐标命中已启用 Remote files 区域时才排入上传；macOS 对每个已送达的 `DroppedFile` 读取当前 AppKit 坐标；坐标缺失、加载中或命中其它区域均拒绝。
+- 已让 macOS `DroppedFile` 严格 fail-closed：仅使用 drop 时读取的 AppKit 位置；读取失败即拒绝，macOS 不再编译 Winit 光标缓存、`CursorMoved` 事件路径或其回退转换。
 - 已定位普通远端下载自动打开的来源：`connection_monitor` 在 `Completed` 后无条件派生后台平台 opener；本轮改为直接结束为 `Downloaded` 并保留本地路径，系统打开仅由用户显式的 Local files 动作触发。
 - 已将 macOS file-promise 的接收视图从全窗口收窄为拖动启动时经校验的 Local files 矩形；区域不可用时 Finder 仍可接收 promise，但回拖至 AxSSH 会被拒绝。
 - 已复用既有有界 SFTP intent/worker 和安全本地 writer；未改变 SSH host-key 信任、凭据生命周期、远端写入或传输并发上限。
@@ -46,8 +59,7 @@
 - 已加入 renderer 请求/实际选择/来源/回退原因、Metal device、实时窗口数及有界 fault 计数；raw Skia stderr shader source 明确标为 application-errors-only，避免把不可观测错误伪造成统计数据。
 - 已核对参考实现的行为思路；未引入其依赖、路径或源码。
 - 已确认 AxSSH 已有软换行/reflow、宽字符、SGR/X10/UTF-8 mouse reporting、滚轮与可靠/可丢弃 worker 入队的完整边界，故本轮不重复实现这些契约。
-- 已实现跨 transport read 的 `CSI ?25l`/`CSI ?25h` 检测；仅在最多 250ms 内保留最后已发布的有界 terminal frame，parser 和 `PtyWrite` 协议应答即时执行。
-- 已将 hold deadline 接入 Local、SSH、Telnet 与 Serial monitor，完成后以现有 latest-frame snapshot 路径发布最新内容。
+- 已将 `CSI ?25l/h` 收敛为纯光标可见性状态；Local、SSH、Telnet 与 Serial monitor 只按 `CSI ?2026h/l` 的标准结束或上游 deadline 控制呈现，parser 和 `PtyWrite` 协议应答仍即时执行，且没有旧 frame 时不发布局部首帧。
 - 已恢复左键双击的 URL 优先、否则语义单元选择；URL 可跨连续软换行且排除末尾终端标点，普通选区继续由终端核心的标点、空白、宽字符和配对括号边界决定。相同短序列第三击选中逻辑行，连续软换行的物理行会一并选中，硬换行仍为边界。
 - 已实现互斥的 1005/1006/1015 鼠标编码状态、xterm 横向滚轮 6/7、Back/Forward 侧键 8/9 与有界辅助按键 10/11 编码；未分类硬件按键不作不可靠猜测。
 - 已修复大量输出 Tab 切换后的视口回退：主屏 Detached `TerminalModel` 在 resize 后恢复有界 `display_offset`，新建 `TerminalPane` 首次 resize 等待两个 frame，避免瞬时最小网格触发重排。
@@ -55,6 +67,10 @@
 
 ## 验证
 
+- 已完成：SFTP payload 定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`、`cargo build --locked --offline` 和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。
+- 未完成：目标 macOS 需重启新二进制，并以 `ax_ssh::sftp_drag=debug` 复现 Local files 到 Remote files 的内部拖放，提供对应日志阶段。
+- 已完成：MACDROP3 的 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 254、Doc tests 0）、`cargo build --locked --offline` 和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
+- 已完成：MACDROP4 的 `active_sftp_upload_target_revalidates_live_readiness` 与既有 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归，`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 255、Doc tests 0）和 `cargo build --locked --offline` 通过；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
 - 已完成：SFTP bridge 11 项、Winit 外部文件命中 2 项、macOS native drop region 2 项定向回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings` 均通过，`ui/app.slint` 已由 Cargo 重新编译。
 - 已完成：`cargo test --locked --offline -- --skip local_pty_output_modes_translate_linefeeds_before_shell_start` 通过，以及 `git diff --check`。未跳过的完整测试会在既有、非本轮改动的 `src/local_shell.rs` PTY 子进程等待中卡住；已用 macOS `sample` 确认阻塞位置，未修改该用户工作区改动。
 - 已完成：tracker validator 已运行；本轮新增条目通过，但校验仍由既有 2026-08/09 历史条目格式债务阻断。新增 Markdown 链接均为外部标准来源，未新增相对链接；目标 macOS 的 Finder/外部拖入手工验收待执行。
@@ -64,24 +80,29 @@
 - 未完成：目标平台需要用户在出现或复现 Skia shader timeout 后提供 `ax_ssh::diagnostics` 记录及 stderr，以确认 fault 是否能从 Slint 返回到应用边界。
 - 已完成：下载终态和外部文件指针定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 257、应用 253、Doc tests 0）、462 条中文翻译检查、Markdown 相对链接检查和 `git diff --check`。macOS Finder 拖入与系统 opener 行为仍需用户手工验收。
 - 未完成：本机对 `x86_64-pc-windows-msvc` 的离线 `cargo check` 在 `aws-lc-sys` C 探测阶段因缺少 Windows SDK 的 `stdlib.h`/`windows.h` 终止，未进入 Rust 代码层；Windows CI/目标机仍需完成 check、Clippy、build 和 native test。
-- 已完成：MACDROP2 的 AppKit 读取失败、有效位置和 hover 结束定向回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 257、应用 254、Doc tests 0）均通过，`ui/app.slint` 已由 Cargo 重新编译；462 条中文翻译、Markdown 新增相对链接和 `git diff --check` 通过。tracker validator 已运行，本轮条目未新增问题，但仍报告既有 2026-08/09 历史记录与 research 的字段/时间格式债务。
+- 已完成：MACDROP2 的 AppKit 读取失败与有效位置定向回归；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 257、应用 254、Doc tests 0）均通过，`ui/app.slint` 已由 Cargo 重新编译；462 条中文翻译、Markdown 新增相对链接和 `git diff --check` 通过。tracker validator 已运行，本轮条目未新增问题，但仍报告既有 2026-08/09 历史记录与 research 的字段/时间格式债务。
 - 已完成：X11MODE1–3 的配置迁移、编辑器转换、worker 授权生命周期与受限 xauth 参数回归通过；`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings` 和完整 `cargo test --locked --offline` 通过，`ui/app.slint` 已由 Cargo 重新编译；465 条中文翻译、Markdown 相对链接和 `git diff --check` 通过。tracker validator 已运行，本轮条目字段有效，但仍由既有 2026-08/09 历史记录与 research 的字段/时间格式债务报告失败。
+- 已完成 TERMSTD1：`alacritty_terminal` 负责终端网格、scrollback、光标和 SGR 状态；`CSI ?25l/h` 只改变可见性，`CSI ?2026h/l` 才控制有界呈现事务，首帧没有旧 snapshot 时也不提前发布局部内容；协议写回覆盖 ConPTY 光标位置、动态 OSC 颜色、`CSI 14 t` 文本区像素与 `CSI 16 t` 单元像素查询，并保留默认 X10、UTF-8 1005、URXVT 1015、SGR 1006 与像素 1016 编码。
+- 已完成 TERMSTD2：`TerminalPane` 将本地网格尺寸、内容区 cell 度量、字符格指针和物理指针坐标通过 UUID 定向 DTO 送入 `AppState`；Local PTY 与 SSH `request_pty/window_change` 同时接收字符和物理像素尺寸，Telnet 保持 RFC 1073 字符尺寸边界，Serial 不伪造远端尺寸。
+- 已完成 TERMSTD3：主屏 Detached display offset、备用屏和 resize/reflow 回归保持在 `TerminalModel`；网格从 pane 顶部开始，底部余量不属于字符格或上报坐标；中英文架构/开发说明已改为 `alacritty_terminal` 当前事实，并明确 `vendor/vt100` 仅为历史许可证审计副本，不在 Cargo 依赖图中。
+- 已完成：新增 SGR 1016 像素坐标按测量文本区边界夹位回归；`ui/app.slint` 已由 Cargo 重新编译。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 266、应用 256、Doc tests 0）、定向 1016 像素坐标回归和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。
+- 未完成：tracker validator 已运行，但仍被既有 2026-08/09 历史记录与 research 的字段/时间格式债务阻断；GUI 视觉、真实终端程序和目标平台 PTY 行为仍待用户验收。
 
 ## 风险与阻塞
 
-- 已修正：macOS `DroppedFile` 的 AppKit 读取失败不再回退到旧 Winit 坐标，而是拒绝该文件；Finder/原生窗口坐标变换仍需目标 macOS 手工确认。
-- 无代码阻塞。Slint renderer 为 process-global，已活跃 Metal surface 不能安全热切换；这不是未实现路径，而是通过启动回退和下一次 Automatic fallback marker 明确处理的生命周期边界。GUI 视觉验收仍需要用户执行。
-- 无代码阻塞。真实 `-X` 依赖目标本机安装 `xauth`、可连接 DISPLAY 和支持 X11 SECURITY 的 X server；真实远端图形程序与 UI 下拉框的视觉/可访问性仍需要用户在目标平台验收。
+- 无代码阻塞。当前剩余风险是目标平台上的 GUI 视觉、真实全屏终端程序行为和 PTY 对物理像素尺寸的实际响应，需要用户在新二进制上验收。
+- 代码保持安全边界不变：终端协议应答仍经当前 Tab 的有界 worker 回写；不进入 Slint、持久化或日志，也不扩大 SSH host-key、凭据、Telnet 或 Serial 边界。
 
 ## 下一步
 
-- 在目标平台为一个 SSH profile 分别保存 Off、Untrusted (`-X`) 和 Trusted (`-Y`)，再以远端 X client 验证：Off 不请求 X11、`-X` 在受限授权过期后拒绝新连接、`-Y` 维持既有可信访问。全局 Settings > X11 只需按本机 X server 调整。
-- 在主窗口和 detached SFTP 窗口分别验证：(1) 从 Finder 拖文件到 Remote files 才上传；(2) 拖到 Local/终端/标题栏/分隔条不上传；(3) AppKit 坐标不可用时不上传；(4) 普通远端 Download、Remote-to-Local 和 Remote-to-Finder 下载都保留文件且不自动打开；(5) 回拖只在 Local files 下载，并覆盖 resize、取消和多个文件情形。
-- 在目标平台复现时，通过 Help > Copy Diagnostic Info 查看 `renderer-selected`、`renderer-source`、`metal-device`、window/fault 计数；同时保存 `ax_ssh::diagnostics` 和 Skia stderr，判断是否需要稳定保留 software renderer。
+- 在目标平台启动新二进制，分别运行本地 shell、SSH 全屏 TUI 和会发送 `CSI ?2026` 的进度程序，确认隐藏光标不会额外冻结帧，标准同步结束或超时后才发布最新帧。
+- 验证窗口缩放与 detached scrollback：主屏 Detached 保持历史位置，备用屏不做 reflow；改变终端字体或 Retina scale 后，Local/SSH PTY 收到字符和物理像素尺寸，Telnet 仍只协商 NAWS。
+- 验证真实终端的 SGR 1006/1016、UTF-8 1005、URXVT 1015、OSC 4/10/11/12 和 `CSI 14 t`/`CSI 16 t` 查询；检查 block/空心 block/underline/beam cursor、hidden text、双/曲/点/虚线下划线的可见效果。
 
 ## 最后更新时间
 
-- 2026-09-18：完成 X11MODE1–3。X11 provider 仍是全局的本机环境设置；转发方式由每个 SSH profile 决定。Off/`-X`/`-Y` 均有明确的持久化、授权和失败语义，未持久化 cookie 或凭据。
+- 2026-09-19 09:20 +0800：完成 TERMSTD1–3 代码与文档交付；终端标准同步输出、光标/SGR、鼠标编码、字符/物理尺寸上报和 resize/scroll 语义已接入，等待目标平台真实终端与 GUI 视觉验收。
 
 ## 9 项复核映射
 
@@ -191,7 +212,7 @@
 - 已完成 COLOR1：macOS CoreGraphics backend 将 `CGColorSpace::new_device_rgb()` 改为显式 `kCGColorSpaceSRGB`，不改变 BGRA/32-bit bitmap 声明、tile 几何、damage mask 或图像独立所有权；同负载 sample 显示 ICC/vImage 仍存在。
 - 已完成 COLOR2 采样：目标 sample UUID `75D434E2-B1D0-3C6A-ABFB-7504F41A0663` 与当前 `target/release/ax_ssh` 一致；主线程热点仍在 `CA::Render::copy_image`、ICC/vImage。当前 release SHA-256 为 `f838a4c3b9893f93b143091622f7e212e534d1438c52b7bab1347eb9addaacd4`；此前 14:20 记录的 `17C09EF9...` 是更早候选，不是该 sample 的进程。
 - 已完成 COLOR3 原型代码并将其提升为默认：现有 pane/fallback layer 几何和排序不变；每个 layer 的 retained delegate 持有同步像素 backing，present 只复制 tile-local damage 并按 Retina scale 调用 `setNeedsDisplayInRect`，delegate 只为 CGContext clip 创建独立图像。`setContents(CGImage)` 保留为显式回退；重建/析构前清除 weak delegate，不直接共享可变 provider 内存。
-- 已完成 CELL1/CELL2：TerminalPane 使用主字体 50 个 Latin cell 的 advance 作为唯一逻辑格宽，中文和盒线保持独立 run 并在一格或两格内居中；TerminalGrid 选区恢复固定逐格 fill。Software presentation 只注册从 `grid-top-offset` 开始的完整底对齐行，顶部小数余量和不足三行的 pane 留给 fallback 分区。
+- 已完成 CELL1/CELL2：TerminalPane 使用主字体 50 个 Latin cell 的 advance 作为唯一逻辑格宽，中文和盒线保持独立 run 并在一格或两格 span 左边缘绘制；TerminalGrid 选区恢复固定逐格 fill。Software presentation 只注册从 pane 顶边开始的完整顶部对齐行，底部小数余量和不足三行的 pane 留给 fallback 分区。
 - 已完成 CELL4：TerminalGrid 的 pointer callback 同时携带所在格与最近插入边界；TerminalPane 用行优先半开索引保存鼠标拖选，并只在绘制/复制前转换为同一包含式首末格。单格、反向和跨行拖选共用该路径；远端 mouse reporting、双击单词和三击逻辑行的既有契约不变。
 - 已完成 WAKE1-WAKE3：SSH/Telnet 的 16ms flush 只在输出缓冲区非空时启动一次；Local PTY reader 关闭会通过有界命令通道唤醒 owner，空闲 child 轮询从 25ms 降为 1s，并把 25ms 退出确认限制在最多一秒；macOS 激活事件继续走快速路径，`isKeyWindow` 兜底从 100ms 降为 500ms。
 - 已完成 XPLAT1-XPLAT4：`softbuffer::Surface::damage_support()` 将 native presentation 能力显式分类为矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time；Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics 各 backend 返回运行时能力，winit software bridge 对 full-frame/lock-time 路径直接使用 `present()`，不改变既有 `present_with_damage` 兼容契约。

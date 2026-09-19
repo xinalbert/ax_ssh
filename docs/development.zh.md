@@ -135,8 +135,8 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
   只有用户明确连接后才能解析已保存身份并创建设备 worker。Serial resize 只改变本地终端网格。
 - 主屏 Detached 终端在模型 resize 后必须保留有界 display offset。新建 `TerminalPane` 必须先等待布局稳定再发
   首个 resize callback，避免瞬时最小网格重置已保留 Tab 的滚动位置。
-- `vendor/vt100` 是锁定 `vt100 0.16.2` 宽字符缩窄问题的最小本地补丁。保留其中的 MIT
-  文件；只可在有回归测试时调整已说明的 resize 路径，并在上游发布对应修复后移除该补丁。
+- `vendor/vt100` 是为审计和许可证核对保留的历史 MIT 补丁，不是 Cargo 依赖，也不得再承载
+  新的终端行为；当前终端模型的改动应进入 `alacritty_terminal` 集成和 AxSSH 自有 DTO/渲染测试。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
   窗口的条件下测试普通/application-cursor 终端字节序列；平台可打印键后备转换归
   Slint bridge 所有。
@@ -298,13 +298,18 @@ About 从进程边界接收已经创建的目录，并通过 bridge 打开；Sli
 单次运行中可用以下命令开启脱敏键盘/UI diagnostics 和 SSH latency 阶段：
 
 ```bash
-RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
+RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,ax_ssh::sftp_drag=debug,russh=warn' cargo run --locked
 ```
 
 `terminal-input` 除 UI 到 worker 总耗时外，还记录 `state_lock_us` 和 `worker_request_us`。
 多窗口 `workspace-refresh` 记录 `coalesced_refreshes`、`views_built_us`、`ui_queue_us`、
 `ui_apply_us` 及可选的 output-to-UI 时间。这些字段均不包含按键文字、终端内容、主机、路径、
 profile 标签或凭据。
+
+`sftp_drag` 记录本地/远程文件面板的内部拖动生命周期、本地到远程上传路由，以及 Finder
+原生路径。原生阶段只记录固定事件阶段、外部 hover 数和固定目标结果（`remote`、
+`inactive-tab`、`remote-unavailable` 或 `other-region`）；共享上传路由还会记录实时 SFTP
+目标已确认或被拒绝。不会记录路径、主机数据、光标坐标、文件内容或凭据。
 
 `terminal-geometry` 只在可见 pane 的几何签名变化时记录一次：包括终端 UUID、活动 Tab 类型、
 detached/renderer 状态、scale factor、native 与 logical 窗口尺寸、pane 和 grid 的位置/尺寸、
@@ -331,7 +336,7 @@ loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/�
 才执行外部签名的内存 agent protocol、PTY shell
 输入输出、resize、worker 断开与 join；单元测试还覆盖 ANSI 解析、有界 scrollback、
 终端控制/导航键编码、旧版外观到版本化设置的迁移、同 profile 多 Tab 隔离、本机密钥
-发现、加密密钥 passphrase、本地 PTY 生命周期、vt100 字符格渲染、application-cursor
+发现、加密密钥 passphrase、本地 PTY 生命周期、`alacritty_terminal` 字符格渲染、application-cursor
 方向键、bracketed-paste 规范化与上限、resize 后 Detached 视口保持、
 Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键还原、Telnet
 协商/CRLF/NAWS、Serial USB 稳定身份匹配和直连 attempt 隔离。SFTP 测试覆盖远端

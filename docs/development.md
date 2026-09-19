@@ -191,9 +191,10 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   across model resize. A newly mounted `TerminalPane` must settle its layout
   before its first resize callback so a transient minimum grid cannot reset a
   retained Tab's scroll position.
-- `vendor/vt100` is the minimal local patch for locked `vt100 0.16.2` wide-cell
-  shrinking. Keep its MIT files, change only the documented resize path with a
-  regression test, and remove the patch when an upstream release contains it.
+- `vendor/vt100` is a historical MIT-licensed patch retained for audit and
+  license accounting. It is not a Cargo dependency and must not receive new
+  terminal behavior; active terminal model changes belong in
+  `alacritty_terminal` integration and AxSSH-owned DTO/rendering tests.
 - Keep Slint key values out of `src/terminal/input.rs`; map them in `src/app.rs`
   and test normal/application-cursor byte sequences without constructing a
   window. Platform-specific printable-key fallbacks belong in the Slint bridge.
@@ -396,7 +397,7 @@ Objective-C callback panic; it is separate from the buffered daily logs.
 Enable redacted keyboard/UI diagnostics and SSH latency stages for one run with:
 
 ```bash
-RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn' cargo run --locked
+RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,ax_ssh::sftp_drag=debug,russh=warn' cargo run --locked
 ```
 
 `terminal-input` reports total UI-to-worker time plus `state_lock_us` and
@@ -404,6 +405,14 @@ RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,russh=warn
 `coalesced_refreshes`, `views_built_us`, `ui_queue_us`, `ui_apply_us`, and the
 optional output-to-UI time. These fields contain no key text, terminal content,
 host, path, profile label, or credential.
+
+`sftp_drag` traces the internal local/remote pane drag lifecycle, its
+local-to-remote upload route, and the native Finder route. Native stages report
+only a fixed event stage, the external hover count, and a fixed target outcome
+(`remote`, `inactive-tab`, `remote-unavailable`, or `other-region`). The
+shared upload route also records whether its live SFTP target resolved or was
+rejected; paths, host data, cursor coordinates, file contents, and credentials
+are never logged.
 
 `terminal-geometry` reports one changed geometry signature per visible pane:
 the terminal UUID, active-tab kind, detached/renderer state, scale factor,
@@ -440,8 +449,8 @@ log flush behavior, and a loopback russh server that verifies rejected host-key
 probing, trusted password/private-key authentication, an in-memory agent protocol
 that performs external signing only after exact host-key matching, PTY shell
 input/output, resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,
-bounded scrollback, terminal control/navigation encoding, legacy appearance
-migration into versioned settings, duplicate-profile tab isolation, local key
+bounded scrollback, `alacritty_terminal` cell rendering, terminal control/navigation encoding,
+legacy appearance migration into versioned settings, duplicate-profile tab isolation, local key
 discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
 application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
 events, Apple modifier normalization, bracketed-paste normalization and size
