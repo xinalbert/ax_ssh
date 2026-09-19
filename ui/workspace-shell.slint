@@ -231,7 +231,6 @@ component TerminalPaneGroup inherits Rectangle {
     callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
-
     for pane in root.panes : TerminalPane {
         x: pane.x * parent.width;
         y: pane.y * parent.height;
@@ -413,6 +412,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
     pure callback drag-remote-file-sftp(string) -> data-transfer;
+    callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
@@ -437,9 +437,8 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
-    in-out property <SftpNativeDropRegion> native-sftp-remote-region: { accepts: false };
-    in-out property <SftpNativeDropRegion> native-sftp-local-region: { accepts: false };
-
+    callback native-remote-drop-region-changed(SftpNativeDropRegion);
+    callback native-local-drop-region-changed(SftpNativeDropRegion);
     private property <float> sftp-directory-split-ratio: 0.5;
     private property <float> sftp-files-split-ratio: 0.7;
     private property <bool> sftp-transfers-collapsed: false;
@@ -541,8 +540,12 @@ component DetachedWorkspaceContent inherits Rectangle {
             standalone: true;
             native-file-drag-enabled: root.apple-platform;
             view: root.view.sftp;
-            native-remote-drop-region <=> root.native-sftp-remote-region;
-            native-local-drop-region <=> root.native-sftp-local-region;
+            native-remote-drop-region-changed(region) => {
+                root.native-remote-drop-region-changed(region);
+            }
+            native-local-drop-region-changed(region) => {
+                root.native-local-drop-region-changed(region);
+            }
             directory-split-ratio <=> root.sftp-directory-split-ratio;
             files-split-ratio <=> root.sftp-files-split-ratio;
             transfers-collapsed <=> root.sftp-transfers-collapsed;
@@ -591,6 +594,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
             drag-local-file(path) => { return root.drag-local-file-sftp(path); }
             drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
+            drag-diagnostic(stage, local-source) => {
+                root.sftp-drag-diagnostic(stage, local-source);
+            }
             begin-native-remote-file-drag(path) => {
                 root.begin-native-remote-file-drag-sftp(path);
             }
@@ -626,7 +632,6 @@ export component WorkspaceShell inherits Rectangle {
     private property <bool> terminal-tab-active: root.view.active_tab_kind == "terminal";
     private property <SftpNativeDropRegion> native-sftp-remote-region: { accepts: false };
     private property <SftpNativeDropRegion> native-sftp-local-region: { accepts: false };
-
     callback new-session();
     callback new-session-in-group(string);
     callback edit-session(string);
@@ -695,6 +700,7 @@ export component WorkspaceShell inherits Rectangle {
     callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
     pure callback drag-remote-file-sftp(string) -> data-transfer;
+    callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
@@ -720,6 +726,8 @@ export component WorkspaceShell inherits Rectangle {
     callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
+    callback native-remote-drop-region-changed(SftpNativeDropRegion);
+    callback native-local-drop-region-changed(SftpNativeDropRegion);
     callback report-bug();
     callback open-log-directory();
     callback copy-diagnostic-info();
@@ -764,8 +772,11 @@ export component WorkspaceShell inherits Rectangle {
     }
 
     public function native-sftp-drop-target-at(x: length, y: length) -> string {
-        if root.view.active_tab_kind != "sftp" || !root.native-sftp-remote-region.accepts {
-            return "";
+        if root.view.active_tab_kind != "sftp" {
+            return "inactive-tab";
+        }
+        if !root.native-sftp-remote-region.accepts {
+            return "remote-unavailable";
         }
         let content-x = root.detached-window ? x : x - session-navigation.width;
         let content-y = root.detached-window ? y : y - workspace-titlebar.height;
@@ -774,7 +785,7 @@ export component WorkspaceShell inherits Rectangle {
                 && content-y >= region.y && content-y < region.y + region.height {
             return "remote";
         }
-        return "";
+        return "other-region";
     }
 
     public function native-sftp-local-drop-region() -> SftpNativeDropRegion {
@@ -830,9 +841,13 @@ export component WorkspaceShell inherits Rectangle {
         software-presentation-enabled: root.software-presentation-enabled;
         window-active: root.window-active;
         input-blocked: root.input-blocked;
-        native-sftp-remote-region <=> root.native-sftp-remote-region;
-        native-sftp-local-region <=> root.native-sftp-local-region;
         terminal-focus-state(id, active) => { root.terminal-focus-state(id, active); }
+        native-remote-drop-region-changed(region) => {
+            root.native-sftp-remote-region = region;
+        }
+        native-local-drop-region-changed(region) => {
+            root.native-sftp-local-region = region;
+        }
         close-tab(id) => { root.close-tab(id); }
         list-sftp-directory(path) => { root.list-sftp-directory(path); }
         load-more-sftp => { root.load-more-sftp(); }
@@ -877,6 +892,9 @@ export component WorkspaceShell inherits Rectangle {
         dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
         drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
         drag-remote-file-sftp(path) => { return root.drag-remote-file-sftp(path); }
+        sftp-drag-diagnostic(stage, local-source) => {
+            root.sftp-drag-diagnostic(stage, local-source);
+        }
         begin-native-remote-file-drag-sftp(path) => {
             root.begin-native-remote-file-drag-sftp(path);
         }
@@ -1125,8 +1143,12 @@ export component WorkspaceShell inherits Rectangle {
                         standalone: true;
                         native-file-drag-enabled: root.apple-platform;
                         view: root.view.sftp;
-                        native-remote-drop-region <=> root.native-sftp-remote-region;
-                        native-local-drop-region <=> root.native-sftp-local-region;
+                        native-remote-drop-region-changed(region) => {
+                            root.native-sftp-remote-region = region;
+                        }
+                        native-local-drop-region-changed(region) => {
+                            root.native-sftp-local-region = region;
+                        }
                         directory-split-ratio <=> root.sftp-directory-split-ratio;
                         files-split-ratio <=> root.sftp-files-split-ratio;
                         transfers-collapsed <=> root.sftp-transfers-collapsed;
@@ -1175,6 +1197,9 @@ export component WorkspaceShell inherits Rectangle {
                         dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
                         drag-local-file(path) => { return root.drag-local-file-sftp(path); }
                         drag-remote-file(path) => { return root.drag-remote-file-sftp(path); }
+                        drag-diagnostic(stage, local-source) => {
+                            root.sftp-drag-diagnostic(stage, local-source);
+                        }
                         begin-native-remote-file-drag(path) => {
                             root.begin-native-remote-file-drag-sftp(path);
                         }

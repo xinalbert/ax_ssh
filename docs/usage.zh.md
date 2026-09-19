@@ -147,6 +147,9 @@ Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。�
 取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
 待发现、待打开 subsystem 和活动下载，再关闭浏览器和 SSH transport。
 
+每条 transfer 的文件名之前都会显示 **Upload** 或 **Download**，排队中、进行中、失败、取消和成功记录都保持该方向标识。
+进度列继续显示百分比，终态则显示 **Uploaded** 或 **Downloaded**。
+
 右击活动 transfer 可执行其适用的暂停、继续或取消操作。右击 Failed、Cancelled 或 Success 记录可移除
 记录；在该记录仍有本地源文件或下载文件路径时，也可直接在本地文件夹中显示。上传完成后，只有当前
 **Remote files** 仍显示上传目标目录且没有其他目录请求时，AxSSH 才会自动刷新该列表；之后的导航不会被

@@ -236,6 +236,11 @@ including a file published just before cancellation wins; failures remove the
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
 active download work before closing the browser and SSH transport.
 
+Every transfer row prefixes its filename with **Upload** or **Download**,
+including queued, in-progress, failed, cancelled, and successful records. The
+progress column continues to show the percentage or terminal result such as
+`Uploaded` or `Downloaded`.
+
 Right-click an active transfer for its applicable Pause, Resume, or Cancel
 action. Right-click a failed, cancelled, or successful record to remove it, or
 to reveal its local source or downloaded file when that path is available.

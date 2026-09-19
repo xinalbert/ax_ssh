@@ -500,6 +500,7 @@ export component AppWindow inherits Window {
     callback dropped-remote-files-sftp(data-transfer);
     pure callback drag-local-file-sftp(string) -> data-transfer;
     pure callback drag-remote-file-sftp(string) -> data-transfer;
+    callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
@@ -960,6 +961,9 @@ export component AppWindow inherits Window {
             dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
             drag-local-file-sftp(path) => { return root.drag-local-file-sftp(path); }
             drag-remote-file-sftp(path) => { return root.drag-remote-file-sftp(path); }
+            sftp-drag-diagnostic(stage, local-source) => {
+                root.sftp-drag-diagnostic(stage, local-source);
+            }
             begin-native-remote-file-drag-sftp(path) => {
                 root.begin-native-remote-file-drag-sftp(path);
             }

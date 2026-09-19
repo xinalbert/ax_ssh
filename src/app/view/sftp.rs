@@ -268,6 +268,7 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
             SftpTransferRow {
                 id: transfer.id.to_string().into(),
                 name: transfer.name.into(),
+                direction: transfer.direction.as_str().into(),
                 state: transfer.phase.as_str().into(),
                 status: transfer.status.into(),
                 progress,

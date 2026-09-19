@@ -1350,14 +1350,18 @@ fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
 local/remote source prefix: local paths dropped on Remote files queue uploads,
 and remote files or folders dropped on Local files queue downloads. External
-Finder uploads use the same target contract. While an external file hover is
-live, macOS reads the current AppKit cursor position at `DroppedFile` time;
-other platforms use the latest Winit `CursorMoved` position. The bridge asks
-the declarative SFTP geometry whether that position is inside the enabled
-Remote files target. Only that answer creates an upload intent. `DroppedFile`
-has no position, so a missing hover coordinate, any other target, a loading
-target, or a stale multi-file hover is rejected rather than guessed from the
-active directory.
+Finder uploads use the same target contract. macOS reads the current AppKit
+cursor position for every received `DroppedFile`; it does not require a prior
+`HoveredFile` notification, because that notification is not a reliable
+precondition for a delivered native drop. Other platforms use the latest Winit
+`CursorMoved` position from the current external-file hover. The bridge asks
+the declarative SFTP geometry whether that position is inside the visible
+Remote files target. That geometry only selects the target: immediately before
+queueing, the application bridge revalidates the active SFTP tab's current
+connection, loading state, and remote directory. This avoids a stale Slint
+presentation snapshot silently rejecting a valid native drop, while still
+rejecting a missing AppKit/hover coordinate, any other target, or a state that
+is not ready rather than guessing from the active directory.
 Slint `DropArea` continues to handle the in-process paths.
 
 On macOS, beginning a drag on a visible remote regular file instead creates an

@@ -369,9 +369,16 @@ pub(super) struct LocalDirectorySnapshot {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SftpTransferDirection {
+    Download,
+    Upload,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SftpTransferPhase {
     Queued,
     Downloading,
+    Uploading,
     Pausing,
     Paused,
     Resuming,
@@ -384,6 +391,7 @@ pub(super) enum SftpTransferPhase {
 pub(super) struct SftpTransferState {
     pub(super) id: Uuid,
     pub(super) name: String,
+    pub(super) direction: SftpTransferDirection,
     pub(super) phase: SftpTransferPhase,
     pub(super) pausable: bool,
     pub(super) downloaded_bytes: u64,
@@ -399,6 +407,7 @@ pub(super) struct SftpTransferState {
 pub(super) struct SftpTransferSnapshot {
     pub(super) id: Uuid,
     pub(super) name: String,
+    pub(super) direction: SftpTransferDirection,
     pub(super) phase: SftpTransferPhase,
     pub(super) pausable: bool,
     pub(super) downloaded_bytes: u64,

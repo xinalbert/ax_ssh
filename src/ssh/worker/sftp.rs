@@ -395,7 +395,10 @@ pub(super) async fn run_sftp_session(
                                 },
                                 session_id,
                             ).await;
-                        } else if transfers.len() >= MAX_SFTP_TRANSFERS {
+                        } else if sftp_transfer_limit_reached(
+                            transfers.len(),
+                            pending_by_transfer.len(),
+                        ) {
                             send_sftp_transfer_event(
                                 &event_tx,
                                 SftpTransferEvent::Failed {

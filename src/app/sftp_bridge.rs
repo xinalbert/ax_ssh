@@ -13,6 +13,7 @@ const MAX_DROPPED_LOCAL_PATHS: usize = 32;
 const MAX_DROPPED_LOCAL_DATA_BYTES: usize = LOCAL_DIRECTORY_PATH_LIMIT * MAX_DROPPED_LOCAL_PATHS;
 const LOCAL_DRAG_PREFIX: &str = "axssh-local-path:";
 const REMOTE_DRAG_PREFIX: &str = "axssh-remote-path:";
+const SFTP_DRAG_TARGET: &str = "ax_ssh::sftp_drag";
 
 type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
 
@@ -41,6 +42,33 @@ fn remote_file_drag_data(path: &str) -> SlintDataTransfer {
 enum SftpDragPayload {
     Local(Vec<PathBuf>),
     Remote(String),
+}
+
+fn log_sftp_drag_lifecycle(stage: &str, local_source: bool) {
+    let stage = match stage {
+        "started" => "started",
+        "finished-copy" => "finished-copy",
+        "finished-no-copy" => "finished-no-copy",
+        _ => "unknown",
+    };
+    tracing::debug!(
+        target: SFTP_DRAG_TARGET,
+        event = "internal-drag",
+        source_pane = if local_source { "local" } else { "remote" },
+        stage,
+        "SFTP internal drag lifecycle"
+    );
+}
+
+fn log_sftp_drag_drop(stage: &'static str, file_count: Option<usize>, byte_count: Option<u64>) {
+    tracing::debug!(
+        target: SFTP_DRAG_TARGET,
+        event = "drop-on-remote-pane",
+        stage,
+        file_count,
+        byte_count,
+        "SFTP dropped upload route"
+    );
 }
 
 fn parse_sftp_drag_payload(text: &str) -> Result<SftpDragPayload> {
@@ -347,14 +375,17 @@ fn queue_local_upload_path(
         let (name, total_bytes) = match read {
             Ok(Ok(value)) => value,
             Ok(Err(error)) => {
+                log_sftp_drag_drop("local-file-rejected", None, None);
                 set_status(&ui, &format!("Cannot prepare dropped upload: {error}"));
                 return;
             }
             Err(error) => {
+                log_sftp_drag_drop("inspection-task-failed", None, None);
                 set_status(&ui, &format!("Dropped upload task failed: {error}"));
                 return;
             }
         };
+        log_sftp_drag_drop("local-file-validated", Some(1), Some(total_bytes));
         let remote_path = join_remote_upload_path(&remote_directory, &name);
         let queued = queue_upload_for_tab(
             &state_for_task,
@@ -364,8 +395,14 @@ fn queue_local_upload_path(
             total_bytes,
         );
         match queued {
-            Ok(()) => dispatch_active_snapshot(&ui, &state_for_task),
-            Err(error) => set_status(&ui, &format!("Cannot queue dropped upload: {error}")),
+            Ok(()) => {
+                log_sftp_drag_drop("upload-queued", Some(1), Some(total_bytes));
+                dispatch_active_snapshot(&ui, &state_for_task);
+            }
+            Err(error) => {
+                log_sftp_drag_drop("upload-rejected", Some(1), Some(total_bytes));
+                set_status(&ui, &format!("Cannot queue dropped upload: {error}"));
+            }
         }
     });
 }
@@ -384,15 +421,21 @@ pub(super) fn handle_native_dropped_file_on_remote_pane(
     log_ui_action("sftp.drop-native-file");
     sync_window_active(window_router, window_id, state);
     match active_sftp_upload_target(state, window_router, window_id) {
-        Ok((tab_id, remote_directory)) => queue_local_upload_path(
-            runtime,
-            state.clone(),
-            ui.clone(),
-            tab_id,
-            remote_directory,
-            path.to_owned(),
-        ),
-        Err(error) => set_status(ui, &format!("Cannot prepare dropped upload: {error}")),
+        Ok((tab_id, remote_directory)) => {
+            log_sftp_drag_drop("native-upload-target-resolved", Some(1), None);
+            queue_local_upload_path(
+                runtime,
+                state.clone(),
+                ui.clone(),
+                tab_id,
+                remote_directory,
+                path.to_owned(),
+            );
+        }
+        Err(error) => {
+            log_sftp_drag_drop("native-upload-target-rejected", Some(1), None);
+            set_status(ui, &format!("Cannot prepare dropped upload: {error}"));
+        }
     }
 }
 
@@ -443,19 +486,36 @@ fn handle_drop_on_remote_pane(
     text: &str,
 ) {
     let paths = match parse_sftp_drag_payload(text) {
-        Ok(SftpDragPayload::Local(paths)) => paths,
+        Ok(SftpDragPayload::Local(paths)) => {
+            log_sftp_drag_drop(
+                "payload-parsed",
+                Some(paths.len()),
+                u64::try_from(text.len()).ok(),
+            );
+            paths
+        }
         Ok(SftpDragPayload::Remote(_)) => {
+            log_sftp_drag_drop(
+                "remote-payload-rejected",
+                None,
+                u64::try_from(text.len()).ok(),
+            );
             set_status(ui, "Remote files can only be dropped onto the local pane");
             return;
         }
         Err(error) => {
+            log_sftp_drag_drop("payload-rejected", None, u64::try_from(text.len()).ok());
             set_status(ui, &format!("Cannot use dropped path: {error}"));
             return;
         }
     };
     let (tab_id, remote_directory) = match active_sftp_upload_target(state, router, window_id) {
-        Ok(target) => target,
+        Ok(target) => {
+            log_sftp_drag_drop("upload-target-resolved", Some(paths.len()), None);
+            target
+        }
         Err(error) => {
+            log_sftp_drag_drop("upload-target-rejected", Some(paths.len()), None);
             set_status(ui, &format!("Cannot prepare dropped upload: {error}"));
             return;
         }
@@ -1238,6 +1298,10 @@ pub(super) fn wire_sftp(
     ui.on_drag_local_file_sftp(|path| local_file_drag_data(path.as_str()));
     ui.on_drag_remote_file_sftp(|path| remote_file_drag_data(path.as_str()));
 
+    ui.on_sftp_drag_diagnostic(|stage, local_source| {
+        log_sftp_drag_lifecycle(stage.as_str(), local_source);
+    });
+
     #[cfg(target_os = "macos")]
     {
         let ui_for_native_drag = ui.as_weak();
@@ -1275,6 +1339,7 @@ pub(super) fn wire_sftp(
         let text = match data.plain_text() {
             Ok(text) => text.to_string(),
             Err(error) => {
+                log_sftp_drag_drop("payload-unreadable", None, None);
                 set_status(
                     &ui_for_remote_drop,
                     &format!("Dropped data is not a readable path: {error}"),
@@ -1282,6 +1347,7 @@ pub(super) fn wire_sftp(
                 return;
             }
         };
+        log_sftp_drag_drop("payload-received", None, u64::try_from(text.len()).ok());
         handle_drop_on_remote_pane(
             &runtime_for_remote_drop,
             &state_for_remote_drop,
@@ -2501,6 +2567,41 @@ mod tests {
         assert_ne!(
             app.terminal(global_tab).expect("global tab").sftp.status,
             "routed"
+        );
+    }
+
+    #[test]
+    fn active_sftp_upload_target_revalidates_live_readiness() {
+        let router = WindowRouter::new(slint::Weak::<AppWindow>::default());
+        let mut app = test_state();
+        let profile = SessionProfile::new("remote", "remote.example", "alice");
+        let tab_id = app.open_sftp_tab(&profile);
+        assert!(router.activate_tab(MAIN_WINDOW_ID, tab_id, &mut app));
+        let state = Arc::new(Mutex::new(app));
+
+        let error = active_sftp_upload_target(&state, &router, MAIN_WINDOW_ID)
+            .expect_err("a disconnected SFTP tab must reject an upload");
+        assert!(error.to_string().contains("no longer connected"));
+
+        {
+            let mut app = state.lock().expect("state lock");
+            let terminal = app.terminal_mut(tab_id).expect("SFTP tab");
+            terminal.connected = true;
+            terminal.sftp.path = " /remote/inbox ".to_owned();
+            terminal.sftp.loading = true;
+        }
+        let error = active_sftp_upload_target(&state, &router, MAIN_WINDOW_ID)
+            .expect_err("a loading SFTP directory must reject an upload");
+        assert!(error.to_string().contains("still loading"));
+
+        {
+            let mut app = state.lock().expect("state lock");
+            app.terminal_mut(tab_id).expect("SFTP tab").sftp.loading = false;
+        }
+        assert_eq!(
+            active_sftp_upload_target(&state, &router, MAIN_WINDOW_ID)
+                .expect("a ready SFTP tab should resolve an upload target"),
+            (tab_id, "/remote/inbox".to_owned())
         );
     }
 

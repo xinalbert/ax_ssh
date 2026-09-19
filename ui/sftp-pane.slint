@@ -22,6 +22,7 @@ export struct SftpEntryRow {
 export struct SftpTransferRow {
     id: string,
     name: string,
+    direction: string,
     state: string,
     status: string,
     progress: float,
@@ -349,6 +350,7 @@ component SftpEntry inherits Rectangle {
     callback reveal-local(string);
     callback begin-native-file-drag(string);
     pure callback drag-data(string) -> data-transfer;
+    callback drag-diagnostic(string);
     in property <bool> drag-enabled: false;
     in property <bool> native-file-drag-enabled: false;
     private property <bool> native-drag-started: false;
@@ -532,6 +534,14 @@ component SftpEntry inherits Rectangle {
             && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
         allow-copy: true;
         data: root.drag-data(root.entry.path);
+        changed dragging => {
+            if self.dragging {
+                root.drag-diagnostic("started");
+            }
+        }
+        drag-finished(action) => {
+            root.drag-diagnostic(action == DragAction.copy ? "finished-copy" : "finished-no-copy");
+        }
 
         // DragArea owns a file-row press for drag initiation. Keep activation
         // in its child so a double-click still reaches the same directory/file
@@ -649,6 +659,7 @@ component SftpDirectoryPane inherits Rectangle {
     callback dropped(data-transfer);
     callback begin-native-file-drag(string);
     pure callback drag-data(string) -> data-transfer;
+    callback drag-diagnostic(string);
     private property <string> rename-name-draft: "";
 
     private property <string> current-path: root.path;
@@ -892,6 +903,7 @@ component SftpDirectoryPane inherits Rectangle {
                     reveal-local(path) => { root.reveal-local(path); }
                     begin-native-file-drag(path) => { root.begin-native-file-drag(path); }
                     drag-data(path) => { return root.drag-data(path); }
+                    drag-diagnostic(stage) => { root.drag-diagnostic(stage); }
                 }
             }
         }
@@ -1011,7 +1023,7 @@ component SftpTransferEntry inherits Rectangle {
     clip: true;
     background: action-button.has-focus ? Theme.hover : transparent;
     accessible-role: list-item;
-    accessible-label: root.transfer.name + ", " + root.transfer.status
+    accessible-label: root.transfer.direction + ", " + root.transfer.name + ", " + root.transfer.status
         + (root.transfer.size.is-empty ? "" : ", " + root.transfer.size);
 
     Rectangle {
@@ -1041,7 +1053,7 @@ component SftpTransferEntry inherits Rectangle {
         x: root.name-x;
         width: max(0px, root.status-x - Theme.sftp-column-gap - self.x);
         height: parent.height;
-        text: root.transfer.name;
+        text: root.transfer.direction + "  " + root.transfer.name;
         color: Theme.text;
         font-size: Theme.font-body;
         overflow: elide;
@@ -1432,31 +1444,42 @@ export component SftpPane inherits Rectangle {
     callback begin-native-remote-file-drag(string);
     pure callback drag-local-file(string) -> data-transfer;
     pure callback drag-remote-file(string) -> data-transfer;
+    callback drag-diagnostic(string, bool);
+    callback native-remote-drop-region-changed(SftpNativeDropRegion);
+    callback native-local-drop-region-changed(SftpNativeDropRegion);
     private property <string> editor-path-draft: root.view.editor_path;
     private property <string> editor-text-draft: root.view.editor_text;
     private property <string> rename-name-draft: root.view.rename_name;
 
-    // Native file events do not carry Slint's DropArea target. These bound
-    // regions let the application bridge query the same target geometry
-    // before it creates an external transfer intent.
-    in-out property <SftpNativeDropRegion> native-remote-drop-region: {
-        x: remote-pane.x,
-        y: files-area.y + remote-pane.y,
-        width: remote-pane.width,
-        height: remote-pane.height,
-        accepts: root.view.available && !root.view.loading
-            && remote-pane.width > 0px && remote-pane.height > 0px,
+    // Native file events have no Slint DropArea target. Publish the live,
+    // finite layout through callbacks instead of a two-way struct property:
+    // two-way bindings retain their right-hand binding and could otherwise
+    // preserve a parent's default geometry. The application bridge performs
+    // the final live SFTP readiness check before creating an upload intent.
+    out property <SftpNativeDropRegion> native-remote-drop-region: {
+        x: 0px,
+        y: 0px,
+        width: root.remote-pane-width,
+        height: root.files-area-height,
+        accepts: root.remote-pane-width > 0px && root.files-area-height > 0px,
     };
-    in-out property <SftpNativeDropRegion> native-local-drop-region: {
-            x: local-pane.x,
-            y: files-area.y + local-pane.y,
-            width: local-pane.width,
-            height: local-pane.height,
-            accepts: root.view.available && !root.view.local_loading
-                && !root.view.local_path.is-empty
-                && local-pane.width > 0px && local-pane.height > 0px,
+    out property <SftpNativeDropRegion> native-local-drop-region: {
+        x: root.remote-pane-width + root.directory-splitter-size,
+        y: 0px,
+        width: max(0px, root.width - root.remote-pane-width - root.directory-splitter-size),
+        height: root.files-area-height,
+        accepts: root.view.available && !root.view.local_loading
+            && !root.view.local_path.is-empty
+            && root.width > root.remote-pane-width + root.directory-splitter-size
+            && root.files-area-height > 0px,
     };
 
+    changed native-remote-drop-region => {
+        root.native-remote-drop-region-changed(root.native-remote-drop-region);
+    }
+    changed native-local-drop-region => {
+        root.native-local-drop-region-changed(root.native-local-drop-region);
+    }
     changed view => {
         root.editor-text-draft = root.view.editor_text;
         root.editor-path-draft = root.view.editor_path;
@@ -1525,7 +1548,19 @@ export component SftpPane inherits Rectangle {
         ? root.collapsed-transfer-height
         : max(0px, root.expanded-vertical-available-height - root.files-area-height);
 
+    Timer {
+        running: true;
+        interval: 1ms;
+        triggered => {
+            self.running = false;
+            root.native-remote-drop-region-changed(root.native-remote-drop-region);
+            root.native-local-drop-region-changed(root.native-local-drop-region);
+        }
+    }
+
     init => {
+        root.native-remote-drop-region-changed(root.native-remote-drop-region);
+        root.native-local-drop-region-changed(root.native-local-drop-region);
         if !root.view.local_path.is-empty {
             root.list-local-directory(root.view.local_path);
         }
@@ -1582,6 +1617,7 @@ export component SftpPane inherits Rectangle {
                 copy-path(path) => { root.write-clipboard(path); }
                 begin-native-file-drag(path) => { root.begin-native-remote-file-drag(path); }
                 drag-data(path) => { return root.drag-remote-file(path); }
+                drag-diagnostic(stage) => { root.drag-diagnostic(stage, false); }
                 dropped(data) => { root.dropped-remote-files(data); }
             }
 
@@ -1639,6 +1675,7 @@ export component SftpPane inherits Rectangle {
                 open-file(path) => { root.open-local-file(path); }
                 reveal-local(path) => { root.reveal-local-file(path); }
                 drag-data(path) => { return root.drag-local-file(path); }
+                drag-diagnostic(stage) => { root.drag-diagnostic(stage, true); }
                 dropped(data) => { root.dropped-local-files(data); }
                 toggle-selection(path, selected) => {
                     root.toggle-local-selection(path, selected);

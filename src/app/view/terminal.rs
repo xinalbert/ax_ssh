@@ -984,6 +984,7 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
         match transfer.phase {
             SftpTransferPhase::Queued
             | SftpTransferPhase::Downloading
+            | SftpTransferPhase::Uploading
             | SftpTransferPhase::Pausing
             | SftpTransferPhase::Paused
             | SftpTransferPhase::Resuming

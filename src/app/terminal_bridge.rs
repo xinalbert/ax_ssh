@@ -36,8 +36,8 @@ fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
 
 /// A `DroppedFile` has no location. On macOS, the native bridge obtains the
 /// current AppKit cursor position at drop time; other platforms rely on the
-/// latest Winit cursor move. Both routes require a live external-file hover
-/// before Slint can resolve the declared Remote files target.
+/// latest Winit cursor move from the current external-file hover. Every route
+/// resolves the declared Remote files target before it creates an upload.
 #[derive(Default)]
 struct NativeFileDropPointer {
     hovered_file_count: u16,
@@ -80,6 +80,7 @@ impl NativeFileDropPointer {
         self.last_physical_position = None;
     }
 
+    #[cfg(not(target_os = "macos"))]
     fn is_external_file_hovering(&self) -> bool {
         self.hovered_file_count > 0
     }
@@ -107,13 +108,20 @@ impl NativeFileDropPointer {
 
 #[cfg(target_os = "macos")]
 fn macos_file_drop_position(
-    pointer: &NativeFileDropPointer,
     read_current_position: impl FnOnce() -> Option<(f32, f32)>,
 ) -> Option<(f32, f32)> {
-    if !pointer.is_external_file_hovering() {
-        return None;
-    }
     read_current_position()
+}
+
+fn log_native_file_drop(stage: &'static str, hovered_file_count: u16, target: Option<&str>) {
+    tracing::debug!(
+        target: "ax_ssh::sftp_drag",
+        event = "native-file-drop",
+        stage,
+        hovered_file_count,
+        target = target.unwrap_or("not-resolved"),
+        "SFTP native file drop route"
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -376,12 +384,15 @@ pub(super) fn install_terminal_keypad_input_hook(
         match event {
             WindowEvent::DroppedFile(path) => {
                 let Some(ui) = ui_for_drop.upgrade() else {
+                    log_native_file_drop("dropped-ui-gone", 0, None);
                     return EventResult::Propagate;
                 };
-                let target = {
+                let (target, hovered_file_count) = {
                     let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
+                    let hovered_file_count = pointer.hovered_file_count;
+                    log_native_file_drop("dropped-received", hovered_file_count, None);
                     #[cfg(target_os = "macos")]
-                    let logical_position = macos_file_drop_position(&pointer, || {
+                    let logical_position = macos_file_drop_position(|| {
                         super::macos_window::current_cursor_position(ui.window()).ok()
                     });
                     #[cfg(not(target_os = "macos"))]
@@ -390,26 +401,40 @@ pub(super) fn install_terminal_keypad_input_hook(
                     let target =
                         logical_position.map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
                     pointer.complete_external_file_drop();
-                    target
+                    if target.is_none() {
+                        log_native_file_drop("position-unavailable", hovered_file_count, None);
+                    }
+                    (target, hovered_file_count)
                 };
-                if target.is_some_and(|target| target.as_str() == "remote") {
-                    super::sftp_bridge::handle_native_dropped_file_on_remote_pane(
-                        &runtime_for_drop,
-                        &state_for_drop,
-                        &ui_for_drop,
-                        &router_for_drop,
-                        window_id,
-                        path,
-                    );
+                match target.as_deref() {
+                    Some("remote") => {
+                        log_native_file_drop("target-remote", hovered_file_count, Some("remote"));
+                        super::sftp_bridge::handle_native_dropped_file_on_remote_pane(
+                            &runtime_for_drop,
+                            &state_for_drop,
+                            &ui_for_drop,
+                            &router_for_drop,
+                            window_id,
+                            path,
+                        );
+                    }
+                    Some(target) => {
+                        log_native_file_drop("target-rejected", hovered_file_count, Some(target));
+                    }
+                    None => {}
                 }
             }
             WindowEvent::HoveredFile(_) => {
-                native_file_drop_pointer_for_event
-                    .borrow_mut()
-                    .begin_external_file_hover();
+                let hovered_file_count = {
+                    let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
+                    pointer.begin_external_file_hover();
+                    pointer.hovered_file_count
+                };
+                log_native_file_drop("hovered", hovered_file_count, None);
             }
             WindowEvent::HoveredFileCancelled => {
                 native_file_drop_pointer_for_event.borrow_mut().clear();
+                log_native_file_drop("hover-cancelled", 0, None);
             }
             #[cfg(not(target_os = "macos"))]
             WindowEvent::CursorMoved { position, .. } => {
@@ -2079,20 +2104,11 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn macos_file_drop_rejects_native_cursor_read_failure_without_winit_fallback() {
-        let mut pointer = NativeFileDropPointer::default();
-        pointer.begin_external_file_hover();
-
-        assert_eq!(macos_file_drop_position(&pointer, || None), None);
+    fn macos_file_drop_uses_appkit_position_without_hover_state() {
+        assert_eq!(macos_file_drop_position(|| None), None);
         assert_eq!(
-            macos_file_drop_position(&pointer, || Some((30.0, 20.0))),
+            macos_file_drop_position(|| Some((30.0, 20.0))),
             Some((30.0, 20.0))
-        );
-
-        pointer.complete_external_file_drop();
-        assert_eq!(
-            macos_file_drop_position(&pointer, || Some((30.0, 20.0))),
-            None
         );
     }
 

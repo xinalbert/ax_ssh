@@ -96,7 +96,14 @@ impl SftpBrowserState {
         name: String,
         total_bytes: u64,
     ) -> Result<()> {
-        self.queue_transfer_with_pause(id, name, total_bytes, true, None, None)
+        self.queue_transfer_with_pause(
+            id,
+            name,
+            total_bytes,
+            SftpTransferDirection::Download,
+            None,
+            None,
+        )
     }
 
     pub(in crate::app) fn queue_upload_transfer(
@@ -111,7 +118,7 @@ impl SftpBrowserState {
             id,
             name,
             total_bytes,
-            false,
+            SftpTransferDirection::Upload,
             Some(local_path),
             Some(remote_path),
         )
@@ -122,7 +129,7 @@ impl SftpBrowserState {
         id: Uuid,
         name: String,
         total_bytes: u64,
-        pausable: bool,
+        direction: SftpTransferDirection,
         local_path: Option<std::path::PathBuf>,
         remote_path: Option<String>,
     ) -> Result<()> {
@@ -155,8 +162,9 @@ impl SftpBrowserState {
         self.transfers.push_back(SftpTransferState {
             id,
             name,
+            direction,
             phase: SftpTransferPhase::Queued,
-            pausable,
+            pausable: direction == SftpTransferDirection::Download,
             downloaded_bytes: 0,
             total_bytes,
             bytes_per_second: 0,
@@ -203,10 +211,10 @@ impl SftpBrowserState {
         if !remote_path.is_empty() {
             transfer.remote_path = Some(remote_path);
         }
-        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.phase = transfer.direction.active_phase();
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
-        transfer.status = "Downloading".to_owned();
+        transfer.status = transfer.direction.active_status().to_owned();
     }
 
     pub(in crate::app) fn update_transfer_progress(
@@ -218,13 +226,12 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return;
         };
-        if !matches!(
-            transfer.phase,
-            SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
-        ) {
+        if transfer.phase != transfer.direction.active_phase()
+            && transfer.phase != SftpTransferPhase::Pausing
+        {
             return;
         }
-        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.phase = transfer.direction.active_phase();
         transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
         transfer.total_bytes = total_bytes;
         if let Some(started_at) = transfer.started_at {
@@ -235,7 +242,7 @@ impl SftpBrowserState {
             }
         }
         transfer.status = if total_bytes == 0 {
-            "Downloading".to_owned()
+            transfer.direction.active_status().to_owned()
         } else {
             format!(
                 "{:.0}%",
@@ -253,12 +260,14 @@ impl SftpBrowserState {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
-        if !matches!(
-            transfer.phase,
-            SftpTransferPhase::Downloading
-                | SftpTransferPhase::Pausing
-                | SftpTransferPhase::Resuming
-        ) {
+        if transfer.direction != SftpTransferDirection::Download
+            || !matches!(
+                transfer.phase,
+                SftpTransferPhase::Downloading
+                    | SftpTransferPhase::Pausing
+                    | SftpTransferPhase::Resuming
+            )
+        {
             return false;
         }
         transfer.phase = SftpTransferPhase::Completed;
@@ -277,10 +286,10 @@ impl SftpBrowserState {
             .iter()
             .find(|transfer| {
                 transfer.id == id
-                    && !transfer.pausable
+                    && transfer.direction == SftpTransferDirection::Upload
                     && matches!(
                         transfer.phase,
-                        SftpTransferPhase::Downloading
+                        SftpTransferPhase::Uploading
                             | SftpTransferPhase::Pausing
                             | SftpTransferPhase::Resuming
                     )
@@ -381,11 +390,11 @@ impl SftpBrowserState {
         if transfer.phase != SftpTransferPhase::Resuming {
             return false;
         }
-        transfer.phase = SftpTransferPhase::Downloading;
+        transfer.phase = transfer.direction.active_phase();
         transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
-        transfer.status = "Downloading".to_owned();
+        transfer.status = transfer.direction.active_status().to_owned();
         true
     }
 
@@ -474,6 +483,8 @@ impl SftpBrowserState {
                 | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Uploading, SftpTransferPhase::Cancelled)
+                | (SftpTransferPhase::Uploading, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Paused, SftpTransferPhase::Cancelled)
@@ -483,6 +494,7 @@ impl SftpBrowserState {
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
+                | (SftpTransferPhase::Uploading, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
         );
@@ -970,6 +982,7 @@ impl SftpTransferPhase {
         match self {
             Self::Queued => "queued",
             Self::Downloading => "downloading",
+            Self::Uploading => "uploading",
             Self::Pausing => "pausing",
             Self::Paused => "paused",
             Self::Resuming => "resuming",
@@ -983,7 +996,12 @@ impl SftpTransferPhase {
     pub(in crate::app) fn cancellable(self) -> bool {
         matches!(
             self,
-            Self::Queued | Self::Downloading | Self::Pausing | Self::Paused | Self::Resuming
+            Self::Queued
+                | Self::Downloading
+                | Self::Uploading
+                | Self::Pausing
+                | Self::Paused
+                | Self::Resuming
         )
     }
 
@@ -1000,6 +1018,7 @@ impl SftpTransferPhase {
             self,
             Self::Queued
                 | Self::Downloading
+                | Self::Uploading
                 | Self::Pausing
                 | Self::Paused
                 | Self::Resuming
@@ -1010,8 +1029,36 @@ impl SftpTransferPhase {
     fn can_request_cancel(self) -> bool {
         matches!(
             self,
-            Self::Queued | Self::Downloading | Self::Pausing | Self::Paused | Self::Resuming
+            Self::Queued
+                | Self::Downloading
+                | Self::Uploading
+                | Self::Pausing
+                | Self::Paused
+                | Self::Resuming
         )
+    }
+}
+
+impl SftpTransferDirection {
+    fn active_phase(self) -> SftpTransferPhase {
+        match self {
+            Self::Download => SftpTransferPhase::Downloading,
+            Self::Upload => SftpTransferPhase::Uploading,
+        }
+    }
+
+    fn active_status(self) -> &'static str {
+        match self {
+            Self::Download => "Downloading",
+            Self::Upload => "Uploading",
+        }
+    }
+
+    pub(in crate::app) fn as_str(self) -> &'static str {
+        match self {
+            Self::Download => "Download",
+            Self::Upload => "Upload",
+        }
     }
 }
 
@@ -1020,6 +1067,7 @@ impl SftpTransferState {
         SftpTransferSnapshot {
             id: self.id,
             name: self.name.clone(),
+            direction: self.direction,
             phase: self.phase,
             pausable: self.pausable,
             downloaded_bytes: self.downloaded_bytes,
