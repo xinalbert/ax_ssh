@@ -27,6 +27,13 @@ use slint::winit_030::{
 
 const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
 
+fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
+    let palette = super::view::terminal::terminal_query_palette(ui);
+    if let Ok(mut app) = state.lock() {
+        app.set_terminal_query_palette(palette);
+    }
+}
+
 /// A `DroppedFile` has no location. On macOS, the native bridge obtains the
 /// current AppKit cursor position at drop time; other platforms rely on the
 /// latest Winit cursor move. Both routes require a live external-file hover
@@ -587,7 +594,7 @@ impl TerminalInputContext<'_> {
             .state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-            .and_then(|mut app| {
+            .and_then(|app| {
                 state_lock_elapsed = Some(state_lock_started_at.elapsed());
                 if self
                     .window_router
@@ -639,7 +646,6 @@ impl TerminalInputContext<'_> {
                     };
                     data
                 };
-                let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
                 {
                     let terminal = app.terminal(tab_id).context("terminal tab not found")?;
                     let worker_request_started_at = std::time::Instant::now();
@@ -655,7 +661,7 @@ impl TerminalInputContext<'_> {
                     worker_request_elapsed = Some(worker_request_started_at.elapsed());
                     request_result?;
                 }
-                Ok((true, viewport_changed))
+                Ok((true, false))
             });
         match result {
             Ok((handled, true)) => {
@@ -741,6 +747,8 @@ pub(super) fn wire_terminal(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
+    sync_terminal_query_palette(ui, &state);
+
     let geometry_diagnostics = Rc::new(RefCell::new(TerminalGeometryDiagnostics::default()));
     let geometry_diagnostics_for_callback = geometry_diagnostics.clone();
     let ui_for_geometry = ui.as_weak();
@@ -812,6 +820,9 @@ pub(super) fn wire_terminal(
         log_ui_action("terminal.refresh-appearance");
         // A theme change only changes the visual snapshot; it must not resize or
         // otherwise disturb the PTY worker that owns the active terminal.
+        if let Some(ui) = ui_for_theme.upgrade() {
+            sync_terminal_query_palette(&ui, &state_for_theme);
+        }
         dispatch_active_snapshot(&ui_for_theme, &state_for_theme);
     });
 
@@ -835,7 +846,7 @@ pub(super) fn wire_terminal(
     let ui_for_resize = ui.as_weak();
     let state_for_resize = state.clone();
     let router_for_resize = window_router.clone();
-    ui.on_resize_terminal(move |tab_id, columns, rows| {
+    ui.on_resize_terminal(move |tab_id, columns, rows, cell_width, cell_height| {
         log_ui_action("terminal.resize");
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_resize) else {
             return;
@@ -849,7 +860,22 @@ pub(super) fn wire_terminal(
                 }
                 let columns = columns.max(1) as u32;
                 let rows = rows.max(1) as u32;
-                app.resize_terminal(tab_id, columns, rows)
+                let scale_factor = ui_for_resize
+                    .upgrade()
+                    .map(|ui| f64::from(ui.window().scale_factor()).max(0.01))
+                    .unwrap_or(1.0);
+                let to_physical = |value: f32| {
+                    (f64::from(value).max(0.0) * scale_factor)
+                        .round()
+                        .clamp(1.0, f64::from(u32::MAX)) as u32
+                };
+                app.resize_terminal_with_metrics(
+                    tab_id,
+                    columns,
+                    rows,
+                    to_physical(cell_width),
+                    to_physical(cell_height),
+                )
             });
         match result {
             Ok(true) => {
@@ -954,6 +980,18 @@ pub(super) fn wire_terminal(
             debug!(%tab_id, "discarded invalid repeated terminal mouse event");
             return;
         }
+        let scale_factor = ui_for_mouse
+            .upgrade()
+            .map(|ui| f64::from(ui.window().scale_factor()).max(0.01))
+            .unwrap_or(1.0);
+        let to_physical = |value: f32| {
+            (f64::from(value).max(0.0) * scale_factor)
+                .floor()
+                .clamp(0.0, (usize::MAX - 1) as f64) as usize
+                + 1
+        };
+        let pixel_x = to_physical(input.x);
+        let pixel_y = to_physical(input.y);
         let result = state_for_mouse
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
@@ -969,17 +1007,21 @@ pub(super) fn wire_terminal(
                     .terminal
                     .as_ref()
                     .context("active tab has no terminal model")?;
-                let Some(data) = model.encode_mouse_event(TerminalMouseEvent {
-                    kind,
-                    button,
-                    column: input.column.max(0) as usize,
-                    row: input.row.max(0) as usize,
-                    modifiers: TerminalMouseModifiers {
-                        shift: input.shift,
-                        alt: input.alt,
-                        control: input.control,
+                let Some(data) = model.encode_mouse_event_with_pixels(
+                    TerminalMouseEvent {
+                        kind,
+                        button,
+                        column: input.column.max(0) as usize,
+                        row: input.row.max(0) as usize,
+                        modifiers: TerminalMouseModifiers {
+                            shift: input.shift,
+                            alt: input.alt,
+                            control: input.control,
+                        },
                     },
-                }) else {
+                    pixel_x,
+                    pixel_y,
+                ) else {
                     return Ok(true);
                 };
                 let data = if repeat_count == 1 {
@@ -1893,7 +1935,7 @@ pub(super) fn process_terminal_output(
         .as_mut()
         .context("terminal tab has no terminal model")?;
     let responses = model.process_with_responses(data);
-    let presentation_hold = model.output_frame_hold_remaining();
+    let presentation_hold = model.synchronized_output_remaining();
     if responses.is_empty() {
         return Ok(presentation_hold);
     }

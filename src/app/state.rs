@@ -18,7 +18,7 @@ use ax_ssh::serial::{SerialPortDescriptor, SerialSessionHandle};
 use ax_ssh::sftp::SftpEntry;
 use ax_ssh::ssh::SshSessionHandle;
 use ax_ssh::telnet::TelnetSessionHandle;
-use ax_ssh::terminal::{TerminalModel, TerminalSnapshot};
+use ax_ssh::terminal::{TerminalModel, TerminalQueryPalette, TerminalSnapshot};
 
 use super::local_files::{LocalDirectoryEntry, default_local_directory};
 
@@ -37,6 +37,7 @@ pub(super) struct AppState {
     pub(super) persistence_coordinator: Arc<PersistenceCoordinator>,
     local_terminal_number: u32,
     serial_ports: Vec<SerialPortDescriptor>,
+    terminal_query_palette: TerminalQueryPalette,
     ui_refresh: UiRefreshState,
 }
 
@@ -169,6 +170,11 @@ struct TerminalVisibleState {
     cursor_column: usize,
     cursor_cells: usize,
     cursor_visible: bool,
+    cursor_shape: ax_ssh::terminal::TerminalCursorShape,
+    cursor_blinking: bool,
+    foreground_color: ax_ssh::terminal::TerminalColor,
+    background_color: ax_ssh::terminal::TerminalColor,
+    cursor_color: ax_ssh::terminal::TerminalColor,
     cursor_text: String,
     display_offset: usize,
     viewport_mode: ax_ssh::terminal::TerminalViewportMode,
@@ -186,6 +192,11 @@ impl From<&TerminalSnapshot> for TerminalVisibleState {
             cursor_column: snapshot.cursor_column,
             cursor_cells: snapshot.cursor_cells,
             cursor_visible: snapshot.cursor_visible,
+            cursor_shape: snapshot.cursor_shape,
+            cursor_blinking: snapshot.cursor_blinking,
+            foreground_color: snapshot.foreground_color,
+            background_color: snapshot.background_color,
+            cursor_color: snapshot.cursor_color,
             cursor_text: snapshot.cursor_text.clone(),
             display_offset: snapshot.display_offset,
             viewport_mode: snapshot.viewport_mode,

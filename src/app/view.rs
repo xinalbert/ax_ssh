@@ -18,7 +18,7 @@ mod options;
 mod settings;
 mod sftp;
 mod sidebar;
-mod terminal;
+pub(super) mod terminal;
 mod workspace;
 
 use self::options::*;

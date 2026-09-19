@@ -21,7 +21,7 @@ Slint UI（.slint）
        ├──────────────► 系统凭据（src/credentials.rs）
        │                 阻塞式系统 keyring 与加密保险库 API
        ├──────────────► 终端模型（src/terminal.rs）
-       │                 有界 vt100 网格 + scrollback
+       │                 有界 alacritty_terminal 网格 + scrollback
        ├──────────────► 本地 PTY（src/local_shell.rs）
        │                 有界线程 + portable-pty 子进程
        ├──────────────► SSH 边界（src/ssh.rs）
@@ -98,7 +98,7 @@ Rust
 激活、关闭、连接、保存和取消等用户意图。`TerminalPaneGroup` 渲染有界、按窗口保存的标准化
 `TerminalPane` placement 与内部 split divider 列表。每个 `TerminalPane` 接收只读 `TerminalViewState`，只拥有
 终端局部焦点、IME proxy、选区、光标闪烁和尺寸测量；逻辑 pane 或透明原生输入失焦时其选区会清除，
-但终端上下文菜单会将选区保留至 Copy 动作完成。真实的标准化 resize、实际本地滚动或输入前回到底部改变
+但终端上下文菜单会将选区保留至 Copy 动作完成。真实的标准化 resize 或实际本地滚动改变
 视口身份时，`AppState` 会发布一个有界 selection revision，`TerminalPane` 在它变化时清除局部坐标。
 终端输出 snapshot 只更新网格，不推进 revision，因此屏幕刷新期间选区可以继续存在；Copy 会按不变的局部
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
@@ -107,7 +107,7 @@ Rust
 在 Local selection priority 模式下，没有发生移动的单次左键点击会延迟到释放时转发给已启用
 mouse reporting 的 TUI；指针一旦移动就取消该候选并保持本地选区。
 `TerminalModel` 在上游 `display_offset` 旁维护显式的 `Follow`、`Detached` 和
-`AlternateScreen` 视口策略。输出在 Detached 时保持用户查看的历史位置，键盘输入/粘贴回到底部，进入或
+`AlternateScreen` 视口策略。输出、键盘输入和粘贴都会保持 Detached 时用户查看的历史位置，进入或
 退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
 和 mode，UI 不需要从几何值猜测用户意图，也可以据此提供返回底部或未读输出提示。
 Rust 模型在 Tab 激活和 pane 重建之间仍是视口状态的 owner；主屏 Detached 视口发生 resize 后会在
@@ -135,9 +135,9 @@ Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 从当前私有 mouse mode 分别暴露 button 与 wheel 能力，
-并生成有界的 SGR 1006 或传统 X10 事件。小型原始 DEC 私有模式跟踪器会在程序请求 UTF-8 1005、URXVT 1015
-或像素坐标 SGR 1016 时抑制上报：AxSSH 绝不替换成另一种 wire format，也不会把字符格坐标冒充像素。
-该跟踪器可跨 transport read，并在不兼容请求被关闭或重置后回到终端 parser 实际的 1006 mode。SGR 1006 的
+并按程序选择的格式生成有界事件：默认 X10、UTF-8 1005、URXVT 1015、SGR 1006 或 SGR 像素坐标 1016。
+原始 DEC 私有模式跟踪器可跨 transport read，并在编码前应用同一序列中的全部 mode 参数。SGR 1016 使用实测的
+物理指针位置，绝不把字符格坐标冒充像素。SGR 1006 的
 release 保留按下时的按钮、读取 release 事件发生时的修饰键，并以小写 `m` 结束；传统 X10 release 使用按钮码 3。
 纵向滚轮映射 xterm 按钮 4/5，横向滚轮映射 6/7，Winit 可跨平台识别的 Back/Forward 侧键映射 8/9。领域编码器
 也有界支持标准辅助按键 10/11，但没有可移植身份的平台 `Other` 按键绝不猜测映射。协议编码与 UI 交互策略分离。
@@ -414,12 +414,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    该 PTY 子进程的 `PATH`。未发现前缀时继承的 PATH 保持不变；AxSSH 不会自行调用 `brew shellenv`，
    也不会修改用户的 shell 启动文件。
 8. 每个真正渲染终端的 Tab 持有一个有界 `TerminalModel`。纯 SFTP Tab 从不渲染终端字符格，
-   因此不创建该模型，只保留独立的浏览状态。`vt100` 负责行、字符格样式、光标、
-   scrollback、宽字符和 application-cursor 模式。终端生成的 `PtyWrite` 协议应答（包括 Windows
-   ConPTY 启动依赖的光标位置报告）进入私有有界队列，并且只通过产生该输出的 Tab 当前 transport
-   worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 补丁保持锁定
-   的 `0.16.2` API 不变；在缩窄列数会移除宽字符续位格时，先清除对应的宽字符首格，且
-   同时覆盖普通与备用屏幕。`TerminalModel` 将高度变化交给锁定的
+   因此不创建该模型，只保留独立的浏览状态。`alacritty_terminal` 负责行、字符格样式、光标、
+   scrollback、宽字符和 application-cursor 模式。终端生成的协议应答（包括 Windows
+   ConPTY 启动依赖的光标位置报告、颜色查询和文本区尺寸查询）进入私有有界队列，并且只通过产生该输出的 Tab 当前 transport
+   worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 副本是历史遗留的
+   MIT 补丁，仅为审计与许可证核对保留，不在 Cargo 依赖图中，也不由 `TerminalModel` 使用。
+   `TerminalModel` 将宽度和高度变化交给锁定的
    `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。主屏 Detached
    视口在 resize 后也恢复有界 display offset；Follow 和备用屏继续保留各自的底部/备用屏语义。
    历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
@@ -430,10 +430,14 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
-   一次 DEC 光标可见性重绘（`CSI ?25l` 后接 `CSI ?25h`）属于短暂的呈现事务：解析和协议应答
-   仍立即执行，但 UI 会保留最后已发布的有界帧，直到完整重绘结束或达到 250ms deadline。这样多次
-   写入的进度类 TUI 不会让光标在中间行之间可见地跳动；它不缓存无界输出，也不改变软换行/reflow、
-   mouse reporting、worker 或 SSH transport 语义。
+   DEC 光标可见性（`CSI ?25l` 与 `CSI ?25h`）只改变光标是否可见。只有同步输出（`CSI ?2026h` 与
+   `CSI ?2026l`）可以控制呈现事务：parser 持续消费输出，UI 保留最后已发布的有界帧，直到标准结束序列或
+   上游同步 deadline 释放；没有旧帧时不发布局部首帧。它不缓存无界输出，也不改变软换行/reflow、mouse reporting、worker 或 SSH transport
+   语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定
+   block 光标或本地对齐启发式替代它们。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
+   调色板变更会解析为同一份快照颜色，用于显示和颜色查询应答。`CSI 14 t` 回报实测文本区像素，`CSI 16 t`
+   回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。`OSC 52` 剪贴板访问和
+   `OSC 8` 超链接仍是不支持的扩展，因此远端输出不能读取或注入系统剪贴板。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
    网格下限。Rust 的 `terminal_dimensions` 模块是模型、设置和各后端最大值的共享来源；由于
    Slint 不能导入 Rust 常量，Theme 保留编译期镜像。PTY 和 worker 入口继续保留独立的非零
@@ -454,14 +458,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    cell 取整。该诊断 payload 不包含终端文字、主机/路径、profile 标签或凭据。测得的尺寸只经 UUID 定向的
    `resize-terminal` callback 送至 `AppState`、对应 worker 与下一份有界 terminal snapshot；
    worker 和 router 都不推导 UI 字符格几何。
-   纵向行数向下取整为完整行，
-   不足一格的高度成为非负顶部偏移，因此第一行保持完整且最后一行仍贴住 pane 底边；只有 pane
-   低于三行保底时才裁切较旧的顶部行，超过最大行数后的高度也保留在网格上方。同一内容区原点
+   纵向行数向下取整为完整行。网格从 pane 顶边开始；不足一格的高度和超过最大行数后的空间
+   都保留在最后一行下方。只有 pane 低于三行保底时才裁切较旧的顶部行。同一内容区原点
    同时用于字符格、光标/IME 预编辑和指针行映射，完整行数也会沿既有 PTY resize 请求发送。
-   `AppState::resize_terminal(tab_id, ...)` 是 UI 网格变化的单一应用入口：它先请求指定可见 pane
-   对应 worker 的 resize，再立即调整该 Tab 的本地 `TerminalModel`。本地与 SSH worker 接收 PTY resize；Telnet 只在
-   对端接受选项后发送 NAWS；Serial 没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口
-   只调整本地模型。任何 UI resize 被接受后，应用都会安排可见 pane 刷新。
+   `AppState::resize_terminal_with_metrics(tab_id, ...)` 是 UI 网格变化的单一应用入口：它同时携带字符网格
+   和实测物理 cell 尺寸，先请求指定可见 pane 对应 worker 的 resize，再立即调整该 Tab 的本地
+   `TerminalModel`。本地与 SSH worker 同时接收字符和物理 PTY 尺寸；Telnet 只在对端接受选项后发送 NAWS；Serial
+   没有远端终端尺寸契约，因此 worker 请求为 no-op，同一入口只调整本地模型。任何 UI resize 被接受后，应用都会安排可见 pane 刷新。
    该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
    worker 事件已捕获的旧快照；因此已经排队的 Output 不会在用户持续拖动窗口时把界面
    恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
@@ -1070,7 +1073,7 @@ Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`Te
 脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 持有
 一个持久 CPU framebuffer，并把 presentation surface 划分为安全的 Core Animation layer。`TerminalPane` 以逻辑坐标
 发布终端 pane 几何，backend 边界再转换为物理像素；pane 区域内的 layer 覆盖整个 pane 宽度，垂直边界落在设置的
-终端行高倍数上。pane 只上报从 `grid-top-offset` 开始的完整底对齐终端行，顶部小数余量留给 fallback；sidebar、tab 和未上报区域使用固定 256×128 物理像素的 fallback grid。`present_with_damage` 将
+终端行高倍数上。pane 只上报从顶边开始的完整顶部对齐终端行，底部小数余量留给 fallback；sidebar、tab 和未上报区域使用固定 256×128 物理像素的 fallback grid。`present_with_damage` 将
 Slint 的物理矩形映射到相交 layer；每个被选中的 layer 只为自身的行创建新的、独立拥有的 `CGImage`，未变化的 layer
 则继续保留旧的不可变图像。因此 Core Animation 在 transaction commit 后仍可安全读取图像，无需为一次很小的终端更新
 clone 或色彩转换整个 framebuffer。首帧、resize、Retina scale、surface invalidate 和窗口恢复都会重置 buffer age

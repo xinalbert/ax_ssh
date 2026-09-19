@@ -20,29 +20,176 @@ fn parses_colored_output_and_carriage_return_updates() {
 }
 
 #[test]
-fn cursor_hidden_redraw_hold_survives_split_escape_sequences() {
+fn cursor_visibility_does_not_hold_output_frames() {
     let mut terminal = TerminalModel::new(20, 3, 10);
     terminal.process(b"before");
-    assert_eq!(terminal.output_frame_hold_remaining(), None);
+    terminal.process(b"\x1b[?25l\rafter");
 
-    terminal.process(b"\x1b[?25");
-    assert_eq!(terminal.output_frame_hold_remaining(), None);
-
-    terminal.process(b"l\rafter");
-    assert!(terminal.output_frame_hold_remaining().is_some());
-
-    terminal.process(b"\x1b[?25h");
-    assert_eq!(terminal.output_frame_hold_remaining(), None);
+    assert!(terminal.synchronized_output_remaining().is_none());
+    assert!(!terminal.snapshot().cursor_visible);
+    assert!(terminal.contents().starts_with("after"));
 }
 
 #[test]
-fn cursor_hidden_redraw_hold_has_a_fixed_deadline() {
-    let mut hold = OutputFrameHold::default();
-    let started_at = std::time::Instant::now();
-    hold.observe(b"\x1b[?25l", started_at);
+fn synchronized_output_defers_rendering_until_standard_end_or_timeout() {
+    let mut terminal = TerminalModel::new(20, 3, 10);
+    terminal.process(b"before");
+    let before = terminal.snapshot();
 
-    assert!(hold.remaining(started_at).is_some());
-    assert_eq!(hold.remaining(started_at + OUTPUT_FRAME_HOLD_MAX), None);
+    terminal.process(b"\x1b[?2026h\x1b[2J\x1b[Hafter");
+    assert!(terminal.synchronized_output_remaining().is_some());
+    assert_eq!(terminal.snapshot().lines, before.lines);
+
+    terminal.flush_synchronized_output_for_test();
+    assert!(terminal.synchronized_output_remaining().is_none());
+    assert!(terminal.contents().starts_with("after"));
+}
+
+#[test]
+fn reports_text_area_pixels_after_measured_layout() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert!(terminal.process_with_responses(b"\x1b[14t").is_empty());
+    assert_eq!(
+        terminal.set_window_size(80, 24, 9, 18),
+        vec![b"\x1b[4;432;720t".to_vec()]
+    );
+}
+
+#[test]
+fn reports_text_area_characters_without_waiting_for_layout_metrics() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b[18t"),
+        vec![b"\x1b[8;24;80t".to_vec()]
+    );
+}
+
+#[test]
+fn reports_cell_pixels_after_measured_layout() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert!(terminal.process_with_responses(b"\x1b[1").is_empty());
+    assert!(terminal.process_with_responses(b"6t").is_empty());
+    assert_eq!(
+        terminal.set_window_size(80, 24, 9, 18),
+        vec![b"\x1b[6;18;9t".to_vec()]
+    );
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b[16t"),
+        vec![b"\x1b[6;18;9t".to_vec()]
+    );
+}
+
+#[test]
+fn reports_the_standard_default_foreground_color() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b]10;?\x07"),
+        vec![b"\x1b]10;rgb:e5e5/e5e5/e5e5\x07".to_vec()]
+    );
+}
+
+#[test]
+fn color_queries_use_the_configured_palette_until_osc_overrides_them() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    let mut palette = TerminalQueryPalette {
+        foreground: TerminalQueryColor {
+            red: 1,
+            green: 2,
+            blue: 3,
+        },
+        ..TerminalQueryPalette::default()
+    };
+    palette.ansi[1] = TerminalQueryColor {
+        red: 4,
+        green: 5,
+        blue: 6,
+    };
+    terminal.set_query_palette(palette);
+
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b]10;?\x07\x1b]4;1;?\x07"),
+        vec![
+            b"\x1b]10;rgb:0101/0202/0303\x07".to_vec(),
+            b"\x1b]4;1;rgb:0404/0505/0606\x07".to_vec(),
+        ]
+    );
+
+    terminal.process(b"\x1b]10;#123456\x07");
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b]10;?\x07"),
+        vec![b"\x1b]10;rgb:1212/3434/5656\x07".to_vec()]
+    );
+}
+
+#[test]
+fn snapshots_apply_terminal_local_osc_colors_to_cells_background_and_cursor() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b]10;#123456\x07\x1b]11;#654321\x07\x1b]12;#abcdef\x07text");
+    let snapshot = terminal.snapshot();
+
+    assert_eq!(
+        snapshot.lines[0].runs[0].style.foreground,
+        TerminalColor::Rgb {
+            red: 0x12,
+            green: 0x34,
+            blue: 0x56,
+        }
+    );
+    assert_eq!(
+        snapshot.cursor_color,
+        TerminalColor::Rgb {
+            red: 0xab,
+            green: 0xcd,
+            blue: 0xef,
+        }
+    );
+    assert_eq!(
+        snapshot.background_color,
+        TerminalColor::Rgb {
+            red: 0x65,
+            green: 0x43,
+            blue: 0x21,
+        }
+    );
+}
+
+#[test]
+fn snapshots_preserve_cursor_shape_blinking_and_hidden_text_attributes() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b[6 q\x1b[?12h\x1b[4:2;8msecret");
+    let snapshot = terminal.snapshot();
+
+    assert_eq!(snapshot.cursor_shape, TerminalCursorShape::Beam);
+    assert!(snapshot.cursor_blinking);
+    assert_eq!(
+        snapshot.lines[0].runs[0].style.underline_style,
+        TerminalUnderlineStyle::Double
+    );
+    assert!(snapshot.lines[0].runs[0].style.hidden);
+}
+
+#[test]
+fn snapshots_preserve_extended_underline_variants() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b[4:3mA\x1b[4:4mB\x1b[4:5mC");
+    let styles = terminal.snapshot().lines[0]
+        .runs
+        .iter()
+        .map(|run| run.style.underline_style)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        styles,
+        vec![
+            TerminalUnderlineStyle::Curly,
+            TerminalUnderlineStyle::Dotted,
+            TerminalUnderlineStyle::Dashed,
+        ]
+    );
 }
 
 #[test]
@@ -142,8 +289,30 @@ fn parses_standard_extended_truecolor_and_attributes() {
 }
 
 #[test]
+fn snapshots_preserve_the_sgr_underline_color() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.process(b"\x1b[4:3;58:2::1:2:3munderlined");
+    let style = terminal.snapshot().lines[0].runs[0].style;
+
+    assert_eq!(style.underline_style, TerminalUnderlineStyle::Curly);
+    assert_eq!(
+        style.underline_color,
+        Some(TerminalColor::Rgb {
+            red: 1,
+            green: 2,
+            blue: 3,
+        })
+    );
+}
+
+#[test]
 fn terminal_protocol_queries_return_bounded_transport_responses() {
     let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b[c"),
+        vec![b"\x1b[?6c".to_vec()]
+    );
 
     assert_eq!(
         terminal.process_with_responses(b"\x1b[6n"),
@@ -502,7 +671,7 @@ fn encodes_sgr_click_release_wheel_drag_and_modifiers() {
 }
 
 #[test]
-fn rejects_legacy_utf8_mouse_coordinates() {
+fn encodes_utf8_mouse_coordinates_beyond_x10_limits() {
     let mut terminal = TerminalModel::new(300, 100, 10);
     terminal.process(b"\x1b[?1000h");
     let event = TerminalMouseEvent {
@@ -514,11 +683,14 @@ fn rejects_legacy_utf8_mouse_coordinates() {
     };
     assert_eq!(terminal.encode_mouse_event(event), None);
     terminal.process(b"\x1b[?1005h");
-    assert_eq!(terminal.encode_mouse_event(event), None);
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[M\"\xc5\x8c\xc2\x84".to_vec())
+    );
 }
 
 #[test]
-fn rejects_legacy_urxvt_and_sgr_pixel_mouse_encodings() {
+fn encodes_urxvt_and_sgr_pixel_mouse_coordinates() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     terminal.process(b"\x1b[?1000h\x1b[?1006h");
     let event = TerminalMouseEvent {
@@ -534,8 +706,11 @@ fn rejects_legacy_urxvt_and_sgr_pixel_mouse_encodings() {
     );
 
     terminal.process(b"\x1b[?1016h");
-    assert!(!terminal.mouse_button_reporting_active());
-    assert_eq!(terminal.encode_mouse_event(event), None);
+    assert!(terminal.mouse_button_reporting_active());
+    assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 30, 40),
+        Some(b"\x1b[<2;30;40M".to_vec())
+    );
     terminal.process(b"\x1b[?1016l");
     assert!(terminal.mouse_reporting().sgr);
     assert_eq!(
@@ -543,9 +718,41 @@ fn rejects_legacy_urxvt_and_sgr_pixel_mouse_encodings() {
         Some(b"\x1b[<2;3;4M".to_vec())
     );
 
-    terminal.process(b"\x1b[?1015h");
-    assert!(!terminal.mouse_button_reporting_active());
-    assert_eq!(terminal.encode_mouse_event(event), None);
+    terminal.process(b"\x1b[?1006l\x1b[?1015h");
+    assert!(terminal.mouse_button_reporting_active());
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[34;3;4M".to_vec())
+    );
+
+    terminal.process(b"\x1b[?1005;1015h\x1b[?1015l");
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[M\"#$".to_vec())
+    );
+}
+
+#[test]
+fn clamps_sgr_pixel_mouse_coordinates_to_the_measured_text_area() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    terminal.set_window_size(80, 24, 10, 20);
+    terminal.process(b"\x1b[?1000;1006;1016h");
+    let event = TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button: TerminalMouseButton::Left,
+        column: 0,
+        row: 0,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+
+    assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 0, 0),
+        Some(b"\x1b[<0;1;1M".to_vec())
+    );
+    assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 9_999, 9_999),
+        Some(b"\x1b[<0;800;480M".to_vec())
+    );
 }
 
 #[test]

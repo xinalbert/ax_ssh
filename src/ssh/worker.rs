@@ -351,11 +351,21 @@ impl SshSessionHandle {
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
+        self.request_resize_with_pixels(columns, rows, 0, 0)
+    }
+
+    pub fn request_resize_with_pixels(
+        &self,
+        columns: u32,
+        rows: u32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) -> Result<()> {
         validate_terminal_size(columns, rows)?;
         if self.task.is_finished() || self.resize_tx.receiver_count() == 0 {
             anyhow::bail!("cannot update terminal size after SSH worker stopped");
         }
-        let size = TerminalSize::backend(columns, rows);
+        let size = TerminalSize::backend_with_pixels(columns, rows, pixel_width, pixel_height);
         self.resize_tx.send_if_modified(|current| {
             if *current == size {
                 false

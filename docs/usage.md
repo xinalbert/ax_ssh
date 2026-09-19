@@ -407,11 +407,11 @@ and 90% of that split. The ratios survive Tab switching and detached-window
 round trips during the current run, then return to equal splits after restart.
 Terminal rows, the cursor, preedit text, and the native input proxy remain
 clipped to their pane even when nested splits make one side unusually small.
-Every pane keeps its final complete terminal row at the pane bottom. Height
-that is not a whole cell stays above the first complete row instead of clipping
-it; space above the maximum row count also remains above the grid. Only a pane
+Every pane anchors its first complete terminal row at the pane top. Height that
+is not a whole cell stays below the final complete row instead of clipping it;
+space beyond the maximum row count also remains below the grid. Only a pane
 shorter than the three-row floor clips older top rows.
-This clipping and bottom alignment are established on the pane's initial layout,
+This clipping and top-aligned grid are established on the pane's initial layout,
 not only after the first window or divider resize.
 Releasing or cancelling a mouse drag returns input focus to the focused,
 connected terminal pane; keyboard and accessibility divider actions retain
@@ -426,16 +426,16 @@ the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
-UTF-8, or legacy encoding. **Local selection priority** is enabled by default:
-left-dragging selects local text, while `Alt` (`Option` on macOS) sends a button
-gesture to the TUI. A stationary single left click is also forwarded to a
-reporting TUI; once the pointer moves, the gesture remains a local selection.
-Disable it in **Settings > Terminal** for standard xterm
-behavior: reporting receives ordinary clicks, releases, drags, and motion;
-`Shift` bypasses reporting for local selection, and `Alt`/`Option` is only a
-reported modifier. Wheel events go to the TUI while reporting is active in both
-modes; `Shift` + wheel scrolls local history. Outside reporting mode, direct
-left-drag selection and wheel scrolling remain local. A pointer gesture keeps
+UTF-8, or legacy encoding. **Standard xterm mouse routing** is the default:
+reporting receives ordinary clicks, releases, drags, and motion; `Shift`
+bypasses reporting for local selection, and `Alt`/`Option` is only a reported
+modifier. Enable **Local selection priority** in **Settings > Terminal** when
+left-dragging should select local text while `Alt` (`Option` on macOS) sends a
+button gesture to the TUI. A stationary single left click is still forwarded to
+a reporting TUI; once the pointer moves, the gesture remains a local selection.
+Wheel events go to the TUI while reporting is active in both modes; `Shift` +
+wheel scrolls local history. Outside reporting mode, direct left-drag selection
+and wheel scrolling remain local. A pointer gesture keeps
 the owner chosen at button press through release or cancellation, including
 motion outside the grid, so one drag is never handled by both AxSSH and the
 remote program. Release reports the current modifier state; cancellation uses
@@ -493,8 +493,8 @@ their normal foreground and receive only a temporary underline while the
 platform primary modifier is held. When semantic highlighting is enabled, its
 status colors follow the selected terminal palette unless Settings overrides a
 category; explicit ANSI or true-color foregrounds are never replaced.
-In **Settings > Terminal**, **Local selection priority** chooses between the
-default selection-first interaction and standard xterm mouse routing.
+In **Settings > Terminal**, **Local selection priority** is an opt-in
+selection-first interaction; standard xterm mouse routing remains the default.
 **Copy selection on select** is disabled by default.
 When enabled, completed pointer selections and **Select All** copy immediately,
 and a direct right-click always pastes.

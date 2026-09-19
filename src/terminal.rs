@@ -13,35 +13,43 @@ mod tests;
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
-use std::time::Duration;
 
-use alacritty_terminal::event::{Event, EventListener};
+use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::term::Term;
-use alacritty_terminal::vte::ansi::Processor;
+use alacritty_terminal::vte::ansi::{Processor, Rgb};
 
 use crate::terminal_dimensions::TerminalSize;
 
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
-/// A cursor-hidden redraw is normally emitted as several small PTY writes.
-/// Bound the time that its intermediate frames may remain unpublished.
-const OUTPUT_FRAME_HOLD_MAX: Duration = Duration::from_millis(250);
+
+type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
+type TextAreaResponseFormatter = Arc<dyn Fn(WindowSize) -> String + Send + Sync + 'static>;
+
+enum TerminalProtocolEvent {
+    PtyWrite(Vec<u8>),
+    ColorRequest(usize, ColorResponseFormatter),
+    TextAreaSizeRequest(TextAreaResponseFormatter),
+}
 
 #[derive(Clone)]
 struct TerminalEventListener {
-    protocol_responses: SyncSender<Vec<u8>>,
+    protocol_events: SyncSender<TerminalProtocolEvent>,
 }
 
 impl EventListener for TerminalEventListener {
     fn send_event(&self, event: Event) {
-        let Event::PtyWrite(response) = event else {
-            return;
+        let event = match event {
+            Event::PtyWrite(response) => TerminalProtocolEvent::PtyWrite(response.into_bytes()),
+            Event::ColorRequest(index, formatter) => {
+                TerminalProtocolEvent::ColorRequest(index, formatter)
+            }
+            Event::TextAreaSizeRequest(formatter) => {
+                TerminalProtocolEvent::TextAreaSizeRequest(formatter)
+            }
+            _ => return,
         };
-        let response = response.into_bytes();
-        if response.is_empty() || response.len() > MAX_PROTOCOL_RESPONSE_BYTES {
-            return;
-        }
-        match self.protocol_responses.try_send(response) {
+        match self.protocol_events.try_send(event) {
             Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
         }
     }
@@ -60,6 +68,134 @@ pub enum TerminalColor {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerminalQueryColor {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalQueryPalette {
+    pub ansi: [TerminalQueryColor; 16],
+    pub foreground: TerminalQueryColor,
+    pub background: TerminalQueryColor,
+    pub cursor: TerminalQueryColor,
+}
+
+impl Default for TerminalQueryPalette {
+    fn default() -> Self {
+        let ansi = [
+            TerminalQueryColor {
+                red: 0,
+                green: 0,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 205,
+                green: 0,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 0,
+                green: 205,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 205,
+                green: 205,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 0,
+                green: 0,
+                blue: 238,
+            },
+            TerminalQueryColor {
+                red: 205,
+                green: 0,
+                blue: 205,
+            },
+            TerminalQueryColor {
+                red: 0,
+                green: 205,
+                blue: 205,
+            },
+            TerminalQueryColor {
+                red: 229,
+                green: 229,
+                blue: 229,
+            },
+            TerminalQueryColor {
+                red: 127,
+                green: 127,
+                blue: 127,
+            },
+            TerminalQueryColor {
+                red: 255,
+                green: 0,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 0,
+                green: 255,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 255,
+                green: 255,
+                blue: 0,
+            },
+            TerminalQueryColor {
+                red: 92,
+                green: 92,
+                blue: 255,
+            },
+            TerminalQueryColor {
+                red: 255,
+                green: 0,
+                blue: 255,
+            },
+            TerminalQueryColor {
+                red: 0,
+                green: 255,
+                blue: 255,
+            },
+            TerminalQueryColor {
+                red: 255,
+                green: 255,
+                blue: 255,
+            },
+        ];
+        Self {
+            ansi,
+            foreground: ansi[7],
+            background: ansi[0],
+            cursor: ansi[7],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TerminalUnderlineStyle {
+    #[default]
+    None,
+    Single,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TerminalCursorShape {
+    #[default]
+    Block,
+    HollowBlock,
+    Underline,
+    Beam,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerminalStyle {
     pub foreground: TerminalColor,
     pub background: TerminalColor,
@@ -67,8 +203,11 @@ pub struct TerminalStyle {
     pub dim: bool,
     pub italic: bool,
     pub underline: bool,
+    pub underline_style: TerminalUnderlineStyle,
+    pub underline_color: Option<TerminalColor>,
     pub strikethrough: bool,
     pub inverse: bool,
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,6 +246,13 @@ pub struct TerminalSnapshot {
     pub cursor_column: usize,
     pub cursor_cells: usize,
     pub cursor_visible: bool,
+    pub cursor_shape: TerminalCursorShape,
+    pub cursor_blinking: bool,
+    /// Resolved terminal-local defaults after OSC palette overrides.
+    pub foreground_color: TerminalColor,
+    pub background_color: TerminalColor,
+    /// Resolved cursor color after terminal-local OSC palette overrides.
+    pub cursor_color: TerminalColor,
     pub cursor_text: String,
     pub display_offset: usize,
     pub viewport_mode: TerminalViewportMode,
@@ -202,22 +348,22 @@ pub struct TerminalMouseEvent {
 pub struct TerminalModel {
     term: Term<TerminalEventListener>,
     processor: Processor,
-    protocol_responses: Receiver<Vec<u8>>,
+    protocol_events: Receiver<TerminalProtocolEvent>,
+    query_palette: TerminalQueryPalette,
+    window_size: Option<WindowSize>,
+    pending_text_area_requests: Vec<TextAreaResponseFormatter>,
+    pending_cell_size_requests: usize,
     scrollback_lines: usize,
     snapshot_lines: Vec<Arc<TerminalStyledLine>>,
     snapshot_columns: usize,
     snapshot_display_offset: usize,
     next_line_revision: u64,
     viewport_detached: bool,
-    output_frame_hold: OutputFrameHold,
     mouse_encoding: MouseEncodingTracker,
+    window_operation_queries: WindowOperationQueryTracker,
 }
 
 /// The accepted mouse-coordinate encodings selected through DEC private modes.
-///
-/// AxSSH emits only default xterm coordinates and SGR 1006. Legacy UTF-8 1005,
-/// URXVT 1015, and SGR-pixel 1016 are tracked only to suppress an incompatible
-/// report; the locked parser does not expose every one of those mode changes.
 #[derive(Default)]
 struct MouseEncodingTracker {
     utf8_coordinates: bool,
@@ -226,18 +372,23 @@ struct MouseEncodingTracker {
     parser_state: u8,
     parameter: u16,
     has_parameter: bool,
+    parameters: Vec<u16>,
 }
 
-/// Tracks DEC cursor-visibility sequences without retaining terminal output.
-///
-/// Full-screen progress applications often hide the cursor, rewrite several
-/// rows across separate transport reads, then show it again. Publishing those
-/// partial grids makes the cursor appear to jump between the rows being
-/// rewritten. This only controls presentation timing; the terminal parser
-/// continues to consume every byte immediately.
+#[derive(Clone, Copy)]
+enum MouseCoordinateEncoding {
+    Default,
+    Utf8,
+    Urxvt,
+    Sgr,
+    SgrPixels,
+}
+
+/// Tracks the xterm `CSI 16 t` cell-pixel-size query, which the terminal core
+/// does not expose as an event. It deliberately accepts only that exact query.
 #[derive(Default)]
-struct OutputFrameHold {
-    active: bool,
-    started_at: Option<std::time::Instant>,
-    cursor_visibility_prefix: u8,
+struct WindowOperationQueryTracker {
+    parser_state: u8,
+    parameter: u16,
+    has_parameter: bool,
 }

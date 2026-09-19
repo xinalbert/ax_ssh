@@ -8,14 +8,7 @@ impl TerminalTabState {
     /// UI sees the newest frame without losing rows that changed earlier in the
     /// burst. Control-only terminal writes still do not enter the Slint queue.
     pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
-        if self
-            .terminal
-            .as_mut()
-            .and_then(TerminalModel::output_frame_hold_remaining)
-            .is_some()
-            && (self.published_terminal_snapshot.is_some()
-                || self.pending_terminal_snapshot.is_some())
-        {
+        if self.synchronized_output_pending() {
             return false;
         }
         if self.pending_terminal_snapshot.is_some() {
@@ -38,12 +31,7 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn terminal_snapshot_for_ui(&mut self) -> Option<TerminalSnapshot> {
-        if self
-            .terminal
-            .as_mut()
-            .and_then(TerminalModel::output_frame_hold_remaining)
-            .is_some()
-        {
+        if self.synchronized_output_pending() {
             return self
                 .published_terminal_snapshot
                 .clone()
@@ -59,6 +47,13 @@ impl TerminalTabState {
         self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
         self.published_terminal_snapshot = Some(snapshot.clone());
         Some(snapshot)
+    }
+
+    fn synchronized_output_pending(&mut self) -> bool {
+        let Some(model) = self.terminal.as_mut() else {
+            return false;
+        };
+        !model.flush_synchronized_output_if_due() && model.synchronized_output_remaining().is_some()
     }
 
     pub(in crate::app) fn discard_pending_terminal_snapshot(&mut self) {
@@ -442,12 +437,22 @@ impl TerminalWorker {
         }
     }
 
-    pub(in crate::app) fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
+    pub(in crate::app) fn request_resize_with_pixels(
+        &self,
+        columns: u32,
+        rows: u32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) -> Result<()> {
         match self {
-            Self::Ssh(worker) => worker.request_resize(columns, rows),
+            Self::Ssh(worker) => {
+                worker.request_resize_with_pixels(columns, rows, pixel_width, pixel_height)
+            }
             Self::Telnet(worker) => worker.request_resize(columns, rows),
             Self::Serial(_) => Ok(()),
-            Self::Local(worker) => worker.request_resize(columns, rows),
+            Self::Local(worker) => {
+                worker.request_resize_with_pixels(columns, rows, pixel_width, pixel_height)
+            }
         }
     }
 

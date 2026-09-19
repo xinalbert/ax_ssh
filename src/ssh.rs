@@ -696,8 +696,7 @@ impl SshConnection {
 
     async fn open_shell(
         &self,
-        columns: u32,
-        rows: u32,
+        size: crate::terminal_dimensions::TerminalSize,
         x11: Option<&x11::X11Forwarding>,
     ) -> Result<(SshShell, X11RequestStatus)> {
         let channel = self.handle.channel_open_session().await?;
@@ -705,10 +704,10 @@ impl SshConnection {
             .request_pty(
                 true,
                 "xterm-256color",
-                columns,
-                rows,
-                0,
-                0,
+                size.columns(),
+                size.rows(),
+                size.pixel_width(),
+                size.pixel_height(),
                 INTERACTIVE_TERMINAL_MODES,
             )
             .await?;
@@ -785,8 +784,15 @@ impl SshShell {
         Ok(())
     }
 
-    pub async fn resize(&self, columns: u32, rows: u32) -> Result<()> {
-        self.channel.window_change(columns, rows, 0, 0).await?;
+    pub async fn resize(&self, size: crate::terminal_dimensions::TerminalSize) -> Result<()> {
+        self.channel
+            .window_change(
+                size.columns(),
+                size.rows(),
+                size.pixel_width(),
+                size.pixel_height(),
+            )
+            .await?;
         Ok(())
     }
 

@@ -507,7 +507,7 @@ export component AppWindow inherits Window {
     callback close-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
-    callback resize-terminal(string, int, int);
+    callback resize-terminal(string, int, int, length, length);
     callback terminal-geometry(string, length, length, length, length, length, length, length, length, length, length, int, int);
     callback terminal-presentation-layout(string, length, length, length, length, length);
     callback terminal-presentation-layout-reset();
@@ -973,7 +973,9 @@ export component AppWindow inherits Window {
             terminal-key-direct(request) => {
                 return root.terminal-key-direct(request);
         }
-        resize-terminal(id, columns, rows) => { root.resize-terminal(id, columns, rows); }
+        resize-terminal(id, columns, rows, cell-width, cell-height) => {
+            root.resize-terminal(id, columns, rows, cell-width, cell-height);
+        }
         terminal-geometry(id, pane-x, pane-y, pane-width, pane-height, grid-x, grid-y, grid-width, grid-height, cell-width, cell-height, columns, rows) => {
             root.terminal-geometry(
                 id,

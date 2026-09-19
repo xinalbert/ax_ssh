@@ -14,6 +14,7 @@ impl AppState {
             persistence_coordinator: Arc::new(PersistenceCoordinator::default()),
             local_terminal_number: 0,
             serial_ports: Vec::new(),
+            terminal_query_palette: TerminalQueryPalette::default(),
             ui_refresh: UiRefreshState::default(),
         }
     }
@@ -188,11 +189,12 @@ impl AppState {
         let number = self.terminal_numbers.entry(profile.id).or_default();
         *number = number.saturating_add(1);
         let id = Uuid::new_v4();
-        let terminal = TerminalModel::new(
+        let mut terminal = TerminalModel::new(
             usize::from(self.sessions.settings.terminal.default_columns),
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
+        terminal.set_query_palette(self.terminal_query_palette);
         let backend = match profile.connection {
             ax_ssh::config::ConnectionProfile::Ssh(_) => TerminalBackend::Ssh {
                 profile_id: profile.id,
@@ -299,11 +301,12 @@ impl AppState {
     pub(in crate::app) fn open_local_shell_tab(&mut self) -> Uuid {
         self.local_terminal_number = self.local_terminal_number.saturating_add(1);
         let id = Uuid::new_v4();
-        let terminal = TerminalModel::new(
+        let mut terminal = TerminalModel::new(
             usize::from(self.sessions.settings.terminal.default_columns),
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
+        terminal.set_query_palette(self.terminal_query_palette);
         self.tabs.push(WorkspaceTab {
             id,
             title: format!("Local Shell #{}", self.local_terminal_number),
@@ -1004,11 +1007,23 @@ impl AppState {
         self.resize_terminal(tab_id, columns, rows).map(|_| ())
     }
 
+    #[cfg(test)]
     pub(in crate::app) fn resize_terminal(
         &mut self,
         tab_id: Uuid,
         columns: u32,
         rows: u32,
+    ) -> Result<bool> {
+        self.resize_terminal_with_metrics(tab_id, columns, rows, 0, 0)
+    }
+
+    pub(in crate::app) fn resize_terminal_with_metrics(
+        &mut self,
+        tab_id: Uuid,
+        columns: u32,
+        rows: u32,
+        cell_width: u32,
+        cell_height: u32,
     ) -> Result<bool> {
         let terminal = self
             .terminal_mut(tab_id)
@@ -1017,22 +1032,52 @@ impl AppState {
             .terminal
             .as_ref()
             .context("terminal tab has no terminal model")?;
-        let size = TerminalSize::model(columns as usize, rows as usize);
-        if current_size.size() == size {
+        let size = TerminalSize::model_with_pixels(
+            columns as usize,
+            rows as usize,
+            columns.saturating_mul(cell_width),
+            rows.saturating_mul(cell_height),
+        );
+        let characters_changed = current_size.size().columns() != size.columns()
+            || current_size.size().rows() != size.rows();
+        let has_window_metrics = cell_width > 0 && cell_height > 0;
+        if !characters_changed && !has_window_metrics {
             return Ok(false);
         }
         if let Some(worker) = terminal.worker.as_ref() {
-            worker.request_resize(size.columns(), size.rows())?;
+            worker.request_resize_with_pixels(
+                size.columns(),
+                size.rows(),
+                size.pixel_width(),
+                size.pixel_height(),
+            )?;
         }
         let model = terminal
             .terminal
             .as_mut()
             .context("terminal tab has no terminal model")?;
-        if model.resize(size.columns() as usize, size.rows() as usize) {
+        let responses = if has_window_metrics {
+            model.set_window_size(size.columns(), size.rows(), cell_width, cell_height)
+        } else {
+            Vec::new()
+        };
+        let sent_protocol_response = !responses.is_empty();
+        if characters_changed && model.resize(size.columns() as usize, size.rows() as usize) {
             terminal.discard_pending_terminal_snapshot();
             terminal.invalidate_selection();
         }
-        Ok(true)
+        if !responses.is_empty() {
+            let worker = terminal
+                .worker
+                .as_ref()
+                .context("terminal protocol response has no transport worker")?;
+            for response in responses {
+                worker
+                    .request_send(response)
+                    .context("cannot queue terminal protocol response")?;
+            }
+        }
+        Ok(characters_changed || sent_protocol_response)
     }
 
     pub(in crate::app) fn scroll_terminal(&mut self, tab_id: Uuid, lines: i32) -> bool {
@@ -1050,6 +1095,7 @@ impl AppState {
         changed
     }
 
+    #[cfg(test)]
     pub(in crate::app) fn scroll_terminal_to_bottom(&mut self, tab_id: Uuid) -> bool {
         let Some(terminal) = self.terminal_mut(tab_id) else {
             return false;
@@ -1132,6 +1178,17 @@ impl AppState {
             {
                 model.set_scrollback_lines(scrollback_lines);
                 terminal.discard_pending_terminal_snapshot();
+            }
+        }
+    }
+
+    pub(in crate::app) fn set_terminal_query_palette(&mut self, palette: TerminalQueryPalette) {
+        self.terminal_query_palette = palette;
+        for tab in &mut self.tabs {
+            if let WorkspaceTabKind::Terminal(terminal) = &mut tab.kind
+                && let Some(model) = terminal.terminal.as_mut()
+            {
+                model.set_query_palette(palette);
             }
         }
     }

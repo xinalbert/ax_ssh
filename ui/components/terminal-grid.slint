@@ -19,6 +19,7 @@ export struct TerminalDecorationRun {
     column: int,
     cells: int,
     foreground: color,
+    underline_style: int,
     strikethrough: bool,
 }
 
@@ -43,6 +44,9 @@ export struct TerminalGridView {
     cursor_column: int,
     cursor_cells: int,
     cursor_visible: bool,
+    cursor_shape: int,
+    cursor_blinking: bool,
+    cursor_color: color,
     cursor_text: string,
     mouse_button_reporting: bool,
     font_family: string,
@@ -95,14 +99,14 @@ export component TerminalGrid inherits Rectangle {
     // Pointer callbacks carry both the containing cell column and the nearest
     // insertion boundary in 0..=content_columns. Terminal mouse reporting uses
     // the cell; local text selection uses the boundary.
-    callback pointer-down(int, int, int, int, bool, bool, bool, bool);
-    callback pointer-moved(int, int, int, bool, bool, bool, bool);
+    callback pointer-down(int, int, int, length, length, int, bool, bool, bool, bool);
+    callback pointer-moved(int, int, int, length, length, bool, bool, bool, bool);
     callback pointer-hovered(bool);
-    callback pointer-up(int, int, int, int, bool, bool, bool);
+    callback pointer-up(int, int, int, length, length, int, bool, bool, bool);
     callback pointer-cancel();
     callback semantic-selection-request(int, int);
     callback line-selection-request(int, int);
-    callback scrolled(int, int, int, int, bool, bool, bool);
+    callback scrolled(int, int, length, length, int, int, bool, bool, bool);
     callback copy-request();
     callback paste-request();
     callback select-all-request();
@@ -209,16 +213,72 @@ export component TerminalGrid inherits Rectangle {
             }
 
             // Decorations use one shared, merged model in both rendering modes.
-            // This avoids per-run conditional children while preserving the
+            // Each underline variant keeps its terminal cell geometry and the
             // original text-then-decoration draw order.
             for run in line.decorations : Rectangle {
+                visible: run.strikethrough || run.underline_style == 1
+                    || run.underline_style == 2;
                 x: run.column * root.cell-width;
-                y: run.strikethrough
-                    ? parent.height / 2
-                    : parent.height - Theme.terminal-underline-offset;
+                y: run.strikethrough ? parent.height / 2
+                    : run.underline_style == 2
+                        ? parent.height - Theme.terminal-underline-offset - 2px
+                        : parent.height - Theme.terminal-underline-offset;
                 width: run.cells * root.cell-width;
                 height: Theme.hairline;
                 background: run.foreground;
+            }
+            for run in line.decorations : Rectangle {
+                visible: !run.strikethrough && run.underline_style == 2;
+                x: run.column * root.cell-width;
+                y: parent.height - Theme.terminal-underline-offset;
+                width: run.cells * root.cell-width;
+                height: Theme.hairline;
+                background: run.foreground;
+            }
+            for run in line.decorations : Rectangle {
+                visible: !run.strikethrough && run.underline_style == 3;
+                x: run.column * root.cell-width;
+                y: 0px;
+                width: run.cells * root.cell-width;
+                height: parent.height;
+                background: transparent;
+                for _[curl] in max(1, run.cells * 2) : Rectangle {
+                    x: curl * root.cell-width / 2;
+                    y: Math.mod(curl, 2) == 0
+                        ? parent.height - Theme.terminal-underline-offset - 2px
+                        : parent.height - Theme.terminal-underline-offset;
+                    width: root.cell-width / 2;
+                    height: Theme.hairline;
+                    background: run.foreground;
+                }
+            }
+            for run in line.decorations : Rectangle {
+                visible: !run.strikethrough && run.underline_style == 4;
+                x: run.column * root.cell-width;
+                y: parent.height - Theme.terminal-underline-offset;
+                width: run.cells * root.cell-width;
+                height: Theme.hairline;
+                background: transparent;
+                for _[dot] in max(1, run.cells * 2) : Rectangle {
+                    x: dot * root.cell-width / 2;
+                    width: Theme.hairline;
+                    height: parent.height;
+                    background: run.foreground;
+                }
+            }
+            for run in line.decorations : Rectangle {
+                visible: !run.strikethrough && run.underline_style == 5;
+                x: run.column * root.cell-width;
+                y: parent.height - Theme.terminal-underline-offset;
+                width: run.cells * root.cell-width;
+                height: Theme.hairline;
+                background: transparent;
+                for _[dash] in max(1, run.cells) : Rectangle {
+                    x: dash * root.cell-width;
+                    width: max(Theme.hairline, root.cell-width / 2);
+                    height: parent.height;
+                    background: run.foreground;
+                }
             }
         }
 
@@ -274,13 +334,20 @@ export component TerminalGrid inherits Rectangle {
 
     cursor-overlay := Rectangle {
         x: root.cursor-x;
-        y: root.cursor-y;
-        width: max(1, root.view.cursor_cells) * root.cell-width;
-        height: root.cell-height;
+        y: root.view.cursor_shape == 1
+            ? root.cursor-y + root.cell-height - Theme.hairline
+            : root.cursor-y;
+        width: root.view.cursor_shape == 2
+            ? max(Theme.hairline, min(2px, root.cell-width))
+            : max(1, root.view.cursor_cells) * root.cell-width;
+        height: root.view.cursor_shape == 1 ? Theme.hairline : root.cell-height;
         visible: root.view.connected && root.view.cursor_visible
-            && (!root.cursor-blink-enabled || root.cursor-blink);
-        background: root.view.foreground;
+            && (!root.cursor-blink-enabled || !root.view.cursor_blinking || root.cursor-blink);
+        background: root.view.cursor_shape == 3 ? transparent : root.view.cursor_color;
+        border-color: root.view.cursor_color;
+        border-width: root.view.cursor_shape == 3 ? Theme.hairline : 0px;
         Text {
+            visible: root.view.cursor_shape == 0;
             y: (parent.height - root.font-cell-height) / 2;
             width: parent.width;
             height: root.font-cell-height;
@@ -367,6 +434,8 @@ export component TerminalGrid inherits Rectangle {
                     row,
                     column,
                     boundary-column,
+                    max(0px, self.mouse-x),
+                    max(0px, self.mouse-y - root.top-offset),
                     event.button == PointerEventButton.left ? 0
                         : event.button == PointerEventButton.middle ? 1
                         : event.button == PointerEventButton.right ? 2
@@ -388,6 +457,8 @@ export component TerminalGrid inherits Rectangle {
                     row,
                     column,
                     boundary-column,
+                    max(0px, self.mouse-x),
+                    max(0px, self.mouse-y - root.top-offset),
                     event.button == PointerEventButton.left ? 0
                     : event.button == PointerEventButton.middle ? 1
                     : event.button == PointerEventButton.right ? 2
@@ -417,6 +488,8 @@ export component TerminalGrid inherits Rectangle {
                     row,
                     column,
                     boundary-column,
+                    max(0px, self.mouse-x),
+                    max(0px, self.mouse-y - root.top-offset),
                     event.modifiers.shift,
                     event.modifiers.alt,
                     event.modifiers.control,
@@ -470,6 +543,8 @@ export component TerminalGrid inherits Rectangle {
                     floor((self.mouse-y - root.top-offset) / root.cell-height))),
                 max(0, min(root.view.content_columns - 1,
                     floor(self.mouse-x / root.cell-width))),
+                max(0px, self.mouse-x),
+                max(0px, self.mouse-y - root.top-offset),
                 vertical-lines,
                 horizontal-lines,
                 event.modifiers.shift, event.modifiers.alt, event.modifiers.control);

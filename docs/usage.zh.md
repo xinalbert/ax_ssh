@@ -243,10 +243,10 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 等分。分隔线可通过 Tab 聚焦，并接受对应方向键、Home、End，以及用 Enter 或 Space 复位。
 两侧分别限制在该 split 的 10%-90%。比例在当前运行期的 Tab 切换和 detached 窗口往返中保留，
 应用重启后恢复等分。即使嵌套分屏让某一侧异常狭小，终端行、光标、预编辑文本和原生输入代理也会
-裁剪在各自 pane 内；每个 pane 的最后一个完整行都贴住底边。高度不足一个完整字符格的部分会保留在
-第一行上方而不裁切它；超过最大行数后的空间也保留在网格上方。只有高度低于三行保底的 pane 才会
+裁剪在各自 pane 内；每个 pane 的第一个完整行都从顶边开始。高度不足一个完整字符格的部分会保留在
+最后一行下方而不裁切它；超过最大行数后的空间也保留在网格下方。只有高度低于三行保底的 pane 才会
 裁切较旧的顶部行。
-这种裁剪和底部对齐会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
+这种裁剪和顶部起始网格会在 pane 首次布局时建立，而不必等待第一次窗口或分隔线 resize。鼠标拖动 release 或 cancel 后，
 输入焦点会返回当前 focused、connected terminal pane；
 键盘和无障碍分隔线操作继续保留分隔线焦点。
 窗口客户区不再额外绘制应用框线；单个 Terminal pane（包括分屏 pane）也不绘制自己的框线。
@@ -255,11 +255,11 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
-SGR、UTF-8 或传统格式发送。默认开启 **Local selection priority**：普通左键拖动使用本地文字选择，按住
-`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI；如果左键没有移动，单击也会转发给已启用 mouse reporting 的 TUI，
-一旦发生移动则保持为本地选区。在 **Settings > Terminal** 关闭该选项后进入标准
-xterm 模式：普通点击、释放、拖动和 motion 按 reporting 转发，`Shift` 绕过 reporting 进入本地选区，
-`Alt`/`Option` 只作为上报的 modifier bit。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
+SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**：普通点击、释放、拖动和 motion 按 reporting
+转发，`Shift` 绕过 reporting 进入本地选区，`Alt`/`Option` 只作为上报的 modifier bit。在
+**Settings > Terminal** 开启 **Local selection priority** 后，普通左键拖动使用本地文字选择，按住
+`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI；如果左键没有移动，单击仍会转发给已启用 mouse reporting 的 TUI，
+一旦发生移动则保持为本地选区。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
 滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。手势没有交给 reporting 时，左键双击会优先选中完整、有效的 HTTP(S) URL，
 连续软换行会合并，末尾终端标点不会纳入选区。其它位置则按终端核心的标点、空白、宽字符和匹配括号边界选中一个语义词；范围只留在 pane，不会发送给远端程序。Shift 绕过该行为，Cmd/Ctrl 目标激活
 和远端 mouse reporting 保持优先；既有 copy-on-select 偏好也会对 URL 或语义选区生效。同一短点击序列内第三次左键点击会选中完整的逻辑终端行，
@@ -290,8 +290,8 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 关闭。URL 和路径仍由上面的 Cmd/Ctrl 目标交互处理：它们保持原有前景色，仅在按住平台主修饰键时
 短暂显示下划线。开启语义高亮后，状态颜色默认跟随所选 Terminal 色表，Settings 可分别覆盖各类颜色；
 已经指定 ANSI 或真彩色前景的输出不会被语义高亮替换。
-**Settings > Terminal** 的 **Local selection priority** 用于选择默认的本地选区优先交互或标准 xterm
-鼠标路由。**Copy selection on select** 默认关闭。开启后，完成鼠标选区和
+**Settings > Terminal** 的 **Local selection priority** 是可选的本地选区优先交互；标准 xterm
+鼠标路由保持默认。**Copy selection on select** 默认关闭。开启后，完成鼠标选区和
 **Select All** 会立即复制，直接右击始终粘贴。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。
 File 菜单导入默认使用 `Cmd/Ctrl+Shift+I`，导出所选 Group 或服务器默认使用

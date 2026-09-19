@@ -309,6 +309,12 @@ fn terminal_pane_view_incremental(
     }
 }
 
+pub(in crate::app) fn terminal_query_palette(
+    ui: &AppWindow,
+) -> ax_ssh::terminal::TerminalQueryPalette {
+    TerminalRenderer::new(terminal_render_settings(ui)).query_palette()
+}
+
 fn terminal_render_settings(ui: &AppWindow) -> TerminalRenderSettings {
     TerminalRenderSettings {
         color_scheme: TerminalColorScheme::from_setting(ui.get_terminal_color_scheme().as_str()),
@@ -679,7 +685,11 @@ pub(super) fn terminal_view_from_snapshot(
     let selection_revision = snapshot.selection_revision;
     let notice = snapshot.notice;
     let snapshot = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
-    let renderer = TerminalRenderer::new(settings);
+    let renderer = TerminalRenderer::with_terminal_defaults(
+        settings,
+        snapshot.foreground_color,
+        snapshot.background_color,
+    );
     let current_lines = current.map(|current| &current.render_lines);
     let lines = render_snapshot_lines(&snapshot, &renderer, current_lines);
     let cursor_text: SharedString = snapshot.cursor_text.into();
@@ -691,6 +701,8 @@ pub(super) fn terminal_view_from_snapshot(
         column: cursor_column,
         cells: cursor_cells,
         visible: snapshot.cursor_visible,
+        shape: terminal_cursor_shape(snapshot.cursor_shape),
+        blinking: snapshot.cursor_blinking,
         text: cursor_text.clone(),
     };
     TerminalViewState {
@@ -705,6 +717,9 @@ pub(super) fn terminal_view_from_snapshot(
         cursor_column,
         cursor_cells,
         cursor_visible: snapshot.cursor_visible,
+        cursor_shape: terminal_cursor_shape(snapshot.cursor_shape),
+        cursor_blinking: snapshot.cursor_blinking,
+        cursor_color: to_slint_color(renderer.cursor_color(snapshot.cursor_color)),
         cursor_text,
         font_family: ui.get_terminal_font_family(),
         font_registry_generation: ui.get_font_registry_generation(),
@@ -773,7 +788,11 @@ fn terminal_view_from_snapshot_incremental(
     let selection_revision = snapshot.selection_revision;
     let notice = snapshot.notice;
     let snapshot = snapshot.terminal.unwrap_or_else(empty_terminal_snapshot);
-    let renderer = TerminalRenderer::new(settings);
+    let renderer = TerminalRenderer::with_terminal_defaults(
+        settings,
+        snapshot.foreground_color,
+        snapshot.background_color,
+    );
     let render_cache_key = renderer.cache_key();
     let cache_key_matches = current.render_lines.row_data(0).is_some_and(|line| {
         line.render_cache_key_low == render_cache_key as u32 as i32
@@ -806,6 +825,8 @@ fn terminal_view_from_snapshot_incremental(
         column: snapshot.cursor_column.min(i32::MAX as usize) as i32,
         cells: snapshot.cursor_cells.clamp(1, 2) as i32,
         visible: snapshot.cursor_visible,
+        shape: terminal_cursor_shape(snapshot.cursor_shape),
+        blinking: snapshot.cursor_blinking,
         text: cursor_text.clone(),
     };
     if !replace_vec_model_rows(&terminal.cursor_state, vec![cursor_state.clone()]) {
@@ -821,6 +842,9 @@ fn terminal_view_from_snapshot_incremental(
     terminal.cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
     terminal.cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
     terminal.cursor_visible = snapshot.cursor_visible;
+    terminal.cursor_shape = terminal_cursor_shape(snapshot.cursor_shape);
+    terminal.cursor_blinking = snapshot.cursor_blinking;
+    terminal.cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
     terminal.cursor_text = cursor_text;
     terminal.font_family = ui.get_terminal_font_family();
     terminal.font_registry_generation = ui.get_font_registry_generation();
@@ -850,6 +874,15 @@ fn terminal_view_from_snapshot_incremental(
     terminal.select_all_shortcut = ui.get_select_all_shortcut();
     terminal.mouse_local_selection_priority = ui.get_terminal_mouse_local_selection_priority();
     terminal
+}
+
+fn terminal_cursor_shape(shape: ax_ssh::terminal::TerminalCursorShape) -> i32 {
+    match shape {
+        ax_ssh::terminal::TerminalCursorShape::Block => 0,
+        ax_ssh::terminal::TerminalCursorShape::Underline => 1,
+        ax_ssh::terminal::TerminalCursorShape::Beam => 2,
+        ax_ssh::terminal::TerminalCursorShape::HollowBlock => 3,
+    }
 }
 
 fn update_terminal_render_lines_dirty(

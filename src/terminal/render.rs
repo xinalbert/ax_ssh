@@ -17,6 +17,12 @@ impl TerminalModel {
         let (cursor, cursor_cells) = cursor_geometry(grid, content.cursor.point);
         let cursor_row = usize::try_from(cursor.line.0).unwrap_or(0);
         let cursor_column = cursor.column.0;
+        let cursor_shape = match content.cursor.shape {
+            CursorShape::Block | CursorShape::Hidden => TerminalCursorShape::Block,
+            CursorShape::HollowBlock => TerminalCursorShape::HollowBlock,
+            CursorShape::Underline => TerminalCursorShape::Underline,
+            CursorShape::Beam => TerminalCursorShape::Beam,
+        };
         let cursor_visible = content.display_offset == 0
             && cursor.line.0 >= 0
             && cursor_row < grid.screen_lines()
@@ -37,6 +43,11 @@ impl TerminalModel {
             cursor_column,
             cursor_cells,
             cursor_visible,
+            cursor_shape,
+            cursor_blinking: self.term.cursor_style().blinking,
+            foreground_color: terminal_color(&self.term, Color::Named(NamedColor::Foreground)),
+            background_color: terminal_color(&self.term, Color::Named(NamedColor::Background)),
+            cursor_color: terminal_color(&self.term, Color::Named(NamedColor::Cursor)),
             cursor_text,
             display_offset: content.display_offset,
             viewport_mode: self.viewport_mode(),
@@ -191,29 +202,64 @@ fn is_default_blank(cell: &Cell) -> bool {
         && cell.flags.is_empty()
 }
 
-fn terminal_color(color: Color) -> TerminalColor {
+fn terminal_color(term: &Term<TerminalEventListener>, color: Color) -> TerminalColor {
+    let dynamic_color = |index: usize| {
+        term.colors()[index].map(|rgb| TerminalColor::Rgb {
+            red: rgb.r,
+            green: rgb.g,
+            blue: rgb.b,
+        })
+    };
     match color {
-        Color::Indexed(index) => TerminalColor::Indexed(index),
+        Color::Indexed(index) => {
+            dynamic_color(usize::from(index)).unwrap_or(TerminalColor::Indexed(index))
+        }
         Color::Spec(rgb) => TerminalColor::Rgb {
             red: rgb.r,
             green: rgb.g,
             blue: rgb.b,
         },
-        Color::Named(named) if (named as usize) < 16 => TerminalColor::Indexed(named as u8),
-        Color::Named(_) => TerminalColor::Default,
+        Color::Named(named) => dynamic_color(named as usize).unwrap_or({
+            if (named as usize) < 16 {
+                TerminalColor::Indexed(named as u8)
+            } else {
+                TerminalColor::Default
+            }
+        }),
     }
 }
 
-fn terminal_style(cell: &Cell) -> TerminalStyle {
+fn terminal_style(term: &Term<TerminalEventListener>, cell: &Cell) -> TerminalStyle {
     TerminalStyle {
-        foreground: terminal_color(cell.fg),
-        background: terminal_color(cell.bg),
+        foreground: terminal_color(term, cell.fg),
+        background: terminal_color(term, cell.bg),
         bold: cell.flags.contains(Flags::BOLD),
         dim: cell.flags.contains(Flags::DIM),
         italic: cell.flags.contains(Flags::ITALIC),
         underline: cell.flags.intersects(Flags::ALL_UNDERLINES),
+        underline_style: terminal_underline_style(cell.flags),
+        underline_color: cell
+            .underline_color()
+            .map(|color| terminal_color(term, color)),
         strikethrough: cell.flags.contains(Flags::STRIKEOUT),
         inverse: cell.flags.contains(Flags::INVERSE),
+        hidden: cell.flags.contains(Flags::HIDDEN),
+    }
+}
+
+fn terminal_underline_style(flags: Flags) -> TerminalUnderlineStyle {
+    if flags.contains(Flags::DOUBLE_UNDERLINE) {
+        TerminalUnderlineStyle::Double
+    } else if flags.contains(Flags::UNDERCURL) {
+        TerminalUnderlineStyle::Curly
+    } else if flags.contains(Flags::DOTTED_UNDERLINE) {
+        TerminalUnderlineStyle::Dotted
+    } else if flags.contains(Flags::DASHED_UNDERLINE) {
+        TerminalUnderlineStyle::Dashed
+    } else if flags.contains(Flags::UNDERLINE) {
+        TerminalUnderlineStyle::Single
+    } else {
+        TerminalUnderlineStyle::None
     }
 }
 
@@ -313,7 +359,7 @@ pub(super) fn styled_line(
             column += 1;
             continue;
         }
-        let style = terminal_style(cell);
+        let style = terminal_style(term, cell);
         let start_column = column;
         let is_wide = cell.flags.contains(Flags::WIDE_CHAR);
         let batch_kind = (!is_wide).then(|| text_batch_kind(cell)).flatten();
@@ -327,7 +373,7 @@ pub(super) fn styled_line(
                 let next = &grid[line][Column(column)];
                 if next.flags.contains(Flags::WIDE_CHAR)
                     || is_wide_continuation(next)
-                    || terminal_style(next) != style
+                    || terminal_style(term, next) != style
                     || batch_kind.is_none()
                     || text_batch_kind(next) != batch_kind
                 {

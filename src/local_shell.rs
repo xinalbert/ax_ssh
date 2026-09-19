@@ -197,8 +197,18 @@ impl LocalShellHandle {
     }
 
     pub fn request_resize(&self, columns: u32, rows: u32) -> Result<()> {
+        self.request_resize_with_pixels(columns, rows, 0, 0)
+    }
+
+    pub fn request_resize_with_pixels(
+        &self,
+        columns: u32,
+        rows: u32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) -> Result<()> {
         validate_terminal_size(columns, rows)?;
-        let size = TerminalSize::backend(columns, rows);
+        let size = TerminalSize::backend_with_pixels(columns, rows, pixel_width, pixel_height);
         let mut requested = self
             .requested_resize
             .lock()
@@ -675,8 +685,8 @@ fn pty_size(size: TerminalSize) -> PtySize {
     PtySize {
         rows: size.rows() as u16,
         cols: size.columns() as u16,
-        pixel_width: 0,
-        pixel_height: 0,
+        pixel_width: size.pixel_width().min(u32::from(u16::MAX)) as u16,
+        pixel_height: size.pixel_height().min(u32::from(u16::MAX)) as u16,
     }
 }
 
@@ -1207,6 +1217,13 @@ mod tests {
         assert_eq!(default_shell_fallback(), Some("/bin/zsh"));
         #[cfg(all(not(windows), not(target_os = "macos")))]
         assert_eq!(default_shell_fallback(), Some("sh"));
+    }
+
+    #[test]
+    fn local_pty_size_includes_physical_terminal_dimensions() {
+        let size = pty_size(TerminalSize::backend_with_pixels(80, 24, 720, 432));
+        assert_eq!((size.cols, size.rows), (80, 24));
+        assert_eq!((size.pixel_width, size.pixel_height), (720, 432));
     }
 
     #[cfg(target_os = "macos")]

@@ -364,6 +364,11 @@ pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
         cursor_column: 0,
         cursor_cells: 1,
         cursor_visible: false,
+        cursor_shape: ax_ssh::terminal::TerminalCursorShape::Block,
+        cursor_blinking: false,
+        foreground_color: ax_ssh::terminal::TerminalColor::Default,
+        background_color: ax_ssh::terminal::TerminalColor::Default,
+        cursor_color: ax_ssh::terminal::TerminalColor::Default,
         cursor_text: " ".to_owned(),
         display_offset: 0,
         viewport_mode: ax_ssh::terminal::TerminalViewportMode::Follow,
@@ -390,6 +395,7 @@ pub(in crate::app) fn terminal_render_line(line: RenderedTerminalLine) -> Termin
             column: run.column.min(i32::MAX as usize) as i32,
             cells: run.cells.min(i32::MAX as usize) as i32,
             foreground: to_slint_color(run.foreground),
+            underline_style: terminal_underline_style(run.underline_style),
             strikethrough: run.strikethrough,
         })
         .collect::<Vec<_>>();
@@ -406,6 +412,17 @@ pub(in crate::app) fn terminal_render_line(line: RenderedTerminalLine) -> Termin
         backgrounds: ModelRc::new(VecModel::from(backgrounds)),
         decorations: ModelRc::new(VecModel::from(decorations)),
         runs: ModelRc::new(VecModel::from(runs)),
+    }
+}
+
+fn terminal_underline_style(style: ax_ssh::terminal::TerminalUnderlineStyle) -> i32 {
+    match style {
+        ax_ssh::terminal::TerminalUnderlineStyle::None => 0,
+        ax_ssh::terminal::TerminalUnderlineStyle::Single => 1,
+        ax_ssh::terminal::TerminalUnderlineStyle::Double => 2,
+        ax_ssh::terminal::TerminalUnderlineStyle::Curly => 3,
+        ax_ssh::terminal::TerminalUnderlineStyle::Dotted => 4,
+        ax_ssh::terminal::TerminalUnderlineStyle::Dashed => 5,
     }
 }
 

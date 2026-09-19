@@ -3,7 +3,10 @@
 use ax_ssh::config::TerminalColorScheme;
 #[cfg(test)]
 use ax_ssh::terminal::TerminalSnapshot;
-use ax_ssh::terminal::{TerminalColor, TerminalStyle, TerminalStyledLine, TerminalStyledRun};
+use ax_ssh::terminal::{
+    TerminalColor, TerminalQueryColor, TerminalQueryPalette, TerminalStyle, TerminalStyledLine,
+    TerminalStyledRun, TerminalUnderlineStyle,
+};
 
 const MAX_SEMANTIC_HIGHLIGHT_CHARS: usize = 512;
 const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
@@ -176,6 +179,7 @@ pub(super) struct RenderedTerminalDecorationRun {
     pub(super) column: usize,
     pub(super) cells: usize,
     pub(super) foreground: RgbColor,
+    pub(super) underline_style: TerminalUnderlineStyle,
     pub(super) strikethrough: bool,
 }
 
@@ -185,9 +189,11 @@ pub(super) struct RenderedTerminalRun {
     pub(super) cells: usize,
     pub(super) foreground: RgbColor,
     pub(super) background: RgbColor,
+    pub(super) decoration_foreground: RgbColor,
     pub(super) bold: bool,
     pub(super) italic: bool,
     pub(super) underline: bool,
+    pub(super) underline_style: TerminalUnderlineStyle,
     pub(super) strikethrough: bool,
 }
 
@@ -200,14 +206,24 @@ pub(super) struct TerminalRenderer {
 
 impl TerminalRenderer {
     pub(super) fn new(settings: TerminalRenderSettings) -> Self {
+        Self::with_terminal_defaults(settings, TerminalColor::Default, TerminalColor::Default)
+    }
+
+    pub(super) fn with_terminal_defaults(
+        settings: TerminalRenderSettings,
+        foreground: TerminalColor,
+        background: TerminalColor,
+    ) -> Self {
         let mut palette = TerminalPalette::for_scheme(settings.color_scheme);
         palette.foreground = settings.default_foreground;
         palette.background = settings.default_background;
         palette.selection_background = settings.selection_background;
+        palette.foreground = resolve_color(foreground, palette.foreground, &palette);
+        palette.background = resolve_color(background, palette.background, &palette);
         let semantic_palette = settings
             .semantic_highlighting
             .then(|| SemanticPalette::for_terminal(&palette, settings.semantic_colors));
-        let cache_key = terminal_render_cache_key(settings);
+        let cache_key = terminal_render_cache_key(settings, foreground, background);
         Self {
             palette,
             settings,
@@ -241,6 +257,24 @@ impl TerminalRenderer {
     pub(super) fn selection_background(&self) -> RgbColor {
         self.palette.selection_background
     }
+
+    pub(super) fn cursor_color(&self, color: TerminalColor) -> RgbColor {
+        resolve_color(color, self.palette.foreground, &self.palette)
+    }
+
+    pub(super) fn query_palette(&self) -> TerminalQueryPalette {
+        let color = |color: RgbColor| TerminalQueryColor {
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+        };
+        TerminalQueryPalette {
+            ansi: self.palette.ansi.map(color),
+            foreground: color(self.palette.foreground),
+            background: color(self.palette.background),
+            cursor: color(self.palette.foreground),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -248,7 +282,11 @@ pub(super) fn render_terminal(
     snapshot: TerminalSnapshot,
     settings: TerminalRenderSettings,
 ) -> RenderedTerminal {
-    let renderer = TerminalRenderer::new(settings);
+    let renderer = TerminalRenderer::with_terminal_defaults(
+        settings,
+        snapshot.foreground_color,
+        snapshot.background_color,
+    );
     let lines = snapshot
         .lines
         .iter()
@@ -287,32 +325,39 @@ fn render_line(
 
 fn compact_decoration_runs(runs: &[RenderedTerminalRun]) -> Vec<RenderedTerminalDecorationRun> {
     let mut decorations: Vec<RenderedTerminalDecorationRun> = Vec::new();
-    for strikethrough in [false, true] {
-        for run in runs.iter().filter(|run| {
-            run.cells > 0
-                && if strikethrough {
-                    run.strikethrough
-                } else {
-                    run.underline
-                }
-        }) {
-            if let Some(previous) = decorations.last_mut()
-                && previous.strikethrough == strikethrough
-                && previous.foreground == run.foreground
-                && previous.column.saturating_add(previous.cells) == run.column
-            {
-                previous.cells = previous.cells.saturating_add(run.cells);
-                continue;
-            }
-            decorations.push(RenderedTerminalDecorationRun {
-                column: run.column,
-                cells: run.cells,
-                foreground: run.foreground,
-                strikethrough,
-            });
+    for run in runs.iter().filter(|run| run.cells > 0) {
+        if run.underline_style != TerminalUnderlineStyle::None {
+            push_decoration_run(&mut decorations, run, run.underline_style, false);
         }
     }
+    for run in runs.iter().filter(|run| run.cells > 0 && run.strikethrough) {
+        push_decoration_run(&mut decorations, run, TerminalUnderlineStyle::None, true);
+    }
     decorations
+}
+
+fn push_decoration_run(
+    decorations: &mut Vec<RenderedTerminalDecorationRun>,
+    run: &RenderedTerminalRun,
+    underline_style: TerminalUnderlineStyle,
+    strikethrough: bool,
+) {
+    if let Some(previous) = decorations.last_mut()
+        && previous.strikethrough == strikethrough
+        && previous.underline_style == underline_style
+        && previous.foreground == run.decoration_foreground
+        && previous.column.saturating_add(previous.cells) == run.column
+    {
+        previous.cells = previous.cells.saturating_add(run.cells);
+        return;
+    }
+    decorations.push(RenderedTerminalDecorationRun {
+        column: run.column,
+        cells: run.cells,
+        foreground: run.decoration_foreground,
+        underline_style,
+        strikethrough,
+    });
 }
 
 fn merged_background_runs(
@@ -352,15 +397,21 @@ fn render_run(
     let style = run.style;
     let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
+    let decoration_foreground = style
+        .underline_color
+        .map(|color| resolve_color(color, foreground, palette))
+        .unwrap_or(foreground);
     let rendered = RenderedTerminalRun {
         text,
         column,
         cells,
         foreground,
         background,
+        decoration_foreground,
         bold: style.bold,
         italic: style.italic,
         underline: style.underline,
+        underline_style: style.underline_style,
         strikethrough: style.strikethrough,
     };
     let mut rendered_runs =
@@ -372,11 +423,24 @@ fn render_run(
     for rendered_run in &mut rendered_runs {
         rendered_run.foreground =
             adjust_text_foreground(rendered_run.foreground, settings.text_brightness, style.dim);
+        rendered_run.decoration_foreground = adjust_text_foreground(
+            rendered_run.decoration_foreground,
+            settings.text_brightness,
+            style.dim,
+        );
+        if style.hidden {
+            rendered_run.foreground = rendered_run.background;
+            rendered_run.decoration_foreground = rendered_run.background;
+        }
     }
     rendered_runs
 }
 
-fn terminal_render_cache_key(settings: TerminalRenderSettings) -> u64 {
+fn terminal_render_cache_key(
+    settings: TerminalRenderSettings,
+    foreground: TerminalColor,
+    background: TerminalColor,
+) -> u64 {
     let mut hash = 14_695_981_039_346_656_037_u64;
     let mut mix = |byte: u8| {
         hash ^= u64::from(byte);
@@ -393,6 +457,21 @@ fn terminal_render_cache_key(settings: TerminalRenderSettings) -> u64 {
         mix(color.red);
         mix(color.green);
         mix(color.blue);
+    }
+    for color in [foreground, background] {
+        match color {
+            TerminalColor::Default => mix(0),
+            TerminalColor::Indexed(index) => {
+                mix(1);
+                mix(index);
+            }
+            TerminalColor::Rgb { red, green, blue } => {
+                mix(2);
+                mix(red);
+                mix(green);
+                mix(blue);
+            }
+        }
     }
     for byte in settings.text_brightness.to_bits().to_le_bytes() {
         mix(byte);
@@ -434,6 +513,7 @@ fn semantic_highlights(
         || style.background != TerminalColor::Default
         || style.inverse
         || style.dim
+        || style.hidden
     {
         return None;
     }
@@ -577,9 +657,11 @@ fn split_semantic_run(
             cells: end - start,
             foreground: highlight.map_or(run.foreground, |value| palette.color_for(value)),
             background: run.background,
+            decoration_foreground: run.decoration_foreground,
             bold: run.bold,
             italic: run.italic,
             underline: run.underline,
+            underline_style: run.underline_style,
             strikethrough: run.strikethrough,
         });
         start = end;
@@ -822,6 +904,11 @@ mod tests {
             cursor_column: 1,
             cursor_cells: 1,
             cursor_visible: true,
+            cursor_shape: ax_ssh::terminal::TerminalCursorShape::Block,
+            cursor_blinking: false,
+            foreground_color: TerminalColor::Default,
+            background_color: TerminalColor::Default,
+            cursor_color: TerminalColor::Default,
             cursor_text: " ".into(),
             display_offset: 0,
             viewport_mode: ax_ssh::terminal::TerminalViewportMode::Follow,
@@ -851,6 +938,41 @@ mod tests {
         }
     }
 
+    #[test]
+    fn terminal_local_default_background_overrides_the_theme_surface() {
+        let mut source = snapshot(TerminalStyle::default());
+        source.background_color = TerminalColor::Rgb {
+            red: 0x65,
+            green: 0x43,
+            blue: 0x21,
+        };
+
+        let rendered = render_terminal(source, settings());
+        assert_eq!(rendered.background, RgbColor::new(0x65, 0x43, 0x21));
+    }
+
+    #[test]
+    fn sgr_underline_color_overrides_the_text_foreground_for_decorations() {
+        let rendered = render_terminal(
+            snapshot(TerminalStyle {
+                underline: true,
+                underline_style: TerminalUnderlineStyle::Curly,
+                underline_color: Some(TerminalColor::Rgb {
+                    red: 1,
+                    green: 2,
+                    blue: 3,
+                }),
+                ..TerminalStyle::default()
+            }),
+            settings(),
+        );
+
+        assert_eq!(
+            rendered.lines[0].decorations[0].foreground,
+            RgbColor::new(1, 2, 3)
+        );
+    }
+
     fn snapshot_line(runs: Vec<TerminalStyledRun>) -> TerminalSnapshot {
         TerminalSnapshot {
             lines: vec![Arc::new(TerminalStyledLine { revision: 1, runs })],
@@ -861,6 +983,11 @@ mod tests {
             cursor_column: 0,
             cursor_cells: 1,
             cursor_visible: false,
+            cursor_shape: ax_ssh::terminal::TerminalCursorShape::Block,
+            cursor_blinking: false,
+            foreground_color: TerminalColor::Default,
+            background_color: TerminalColor::Default,
+            cursor_color: TerminalColor::Default,
             cursor_text: String::new(),
             display_offset: 0,
             viewport_mode: ax_ssh::terminal::TerminalViewportMode::Follow,
@@ -911,9 +1038,15 @@ mod tests {
             cells: 1,
             foreground,
             background,
+            decoration_foreground: foreground,
             bold: false,
             italic: false,
             underline,
+            underline_style: if underline {
+                TerminalUnderlineStyle::Single
+            } else {
+                TerminalUnderlineStyle::None
+            },
             strikethrough,
         };
         let runs = [
@@ -945,12 +1078,14 @@ mod tests {
                     column: 1,
                     cells: 2,
                     foreground,
+                    underline_style: TerminalUnderlineStyle::Single,
                     strikethrough: false,
                 },
                 RenderedTerminalDecorationRun {
                     column: 4,
                     cells: 1,
                     foreground,
+                    underline_style: TerminalUnderlineStyle::None,
                     strikethrough: true,
                 },
             ]

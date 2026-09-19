@@ -30,6 +30,8 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
         column: 2,
         cells: 1,
         visible: true,
+        shape: 0,
+        blinking: false,
         text: "b".into(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![
@@ -63,6 +65,8 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
             column: 7,
             cells: 1,
             visible: true,
+            shape: 0,
+            blinking: false,
             text: "a".into(),
         }]));
     let updated_dividers = vec![TerminalPaneDividerView {
@@ -264,6 +268,8 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         column: 0,
         cells: 1,
         visible: true,
+        shape: 0,
+        blinking: false,
         text: "b".into(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![pane]));
@@ -278,6 +284,8 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         column: 7,
         cells: 1,
         visible: true,
+        shape: 0,
+        blinking: false,
         text: "a".into(),
     }]));
     updated.terminal.cursor_row = 3;
@@ -389,6 +397,11 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
         cursor_column: 5,
         cursor_cells: 1,
         cursor_visible: true,
+        cursor_shape: ax_ssh::terminal::TerminalCursorShape::Block,
+        cursor_blinking: false,
+        foreground_color: ax_ssh::terminal::TerminalColor::Default,
+        background_color: ax_ssh::terminal::TerminalColor::Default,
+        cursor_color: ax_ssh::terminal::TerminalColor::Default,
         cursor_text: " ".to_owned(),
         display_offset: 0,
         viewport_mode: ax_ssh::terminal::TerminalViewportMode::Follow,

@@ -23,7 +23,7 @@ Application controller (src/app.rs)
        ├──────────────► Credential store (src/credentials.rs)
        │                 blocking system-keyring and encrypted-vault APIs
        ├──────────────► Terminal model (src/terminal.rs)
-       │                 bounded vt100 grid + scrollback
+       │                 bounded alacritty_terminal grid + scrollback
        ├──────────────► Local PTY (src/local_shell.rs)
        │                 bounded thread + portable-pty process
        ├──────────────► SSH boundary (src/ssh.rs)
@@ -110,8 +110,8 @@ callback. `TerminalPaneGroup` renders bounded per-window lists of normalized
 cursor blink, and measured sizing. Its selection clears when the logical pane or
 transparent native input loses focus, while the terminal context menu retains it
 through a Copy action. `AppState` also publishes a bounded selection revision
-when a real normalized resize, an effective local scroll, or an input-driven
-return to the bottom changes the viewport identity; `TerminalPane` clears its
+when a real normalized resize or an effective local scroll changes the viewport
+identity; `TerminalPane` clears its
 local coordinates when that revision changes. Output snapshots update the grid
 without advancing the revision, so a selection can remain active while the
 screen refreshes. Copy then extracts the latest cells under the unchanged local
@@ -127,9 +127,9 @@ until release and forwarded to a reporting TUI; pointer movement cancels that
 candidate and keeps the gesture as local selection.
 `TerminalModel` keeps the viewport policy explicit alongside the upstream
 `display_offset`: `Follow` is the live bottom, `Detached` is user scrollback,
-and `AlternateScreen` is the remote full-screen buffer. Output preserves a
-detached offset, keyboard input/paste returns to the bottom, entering or
-leaving alternate screen clears local scrollback follow state, and mouse
+and `AlternateScreen` is the remote full-screen buffer. Output and keyboard
+input/paste preserve a detached offset, entering or leaving alternate screen
+clears local scrollback follow state, and mouse
 reporting does not change the local viewport. The snapshot exposes bounded
 offset and mode metadata so the UI can add return-to-bottom or unread-output
 affordances without inferring user intent from geometry alone.
@@ -187,14 +187,13 @@ carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Mouse input follows the same ownership boundary. `TerminalModel` exposes
 separate button and wheel capabilities from the active private mouse modes and
-emits bounded SGR 1006 or legacy X10 events. A small raw DEC-private-mode
-tracker suppresses output while a program requests UTF-8 1005, URXVT 1015, or
-pixel-coordinate SGR 1016: AxSSH never substitutes a different wire format or
-reports character cells as pixels. The tracker survives split transport reads
-and returns to the terminal parser's actual 1006 mode when that incompatible
-request is cleared or reset. SGR 1006 release preserves the pressed button,
-reads modifiers from the release event, and terminates with lowercase `m`, while
-legacy X10 release uses button code 3. Vertical wheel maps to xterm buttons
+emits the format selected by the application: default X10, UTF-8 1005, URXVT
+1015, SGR 1006, or SGR pixel-coordinate 1016. The raw DEC-private-mode tracker
+survives split transport reads and applies combined mode parameters before
+encoding a report. SGR 1016 uses the measured physical pointer position; it
+never substitutes character cells for pixels. SGR 1006 release preserves the
+pressed button, reads modifiers from the release event, and terminates with
+lowercase `m`, while legacy X10 release uses button code 3. Vertical wheel maps to xterm buttons
 4/5, horizontal wheel to 6/7, and Winit's portable Back/Forward side buttons to
 8/9. The domain encoder also bounds the standard auxiliary 10/11 codes, but
 unclassified platform buttons have no portable identity and are never guessed.
@@ -669,16 +668,17 @@ tab-local terminal connection notice deliberately remains non-blocking.
    `brew shellenv` itself or modifies user shell startup files.
 8. Each tab that renders a terminal owns one bounded `TerminalModel`. An
    SFTP-only tab deliberately keeps this model absent because it never renders
-   terminal cells; its browser state remains independent. `vt100` owns the
-   rows, cell styles, cursor, scrollback, wide characters, and application
-   cursor mode. Terminal-generated `PtyWrite` protocol responses, including
-   cursor-position reports required by Windows ConPTY startup, are collected in
-   a bounded private queue and written back only through that Tab's current
-   transport worker. They do not enter Slint, persistence, or logs. The checked-in
-   `vendor/vt100` patch keeps its locked `0.16.2`
-   API but clears a wide character whose continuation cell would be removed
-   during a column shrink, for both normal and alternate screens. `TerminalModel`
-   delegates height changes to the locked `alacritty_terminal::Term::resize`:
+   terminal cells; its browser state remains independent. `alacritty_terminal`
+   owns the rows, cell styles, cursor, scrollback, wide characters, and
+   application cursor mode. Terminal-generated protocol responses, including
+   cursor-position reports required by Windows ConPTY startup, color queries,
+   and text-area-size queries, are collected in a bounded private queue and
+   written back only through that Tab's current transport worker. They do not
+   enter Slint, persistence, or logs. The checked-in `vendor/vt100` copy is a
+   historical, MIT-licensed patch retained for audit and license accounting;
+   it is not in the Cargo dependency graph and is not used by `TerminalModel`.
+   `TerminalModel` delegates height and width changes to the locked
+   `alacritty_terminal::Term::resize`:
    growth restores only actual scrollback rows above the viewport. A detached
    main-screen viewport also restores its bounded display offset after resize;
    Follow and alternate-screen views retain their existing bottom/alternate
@@ -697,13 +697,24 @@ tab-local terminal connection notice deliberately remains non-blocking.
    state; each visible pane contributes only its bounded cell snapshot across
    the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
-   keep a window alive. A DEC cursor-visibility redraw (`CSI ?25l` followed by
-   `CSI ?25h`) is a short presentation transaction: parsing and protocol
-   responses continue immediately, while the last published bounded frame is
-   retained until the completed redraw or a 250ms deadline. This prevents
-   multi-write progress UIs from visibly moving the cursor through intermediate
-   rows; it neither buffers unbounded output nor changes soft-wrap/reflow,
-   mouse-reporting, worker, or SSH transport semantics.
+   keep a window alive. DEC cursor visibility (`CSI ?25l` and `CSI ?25h`) only
+   changes the cursor's visibility. Synchronized output (`CSI ?2026h` and
+   `CSI ?2026l`) is the only terminal-controlled presentation transaction: the
+   parser keeps consuming output while the last published bounded frame remains
+   visible until the standard end sequence or the upstream synchronization
+   deadline flushes it; without a prior frame, it publishes no partial frame.
+   This neither buffers unbounded output nor changes
+   soft-wrap/reflow, mouse-reporting, worker, or SSH transport semantics.
+   Snapshots preserve the protocol cursor shape and blink request, plus hidden
+   text and each supported SGR underline style and color, so Slint does not replace them
+   with a fixed block cursor or local alignment heuristic. Terminal-local
+   `OSC 4`, `OSC 10`, `OSC 11`, and `OSC 12` palette changes resolve into the
+   same snapshot colors used for rendering and color-query replies. `CSI 14 t`
+   reports the measured text-area pixels and `CSI 16 t` reports the measured
+   cell height and width; both defer through the same bounded protocol queue
+   until layout metrics are known. `OSC 52` clipboard access and `OSC 8`
+   hyperlinks remain unsupported extensions, so remote output cannot read or
+   inject the system clipboard.
    The small-screen window floor is `520x360`; terminal layout, persisted
    default sizes, and the model use the same non-zero `10x3` grid floor. The
    Rust `terminal_dimensions` module is the source for the model, settings,
@@ -739,18 +750,18 @@ tab-local terminal connection notice deliberately remains non-blocking.
    The measured dimensions then travel only through the UUID-directed
    `resize-terminal` callback to `AppState`, its worker, and the next bounded
    terminal snapshot; neither the worker nor the router derives UI cell geometry.
-   The vertical row count rounds down
-   to complete rows. Fractional height becomes a nonnegative top offset, so the
-   first row remains complete while the final row still meets the pane bottom;
-   only a pane below the three-row floor clips older top rows. Height beyond the
-   maximum row count also remains above the grid. The same local origin is
+   The vertical row count rounds down to complete rows. The grid begins at the
+   pane's top edge; fractional height and height beyond the maximum row count
+   remain below the final row. Only a pane below the three-row floor clips older
+   top rows. The same local origin is
    applied to grid cells, cursor/IME preedit, and pointer row mapping, and that
    complete row count is sent through the existing PTY resize request.
-   `AppState::resize_terminal(tab_id, ...)` is the single application entry for
-   a UI grid change: it requests the specified visible pane's existing worker
-   resize first and then immediately resizes that Tab's local `TerminalModel`.
-   Local and SSH workers receive PTY
-   resize requests; Telnet sends NAWS only after the peer accepts that option.
+   `AppState::resize_terminal_with_metrics(tab_id, ...)` is the single
+   application entry for a UI grid change: it carries the character grid and
+   measured physical cell dimensions, requests the specified visible pane's
+   existing worker resize first, and then immediately resizes that Tab's local
+   `TerminalModel`. Local and SSH workers receive both character and physical
+   PTY dimensions; Telnet sends NAWS only after the peer accepts that option.
    Serial has no remote terminal-size contract, so its worker request is a no-op
    and the same entry changes only the local model. After any accepted UI
    resize, the application schedules a visible-pane refresh. When
@@ -1825,8 +1836,8 @@ presentation surface into safe Core Animation layers. `TerminalPane` reports
 terminal pane geometry in logical coordinates; the backend converts it to
 physical pixels. Inside those pane regions, horizontal layers cover the full
 pane width and vertical boundaries fall on the configured number of terminal
-row heights. The pane reports only the complete bottom-aligned rows beginning
-at its `grid-top-offset`; the fractional top remainder stays in fallback space.
+row heights. The pane reports only the complete top-aligned rows beginning at
+its top edge; the fractional bottom remainder stays in fallback space.
 Sidebar, tab, and unreported space use the fallback
 256×128-physical-pixel grid. `present_with_damage` maps Slint's physical
 rectangles to intersecting layers; each selected layer gets a fresh, owned

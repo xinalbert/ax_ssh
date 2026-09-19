@@ -1784,7 +1784,7 @@ fn pending_terminal_snapshot_merges_later_dirty_rows_before_ui_consumes_it() {
 }
 
 #[test]
-fn cursor_hidden_redraw_keeps_the_last_published_terminal_frame() {
+fn synchronized_output_keeps_the_last_published_terminal_frame() {
     let mut state = test_state();
     let profile = SessionProfile::new_telnet("console", "127.0.0.1");
     let tab_id = state.open_terminal_tab(&profile);
@@ -1803,10 +1803,10 @@ fn cursor_hidden_redraw_keeps_the_last_published_terminal_frame() {
         .terminal
         .as_mut()
         .expect("terminal model should exist")
-        .process(b"\x1b[?25l\rafter");
+        .process(b"\x1b[?2026h\x1b[2J\x1b[Hafter");
     assert!(
         !terminal.prepare_terminal_output_snapshot(),
-        "cursor-hidden intermediate redraws must not enter the UI queue"
+        "synchronized intermediate redraws must not enter the UI queue"
     );
     let held = terminal
         .terminal_snapshot_for_ui()
@@ -1817,12 +1817,42 @@ fn cursor_hidden_redraw_keeps_the_last_published_terminal_frame() {
         .terminal
         .as_mut()
         .expect("terminal model should exist")
-        .process(b"\x1b[?25h");
+        .process(b"\x1b[?2026l");
     assert!(terminal.prepare_terminal_output_snapshot());
     let after = terminal
         .terminal_snapshot_for_ui()
         .expect("completed redraw should be available");
     assert_ne!(after.lines, before.lines);
+}
+
+#[test]
+fn synchronized_output_does_not_publish_an_initial_partial_frame() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[?2026hpartial");
+    assert!(
+        !terminal.prepare_terminal_output_snapshot(),
+        "a synchronized first frame must not enter the UI queue"
+    );
+    assert!(
+        terminal.terminal_snapshot_for_ui().is_none(),
+        "no previous frame exists to present during the transaction"
+    );
+
+    terminal
+        .terminal
+        .as_mut()
+        .expect("terminal model should exist")
+        .process(b"\x1b[?2026l");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    assert!(terminal.terminal_snapshot_for_ui().is_some());
 }
 
 #[test]
