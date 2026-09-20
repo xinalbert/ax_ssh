@@ -1121,7 +1121,9 @@ export component TerminalPane inherits Rectangle {
                         }
                         root.clear-terminal-target-highlight();
                     } else if root.forward-mouse-to-terminal(shift, alt) {
-                        root.queue-mouse-motion(row, column, x, y, 5, shift, alt, control);
+                        // Button 9 is the bridge's explicit "no button" value.
+                        // Button 5 is reserved for horizontal wheel-left input.
+                        root.queue-mouse-motion(row, column, x, y, 9, shift, alt, control);
                     } else {
                         root.terminal-target-highlight = root.terminal-target-at-cell(
                             row, column, control, meta,

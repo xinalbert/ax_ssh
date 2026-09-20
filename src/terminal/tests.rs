@@ -769,6 +769,27 @@ fn encodes_utf8_mouse_coordinates_beyond_x10_limits() {
 }
 
 #[test]
+fn mouse_coordinate_encodings_follow_xterm_mutual_exclusion() {
+    let mut terminal = TerminalModel::new(300, 100, 10);
+    let event = TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button: TerminalMouseButton::Right,
+        column: 299,
+        row: 99,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+
+    terminal.process(b"\x1b[?1000h\x1b[?1005h\x1b[?1006h\x1b[?1006l");
+    assert_eq!(terminal.encode_mouse_event(event), None);
+
+    terminal.process(b"\x1b[?1006h\x1b[?1005h");
+    assert_eq!(
+        terminal.encode_mouse_event(event),
+        Some(b"\x1b[M\"\xc5\x8c\xc2\x84".to_vec())
+    );
+}
+
+#[test]
 fn encodes_urxvt_and_sgr_pixel_mouse_coordinates() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     terminal.process(b"\x1b[?1000h\x1b[?1006h");

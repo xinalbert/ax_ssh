@@ -726,8 +726,27 @@ impl MouseEncodingTracker {
     fn apply_parameters(&mut self, enabled: bool) {
         for parameter in self.parameters.drain(..) {
             match parameter {
-                1005 => self.utf8_coordinates = enabled,
-                1015 => self.urxvt_coordinates = enabled,
+                1005 => {
+                    self.utf8_coordinates = enabled;
+                    if enabled {
+                        self.urxvt_coordinates = false;
+                        self.pixel_coordinates = false;
+                    }
+                }
+                1015 => {
+                    self.urxvt_coordinates = enabled;
+                    if enabled {
+                        self.utf8_coordinates = false;
+                        self.pixel_coordinates = false;
+                    }
+                }
+                1006 if enabled => {
+                    // xterm mouse encodings are mutually exclusive. SGR pixel
+                    // mode (1016) remains an SGR extension and is checked
+                    // separately by `coordinate_encoding`.
+                    self.utf8_coordinates = false;
+                    self.urxvt_coordinates = false;
+                }
                 1016 => self.pixel_coordinates = enabled,
                 _ => {}
             }
