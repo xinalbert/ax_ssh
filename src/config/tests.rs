@@ -480,6 +480,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
             local_shell: SYSTEM_DEFAULT_SHELL,
             known_shells: &known_shells,
             option_as_meta: false,
+            osc52_clipboard: false,
         },
         workspace: WorkspaceSettingsInput {
             sidebar_width: 220,
@@ -1017,6 +1018,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             local_shell: "zsh",
             known_shells: &known_shells,
             option_as_meta: true,
+            osc52_clipboard: false,
         },
         workspace: WorkspaceSettingsInput {
             sidebar_width: 20,
@@ -1413,6 +1415,7 @@ fn terminal_shell_cache_is_normalized_and_only_adds_discoveries() {
         local_shell: " zsh ",
         known_shells: &known_shells,
         option_as_meta: true,
+        osc52_clipboard: false,
     });
     assert_eq!(settings.local_shell, "zsh");
     assert_eq!(settings.known_shells, [SYSTEM_DEFAULT_SHELL, "zsh"]);

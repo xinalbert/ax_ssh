@@ -1,6 +1,7 @@
 //! Cell-based text extraction and selection boundaries.
 
 use super::*;
+use alacritty_terminal::term::cell::Cell;
 
 use super::render::{
     append_cell_text, append_occupied_cells, cell_character_count, is_wide_continuation,
@@ -15,6 +16,40 @@ const MAX_TARGET_CONTEXT_ROWS: usize = 32;
 const MAX_TARGET_CONTEXT_CHARS: usize = 2_048;
 
 impl TerminalModel {
+    /// Returns a bounded, safe OSC 8 hyperlink and its contiguous cell span.
+    /// Only web URLs are exposed to the application opener; other URI schemes
+    /// remain inert terminal metadata.
+    pub fn hyperlink_at_cell(&self, row: usize, column: usize) -> Option<(String, usize, usize)> {
+        let grid = self.term.grid();
+        if row >= grid.screen_lines() || column >= grid.columns() {
+            return None;
+        }
+        let line = Line(row as i32 - grid.display_offset() as i32);
+        let cell = &grid[line][Column(column)];
+        if is_wide_continuation(cell) {
+            return None;
+        }
+        let uri = cell.hyperlink()?.uri().to_owned();
+        let uri = super::bound_utf8(uri, super::MAX_HYPERLINK_URI_BYTES);
+        if !super::is_safe_hyperlink_uri(&uri) {
+            return None;
+        }
+        let same_uri = |cell: &Cell| {
+            cell.hyperlink().is_some_and(|hyperlink| {
+                super::bound_utf8(hyperlink.uri().to_owned(), super::MAX_HYPERLINK_URI_BYTES) == uri
+            })
+        };
+        let mut start = column;
+        while start > 0 && same_uri(&grid[line][Column(start - 1)]) {
+            start -= 1;
+        }
+        let mut end = column.saturating_add(1);
+        while end < grid.columns() && same_uri(&grid[line][Column(end)]) {
+            end += 1;
+        }
+        Some((uri, start, end))
+    }
+
     /// Returns text for an inclusive, viewport-relative cell selection.
     pub fn selection_text(
         &self,

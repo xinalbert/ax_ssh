@@ -723,6 +723,7 @@ pub(super) fn wire_settings(
               copy_selection_on_select,
               terminal_mouse_local_selection_priority,
               option_as_meta,
+              osc52_clipboard,
               x11_server_provider,
               x11_server_app_path,
               x11_launch_on_connect,
@@ -833,6 +834,7 @@ pub(super) fn wire_settings(
                     local_shell: local_shell.as_str(),
                     known_shells: &known_shells,
                     option_as_meta,
+                    osc52_clipboard,
                 },
                 workspace: WorkspaceSettingsInput {
                     sidebar_width,

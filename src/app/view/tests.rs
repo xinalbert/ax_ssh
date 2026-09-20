@@ -388,6 +388,7 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
                 column: 0,
                 cells: 5,
                 style: Default::default(),
+                hyperlink: None,
             }],
         })],
         dirty_rows: vec![0],
@@ -408,6 +409,7 @@ fn terminal_render_cache_reuses_only_matching_line_and_settings_revisions() {
         mouse_reporting: Default::default(),
         mouse_button_reporting_active: false,
         mouse_wheel_reporting_active: false,
+        bell_revision: 0,
     };
     let settings = TerminalRenderSettings {
         color_scheme: TerminalColorScheme::Dark,

@@ -3,6 +3,80 @@ use super::*;
 impl TerminalTabState {
     pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 
+    pub(in crate::app) fn offer_clipboard_read(
+        &mut self,
+        formatter: ClipboardLoadFormatter,
+    ) -> Option<(u64, u64)> {
+        if !self.connected || !self.worker_running || self.worker.is_none() {
+            return None;
+        }
+        self.next_clipboard_read_token = self.next_clipboard_read_token.wrapping_add(1);
+        if self.next_clipboard_read_token == 0 {
+            self.next_clipboard_read_token = 1;
+        }
+        let token = self.next_clipboard_read_token;
+        let generation = self.reconnect_generation;
+        self.pending_clipboard_read = Some(PendingClipboardRead {
+            formatter,
+            token,
+            generation,
+        });
+        Some((token, generation))
+    }
+
+    pub(in crate::app) fn clipboard_read_key(&self) -> Option<(u64, u64)> {
+        let pending = self.pending_clipboard_read.as_ref()?;
+        (pending.generation == self.reconnect_generation
+            && self.connected
+            && self.worker_running
+            && self.worker.is_some())
+        .then_some((pending.token, pending.generation))
+    }
+
+    pub(in crate::app) fn take_pending_clipboard_read(&mut self) -> Option<ClipboardLoadFormatter> {
+        let (token, generation) = self.clipboard_read_key()?;
+        if generation != self.reconnect_generation
+            || !self.connected
+            || !self.worker_running
+            || self.worker.is_none()
+        {
+            return None;
+        }
+        self.pending_clipboard_read.take().and_then(|pending| {
+            (pending.token == token && pending.generation == generation)
+                .then_some(pending.formatter)
+        })
+    }
+
+    pub(in crate::app) fn clear_clipboard_read(&mut self, token: u64, generation: u64) -> bool {
+        if self.pending_clipboard_read.as_ref().is_some_and(|pending| {
+            pending.token == token
+                && pending.generation == generation
+                && generation == self.reconnect_generation
+        }) {
+            self.pending_clipboard_read = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(in crate::app) fn clear_pending_clipboard_read(&mut self) -> bool {
+        self.pending_clipboard_read.take().is_some()
+    }
+
+    #[cfg(test)]
+    pub(in crate::app) fn set_test_pending_clipboard_read(
+        &mut self,
+        formatter: ClipboardLoadFormatter,
+    ) {
+        self.pending_clipboard_read = Some(PendingClipboardRead {
+            formatter,
+            token: 1,
+            generation: self.reconnect_generation,
+        });
+    }
+
     /// Build at most one pending snapshot for a coalesced output burst. Later
     /// output is merged into this bounded slot when the UI consumes it, so the
     /// UI sees the newest frame without losing rows that changed earlier in the
@@ -107,6 +181,7 @@ impl TerminalTabState {
         self.reconnect_generation = self.reconnect_generation.wrapping_add(1);
         self.reconnecting = false;
         self.reconnect_enabled = false;
+        self.clear_pending_clipboard_read();
     }
 
     pub(in crate::app) fn prepare_manual_retry(&mut self) {
@@ -114,6 +189,7 @@ impl TerminalTabState {
         self.reconnect_attempt = 0;
         self.reconnecting = false;
         self.reconnect_enabled = !self.is_local();
+        self.clear_pending_clipboard_read();
     }
 
     pub(in crate::app) fn enable_reconnect(&mut self) {
@@ -309,6 +385,9 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn notice_snapshot(&self) -> TerminalNoticeSnapshot {
+        if self.pending_clipboard_read.is_some() {
+            return TerminalNoticeSnapshot::osc52_clipboard_read();
+        }
         let status = self.status.trim();
         if status.is_empty()
             || self.connected

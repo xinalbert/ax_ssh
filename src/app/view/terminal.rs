@@ -503,6 +503,7 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current_terminal.row_render_cache == updated_terminal.row_render_cache
         && current_terminal.mouse_button_reporting == updated_terminal.mouse_button_reporting
         && current_terminal.mouse_wheel_reporting == updated_terminal.mouse_wheel_reporting
+        && current_terminal.bell_revision == updated_terminal.bell_revision
         && current_terminal.display_offset == updated_terminal.display_offset
         && current_terminal.viewport_detached == updated_terminal.viewport_detached
         && current_terminal.alternate_screen == updated_terminal.alternate_screen
@@ -732,6 +733,7 @@ pub(super) fn terminal_view_from_snapshot(
         row_render_cache: ui.get_terminal_row_render_cache(),
         mouse_button_reporting: snapshot.mouse_button_reporting_active,
         mouse_wheel_reporting: snapshot.mouse_wheel_reporting_active,
+        bell_revision: snapshot.bell_revision.min(i32::MAX as u64) as i32,
         display_offset: snapshot.display_offset.min(i32::MAX as usize) as i32,
         viewport_detached: matches!(
             snapshot.viewport_mode,
@@ -857,6 +859,7 @@ fn terminal_view_from_snapshot_incremental(
     terminal.row_render_cache = ui.get_terminal_row_render_cache();
     terminal.mouse_button_reporting = snapshot.mouse_button_reporting_active;
     terminal.mouse_wheel_reporting = snapshot.mouse_wheel_reporting_active;
+    terminal.bell_revision = snapshot.bell_revision.min(i32::MAX as u64) as i32;
     terminal.display_offset = snapshot.display_offset.min(i32::MAX as usize) as i32;
     terminal.viewport_detached = matches!(
         snapshot.viewport_mode,

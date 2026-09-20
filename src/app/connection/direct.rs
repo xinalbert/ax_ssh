@@ -303,6 +303,7 @@ fn spawn_telnet_monitor(
                 TelnetSessionEvent::Output(data) => {
                     let mut response_error = None;
                     let mut presentation_hold = None;
+                    let mut output_effects = TerminalOutputEffects::default();
                     if mutate_direct_attempt(
                         &state,
                         tab_id,
@@ -310,7 +311,10 @@ fn spawn_telnet_monitor(
                         attempt_id,
                         DirectProtocol::Telnet,
                         |terminal| match process_terminal_output(terminal, &data) {
-                            Ok(hold) => presentation_hold = hold,
+                            Ok(effects) => {
+                                presentation_hold = effects.presentation_hold;
+                                output_effects = effects;
+                            }
                             Err(error) => response_error = Some(error),
                         },
                     )
@@ -319,6 +323,7 @@ fn spawn_telnet_monitor(
                     {
                         presentation.record_output(None, presentation_hold);
                     }
+                    apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
                         warn!(
                             tab_id = %tab_id,
@@ -456,6 +461,7 @@ fn spawn_serial_monitor(
                 SerialSessionEvent::Output(data) => {
                     let mut response_error = None;
                     let mut presentation_hold = None;
+                    let mut output_effects = TerminalOutputEffects::default();
                     if mutate_direct_attempt(
                         &state,
                         tab_id,
@@ -463,7 +469,10 @@ fn spawn_serial_monitor(
                         attempt_id,
                         DirectProtocol::Serial,
                         |terminal| match process_terminal_output(terminal, &data) {
-                            Ok(hold) => presentation_hold = hold,
+                            Ok(effects) => {
+                                presentation_hold = effects.presentation_hold;
+                                output_effects = effects;
+                            }
                             Err(error) => response_error = Some(error),
                         },
                     )
@@ -472,6 +481,7 @@ fn spawn_serial_monitor(
                     {
                         presentation.record_output(None, presentation_hold);
                     }
+                    apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
                         warn!(
                             tab_id = %tab_id,
@@ -631,6 +641,7 @@ fn finish_direct_attempt(
     let generation = terminal.reconnect_generation();
     terminal.finish_reconnect_attempt(generation);
     terminal.worker = None;
+    terminal.clear_pending_clipboard_read();
     match protocol {
         DirectProtocol::Telnet => terminal.set_telnet_attempt(None),
         DirectProtocol::Serial => terminal.set_serial_attempt(None),

@@ -78,6 +78,7 @@ pub(super) fn spawn_session_monitor(
                 SshSessionEvent::Output { data, received_at } => {
                     let mut response_error = None;
                     let mut presentation_hold = None;
+                    let mut output_effects = TerminalOutputEffects::default();
                     if mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -85,7 +86,10 @@ pub(super) fn spawn_session_monitor(
                         attempt_id,
                         |terminal| {
                             match process_terminal_output(terminal, &data) {
-                                Ok(hold) => presentation_hold = hold,
+                                Ok(effects) => {
+                                    presentation_hold = effects.presentation_hold;
+                                    output_effects = effects;
+                                }
                                 Err(error) => response_error = Some(error),
                             }
                         },
@@ -95,6 +99,7 @@ pub(super) fn spawn_session_monitor(
                     {
                         presentation.record_output(Some(received_at), presentation_hold);
                     }
+                    apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
                         warn!(
                             tab_id = %tab_id,

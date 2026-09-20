@@ -77,6 +77,7 @@ export struct SettingsViewState {
     copy_selection_on_select: bool,
     terminal_mouse_local_selection_priority: bool,
     option_as_meta: bool,
+    osc52_clipboard: bool,
     x11_server_provider_options: [string],
     x11_server_installations: [string],
     x11_server_provider: string,
@@ -236,7 +237,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, string, bool,
     );
     callback save-ui-language(int);
@@ -310,6 +311,7 @@ export component SettingsPane inherits Rectangle {
     private property <bool> draft-terminal-mouse-local-selection-priority:
         root.terminal-mouse-local-selection-priority;
     private property <bool> draft-option-as-meta: root.option-as-meta;
+    private property <bool> draft-osc52-clipboard: root.source.osc52_clipboard;
     private property <string> draft-x11-server-provider: root.x11-server-provider;
     private property <int> draft-x11-server-provider-index: root.x11-server-provider-index;
     private property <string> draft-x11-server-app-path: root.x11-server-app-path;
@@ -428,6 +430,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-copy-selection-on-select,
             root.draft-terminal-mouse-local-selection-priority,
             root.draft-option-as-meta,
+            root.draft-osc52-clipboard,
             root.draft-x11-server-provider,
             root.draft-x11-server-app-path,
             root.draft-x11-launch-on-connect,
@@ -512,6 +515,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-copy-selection-on-select,
             root.draft-terminal-mouse-local-selection-priority,
             root.draft-option-as-meta,
+            root.draft-osc52-clipboard,
             root.draft-x11-server-provider,
             root.draft-x11-server-app-path,
             root.draft-x11-launch-on-connect,
@@ -593,6 +597,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-copy-selection-on-select => { root.schedule-preview(); }
     changed draft-terminal-mouse-local-selection-priority => { root.schedule-preview(); }
     changed draft-option-as-meta => { root.schedule-preview(); }
+    changed draft-osc52-clipboard => { root.schedule-preview(); }
     changed draft-x11-server-provider => { root.schedule-preview(); }
     changed draft-x11-server-app-path => { root.schedule-preview(); }
     changed draft-x11-launch-on-connect => { root.schedule-preview(); }
@@ -873,6 +878,7 @@ export component SettingsPane inherits Rectangle {
                         draft-terminal-mouse-local-selection-priority <=> root.draft-terminal-mouse-local-selection-priority;
                         apple-platform: root.apple-platform;
                         draft-option-as-meta <=> root.draft-option-as-meta;
+                        draft-osc52-clipboard <=> root.draft-osc52-clipboard;
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "X11" : X11SettingsPage {

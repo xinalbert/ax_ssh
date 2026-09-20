@@ -15,21 +15,30 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 
 use alacritty_terminal::event::{Event, EventListener, WindowSize};
-use alacritty_terminal::term::Term;
+use alacritty_terminal::term::{ClipboardType, Term};
 use alacritty_terminal::vte::ansi::{Processor, Rgb};
 
 use crate::terminal_dimensions::TerminalSize;
 
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
+const MAX_TERMINAL_TITLE_BYTES: usize = 512;
+const MAX_HYPERLINK_URI_BYTES: usize = 2 * 1024;
+const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
 
 type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
 type TextAreaResponseFormatter = Arc<dyn Fn(WindowSize) -> String + Send + Sync + 'static>;
+pub type ClipboardLoadFormatter = Arc<dyn Fn(&str) -> String + Send + Sync + 'static>;
 
 enum TerminalProtocolEvent {
     PtyWrite(Vec<u8>),
     ColorRequest(usize, ColorResponseFormatter),
     TextAreaSizeRequest(TextAreaResponseFormatter),
+    Title(String),
+    ResetTitle,
+    Bell,
+    ClipboardStore(String),
+    ClipboardLoad(ClipboardLoadFormatter),
 }
 
 #[derive(Clone)]
@@ -46,6 +55,19 @@ impl EventListener for TerminalEventListener {
             }
             Event::TextAreaSizeRequest(formatter) => {
                 TerminalProtocolEvent::TextAreaSizeRequest(formatter)
+            }
+            Event::Title(title) => {
+                TerminalProtocolEvent::Title(bound_utf8(title, MAX_TERMINAL_TITLE_BYTES))
+            }
+            Event::ResetTitle => TerminalProtocolEvent::ResetTitle,
+            Event::Bell => TerminalProtocolEvent::Bell,
+            Event::ClipboardStore(ClipboardType::Clipboard, text)
+                if text.len() <= MAX_OSC52_CLIPBOARD_BYTES =>
+            {
+                TerminalProtocolEvent::ClipboardStore(text)
+            }
+            Event::ClipboardLoad(ClipboardType::Clipboard, formatter) => {
+                TerminalProtocolEvent::ClipboardLoad(formatter)
             }
             _ => return,
         };
@@ -216,6 +238,9 @@ pub struct TerminalStyledRun {
     pub column: usize,
     pub cells: usize,
     pub style: TerminalStyle,
+    /// URI carried by OSC 8 for this cell span. It is bounded at the parser
+    /// boundary and is never persisted or logged.
+    pub hyperlink: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -259,6 +284,7 @@ pub struct TerminalSnapshot {
     pub mouse_reporting: TerminalMouseReporting,
     pub mouse_button_reporting_active: bool,
     pub mouse_wheel_reporting_active: bool,
+    pub bell_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,6 +387,35 @@ pub struct TerminalModel {
     viewport_detached: bool,
     mouse_encoding: MouseEncodingTracker,
     window_operation_queries: WindowOperationQueryTracker,
+    pending_title_update: Option<Option<String>>,
+    bell_revision: u64,
+    pending_bell: bool,
+    pending_clipboard_store: Option<String>,
+    pending_clipboard_load: Option<ClipboardLoadFormatter>,
+    osc52_clipboard_enabled: bool,
+}
+
+fn bound_utf8(mut value: String, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value;
+    }
+    let mut end = max_bytes.min(value.len());
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value.truncate(end);
+    value
+}
+
+fn is_safe_hyperlink_uri(uri: &str) -> bool {
+    let Some((scheme, authority)) = uri.split_once("://") else {
+        return false;
+    };
+    matches!(scheme, "http" | "https")
+        && !authority.is_empty()
+        && !uri
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
 }
 
 /// The accepted mouse-coordinate encodings selected through DEC private modes.

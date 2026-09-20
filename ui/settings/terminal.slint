@@ -26,6 +26,7 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <bool> draft-terminal-mouse-local-selection-priority;
     in property <bool> apple-platform: false;
     in-out property <bool> draft-option-as-meta;
+    in-out property <bool> draft-osc52-clipboard;
 
     background: Theme.background;
 
@@ -244,6 +245,14 @@ export component TerminalSettingsPage inherits Rectangle {
                             vertical-alignment: center;
                         }
                     }
+                }
+
+                SettingsSectionHeading { label: @tr("CLIPBOARD"); }
+                SettingsToggleRow {
+                    label: @tr("Allow remote OSC 52 clipboard access");
+                    description: @tr("Allow writes to the default clipboard; ask before remote reads");
+                    checked <=> root.draft-osc52-clipboard;
+                    show-divider: false;
                 }
 
                 SettingsSectionHeading { label: @tr("MOUSE"); }

@@ -1,5 +1,7 @@
 //! Terminal model regression tests.
 
+use base64::Engine as _;
+
 use super::*;
 
 #[test]
@@ -16,6 +18,83 @@ fn parses_colored_output_and_carriage_return_updates() {
     assert_eq!(
         snapshot.lines[0].runs[1].style.foreground,
         TerminalColor::Indexed(2)
+    );
+}
+
+#[test]
+fn captures_standard_title_reset_and_bell_events() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\x1b]0;build\x07\x07");
+    assert_eq!(terminal.take_title_update(), Some(Some("build".to_owned())));
+    assert!(terminal.take_bell());
+    assert!(!terminal.take_bell());
+
+    let mut reset_terminal = TerminalModel::new(80, 3, 10);
+    reset_terminal.process(b"\x1b[22t\x1b]2;run\x07\x1b[23t");
+    assert_eq!(reset_terminal.take_title_update(), Some(None));
+}
+
+#[test]
+fn osc52_clipboard_is_disabled_by_default() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\x1b]52;c;SGVsbG8=\x07");
+
+    assert_eq!(terminal.take_clipboard_store(), None);
+}
+
+#[test]
+fn osc52_clipboard_reads_are_disabled_by_default() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\x1b]52;c;?\x07");
+
+    assert!(terminal.take_clipboard_load().is_none());
+}
+
+#[test]
+fn osc52_clipboard_accepts_default_reads_but_rejects_selection_reads() {
+    let mut terminal = TerminalModel::new_with_osc52_clipboard(80, 3, 10, true);
+    terminal.process(b"\x1b]52;p;?\x07\x1b]52;s;?\x07\x1b]52;c;?\x07");
+
+    let formatter = terminal
+        .take_clipboard_load()
+        .expect("default clipboard read should be pending");
+    assert_eq!(formatter("Hello"), "\x1b]52;c;SGVsbG8=\x07");
+    assert!(terminal.take_clipboard_load().is_none());
+}
+
+#[test]
+fn osc52_clipboard_accepts_bounded_default_clipboard_writes_only() {
+    let mut terminal = TerminalModel::new_with_osc52_clipboard(80, 3, 10, true);
+    terminal.process(b"\x1b]52;p;SGVsbG8=\x07\x1b]52;c;SGVsbG8=\x07");
+
+    assert_eq!(terminal.take_clipboard_store().as_deref(), Some("Hello"));
+    assert_eq!(terminal.take_clipboard_store(), None);
+
+    let oversized =
+        base64::engine::general_purpose::STANDARD.encode("x".repeat(MAX_OSC52_CLIPBOARD_BYTES + 1));
+    let sequence = format!("\x1b]52;c;{oversized}\x07");
+    terminal.process(sequence.as_bytes());
+    assert_eq!(terminal.take_clipboard_store(), None);
+}
+
+#[test]
+fn bounds_utf8_title_and_hyperlink_values_at_character_boundaries() {
+    assert_eq!(bound_utf8("a😀".to_owned(), 2), "a");
+    assert_eq!(bound_utf8("你好".to_owned(), 4), "你");
+}
+
+#[test]
+fn captures_bounded_osc8_web_hyperlink_spans() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\x1b]8;;https://example.test/a\x07link\x1b]8;;\x07");
+    let snapshot = terminal.snapshot();
+    assert_eq!(
+        snapshot.lines[0].runs[0].hyperlink.as_deref(),
+        Some("https://example.test/a")
+    );
+    assert_eq!(
+        terminal.hyperlink_at_cell(0, 1),
+        Some(("https://example.test/a".to_owned(), 0, 4,))
     );
 }
 

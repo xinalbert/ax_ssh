@@ -6,13 +6,22 @@ use std::time::Instant;
 
 use alacritty_terminal::event::WindowSize;
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::term::{Config as TermConfig, TermMode};
+use alacritty_terminal::term::{Config as TermConfig, Osc52, TermMode};
 use alacritty_terminal::vte::ansi::Rgb;
 
 impl TerminalModel {
     pub fn new(columns: usize, rows: usize, scrollback_lines: usize) -> Self {
+        Self::new_with_osc52_clipboard(columns, rows, scrollback_lines, false)
+    }
+
+    pub fn new_with_osc52_clipboard(
+        columns: usize,
+        rows: usize,
+        scrollback_lines: usize,
+        osc52_clipboard_enabled: bool,
+    ) -> Self {
         let dimensions = TerminalDimensions::new(columns, rows);
-        let config = terminal_config(scrollback_lines);
+        let config = terminal_config(scrollback_lines, osc52_clipboard_enabled);
         let (protocol_events_tx, protocol_events) = sync_channel(PROTOCOL_RESPONSE_CAPACITY);
         Self {
             term: Term::new(
@@ -36,6 +45,12 @@ impl TerminalModel {
             viewport_detached: false,
             mouse_encoding: MouseEncodingTracker::default(),
             window_operation_queries: WindowOperationQueryTracker::default(),
+            pending_title_update: None,
+            bell_revision: 0,
+            pending_bell: false,
+            pending_clipboard_store: None,
+            pending_clipboard_load: None,
+            osc52_clipboard_enabled,
         }
     }
 
@@ -62,6 +77,27 @@ impl TerminalModel {
         let mut responses = self.drain_protocol_events();
         self.handle_cell_size_requests(cell_size_requests, &mut responses);
         responses
+    }
+
+    /// Takes the latest OSC 0/2 title update. `Some(None)` means the terminal
+    /// requested a reset to the application-provided default title.
+    pub fn take_title_update(&mut self) -> Option<Option<String>> {
+        self.pending_title_update.take()
+    }
+
+    /// Takes one or more Bell events coalesced during the last parser pass.
+    pub fn take_bell(&mut self) -> bool {
+        std::mem::take(&mut self.pending_bell)
+    }
+
+    /// Takes the latest bounded OSC 52 write request for the default clipboard.
+    pub fn take_clipboard_store(&mut self) -> Option<String> {
+        self.pending_clipboard_store.take()
+    }
+
+    /// Takes the latest OSC 52 read request for the default clipboard.
+    pub fn take_clipboard_load(&mut self) -> Option<ClipboardLoadFormatter> {
+        self.pending_clipboard_load.take()
     }
 
     /// Returns the remaining standard synchronized-output interval, if any.
@@ -384,11 +420,23 @@ impl TerminalModel {
             return;
         }
 
-        self.term.set_options(terminal_config(scrollback_lines));
+        self.term.set_options(terminal_config(
+            scrollback_lines,
+            self.osc52_clipboard_enabled,
+        ));
         self.scrollback_lines = scrollback_lines;
         if self.term.grid().display_offset() == 0 {
             self.viewport_detached = false;
         }
+    }
+
+    pub fn set_osc52_clipboard_enabled(&mut self, enabled: bool) {
+        if self.osc52_clipboard_enabled == enabled {
+            return;
+        }
+        self.osc52_clipboard_enabled = enabled;
+        self.term
+            .set_options(terminal_config(self.scrollback_lines, enabled));
     }
 
     pub fn contents(&self) -> String {
@@ -477,6 +525,22 @@ impl TerminalModel {
                         self.pending_text_area_requests.push(formatter);
                     }
                 }
+                TerminalProtocolEvent::Title(title) => {
+                    self.pending_title_update = Some(Some(title));
+                }
+                TerminalProtocolEvent::ResetTitle => {
+                    self.pending_title_update = Some(None);
+                }
+                TerminalProtocolEvent::Bell => {
+                    self.bell_revision = self.bell_revision.wrapping_add(1).max(1);
+                    self.pending_bell = true;
+                }
+                TerminalProtocolEvent::ClipboardStore(text) => {
+                    self.pending_clipboard_store = Some(text);
+                }
+                TerminalProtocolEvent::ClipboardLoad(formatter) => {
+                    self.pending_clipboard_load = Some(formatter);
+                }
             }
         }
         responses
@@ -542,9 +606,14 @@ impl Dimensions for TerminalDimensions {
     }
 }
 
-fn terminal_config(scrollback_lines: usize) -> TermConfig {
+fn terminal_config(scrollback_lines: usize, osc52_clipboard_enabled: bool) -> TermConfig {
     TermConfig {
         scrolling_history: scrollback_lines,
+        osc52: if osc52_clipboard_enabled {
+            Osc52::CopyPaste
+        } else {
+            Osc52::Disabled
+        },
         ..TermConfig::default()
     }
 }

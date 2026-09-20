@@ -185,6 +185,7 @@ pub(super) struct RenderedTerminalDecorationRun {
 
 pub(super) struct RenderedTerminalRun {
     pub(super) text: String,
+    pub(super) hyperlink: Option<String>,
     pub(super) column: usize,
     pub(super) cells: usize,
     pub(super) foreground: RgbColor,
@@ -397,12 +398,17 @@ fn render_run(
     let style = run.style;
     let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
     let (foreground, background) = resolve_style_colors(style, palette, settings);
+    let hyperlink = run.hyperlink.clone();
+    let hyperlink_underline = hyperlink.is_some()
+        && style.underline_style == TerminalUnderlineStyle::None
+        && !style.underline;
     let decoration_foreground = style
         .underline_color
         .map(|color| resolve_color(color, foreground, palette))
         .unwrap_or(foreground);
     let rendered = RenderedTerminalRun {
         text,
+        hyperlink,
         column,
         cells,
         foreground,
@@ -410,8 +416,12 @@ fn render_run(
         decoration_foreground,
         bold: style.bold,
         italic: style.italic,
-        underline: style.underline,
-        underline_style: style.underline_style,
+        underline: style.underline || hyperlink_underline,
+        underline_style: if hyperlink_underline {
+            TerminalUnderlineStyle::Single
+        } else {
+            style.underline_style
+        },
         strikethrough: style.strikethrough,
     };
     let mut rendered_runs =
@@ -653,6 +663,7 @@ fn split_semantic_run(
         }
         runs.push(RenderedTerminalRun {
             text: run.text[start..end].to_owned(),
+            hyperlink: run.hyperlink.clone(),
             column: run.column + start,
             cells: end - start,
             foreground: highlight.map_or(run.foreground, |value| palette.color_for(value)),
@@ -895,6 +906,7 @@ mod tests {
                     column: 0,
                     cells: 1,
                     style,
+                    hyperlink: None,
                 }],
             })],
             dirty_rows: vec![0],
@@ -915,6 +927,7 @@ mod tests {
             mouse_reporting: Default::default(),
             mouse_button_reporting_active: false,
             mouse_wheel_reporting_active: false,
+            bell_revision: 0,
         }
     }
 
@@ -994,6 +1007,7 @@ mod tests {
             mouse_reporting: Default::default(),
             mouse_button_reporting_active: false,
             mouse_wheel_reporting_active: false,
+            bell_revision: 0,
         }
     }
 
@@ -1006,12 +1020,14 @@ mod tests {
                     column: 0,
                     cells: 2,
                     style: TerminalStyle::default(),
+                    hyperlink: None,
                 },
                 TerminalStyledRun {
                     text: "┌".into(),
                     column: 2,
                     cells: 1,
                     style: TerminalStyle::default(),
+                    hyperlink: None,
                 },
                 plain_run("A", 3),
             ]),
@@ -1034,6 +1050,7 @@ mod tests {
         let foreground = settings().default_foreground;
         let run = |column, background, underline, strikethrough| RenderedTerminalRun {
             text: "x".into(),
+            hyperlink: None,
             column,
             cells: 1,
             foreground,
@@ -1098,6 +1115,7 @@ mod tests {
             column,
             cells: text.len(),
             style: TerminalStyle::default(),
+            hyperlink: None,
         }
     }
 
@@ -1194,6 +1212,7 @@ mod tests {
                     column: 24,
                     cells: 6,
                     style: ansi_style,
+                    hyperlink: None,
                 },
             ]),
             semantic_settings(),

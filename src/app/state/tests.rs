@@ -147,6 +147,55 @@ fn terminal_notice_hides_user_requested_disconnect() {
 }
 
 #[test]
+fn osc52_clipboard_read_notice_has_priority_and_pending_is_one_shot() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+    terminal.set_test_pending_clipboard_read(Arc::new(|text| format!("response:{text}")));
+    assert_eq!(
+        terminal.notice_snapshot().primary_action,
+        "allow-osc52-clipboard-read"
+    );
+    assert!(terminal.clear_pending_clipboard_read());
+    assert!(!terminal.notice_snapshot().visible);
+}
+
+#[test]
+fn osc52_clipboard_read_rejects_stale_token_and_generation() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+    terminal.set_test_pending_clipboard_read(Arc::new(|text| text.to_owned()));
+    let (token, generation) = terminal
+        .pending_clipboard_read
+        .as_ref()
+        .map(|pending| (pending.token, pending.generation))
+        .expect("pending request should have a key");
+
+    assert!(!terminal.clear_clipboard_read(token.wrapping_add(1), generation));
+    assert!(terminal.pending_clipboard_read.is_some());
+
+    terminal.reconnect_generation = generation.wrapping_add(1);
+    assert!(!terminal.clear_clipboard_read(token, generation));
+    assert!(terminal.pending_clipboard_read.is_some());
+}
+
+#[test]
+fn osc52_clipboard_read_is_cleared_when_manual_retry_starts() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal should exist");
+    terminal.set_test_pending_clipboard_read(Arc::new(|text| text.to_owned()));
+
+    terminal.prepare_manual_retry();
+
+    assert!(terminal.pending_clipboard_read.is_none());
+}
+
+#[test]
 fn terminal_notice_allows_local_shell_restart_after_failure() {
     let mut state = test_state();
     let tab_id = state.open_local_shell_tab();
@@ -827,6 +876,23 @@ fn local_shell_tabs_have_unique_ids_and_independent_numbers() {
             .terminal(second)
             .is_some_and(TerminalTabState::is_local)
     );
+}
+
+#[test]
+fn runtime_terminal_titles_are_not_persisted_and_can_be_empty() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+
+    assert!(state.apply_terminal_title(tab_id, Some("build".to_owned())));
+    assert_eq!(state.tab_summaries()[0].title, "build");
+    assert_eq!(state.workspace_snapshot().tabs[0].title, "Local Shell #1");
+
+    assert!(state.apply_terminal_title(tab_id, Some(String::new())));
+    assert_eq!(state.tab_summaries()[0].title, "");
+    assert_eq!(state.workspace_snapshot().tabs[0].title, "Local Shell #1");
+
+    assert!(state.apply_terminal_title(tab_id, None));
+    assert_eq!(state.tab_summaries()[0].title, "Local Shell #1");
 }
 
 #[test]

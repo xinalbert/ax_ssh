@@ -202,6 +202,9 @@ fn slint_menu_key_name(key: &str) -> String {
 
 #[cfg(test)]
 pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) -> TerminalKey {
+    if let Some(number) = extended_function_key_number(text) {
+        return TerminalKey::Function(number);
+    }
     let special = [
         (Key::Return, TerminalKey::Return),
         (Key::Backspace, TerminalKey::Backspace),
@@ -252,6 +255,9 @@ pub(super) fn terminal_key_from_slint(text: &str, modifiers: TerminalModifiers) 
 }
 
 fn application_key_from_slint(text: &str) -> ApplicationKeyboardKey {
+    if let Some(number) = extended_function_key_number(text) {
+        return ApplicationKeyboardKey::Named(ApplicationKeyboardNamedKey::Function(number));
+    }
     let named_keys = [
         (Key::Return, ApplicationKeyboardNamedKey::Return),
         (Key::Backspace, ApplicationKeyboardNamedKey::Backspace),
@@ -331,6 +337,18 @@ fn application_key_from_native_key(key: &WinitKey) -> Option<ApplicationKeyboard
         NamedKey::F10 => ApplicationKeyboardNamedKey::Function(10),
         NamedKey::F11 => ApplicationKeyboardNamedKey::Function(11),
         NamedKey::F12 => ApplicationKeyboardNamedKey::Function(12),
+        NamedKey::F13 => ApplicationKeyboardNamedKey::Function(13),
+        NamedKey::F14 => ApplicationKeyboardNamedKey::Function(14),
+        NamedKey::F15 => ApplicationKeyboardNamedKey::Function(15),
+        NamedKey::F16 => ApplicationKeyboardNamedKey::Function(16),
+        NamedKey::F17 => ApplicationKeyboardNamedKey::Function(17),
+        NamedKey::F18 => ApplicationKeyboardNamedKey::Function(18),
+        NamedKey::F19 => ApplicationKeyboardNamedKey::Function(19),
+        NamedKey::F20 => ApplicationKeyboardNamedKey::Function(20),
+        NamedKey::F21 => ApplicationKeyboardNamedKey::Function(21),
+        NamedKey::F22 => ApplicationKeyboardNamedKey::Function(22),
+        NamedKey::F23 => ApplicationKeyboardNamedKey::Function(23),
+        NamedKey::F24 => ApplicationKeyboardNamedKey::Function(24),
         NamedKey::Space => ApplicationKeyboardNamedKey::Space,
         NamedKey::Shift => ApplicationKeyboardNamedKey::Shift,
         NamedKey::Control => ApplicationKeyboardNamedKey::Control,
@@ -501,6 +519,18 @@ pub(super) fn terminal_key_from_native_key(key: &WinitKey) -> Option<TerminalKey
         NamedKey::F10 => TerminalKey::Function(10),
         NamedKey::F11 => TerminalKey::Function(11),
         NamedKey::F12 => TerminalKey::Function(12),
+        NamedKey::F13 => TerminalKey::Function(13),
+        NamedKey::F14 => TerminalKey::Function(14),
+        NamedKey::F15 => TerminalKey::Function(15),
+        NamedKey::F16 => TerminalKey::Function(16),
+        NamedKey::F17 => TerminalKey::Function(17),
+        NamedKey::F18 => TerminalKey::Function(18),
+        NamedKey::F19 => TerminalKey::Function(19),
+        NamedKey::F20 => TerminalKey::Function(20),
+        NamedKey::F21 => TerminalKey::Function(21),
+        NamedKey::F22 => TerminalKey::Function(22),
+        NamedKey::F23 => TerminalKey::Function(23),
+        NamedKey::F24 => TerminalKey::Function(24),
         NamedKey::Space => TerminalKey::Text(" ".to_owned()),
         _ => return None,
     };
@@ -552,6 +582,18 @@ pub(super) fn native_shortcut_key_name(key: &WinitKey) -> Option<String> {
             NamedKey::F10 => "F10",
             NamedKey::F11 => "F11",
             NamedKey::F12 => "F12",
+            NamedKey::F13 => "F13",
+            NamedKey::F14 => "F14",
+            NamedKey::F15 => "F15",
+            NamedKey::F16 => "F16",
+            NamedKey::F17 => "F17",
+            NamedKey::F18 => "F18",
+            NamedKey::F19 => "F19",
+            NamedKey::F20 => "F20",
+            NamedKey::F21 => "F21",
+            NamedKey::F22 => "F22",
+            NamedKey::F23 => "F23",
+            NamedKey::F24 => "F24",
             _ => return None,
         },
         WinitKey::Dead(_) | WinitKey::Unidentified(_) => return None,
@@ -851,6 +893,11 @@ fn matches_slint_key(text: &str, key: Key) -> bool {
     characters.next() == Some(char::from(key)) && characters.next().is_none()
 }
 
+fn extended_function_key_number(text: &str) -> Option<u8> {
+    let number = text.strip_prefix('F')?.parse::<u8>().ok()?;
+    (13..=24).contains(&number).then_some(number)
+}
+
 fn shortcut_key_name(text: &str, control: bool) -> Option<String> {
     let modifier_keys = [
         Key::Alt,
@@ -867,6 +914,9 @@ fn shortcut_key_name(text: &str, control: bool) -> Option<String> {
         .any(|key| matches_slint_key(text, key))
     {
         return None;
+    }
+    if extended_function_key_number(text).is_some() {
+        return Some(text.to_owned());
     }
     let special_keys = [
         (Key::Backspace, "Backspace"),

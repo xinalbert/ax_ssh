@@ -504,6 +504,9 @@ pub struct TerminalSettings {
     /// Whether macOS Option-modified keys should be encoded as terminal Meta.
     #[serde(default)]
     pub option_as_meta: bool,
+    /// Whether remote OSC 52 access to the default clipboard is enabled.
+    #[serde(default)]
+    pub osc52_clipboard: bool,
 }
 
 /// Raw terminal values supplied by an application settings surface.
@@ -515,6 +518,7 @@ pub struct TerminalSettingsInput<'a> {
     pub local_shell: &'a str,
     pub known_shells: &'a [String],
     pub option_as_meta: bool,
+    pub osc52_clipboard: bool,
 }
 
 impl TerminalSettings {
@@ -537,6 +541,7 @@ impl TerminalSettings {
             local_shell,
             known_shells,
             option_as_meta: input.option_as_meta,
+            osc52_clipboard: input.osc52_clipboard,
         }
     }
 
@@ -548,6 +553,7 @@ impl TerminalSettings {
             local_shell: &self.local_shell,
             known_shells: &self.known_shells,
             option_as_meta: self.option_as_meta,
+            osc52_clipboard: self.osc52_clipboard,
         });
     }
 
@@ -571,6 +577,7 @@ impl Default for TerminalSettings {
             local_shell: default_local_shell(),
             known_shells: default_known_shells(),
             option_as_meta: false,
+            osc52_clipboard: false,
         }
     }
 }

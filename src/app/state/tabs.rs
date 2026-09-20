@@ -152,7 +152,8 @@ impl AppState {
         let id = Uuid::new_v4();
         self.tabs.push(WorkspaceTab {
             id,
-            title,
+            title: title.clone(),
+            default_title: title,
             kind: WorkspaceTabKind::SessionEditor(editor),
             companion_tab_id: None,
         });
@@ -169,6 +170,7 @@ impl AppState {
         self.tabs.push(WorkspaceTab {
             id,
             title: title.to_owned(),
+            default_title: title.to_owned(),
             kind,
             companion_tab_id: None,
         });
@@ -194,6 +196,7 @@ impl AppState {
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
+        terminal.set_osc52_clipboard_enabled(self.sessions.settings.terminal.osc52_clipboard);
         terminal.set_query_palette(self.terminal_query_palette);
         let backend = match profile.connection {
             ax_ssh::config::ConnectionProfile::Ssh(_) => TerminalBackend::Ssh {
@@ -212,6 +215,7 @@ impl AppState {
         let tab = WorkspaceTab {
             id,
             title: format!("{} #{}", profile.name, number),
+            default_title: format!("{} #{}", profile.name, number),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
                 backend,
                 worker: None,
@@ -231,6 +235,8 @@ impl AppState {
                 reconnecting: false,
                 reconnect_enabled: true,
                 pending_auth_secret: None,
+                pending_clipboard_read: None,
+                next_clipboard_read_token: 0,
             })),
             companion_tab_id: None,
         };
@@ -270,6 +276,7 @@ impl AppState {
         let tab = WorkspaceTab {
             id,
             title: format!("{} SFTP", profile.name),
+            default_title: format!("{} SFTP", profile.name),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
                 backend: TerminalBackend::Sftp {
                     profile_id: profile.id,
@@ -292,6 +299,8 @@ impl AppState {
                 reconnecting: false,
                 reconnect_enabled: true,
                 pending_auth_secret: None,
+                pending_clipboard_read: None,
+                next_clipboard_read_token: 0,
             })),
             companion_tab_id: None,
         };
@@ -306,10 +315,12 @@ impl AppState {
             usize::from(self.sessions.settings.terminal.default_rows),
             self.sessions.settings.terminal.scrollback_lines as usize,
         );
+        terminal.set_osc52_clipboard_enabled(self.sessions.settings.terminal.osc52_clipboard);
         terminal.set_query_palette(self.terminal_query_palette);
         self.tabs.push(WorkspaceTab {
             id,
             title: format!("Local Shell #{}", self.local_terminal_number),
+            default_title: format!("Local Shell #{}", self.local_terminal_number),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
                 backend: TerminalBackend::Local,
                 worker: None,
@@ -329,6 +340,8 @@ impl AppState {
                 reconnecting: false,
                 reconnect_enabled: false,
                 pending_auth_secret: None,
+                pending_clipboard_read: None,
+                next_clipboard_read_token: 0,
             })),
             companion_tab_id: None,
         });
@@ -703,9 +716,15 @@ impl AppState {
                             String::new(),
                         ),
                     };
+                let title = match tab.kind {
+                    WorkspaceTabKind::Terminal(_) => tab.default_title.clone(),
+                    WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => {
+                        tab.title.clone()
+                    }
+                };
                 ax_ssh::config::WorkspaceTabSnapshot {
                     id: tab.id,
-                    title: tab.title.clone(),
+                    title,
                     kind,
                     profile_id,
                     companion_tab_id: tab.companion_tab_id,
@@ -826,6 +845,12 @@ impl AppState {
                                 usize::from(self.sessions.settings.terminal.default_rows),
                                 self.sessions.settings.terminal.scrollback_lines as usize,
                             ))
+                            .map(|mut terminal| {
+                                terminal.set_osc52_clipboard_enabled(
+                                    self.sessions.settings.terminal.osc52_clipboard,
+                                );
+                                terminal
+                            })
                         };
                         let local_path = if snapshot.sftp_local_path.is_empty() {
                             profile
@@ -865,6 +890,8 @@ impl AppState {
                             reconnecting: false,
                             reconnect_enabled: true,
                             pending_auth_secret: None,
+                            pending_clipboard_read: None,
+                            next_clipboard_read_token: 0,
                         })
                     } else {
                         let terminal = TerminalModel::from_text(
@@ -872,6 +899,10 @@ impl AppState {
                             usize::from(self.sessions.settings.terminal.default_columns),
                             usize::from(self.sessions.settings.terminal.default_rows),
                             self.sessions.settings.terminal.scrollback_lines as usize,
+                        );
+                        let mut terminal = terminal;
+                        terminal.set_osc52_clipboard_enabled(
+                            self.sessions.settings.terminal.osc52_clipboard,
                         );
                         Box::new(TerminalTabState {
                             backend: TerminalBackend::Local,
@@ -892,6 +923,8 @@ impl AppState {
                             reconnecting: false,
                             reconnect_enabled: false,
                             pending_auth_secret: None,
+                            next_clipboard_read_token: 0,
+                            pending_clipboard_read: None,
                         })
                     };
                     WorkspaceTabKind::Terminal(terminal)
@@ -907,6 +940,7 @@ impl AppState {
             self.tabs.push(WorkspaceTab {
                 id: snapshot.id,
                 title: snapshot.title.clone(),
+                default_title: snapshot.title.clone(),
                 kind: tab,
                 companion_tab_id: None,
             });
@@ -1170,13 +1204,34 @@ impl AppState {
         })
     }
 
+    pub(in crate::app) fn apply_terminal_title(
+        &mut self,
+        tab_id: Uuid,
+        title: Option<String>,
+    ) -> bool {
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == tab_id) else {
+            return false;
+        };
+        if !matches!(tab.kind, WorkspaceTabKind::Terminal(_)) {
+            return false;
+        }
+        let next = title.unwrap_or_else(|| tab.default_title.clone());
+        if tab.title == next {
+            return false;
+        }
+        tab.title = next;
+        true
+    }
+
     pub(in crate::app) fn apply_scrollback_setting(&mut self) {
         let scrollback_lines = self.sessions.settings.terminal.scrollback_lines as usize;
+        let osc52_clipboard = self.sessions.settings.terminal.osc52_clipboard;
         for tab in &mut self.tabs {
             if let WorkspaceTabKind::Terminal(terminal) = &mut tab.kind
                 && let Some(model) = terminal.terminal.as_mut()
             {
                 model.set_scrollback_lines(scrollback_lines);
+                model.set_osc52_clipboard_enabled(osc52_clipboard);
                 terminal.discard_pending_terminal_snapshot();
             }
         }

@@ -10,6 +10,15 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "允许远端 OSC 52 访问剪贴板"
+
+msgid "CLIPBOARD"
+msgstr "剪贴板"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "允许写入默认剪贴板；远端读取前需要确认"
+
 msgid "%"
 msgstr "%"
 

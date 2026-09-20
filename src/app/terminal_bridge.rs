@@ -26,6 +26,7 @@ use slint::winit_030::{
 };
 
 const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
+const OSC52_CLIPBOARD_READ_TIMEOUT: Duration = Duration::from_secs(20);
 
 fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
     let palette = super::view::terminal::terminal_query_palette(ui);
@@ -1389,6 +1390,24 @@ pub(super) fn wire_terminal(
                 &terminal_font_started_for_command,
             );
         }
+        if command.as_str() == "allow-osc52-clipboard-read" {
+            return handle_osc52_clipboard_read(
+                &router_for_command,
+                window_id,
+                tab_id,
+                &state_for_command,
+                &ui_for_command,
+            );
+        }
+        if command.as_str() == "deny-osc52-clipboard-read" {
+            return handle_osc52_clipboard_deny(
+                &router_for_command,
+                window_id,
+                tab_id,
+                &state_for_command,
+                &ui_for_command,
+            );
+        }
         let Some((direction, action)) = PaneDirection::from_command(command.as_str()) else {
             return false;
         };
@@ -1654,10 +1673,11 @@ fn terminal_target_for_pane(
     if !terminal.connected {
         return None;
     }
-    let context = terminal
-        .terminal
-        .as_ref()?
-        .visible_logical_line_target_context_at_cell(row, column)?;
+    let terminal_model = terminal.terminal.as_ref()?;
+    if let Some((uri, _, _)) = terminal_model.hyperlink_at_cell(row, column) {
+        return Some(TerminalTarget::Url(uri));
+    }
+    let context = terminal_model.visible_logical_line_target_context_at_cell(row, column)?;
     terminal_target_match_at_context(&context).map(|target_match| target_match.target)
 }
 
@@ -1680,6 +1700,16 @@ fn terminal_target_highlight_for_pane(
         return None;
     }
     let terminal = terminal.terminal.as_ref()?;
+    if let Some((_, start, end)) = terminal.hyperlink_at_cell(row, column) {
+        return Some(TerminalTargetHighlight {
+            active: true,
+            segments: ModelRc::new(VecModel::from(vec![TerminalTargetHighlightSegment {
+                row: i32::try_from(row).ok()?,
+                start_column: i32::try_from(start).ok()?,
+                end_column: i32::try_from(end).ok()?,
+            }])),
+        });
+    }
     let context: TerminalTargetContext =
         terminal.visible_logical_line_target_context_at_cell(row, column)?;
     let target_match = terminal_target_match_at_context(&context)?;
@@ -1871,9 +1901,13 @@ pub(super) fn spawn_local_shell_monitor(
                 LocalShellEvent::Output(data) => {
                     let mut response_error = None;
                     let mut presentation_hold = None;
+                    let mut output_effects = TerminalOutputEffects::default();
                     if mutate_local_terminal(&state, tab_id, |terminal| {
                         match process_terminal_output(terminal, &data) {
-                            Ok(hold) => presentation_hold = hold,
+                            Ok(effects) => {
+                                presentation_hold = effects.presentation_hold;
+                                output_effects = effects;
+                            }
                             Err(error) => response_error = Some(error),
                         }
                     })
@@ -1882,6 +1916,7 @@ pub(super) fn spawn_local_shell_monitor(
                     {
                         presentation.record_output(None, presentation_hold);
                     }
+                    apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
                         warn!(tab_id = %tab_id, %error, "failed to send local terminal protocol response");
                     }
@@ -1954,15 +1989,32 @@ pub(super) fn spawn_local_shell_monitor(
 pub(super) fn process_terminal_output(
     terminal: &mut TerminalTabState,
     data: &[u8],
-) -> Result<Option<Duration>> {
-    let model = terminal
-        .terminal
-        .as_mut()
-        .context("terminal tab has no terminal model")?;
-    let responses = model.process_with_responses(data);
-    let presentation_hold = model.synchronized_output_remaining();
+) -> Result<TerminalOutputEffects> {
+    let (responses, presentation_hold, title_update, bell, clipboard_store, clipboard_formatter) = {
+        let model = terminal
+            .terminal
+            .as_mut()
+            .context("terminal tab has no terminal model")?;
+        (
+            model.process_with_responses(data),
+            model.synchronized_output_remaining(),
+            model.take_title_update(),
+            model.take_bell(),
+            model.take_clipboard_store(),
+            model.take_clipboard_load(),
+        )
+    };
+    let clipboard_read_requested = clipboard_formatter
+        .and_then(|formatter| terminal.offer_clipboard_read(formatter))
+        .is_some();
     if responses.is_empty() {
-        return Ok(presentation_hold);
+        return Ok(TerminalOutputEffects {
+            presentation_hold,
+            title_update,
+            bell,
+            clipboard_store,
+            clipboard_read_requested,
+        });
     }
     let worker = terminal
         .worker
@@ -1973,7 +2025,154 @@ pub(super) fn process_terminal_output(
             .request_send(response)
             .context("cannot queue terminal protocol response")?;
     }
-    Ok(presentation_hold)
+    Ok(TerminalOutputEffects {
+        presentation_hold,
+        title_update,
+        bell,
+        clipboard_store,
+        clipboard_read_requested,
+    })
+}
+
+#[derive(Default)]
+pub(super) struct TerminalOutputEffects {
+    pub(super) presentation_hold: Option<Duration>,
+    pub(super) title_update: Option<Option<String>>,
+    pub(super) bell: bool,
+    pub(super) clipboard_store: Option<String>,
+    pub(super) clipboard_read_requested: bool,
+}
+
+pub(super) fn apply_terminal_output_effects(
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    effects: TerminalOutputEffects,
+) {
+    if effects.title_update.is_none()
+        && !effects.bell
+        && effects.clipboard_store.is_none()
+        && !effects.clipboard_read_requested
+    {
+        return;
+    }
+    if let Some(text) = effects.clipboard_store {
+        dispatch_ui(ui, move |ui| set_platform_clipboard_text(ui, &text));
+    }
+    let title_changed = match state.lock() {
+        Ok(mut app) => effects
+            .title_update
+            .map(|title| app.apply_terminal_title(tab_id, title))
+            .unwrap_or(false),
+        Err(_) => false,
+    };
+    if effects.clipboard_read_requested {
+        let request = state.lock().ok().and_then(|app| {
+            app.terminal(tab_id)
+                .and_then(TerminalTabState::clipboard_read_key)
+        });
+        if let Some((token, generation)) = request {
+            refresh_workspace(ui, state);
+            schedule_osc52_clipboard_read_timeout(
+                state.clone(),
+                ui.clone(),
+                tab_id,
+                token,
+                generation,
+            );
+        }
+    }
+    if title_changed || effects.bell {
+        refresh_workspace(ui, state);
+    }
+}
+
+fn schedule_osc52_clipboard_read_timeout(
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    token: u64,
+    generation: u64,
+) {
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    runtime.spawn(async move {
+        tokio::time::sleep(OSC52_CLIPBOARD_READ_TIMEOUT).await;
+        let cleared = state.lock().ok().is_some_and(|mut app| {
+            app.terminal_mut(tab_id)
+                .is_some_and(|terminal| terminal.clear_clipboard_read(token, generation))
+        });
+        if cleared {
+            refresh_workspace(&ui, &state);
+        }
+    });
+}
+
+fn handle_osc52_clipboard_read(
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+) -> bool {
+    let Some(ui) = ui.upgrade() else {
+        return false;
+    };
+    let Some((token, generation)) = state.lock().ok().and_then(|app| {
+        if !router.owns_terminal_pane(window_id, tab_id, &app) {
+            return None;
+        }
+        app.terminal(tab_id)
+            .and_then(TerminalTabState::clipboard_read_key)
+    }) else {
+        return false;
+    };
+
+    let text = platform_clipboard_text(&ui);
+    let sent = {
+        let Ok(mut app) = state.lock() else {
+            return false;
+        };
+        if !router.owns_terminal_pane(window_id, tab_id, &app) {
+            return false;
+        }
+        let Some(terminal) = app.terminal_mut(tab_id) else {
+            return false;
+        };
+        if terminal.clipboard_read_key() != Some((token, generation)) {
+            return false;
+        }
+        let Some(formatter) = terminal.take_pending_clipboard_read() else {
+            return false;
+        };
+        let Some(worker) = terminal.worker.as_ref() else {
+            return false;
+        };
+        worker.request_send(formatter(&text).into_bytes()).is_ok()
+    };
+    refresh_workspace(&ui.as_weak(), state);
+    sent
+}
+
+fn handle_osc52_clipboard_deny(
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+) -> bool {
+    let cleared = state.lock().ok().is_some_and(|mut app| {
+        if !router.owns_terminal_pane(window_id, tab_id, &app) {
+            return false;
+        }
+        app.terminal_mut(tab_id)
+            .is_some_and(TerminalTabState::clear_pending_clipboard_read)
+    });
+    if cleared {
+        refresh_workspace(ui, state);
+    }
+    cleared
 }
 
 pub(super) fn mutate_local_terminal(
@@ -2002,6 +2201,7 @@ fn finish_local_terminal(
         Ok(mut app) if app.terminal(tab_id).is_some_and(TerminalTabState::is_local) => {
             let terminal = app.terminal_mut(tab_id)?;
             let worker = terminal.worker.take();
+            terminal.clear_pending_clipboard_read();
             terminal.connected = false;
             terminal.worker_running = false;
             terminal.status = status.to_owned();

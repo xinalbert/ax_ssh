@@ -176,6 +176,7 @@ export component AppWindow inherits Window {
     in property <bool> right-click-copy-or-paste: false;
     in property <bool> copy-selection-on-select: false;
     in property <bool> option-as-meta: false;
+    in property <bool> osc52-clipboard: false;
     in property <[string]> x11-server-provider-options;
     in property <[string]> x11-server-installations;
     in property <string> x11-server-provider: "auto";
@@ -363,6 +364,7 @@ export component AppWindow inherits Window {
             theme_dark_terminal_selection: root.theme-dark-terminal-selection,
             right_click_copy_or_paste: root.right-click-copy-or-paste,
             copy_selection_on_select: root.copy-selection-on-select, option_as_meta: root.option-as-meta,
+            osc52_clipboard: root.osc52-clipboard,
             terminal_mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
             x11_server_provider_options: root.x11-server-provider-options,
             x11_server_installations: root.x11-server-installations,
@@ -444,7 +446,7 @@ export component AppWindow inherits Window {
         string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, string, bool,
     );
     callback save-ui-language(int);
@@ -878,7 +880,7 @@ export component AppWindow inherits Window {
                           theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                           theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                           theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                          theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta,
+                          theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, osc52-clipboard,
                           x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
@@ -894,7 +896,7 @@ export component AppWindow inherits Window {
                     theme-dark-panel, theme-dark-panel-alt, theme-dark-border, theme-dark-text,
                     theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                     theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
-                    theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta,
+                    theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, osc52-clipboard,
                     x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key,

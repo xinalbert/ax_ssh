@@ -18,7 +18,9 @@ use ax_ssh::serial::{SerialPortDescriptor, SerialSessionHandle};
 use ax_ssh::sftp::SftpEntry;
 use ax_ssh::ssh::SshSessionHandle;
 use ax_ssh::telnet::TelnetSessionHandle;
-use ax_ssh::terminal::{TerminalModel, TerminalQueryPalette, TerminalSnapshot};
+use ax_ssh::terminal::{
+    ClipboardLoadFormatter, TerminalModel, TerminalQueryPalette, TerminalSnapshot,
+};
 
 use super::local_files::{LocalDirectoryEntry, default_local_directory};
 
@@ -118,6 +120,7 @@ impl Default for SessionEditorState {
 struct WorkspaceTab {
     id: Uuid,
     title: String,
+    default_title: String,
     kind: WorkspaceTabKind,
     companion_tab_id: Option<Uuid>,
 }
@@ -156,6 +159,14 @@ pub(super) struct TerminalTabState {
     pub(super) reconnecting: bool,
     pub(super) reconnect_enabled: bool,
     pending_auth_secret: Option<zeroize::Zeroizing<String>>,
+    pending_clipboard_read: Option<PendingClipboardRead>,
+    next_clipboard_read_token: u64,
+}
+
+struct PendingClipboardRead {
+    formatter: ClipboardLoadFormatter,
+    token: u64,
+    generation: u64,
 }
 
 /// The bounded terminal state that is visible outside the retained row models.
@@ -181,6 +192,7 @@ struct TerminalVisibleState {
     mouse_reporting: ax_ssh::terminal::TerminalMouseReporting,
     mouse_button_reporting_active: bool,
     mouse_wheel_reporting_active: bool,
+    bell_revision: u64,
 }
 
 impl From<&TerminalSnapshot> for TerminalVisibleState {
@@ -203,6 +215,7 @@ impl From<&TerminalSnapshot> for TerminalVisibleState {
             mouse_reporting: snapshot.mouse_reporting,
             mouse_button_reporting_active: snapshot.mouse_button_reporting_active,
             mouse_wheel_reporting_active: snapshot.mouse_wheel_reporting_active,
+            bell_revision: snapshot.bell_revision,
         }
     }
 }
@@ -505,6 +518,19 @@ pub(super) struct TerminalNoticeSnapshot {
 }
 
 impl TerminalNoticeSnapshot {
+    pub(super) fn osc52_clipboard_read() -> Self {
+        Self {
+            visible: true,
+            severity: "warning",
+            title: "Remote clipboard request",
+            message: "A remote application wants to read your default clipboard.".to_owned(),
+            primary_action: "allow-osc52-clipboard-read",
+            primary_label: "Allow",
+            secondary_action: "deny-osc52-clipboard-read",
+            secondary_label: "Deny",
+        }
+    }
+
     pub(super) fn reconnecting(message: &str) -> Self {
         Self {
             visible: true,

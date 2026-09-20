@@ -91,6 +91,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         settings.appearance.terminal_mouse_local_selection_priority,
     );
     ui.set_option_as_meta(settings.terminal.option_as_meta);
+    ui.set_osc52_clipboard(settings.terminal.osc52_clipboard);
     ui.set_x11_server_provider(
         ax_ssh::x_server::provider_for_current_platform(settings.x11.provider)
             .as_setting()
@@ -375,6 +376,7 @@ pub(in crate::app) fn empty_terminal_snapshot() -> TerminalSnapshot {
         mouse_reporting: Default::default(),
         mouse_button_reporting_active: false,
         mouse_wheel_reporting_active: false,
+        bell_revision: 0,
     }
 }
 
@@ -429,6 +431,7 @@ fn terminal_underline_style(style: ax_ssh::terminal::TerminalUnderlineStyle) -> 
 pub(in crate::app) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalRenderRun {
     TerminalRenderRun {
         text: run.text.into(),
+        hyperlink: run.hyperlink.unwrap_or_default().into(),
         column: run.column.min(i32::MAX as usize) as i32,
         cells: run.cells.min(i32::MAX as usize) as i32,
         foreground: to_slint_color(run.foreground),
