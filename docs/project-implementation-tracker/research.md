@@ -8,7 +8,7 @@
 - 来源列表：xterm 控制序列参考的 [DECSET、窗口操作、OSC 颜色和 DECSCUSR](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)；Contour 的 [synchronized output 扩展说明](https://contour-terminal.org/vt-extensions/synchronized-output/)；锁定的 `alacritty_terminal 0.26.0` 本机 `Processor`、`Event`、`Colors` 和 `WindowSize` 实现。
 - 关键结论：`CSI ?25l/h` 只描述光标可见性；呈现事务只能由 `CSI ?2026h/l` 和其超时兜底控制。终端只在应用发出颜色或窗口查询时回答，不会主动请求 UI 对齐。`CSI 14 t` 是文本区像素，`CSI 16 t` 是字符单元像素，二者必须使用最新的实测 cell 尺寸。动态 OSC 调色板既影响查询回复也影响已有和后续 cell 的可见颜色。
 - AxSSH 落地：终端模型在 snapshot 边界解析动态颜色，保留 block/空心 block/underline/beam 光标和 SGR 下划线变体/指定颜色；模型为核心未暴露的 `CSI 16 t` 保留分片安全的窄解析器。协议响应、延后布局查询和 renderer 都保持有界，且 UI 不接触 transport 或终端颜色表。标准 xterm 鼠标路由为默认策略，本地选区优先为显式可选模式。
-- 安全与未支持项：`OSC 52` 剪贴板读写和 `OSC 8` 超链接没有实现；前者尤其不能因远端输出自动取得系统剪贴板能力。图形协议和额外设备属性属于后续扩展，不伪造响应。
+- 安全与未支持项：`OSC 8` 超链接已实现为有界、仅显式 HTTP(S) 打开；`OSC 52` 默认关闭，显式开启后允许有界的远端写入本机默认剪贴板，远端读取必须逐次经过用户确认且只读取默认 clipboard，selection clipboard 仍关闭，不能因远端输出自动取得系统剪贴板读取能力。图形协议和额外设备属性属于后续扩展，不伪造响应。
 - 对实施计划的影响：TERMSTD1--3 覆盖协议、渲染和文档边界，完成后维持现有 SSH 信任、凭据和有界 worker 设计，不为未支持扩展增加猜测性响应。
 - 未解决问题：真实 TUI、平台字体、光标/下划线视觉和 PTY 像素行为仍需在目标平台手动验收。
 - 验证边界：离线单元/状态/Slint 编译验证协议数据流与有界性；真实 TUI、光标与下划线视觉、平台 PTY 像素行为仍由目标平台用户验收。

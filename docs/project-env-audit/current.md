@@ -1,3 +1,30 @@
+# 2026-09-19 OSC 52 写入阶段施工预检
+
+- 项目边界：独立 Rust 2024 桌面应用；本阶段涉及 `src/terminal.rs`、`src/terminal/model.rs`、`src/config/settings.rs`、`src/app.rs`、`src/app/terminal_bridge.rs`、`src/app/platform_support.rs`、`ui/settings/terminal.slint` 及配套测试/文档。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0；`base64` 和现有 Slint 平台剪贴板 API 已在 `Cargo.toml`/`Cargo.lock` 中。
+- 运行环境：Cargo locked/offline 解析可用；本阶段不新增 crate、不修改锁文件、不联网。
+- 测试环境：Slint 入口由 `build.rs` 编译；可执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline` 和 `git diff --check`。
+- 安全与边界：默认关闭 OSC 52；本阶段只允许有界远端写入，不实现远端读取，不持久化或记录剪贴板内容；保留 SSH host-key deny-by-default、凭据短生命周期和 bounded worker queues。
+- 开工判定：允许开工。
+
+# 2026-09-20 OSC 52 剪贴板访问环境验证
+
+- 项目边界：`src/terminal*`、`src/app/{state,terminal_bridge}.rs`、`src/app/settings_bridge.rs`、`src/app/view/settings.rs`、`ui/settings*`、`ui/app.slint`、`ui/workspace-shell.slint` 与双语文档；不涉及 Sixel/Kitty/iTerm2 图形协议、SSH trust、凭据或 transport 所有权。
+- 环境变化：无新增依赖；继续 Rust 2024、MSRV 1.92.0、Slint 1.17.1、`alacritty_terminal` 0.26.0、Cargo locked/offline 和既有 `base64`/Slint 平台剪贴板 API。
+- 安全边界：OSC 52 默认关闭；开启后允许有界远端写入本机默认剪贴板，远端读取只对默认 clipboard 逐次确认；selection 目标和超出 64 KiB 的解码文本均拒绝。剪贴板内容不记录、不持久化，平台调用只在 Slint UI 线程执行。
+- 验证结果：本轮代码完成后执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、全量测试和 `git diff --check`；翻译检查仍覆盖新增 Settings 文案。
+- 人工验收：真实远端 TUI 发出 OSC 52 后的目标平台写入、读取确认、拒绝和超时结果，以及 Settings 开关视觉/交互仍需用户验收；不以自动截图替代 GUI 验收。
+- 开工判定：施工完成。
+
+# 2026-09-19 终端标准行为施工预检
+
+- 项目边界：独立 Rust 2024 桌面应用；本轮涉及 `src/terminal/`、`src/app/state*`、`src/app/terminal_bridge.rs`、`src/app/terminal_render.rs`、`src/app/view/terminal.rs` 和 `ui/terminal-pane.slint`/`ui/components/terminal-grid.slint`。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0；Rust edition 2024，依赖由 `Cargo.toml`/`Cargo.lock` 管理。
+- 运行环境：Cargo locked/offline 解析可用；本轮不新增 crate、不修改锁文件、不联网。
+- 测试环境：Slint 入口由 `build.rs` 编译；可执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline` 和 `git diff --check`。
+- 安全与边界：保留 SSH host-key deny-by-default、凭据短生命周期、bounded terminal output/worker queue；远端 OSC 52 不直接取得本机剪贴板，图形协议不进入现有文本网格。
+- 开工判定：允许开工。
+
 # 2026-09-06 Settings 控件与终端焦点修复环境验证
 
 - 项目类型：Rust 2024 独立桌面应用（Slint UI、Tokio runtime、russh transport）。

@@ -2,19 +2,19 @@
 
 ## 当前目标
 
-- 目标 ID：20260919-terminal-vt-standards
-- 目标：将终端展示、滚动、鼠标编码和窗口/查询应答收敛到 xterm/VT 标准语义，移除以光标可见性驱动的本地强制对齐与刷新策略。
-- 交付物：标准同步输出、光标和 SGR 绘制状态、鼠标编码、字符/像素尺寸上报、滚动语义、定向回归和双语契约说明。
+- 目标 ID：20260919-terminal-standard-behavior
+- 目标：把终端展示和输入行为继续收敛到常见 xterm/VT 语义，并分阶段增加显式受控的 OSC 52 剪贴板能力。
+- 交付物：已完成的标题/Bell/OSC 8/F13-F24 标准化，以及本阶段默认关闭、有界、带确认的 OSC 52 默认剪贴板访问实现和回归测试。
 
 ## 项目边界
 
-- 根目录：`/Volumes/albert_xin/2026/soft/axsoft/ax_ssh`
-- 当前范围：终端模型、Slint 终端 DTO 与布局、Local/SSH PTY 尺寸、标准 VT 查询应答，以及配套中英文架构与实施记录。
-- 不在本轮范围内：SFTP worker/队列协议、远端文件写入、host-key trust、凭据、Telnet NAWS 以外的协议扩展、路径/主机/文件内容日志、GUI 自动验收。
+- 根目录：`<repo-root>`
+- 当前范围：终端模型 OSC 52 写入/读取事件、默认关闭的 TerminalSettings 开关、UI 线程剪贴板访问、有界协议回写边界和配套记录。
+- 本轮范围：默认关闭且用户确认的 OSC 52 默认剪贴板读取；请求有界、一次性、按 Tab 绑定并在拒绝/超时/断开/关闭时清理。Sixel/Kitty/iTerm2 图形协议、SSH host-key trust、凭据、SFTP worker/队列、路径/主机/文件内容日志和 GUI 自动验收仍不在范围内。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -36,8 +36,23 @@
 | TERMSTD1 | completed | 终端模型采用标准同步输出、光标/SGR 状态和鼠标编码 | `terminal` 定向回归、完整 Cargo 门禁 | `?25` 仅控制光标可见性；`?2026` 使用标准结束序列或上游超时释放；查询应答保持有界并回写原 transport。 |
 | TERMSTD2 | completed | Slint 传递网格几何和指针像素坐标，Local/SSH PTY 上报字符与物理像素尺寸 | UI DTO/状态定向回归、Slint 重新编译、完整 Cargo 门禁 | Telnet 仍只发送 RFC 1073 NAWS 字符尺寸；Serial 只调整本地模型。 |
 | TERMSTD3 | completed | 滚动与网格锚点、双语架构说明、研究记录和完整门禁 | fmt/check/clippy/test/diff、Markdown/tracker 检查 | 代码与文档交付完成；GUI 视觉、真实终端程序和目标平台 PTY 行为由用户验收。 |
+| STDUI1 | completed | 终端标题、ResetTitle、Bell 事件进入有界应用状态 | terminal/model/app focused tests，随后 Cargo 门禁 | 动态标题只改运行时 Tab，不写入 profile/workspace；空标题合法；Bell 只触发 bounded UI hint。 |
+| STDUI2 | completed | OSC 8 URI 经过有界渲染 DTO，并保持安全 target 约束；F13-F24 普通编码 | terminal/render/input/app focused tests | 仅显式 HTTP(S) 目标可打开，其他 scheme inert；Kitty CSI-u 不默认启用。 |
+| STDUI3 | completed | 更新双语标准化边界，明确 OSC 52 与图形协议的 opt-in/后续设计 | Markdown/tracker/link checks | OSC 52 默认关闭，显式开启后仅允许有界远端写入本机默认剪贴板；图形协议不伪装成文本网格能力。 |
+| STDUI4 | completed | 完整 Rust/Slint 离线验证与差异检查 | fmt/check/clippy/test/diff | GUI、真实 TUI 和目标平台手工验收留给用户。 |
+| OSC52-1 | completed | 默认关闭的 OSC 52 写入策略与有界终端事件 DTO | 配置/终端 focused tests，随后 Cargo check | 只允许远端写入本机默认剪贴板；读取和图形协议不在本阶段。 |
+| OSC52-2 | completed | UI 线程剪贴板写入与所有终端 transport 接入 | app focused tests、Slint 重编译 | 不阻塞 worker，不记录或持久化剪贴板内容。 |
+| OSC52-3 | completed | 双语边界说明、实施记录和完整离线门禁 | fmt/check/clippy/test/diff、tracker validator | 目标平台剪贴板和真实 TUI 仍需用户验收。 |
+| OSC52READ1 | completed | 读取事件 formatter 与 Tab-local 一次性 pending 请求状态 | terminal/model focused tests | 不向 Slint DTO 暴露 formatter；仅默认 clipboard、默认关闭策略。 |
+| OSC52READ2 | completed | 非阻塞确认 notice、允许/拒绝动作与 20 秒超时 | AppState/route focused tests | 允许前不读取剪贴板；请求失效时 fail-closed。 |
+| OSC52READ3 | completed | UI 线程读取剪贴板、当前 worker 回写、断开/关闭清理 | bridge/transport focused tests | 不记录、不持久化剪贴板内容，回写失败也清除 pending。 |
+| OSC52READ4 | completed | 双语边界说明、项目地图和完整离线门禁 | fmt/check/clippy/test/diff | 真实 TUI、目标平台剪贴板和 GUI 视觉仍需用户验收。 |
 
 ## 已完成
+
+- 已完成 OSC52-1–3：Terminal Settings 新增默认关闭的 `osc52_clipboard`；开启后 `alacritty_terminal` 使用 `Osc52::CopyPaste`，但应用层只接受默认 clipboard，selection 仍拒绝；协议事件限制为 64 KiB 解码文本并通过有界 DTO 传递。
+- 已完成 OSC52 UI bridge：Local、SSH、Telnet、Serial 四类 transport 共用 `TerminalOutputEffects`，monitor 取得剪贴板事件后经 `dispatch_ui` 调用平台默认剪贴板 API；不记录、不持久化、不在 worker 线程触碰 UI/平台剪贴板。
+- 已完成 OSC52 回归与文档：默认关闭、默认目标、selection 拒绝、超限丢弃、读取确认、拒绝/超时/断开/重试清理、Settings preview/save 和中英文架构/用法说明均已覆盖；Sixel、Kitty、iTerm2 图形协议仍明确排除。
 
 - 已为 SFTP 内部拖动增加 `ax_ssh::sftp_drag` debug target：记录 Local/Remote 来源、开始、copy/非 copy 结束、远端落点收到/解析载荷、目标确认、本地文件校验与上传入队结果；字段只含固定阶段、面板、文件数和字节数。
 - 已从用户的最新运行日志确认：内部 Local-to-Remote 已经到达 `upload-queued`；Finder 的尝试没有到达既有 `sftp.drop-native-file` action，因此 SFTP worker、路径校验和上传队列不是该失败点。
@@ -96,13 +111,14 @@
 
 ## 下一步
 
-- 在目标平台启动新二进制，分别运行本地 shell、SSH 全屏 TUI 和会发送 `CSI ?2026` 的进度程序，确认隐藏光标不会额外冻结帧，标准同步结束或超时后才发布最新帧。
+- 在 Settings > Terminal 中手工确认 OSC 52 开关的 preview/save 行为；分别用默认目标、selection 目标和超过 64 KiB 的远端写入验证接受/拒绝边界。
+- 在目标平台用真实 TUI 验证远端写入本机默认剪贴板，以及读取请求的 Allow/Deny/20 秒超时行为；确认 selection clipboard、Sixel、Kitty 和 iTerm2 图形协议仍保持关闭。
 - 验证窗口缩放与 detached scrollback：主屏 Detached 保持历史位置，备用屏不做 reflow；改变终端字体或 Retina scale 后，Local/SSH PTY 收到字符和物理像素尺寸，Telnet 仍只协商 NAWS。
 - 验证真实终端的 SGR 1006/1016、UTF-8 1005、URXVT 1015、OSC 4/10/11/12 和 `CSI 14 t`/`CSI 16 t` 查询；检查 block/空心 block/underline/beam cursor、hidden text、双/曲/点/虚线下划线的可见效果。
 
 ## 最后更新时间
 
-- 2026-09-19 09:20 +0800：完成 TERMSTD1–3 代码与文档交付；终端标准同步输出、光标/SGR、鼠标编码、字符/物理尺寸上报和 resize/scroll 语义已接入，等待目标平台真实终端与 GUI 视觉验收。
+- 2026-09-20：完成 OSC52-1–3 与 OSC52READ1–4；设置字段、默认关闭的有界远端写入、带确认的默认剪贴板读取、UI 线程桥接、四类 transport 接入和中英文说明已同步，等待目标平台真实 TUI/剪贴板验收；selection clipboard 与图形协议仍关闭。
 
 ## 9 项复核映射
 

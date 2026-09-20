@@ -345,7 +345,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    保留逻辑键/文本、物理 `KeyCode`、`KeyLocation`、修饰键快照、composing、repeat
    和 synthetic 状态。Slint 的 `key-pressed`、已提交的 `edited` 与粘贴事件和 Winit
    `KeyEvent` 构造同一种边界对象；已提交文本和粘贴故意不携带物理身份。终端表面把
-   Slint 特殊键（包括 F1-F12）转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
+   Slint 特殊键（包括 F1-F24）转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
    `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI、
    application-cursor SS3 方向/Home/End 序列、application-keypad SS3 序列，以及带修饰键的
    xterm 导航/功能键序列。已显示的 Winit 窗口收到非合成、无修饰的物理数字小键盘事件时，若活动
@@ -436,8 +436,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定
    block 光标或本地对齐启发式替代它们。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
    调色板变更会解析为同一份快照颜色，用于显示和颜色查询应答。`CSI 14 t` 回报实测文本区像素，`CSI 16 t`
-   回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。`OSC 52` 剪贴板访问和
-   `OSC 8` 超链接仍是不支持的扩展，因此远端输出不能读取或注入系统剪贴板。
+   回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。`OSC 0` 和 `OSC 2`
+   只更新运行时 Terminal Tab 标题；`CSI 22 t` 与 `CSI 23 t` 保存和恢复标题栈，空标题也是合法值。
+   动态标题不会写入 profile 或 workspace。`BEL` 只产生短暂视觉提示。`OSC 8` 超链接在终端 DTO
+   中有界保存，只有 HTTP(S) 目标能在用户显式操作后交给系统打开，其他 scheme 保持 inert。`OSC 52`
+   剪贴板访问必须在 **Settings > Terminal** 中显式开启。开启后，远端写入本机默认剪贴板仍受 64 KiB 解码文本上限约束；远端读取同一默认剪贴板时，先在对应 Tab 显示确认提示。
+   只有 Allow 会读取默认剪贴板并向当前 worker 回写有界响应；Deny、20 秒超时、断开、重试或关闭 Tab 都会使请求失效。selection clipboard 访问和图形协议仍关闭。
+   有界事件由终端 monitor 取得后投递到 Slint UI 线程，worker 不直接调用平台剪贴板 API，剪贴板内容也不会写入日志或持久化配置。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
    网格下限。Rust 的 `terminal_dimensions` 模块是模型、设置和各后端最大值的共享来源；由于
    Slint 不能导入 Rust 常量，Theme 保留编译期镜像。PTY 和 worker 入口继续保留独立的非零

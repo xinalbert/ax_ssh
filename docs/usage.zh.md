@@ -254,8 +254,12 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 键盘和无障碍分隔线操作继续保留分隔线焦点。
 窗口客户区不再额外绘制应用框线；单个 Terminal pane（包括分屏 pane）也不绘制自己的框线。
 
-终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F12 和常见 xterm 风格
-控制/导航序列。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
+终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F24 和常见 xterm 风格
+控制/导航序列。标准终端事件也会保留：OSC 0/2 可更新运行时 Terminal Tab 标题，CSI 22/23
+恢复标题栈，BEL 产生短暂视觉提示。动态标题只存在运行时，不写入 profile 或 workspace。OSC 8
+超链接使用有界 URI，只有用户显式操作时才允许打开 HTTP(S) 目标，其他 scheme 保持 inert。远端 OSC 52
+剪贴板访问默认关闭；要允许远端程序访问本机默认剪贴板，请在 **Settings > Terminal > Allow remote OSC 52 clipboard access**
+中开启。远端写入只使用默认剪贴板，解码文本上限为 64 KiB；远端读取会在对应 Tab 显示 Allow/Deny 提示，只有 Allow 才读取默认剪贴板，Deny、20 秒超时、断开、重试或关闭 Tab 都会取消请求。selection clipboard 访问和图形协议仍关闭。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**：普通点击、释放、拖动和 motion 按 reporting

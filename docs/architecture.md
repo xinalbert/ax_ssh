@@ -712,9 +712,22 @@ tab-local terminal connection notice deliberately remains non-blocking.
    same snapshot colors used for rendering and color-query replies. `CSI 14 t`
    reports the measured text-area pixels and `CSI 16 t` reports the measured
    cell height and width; both defer through the same bounded protocol queue
-   until layout metrics are known. `OSC 52` clipboard access and `OSC 8`
-   hyperlinks remain unsupported extensions, so remote output cannot read or
-   inject the system clipboard.
+   until layout metrics are known. `OSC 0` and `OSC 2` update only the runtime
+   Terminal Tab title; `CSI 22 t` and `CSI 23 t` save and restore the title
+   stack, and an empty title is valid. Dynamic titles are never persisted to
+   profiles or workspaces. `BEL` produces a short-lived visual hint. `OSC 8`
+   hyperlinks are bounded in the terminal DTO and only HTTP(S) targets may be
+   opened by an explicit user action; other schemes remain inert. `OSC 52`
+   clipboard access is an explicit opt-in under **Settings > Terminal**. When
+   enabled, remote writes to the default clipboard are accepted with a 64 KiB
+   decoded-text bound. A remote read of that same default clipboard creates a
+   tab-local confirmation notice; Allow reads only the default clipboard and
+   sends the bounded formatter response to the current worker, while Deny,
+   timeout (20 seconds), disconnect, retry, or tab close invalidates it.
+   Selection clipboard access and graphical protocols remain disabled. The
+   bounded event is consumed by the terminal monitor and dispatched to Slint's
+   UI thread, so worker tasks never call platform clipboard APIs and clipboard
+   contents are never logged or persisted.
    The small-screen window floor is `520x360`; terminal layout, persisted
    default sizes, and the model use the same non-zero `10x3` grid floor. The
    Rust `terminal_dimensions` module is the source for the model, settings,

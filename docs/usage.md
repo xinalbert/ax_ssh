@@ -425,7 +425,19 @@ The window client area has no additional application-drawn outer frame;
 individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
-input methods, F1-F12, and common xterm-style control and navigation sequences.
+input methods, F1-F24, and common xterm-style control and navigation sequences.
+Standard terminal events are preserved: OSC 0/2 can update the runtime Terminal
+Tab title, CSI 22/23 restores the title stack, and BEL produces a short visual
+hint. Dynamic titles are runtime-only and are not saved in profiles or workspaces.
+OSC 8 links use a bounded URI and can open only explicit HTTP(S) targets; other
+schemes are inert. Remote OSC 52 clipboard writes are disabled by default. To
+allow a remote program to copy text into the local default clipboard, enable
+**Settings > Terminal > Allow remote OSC 52 clipboard access**. Remote writes
+use only the default clipboard and are limited to 64 KiB of decoded text. A
+remote read shows an Allow/Deny notice for that tab; Allow reads only the
+default clipboard, while Deny, a 20-second timeout, disconnect, retry, or tab
+close cancels the request. Selection clipboard access and image protocols stay
+disabled.
 When a normal terminal grows taller, actual scrollback may become visible above
 the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
