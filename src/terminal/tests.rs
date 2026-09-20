@@ -162,6 +162,17 @@ fn reports_cell_pixels_after_measured_layout() {
 }
 
 #[test]
+fn does_not_fabricate_window_or_screen_geometry_queries() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+
+    assert!(
+        terminal
+            .process_with_responses(b"\x1b[13t\x1b[15t\x1b[19t")
+            .is_empty()
+    );
+}
+
+#[test]
 fn reports_the_standard_default_foreground_color() {
     let mut terminal = TerminalModel::new(80, 24, 10);
 
@@ -829,6 +840,30 @@ fn encodes_urxvt_and_sgr_pixel_mouse_coordinates() {
     assert_eq!(
         terminal.encode_mouse_event(event),
         Some(b"\x1b[M\"#$".to_vec())
+    );
+}
+
+#[test]
+fn sgr_pixel_mode_remains_an_extension_of_sgr_mouse_mode() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    let event = TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button: TerminalMouseButton::Left,
+        column: 1,
+        row: 2,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+
+    terminal.process(b"\x1b[?1000;1016h");
+    assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 30, 40),
+        Some(b"\x1b[M \"#".to_vec())
+    );
+
+    terminal.process(b"\x1b[?1006h");
+    assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 30, 40),
+        Some(b"\x1b[<0;30;40M".to_vec())
     );
 }
 

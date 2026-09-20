@@ -71,8 +71,22 @@ impl EventListener for TerminalEventListener {
             }
             _ => return,
         };
-        match self.protocol_events.try_send(event) {
-            Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
+        // Parser callbacks run synchronously while a bounded output batch is
+        // being consumed. A full queue means the model cannot preserve the
+        // response ordering contract, so surface that condition as a bounded
+        // diagnostic instead of silently dropping a query response.
+        if let Err(error) = self.protocol_events.try_send(event) {
+            match error {
+                TrySendError::Full(_) => {
+                    tracing::warn!(
+                        target: "ax_ssh::diagnostics",
+                        event = "terminal-protocol-event-dropped",
+                        reason = "bounded protocol event queue full",
+                        "terminal protocol response was dropped"
+                    );
+                }
+                TrySendError::Disconnected(_) => {}
+            }
         }
     }
 }
@@ -440,7 +454,9 @@ enum MouseCoordinateEncoding {
 }
 
 /// Tracks the xterm `CSI 16 t` cell-pixel-size query, which the terminal core
-/// does not expose as an event. It deliberately accepts only that exact query.
+/// does not expose as an event. It deliberately accepts only that exact query:
+/// `13t`, `15t`, and `19t` require window/screen geometry that this model does
+/// not own, so they must not be answered with a text-area approximation.
 #[derive(Default)]
 struct WindowOperationQueryTracker {
     parser_state: u8,

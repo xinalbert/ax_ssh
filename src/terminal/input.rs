@@ -353,18 +353,21 @@ fn function_key_sequence(key: &TerminalKey, modifiers: TerminalModifiers) -> Opt
         10 => Some(b"\x1b[21~".as_slice()),
         11 => Some(b"\x1b[23~".as_slice()),
         12 => Some(b"\x1b[24~".as_slice()),
-        13 => Some(b"\x1b[25~".as_slice()),
-        14 => Some(b"\x1b[26~".as_slice()),
-        15 => Some(b"\x1b[28~".as_slice()),
-        16 => Some(b"\x1b[29~".as_slice()),
-        17 => Some(b"\x1b[31~".as_slice()),
-        18 => Some(b"\x1b[32~".as_slice()),
-        19 => Some(b"\x1b[33~".as_slice()),
-        20 => Some(b"\x1b[34~".as_slice()),
-        21 => Some(b"\x1b[1;2P".as_slice()),
-        22 => Some(b"\x1b[1;2Q".as_slice()),
-        23 => Some(b"\x1b[1;2R".as_slice()),
-        24 => Some(b"\x1b[1;2S".as_slice()),
+        // xterm-256color's kf13-kf24 entries. F13-F16 are the
+        // shift-modified F1-F4 forms; F17-F24 use the extended tilde
+        // numbers rather than reusing the F1-F4 forms.
+        13 => Some(b"\x1b[1;2P".as_slice()),
+        14 => Some(b"\x1b[1;2Q".as_slice()),
+        15 => Some(b"\x1b[1;2R".as_slice()),
+        16 => Some(b"\x1b[1;2S".as_slice()),
+        17 => Some(b"\x1b[15;2~".as_slice()),
+        18 => Some(b"\x1b[17;2~".as_slice()),
+        19 => Some(b"\x1b[18;2~".as_slice()),
+        20 => Some(b"\x1b[19;2~".as_slice()),
+        21 => Some(b"\x1b[20;2~".as_slice()),
+        22 => Some(b"\x1b[21;2~".as_slice()),
+        23 => Some(b"\x1b[23;2~".as_slice()),
+        24 => Some(b"\x1b[24;2~".as_slice()),
         _ => None,
     };
     if modifiers.is_empty() {
@@ -385,18 +388,18 @@ fn function_key_sequence(key: &TerminalKey, modifiers: TerminalModifiers) -> Opt
         10 => format!("\x1b[21;{code}~"),
         11 => format!("\x1b[23;{code}~"),
         12 => format!("\x1b[24;{code}~"),
-        13 => format!("\x1b[25;{code}~"),
-        14 => format!("\x1b[26;{code}~"),
-        15 => format!("\x1b[28;{code}~"),
-        16 => format!("\x1b[29;{code}~"),
-        17 => format!("\x1b[31;{code}~"),
-        18 => format!("\x1b[32;{code}~"),
-        19 => format!("\x1b[33;{code}~"),
-        20 => format!("\x1b[34;{code}~"),
-        21 => format!("\x1b[1;{code}P"),
-        22 => format!("\x1b[1;{code}Q"),
-        23 => format!("\x1b[1;{code}R"),
-        24 => format!("\x1b[1;{code}S"),
+        13 => format!("\x1b[1;{code}P"),
+        14 => format!("\x1b[1;{code}Q"),
+        15 => format!("\x1b[1;{code}R"),
+        16 => format!("\x1b[1;{code}S"),
+        17 => format!("\x1b[15;{code}~"),
+        18 => format!("\x1b[17;{code}~"),
+        19 => format!("\x1b[18;{code}~"),
+        20 => format!("\x1b[19;{code}~"),
+        21 => format!("\x1b[20;{code}~"),
+        22 => format!("\x1b[21;{code}~"),
+        23 => format!("\x1b[23;{code}~"),
+        24 => format!("\x1b[24;{code}~"),
         _ => return None,
     };
     Some(sequence.into_bytes())
@@ -694,11 +697,19 @@ mod tests {
         );
         assert_eq!(
             encode_key(&TerminalKey::Function(13), modifiers, false),
-            Some(b"\x1b[25~".to_vec())
+            Some(b"\x1b[1;2P".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Function(16), modifiers, false),
+            Some(b"\x1b[1;2S".to_vec())
+        );
+        assert_eq!(
+            encode_key(&TerminalKey::Function(17), modifiers, false),
+            Some(b"\x1b[15;2~".to_vec())
         );
         assert_eq!(
             encode_key(&TerminalKey::Function(24), modifiers, false),
-            Some(b"\x1b[1;2S".to_vec())
+            Some(b"\x1b[24;2~".to_vec())
         );
         assert_eq!(
             encode_key(
@@ -710,6 +721,28 @@ mod tests {
                 false,
             ),
             Some(b"\x1b[15;5~".to_vec())
+        );
+        assert_eq!(
+            encode_key(
+                &TerminalKey::Function(13),
+                TerminalModifiers {
+                    control: true,
+                    ..TerminalModifiers::default()
+                },
+                false,
+            ),
+            Some(b"\x1b[1;5P".to_vec())
+        );
+        assert_eq!(
+            encode_key(
+                &TerminalKey::Function(24),
+                TerminalModifiers {
+                    alt: true,
+                    ..TerminalModifiers::default()
+                },
+                false,
+            ),
+            Some(b"\x1b[24;3~".to_vec())
         );
     }
 

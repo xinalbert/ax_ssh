@@ -666,6 +666,9 @@ fn default_query_color(index: usize, palette: TerminalQueryPalette) -> Rgb {
 
 impl MouseEncodingTracker {
     fn coordinate_encoding(&self, sgr: bool) -> MouseCoordinateEncoding {
+        // DECSET 1016 selects pixel coordinates only within SGR mouse mode;
+        // xterm enables it as an extension of DECSET 1006 rather than as a
+        // standalone legacy/X10 encoding.
         if self.pixel_coordinates && sgr {
             MouseCoordinateEncoding::SgrPixels
         } else if sgr {
