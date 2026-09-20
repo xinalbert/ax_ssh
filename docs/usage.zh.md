@@ -257,7 +257,9 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F24 和常见 xterm 风格
 控制/导航序列。标准终端事件也会保留：OSC 0/2 可更新运行时 Terminal Tab 标题，CSI 22/23
 恢复标题栈，BEL 产生短暂视觉提示。动态标题只存在运行时，不写入 profile 或 workspace。OSC 8
-超链接使用有界 URI，只有用户显式操作时才允许打开 HTTP(S) 目标，其他 scheme 保持 inert。远端 OSC 52
+超链接使用有界 URI，只有用户显式操作时才允许打开 HTTP(S) 目标，其他 scheme 保持 inert。F13-F16 使用 xterm
+标准的 Shift-F1-F4 形式（`CSI 1;2P` 到 `CSI 1;2S`），F17-F24 使用标准扩展 tilde 形式。终端根据实测文本区度量回答
+`CSI 14 t`、`CSI 16 t` 和 `CSI 18 t`；没有窗口/屏幕几何时，不伪造 `CSI 13 t`、`CSI 15 t` 或 `CSI 19 t`。远端 OSC 52
 剪贴板访问默认关闭；要允许远端程序访问本机默认剪贴板，请在 **Settings > Terminal > Allow remote OSC 52 clipboard access**
 中开启。远端写入只使用默认剪贴板，解码文本上限为 64 KiB；远端读取会在对应 Tab 显示 Allow/Deny 提示，只有 Allow 才读取默认剪贴板，Deny、20 秒超时、断开、重试或关闭 Tab 都会取消请求。selection clipboard 访问和图形协议仍关闭。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
 已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
@@ -271,6 +273,7 @@ SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**�
 连续软换行会合并，末尾终端标点不会纳入选区。其它位置则按终端核心的标点、空白、宽字符和匹配括号边界选中一个语义词；范围只留在 pane，不会发送给远端程序。Shift 绕过该行为，Cmd/Ctrl 目标激活
 和远端 mouse reporting 保持优先；既有 copy-on-select 偏好也会对 URL 或语义选区生效。同一短点击序列内第三次左键点击会选中完整的逻辑终端行，
 包括软换行 cell；行边界仍由终端核心计算。行选区留在本地，并沿用语义选区相同的 reporting、修饰键、焦点、刷新和复制规则。
+终端会有意保持未实现上报无响应：DA3/tertiary device attributes、除状态和光标位置外的 DSR 查询，以及没有对应设备或几何数据时的窗口位置/完整屏幕查询。Kitty keyboard/CSI-u、`modifyOtherKeys`、Sixel、Kitty graphics 和 iTerm2 inline images 保持关闭。Telnet 通过 TTYPE 回报 `xterm-256color`，只在协商后发送 NAWS；Serial 是原始字节流，没有 TERM/PTY/NAWS 契约。
 一次指针手势从按下到释放或 cancel 始终沿用按下时确定的 owner，指针移出 grid 后也不会切换链路。release
 上报当时的修饰键状态，cancel 使用最近一次 pointer 状态；高频 motion 每个显示帧只保留最新 cell，并在 release
 前刷新最后一帧。1007 只启用备用屏滚轮转换，绝不会接管 button 手势。焦点移到另一 pane、

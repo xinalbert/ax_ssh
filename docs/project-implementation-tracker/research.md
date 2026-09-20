@@ -22,6 +22,7 @@
 - AxShell 对照：AxShell 的 `KeyDownEvent.keystroke` 是应用内统一入口，workspace keybinding、密码提示、字符直发和 `encode_key` 都消费同一个事件；AxSSH 采用同样的边界思想，但额外保留 Winit physical code/location 以支持 NumLock 与 DEC application-keypad，不引入参考工程代码或依赖。
 - 其它终端对照：成熟终端通常把“平台键事件”与“送往 PTY 的字节流”分层；配置快捷键在前，未被消费的键进入终端编码器。普通模式依赖文本/逻辑键，特殊键依赖规范化名称，application modes 决定导航和小键盘的最终序列；Kitty 的扩展键盘协议属于终端协议输出能力，不应成为 UI callback 的参数形状。
 - AxSSH 落地：新增 `ui/components/keyboard-input.slint` 的 `KeyboardEvent`、终端上下文 DTO 和日志 DTO；`src/app.rs` 只做一次 UI DTO -> `NormalizedKeyboardInput` 转换；`NormalizedKeyboardInput.key` 改为 `ApplicationKeyboardKey`；只有 `src/app/terminal_bridge.rs` 在调用 `src/terminal/input.rs` 前转换为 `TerminalKey`。物理小键盘通过独立的 `physical_keycode`/`location` 保留，并在所有桌面平台由活动终端的 application-keypad 模式决定是否发送 SS3。
+- 对实施计划的影响：将输入协议标准化拆分为应用层规范化事件和终端层字节编码两步，Kitty CSI-u 继续保持默认关闭，并把目标平台 physical key/location 实机验证列为后续验收。
 - 未解决问题：Winit/Slint 在各目标平台实际报告的 `physical_keycode`、`location`、IME dead-key 和合成事件细节仍需 Windows/macOS/Linux 实机验证；Kitty CSI-u 等扩展协议暂不默认启用，避免改变现有远端 TUI 兼容性。
 
 ## 2026-09-14 macOS SFTP 原生 file-promise 拖放
@@ -47,6 +48,13 @@
 - 未解决问题：AxSSH 尚未实现证书颁发机构信任，因此证书服务端仍不可用；`rustsec/audit-check` 需在 GitHub-hosted runner 访问 advisory 数据库，目标平台真实 SSH/agent/SFTP 互操作仍需手工验收。
 
 ## 2026-08-25 macOS Software damage-aware tile present
+
+- 检索问题：如何在 macOS Software renderer 中缩小 damage 提交范围，同时保持 CPU framebuffer 复用和 Core Animation 异步读取安全？
+- 检索原因：用户 sample 显示完整 `CGImage` clone、CoreGraphics image-data lock 和 vImage color conversion 是 Software 路径主要热点，需要评估 tile 化提交是否能降低成本。
+- 来源列表：用户提供的 macOS sample、锁定的 `softbuffer`/winit renderer 实现和本地实验结果。
+- 关键结论：持久 CPU framebuffer 配合 256x128 child-layer tiles 可只复制受 damage 影响的区域，旧 tile image 继续由对应 layer 持有，避免把下一帧写入仍被 Core Animation 读取的图像。
+- 对实施计划的影响：保留 application 层 `TerminalRenderLine`/`TermDamage` 边界，tile model 只存在 renderer 适配层，并将首帧、resize、scale、invalidate 和恢复都视为完整提交。
+- 未解决问题：目标 macOS 仍需同一软件负载复测 CPU/footprint，并人工确认首帧、resize、Retina、隐藏/恢复、滚动、光标和选区。
 
 - 实施原因：用户 sample 显示单 layer 完整 `CGImage` clone、CoreGraphics image-data lock 和 vImage color conversion 是 Software 路径主要热点；需要在保持 CPU framebuffer 可复用和 Core Animation 异步读取安全的前提下缩小提交范围。
 - 实施结论：macOS `softbuffer` 仍持有一个持久 CPU framebuffer，但 presentation surface 固定划分为 256×128 物理像素 child layers。winit 转发的每个物理 damage rectangle 映射到相交 tile；每个更新 tile 从 framebuffer 的对应行复制到独立拥有的 `CGImage`，未变化 tile 保留旧图像。

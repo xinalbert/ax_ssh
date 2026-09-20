@@ -1,3 +1,21 @@
+# 2026-09-21 Telnet 终端类型协商环境验证
+
+- 项目边界：`src/telnet.rs` 及双语终端/传输契约文档；补齐 RFC 1091 TTYPE，不改变 SSH、Local PTY、Serial 或 UI 所有权。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0，`libmudtelnet-rs` 2.0.10；依赖和锁文件不变。
+- 运行环境：Cargo locked/offline 解析可用；不新增 crate、不修改锁文件、不联网。
+- 标准边界：Telnet 在收到 `DO TTYPE` 后回 `WILL TTYPE`，并将 `TTYPE SEND` 回报为 `xterm-256color`；NAWS 仍只在对端接受后发送。ENVIRON、LINEMODE、MCCP、CHARSET、GMCP/MSDP 等扩展继续关闭。
+- 验证结果：Telnet loopback TTYPE/NAWS/IAC 回归通过；完整 fmt/check/Clippy/test/diff 门禁待本轮最终执行。
+- 开工判定：施工完成。
+
+# 2026-09-21 终端上报/下发标准化续审预检
+
+- 项目边界：独立 Rust 2024 桌面应用；本轮涉及 `src/terminal/input.rs`、`src/terminal.rs`、`src/terminal/model.rs`、终端回归测试和双语标准行为记录。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0；依赖和锁文件不变。
+- 运行环境：Cargo locked/offline 解析可用；本轮不新增 crate、不修改锁文件、不联网。
+- 测试环境：Slint 入口仍由 `build.rs` 编译；执行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、`cargo test --locked --offline` 和 `git diff --check`。
+- 标准边界：F13-F24 采用本机 `xterm-256color` terminfo 核对；协议响应保持有界。CSI `13t/15t/19t` 因当前 DTO 没有窗口位置/屏幕几何而不伪造回答；Sixel、Kitty/iTerm2 图形协议和 Kitty keyboard protocol 继续关闭。
+- 开工判定：允许开工。
+
 # 2026-09-19 OSC 52 写入阶段施工预检
 
 - 项目边界：独立 Rust 2024 桌面应用；本阶段涉及 `src/terminal.rs`、`src/terminal/model.rs`、`src/config/settings.rs`、`src/app.rs`、`src/app/terminal_bridge.rs`、`src/app/platform_support.rs`、`ui/settings/terminal.slint` 及配套测试/文档。

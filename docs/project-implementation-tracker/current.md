@@ -3,14 +3,15 @@
 ## 当前目标
 
 - 目标 ID：20260919-terminal-standard-behavior
-- 目标：把终端展示和输入行为继续收敛到常见 xterm/VT 语义，并分阶段增加显式受控的 OSC 52 剪贴板能力。
-- 交付物：已完成的标题/Bell/OSC 8/F13-F24 标准化，以及本阶段默认关闭、有界、带确认的 OSC 52 默认剪贴板访问实现和回归测试。
+- 目标：把终端上报与下发行为继续收敛到常见 xterm/VT 语义，并明确记录仍有意关闭或缺少必要几何数据的扩展。
+- 交付物：修正 F13-F24 的 xterm/terminfo 下发序列，补齐 Telnet TTYPE `xterm-256color` 回报，审计协议响应队列、窗口查询和 1016 像素上报边界，并同步标准化结论与回归测试。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：终端模型 OSC 52 写入/读取事件、默认关闭的 TerminalSettings 开关、UI 线程剪贴板访问、有界协议回写边界和配套记录。
-- 本轮范围：默认关闭且用户确认的 OSC 52 默认剪贴板读取；请求有界、一次性、按 Tab 绑定并在拒绝/超时/断开/关闭时清理。Sixel/Kitty/iTerm2 图形协议、SSH host-key trust、凭据、SFTP worker/队列、路径/主机/文件内容日志和 GUI 自动验收仍不在范围内。
+- 当前范围：终端按键下发、CSI/OSC/DEC 查询上报、鼠标坐标模式、跨 transport 协议回写和有界响应策略。
+- 本轮范围：修正 F13-F24 标准序列，补齐 Telnet TTYPE，审计协议响应队列、CSI `t` 窗口查询和 `1016` 依赖语义；OSC 52 默认关闭策略、Sixel/Kitty/iTerm2 图形协议、SSH host-key trust、凭据、SFTP worker/队列和 GUI 自动验收仍不在本轮实现范围内。
+- 不在本轮范围内：扩展窗口/屏幕几何 DTO 以实现 `CSI 13 t`、`CSI 15 t`、`CSI 19 t`，开启 Kitty keyboard protocol，或实现 Sixel/Kitty/iTerm2 图形协议。
 
 ## 当前状态
 
@@ -47,12 +48,19 @@
 | OSC52READ2 | completed | 非阻塞确认 notice、允许/拒绝动作与 20 秒超时 | AppState/route focused tests | 允许前不读取剪贴板；请求失效时 fail-closed。 |
 | OSC52READ3 | completed | UI 线程读取剪贴板、当前 worker 回写、断开/关闭清理 | bridge/transport focused tests | 不记录、不持久化剪贴板内容，回写失败也清除 pending。 |
 | OSC52READ4 | completed | 双语边界说明、项目地图和完整离线门禁 | fmt/check/clippy/test/diff | 真实 TUI、目标平台剪贴板和 GUI 视觉仍需用户验收。 |
+| STDUI5 | completed | F13-F24 使用 xterm/terminfo 标准下发序列，并覆盖带修饰键编码 | `src/terminal/input.rs` 定向测试、完整 Cargo 门禁 | 不改变 Kitty CSI-u 默认关闭策略。 |
+| STDREP1 | completed | 协议响应队列、CSI `t` 查询覆盖和 1016 依赖语义形成明确标准化结论 | terminal focused tests、双语文档、tracker/diff 检查 | 不伪造缺少窗口位置/屏幕几何 DTO 的响应；保持队列有界。 |
+| TELNETSTD1 | completed | Telnet TTYPE 协商回报 `xterm-256color`，并明确 Telnet/Serial 能力边界 | Telnet loopback、完整 Cargo 门禁、双语文档 | Telnet 不伪造 PTY 行规程；Serial 保持原始字节流；其它 Telnet 扩展继续关闭。 |
 
 ## 已完成
 
 - 已完成 OSC52-1–3：Terminal Settings 新增默认关闭的 `osc52_clipboard`；开启后 `alacritty_terminal` 使用 `Osc52::CopyPaste`，但应用层只接受默认 clipboard，selection 仍拒绝；协议事件限制为 64 KiB 解码文本并通过有界 DTO 传递。
 - 已完成 OSC52 UI bridge：Local、SSH、Telnet、Serial 四类 transport 共用 `TerminalOutputEffects`，monitor 取得剪贴板事件后经 `dispatch_ui` 调用平台默认剪贴板 API；不记录、不持久化、不在 worker 线程触碰 UI/平台剪贴板。
 - 已完成 OSC52 回归与文档：默认关闭、默认目标、selection 拒绝、超限丢弃、读取确认、拒绝/超时/断开/重试清理、Settings preview/save 和中英文架构/用法说明均已覆盖；Sixel、Kitty、iTerm2 图形协议仍明确排除。
+
+- 已完成 STDUI5：F13-F16 改为 xterm-256color 的 `CSI 1;2P` 到 `CSI 1;2S`，F17-F24 改为标准扩展 tilde 序列；带 Shift/Alt/Control 修饰键时保留相同的 xterm 参数位，不复用旧的错误 F13-F20 或 F21-F24 编码。
+- 已完成 STDREP1：协议事件队列继续保持容量 16，队列满时记录有界诊断而不静默；`CSI 13 t`、`CSI 15 t`、`CSI 19 t` 因当前模型没有窗口位置/完整屏幕几何而不伪造回答；`1016` 明确只作为 `1006` SGR 的像素扩展，单独启用时仍走 legacy 坐标。
+- 已完成 TELNETSTD1：Telnet 接受 `DO TTYPE`，回报 `WILL TTYPE`，并将 `TTYPE SEND` 回写为 `IS xterm-256color`；Telnet 裸 `LF`/`CR`/`NUL` 不被应用层伪造成 SSH PTY 行规程，Serial 的无 TERM/PTY/NAWS 边界和 Telnet 可选扩展关闭状态已同步记录。
 
 - 已为 SFTP 内部拖动增加 `ax_ssh::sftp_drag` debug target：记录 Local/Remote 来源、开始、copy/非 copy 结束、远端落点收到/解析载荷、目标确认、本地文件校验与上传入队结果；字段只含固定阶段、面板、文件数和字节数。
 - 已从用户的最新运行日志确认：内部 Local-to-Remote 已经到达 `upload-queued`；Finder 的尝试没有到达既有 `sftp.drop-native-file` action，因此 SFTP worker、路径校验和上传队列不是该失败点。
@@ -102,11 +110,13 @@
 - 已完成 TERMSTD3：主屏 Detached display offset、备用屏和 resize/reflow 回归保持在 `TerminalModel`；网格从 pane 顶部开始，底部余量不属于字符格或上报坐标；中英文架构/开发说明已改为 `alacritty_terminal` 当前事实，并明确 `vendor/vt100` 仅为历史许可证审计副本，不在 Cargo 依赖图中。
 - 已完成：新增 SGR 1016 像素坐标按测量文本区边界夹位回归；`ui/app.slint` 已由 Cargo 重新编译。
 - 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 266、应用 256、Doc tests 0）、定向 1016 像素坐标回归和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。
-- 未完成：tracker validator 已运行，但仍被既有 2026-08/09 历史记录与 research 的字段/时间格式债务阻断；GUI 视觉、真实终端程序和目标平台 PTY 行为仍待用户验收。
+- 已完成 STDUI5/STDREP1 验证：F13-F24 定向输入测试、1016 依赖语义和窗口查询回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 281、应用 264、Doc tests 0）和 `git diff --check` 通过；本机 `infocmp -1 xterm-256color` 用于序列核对，tracker validator 通过。
+- 已完成 TELNETSTD1 验证：Telnet loopback 覆盖 `DO TTYPE`、`TTYPE SEND`、NAWS、IAC 转义和未知选项拒绝；完整 Cargo 门禁与双语能力边界待本轮最终执行。
+- 未完成：GUI 视觉、真实终端程序和目标平台 PTY 行为仍待用户验收。
 
 ## 风险与阻塞
 
-- 无代码阻塞。当前剩余风险是目标平台上的 GUI 视觉、真实全屏终端程序行为和 PTY 对物理像素尺寸的实际响应，需要用户在新二进制上验收。
+- 无代码阻塞。当前剩余风险是目标平台上的 GUI 视觉、真实全屏终端程序行为和 PTY 对物理像素尺寸的实际响应，需要用户在新二进制上验收；超过 16 个同批协议回调时仍会按有界背压丢弃超额响应，并通过诊断可见。
 - 代码保持安全边界不变：终端协议应答仍经当前 Tab 的有界 worker 回写；不进入 Slint、持久化或日志，也不扩大 SSH host-key、凭据、Telnet 或 Serial 边界。
 
 ## 下一步
@@ -114,10 +124,11 @@
 - 在 Settings > Terminal 中手工确认 OSC 52 开关的 preview/save 行为；分别用默认目标、selection 目标和超过 64 KiB 的远端写入验证接受/拒绝边界。
 - 在目标平台用真实 TUI 验证远端写入本机默认剪贴板，以及读取请求的 Allow/Deny/20 秒超时行为；确认 selection clipboard、Sixel、Kitty 和 iTerm2 图形协议仍保持关闭。
 - 验证窗口缩放与 detached scrollback：主屏 Detached 保持历史位置，备用屏不做 reflow；改变终端字体或 Retina scale 后，Local/SSH PTY 收到字符和物理像素尺寸，Telnet 仍只协商 NAWS。
-- 验证真实终端的 SGR 1006/1016、UTF-8 1005、URXVT 1015、OSC 4/10/11/12 和 `CSI 14 t`/`CSI 16 t` 查询；检查 block/空心 block/underline/beam cursor、hidden text、双/曲/点/虚线下划线的可见效果。
+- 验证真实终端的 F13-F24、SGR 1006/1016、UTF-8 1005、URXVT 1015、OSC 4/10/11/12 和 `CSI 14 t`/`CSI 16 t`/`CSI 18 t` 查询；确认 `CSI 13 t`/`15t`/`19t` 不被伪造，检查 block/空心 block/underline/beam cursor、hidden text、双/曲/点/虚线下划线的可见效果。
 
 ## 最后更新时间
 
+- 2026-09-21：完成 STDUI5/STDREP1/TELNETSTD1；F13-F24 下发序列与修饰键编码按本机 xterm-256color terminfo 修正，Telnet TTYPE 回报 `xterm-256color`，协议队列满有诊断，CSI 窗口查询、1016、Telnet/Serial 能力边界形成明确结论；真实 TUI 和目标平台行为仍待用户验收。
 - 2026-09-20：完成 OSC52-1–3 与 OSC52READ1–4；设置字段、默认关闭的有界远端写入、带确认的默认剪贴板读取、UI 线程桥接、四类 transport 接入和中英文说明已同步，等待目标平台真实 TUI/剪贴板验收；selection clipboard 与图形协议仍关闭。
 
 ## 9 项复核映射

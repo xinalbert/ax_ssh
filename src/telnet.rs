@@ -5,8 +5,8 @@ use libmudtelnet_rs::Parser;
 use libmudtelnet_rs::bytes::{Buf, Bytes, BytesMut};
 use libmudtelnet_rs::compatibility::CompatibilityTable;
 use libmudtelnet_rs::events::TelnetEvents;
-use libmudtelnet_rs::telnet::op_command::{DO, DONT, IAC, SB, SE, WILL, WONT};
-use libmudtelnet_rs::telnet::op_option::{BINARY, ECHO, NAWS, SGA};
+use libmudtelnet_rs::telnet::op_command::{DO, DONT, IAC, IS, SB, SE, SEND, WILL, WONT};
+use libmudtelnet_rs::telnet::op_option::{BINARY, ECHO, NAWS, SGA, TTYPE};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedWriteHalf;
@@ -32,6 +32,7 @@ const MAX_INPUT_BYTES: usize = 16 * 1024;
 const MAX_OUTPUT_BATCH_BYTES: usize = 16 * 1024;
 const MAX_PROTOCOL_FRAME_BYTES: usize = 64 * 1024;
 const MAX_ERROR_CHARS: usize = 512;
+const TELNET_TERMINAL_TYPE: &str = "xterm-256color";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TelnetSessionEvent {
@@ -435,6 +436,7 @@ fn terminal_parser() -> Parser {
     options.support_remote(ECHO);
     options.support(SGA);
     options.support_local(NAWS);
+    options.support_local(TTYPE);
     Parser::with_support_and_capacity(1024, options)
 }
 
@@ -477,6 +479,19 @@ async fn handle_inbound_frames(
                     }
                     _ => {}
                 },
+                TelnetEvents::Subnegotiation(subnegotiation)
+                    if subnegotiation.option == TTYPE
+                        && subnegotiation.buffer.as_ref() == [SEND] =>
+                {
+                    let mut payload = BytesMut::with_capacity(1 + TELNET_TERMINAL_TYPE.len());
+                    payload.extend_from_slice(&[IS]);
+                    payload.extend_from_slice(TELNET_TERMINAL_TYPE.as_bytes());
+                    if let Some(event) = parser.subnegotiation(TTYPE, payload.freeze()) {
+                        write_parser_event(writer, event)
+                            .await
+                            .context("failed to send Telnet terminal type")?;
+                    }
+                }
                 TelnetEvents::DecompressImmediate(_) => {
                     anyhow::bail!("Telnet compression is not supported")
                 }
@@ -695,8 +710,9 @@ mod tests {
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.expect("client should connect");
             let wire = [
-                IAC, WILL, ECHO, IAC, WILL, 99, IAC, DO, NAWS, IAC, NOP, b'T', b'E', b'L', b'N',
-                b'E', b'T', b'_', b'O', b'K', b'\r', b'\n', IAC, IAC, b'!',
+                IAC, WILL, ECHO, IAC, WILL, 99, IAC, DO, NAWS, IAC, DO, TTYPE, IAC, SB, TTYPE,
+                SEND, IAC, SE, IAC, NOP, b'T', b'E', b'L', b'N', b'E', b'T', b'_', b'O', b'K',
+                b'\r', b'\n', IAC, IAC, b'!',
             ];
             for byte in wire {
                 stream
@@ -773,6 +789,20 @@ mod tests {
         );
         assert!(received.windows(3).any(|window| window == [IAC, DONT, 99]));
         assert!(received.windows(3).any(|window| window == [IAC, DO, ECHO]));
+        assert!(
+            received
+                .windows(3)
+                .any(|window| window == [IAC, WILL, TTYPE])
+        );
+        let terminal_type = [
+            IAC, SB, TTYPE, IS, b'x', b't', b'e', b'r', b'm', b'-', b'2', b'5', b'6', b'c', b'o',
+            b'l', b'o', b'r', IAC, SE,
+        ];
+        assert!(
+            received
+                .windows(terminal_type.len())
+                .any(|window| window == terminal_type)
+        );
         assert!(
             !received
                 .windows(3)

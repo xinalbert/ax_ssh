@@ -429,6 +429,10 @@ input methods, F1-F24, and common xterm-style control and navigation sequences.
 Standard terminal events are preserved: OSC 0/2 can update the runtime Terminal
 Tab title, CSI 22/23 restores the title stack, and BEL produces a short visual
 hint. Dynamic titles are runtime-only and are not saved in profiles or workspaces.
+F13-F16 use the xterm shifted-F1-F4 forms (`CSI 1;2P` through `CSI 1;2S`),
+and F17-F24 use the standard extended tilde forms. The terminal answers
+`CSI 14 t`, `CSI 16 t`, and `CSI 18 t` from measured text-area metrics; it does
+not fabricate `CSI 13 t`, `CSI 15 t`, or `CSI 19 t` without window/screen geometry.
 OSC 8 links use a bounded URI and can open only explicit HTTP(S) targets; other
 schemes are inert. Remote OSC 52 clipboard writes are disabled by default. To
 allow a remote program to copy text into the local default clipboard, enable
@@ -438,6 +442,13 @@ remote read shows an Allow/Deny notice for that tab; Allow reads only the
 default clipboard, while Deny, a 20-second timeout, disconnect, retry, or tab
 close cancels the request. Selection clipboard access and image protocols stay
 disabled.
+The terminal deliberately leaves unsupported reports unanswered: DA3/tertiary
+device attributes, DSR queries other than status and cursor position, and
+window-position/full-screen queries cannot be answered without corresponding
+device or geometry data. Kitty keyboard/CSI-u, `modifyOtherKeys`, Sixel, Kitty
+graphics, and iTerm2 inline images remain off. Telnet reports `xterm-256color`
+through TTYPE and sends NAWS only after negotiation; Serial is a raw byte stream
+with no TERM/PTY/NAWS contract.
 When a normal terminal grows taller, actual scrollback may become visible above
 the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.

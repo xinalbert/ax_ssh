@@ -712,7 +712,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    same snapshot colors used for rendering and color-query replies. `CSI 14 t`
    reports the measured text-area pixels and `CSI 16 t` reports the measured
    cell height and width; both defer through the same bounded protocol queue
-   until layout metrics are known. `OSC 0` and `OSC 2` update only the runtime
+   until layout metrics are known. Window-operation queries `CSI 13 t`, `CSI 15 t`,
+   and `CSI 19 t` remain unanswered because this model does not own window position
+   or full-screen geometry, and it never substitutes text-area dimensions for those
+   values. Protocol callbacks use a 16-event bounded queue; overflow is logged and
+   excess responses may be dropped, so this is a backpressure safety limit rather
+   than an unbounded query-response guarantee. `OSC 0` and `OSC 2` update only the runtime
    Terminal Tab title; `CSI 22 t` and `CSI 23 t` save and restore the title
    stack, and an empty title is valid. Dynamic titles are never persisted to
    profiles or workspaces. `BEL` produces a short-lived visual hint. `OSC 8`
@@ -727,7 +732,15 @@ tab-local terminal connection notice deliberately remains non-blocking.
    Selection clipboard access and graphical protocols remain disabled. The
    bounded event is consumed by the terminal monitor and dispatched to Slint's
    UI thread, so worker tasks never call platform clipboard APIs and clipboard
-   contents are never logged or persisted.
+   contents are never logged or persisted. The remaining terminal protocol
+   boundary is intentional: tertiary device attributes, DSR queries other than
+   status/cursor (`5`/`6`), and window-position/full-screen queries (`CSI 13 t`,
+   `CSI 15 t`, and `CSI 19 t`) remain unanswered when AxSSH does not own the
+   corresponding device or geometry. Kitty keyboard/CSI-u, xterm
+   `modifyOtherKeys`, Sixel, Kitty graphics, and iTerm2 inline-image protocols
+   remain disabled rather than being approximated by text cells. OSC 52
+   selection targets remain disabled even when default-clipboard access is
+   enabled.
    The small-screen window floor is `520x360`; terminal layout, persisted
    default sizes, and the model use the same non-zero `10x3` grid floor. The
    Rust `terminal_dimensions` module is the source for the model, settings,
@@ -1405,12 +1418,22 @@ adapter assembles complete commands, negotiations, and subnegotiations before
 calling the parser; it also restores doubled `IAC IAC` bytes as terminal data.
 This isolates the parser's confirmed cross-call fragmentation boundary without
 reimplementing option semantics. Negotiation commands never enter
-`TerminalModel`; supported Echo, Suppress-Go-Ahead, Binary, and NAWS options
-receive explicit responses, unknown options are rejected, and NAWS is sent only
-after peer acceptance. TCP connect, protocol frames, input/output batches,
-errors, queues, and shutdown waits are bounded.
+`TerminalModel`; supported Echo, Suppress-Go-Ahead, Binary, NAWS, and terminal
+type (TTYPE) options receive explicit responses. AxSSH advertises
+`xterm-256color` and answers `IAC SB TTYPE SEND IAC SE` with
+`IAC SB TTYPE IS xterm-256color IAC SE`; unknown options are rejected, and
+NAWS is sent only after peer acceptance. Telnet input is an escaped byte
+stream, not a remote PTY line discipline: AxSSH sends the terminal model's
+already-encoded bytes, does not rewrite bare `LF` to `CRLF`, and does not strip
+or append a Telnet `NUL` after `CR`. TCP connect, protocol frames, input/output
+batches, errors, queues, and shutdown waits are bounded. Telnet ENVIRON,
+LINEMODE, compression/MCCP, CHARSET, GMCP/MSDP, and other optional extensions
+remain explicitly disabled.
 
-Serial discovery calls the operating system enumeration API on a blocking Tokio
+Serial is a raw byte-stream transport rather than a remote terminal protocol:
+it has no `TERM` negotiation, PTY, NAWS, window-change, or terminal-size
+reporting contract. The local `TerminalModel` still resizes for presentation,
+but no remote capability is fabricated. Serial discovery calls the operating system enumeration API on a blocking Tokio
 boundary and returns descriptors only. It does not open candidate devices,
 toggle modem lines, write probe bytes, or infer baud/parity settings. The
 Session Editor requests a scan when Serial is selected or the user explicitly

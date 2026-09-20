@@ -436,13 +436,15 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定
    block 光标或本地对齐启发式替代它们。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
    调色板变更会解析为同一份快照颜色，用于显示和颜色查询应答。`CSI 14 t` 回报实测文本区像素，`CSI 16 t`
-   回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。`OSC 0` 和 `OSC 2`
+   回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。窗口操作查询 `CSI 13 t`、`CSI 15 t`
+   和 `CSI 19 t` 因模型不拥有窗口位置或完整屏幕几何而保持不应答，绝不把文本区尺寸冒充这些值。协议 callback
+   使用容量为 16 的有界队列；队列满时会记录诊断，超出上限的应答可能丢弃，因此这是背压安全边界，不是无界查询应答保证。`OSC 0` 和 `OSC 2`
    只更新运行时 Terminal Tab 标题；`CSI 22 t` 与 `CSI 23 t` 保存和恢复标题栈，空标题也是合法值。
    动态标题不会写入 profile 或 workspace。`BEL` 只产生短暂视觉提示。`OSC 8` 超链接在终端 DTO
    中有界保存，只有 HTTP(S) 目标能在用户显式操作后交给系统打开，其他 scheme 保持 inert。`OSC 52`
    剪贴板访问必须在 **Settings > Terminal** 中显式开启。开启后，远端写入本机默认剪贴板仍受 64 KiB 解码文本上限约束；远端读取同一默认剪贴板时，先在对应 Tab 显示确认提示。
    只有 Allow 会读取默认剪贴板并向当前 worker 回写有界响应；Deny、20 秒超时、断开、重试或关闭 Tab 都会使请求失效。selection clipboard 访问和图形协议仍关闭。
-   有界事件由终端 monitor 取得后投递到 Slint UI 线程，worker 不直接调用平台剪贴板 API，剪贴板内容也不会写入日志或持久化配置。
+   有界事件由终端 monitor 取得后投递到 Slint UI 线程，worker 不直接调用平台剪贴板 API，剪贴板内容也不会写入日志或持久化配置。其余终端协议边界也是有意保留的：tertiary device attributes、除状态/光标（`5`/`6`）以外的 DSR 查询，以及窗口位置/完整屏幕查询（`CSI 13 t`、`CSI 15 t`、`CSI 19 t`）在 AxSSH 不拥有对应设备或几何时保持不应答。Kitty keyboard/CSI-u、xterm `modifyOtherKeys`、Sixel、Kitty graphics 和 iTerm2 inline-image 协议保持关闭，不用文本 cell 近似；即使开启默认剪贴板访问，OSC 52 selection 目标也仍关闭。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`
    网格下限。Rust 的 `terminal_dimensions` 模块是模型、设置和各后端最大值的共享来源；由于
    Slint 不能导入 Rust 常量，Theme 保留编译期镜像。PTY 和 worker 入口继续保留独立的非零
@@ -846,11 +848,15 @@ Telnet 被明确标记为明文，且绝不共享 SSH 凭据或信任字段。RF
 响应、IAC 转义和 subnegotiation 编码由 `libmudtelnet-rs` 负责。本地 64 KiB 有界分帧
 适配器先组装完整命令、协商与 subnegotiation 再调用 parser，并把成对的 `IAC IAC`
 还原为终端数据；它只隔离已确认的跨调用分片边界，不重新实现选项语义。协商命令不会进入
-`TerminalModel`；Echo、Suppress-Go-Ahead、Binary 和 NAWS 等受支持选项得到明确响应，
-未知选项被拒绝，且只有对端接受后才发送 NAWS。TCP connect、协议帧、输入输出批次、错误、
-队列和 shutdown 等待都有上限。
+`TerminalModel`；Echo、Suppress-Go-Ahead、Binary、NAWS 和终端类型（TTYPE）等受支持选项得到明确响应。
+AxSSH 回报 `xterm-256color`，收到 `IAC SB TTYPE SEND IAC SE` 时发送
+`IAC SB TTYPE IS xterm-256color IAC SE`；未知选项被拒绝，且只有对端接受后才发送 NAWS。
+Telnet 输入是经过 IAC 转义的字节流，不是远端 PTY 行规程：使用终端模型已经编码的字节，不把裸
+`LF` 自动改为 `CRLF`，也不在 `CR` 后自动删除或追加 Telnet `NUL`。TCP connect、协议帧、输入输出批次、错误、
+队列和 shutdown 等待都有上限。Telnet ENVIRON、LINEMODE、压缩/MCCP、CHARSET、GMCP/MSDP
+和其它可选扩展仍明确关闭。
 
-Serial 发现通过 Tokio blocking 边界调用操作系统枚举 API，只返回 descriptor；不会打开
+Serial 是原始字节流传输，不是远端终端协议：没有 `TERM` 协商、PTY、NAWS、window-change 或远端终端尺寸上报契约。其本地 `TerminalModel` 仍会跟随界面 resize，但不会伪造远端能力。Serial 发现通过 Tokio blocking 边界调用操作系统枚举 API，只返回 descriptor；不会打开
 候选设备、切换 modem line、写入探测字节或推断 baud/parity。Session Editor 只有在用户选择
 Serial 或明确刷新列表时才请求扫描；应用启动不会枚举串口。用户发起连接后再次扫描；存在 USB 身份时必须解析到唯一设备，
 然后才启动由 worker 独占的串口 handle。找不到或出现歧义时默认拒绝；仍支持手工端口名。
