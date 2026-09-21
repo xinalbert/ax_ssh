@@ -386,7 +386,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         renderer_window_destroyed("main");
         return Err(error).context("failed to show main window");
     }
-    install_terminal_keypad_input_hook(
+    install_native_window_input_hook(
         &ui,
         state.clone(),
         runtime.handle().clone(),

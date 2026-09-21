@@ -5,19 +5,18 @@ use std::{
     time::Duration,
 };
 
-use super::input::{
-    clear_native_event_modifiers, normalized_keyboard_input_from_winit,
-    update_native_event_modifiers,
-};
+use super::input::{clear_native_event_modifiers, update_native_event_modifiers};
 #[cfg(target_os = "macos")]
-use super::input::{native_shortcut_key_name, native_shortcut_matches_setting};
+use super::input::{
+    native_shortcut_key_name, native_shortcut_matches_setting, normalized_keyboard_input_from_winit,
+};
 use super::*;
 use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{TerminalTarget, terminal_target_match_at_context};
 use ax_ssh::terminal::{
     TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
     TerminalMouseEventKind, TerminalMouseModifiers, TerminalSelectionRange, TerminalTargetContext,
-    encode_key_with_modes,
+    encode_key,
 };
 use slint::winit_030::winit::event::ElementState;
 use slint::winit_030::{
@@ -362,10 +361,9 @@ pub(super) fn resume_existing_local_shell(
 /// Register after a Slint window is shown, when its Winit adapter exists.
 ///
 /// Native modifier snapshots are recorded for every platform before Slint
-/// dispatches the corresponding key event. Physical Winit key identity is
-/// normalized at this boundary for application-keypad input on every desktop
-/// platform. Normal text and IME input continue through Slint's TextInput path.
-pub(super) fn install_terminal_keypad_input_hook(
+/// dispatches the corresponding key event. Normal text, IME input, and
+/// physical keypad input continue through Slint's standard keyboard path.
+pub(super) fn install_native_window_input_hook(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
     runtime: Handle,
@@ -374,7 +372,8 @@ pub(super) fn install_terminal_keypad_input_hook(
 ) {
     let modifiers = Rc::new(Cell::new(ModifiersState::default()));
     let modifiers_for_event = modifiers.clone();
-    let ui_for_keypad = ui.as_weak();
+    #[cfg(target_os = "macos")]
+    let ui_for_native = ui.as_weak();
     let state_for_drop = state.clone();
     let runtime_for_drop = runtime.clone();
     let router_for_drop = window_router.clone();
@@ -466,43 +465,36 @@ pub(super) fn install_terminal_keypad_input_hook(
                 if *is_synthetic || event.state != ElementState::Pressed {
                     return EventResult::Propagate;
                 }
-                let Some(ui) = ui_for_keypad.upgrade() else {
-                    return EventResult::Propagate;
-                };
-                if ui.get_active_tab_kind().as_str() != "terminal" {
-                    return EventResult::Propagate;
-                }
-                let modifiers = modifiers_for_event.get();
                 #[cfg(target_os = "macos")]
-                let mut physical_modifiers = TerminalModifiers {
-                    alt: modifiers.alt_key(),
-                    control: modifiers.control_key(),
-                    meta: modifiers.super_key(),
-                    shift: modifiers.shift_key(),
-                };
-                #[cfg(not(target_os = "macos"))]
-                let physical_modifiers = TerminalModifiers {
-                    alt: modifiers.alt_key(),
-                    control: modifiers.control_key(),
-                    meta: modifiers.super_key(),
-                    shift: modifiers.shift_key(),
-                };
-                #[cfg(target_os = "macos")]
-                if !physical_modifiers.control {
-                    let current = super::macos_window::current_modifier_state();
-                    if current.control || current.meta || current.alt || current.shift {
-                        physical_modifiers = current;
-                        update_native_event_modifiers(
-                            current.alt,
-                            current.control,
-                            current.meta,
-                            current.shift,
-                        );
+                {
+                    let modifiers = modifiers_for_event.get();
+                    let mut physical_modifiers = TerminalModifiers {
+                        alt: modifiers.alt_key(),
+                        control: modifiers.control_key(),
+                        meta: modifiers.super_key(),
+                        shift: modifiers.shift_key(),
+                    };
+                    if !physical_modifiers.control {
+                        let current = super::macos_window::current_modifier_state();
+                        if current.control || current.meta || current.alt || current.shift {
+                            physical_modifiers = current;
+                            update_native_event_modifiers(
+                                current.alt,
+                                current.control,
+                                current.meta,
+                                current.shift,
+                            );
+                        }
                     }
-                }
-
-                #[cfg(target_os = "macos")]
-                if physical_modifiers.control && !physical_modifiers.meta {
+                    let Some(ui) = ui_for_native.upgrade() else {
+                        return EventResult::Propagate;
+                    };
+                    if ui.get_active_tab_kind().as_str() != "terminal" {
+                        return EventResult::Propagate;
+                    }
+                    if !physical_modifiers.control || physical_modifiers.meta {
+                        return EventResult::Propagate;
+                    }
                     let Some(key_name) = native_shortcut_key_name(&event.logical_key) else {
                         return EventResult::Propagate;
                     };
@@ -538,7 +530,7 @@ pub(super) fn install_terminal_keypad_input_hook(
                         return EventResult::Propagate;
                     };
                     let input = TerminalInputContext {
-                        ui: &ui_for_keypad,
+                        ui: &ui_for_native,
                         state: &state,
                         window_router: &window_router,
                         window_id,
@@ -546,36 +538,6 @@ pub(super) fn install_terminal_keypad_input_hook(
                     if input.dispatch(tab_id, input_event) {
                         return EventResult::PreventDefault;
                     }
-                }
-
-                let Some(input_event) =
-                    normalized_keyboard_input_from_winit(event, physical_modifiers, *is_synthetic)
-                else {
-                    return EventResult::Propagate;
-                };
-                let modifiers = input_event.modifiers;
-                if !input_event.is_physical_keypad()
-                    || modifiers.alt
-                    || modifiers.control
-                    || modifiers.meta
-                    || modifiers.shift
-                {
-                    return EventResult::Propagate;
-                }
-                let Some(tab_id) = window_router.active_tab(window_id) else {
-                    return EventResult::Propagate;
-                };
-                let input = TerminalInputContext {
-                    ui: &ui_for_keypad,
-                    state: &state,
-                    window_router: &window_router,
-                    window_id,
-                };
-                if !input.application_keypad_active(tab_id) {
-                    return EventResult::Propagate;
-                }
-                if input.dispatch(tab_id, input_event) {
-                    return EventResult::PreventDefault;
                 }
             }
             _ => {}
@@ -592,24 +554,6 @@ struct TerminalInputContext<'a> {
 }
 
 impl TerminalInputContext<'_> {
-    fn application_keypad_active(&self, tab_id: Uuid) -> bool {
-        self.state.lock().is_ok_and(|app| {
-            !self
-                .window_router
-                .workspace_actions_locked(self.window_id, &app)
-                && self
-                    .window_router
-                    .owns_terminal_pane(self.window_id, tab_id, &app)
-                && app.terminal(tab_id).is_some_and(|terminal| {
-                    terminal.connected
-                        && terminal
-                            .terminal
-                            .as_ref()
-                            .is_some_and(|model| model.application_keypad())
-                })
-        })
-    }
-
     fn dispatch(&self, tab_id: Uuid, input: super::input::NormalizedKeyboardInput) -> bool {
         let input_started_at = std::time::Instant::now();
         let mut state_lock_elapsed = None;
@@ -658,16 +602,10 @@ impl TerminalInputContext<'_> {
                         .context("terminal paste exceeds the bounded input limit")?
                 } else {
                     let application_cursor = model.application_cursor();
-                    let application_keypad = model.application_keypad();
                     let Some(key) = super::input::terminal_key_from_normalized_input(&input) else {
                         return Ok((false, false));
                     };
-                    let Some(data) = encode_key_with_modes(
-                        &key,
-                        modifiers,
-                        application_cursor,
-                        application_keypad,
-                    ) else {
+                    let Some(data) = encode_key(&key, modifiers, application_cursor) else {
                         return Ok((false, false));
                     };
                     data

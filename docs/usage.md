@@ -426,6 +426,13 @@ individual Terminal panes remain borderless, including split panes.
 
 The terminal supports bounded scrollback, ANSI colors, text selection, native
 input methods, F1-F24, and common xterm-style control and navigation sequences.
+Character input keeps the layout-resolved text produced by the native event;
+Shift punctuation is not reconstructed from a hard-coded US layout. Physical
+numeric-keypad events follow the same standard text or logical-key path as
+other keyboard input; their physical identity is retained only as event
+metadata. NumLock, IME, AltGr, and modified keypad input keep their platform
+standard behavior. Unsupported modified Escape, Tab, or Return combinations do not emit
+private Kitty/CSI-u or `modifyOtherKeys` sequences.
 Standard terminal events are preserved: OSC 0/2 can update the runtime Terminal
 Tab title, CSI 22/23 restores the title stack, and BEL produces a short visual
 hint. Dynamic titles are runtime-only and are not saved in profiles or workspaces.

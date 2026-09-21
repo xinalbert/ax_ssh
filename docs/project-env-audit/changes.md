@@ -635,3 +635,11 @@
 - 受影响文件：`ui/settings/general.slint`、`ui/app.slint`、`ui/workspace-shell.slint`、`src/app/window_bridge.rs`、`src/app/window_router.rs`、双语使用说明和 tracker。
 - 更新后的命令或环境：工具链、Cargo.lock、Slint build 入口和 locked/offline 门禁保持不变。
 - 验证结果：fmt、locked/offline check、严格 Clippy、完整 Cargo test（230 库、218 应用、Doc tests 0）及 diff 检查通过；目标平台 GUI 未自动验收。
+
+# 2026-09-21 键盘输入标准化施工预检
+
+- 日期：2026-09-21
+- 变化摘要：本轮进入 Slint/Winit/终端键盘输入标准化施工；继续使用 Rust 2024、MSRV 1.92.0、Slint 1.17.1、`alacritty_terminal` 0.26.0 和 Cargo locked/offline 门禁，不新增依赖、不联网。
+- 受影响文件：`src/app/input.rs`、`src/app/terminal_bridge.rs`、`src/terminal/input.rs`、`ui/components/keyboard-input.slint`、`ui/terminal-pane.slint`、双语架构/用法和项目跟踪文档。
+- 更新后的命令或环境：先运行 `cargo test --locked --offline terminal::input::tests` 与 `cargo test --locked --offline app::input::tests`；实现后运行 fmt/check/严格 Clippy/全量测试/翻译检查/`git diff --check`。
+- 风险/待办：Shift 文本 fallback 需保持布局/IME/AltGr 语义；无稳定 xterm/terminfo 定义的组合继续不发序列；目标平台真实键盘布局、IME、NumLock、焦点和应用快捷键仍需用户验收。

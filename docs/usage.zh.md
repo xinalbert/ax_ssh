@@ -255,7 +255,10 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 窗口客户区不再额外绘制应用框线；单个 Terminal pane（包括分屏 pane）也不绘制自己的框线。
 
 终端支持有界回滚、ANSI 颜色、文本选择、原生输入法、F1-F24 和常见 xterm 风格
-控制/导航序列。标准终端事件也会保留：OSC 0/2 可更新运行时 Terminal Tab 标题，CSI 22/23
+控制/导航序列。字符输入保留原生事件产生的布局解析文本，不按硬编码的 US 键盘重新猜测
+Shift 标点。物理数字小键盘不再单独拦截为终端 application-keypad 模式；它的文本或逻辑键与其他键盘输入一样走标准路径，
+物理身份只作为事件元数据保留。NumLock、IME、AltGr 和带修饰的小键盘输入继续使用平台标准行为。没有标准定义的带修饰 Escape、Tab 或 Return 组合不会
+发出私有 Kitty/CSI-u 或 `modifyOtherKeys` 序列。标准终端事件也会保留：OSC 0/2 可更新运行时 Terminal Tab 标题，CSI 22/23
 恢复标题栈，BEL 产生短暂视觉提示。动态标题只存在运行时，不写入 profile 或 workspace。OSC 8
 超链接使用有界 URI，只有用户显式操作时才允许打开 HTTP(S) 目标，其他 scheme 保持 inert。F13-F16 使用 xterm
 标准的 Shift-F1-F4 形式（`CSI 1;2P` 到 `CSI 1;2S`），F17-F24 使用标准扩展 tilde 形式。终端根据实测文本区度量回答

@@ -2,16 +2,16 @@
 
 ## 当前目标
 
-- 目标 ID：20260919-terminal-standard-behavior
-- 目标：把终端上报与下发行为继续收敛到常见 xterm/VT 语义，并明确记录仍有意关闭或缺少必要几何数据的扩展。
-- 交付物：修正 F13-F24 的 xterm/terminfo 下发序列，补齐 Telnet TTYPE `xterm-256color` 回报，审计协议响应队列、窗口查询和 1016 像素上报边界，并同步标准化结论与回归测试。
+- 目标 ID：20260921-keyboard-input-standardization
+- 目标：把 Slint/Winit 到终端 worker 的键盘输入边界收敛到稳定的 xterm/VT 语义，修正 Shift 文本和修饰键路由，同时保持 IME、AltGr、NumLock 与应用快捷键边界。
+- 交付物：补齐键盘标准矩阵回归，修正布局感知的 Shift 文本 fallback，固定不支持的扩展组合为 fail-closed，并同步双语架构/用法、环境审计与实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：终端按键下发、CSI/OSC/DEC 查询上报、鼠标坐标模式、跨 transport 协议回写和有界响应策略。
-- 本轮范围：修正 F13-F24 标准序列，补齐 Telnet TTYPE，审计协议响应队列、CSI `t` 窗口查询和 `1016` 依赖语义；OSC 52 默认关闭策略、Sixel/Kitty/iTerm2 图形协议、SSH host-key trust、凭据、SFTP worker/队列和 GUI 自动验收仍不在本轮实现范围内。
-- 不在本轮范围内：扩展窗口/屏幕几何 DTO 以实现 `CSI 13 t`、`CSI 15 t`、`CSI 19 t`，开启 Kitty keyboard protocol，或实现 Sixel/Kitty/iTerm2 图形协议。
+- 当前范围：终端输入 DTO、Slint/Winit 键盘归一化、xterm 按键编码和应用快捷键/IME 优先级。
+- 本轮范围：F1-F24、导航/编辑键、Return/Backspace/Tab/Escape、Control/Alt 文本、Shift 文本、物理数字小键盘的标准输入路径、NumLock、重复/合成事件和无标准组合键的拒绝矩阵；移除 application-keypad/SS3 专用拦截。
+- 不在本轮范围内：开启 Kitty keyboard protocol、CSI-u、xterm `modifyOtherKeys`、伪造 Alt+Escape/Ctrl+Tab 等无稳定 terminfo 定义的扩展序列，或改变 OSC 52、图形协议、SSH host-key trust、凭据、SFTP worker/队列和 GUI 自动验收边界。
 
 ## 当前状态
 
@@ -51,6 +51,10 @@
 | STDUI5 | completed | F13-F24 使用 xterm/terminfo 标准下发序列，并覆盖带修饰键编码 | `src/terminal/input.rs` 定向测试、完整 Cargo 门禁 | 不改变 Kitty CSI-u 默认关闭策略。 |
 | STDREP1 | completed | 协议响应队列、CSI `t` 查询覆盖和 1016 依赖语义形成明确标准化结论 | terminal focused tests、双语文档、tracker/diff 检查 | 不伪造缺少窗口位置/屏幕几何 DTO 的响应；保持队列有界。 |
 | TELNETSTD1 | completed | Telnet TTYPE 协商回报 `xterm-256color`，并明确 Telnet/Serial 能力边界 | Telnet loopback、完整 Cargo 门禁、双语文档 | Telnet 不伪造 PTY 行规程；Serial 保持原始字节流；其它 Telnet 扩展继续关闭。 |
+| KEYSTD1 | completed | Slint/Winit/终端输入标准矩阵和 Shift/修饰键边界 | `terminal::input::tests`、`app::input::tests` | 保持布局解析事件文本优先，逻辑键只作空文本 fallback；物理小键盘不再进入专用 application-keypad/SS3 路径；IME、AltGr、NumLock 与应用快捷键不被终端编码器抢占。 |
+| KEYSTD2 | completed | 修正 Shift 文本 fallback、补齐 xterm 导航/功能键和 keypad fail-closed 回归 | focused tests、Slint/Cargo 重编译 | 原生事件文本优先，逻辑键只作空文本 fallback；不启用 Kitty keyboard protocol、CSI-u 或 `modifyOtherKeys`。 |
+| KEYSTD3 | completed | 双语输入契约、tracker/environment 记录和完整离线门禁 | fmt/check/Clippy/test/translation/diff/tracker | 目标平台真实键盘布局、IME、NumLock、应用快捷键和 GUI 焦点仍需用户验收。 |
+| KEYSTD4 | completed | 移除物理数字小键盘 application-keypad/SS3 专用拦截并回归标准输入路径 | fmt/check/Clippy/test/translation/diff/tracker | 物理小键盘保留事件元数据但不改变标准文本/逻辑键路由；Kitty keyboard protocol、CSI-u 和 `modifyOtherKeys` 继续关闭。 |
 
 ## 已完成
 
@@ -61,6 +65,9 @@
 - 已完成 STDUI5：F13-F16 改为 xterm-256color 的 `CSI 1;2P` 到 `CSI 1;2S`，F17-F24 改为标准扩展 tilde 序列；带 Shift/Alt/Control 修饰键时保留相同的 xterm 参数位，不复用旧的错误 F13-F20 或 F21-F24 编码。
 - 已完成 STDREP1：协议事件队列继续保持容量 16，队列满时记录有界诊断而不静默；`CSI 13 t`、`CSI 15 t`、`CSI 19 t` 因当前模型没有窗口位置/完整屏幕几何而不伪造回答；`1016` 明确只作为 `1006` SGR 的像素扩展，单独启用时仍走 legacy 坐标。
 - 已完成 TELNETSTD1：Telnet 接受 `DO TTYPE`，回报 `WILL TTYPE`，并将 `TTYPE SEND` 回写为 `IS xterm-256color`；Telnet 裸 `LF`/`CR`/`NUL` 不被应用层伪造成 SSH PTY 行规程，Serial 的无 TERM/PTY/NAWS 边界和 Telnet 可选扩展关闭状态已同步记录。
+
+- 已完成 KEYSTD1–3：终端字符键优先使用 Winit/原生事件的布局解析文本，逻辑键只在事件没有文本时回退；物理数字小键盘移除 application-keypad/SS3 专用拦截并回归标准文本/逻辑键路径；补充 Shift 字符、组合输入、F1-F24、导航键、NumLock/IME/AltGr 和无稳定 xterm 定义组合的回归。独立修饰键、带修饰 Escape/Tab/Return 不误发私有扩展序列；Kitty keyboard/CSI-u 与 `modifyOtherKeys` 继续关闭。
+- 已完成 KEYSTD4：删除物理数字小键盘的 application-keypad/SS3 专用 hook、终端 keypad 类型和 mode 编码参数；普通小键盘、NumLock、IME、AltGr、快捷键及带修饰输入统一回归标准 Slint/Winit 文本或逻辑键路径。
 
 - 已为 SFTP 内部拖动增加 `ax_ssh::sftp_drag` debug target：记录 Local/Remote 来源、开始、copy/非 copy 结束、远端落点收到/解析载荷、目标确认、本地文件校验与上传入队结果；字段只含固定阶段、面板、文件数和字节数。
 - 已从用户的最新运行日志确认：内部 Local-to-Remote 已经到达 `upload-queued`；Finder 的尝试没有到达既有 `sftp.drop-native-file` action，因此 SFTP worker、路径校验和上传队列不是该失败点。
@@ -174,7 +181,7 @@
 | KPAD2 | completed | 双语输入契约、项目地图、月度记录和离线质量门禁 | fmt/check/Clippy/test、tracker/Markdown、`git diff --check` | 不改变 SSH transport、host-key trust、凭据或持久化。 |
 | SHORT1 | completed | 在设置页展示所有应用层快捷键，包括固定的平台快捷键 | Slint 编译、设置搜索回归、翻译检查和完整 Cargo 门禁 | 可配置快捷键保持现有保存契约；固定的 Terminal Select All、Previous Tab、Next Tab 只读展示。 |
 | INPUT1 | completed | 统一普通输入框的复制/粘贴入口，并为密码输入提供安全的粘贴菜单 | Slint 编译、输入组件静态审阅、完整 Cargo 门禁 | 普通文本/路径/编辑器支持系统 Copy/Cut/Paste/Select All；SecretTextInput 仍禁止复制，仅允许粘贴，不改变凭据生命周期。 |
-| INPUT2 | completed | 统一全应用 Slint/Winit 键盘事件边界，并跨平台保留 application-keypad 物理小键盘身份 | 输入归一化回归、Slint/Cargo 离线门禁、双语契约和 tracker 检查 | `KeyboardEvent`/终端上下文 DTO 统一 callback 载荷；`NormalizedKeyboardInput.key` 使用应用级逻辑键，普通文本/IME 不携带物理身份，application-keypad 仅消费无修饰物理小键盘，`TerminalKey` 只在终端编码边界生成。 |
+| INPUT2 | completed | 统一全应用 Slint/Winit 键盘事件边界并回归标准键盘输入 | 输入归一化回归、Slint/Cargo 离线门禁、双语契约和 tracker 检查 | `KeyboardEvent`/终端上下文 DTO 统一 callback 载荷；`NormalizedKeyboardInput.key` 使用应用级逻辑键，普通文本/IME 不携带物理身份；物理小键盘统一走标准文本/逻辑键路径，`TerminalKey` 只在终端编码边界生成。 |
 | CRED1 | completed | 加密保险库缺少用户口令时生成隐藏逐服务器解锁密钥，并同步认证与会话编辑器入口 | 定向凭据回归、Slint 编译、翻译检查、fmt/check/Clippy/完整 test、`git diff --check` | 默认使用应用私有 `0600` 文件自动解锁，不访问系统密钥库；旧 profile 仅在本地解锁文件缺失时迁移一次旧 keyring 条目。随机解锁密钥不进入 profile JSON、UI 或日志。 |
 
 - `ROWMODEL1`：保持单层 `TerminalRenderLine` 和 nested run/background/decoration model 的稳定 identity。

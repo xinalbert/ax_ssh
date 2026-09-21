@@ -95,7 +95,7 @@ pub(super) fn restore_detached_workspaces(
             renderer_window_destroyed("detached");
             continue;
         }
-        install_terminal_keypad_input_hook(
+        install_native_window_input_hook(
             &detached_ui,
             state.clone(),
             runtime.clone(),

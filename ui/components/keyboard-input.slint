@@ -1,6 +1,5 @@
-// Application-wide keyboard DTO. Logical identity is kept separate from
-// physical identity so terminal modes can consume keypad information without
-// changing shortcut, IME, or text-input semantics.
+// Application-wide keyboard DTO. Logical and physical identity are kept
+// separate so shortcut, IME, and text-input semantics stay layout-aware.
 export struct KeyboardEvent {
     text: string,
     logical_key: string,

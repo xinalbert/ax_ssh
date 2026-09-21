@@ -5,7 +5,6 @@ use crate::terminal_input::TERMINAL_PASTE_MAX_BYTES;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalKey {
     Text(String),
-    Keypad(TerminalKeypadKey),
     Return,
     Backspace,
     Tab,
@@ -21,30 +20,6 @@ pub enum TerminalKey {
     PageUp,
     PageDown,
     Function(u8),
-}
-
-/// Physical numeric-keypad keys whose application-mode encoding differs from
-/// their text or navigation meaning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TerminalKeypadKey {
-    Zero,
-    One,
-    Two,
-    Three,
-    Four,
-    Five,
-    Six,
-    Seven,
-    Eight,
-    Nine,
-    Decimal,
-    Comma,
-    Divide,
-    Multiply,
-    Subtract,
-    Add,
-    Enter,
-    Equal,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -70,21 +45,10 @@ pub fn encode_key(
     modifiers: TerminalModifiers,
     application_cursor: bool,
 ) -> Option<Vec<u8>> {
-    encode_key_with_modes(key, modifiers, application_cursor, false)
-}
-
-/// Encode terminal input using the currently active cursor and keypad modes.
-pub fn encode_key_with_modes(
-    key: &TerminalKey,
-    modifiers: TerminalModifiers,
-    application_cursor: bool,
-    application_keypad: bool,
-) -> Option<Vec<u8>> {
     encode_key_for_platform(
         key,
         modifiers,
         application_cursor,
-        application_keypad,
         TerminalPlatform::current(),
     )
 }
@@ -151,13 +115,8 @@ fn encode_key_for_platform(
     key: &TerminalKey,
     modifiers: TerminalModifiers,
     application_cursor: bool,
-    application_keypad: bool,
     platform: TerminalPlatform,
 ) -> Option<Vec<u8>> {
-    if let Some(sequence) = application_keypad_sequence(key, modifiers, application_keypad) {
-        return Some(sequence.to_vec());
-    }
-
     if let Some(sequence) = platform_navigation_sequence(key, modifiers, platform) {
         return Some(sequence.to_vec());
     }
@@ -252,39 +211,6 @@ fn encode_key_for_platform(
         None
     } else {
         Some(text.as_bytes().to_vec())
-    }
-}
-
-fn application_keypad_sequence(
-    key: &TerminalKey,
-    modifiers: TerminalModifiers,
-    application_keypad: bool,
-) -> Option<&'static [u8]> {
-    if !application_keypad || !modifiers.is_empty() {
-        return None;
-    }
-    let TerminalKey::Keypad(key) = key else {
-        return None;
-    };
-    match key {
-        TerminalKeypadKey::Zero => Some(b"\x1bOp"),
-        TerminalKeypadKey::One => Some(b"\x1bOq"),
-        TerminalKeypadKey::Two => Some(b"\x1bOr"),
-        TerminalKeypadKey::Three => Some(b"\x1bOs"),
-        TerminalKeypadKey::Four => Some(b"\x1bOt"),
-        TerminalKeypadKey::Five => Some(b"\x1bOu"),
-        TerminalKeypadKey::Six => Some(b"\x1bOv"),
-        TerminalKeypadKey::Seven => Some(b"\x1bOw"),
-        TerminalKeypadKey::Eight => Some(b"\x1bOx"),
-        TerminalKeypadKey::Nine => Some(b"\x1bOy"),
-        TerminalKeypadKey::Decimal => Some(b"\x1bOn"),
-        TerminalKeypadKey::Comma => Some(b"\x1bOl"),
-        TerminalKeypadKey::Divide => Some(b"\x1bOo"),
-        TerminalKeypadKey::Multiply => Some(b"\x1bOj"),
-        TerminalKeypadKey::Subtract => Some(b"\x1bOm"),
-        TerminalKeypadKey::Add => Some(b"\x1bOk"),
-        TerminalKeypadKey::Enter => Some(b"\x1bOM"),
-        TerminalKeypadKey::Equal => Some(b"\x1bOX"),
     }
 }
 
@@ -518,73 +444,6 @@ mod tests {
     }
 
     #[test]
-    fn encodes_application_keypad_sequences_only_in_application_mode() {
-        let modifiers = TerminalModifiers::default();
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::Seven),
-                modifiers,
-                false,
-                true,
-            ),
-            Some(b"\x1bOw".to_vec())
-        );
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::Decimal),
-                modifiers,
-                false,
-                true,
-            ),
-            Some(b"\x1bOn".to_vec())
-        );
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::Enter),
-                modifiers,
-                false,
-                true,
-            ),
-            Some(b"\x1bOM".to_vec())
-        );
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::Equal),
-                modifiers,
-                false,
-                true,
-            ),
-            Some(b"\x1bOX".to_vec())
-        );
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::Seven),
-                modifiers,
-                false,
-                false,
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn leaves_modified_keypad_input_for_the_normal_key_path() {
-        let control = TerminalModifiers {
-            control: true,
-            ..TerminalModifiers::default()
-        };
-        assert_eq!(
-            encode_key_with_modes(
-                &TerminalKey::Keypad(TerminalKeypadKey::One),
-                control,
-                false,
-                true,
-            ),
-            None
-        );
-    }
-
-    #[test]
     fn encodes_control_and_alt_text() {
         let control = TerminalModifiers {
             control: true,
@@ -677,8 +536,72 @@ mod tests {
     }
 
     #[test]
+    fn encodes_standard_special_key_boundaries_without_extension_protocols() {
+        let alt = TerminalModifiers {
+            alt: true,
+            ..TerminalModifiers::default()
+        };
+        let control = TerminalModifiers {
+            control: true,
+            ..TerminalModifiers::default()
+        };
+        assert_eq!(encode_key(&TerminalKey::Escape, alt, false), None);
+        assert_eq!(encode_key(&TerminalKey::Tab, alt, false), None);
+        assert_eq!(encode_key(&TerminalKey::Tab, control, false), None);
+        assert_eq!(encode_key(&TerminalKey::Return, control, false), None);
+        assert_eq!(
+            encode_key(&TerminalKey::Return, alt, false),
+            Some(b"\x1b\r".to_vec())
+        );
+        assert_eq!(
+            encode_key(
+                &TerminalKey::Text("A".to_owned()),
+                TerminalModifiers {
+                    alt: true,
+                    shift: true,
+                    ..TerminalModifiers::default()
+                },
+                false,
+            ),
+            Some(b"\x1bA".to_vec())
+        );
+    }
+
+    #[test]
     fn encodes_function_keys_with_xterm_sequences() {
         let modifiers = TerminalModifiers::default();
+        let expected = [
+            (1, b"\x1bOP".as_slice()),
+            (2, b"\x1bOQ".as_slice()),
+            (3, b"\x1bOR".as_slice()),
+            (4, b"\x1bOS".as_slice()),
+            (5, b"\x1b[15~".as_slice()),
+            (6, b"\x1b[17~".as_slice()),
+            (7, b"\x1b[18~".as_slice()),
+            (8, b"\x1b[19~".as_slice()),
+            (9, b"\x1b[20~".as_slice()),
+            (10, b"\x1b[21~".as_slice()),
+            (11, b"\x1b[23~".as_slice()),
+            (12, b"\x1b[24~".as_slice()),
+            (13, b"\x1b[1;2P".as_slice()),
+            (14, b"\x1b[1;2Q".as_slice()),
+            (15, b"\x1b[1;2R".as_slice()),
+            (16, b"\x1b[1;2S".as_slice()),
+            (17, b"\x1b[15;2~".as_slice()),
+            (18, b"\x1b[17;2~".as_slice()),
+            (19, b"\x1b[18;2~".as_slice()),
+            (20, b"\x1b[19;2~".as_slice()),
+            (21, b"\x1b[20;2~".as_slice()),
+            (22, b"\x1b[21;2~".as_slice()),
+            (23, b"\x1b[23;2~".as_slice()),
+            (24, b"\x1b[24;2~".as_slice()),
+        ];
+        for (number, sequence) in expected {
+            assert_eq!(
+                encode_key(&TerminalKey::Function(number), modifiers, false),
+                Some(sequence.to_vec()),
+            );
+        }
         assert_eq!(
             encode_key(&TerminalKey::Function(1), modifiers, false),
             Some(b"\x1bOP".to_vec())
@@ -753,13 +676,7 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key_for_platform(
-                &TerminalKey::Left,
-                meta,
-                true,
-                false,
-                TerminalPlatform::MacOs,
-            ),
+            encode_key_for_platform(&TerminalKey::Left, meta, true, TerminalPlatform::MacOs,),
             Some(vec![0x01])
         );
         let alt = TerminalModifiers {
@@ -767,23 +684,11 @@ mod tests {
             ..TerminalModifiers::default()
         };
         assert_eq!(
-            encode_key_for_platform(
-                &TerminalKey::Right,
-                alt,
-                true,
-                false,
-                TerminalPlatform::MacOs,
-            ),
+            encode_key_for_platform(&TerminalKey::Right, alt, true, TerminalPlatform::MacOs,),
             Some(b"\x1bf".to_vec())
         );
         assert_eq!(
-            encode_key_for_platform(
-                &TerminalKey::Right,
-                alt,
-                true,
-                false,
-                TerminalPlatform::Other,
-            ),
+            encode_key_for_platform(&TerminalKey::Right, alt, true, TerminalPlatform::Other,),
             Some(b"\x1b[1;3C".to_vec())
         );
     }

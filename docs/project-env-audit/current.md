@@ -1,3 +1,14 @@
+# 2026-09-21 键盘输入标准化施工预检
+
+- 项目边界：独立 Rust 2024 桌面应用；本轮涉及 `src/app/input.rs`、`src/app/terminal_bridge.rs`、`src/terminal/input.rs`、`ui/components/keyboard-input.slint`、`ui/terminal-pane.slint` 及键盘回归/双语契约文档。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0；依赖和锁文件不变。
+- 运行环境：Cargo locked/offline 解析可用；本轮不新增 crate、不修改锁文件、不联网。
+- 输入标准边界：逻辑文本/IME、物理 `KeyCode`/`KeyLocation`、modifier snapshot、repeat/synthetic 状态继续分层；补齐 Shift 文本的布局语义回归，保持 Ctrl/Alt/AltGr、死键/IME、NumLock 和快捷键优先级边界。物理数字小键盘不再由 application-keypad/SS3 专用路径拦截，统一走标准 Slint/Winit 输入。未启用 Kitty keyboard protocol、CSI-u 或 `modifyOtherKeys`，无稳定 xterm 定义的组合继续 fail-closed。
+- 测试环境：Slint 入口仍由 `build.rs` 编译；先执行 `cargo test --locked --offline terminal::input::tests` 与 `cargo test --locked --offline app::input::tests`，收口执行 fmt/check/严格 Clippy/全量测试/翻译检查/`git diff --check`。
+- 安全与所有权：不改变 SSH host-key deny-by-default、凭据短生命周期、worker 有界队列、UI 线程边界或原生剪贴板策略；键盘文字仍不进入诊断日志。
+- 验证结果：键盘定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试、翻译检查和 `git diff --check` 已通过；tracker validator 已通过本轮新增记录。
+- 开工判定：施工完成。
+
 # 2026-09-21 Telnet 终端类型协商环境验证
 
 - 项目边界：`src/telnet.rs` 及双语终端/传输契约文档；补齐 RFC 1091 TTYPE，不改变 SSH、Local PTY、Serial 或 UI 所有权。

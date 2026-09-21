@@ -557,12 +557,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    construct the same boundary object as Winit `KeyEvent`; committed text and
    paste intentionally have no physical identity. `src/terminal/input.rs`
    emits control bytes, normal CSI, application-cursor SS3 arrow/Home/End
-   sequences, application-keypad SS3 sequences, and modified xterm
-   navigation/function-key sequences. When a shown Winit window receives a
-   non-synthetic, unmodified physical numeric-keypad event, the active terminal
-   may preserve its keypad identity while application-keypad mode is enabled by
-   `ESC =`; this rule is platform-independent. Normal mode, NumLock behavior,
-   IME, and modified keypad input continue through Slint's normal path. A
+   sequences, and modified xterm navigation/function-key sequences. Physical
+   numeric-keypad events are not intercepted for a terminal-private keypad
+   mode: their text or logical key follows the same standard Slint/Winit path
+   as other keyboard input, while physical `KeyCode`/`KeyLocation` remains
+   event metadata. NumLock behavior, IME, and modified keypad input therefore
+   keep their platform-standard handling. A
    transparent, cursor-positioned
    `TextInput` is the native text and IME proxy: special keys and terminal
    control chords use the native Winit boundary or the Slint `key-pressed`
@@ -602,6 +602,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    completed pointer selection and Select All copy locally, and direct
    right-click always pastes; this mode supersedes the separate right-click
    preference without promoting selection or clipboard text outside Slint.
+   For character keys, layout-resolved event text is authoritative; the logical
+   key is only a fallback when a backend supplies no text. This keeps Shift and
+   layout punctuation from being reconstructed as a US-keyboard guess. Standalone
+   modifiers and combinations without a stable xterm/terminfo sequence (such as
+   Alt+Escape, modified Tab, or modified Return) remain unhandled instead of
+   implicitly enabling Kitty keyboard/CSI-u or `modifyOtherKeys`.
    Native text/IME and application terminal-key routing are disabled until the
    active terminal reports connected. This UI guard is repeated at the Rust
    bridge, so focus or a stale callback cannot enqueue terminal input during

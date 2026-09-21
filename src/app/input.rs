@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use ax_ssh::terminal::{TerminalKey, TerminalKeypadKey, TerminalModifiers};
+use ax_ssh::terminal::{TerminalKey, TerminalModifiers};
 use slint::platform::Key;
 use slint::winit_030::winit::{
     event::KeyEvent as WinitKeyEvent,
@@ -62,8 +62,8 @@ pub(super) enum ApplicationKeyboardNamedKey {
 }
 
 /// The application-wide keyboard boundary shared by Slint and native Winit
-/// events. Logical text is layout/IME-aware; the physical code and location
-/// are retained for controls whose identity must survive NumLock and layouts.
+/// events. Logical text is layout/IME-aware; physical code and location remain
+/// available as event metadata without changing the standard text path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct NormalizedKeyboardInput {
     pub(super) text: String,
@@ -90,12 +90,6 @@ pub(super) struct UiKeyboardInputMetadata {
 impl NormalizedKeyboardInput {
     pub(super) fn is_physical_key_event(&self) -> bool {
         self.uses_native_modifiers
-    }
-
-    pub(super) fn is_physical_keypad(&self) -> bool {
-        self.physical_keycode
-            .and_then(terminal_key_from_physical_keycode)
-            .is_some()
     }
 }
 
@@ -364,16 +358,19 @@ fn application_key_from_native_key(key: &WinitKey) -> Option<ApplicationKeyboard
 pub(super) fn terminal_key_from_normalized_input(
     input: &NormalizedKeyboardInput,
 ) -> Option<TerminalKey> {
-    if let Some(key) = input
-        .physical_keycode
-        .and_then(terminal_key_from_physical_keycode)
-    {
-        return Some(key);
-    }
-
     match &input.key {
-        ApplicationKeyboardKey::Text(text) => {
-            let text = if text == "-"
+        ApplicationKeyboardKey::Text(logical_text) => {
+            // The logical key identifies the key class, but native events may
+            // carry the layout-resolved character in `text` (for example
+            // Shift+A or an Alt-modified punctuation key). Prefer that event
+            // text and only fall back to the logical character when a backend
+            // did not provide one.
+            let event_text = if input.text.is_empty() {
+                logical_text.as_str()
+            } else {
+                input.text.as_str()
+            };
+            let text = if event_text == "-"
                 && input.modifiers.shift
                 && !input.modifiers.alt
                 && !input.modifiers.control
@@ -381,7 +378,7 @@ pub(super) fn terminal_key_from_normalized_input(
             {
                 "_"
             } else {
-                text
+                event_text
             };
             Some(TerminalKey::Text(text.to_owned()))
         }
@@ -612,34 +609,6 @@ pub(super) fn native_shortcut_matches_setting(
     })
 }
 
-/// Preserve physical numeric-keypad identity until the terminal decides
-/// whether its application-keypad mode is active.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub(super) fn terminal_key_from_physical_keycode(keycode: KeyCode) -> Option<TerminalKey> {
-    let keypad = match keycode {
-        KeyCode::Numpad0 => TerminalKeypadKey::Zero,
-        KeyCode::Numpad1 => TerminalKeypadKey::One,
-        KeyCode::Numpad2 => TerminalKeypadKey::Two,
-        KeyCode::Numpad3 => TerminalKeypadKey::Three,
-        KeyCode::Numpad4 => TerminalKeypadKey::Four,
-        KeyCode::Numpad5 => TerminalKeypadKey::Five,
-        KeyCode::Numpad6 => TerminalKeypadKey::Six,
-        KeyCode::Numpad7 => TerminalKeypadKey::Seven,
-        KeyCode::Numpad8 => TerminalKeypadKey::Eight,
-        KeyCode::Numpad9 => TerminalKeypadKey::Nine,
-        KeyCode::NumpadDecimal => TerminalKeypadKey::Decimal,
-        KeyCode::NumpadComma => TerminalKeypadKey::Comma,
-        KeyCode::NumpadDivide => TerminalKeypadKey::Divide,
-        KeyCode::NumpadMultiply => TerminalKeypadKey::Multiply,
-        KeyCode::NumpadSubtract => TerminalKeypadKey::Subtract,
-        KeyCode::NumpadAdd => TerminalKeypadKey::Add,
-        KeyCode::NumpadEnter => TerminalKeypadKey::Enter,
-        KeyCode::NumpadEqual => TerminalKeypadKey::Equal,
-        _ => return None,
-    };
-    Some(TerminalKey::Keypad(keypad))
-}
-
 #[cfg(test)]
 fn format_shortcut_event(text: &str, alt: bool, control: bool, meta: bool, shift: bool) -> String {
     format_shortcut_event_with_modifiers(text, normalize_slint_modifiers(alt, control, meta, shift))
@@ -837,7 +806,7 @@ fn terminal_key_is_direct_for_input_with_platform(
     } else {
         input.modifiers.control || input.modifiers.alt || input.modifiers.meta
     };
-    if preedit_active && !direct_modifier {
+    if (preedit_active || input.is_composing) && !direct_modifier {
         return false;
     }
 
@@ -1002,23 +971,6 @@ mod tests {
     }
 
     #[test]
-    fn maps_physical_numeric_keypad_codes_to_terminal_keypad_values() {
-        assert_eq!(
-            terminal_key_from_physical_keycode(KeyCode::Numpad0),
-            Some(TerminalKey::Keypad(TerminalKeypadKey::Zero))
-        );
-        assert_eq!(
-            terminal_key_from_physical_keycode(KeyCode::NumpadDecimal),
-            Some(TerminalKey::Keypad(TerminalKeypadKey::Decimal))
-        );
-        assert_eq!(
-            terminal_key_from_physical_keycode(KeyCode::NumpadEnter),
-            Some(TerminalKey::Keypad(TerminalKeypadKey::Enter))
-        );
-        assert_eq!(terminal_key_from_physical_keycode(KeyCode::KeyA), None);
-    }
-
-    #[test]
     fn normalizes_slint_text_without_inventing_physical_identity() {
         let input =
             normalized_keyboard_input_from_slint("x", TerminalModifiers::default(), false, false);
@@ -1026,7 +978,77 @@ mod tests {
         assert_eq!(input.physical_keycode, None);
         assert_eq!(input.location, KeyLocation::Standard);
         assert!(!input.is_physical_key_event());
-        assert!(!input.is_physical_keypad());
+    }
+
+    #[test]
+    fn terminal_mapping_prefers_layout_resolved_event_text() {
+        let input = normalized_keyboard_input_from_ui(
+            "A",
+            "a",
+            TerminalModifiers {
+                alt: true,
+                shift: true,
+                ..TerminalModifiers::default()
+            },
+            UiKeyboardInputMetadata {
+                uses_native_modifiers: true,
+                ..UiKeyboardInputMetadata::default()
+            },
+        );
+        assert_eq!(
+            terminal_key_from_normalized_input(&input),
+            Some(TerminalKey::Text("A".to_owned()))
+        );
+    }
+
+    #[test]
+    fn terminal_mapping_falls_back_to_logical_text_when_event_text_is_empty() {
+        let input = normalized_keyboard_input_from_ui(
+            "",
+            "a",
+            TerminalModifiers {
+                control: true,
+                ..TerminalModifiers::default()
+            },
+            UiKeyboardInputMetadata::default(),
+        );
+        assert_eq!(
+            terminal_key_from_normalized_input(&input),
+            Some(TerminalKey::Text("a".to_owned()))
+        );
+    }
+
+    #[test]
+    fn composing_input_is_not_taken_by_plain_terminal_routing() {
+        let input = normalized_keyboard_input_from_ui(
+            "x",
+            "x",
+            TerminalModifiers::default(),
+            UiKeyboardInputMetadata {
+                is_composing: true,
+                uses_native_modifiers: true,
+                ..UiKeyboardInputMetadata::default()
+            },
+        );
+        assert!(!terminal_key_is_direct_for_input_with_platform(
+            &input, false, false, false
+        ));
+    }
+
+    #[test]
+    fn maps_every_extended_function_key_to_a_terminal_function() {
+        for number in 13..=24 {
+            let input = normalized_keyboard_input_from_ui(
+                &format!("F{number}"),
+                &format!("F{number}"),
+                TerminalModifiers::default(),
+                UiKeyboardInputMetadata::default(),
+            );
+            assert_eq!(
+                terminal_key_from_normalized_input(&input),
+                Some(TerminalKey::Function(number))
+            );
+        }
     }
 
     #[cfg(target_os = "macos")]

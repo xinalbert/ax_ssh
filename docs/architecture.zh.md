@@ -347,10 +347,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    `KeyEvent` 构造同一种边界对象；已提交文本和粘贴故意不携带物理身份。终端表面把
    Slint 特殊键（包括 F1-F24）转换成与 UI 无关的终端键值；平台对 `Shift+-` 仍上报
    `-` 时只在该映射层后备转换为 `_`。`src/terminal/input.rs` 生成控制字节、普通 CSI、
-   application-cursor SS3 方向/Home/End 序列、application-keypad SS3 序列，以及带修饰键的
-   xterm 导航/功能键序列。已显示的 Winit 窗口收到非合成、无修饰的物理数字小键盘事件时，若活动
-   终端通过 `ESC =` 进入 application-keypad 模式，就保留物理小键盘身份；该规则不区分平台。
-   普通模式、NumLock 行为、IME 和带修饰键的小键盘输入继续走 Slint 的原有路径。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：特殊键
+   application-cursor SS3 方向/Home/End 序列，以及带修饰键的 xterm 导航/功能键序列。物理
+   数字小键盘不再为终端私有的 application-keypad 模式单独拦截；其文本或逻辑键与其他键盘输入一样
+   走标准 Slint/Winit 路径，物理 `KeyCode`/`KeyLocation` 只作为事件元数据保留。NumLock、IME
+   和带修饰的小键盘输入因此继续使用平台标准行为。透明、随光标定位的 `TextInput` 是原生文字和 IME 代理：特殊键
    与终端控制组合键优先走原生 Winit 边界，未被原生截获的事件再走 `key-pressed`，可打印字符、Shift
    文字和 IME 提交只通过 `edited` 进入；预编辑保留在局部 UI 状态。应用边界先记录 Winit
    `ModifiersChanged` 的事件级状态，再还原物理 Control、Command、Option、Shift 语义。macOS 物理
@@ -374,6 +374,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    默认的可选右键行为根据是否存在选区选择复制或粘贴。启用
    `copy_selection_on_select` 后，完成鼠标选区和 Select All 都在本地复制，直接右击始终粘贴；
    此模式覆盖独立的右键偏好，选区和剪贴板文字仍不会离开 Slint。
+   对字符键，布局解析后的事件文本是权威值；只有后端没有提供文本时才回退到逻辑键。
+   因此 Shift 字符和不同键盘布局的标点不会在终端边界被猜成 US 键盘字符。独立修饰键以及
+   没有稳定 xterm/terminfo 序列的组合（例如 `Alt+Escape`、带修饰的 Tab 或 Return）保持不处理，
+   不会隐式开启 Kitty keyboard/CSI-u 或 `modifyOtherKeys`。
    活动终端报告 connected 前，原生文字/IME 和应用终端按键路由都不可交互；Rust bridge 会再次
    检查连接状态，因此焦点变化或迟到 callback 也不能在建连期间排入终端输入。
    键盘路由和主要 application callback 使用专用 `ax_ssh::diagnostics` debug target。特殊键

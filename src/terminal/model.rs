@@ -185,10 +185,6 @@ impl TerminalModel {
         self.term.mode().contains(TermMode::APP_CURSOR)
     }
 
-    pub fn application_keypad(&self) -> bool {
-        self.term.mode().contains(TermMode::APP_KEYPAD)
-    }
-
     pub fn encode_paste(&self, text: &str) -> Option<Vec<u8>> {
         super::input::encode_paste(text, self.term.mode().contains(TermMode::BRACKETED_PASTE))
     }
