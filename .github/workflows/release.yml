@@ -334,7 +334,7 @@ jobs:
             --jq '[.[] | select(.isDraft == false and .isPrerelease == false and (.tagName | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]*)?$")))] | sort_by(.publishedAt) | reverse | .[] | .tagName' \
             | while IFS= read -r candidate; do
                 if [[ "$candidate" != "$RELEASE_TAG" ]]; then
-                  printf '%s\\n' "$candidate"
+                  printf '%s\n' "$candidate"
                   break
                 fi
               done)"
