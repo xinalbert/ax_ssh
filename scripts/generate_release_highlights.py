@@ -245,8 +245,18 @@ def render_release_body(
     return "\n".join(lines)
 
 
-def generate_release_body(tag: str, repository_url: str, repository: Path) -> str:
-    """Build Highlights for *tag* from the checked-out repository history."""
+def generate_release_body(
+    tag: str,
+    repository_url: str,
+    repository: Path,
+    previous_tag: str | None = None,
+) -> str:
+    """Build Highlights for *tag* from checked-out history.
+
+    When *previous_tag* is supplied, it is the last successfully published
+    release and takes precedence over the nearest Git tag. This matters when
+    a failed release tag remains in Git but never creates a GitHub Release.
+    """
 
     validate_date_tag(tag)
     normalized_url = repository_url.rstrip("/")
@@ -254,7 +264,11 @@ def generate_release_body(tag: str, repository_url: str, repository: Path) -> st
         raise ReleaseHighlightsError("repository URL must not be empty")
 
     current_commit = git_output(repository, "rev-list", "-n", "1", tag)
-    previous_tag = previous_release_tag(repository, current_commit)
+    if previous_tag is not None:
+        validate_date_tag(previous_tag)
+        git_output(repository, "rev-parse", "--verify", f"{previous_tag}^{{commit}}")
+    else:
+        previous_tag = previous_release_tag(repository, current_commit)
     if previous_tag:
         revision_range = f"{previous_tag}..{tag}"
         comparison_url = f"{normalized_url}/compare/{previous_tag}...{tag}"
@@ -274,6 +288,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True, help="Date tag to summarize (YYYY-MM-DD[-N])")
+    parser.add_argument(
+        "--previous-tag",
+        help="last successfully published release tag; overrides Git tag proximity",
+    )
     parser.add_argument(
         "--repository-url",
         required=True,
@@ -299,7 +317,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     try:
-        body = generate_release_body(args.tag, args.repository_url, args.repository)
+        body = generate_release_body(
+            args.tag,
+            args.repository_url,
+            args.repository,
+            args.previous_tag,
+        )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(body, encoding="utf-8")
     except ReleaseHighlightsError as error:

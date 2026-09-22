@@ -323,15 +323,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/generate_release_highlights.py \
-            --tag "$RELEASE_TAG" \
-            --repository-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            --output release/body.md
+          previous_tag="$(gh release list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 100 \
+            --exclude-drafts \
+            --exclude-pre-releases \
+            --json tagName,isDraft,isPrerelease,publishedAt \
+            --jq '[.[] | select(.isDraft == false and .isPrerelease == false and (.tagName | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]*)?$")))] | sort_by(.publishedAt) | reverse | .[] | .tagName' \
+            | while IFS= read -r candidate; do
+                if [[ "$candidate" != "$RELEASE_TAG" ]]; then
+                  printf '%s\\n' "$candidate"
+                  break
+                fi
+              done)"
+          if [[ -n "$previous_tag" ]]; then
+            python scripts/generate_release_highlights.py \
+              --tag "$RELEASE_TAG" \
+              --previous-tag "$previous_tag" \
+              --repository-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --output release/body.md
+          else
+            python scripts/generate_release_highlights.py \
+              --tag "$RELEASE_TAG" \
+              --repository-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --output release/body.md
+          fi
           cat release/body.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ env.RELEASE_TAG }}
           name: AxSSH ${{ env.RELEASE_PUBLIC_VERSION }}
           files: dist/**/*

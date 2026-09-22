@@ -370,8 +370,11 @@ immutable tag. The local
 `packaging/macos/build-app.sh` script consumes the checked-in version and does
 not mutate release metadata.
 
-Before creating the GitHub Release, `scripts/generate_release_highlights.py`
-reads the checked-out tag history and writes a short, categorized **Highlights**
+Before creating the GitHub Release, the workflow asks GitHub for the most recent
+published, non-draft, non-prerelease AxSSH date tag and passes it to
+`scripts/generate_release_highlights.py`. This explicit baseline prevents a
+failed tag that never produced a GitHub Release from becoming the next
+comparison point. The helper then writes a short, categorized **Highlights**
 prefix with immutable commit links and a full-changelog comparison link. It
 excludes implementation-tracking commit subjects and lists each selected commit
 once, with at most eight recent commits per category. `softprops/action-gh-release` receives that file through `body_path` while

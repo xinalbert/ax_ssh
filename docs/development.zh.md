@@ -278,8 +278,9 @@ runner 上执行 x86_64 测试。
 中重跑同一 tag 的 Release run，tag 不会被创建、覆盖或移动。本地
 `packaging/macos/build-app.sh` 只使用已提交的版本，不会修改发布元数据。
 
-创建 GitHub Release 前，`scripts/generate_release_highlights.py` 会读取已检出的 tag 历史，生成带
-不可变 commit 链接和完整变更对比链接的分类 **Highlights** 前缀。它会排除实施跟踪类提交主题，并且每条
+创建 GitHub Release 前，workflow 会先从 GitHub 查询最近一个已发布、非草稿、非预发布的 AxSSH 日期 tag，
+再显式传给 `scripts/generate_release_highlights.py`。这样，未成功创建 GitHub Release 的失败 tag 不会成为下一次
+对比基线。辅助脚本随后生成带不可变 commit 链接和完整变更对比链接的分类 **Highlights** 前缀。它会排除实施跟踪类提交主题，并且每条
 选中的提交只出现一次，每个分类最多保留最近 8 条。`softprops/action-gh-release` 通过 `body_path` 读取该文件，同时仍启用
 `generate_release_notes: true`，因此 GitHub 会在该前缀下提供完整的自动变更列表。CI 通过
 `scripts/test_generate_release_highlights.py` 覆盖该辅助脚本及其 Git tag range 行为。

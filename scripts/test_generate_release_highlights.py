@@ -142,6 +142,49 @@ class ReleaseHighlightsTests(unittest.TestCase):
         )
         self.assertIn(f"/commit/{package_sha}", body)
 
+    def test_explicit_previous_tag_skips_failed_intermediate_release_tag(self) -> None:
+        self.commit("Initial workspace")
+        self.tag("2026-09-17")
+        self.commit("Release 2026-09-22")
+        self.tag("2026-09-22")
+        fix_sha = self.commit("Fix terminal ARM Linux keyboard cfg clippy")
+        self.tag("2026-09-22-1")
+
+        body = release_highlights.generate_release_body(
+            "2026-09-22-1",
+            "https://github.example/AxSSH/ax_ssh",
+            self.repository,
+            previous_tag="2026-09-17",
+        )
+
+        self.assertIn(
+            "[Full changelog](https://github.example/AxSSH/ax_ssh/compare/2026-09-17...2026-09-22-1)",
+            body,
+        )
+        self.assertIn(f"/commit/{fix_sha}", body)
+
+    def test_explicit_previous_tag_must_exist_and_use_release_format(self) -> None:
+        self.commit("Initial workspace")
+        self.tag("2026-09-17")
+        self.commit("Fix release")
+        self.tag("2026-09-22-1")
+
+        with self.assertRaises(release_highlights.ReleaseHighlightsError):
+            release_highlights.generate_release_body(
+                "2026-09-22-1",
+                "https://github.example/AxSSH/ax_ssh",
+                self.repository,
+                previous_tag="2026-09-22-0",
+            )
+
+        with self.assertRaises(release_highlights.GitCommandError):
+            release_highlights.generate_release_body(
+                "2026-09-22-1",
+                "https://github.example/AxSSH/ax_ssh",
+                self.repository,
+                previous_tag="2026-09-18",
+            )
+
     def test_invalid_date_tag_is_rejected(self) -> None:
         with self.assertRaises(release_highlights.ReleaseHighlightsError):
             release_highlights.validate_date_tag("v2026-08-12")
