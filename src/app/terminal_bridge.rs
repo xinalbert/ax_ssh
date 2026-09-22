@@ -18,6 +18,7 @@ use ax_ssh::terminal::{
     TerminalMouseEventKind, TerminalMouseModifiers, TerminalSelectionRange, TerminalTargetContext,
     encode_key,
 };
+#[cfg(target_os = "macos")]
 use slint::winit_030::winit::event::ElementState;
 use slint::winit_030::{
     EventResult, WinitWindowAccessor,
@@ -460,88 +461,82 @@ pub(super) fn install_native_window_input_hook(
             } if *is_synthetic || event.state != ElementState::Pressed => {
                 return EventResult::Propagate;
             }
+            #[cfg(target_os = "macos")]
             WindowEvent::KeyboardInput {
                 event,
                 is_synthetic,
                 ..
             } => {
-                #[cfg(target_os = "macos")]
-                {
-                    let modifiers = modifiers_for_event.get();
-                    let mut physical_modifiers = TerminalModifiers {
-                        alt: modifiers.alt_key(),
-                        control: modifiers.control_key(),
-                        meta: modifiers.super_key(),
-                        shift: modifiers.shift_key(),
-                    };
-                    if !physical_modifiers.control {
-                        let current = super::macos_window::current_modifier_state();
-                        if current.control || current.meta || current.alt || current.shift {
-                            physical_modifiers = current;
-                            update_native_event_modifiers(
-                                current.alt,
-                                current.control,
-                                current.meta,
-                                current.shift,
-                            );
-                        }
-                    }
-                    let Some(ui) = ui_for_native.upgrade() else {
-                        return EventResult::Propagate;
-                    };
-                    if ui.get_active_tab_kind().as_str() != "terminal" {
-                        return EventResult::Propagate;
-                    }
-                    if !physical_modifiers.control || physical_modifiers.meta {
-                        return EventResult::Propagate;
-                    }
-                    let Some(key_name) = native_shortcut_key_name(&event.logical_key) else {
-                        return EventResult::Propagate;
-                    };
-                    let settings = match state.lock() {
-                        Ok(app) => app.sessions.settings.shortcuts.clone(),
-                        Err(_) => return EventResult::Propagate,
-                    };
-                    let application_shortcut = [
-                        settings.open_settings.as_str(),
-                        settings.new_session.as_str(),
-                        settings.import_sessions.as_str(),
-                        settings.export_selected.as_str(),
-                        settings.toggle_sidebar.as_str(),
-                        settings.copy_selection.as_str(),
-                        settings.paste.as_str(),
-                        settings.open_sftp.as_str(),
-                    ]
-                    .into_iter()
-                    .any(|shortcut| {
-                        native_shortcut_matches_setting(shortcut, &key_name, physical_modifiers)
-                    });
-                    if application_shortcut {
-                        return EventResult::Propagate;
-                    }
-                    let Some(input_event) = normalized_keyboard_input_from_winit(
-                        event,
-                        physical_modifiers,
-                        *is_synthetic,
-                    ) else {
-                        return EventResult::Propagate;
-                    };
-                    let Some(tab_id) = window_router.active_tab(window_id) else {
-                        return EventResult::Propagate;
-                    };
-                    let input = TerminalInputContext {
-                        ui: &ui_for_native,
-                        state: &state,
-                        window_router: &window_router,
-                        window_id,
-                    };
-                    if input.dispatch(tab_id, input_event) {
-                        return EventResult::PreventDefault;
+                let modifiers = modifiers_for_event.get();
+                let mut physical_modifiers = TerminalModifiers {
+                    alt: modifiers.alt_key(),
+                    control: modifiers.control_key(),
+                    meta: modifiers.super_key(),
+                    shift: modifiers.shift_key(),
+                };
+                if !physical_modifiers.control {
+                    let current = super::macos_window::current_modifier_state();
+                    if current.control || current.meta || current.alt || current.shift {
+                        physical_modifiers = current;
+                        update_native_event_modifiers(
+                            current.alt,
+                            current.control,
+                            current.meta,
+                            current.shift,
+                        );
                     }
                 }
+                let Some(ui) = ui_for_native.upgrade() else {
+                    return EventResult::Propagate;
+                };
+                if ui.get_active_tab_kind().as_str() != "terminal" {
+                    return EventResult::Propagate;
+                }
+                if !physical_modifiers.control || physical_modifiers.meta {
+                    return EventResult::Propagate;
+                }
+                let Some(key_name) = native_shortcut_key_name(&event.logical_key) else {
+                    return EventResult::Propagate;
+                };
+                let settings = match state.lock() {
+                    Ok(app) => app.sessions.settings.shortcuts.clone(),
+                    Err(_) => return EventResult::Propagate,
+                };
+                let application_shortcut = [
+                    settings.open_settings.as_str(),
+                    settings.new_session.as_str(),
+                    settings.import_sessions.as_str(),
+                    settings.export_selected.as_str(),
+                    settings.toggle_sidebar.as_str(),
+                    settings.copy_selection.as_str(),
+                    settings.paste.as_str(),
+                    settings.open_sftp.as_str(),
+                ]
+                .into_iter()
+                .any(|shortcut| {
+                    native_shortcut_matches_setting(shortcut, &key_name, physical_modifiers)
+                });
+                if application_shortcut {
+                    return EventResult::Propagate;
+                }
+                let Some(input_event) =
+                    normalized_keyboard_input_from_winit(event, physical_modifiers, *is_synthetic)
+                else {
+                    return EventResult::Propagate;
+                };
+                let Some(tab_id) = window_router.active_tab(window_id) else {
+                    return EventResult::Propagate;
+                };
+                let input = TerminalInputContext {
+                    ui: &ui_for_native,
+                    state: &state,
+                    window_router: &window_router,
+                    window_id,
+                };
+                if input.dispatch(tab_id, input_event) {
+                    return EventResult::PreventDefault;
+                }
             }
-            #[cfg(not(target_os = "macos"))]
-            WindowEvent::KeyboardInput { .. } => {}
             _ => {}
         }
         EventResult::Propagate
