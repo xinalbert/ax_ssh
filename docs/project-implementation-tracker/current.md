@@ -2,16 +2,16 @@
 
 ## 当前目标
 
-- 目标 ID：20260922-session-io-standardization
-- 目标：统一 Local PTY、SSH、Telnet、Serial 的终端输入上报、输出接收与展示计时契约，并为 SFTP 异步目录响应增加请求关联，阻止过期响应覆盖当前视图。
-- 交付物：共享 `TerminalOutputChunk`、应用层输入序列号/类型/结果诊断、统一输出展示时间戳、SFTP request ID 状态校验，以及双语架构、环境审计和验证记录。
+- 目标 ID：20260922-platform-cfg-clippy
+- 目标：修复 Windows/Linux 严格 `clippy --all-targets -D warnings` 的平台边界回归，并把平台专属声明、导入、调用方、测试和事件匹配的约束固化到仓库协作规则。
+- 交付物：键盘原生 helper/import 的 macOS `cfg` 对齐、非 macOS 文件拖放辅助状态的死代码清理、跨平台键盘事件 guarded match、根目录 `AGENTS.md` 约束，以及目标平台验证边界记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：终端 transport event DTO、应用 monitor、TerminalPresentation、输入诊断和 SFTP 浏览事件。
-- 本轮范围：输出接收时间、来源、字节数和统一展示记录；key/paste/pointer/focus/protocol/command 输入分类；目录页/失败事件 request ID 与过期响应拒绝。
-- 不在本轮范围内：改变键盘编码标准、开启 Kitty keyboard protocol/CSI-u/modifyOtherKeys、改变 OSC 52、图形协议、SSH host-key trust、凭据、worker 所有权或 GUI 自动验收边界。
+- 当前范围：`src/app/input.rs`、`src/app/terminal_bridge.rs`、根目录 `AGENTS.md`，以及 CI 中的 Windows/Linux target-specific Clippy 门禁。
+- 本轮范围：macOS-only Winit helper 与 import 的 `cfg` 对齐；非 macOS dead code 清理；键盘事件过滤与 macOS 处理逻辑拆分为 guarded match；补充平台编译/严格 Clippy 的协作约束。
+- 不在本轮范围内：改变键盘编码语义、改变拖放行为、修改依赖/锁文件、放宽 `-D warnings`、修改 CI target matrix、SSH host-key trust、凭据、worker 所有权或 GUI 自动验收边界。
 
 ## 当前状态
 
@@ -58,6 +58,8 @@
 | IOSTD1 | completed | 四类 transport 输出统一为带接收时间的 `TerminalOutputChunk`，应用展示统一消费时间戳 | `cargo check --locked --offline`、定向输出测试、diff | 不记录原始终端内容；队列、上限和 UI 线程边界不变。 |
 | IOSTD2 | completed | 输入统一分配应用序列号，标记类型、字节数、结果和耗时；补齐 monitor 输出诊断 | `cargo fmt --all -- --check`、严格 Clippy、定向测试 | SSH 既有 transport 内部序列保留，应用序列用于跨 transport 对齐。 |
 | IOSTD3 | completed | SFTP 目录请求/响应关联 request ID，过期响应 fail-closed；同步双语架构和环境记录 | 全量 Cargo 门禁、tracker validator、diff | 只接受当前 Tab request ID；关闭/重连会使旧请求失效。 |
+| XPLATCFG1 | completed | 平台专属 helper/import/caller/test 的 `cfg` 对齐，并拆分 guarded keyboard event match | macOS 全量 Cargo 门禁；Linux/Windows target 命令已尝试并记录工具链限制；diff | 不使用 `allow(dead_code)` 或放宽 Clippy；保持 macOS 行为不变。 |
+| XPLATCFG2 | completed | 将平台边界和 target-specific 严格 Clippy 要求固化到 `AGENTS.md` | tracker/environment 记录、diff | 目标平台 SDK/linker 缺失时必须记录限制，不能以未验证交叉编译替代 CI。 |
 
 ## 已完成
 

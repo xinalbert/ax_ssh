@@ -1,3 +1,13 @@
+# 2026-09-22 跨平台 cfg/Clippy 回归修复环境验证
+
+- 项目边界：Rust 2024 独立桌面应用；本轮仅涉及 `src/app/input.rs`、`src/app/terminal_bridge.rs`、根目录 `AGENTS.md` 与 target-specific Clippy 验证，不改变 Slint UI 契约、SSH trust、凭据或 worker 所有权。
+- 代码环境：Rust/Cargo 1.97.1，MSRV 1.92.0；依赖和 `Cargo.lock` 未修改。macOS-only Winit helper、相关 import 和调用方已统一置于 `cfg(target_os = "macos")`；非 macOS 键盘过滤使用 guarded match，避免 `dead_code` 与 `collapsible_match` 在 `-D warnings` 下重复回归。
+- 本机验证：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 279、应用 267、Doc tests 0）和 `git diff --check` 通过。
+- Linux target 验证：已执行 `cargo clippy --all-targets --locked --target x86_64-unknown-linux-gnu -- -D warnings`；本机未安装 `x86_64-unknown-linux-gnu` 标准库，编译在 `core/std` 缺失处停止，未进入项目源码检查。
+- Windows target 验证：已执行 `cargo clippy --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings`；target 已安装，但 macOS 环境缺少 MSVC/Windows SDK，`aws-lc-sys` 交叉编译因 `windows.h`/`stdlib.h` 缺失停止，未进入项目源码检查。
+- 门禁结论：目标平台 native CI 仍是 Windows/Linux 的最终证据；本地不能交叉编译时必须保留该限制，不得删除 target-specific CI 或用 `allow(dead_code)` 掩盖平台边界。
+- 开工判定：施工完成；目标平台实际构建和 GUI 行为仍需对应 runner/用户验收。
+
 # 2026-09-22 终端输入输出契约统一环境验证
 
 - 项目边界：`src/terminal.rs`、四类 transport、`src/app/{diagnostics,state/terminal,connection_monitor,connection/direct,terminal_bridge,state/sftp,sftp_bridge}.rs` 及双语架构说明；不改变 Rust 2024、MSRV 1.92、Slint build 入口、SSH host-key trust、凭据和 worker 所有权。
