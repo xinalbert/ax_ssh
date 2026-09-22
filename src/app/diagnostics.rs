@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::input::{ApplicationKeyboardKey, NormalizedKeyboardInput};
 
@@ -64,6 +64,18 @@ pub(super) fn log_terminal_input_latency(
         state_lock_us = state_lock_elapsed.map(duration_micros),
         worker_request_us = worker_request_elapsed.map(duration_micros),
         "terminal input request completed"
+    );
+}
+
+pub(super) fn log_terminal_output_chunk(source: &'static str, bytes: usize, received_at: Instant) {
+    tracing::debug!(
+        target: LATENCY_TARGET,
+        event = "terminal-output",
+        stage = "worker-to-monitor",
+        source,
+        bytes,
+        age_us = duration_micros(received_at.elapsed()),
+        "terminal output batch received by application monitor"
     );
 }
 

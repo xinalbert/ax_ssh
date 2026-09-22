@@ -11,6 +11,7 @@ mod tests;
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
+use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::term::{ClipboardType, Term};
@@ -27,6 +28,30 @@ const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
 type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
 type TextAreaResponseFormatter = Arc<dyn Fn(WindowSize) -> String + Send + Sync + 'static>;
 pub type ClipboardLoadFormatter = Arc<dyn Fn(&str) -> String + Send + Sync + 'static>;
+
+/// One bounded output batch crossing a transport/application boundary.
+///
+/// `received_at` is captured by the transport as close as practical to the
+/// underlying read. The application layer may use it for presentation latency
+/// and diagnostics without coupling the UI to a worker or runtime handle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TerminalOutputChunk {
+    pub data: Vec<u8>,
+    pub received_at: Instant,
+}
+
+impl TerminalOutputChunk {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            received_at: Instant::now(),
+        }
+    }
+
+    pub fn with_received_at(data: Vec<u8>, received_at: Instant) -> Self {
+        Self { data, received_at }
+    }
+}
 
 enum TerminalProtocolEvent {
     PtyWrite(Vec<u8>),

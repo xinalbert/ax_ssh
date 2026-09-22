@@ -814,6 +814,7 @@ pub(super) fn wire_sftp(
                     .as_ref()
                     .context("active SSH terminal has no worker")?
                     .request_load_more_sftp()?;
+                terminal.sftp.request_id = terminal.sftp.request_id.wrapping_add(1).max(1);
                 terminal.sftp.loading = true;
                 terminal.sftp.status = "Loading more files...".to_owned();
                 Ok(())
@@ -2401,7 +2402,7 @@ fn queue_remote_navigation_for_terminal(
         .worker
         .as_ref()
         .context("active SSH terminal has no worker")?;
-    let request_path = terminal.sftp.begin_navigation(kind, path)?;
+    let (_, request_path) = terminal.sftp.begin_navigation(kind, path)?;
     let result = worker.request_list_sftp(request_path);
     if let Err(error) = result {
         terminal.sftp.cancel_navigation();

@@ -946,10 +946,10 @@ async fn probe_then_password_login_preserves_host_key_verification() {
     let output = timeout(Duration::from_secs(2), async {
         loop {
             match events.recv().await {
-                Some(SshSessionEvent::Output { data, .. })
-                    if String::from_utf8_lossy(&data).contains("echo: whoami") =>
+                Some(SshSessionEvent::Output(output))
+                    if String::from_utf8_lossy(&output.data).contains("echo: whoami") =>
                 {
-                    break data;
+                    break output.data;
                 }
                 Some(SshSessionEvent::Failed(message)) => {
                     panic!("SSH worker failed while waiting for shell output: {message}")
@@ -1198,8 +1198,8 @@ async fn private_key_login_opens_interactive_shell() {
         .expect("private-key shell should accept input");
     timeout(Duration::from_secs(2), async {
         loop {
-            if let Some(SshSessionEvent::Output { data, .. }) = events.recv().await
-                && String::from_utf8_lossy(&data).contains("echo: id")
+            if let Some(SshSessionEvent::Output(output)) = events.recv().await
+                && String::from_utf8_lossy(&output.data).contains("echo: id")
             {
                 break;
             }

@@ -27,7 +27,7 @@ use super::local_files::{LocalDirectoryEntry, default_local_directory};
 mod editor;
 mod sftp;
 mod tabs;
-mod terminal;
+pub(super) mod terminal;
 
 pub(super) struct AppState {
     pub(super) config: ConfigStore,
@@ -298,6 +298,7 @@ pub(super) struct SftpBrowserState {
     pub(super) has_more: bool,
     pub(super) truncated: bool,
     pub(super) status: String,
+    pub(super) request_id: u64,
     pub(super) selected: HashSet<String>,
     pub(super) sort: SftpSortState,
     back_history: VecDeque<String>,

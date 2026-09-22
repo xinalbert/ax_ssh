@@ -17,6 +17,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 #[cfg(unix)]
@@ -52,7 +53,7 @@ const UNIX_UTF8_LOCALE: &str = "C.UTF-8";
 pub enum LocalShellEvent {
     Started { shell: String },
     Resized { columns: u32, rows: u32 },
-    Output(Vec<u8>),
+    Output(crate::terminal::TerminalOutputChunk),
     Exited { status: String },
     Failed(String),
 }
@@ -616,7 +617,12 @@ fn read_output(
             Ok(read) => {
                 if send_event_with_cancellation(
                     event_tx,
-                    LocalShellEvent::Output(buffer[..read].to_vec()),
+                    LocalShellEvent::Output(
+                        crate::terminal::TerminalOutputChunk::with_received_at(
+                            buffer[..read].to_vec(),
+                            Instant::now(),
+                        ),
+                    ),
                     shutdown_requested,
                 )
                 .is_err()
@@ -1318,7 +1324,9 @@ mod tests {
         assert!(
             send_event_with_cancellation(
                 &event_tx,
-                LocalShellEvent::Output(b"discard on shutdown".to_vec()),
+                LocalShellEvent::Output(crate::terminal::TerminalOutputChunk::new(
+                    b"discard on shutdown".to_vec(),
+                )),
                 &shutdown_requested,
             )
             .is_err()
@@ -1339,10 +1347,11 @@ mod tests {
             &command_tx,
         );
 
-        assert_eq!(
-            event_rx.try_recv(),
-            Ok(LocalShellEvent::Output(b"done".to_vec()))
-        );
+        let event = event_rx.try_recv().expect("output event should be queued");
+        match event {
+            LocalShellEvent::Output(output) => assert_eq!(output.data, b"done"),
+            other => panic!("expected output event, got {other:?}"),
+        }
         assert!(matches!(
             command_rx.try_recv(),
             Ok(LocalShellCommand::ReaderClosed)
@@ -1364,7 +1373,7 @@ mod tests {
                             .expect("local PTY should accept input");
                         sent = true;
                     }
-                    LocalShellEvent::Output(data) => output.extend(data),
+                    LocalShellEvent::Output(data) => output.extend(data.data),
                     LocalShellEvent::Exited { .. } => break,
                     LocalShellEvent::Failed(message) => {
                         panic!("local PTY failed: {message}");

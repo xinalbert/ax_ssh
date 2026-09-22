@@ -2,16 +2,16 @@
 
 ## 当前目标
 
-- 目标 ID：20260921-keyboard-input-standardization
-- 目标：把 Slint/Winit 到终端 worker 的键盘输入边界收敛到稳定的 xterm/VT 语义，修正 Shift 文本和修饰键路由，同时保持 IME、AltGr、NumLock 与应用快捷键边界。
-- 交付物：补齐键盘标准矩阵回归，修正布局感知的 Shift 文本 fallback，固定不支持的扩展组合为 fail-closed，并同步双语架构/用法、环境审计与实施记录。
+- 目标 ID：20260922-session-io-standardization
+- 目标：统一 Local PTY、SSH、Telnet、Serial 的终端输入上报、输出接收与展示计时契约，并为 SFTP 异步目录响应增加请求关联，阻止过期响应覆盖当前视图。
+- 交付物：共享 `TerminalOutputChunk`、应用层输入序列号/类型/结果诊断、统一输出展示时间戳、SFTP request ID 状态校验，以及双语架构、环境审计和验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：终端输入 DTO、Slint/Winit 键盘归一化、xterm 按键编码和应用快捷键/IME 优先级。
-- 本轮范围：F1-F24、导航/编辑键、Return/Backspace/Tab/Escape、Control/Alt 文本、Shift 文本、物理数字小键盘的标准输入路径、NumLock、重复/合成事件和无标准组合键的拒绝矩阵；移除 application-keypad/SS3 专用拦截。
-- 不在本轮范围内：开启 Kitty keyboard protocol、CSI-u、xterm `modifyOtherKeys`、伪造 Alt+Escape/Ctrl+Tab 等无稳定 terminfo 定义的扩展序列，或改变 OSC 52、图形协议、SSH host-key trust、凭据、SFTP worker/队列和 GUI 自动验收边界。
+- 当前范围：终端 transport event DTO、应用 monitor、TerminalPresentation、输入诊断和 SFTP 浏览事件。
+- 本轮范围：输出接收时间、来源、字节数和统一展示记录；key/paste/pointer/focus/protocol/command 输入分类；目录页/失败事件 request ID 与过期响应拒绝。
+- 不在本轮范围内：改变键盘编码标准、开启 Kitty keyboard protocol/CSI-u/modifyOtherKeys、改变 OSC 52、图形协议、SSH host-key trust、凭据、worker 所有权或 GUI 自动验收边界。
 
 ## 当前状态
 
@@ -55,6 +55,9 @@
 | KEYSTD2 | completed | 修正 Shift 文本 fallback、补齐 xterm 导航/功能键和 keypad fail-closed 回归 | focused tests、Slint/Cargo 重编译 | 原生事件文本优先，逻辑键只作空文本 fallback；不启用 Kitty keyboard protocol、CSI-u 或 `modifyOtherKeys`。 |
 | KEYSTD3 | completed | 双语输入契约、tracker/environment 记录和完整离线门禁 | fmt/check/Clippy/test/translation/diff/tracker | 目标平台真实键盘布局、IME、NumLock、应用快捷键和 GUI 焦点仍需用户验收。 |
 | KEYSTD4 | completed | 移除物理数字小键盘 application-keypad/SS3 专用拦截并回归标准输入路径 | fmt/check/Clippy/test/translation/diff/tracker | 物理小键盘保留事件元数据但不改变标准文本/逻辑键路由；Kitty keyboard protocol、CSI-u 和 `modifyOtherKeys` 继续关闭。 |
+| IOSTD1 | completed | 四类 transport 输出统一为带接收时间的 `TerminalOutputChunk`，应用展示统一消费时间戳 | `cargo check --locked --offline`、定向输出测试、diff | 不记录原始终端内容；队列、上限和 UI 线程边界不变。 |
+| IOSTD2 | completed | 输入统一分配应用序列号，标记类型、字节数、结果和耗时；补齐 monitor 输出诊断 | `cargo fmt --all -- --check`、严格 Clippy、定向测试 | SSH 既有 transport 内部序列保留，应用序列用于跨 transport 对齐。 |
+| IOSTD3 | completed | SFTP 目录请求/响应关联 request ID，过期响应 fail-closed；同步双语架构和环境记录 | 全量 Cargo 门禁、tracker validator、diff | 只接受当前 Tab request ID；关闭/重连会使旧请求失效。 |
 
 ## 已完成
 

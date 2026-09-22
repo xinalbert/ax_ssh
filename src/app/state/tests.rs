@@ -1292,7 +1292,7 @@ fn completed_upload_refreshes_only_its_visible_remote_directory() {
     assert_eq!(
         sftp.begin_refresh_after_upload("/home/alice")
             .expect("refresh intent should be valid"),
-        Some("/home/alice".to_owned())
+        Some((1, "/home/alice".to_owned()))
     );
     assert!(sftp.loading);
     assert_eq!(
@@ -1458,7 +1458,7 @@ fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
     assert_eq!(
         sftp.begin_navigation(SftpNavigation::Direct, Some("/var".to_owned()))
             .expect("direct navigation should be queued"),
-        "/var"
+        (1, "/var".to_owned())
     );
     sftp.complete_navigation("/var".to_owned());
 

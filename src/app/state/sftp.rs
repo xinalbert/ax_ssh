@@ -305,7 +305,7 @@ impl SftpBrowserState {
     pub(in crate::app) fn begin_refresh_after_upload(
         &mut self,
         directory: &str,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<(u64, String)>> {
         if self.loading || self.path != directory {
             return Ok(None);
         }
@@ -515,7 +515,7 @@ impl SftpBrowserState {
         &mut self,
         kind: SftpNavigation,
         path: Option<String>,
-    ) -> Result<String> {
+    ) -> Result<(u64, String)> {
         if self.loading {
             anyhow::bail!("SFTP directory request already in progress");
         }
@@ -544,8 +544,12 @@ impl SftpBrowserState {
             requested: requested.clone(),
         });
         self.loading = true;
+        self.request_id = self.request_id.wrapping_add(1);
+        if self.request_id == 0 {
+            self.request_id = 1;
+        }
         self.status = "Loading directory...".to_owned();
-        Ok(requested)
+        Ok((self.request_id, requested))
     }
 
     pub(in crate::app) fn cancel_navigation(&mut self) {
@@ -553,7 +557,12 @@ impl SftpBrowserState {
         self.loading = false;
     }
 
+    pub(in crate::app) fn accepts_request(&self, request_id: u64) -> bool {
+        request_id == self.request_id
+    }
+
     pub(in crate::app) fn reset_navigation(&mut self) {
+        self.request_id = self.request_id.wrapping_add(1).max(1);
         self.path.clear();
         self.entries.clear();
         self.has_more = false;

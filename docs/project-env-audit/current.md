@@ -1,3 +1,11 @@
+# 2026-09-22 终端输入输出契约统一环境验证
+
+- 项目边界：`src/terminal.rs`、四类 transport、`src/app/{diagnostics,state/terminal,connection_monitor,connection/direct,terminal_bridge,state/sftp,sftp_bridge}.rs` 及双语架构说明；不改变 Rust 2024、MSRV 1.92、Slint build 入口、SSH host-key trust、凭据和 worker 所有权。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1，`alacritty_terminal` 0.26.0；未新增依赖、未修改锁文件、不联网。
+- 标准边界：Local PTY、SSH、Telnet、Serial 输出都通过有界 `TerminalOutputChunk` 携带 `Vec<u8>` 与 `Instant`；应用诊断只记录来源、字节数、序列号、类型、结果与耗时。SFTP 目录页/失败事件携带 request ID，Tab 仅接受当前请求。
+- 测试环境：Slint 入口仍由 `build.rs` 编译；执行 fmt、locked/offline check、严格 Clippy、全量测试、`git diff --check` 和 tracker validator。
+- 开工判定：施工完成，目标平台 GUI/真实 SSH、Telnet、Serial 和 SFTP 互操作仍需用户验收。
+
 # 2026-09-21 键盘输入标准化施工预检
 
 - 项目边界：独立 Rust 2024 桌面应用；本轮涉及 `src/app/input.rs`、`src/app/terminal_bridge.rs`、`src/terminal/input.rs`、`ui/components/keyboard-input.slint`、`ui/terminal-pane.slint` 及键盘回归/双语契约文档。

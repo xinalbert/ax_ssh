@@ -300,7 +300,13 @@ fn spawn_telnet_monitor(
                     }
                     refresh_workspace(&ui, &state);
                 }
-                TelnetSessionEvent::Output(data) => {
+                TelnetSessionEvent::Output(output) => {
+                    let data = &output.data;
+                    super::diagnostics::log_terminal_output_chunk(
+                        "telnet",
+                        data.len(),
+                        output.received_at,
+                    );
                     let mut response_error = None;
                     let mut presentation_hold = None;
                     let mut output_effects = TerminalOutputEffects::default();
@@ -310,7 +316,7 @@ fn spawn_telnet_monitor(
                         profile.id,
                         attempt_id,
                         DirectProtocol::Telnet,
-                        |terminal| match process_terminal_output(terminal, &data) {
+                        |terminal| match process_terminal_output(terminal, data) {
                             Ok(effects) => {
                                 presentation_hold = effects.presentation_hold;
                                 output_effects = effects;
@@ -321,7 +327,7 @@ fn spawn_telnet_monitor(
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None, presentation_hold);
+                        presentation.record_output(Some(output.received_at), presentation_hold);
                     }
                     apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
@@ -458,7 +464,13 @@ fn spawn_serial_monitor(
                     }
                     refresh_workspace(&ui, &state);
                 }
-                SerialSessionEvent::Output(data) => {
+                SerialSessionEvent::Output(output) => {
+                    let data = &output.data;
+                    super::diagnostics::log_terminal_output_chunk(
+                        "serial",
+                        data.len(),
+                        output.received_at,
+                    );
                     let mut response_error = None;
                     let mut presentation_hold = None;
                     let mut output_effects = TerminalOutputEffects::default();
@@ -468,7 +480,7 @@ fn spawn_serial_monitor(
                         profile.id,
                         attempt_id,
                         DirectProtocol::Serial,
-                        |terminal| match process_terminal_output(terminal, &data) {
+                        |terminal| match process_terminal_output(terminal, data) {
                             Ok(effects) => {
                                 presentation_hold = effects.presentation_hold;
                                 output_effects = effects;
@@ -479,7 +491,7 @@ fn spawn_serial_monitor(
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None, presentation_hold);
+                        presentation.record_output(Some(output.received_at), presentation_hold);
                     }
                     apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {

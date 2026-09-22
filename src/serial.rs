@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::config::{
     SerialConfig, SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits,
 };
+use crate::terminal::TerminalOutputChunk;
 use crate::terminal_input::{
     TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
 };
@@ -120,7 +121,7 @@ pub fn resolve_serial_port<'a>(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SerialSessionEvent {
     Connected { port_name: String },
-    Output(Vec<u8>),
+    Output(TerminalOutputChunk),
     Disconnected,
     Failed(String),
 }
@@ -301,7 +302,9 @@ async fn run_serial_session(
                     Ok(read) => {
                         if !send_serial_event(
                             &event_tx,
-                            SerialSessionEvent::Output(buffer[..read].to_vec()),
+                            SerialSessionEvent::Output(TerminalOutputChunk::new(
+                                buffer[..read].to_vec(),
+                            )),
                             session_id,
                         ).await {
                             break;

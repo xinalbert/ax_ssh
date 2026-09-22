@@ -1,5 +1,31 @@
 use super::*;
 
+#[derive(Clone, Copy, Debug)]
+pub(in crate::app) enum TerminalInputKind {
+    Key,
+    Paste,
+    Pointer,
+    Focus,
+    Protocol,
+    Command,
+}
+
+impl TerminalInputKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Key => "key",
+            Self::Paste => "paste",
+            Self::Pointer => "pointer",
+            Self::Focus => "focus",
+            Self::Protocol => "protocol",
+            Self::Command => "command",
+        }
+    }
+}
+
+static NEXT_TERMINAL_INPUT_SEQUENCE: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(1);
+
 impl TerminalTabState {
     pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = 5;
 
@@ -490,30 +516,94 @@ impl TerminalWorker {
     }
 
     pub(in crate::app) fn request_send(&self, data: Vec<u8>) -> Result<()> {
-        match self {
+        self.request_send_kind(data, TerminalInputKind::Command)
+    }
+
+    pub(in crate::app) fn request_send_kind(
+        &self,
+        data: Vec<u8>,
+        kind: TerminalInputKind,
+    ) -> Result<()> {
+        let bytes = data.len();
+        let input_sequence =
+            NEXT_TERMINAL_INPUT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let started_at = std::time::Instant::now();
+        let result = match self {
             Self::Ssh(worker) => worker.request_send(data),
             Self::Telnet(worker) => worker.request_send(data),
             Self::Serial(worker) => worker.request_send(data),
             Self::Local(worker) => worker.request_send(data),
-        }
+        };
+        tracing::debug!(
+            target: "ax_ssh::latency",
+            event = "terminal-input",
+            stage = "worker-request",
+            input_sequence,
+            kind = kind.as_str(),
+            bytes,
+            outcome = if result.is_ok() { "queued" } else { "rejected" },
+            elapsed_us = u64::try_from(started_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "terminal input request dispatched to transport"
+        );
+        result
     }
 
     pub(in crate::app) fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {
-        match self {
+        let bytes = data.len();
+        let input_sequence =
+            NEXT_TERMINAL_INPUT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let started_at = std::time::Instant::now();
+        let result = match self {
             Self::Ssh(worker) => worker.request_send_paste(data),
             Self::Telnet(worker) => worker.request_send_paste(data),
             Self::Serial(worker) => worker.request_send_paste(data),
             Self::Local(worker) => worker.request_send_paste(data),
-        }
+        };
+        tracing::debug!(
+            target: "ax_ssh::latency",
+            event = "terminal-input",
+            stage = "worker-request",
+            input_sequence,
+            kind = TerminalInputKind::Paste.as_str(),
+            bytes,
+            outcome = if result.is_ok() { "queued" } else { "rejected" },
+            elapsed_us = u64::try_from(started_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "terminal paste request dispatched to transport"
+        );
+        result
     }
 
-    pub(in crate::app) fn request_send_motion(&self, data: Vec<u8>) -> Result<bool> {
-        match self {
+    pub(in crate::app) fn request_send_motion_kind(
+        &self,
+        data: Vec<u8>,
+        kind: TerminalInputKind,
+    ) -> Result<bool> {
+        let bytes = data.len();
+        let input_sequence =
+            NEXT_TERMINAL_INPUT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let started_at = std::time::Instant::now();
+        let result = match self {
             Self::Ssh(worker) => worker.request_send_motion(data),
             Self::Telnet(worker) => worker.request_send_motion(data),
             Self::Serial(worker) => worker.request_send_motion(data),
             Self::Local(worker) => worker.request_send_motion(data),
-        }
+        };
+        tracing::debug!(
+            target: "ax_ssh::latency",
+            event = "terminal-input",
+            stage = "worker-request",
+            input_sequence,
+            kind = kind.as_str(),
+            bytes,
+            outcome = match result {
+                Ok(true) => "queued",
+                Ok(false) => "dropped",
+                Err(_) => "rejected",
+            },
+            elapsed_us = u64::try_from(started_at.elapsed().as_micros()).unwrap_or(u64::MAX),
+            "terminal input motion dispatched to transport"
+        );
+        result
     }
 
     pub(in crate::app) fn request_resize_with_pixels(

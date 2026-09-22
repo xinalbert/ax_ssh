@@ -199,7 +199,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             {
                                 send_sftp_event(
                                     &event_tx,
-                                    SftpBrowserEvent::Failed(bounded_error_message(&error)),
+                                    SftpBrowserEvent::Failed {
+                                        request_id: None,
+                                        message: bounded_error_message(&error),
+                                    },
                                     session_id,
                                 ).await;
                             }
@@ -220,7 +223,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                     Err(error) => {
                                         send_sftp_event(
                                             &event_tx,
-                                            SftpBrowserEvent::Failed(bounded_error_message(&error)),
+                                            SftpBrowserEvent::Failed {
+                                                request_id: None,
+                                                message: bounded_error_message(&error),
+                                            },
                                             session_id,
                                         ).await;
                                         send_sftp_event(
@@ -233,7 +239,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 Err(error) => {
                                     send_sftp_event(
                                         &event_tx,
-                                        SftpBrowserEvent::Failed(bounded_error_message(&error)),
+                                        SftpBrowserEvent::Failed {
+                                            request_id: None,
+                                            message: bounded_error_message(&error),
+                                        },
                                         session_id,
                                     ).await;
                                     send_sftp_event(
@@ -252,7 +261,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 if let Err(error) = browser.request_list(path) {
                                     send_sftp_event(
                                         &event_tx,
-                                        SftpBrowserEvent::Failed(bounded_error_message(&error)),
+                                        SftpBrowserEvent::Failed {
+                                            request_id: None,
+                                            message: bounded_error_message(&error),
+                                        },
                                         session_id,
                                     ).await;
                                 }
@@ -260,7 +272,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             None => {
                                 send_sftp_event(
                                     &event_tx,
-                                    SftpBrowserEvent::Failed("SFTP browser is not open".to_owned()),
+                                    SftpBrowserEvent::Failed {
+                                        request_id: None,
+                                        message: "SFTP browser is not open".to_owned(),
+                                    },
                                     session_id,
                                 ).await;
                                 send_sftp_event(
@@ -278,7 +293,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 if let Err(error) = browser.request_load_more() {
                                     send_sftp_event(
                                         &event_tx,
-                                        SftpBrowserEvent::Failed(bounded_error_message(&error)),
+                                        SftpBrowserEvent::Failed {
+                                            request_id: None,
+                                            message: bounded_error_message(&error),
+                                        },
                                         session_id,
                                     ).await;
                                 }
@@ -286,7 +304,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             None => {
                                 send_sftp_event(
                                     &event_tx,
-                                    SftpBrowserEvent::Failed("SFTP browser is not open".to_owned()),
+                                    SftpBrowserEvent::Failed {
+                                        request_id: None,
+                                        message: "SFTP browser is not open".to_owned(),
+                                    },
                                     session_id,
                                 ).await;
                                 send_sftp_event(
@@ -607,7 +628,10 @@ async fn flush_output(
     let received_at = output_received_at.take().unwrap_or_else(Instant::now);
     send_event(
         event_tx,
-        SshSessionEvent::Output { data, received_at },
+        SshSessionEvent::Output(crate::terminal::TerminalOutputChunk::with_received_at(
+            data,
+            received_at,
+        )),
         session_id,
     )
     .await

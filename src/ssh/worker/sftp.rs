@@ -299,8 +299,8 @@ pub(super) async fn run_sftp_session(
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
                 let result = match command {
                     Some(SshCommand::OpenSftp { path })
-                    | Some(SshCommand::ListSftp { path }) => browser.request_list(path),
-                    Some(SshCommand::LoadMoreSftp) => browser.request_load_more(),
+                    | Some(SshCommand::ListSftp { path }) => browser.request_list(path).map(|_| ()),
+                    Some(SshCommand::LoadMoreSftp) => browser.request_load_more().map(|_| ()),
                     Some(SshCommand::OpenSftpFile { root }) => {
                         let transfer_id = root.transfer_id();
                         let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
@@ -685,7 +685,7 @@ pub(super) async fn run_sftp_session(
                     break;
                 };
                 let closed = matches!(event, SftpBrowserEvent::Closed);
-                if let SftpBrowserEvent::Failed(message) = &event {
+                if let SftpBrowserEvent::Failed { message, .. } = &event {
                     browser_error = Some(message.clone());
                 }
                 if !send_sftp_event(&event_tx, event, session_id).await {

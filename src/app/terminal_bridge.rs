@@ -620,7 +620,8 @@ impl TerminalInputContext<'_> {
                     let request_result = if input.is_paste {
                         worker.request_send_paste(data)
                     } else {
-                        worker.request_send(data)
+                        worker
+                            .request_send_kind(data, super::state::terminal::TerminalInputKind::Key)
                     };
                     worker_request_elapsed = Some(worker_request_started_at.elapsed());
                     request_result?;
@@ -698,7 +699,7 @@ fn report_terminal_focus_state(
         .worker
         .as_ref()
         .context("active terminal has no worker")?;
-    worker.request_send(data)?;
+    worker.request_send_kind(data, super::state::terminal::TerminalInputKind::Focus)?;
     Ok(true)
 }
 
@@ -1002,9 +1003,14 @@ pub(super) fn wire_terminal(
                     .as_ref()
                     .context("active terminal has no worker")?;
                 if kind == TerminalMouseEventKind::Motion {
-                    worker.request_send_motion(data)
+                    worker.request_send_motion_kind(
+                        data,
+                        super::state::terminal::TerminalInputKind::Pointer,
+                    )
                 } else {
-                    worker.request_send(data).map(|()| true)
+                    worker
+                        .request_send_kind(data, super::state::terminal::TerminalInputKind::Pointer)
+                        .map(|()| true)
                 }
             });
         match result {
@@ -1836,12 +1842,18 @@ pub(super) fn spawn_local_shell_monitor(
                     }
                     refresh_workspace(&ui, &state);
                 }
-                LocalShellEvent::Output(data) => {
+                LocalShellEvent::Output(output) => {
+                    let data = &output.data;
+                    super::diagnostics::log_terminal_output_chunk(
+                        "local",
+                        data.len(),
+                        output.received_at,
+                    );
                     let mut response_error = None;
                     let mut presentation_hold = None;
                     let mut output_effects = TerminalOutputEffects::default();
                     if mutate_local_terminal(&state, tab_id, |terminal| {
-                        match process_terminal_output(terminal, &data) {
+                        match process_terminal_output(terminal, data) {
                             Ok(effects) => {
                                 presentation_hold = effects.presentation_hold;
                                 output_effects = effects;
@@ -1852,7 +1864,7 @@ pub(super) fn spawn_local_shell_monitor(
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(None, presentation_hold);
+                        presentation.record_output(Some(output.received_at), presentation_hold);
                     }
                     apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
@@ -1960,7 +1972,10 @@ pub(super) fn process_terminal_output(
         .context("terminal protocol response has no transport worker")?;
     for response in responses {
         worker
-            .request_send(response)
+            .request_send_kind(
+                response,
+                super::state::terminal::TerminalInputKind::Protocol,
+            )
             .context("cannot queue terminal protocol response")?;
     }
     Ok(TerminalOutputEffects {

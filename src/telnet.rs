@@ -18,6 +18,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::TelnetConfig;
+use crate::terminal::TerminalOutputChunk;
 use crate::terminal_dimensions::TerminalSize;
 use crate::terminal_input::{
     TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
@@ -37,7 +38,7 @@ const TELNET_TERMINAL_TYPE: &str = "xterm-256color";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TelnetSessionEvent {
     Connected,
-    Output(Vec<u8>),
+    Output(TerminalOutputChunk),
     Disconnected,
     Failed(String),
 }
@@ -558,7 +559,12 @@ async fn flush_output(
         return true;
     }
     let data = std::mem::take(output);
-    send_event(event_tx, TelnetSessionEvent::Output(data), session_id).await
+    send_event(
+        event_tx,
+        TelnetSessionEvent::Output(TerminalOutputChunk::new(data)),
+        session_id,
+    )
+    .await
 }
 
 async fn send_event(
@@ -764,7 +770,7 @@ mod tests {
                         .expect("input should queue");
                 }
                 TelnetSessionEvent::Output(data) => {
-                    output.extend(data);
+                    output.extend(data.data);
                     if output.len() >= expected.len() {
                         break;
                     }

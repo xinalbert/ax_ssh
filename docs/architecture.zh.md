@@ -8,6 +8,16 @@ AxSSH 是一个独立的 Rust 二进制项目。`third_package/axshell` 仅用�
 故意排除在构建图之外；可以参考它的产品行为和评审问题，但不得导入其中的
 源码、类型或依赖。
 
+终端输入/输出在应用边界使用统一的脱敏契约：Local PTY、SSH、Telnet 和
+Serial 都发送有界的 `TerminalOutputChunk`，其中包含输出字节和 transport
+接收时间；应用 monitor 统一记录字节数、来源和 worker 到 monitor 的等待时间，
+再交给同一套终端解析、协议响应和展示节流链路。输入则由应用层分配序列号并
+标记为 key、paste、pointer、focus、protocol 或 command，日志只记录类型、字节数、
+结果和耗时，不记录终端内容。
+
+SFTP 目录请求同样携带有界 request ID。Tab 状态只接受当前 request ID 的目录页或
+失败事件，过期异步响应会被丢弃，避免快速导航时旧目录覆盖新目录。
+
 当前实现将 UI、应用、持久化、传输和进程服务拆成独立所有权边界：
 
 ```text

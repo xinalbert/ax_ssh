@@ -75,7 +75,13 @@ pub(super) fn spawn_session_monitor(
                         );
                     }
                 }
-                SshSessionEvent::Output { data, received_at } => {
+                SshSessionEvent::Output(output) => {
+                    let data = &output.data;
+                    super::diagnostics::log_terminal_output_chunk(
+                        "ssh",
+                        data.len(),
+                        output.received_at,
+                    );
                     let mut response_error = None;
                     let mut presentation_hold = None;
                     let mut output_effects = TerminalOutputEffects::default();
@@ -85,7 +91,7 @@ pub(super) fn spawn_session_monitor(
                         profile.id,
                         attempt_id,
                         |terminal| {
-                            match process_terminal_output(terminal, &data) {
+                            match process_terminal_output(terminal, data) {
                                 Ok(effects) => {
                                     presentation_hold = effects.presentation_hold;
                                     output_effects = effects;
@@ -97,7 +103,7 @@ pub(super) fn spawn_session_monitor(
                     .is_some()
                         && !data.is_empty()
                     {
-                        presentation.record_output(Some(received_at), presentation_hold);
+                        presentation.record_output(Some(output.received_at), presentation_hold);
                     }
                     apply_terminal_output_effects(&state, &ui, tab_id, output_effects);
                     if let Some(error) = response_error {
@@ -120,7 +126,7 @@ pub(super) fn spawn_session_monitor(
                         profile.id,
                         attempt_id,
                         |terminal| {
-                            if let SftpBrowserEvent::Failed(message) = &event {
+                            if let SftpBrowserEvent::Failed { message, .. } = &event {
                                 terminal.status = format!("SFTP: {message}");
                             } else if matches!(&event, SftpBrowserEvent::DirectoryPage { .. })
                                 && terminal.status.starts_with("SFTP: ")
@@ -278,7 +284,7 @@ pub(super) fn spawn_session_monitor(
                                     .sftp
                                     .begin_refresh_after_upload(directory.as_str())
                                 {
-                                    Ok(Some(path)) => path,
+                                    Ok(Some((_, path))) => path,
                                     Ok(None) => return,
                                     Err(error) => {
                                         refresh_error = Some(error);
@@ -791,12 +797,13 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
             state.status = "Loading directory...".to_owned();
         }
         SftpBrowserEvent::DirectoryPage {
+            request_id,
             path,
             entries,
             append,
             has_more,
             truncated,
-        } => {
+        } if state.accepts_request(request_id) => {
             state.open = true;
             state.loading = false;
             if !append {
@@ -821,10 +828,14 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
                 format!("{} items", state.entries.len())
             };
         }
-        SftpBrowserEvent::Failed(message) => {
+        SftpBrowserEvent::Failed {
+            request_id,
+            message,
+        } if request_id.is_none_or(|id| state.accepts_request(id)) => {
             state.cancel_navigation();
             state.status = message;
         }
+        SftpBrowserEvent::DirectoryPage { .. } | SftpBrowserEvent::Failed { .. } => {}
         SftpBrowserEvent::Closed => {
             state.open = false;
             state.loading = false;
@@ -1026,6 +1037,7 @@ mod tests {
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::DirectoryPage {
+                request_id: 1,
                 path: "/home/alice".to_owned(),
                 entries: vec![entry("first")],
                 append: false,
@@ -1036,6 +1048,7 @@ mod tests {
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::DirectoryPage {
+                request_id: 1,
                 path: "/home/alice".to_owned(),
                 entries: vec![entry("second")],
                 append: true,
@@ -1048,7 +1061,24 @@ mod tests {
 
         apply_sftp_event(
             &mut state,
-            SftpBrowserEvent::Failed("permission denied".to_owned()),
+            SftpBrowserEvent::DirectoryPage {
+                request_id: 0,
+                path: "/stale".to_owned(),
+                entries: vec![entry("stale")],
+                append: false,
+                has_more: false,
+                truncated: false,
+            },
+        );
+        assert_eq!(state.path, "/home/alice");
+        assert_eq!(state.entries.len(), 2);
+
+        apply_sftp_event(
+            &mut state,
+            SftpBrowserEvent::Failed {
+                request_id: Some(1),
+                message: "permission denied".to_owned(),
+            },
         );
         assert!(!state.loading);
         assert_eq!(state.status, "permission denied");

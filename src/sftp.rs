@@ -55,13 +55,17 @@ pub enum SftpBrowserEvent {
         home: String,
     },
     DirectoryPage {
+        request_id: u64,
         path: String,
         entries: Vec<SftpEntry>,
         append: bool,
         has_more: bool,
         truncated: bool,
     },
-    Failed(String),
+    Failed {
+        request_id: Option<u64>,
+        message: String,
+    },
     Closed,
 }
 
@@ -148,13 +152,14 @@ pub enum SftpWriteEvent {
 }
 
 enum SftpBrowserCommand {
-    List(String),
-    LoadMore,
+    List { request_id: u64, path: String },
+    LoadMore { request_id: u64 },
     Close,
 }
 
 pub(crate) struct SftpBrowserHandle {
     command_tx: mpsc::Sender<SftpBrowserCommand>,
+    next_request_id: std::sync::atomic::AtomicU64,
     task: Option<JoinHandle<()>>,
 }
 
@@ -447,6 +452,7 @@ impl SftpBrowserHandle {
         let task = runtime.spawn(run_browser(stream, initial_path, command_rx, event_tx));
         Ok(Self {
             command_tx,
+            next_request_id: std::sync::atomic::AtomicU64::new(1),
             task: Some(task),
         })
     }
@@ -455,16 +461,24 @@ impl SftpBrowserHandle {
         self.task.as_ref().is_none_or(|task| task.is_finished())
     }
 
-    pub(crate) fn request_list(&self, path: String) -> Result<()> {
+    pub(crate) fn request_list(&self, path: String) -> Result<u64> {
         validate_remote_path(&path)?;
+        let request_id = self
+            .next_request_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.command_tx
-            .try_send(SftpBrowserCommand::List(path))
+            .try_send(SftpBrowserCommand::List { request_id, path })
+            .map(|()| request_id)
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP directory request: {error}"))
     }
 
-    pub(crate) fn request_load_more(&self) -> Result<()> {
+    pub(crate) fn request_load_more(&self) -> Result<u64> {
+        let request_id = self
+            .next_request_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.command_tx
-            .try_send(SftpBrowserCommand::LoadMore)
+            .try_send(SftpBrowserCommand::LoadMore { request_id })
+            .map(|()| request_id)
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP page request: {error}"))
     }
 
@@ -667,7 +681,10 @@ async fn run_browser<S>(
     let result = run_browser_inner(stream, initial_path, &mut command_rx, &event_tx).await;
     if let Err(error) = result {
         let _ = event_tx
-            .send(SftpBrowserEvent::Failed(bounded_error(&error)))
+            .send(SftpBrowserEvent::Failed {
+                request_id: None,
+                message: bounded_error(&error),
+            })
             .await;
     }
     let _ = event_tx.send(SftpBrowserEvent::Closed).await;
@@ -703,18 +720,18 @@ where
 
     let initial = resolve_remote_path(&home, &home, &initial_path)?;
     let mut initial_cursor = open_directory(&session, initial).await?;
-    emit_page(&session, &mut initial_cursor, false, event_tx).await?;
+    emit_page(&session, &mut initial_cursor, 0, false, event_tx).await?;
     let mut cursor = Some(initial_cursor);
 
     while let Some(command) = command_rx.recv().await {
         match command {
-            SftpBrowserCommand::List(path) => {
+            SftpBrowserCommand::List { request_id, path } => {
                 let current = cursor_path(cursor.as_ref()).unwrap_or(&home).to_owned();
                 let next = async {
                     let resolved = resolve_remote_path(&current, &home, &path)?;
                     let canonical = canonicalize(&session, &resolved).await?;
                     let mut next = open_directory(&session, canonical).await?;
-                    emit_page(&session, &mut next, false, event_tx).await?;
+                    emit_page(&session, &mut next, request_id, false, event_tx).await?;
                     Ok::<_, anyhow::Error>(next)
                 }
                 .await;
@@ -725,16 +742,17 @@ where
                         }
                     }
                     Err(error) => {
-                        send_request_error(event_tx, &error).await;
+                        send_request_error(event_tx, Some(request_id), &error).await;
                     }
                 }
             }
-            SftpBrowserCommand::LoadMore => {
+            SftpBrowserCommand::LoadMore { request_id } => {
                 if let Some(cursor) = cursor.as_mut()
                     && !cursor.done
-                    && let Err(error) = emit_page(&session, cursor, true, event_tx).await
+                    && let Err(error) =
+                        emit_page(&session, cursor, request_id, true, event_tx).await
                 {
-                    send_request_error(event_tx, &error).await;
+                    send_request_error(event_tx, Some(request_id), &error).await;
                 }
             }
             SftpBrowserCommand::Close => break,
@@ -750,9 +768,16 @@ where
     Ok(())
 }
 
-async fn send_request_error(event_tx: &mpsc::Sender<SftpBrowserEvent>, error: &anyhow::Error) {
+async fn send_request_error(
+    event_tx: &mpsc::Sender<SftpBrowserEvent>,
+    request_id: Option<u64>,
+    error: &anyhow::Error,
+) {
     let _ = event_tx
-        .send(SftpBrowserEvent::Failed(bounded_error(error)))
+        .send(SftpBrowserEvent::Failed {
+            request_id,
+            message: bounded_error(error),
+        })
         .await;
 }
 
@@ -795,12 +820,14 @@ async fn open_directory(session: &RawSftpSession, path: String) -> Result<Direct
 async fn emit_page(
     session: &RawSftpSession,
     cursor: &mut DirectoryCursor,
+    request_id: u64,
     append: bool,
     event_tx: &mpsc::Sender<SftpBrowserEvent>,
 ) -> Result<()> {
     let entries = read_page(session, cursor).await?;
     event_tx
         .send(SftpBrowserEvent::DirectoryPage {
+            request_id,
             path: cursor.path.clone(),
             entries,
             append,

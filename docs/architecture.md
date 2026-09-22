@@ -9,6 +9,19 @@ AxSSH is an independent Rust binary. The reference checkout at
 product behavior and review questions, but no source file, type, or dependency
 is imported from it.
 
+Terminal input and output use one redacted application-boundary contract across
+Local PTY, SSH, Telnet, and Serial. Each transport emits a bounded
+`TerminalOutputChunk` containing bytes and the transport receive timestamp. The
+application monitor records only source, byte count, result, and worker-to-
+monitor age before sending the chunk through the shared parser, protocol-
+response, and presentation pipeline. Application input receives a sequence
+number and one of `key`, `paste`, `pointer`, `focus`, `protocol`, or `command`;
+diagnostics never contain terminal content.
+
+SFTP directory requests also carry a bounded request ID. A tab accepts only
+pages and failures associated with its current request, so a late response from
+an older navigation cannot overwrite the current directory view.
+
 The implementation keeps UI, application, persistence, transport, and process
 services in separate ownership boundaries:
 

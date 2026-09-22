@@ -23,6 +23,7 @@ use crate::sftp::{
     SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest,
     SftpWriteEvent, SftpWriteOperation, validate_remote_path,
 };
+use crate::terminal::TerminalOutputChunk;
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
 use crate::terminal_input::{
     TERMINAL_INPUT_CHUNK_BYTES, TERMINAL_PASTE_MAX_BYTES, try_queue_tokio_motion,
@@ -59,10 +60,7 @@ pub enum SshSessionEvent {
         columns: u32,
         rows: u32,
     },
-    Output {
-        data: Vec<u8>,
-        received_at: Instant,
-    },
+    Output(TerminalOutputChunk),
     Sftp(SftpBrowserEvent),
     SftpTransfer(SftpTransferEvent),
     SftpWrite(SftpWriteEvent),
