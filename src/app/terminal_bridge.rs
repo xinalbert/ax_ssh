@@ -81,11 +81,6 @@ impl NativeFileDropPointer {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn is_external_file_hovering(&self) -> bool {
-        self.hovered_file_count > 0
-    }
-
-    #[cfg(not(target_os = "macos"))]
     fn logical_position(&self, scale_factor: f64) -> Option<(f32, f32)> {
         if self.hovered_file_count == 0 || !scale_factor.is_finite() || scale_factor <= 0.0 {
             return None;
@@ -457,14 +452,19 @@ pub(super) fn install_native_window_input_hook(
                 clear_native_event_modifiers();
                 native_file_drop_pointer_for_event.borrow_mut().clear();
             }
+            #[cfg(target_os = "macos")]
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic,
+                ..
+            } if *is_synthetic || event.state != ElementState::Pressed => {
+                return EventResult::Propagate;
+            }
             WindowEvent::KeyboardInput {
                 event,
                 is_synthetic,
                 ..
             } => {
-                if *is_synthetic || event.state != ElementState::Pressed {
-                    return EventResult::Propagate;
-                }
                 #[cfg(target_os = "macos")]
                 {
                     let modifiers = modifiers_for_event.get();
@@ -540,6 +540,8 @@ pub(super) fn install_native_window_input_hook(
                     }
                 }
             }
+            #[cfg(not(target_os = "macos"))]
+            WindowEvent::KeyboardInput { .. } => {}
             _ => {}
         }
         EventResult::Propagate
@@ -2225,10 +2227,8 @@ mod tests {
         let mut pointer = NativeFileDropPointer::default();
         pointer.record_cursor_position(80.0, 48.0);
         assert_eq!(pointer.logical_position(2.0), None);
-        assert!(!pointer.is_external_file_hovering());
 
         pointer.begin_external_file_hover();
-        assert!(pointer.is_external_file_hovering());
         assert_eq!(pointer.logical_position(2.0), None);
         pointer.record_cursor_position(80.0, 48.0);
         assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
@@ -2239,7 +2239,6 @@ mod tests {
         assert_eq!(pointer.logical_position(2.0), Some((40.0, 24.0)));
         pointer.complete_external_file_drop();
         assert_eq!(pointer.logical_position(2.0), None);
-        assert!(!pointer.is_external_file_hovering());
 
         pointer.begin_external_file_hover();
         pointer.clear();

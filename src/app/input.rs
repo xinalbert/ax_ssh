@@ -2,9 +2,11 @@ use std::cell::Cell;
 
 use ax_ssh::terminal::{TerminalKey, TerminalModifiers};
 use slint::platform::Key;
+use slint::winit_030::winit::keyboard::{KeyCode, KeyLocation};
+#[cfg(target_os = "macos")]
 use slint::winit_030::winit::{
     event::KeyEvent as WinitKeyEvent,
-    keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey, PhysicalKey},
+    keyboard::{Key as WinitKey, NamedKey, PhysicalKey},
 };
 
 thread_local! {
@@ -298,6 +300,7 @@ fn application_key_from_slint(text: &str) -> ApplicationKeyboardKey {
         .unwrap_or_else(|| ApplicationKeyboardKey::Text(text.to_owned()))
 }
 
+#[cfg(target_os = "macos")]
 fn application_key_from_native_key(key: &WinitKey) -> Option<ApplicationKeyboardKey> {
     let named = match key {
         WinitKey::Character(text) => return Some(ApplicationKeyboardKey::Text(text.to_string())),
@@ -452,6 +455,7 @@ pub(super) fn normalized_keyboard_input_from_ui(
     }
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn normalized_keyboard_input_from_winit(
     event: &WinitKeyEvent,
     modifiers: TerminalModifiers,
