@@ -1,3 +1,12 @@
+# 2026-09-22 ARM Linux cfg/Clippy 回归修复环境验证
+
+- 项目边界：本轮仅涉及 `src/app/terminal_bridge.rs`、根目录 `AGENTS.md` 与跨平台实施记录；不改变键盘编码语义、Slint UI 契约、SSH trust、凭据或 worker 所有权。
+- 根因与修复：ARM Linux 编译时，第二个 `WindowEvent::KeyboardInput` arm 仍未整体置于 macOS `cfg`，其 `event`、`is_synthetic` 绑定和 `ElementState` import 因 macOS body 被裁剪而触发 unused，同时让后续键盘兜底 arm 变成 unreachable。现已将 import、过滤 arm 和处理 arm 的完整声明/绑定/guard 一并置于 `cfg(target_os = "macos")`，删除冗余非 macOS 键盘 arm，交由 `_` 兜底。
+- 本机验证：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 279、应用 267、Doc tests 0）和 `git diff --check` 通过。
+- ARM Linux target 验证：已执行 `cargo clippy --all-targets --locked --target aarch64-unknown-linux-gnu -- -D warnings`；本机未安装该 target 的 `core/std`，在依赖编译前停止，未进入项目源码检查，最终证据仍由 ARM Linux CI 提供。
+- 规则收口：`AGENTS.md` 明确要求平台专属事件 arm 的 `cfg` 覆盖整个 arm，包括 bindings 和 guard；不得使用未保护 arm 配合 cfg-only body 规避 Clippy。
+- 开工判定：施工完成；ARM Linux runner 的源码编译和 GUI 行为仍需 CI/用户验收。
+
 # 2026-09-22 跨平台 cfg/Clippy 回归修复环境验证
 
 - 项目边界：Rust 2024 独立桌面应用；本轮仅涉及 `src/app/input.rs`、`src/app/terminal_bridge.rs`、根目录 `AGENTS.md` 与 target-specific Clippy 验证，不改变 Slint UI 契约、SSH trust、凭据或 worker 所有权。

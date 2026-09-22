@@ -76,8 +76,11 @@ Tokio receivers, locks, or unbounded terminal buffers to Slint.
   is available. Keep platform-only declarations, imports, callers, and tests
   under the same `cfg` boundary; do not rely on a macOS-only caller to keep a
   cross-platform helper alive. For event matches with platform-specific
-  bodies, use guarded match arms or a platform-specific helper so non-native
-  targets do not trigger `dead_code` or `collapsible_match` under `-D warnings`.
+  bodies, put `cfg` on the entire platform-specific arm—including its bindings
+  and guard—or move the body to a platform-specific helper. Do not leave an
+  unguarded arm with a cfg-only body, because non-native targets can then
+  trigger `unused_imports`, `unused_variables`, or `unreachable_patterns` under
+  `-D warnings`.
 
 ## Slint Rules
 

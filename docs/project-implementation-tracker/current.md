@@ -60,6 +60,7 @@
 | IOSTD3 | completed | SFTP 目录请求/响应关联 request ID，过期响应 fail-closed；同步双语架构和环境记录 | 全量 Cargo 门禁、tracker validator、diff | 只接受当前 Tab request ID；关闭/重连会使旧请求失效。 |
 | XPLATCFG1 | completed | 平台专属 helper/import/caller/test 的 `cfg` 对齐，并拆分 guarded keyboard event match | macOS 全量 Cargo 门禁；Linux/Windows target 命令已尝试并记录工具链限制；diff | 不使用 `allow(dead_code)` 或放宽 Clippy；保持 macOS 行为不变。 |
 | XPLATCFG2 | completed | 将平台边界和 target-specific 严格 Clippy 要求固化到 `AGENTS.md` | tracker/environment 记录、diff | 目标平台 SDK/linker 缺失时必须记录限制，不能以未验证交叉编译替代 CI。 |
+| XPLATCFG3 | completed | 修正 ARM Linux 暴露的键盘事件 arm/import 边界，并把整条平台专属 match arm 纳入 `cfg` | macOS fmt/check/Clippy/test/diff；ARM target 命令已尝试并记录标准库限制 | 不保留 cfg-only body 的未保护绑定，不增加 `allow`/`expect`；非 macOS 继续由 `_` 兜底。 |
 
 ## 已完成
 
