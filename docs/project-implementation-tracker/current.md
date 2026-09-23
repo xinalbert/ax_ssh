@@ -2,20 +2,20 @@
 
 ## 当前目标
 
-- 目标 ID：20260923-terminal-drawing-alternatives
-- 目标：为现有 item-tree 终端绘制增加独立、持久化的策略设置，并分阶段评估/实现 Canvas 绘制路径；当前只交付不会误导用户的配置契约。
-- 交付物：`TerminalDrawingPreference` 配置类型与 serde 兼容、Appearance 控件和设置桥接、Canvas 禁用态、双语架构边界和三阶段后续计划。
+- 目标 ID：20260923-skia-layer-cache-memory
+- 目标：定位约 1.3 GB footprint 的主要来源，并修复动态终端行销毁后 Skia layer GPU 图像仍被缓存的问题。
+- 交付物：锁定 Slint 1.18.1 的 Skia 缓存生命周期补丁、依赖锁定、双语架构说明和采样/验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings}.rs`、`ui/{app,settings,workspace-shell,settings/appearance}.slint`、双语架构和 tracker 文档。
-- 本轮范围：新增 item-tree/Canvas 策略配置，默认且唯一可选行为保持 item-tree；将 Canvas 显示为未实现/禁用；补齐配置迁移测试和 UI callback 链。
-- 不在本轮范围内：Canvas 绘制实现、终端 parser/`TerminalModel`、PTY/transport、Slint backend renderer 选择、依赖/锁文件、SSH host-key trust、凭据、worker ownership 或自动 GUI 截图验收。
+- 当前范围：`vendor/i-slint-renderer-skia/`、`Cargo.toml`、`Cargo.lock`、第三方声明、双语架构和 tracker 文档。
+- 本轮范围：Skia renderer 的 per-component layer cache 释放；用现有进程的 sample、vmmap、heap 与锁定源码确定问题边界。
+- 不在本轮范围内：终端模型、PTY/transport、SSH host-key trust、凭据、worker ownership 或自动 GUI 截图验收。
 
 ## 当前状态
 
-- 阶段：实施中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -34,6 +34,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| MEM1 | completed | Sample/vmmap/heap 与 1.17.1/1.18.1 缓存生命周期根因核对 | 进程类别、配置和锁定源码交叉核对 | 运行中安装版为 1.17.1；GPU row cache 已启用。 |
+| MEM2 | completed | 1.18.1 Skia `layer_cache.component_destroyed` 本地补丁和 Cargo patch | Cargo locked/offline 编译、严格 Clippy、测试 | 本地 vendor 源码与上游仅差该一行；根锁文件仅改变 crate 来源。 |
+| MEM3 | completed | 双语架构、项目地图、采样复核说明和完整门禁 | fmt/check/Clippy/test/build、tracker/diff；用户真实负载对照 | ARM64/x86_64 macOS 编译门禁通过；内存降幅仍待同负载采样。 |
+| TITLEBAR5 | completed | macOS 空白标题栏显式拖窗，Tab/按钮手势互斥，左侧原生命中仅限标题栏高度 | Slint 重编译、fmt/check/Clippy/test/build/diff；用户实际拖动验收 | 复用 Winit `drag_window()` 和现有 AppKit content-view subclass；不增加依赖。 |
 | DRAW1 | completed | 持久化 TerminalDrawingPreference、设置 UI 和安全禁用 Canvas | 配置回归、Slint 重编译、fmt/check/Clippy/test/translation/tracker/diff | 库 280/应用 267 测试通过；Canvas 未实现且控件禁用。 |
 | TITLEBAR1 | completed | macOS 主窗口隐藏原生标题文字，将 Tab 条延伸到红绿灯所在标题栏区域 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | 保留原生红绿灯并为其留空；显式 target check/Clippy 被 Skia 下载阻断，视觉由用户验收。 |
 | TITLEBAR2 | completed | 固定 macOS 顶部 Tab 起点，不随侧栏展开/收起移动 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | Tab 横向固定在红绿灯右侧、纵向固定在窗口顶部；视觉由用户验收，显式 target 门禁仍受 Skia 下载限制。 |
@@ -82,6 +86,10 @@
 
 ## 已完成
 
+- 已定位 2026-09-23 22:31 安装版 Sample 的 1.3 GB footprint 主要在 Metal 图形资源：同 PID 的 `vmmap -summary` 报约 1.1 GB `IOAccelerator (graphics)`、80 MB `IOSurface`，malloc 实际分配约 76 MB；`heap` 有数千个 AGX texture。安装版是 Slint 1.17.1，而当前源码锁定 1.18.1；这不是修复后内存测量。
+- 已确认本机持久化设置选择 GPU 且打开 terminal row render cache。Slint `ItemCache` 的组件指针缓存要求销毁时执行 `component_destroyed`，两版 Skia 的 `free_graphics_resources` 均漏掉 `layer_cache`；修复在当前 1.18.1 的本地补丁中补齐，并保留其他 renderer、配置与应用状态边界。
+- 已完成 TITLEBAR5：macOS 主窗口在 Tab 下层空白区域按下左键时通过 `AppWindow` callback 同步请求 Winit 系统拖窗；Tab 和按钮仍在上层处理原手势。AppKit content view 仅允许顶部 96×32 逻辑点的红绿灯留空原生拖窗，避免侧栏被误判为标题栏。
+
 - 已完成 OSC52-1–3：Terminal Settings 新增默认关闭的 `osc52_clipboard`；开启后 `alacritty_terminal` 使用 `Osc52::CopyPaste`，但应用层只接受默认 clipboard，selection 仍拒绝；协议事件限制为 64 KiB 解码文本并通过有界 DTO 传递。
 - 已完成 OSC52 UI bridge：Local、SSH、Telnet、Serial 四类 transport 共用 `TerminalOutputEffects`，monitor 取得剪贴板事件后经 `dispatch_ui` 调用平台默认剪贴板 API；不记录、不持久化、不在 worker 线程触碰 UI/平台剪贴板。
 - 已完成 OSC52 回归与文档：默认关闭、默认目标、selection 拒绝、超限丢弃、读取确认、拒绝/超时/断开/重试清理、Settings preview/save 和中英文架构/用法说明均已覆盖；Sixel、Kitty、iTerm2 图形协议仍明确排除。
@@ -122,6 +130,11 @@
 
 ## 验证
 
+- 已完成 MEM1–3：排除未使用的上游 crate `Cargo.lock` 后，vendor 与上游 1.18.1 `diff -ru` 仅 `layer_cache.component_destroyed(component)` 一行；根 `Cargo.lock` 仅改变 Skia 来源。`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 280、应用 268、Doc tests 0）、`cargo build --locked --offline` 均通过；x86_64 macOS 显式 target check、严格 Clippy、build 通过，未在 ARM64 上运行 x86_64 测试。
+- 未完成 MEM 运行时对照：补丁尚未安装到正在运行的旧版进程；其相同 pane/尺寸/输出负载下的 footprint、`IOAccelerator (graphics)` 和 AGX texture 数需要新二进制长期采样。
+- 已完成 TITLEBAR5：定向 macOS 命中边界测试 3 项、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 280、应用 268、Doc tests 0）及 `cargo build --locked --offline` 通过；两个 macOS target 的显式 check、严格 Clippy 和 build 也通过。Slint 入口重新编译。首次缺失的 Slint 1.18.1 依赖通过本机 7897 代理按锁文件获取，锁文件未改；x86_64 仅编译链接，没有在 ARM64 主机运行测试。
+- 未完成：macOS 标题栏空白拖窗、Tab 重排、按钮点击及红绿灯留空/侧栏的实际指针行为，待用户在目标窗口确认。
+
 - 已完成（DRAW1）：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（474 条）、tracker validator 与 `git diff --check` 通过；`ui/app.slint` 已由 Cargo 重新编译。
 - 已完成 SFTP-ID-20260923：定向 SFTP 事件回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）和 `cargo build --locked --offline` 通过；目标平台真实 SFTP 服务器与 GUI 重连由用户验收。
 - 未完成：目标 macOS 需重启新二进制，并以 `ax_ssh::sftp_drag=debug` 复现 Local files 到 Remote files 的内部拖放，提供对应日志阶段。
@@ -149,12 +162,16 @@
 
 ## 风险与阻塞
 
+- Skia 逐组件缓存持有是源码确认的增长机制，但单次旧版 Sample 不能量化其在 1.3 GB 中的精确贡献；Skia/Metal 仍可能有其它保留资源。当前修复未调整全局 renderer 或用户的行缓存设置。
+- TITLEBAR5 无代码阻塞；AppKit/Winit 系统拖窗的真实交互仍需用户验收，尤其是空白、Tab、按钮和侧栏的互斥命中。
 - DRAW1 无代码阻塞；Canvas 尚未实现，故当前只能使用 item-tree，未来实现前需验证 Slint custom-paint API 和终端交互兼容性。
 - 无代码阻塞。当前剩余风险是目标平台上的 GUI 视觉、真实全屏终端程序行为和 PTY 对物理像素尺寸的实际响应，需要用户在新二进制上验收；超过 16 个同批协议回调时仍会按有界背压丢弃超额响应，并通过诊断可见。
 - 代码保持安全边界不变：终端协议应答仍经当前 Tab 的有界 worker 回写；不进入 Slint、持久化或日志，也不扩大 SSH host-key、凭据、Telnet 或 Serial 边界。
 
 ## 下一步
 
+- 在新构建上保留 GPU 与当前行缓存设置，以相同窗口尺寸、pane 数和持续输出重复采样启动、持续输出和关闭 Tab 后的 `vmmap -summary` 与 `heap -s`；关注 `IOAccelerator (graphics)`、AGX texture 数是否趋于平台期。若需要立即降低旧安装版占用，可在 Appearance 中关闭 Terminal row render cache 并重启应用；Software renderer 可作独立 A/B，但其 CPU 行为不同。
+- 在 macOS 主窗口分别拖动红绿灯右侧空白、Tab、Tab 内按钮和侧栏，确认只有两个空白区移动窗口；Tab 重排和按钮动作各自独立。
 - DRAW2：先核实锁定 Slint 1.17.1 的 custom-paint API，再实现保持 parser/model/worker 不变的 Canvas 网格原型；该阶段完成前 Canvas 继续禁用。
 - DRAW3：覆盖宽字符、fallback 字体、SGR/盒线、选区、IME、hyperlink、光标、Software/GPU backend 与 damage 更新，并进行同负载 A/B；通过后再决定开放选择或默认值。
 - 在 Settings > Terminal 中手工确认 OSC 52 开关的 preview/save 行为；分别用默认目标、selection 目标和超过 64 KiB 的远端写入验证接受/拒绝边界。
@@ -164,6 +181,8 @@
 
 ## 最后更新时间
 
+- 2026-09-23 23:24 +0800：完成 MEM1–3 的根因核对、Skia 1.18.1 per-component layer cache 释放补丁及两个 macOS target 编译门禁；运行时内存曲线待新版本同负载复核。
+- 2026-09-23 22:59 +0800：完成 TITLEBAR5 的拖动分区实现、本机 Rust/Slint 门禁及两个 macOS target 的 check/Clippy/build；实际拖动由用户验收。
 - 2026-09-23 14:55 +0800：完成 SFTP-ID-20260923；修复首屏目录响应被过期 ID 防护误丢弃的问题，并统一普通导航、分页和上传后刷新的 request ID 所有权。全量 Rust/Slint 门禁和 debug 构建通过；真实 SFTP/GUI 由用户验收。
 - 2026-09-23：完成 DRAW1；持久化 terminal drawing preference，保留 item-tree 为唯一可选实现，Canvas 尚未实现并禁用。全量 Rust/Slint、474 条翻译和 tracker 校验通过；目标平台 GUI 视觉由用户验收。
 - 2026-09-21：完成 STDUI5/STDREP1/TELNETSTD1；F13-F24 下发序列与修饰键编码按本机 xterm-256color terminfo 修正，Telnet TTYPE 回报 `xterm-256color`，协议队列满有诊断，CSI 窗口查询、1016、Telnet/Serial 能力边界形成明确结论；真实 TUI 和目标平台行为仍待用户验收。

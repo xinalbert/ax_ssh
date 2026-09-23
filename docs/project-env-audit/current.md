@@ -426,3 +426,24 @@ git diff --check
 - 测试环境：`cargo fmt --all -- --check`、vendor backend rustfmt、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 202、应用 197、Doc tests 0）、`cargo build --locked --offline`、中文 catalog/check 和 `git diff --check` 通过。仓库未提供 `scripts/validate_tracking_docs.py`，该命令未执行。
 - 环境变化检查：是；新增两个本地 crates.io patch 和 macOS 持久 framebuffer/tiled surface 行为，非 macOS backend dispatch 未改行为；升级 Slint/softbuffer 必须重新核对 damage、buffer age 和 layer 坐标契约。
 - 开工判定：代码施工完成；目标 macOS Software renderer 的持续输出、resize、窗口隐藏/恢复、Retina DPI、光标/选区/IME 和同负载 sample/A-B 仍需人工验收。
+
+# 2026-09-23 macOS 标题栏拖动区域施工预检
+
+- 项目边界：独立 Rust 2024 AxSSH 桌面应用；本轮仅涉及 macOS 主窗口的 Slint 标题栏手势、应用窗口 bridge、AppKit 内容视图命中和双语架构说明。
+- 环境记忆状态：`docs/project-env-audit/current.md` 与 `changes.md` 已存在；已核对本轮 `Cargo.toml`、CI 和本机工具链，Slint 1.18.1、MSRV 1.92.0 与现有记录一致。
+- 运行环境：本机 rustc/Cargo 1.97.1；Cargo.lock 锁定依赖，`build.rs` 编译 `ui/app.slint`；不新增依赖。首次缺失的 Slint 1.18.1 依赖经本机 7897 代理按锁文件下载。
+- 测试环境：先用 Cargo 重编译 Slint，再执行 fmt、locked/offline check、严格 Clippy、完整测试、diff 和 tracker 校验；macOS 实际鼠标拖动及视觉由用户验收。
+- 可直接执行的命令：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`git diff --check`。
+- 风险与缺口：Slint 本身没有本轮可用的显式窗口移动 API；仓库已有 Winit window accessor，底层 macOS `drag_window()` 使用当前 AppKit 事件。交互结果需目标机器人工确认。
+- 验证结果：fmt、locked/offline check、严格 Clippy、定向测试、完整测试（库 280、应用 268、Doc tests 0）和 native build 通过；ARM64/x86_64 macOS 的显式 target check、严格 Clippy 与 build 均通过。x86_64 只编译链接，不在 ARM64 主机运行测试；UI 入口重新编译。
+- 开工判定：施工完成；不改变 SSH、凭据或 worker 边界。
+
+# 2026-09-23 Skia 图形内存修复施工预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；本轮限定锁定的 Skia renderer 缓存生命周期、Cargo patch、双语架构与项目跟踪，不改变终端/SSH worker、host-key trust 或凭据。
+- 环境记忆状态：仓库声明 MSRV 1.92.0、Slint 1.18.1，现有 Cargo.lock 和两处本地 backend patch；本机 Rust/Cargo 1.97.1，macOS ARM64。安装版 Sample 对应 Slint 1.17.1，不能作为当前 1.18.1 运行时修复结果。
+- 运行环境：macOS Metal-backed `winit-skia` 可产生 GPU 离屏 layer 图像；当前用户设置启用了 `terminal_row_render_cache`。本轮使用现有 crate 的精确版本本地补丁，不新增框架或改变默认 renderer。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`cargo build --locked --offline` 与 `git diff --check`；目标 macOS 相同终端负载的内存趋势需要用户后续对照。
+- 环境变化检查：是；Cargo.lock 中 Skia crate 来源将改为本地 path patch，版本保持 1.18.1；非 macOS CI target 仍按原矩阵验证。
+- 开工判定：施工完成；运行时内存降幅待同负载采样。
+- 施工验证：本地 Skia 1.18.1 patch 已编译；ARM64 macOS fmt、locked/offline check、严格 Clippy、全量测试（库 280、应用 268）和 build 均通过。x86_64 macOS 的显式 target check、严格 Clippy、build 均通过，未在 ARM64 主机运行 x86_64 测试；运行时 GPU footprint 改善仍待新二进制同负载采样。
