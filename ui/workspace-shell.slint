@@ -974,33 +974,40 @@ export component WorkspaceShell inherits Rectangle {
         height: parent.height;
         spacing: 0px;
 
-        session-navigation := SessionNavigation {
-            sessions: root.view.sessions;
-            sidebar-width: root.view.sidebar_width;
-            collapsed-group-label-chars: root.view.collapsed_group_label_chars;
-            active-profile-id: root.view.active_profile_id;
-            divider-top-offset: workspace-titlebar.height;
-            collapsed <=> root.sidebar-collapsed;
-            open-local-shell => { root.open-local-shell(); }
-            new-session => { root.new-session(); }
-            connect-session(id) => { root.connect-session(id); }
-            open-sftp(id) => { root.open-sftp-session(id); }
-            new-group => { root.request-session-management("new-group", "", ""); }
-            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-            rename-group(group-name) => {
-                root.request-session-management("rename-group", group-name, group-name);
-            }
-            delete-group(group-name) => {
-                root.request-session-management("delete-group", group-name, group-name);
-            }
-            edit-session(id) => { root.edit-session(id); }
-            copy-session(id) => { root.copy-session(id); }
-            duplicate-session(id) => { root.duplicate-session(id); }
-            session-transfer-action(action, target) => {
-                root.session-transfer-action(action, target);
-            }
-            delete-session(id, name) => {
-                root.request-session-management("delete-session", id, name);
+        Rectangle {
+            width: session-navigation.width;
+            background: Theme.panel;
+
+            session-navigation := SessionNavigation {
+                y: root.apple-platform ? Theme.tab-height : 0px;
+                height: parent.height - self.y;
+                sessions: root.view.sessions;
+                sidebar-width: root.view.sidebar_width;
+                collapsed-group-label-chars: root.view.collapsed_group_label_chars;
+                active-profile-id: root.view.active_profile_id;
+                divider-top-offset: root.apple-platform ? 0px : workspace-titlebar.height;
+                collapsed <=> root.sidebar-collapsed;
+                open-local-shell => { root.open-local-shell(); }
+                new-session => { root.new-session(); }
+                connect-session(id) => { root.connect-session(id); }
+                open-sftp(id) => { root.open-sftp-session(id); }
+                new-group => { root.request-session-management("new-group", "", ""); }
+                new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                rename-group(group-name) => {
+                    root.request-session-management("rename-group", group-name, group-name);
+                }
+                delete-group(group-name) => {
+                    root.request-session-management("delete-group", group-name, group-name);
+                }
+                edit-session(id) => { root.edit-session(id); }
+                copy-session(id) => { root.copy-session(id); }
+                duplicate-session(id) => { root.duplicate-session(id); }
+                session-transfer-action(action, target) => {
+                    root.session-transfer-action(action, target);
+                }
+                delete-session(id, name) => {
+                    root.request-session-management("delete-session", id, name);
+                }
             }
         }
 
@@ -1011,38 +1018,9 @@ export component WorkspaceShell inherits Rectangle {
             VerticalLayout {
                 spacing: 0px;
 
-                workspace-titlebar := WorkspaceTitlebar {
-                    tabs: root.view.workspace_tabs;
-                    active-tab-id: root.view.active_tab_id;
-                    active-tab-kind: root.view.active_tab_kind;
-                    tab-width: root.view.tab_width;
-                    connection-picker-open: root.connection-picker-open;
-                    detached-window: root.detached-window;
-                    activate-tab(id) => {
-                        root.connection-picker-open = false;
-                        root.activate-tab(id);
-                    }
-                    close-tab(id) => {
-                        root.request-close-tab(id);
-                    }
-                    move-tab(id, target-index) => {
-                        root.connection-picker-open = false;
-                        root.move-tab(id, target-index);
-                    }
-                    detach-workspace(id) => {
-                        root.connection-picker-open = false;
-                        root.detach-workspace(id);
-                    }
-                    return-workspace(id) => {
-                        root.connection-picker-open = false;
-                        root.return-workspace(id);
-                    }
-                    terminal-pane-command(command) => {
-                        root.terminal-pane-command(root.view.active_pane_id, command);
-                    }
-                    toggle-connection-picker => {
-                        root.connection-picker-open = !root.connection-picker-open;
-                    }
+                Rectangle {
+                    height: Theme.tab-height;
+                    background: Theme.panel;
                 }
 
                 Rectangle {
@@ -1322,5 +1300,53 @@ export component WorkspaceShell inherits Rectangle {
                 dismiss => { root.connection-picker-open = false; }
             }
         }
+    }
+
+    workspace-titlebar := WorkspaceTitlebar {
+        visible: !root.detached-window;
+        x: root.apple-platform ? Theme.macos-titlebar-controls-width : session-navigation.width;
+        y: 0px;
+        width: max(0px, parent.width - self.x);
+        tabs: root.view.workspace_tabs;
+        active-tab-id: root.view.active_tab_id;
+        active-tab-kind: root.view.active_tab_kind;
+        tab-width: root.view.tab_width;
+        connection-picker-open: root.connection-picker-open;
+        detached-window: root.detached-window;
+        activate-tab(id) => {
+            root.connection-picker-open = false;
+            root.activate-tab(id);
+        }
+        close-tab(id) => {
+            root.request-close-tab(id);
+        }
+        move-tab(id, target-index) => {
+            root.connection-picker-open = false;
+            root.move-tab(id, target-index);
+        }
+        detach-workspace(id) => {
+            root.connection-picker-open = false;
+            root.detach-workspace(id);
+        }
+        return-workspace(id) => {
+            root.connection-picker-open = false;
+            root.return-workspace(id);
+        }
+        terminal-pane-command(command) => {
+            root.terminal-pane-command(root.view.active_pane_id, command);
+        }
+        toggle-connection-picker => {
+            root.connection-picker-open = !root.connection-picker-open;
+        }
+    }
+
+    // The native title-bar clearance and Slint Tab row share one bottom edge.
+    Rectangle {
+        visible: !root.detached-window;
+        x: root.apple-platform ? 0px : session-navigation.width;
+        y: workspace-titlebar.height - Theme.hairline;
+        width: max(0px, parent.width - self.x);
+        height: Theme.hairline;
+        background: Theme.tab-divider;
     }
 }

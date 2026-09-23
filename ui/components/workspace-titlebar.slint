@@ -874,14 +874,4 @@ export component WorkspaceTitlebar inherits Rectangle {
         }
     }
 
-    // One separator owns the entire titlebar boundary. Keeping it outside the
-    // tab/tool segments prevents small segment layout changes from producing
-    // multiple adjacent lines or allowing a tab surface to cover the edge.
-    Rectangle {
-        x: 0px;
-        y: parent.height - Theme.hairline;
-        width: parent.width;
-        height: Theme.hairline;
-        background: Theme.tab-divider;
-    }
 }

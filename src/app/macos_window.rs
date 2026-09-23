@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use ax_ssh::terminal::TerminalModifiers;
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, Sel};
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSColor,
@@ -11,6 +11,7 @@ use objc2_app_kit::{
     NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageNameMultipleDocuments, NSInsertFunctionKey,
     NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
     NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
+    NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -70,6 +71,51 @@ const TITLE_BAR_BUTTON_WIDTH: f64 = 28.0;
 const TITLE_BAR_BUTTON_HEIGHT: f64 = 20.0;
 const TITLE_BAR_BUTTON_SPACING: f64 = 2.0;
 const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
+// Matches Theme.macos-titlebar-controls-width in the Slint title-bar layout.
+const TITLE_BAR_CONTROLS_WIDTH: f64 = 96.0;
+
+extern "C-unwind" fn content_mouse_down_can_move_window(view: &NSView, _cmd: Sel) -> Bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return Bool::NO;
+    };
+    let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() else {
+        return Bool::NO;
+    };
+    let point = view.convertPoint_fromView(event.locationInWindow(), None);
+    Bool::new(point.x - view.bounds().origin.x < TITLE_BAR_CONTROLS_WIDTH)
+}
+
+fn keep_tab_gestures_out_of_window_drag(view: &NSView) -> Result<()> {
+    let original_class = view.class();
+    let class_name = c"AxSSHInteractiveTitleBarContentView";
+    let subclass = if let Some(subclass) = AnyClass::get(class_name) {
+        if original_class == subclass {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            subclass.superclass() == Some(original_class),
+            "AppKit content view has an unexpected class"
+        );
+        subclass
+    } else {
+        let mut builder = ClassBuilder::new(class_name, original_class)
+            .context("could not subclass the AppKit content view")?;
+        // SAFETY: This method has NSView's no-argument BOOL getter signature.
+        // The subclass adds no ivars and inherits Winit's input handlers.
+        unsafe {
+            builder.add_method(
+                sel!(mouseDownCanMoveWindow),
+                content_mouse_down_can_move_window as extern "C-unwind" fn(_, _) -> _,
+            );
+        }
+        builder.register()
+    };
+    // SAFETY: The registered class directly subclasses the live view's class,
+    // adds no ivars, and only overrides NSView's drag-region getter.
+    let previous_class = unsafe { AnyObject::set_class(view, subclass) };
+    debug_assert_eq!(previous_class, original_class);
+    Ok(())
+}
 
 struct NativeTitleBarButtonIvars {
     activate: Box<dyn Fn()>,
@@ -112,8 +158,14 @@ impl NativeTitleBarButton {
 }
 
 pub(super) fn configure(window: &slint::Window) -> Result<()> {
-    with_native_window(window, |native_window| {
+    with_native_view(window, |view| {
+        let native_window = view.window().context("AppKit view has no NSWindow")?;
+        native_window
+            .setStyleMask(native_window.styleMask() | NSWindowStyleMask::FullSizeContentView);
+        native_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        native_window.setTitlebarAppearsTransparent(true);
         native_window.setMovableByWindowBackground(false);
+        keep_tab_gestures_out_of_window_drag(view)?;
         Ok(())
     })
 }
