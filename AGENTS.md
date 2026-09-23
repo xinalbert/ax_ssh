@@ -126,6 +126,26 @@ Tokio receivers, locks, or unbounded terminal buffers to Slint.
 5. Review the final diff for accidental reference-project coupling, leaked
    secrets, unbounded queues/buffers, UI-thread blocking, and expanded APIs.
 
+## Release Tag Constraints
+
+- Public release tags must use `YYYY-MM-DD` for the first release of a day or
+  `YYYY-MM-DD-N` for a same-day revision. Tags must be annotated tags, not
+  lightweight tags.
+- Before creating any new release tag, choose the next unused revision across
+  local and remote tags. A failed, aborted, or partially published tag is
+  consumed and must not be moved, deleted, or reused; create the next revision.
+- Synchronize release metadata before tagging. Run
+  `python3 scripts/release_version.py sync --tag <TAG>` and commit the resulting
+  updates to `Cargo.toml`, `Cargo.lock`, and `packaging/macos/Info.plist`.
+- Verify the exact tag metadata before creating the tag with
+  `python3 scripts/release_version.py verify --tag <TAG>`. The commit named by
+  the tag must contain the matching Cargo and macOS versions; never create a
+  release tag while package metadata still describes an earlier revision.
+- Run the release helper tests before pushing a new tag:
+  `python3 -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v`.
+- Push the metadata commit to `master` before pushing the annotated tag. Do not
+  create or push a tag that points to an uncommitted working-tree state.
+
 ## Verification
 
 For Rust or Slint changes, run:
