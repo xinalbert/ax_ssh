@@ -3,7 +3,7 @@
 ## Version Rule
 
 Use the Slint version resolved by `Cargo.lock` as the executable API baseline;
-it is currently `1.17.1`. Consult `latest` official guidance for current style,
+it is currently `1.18.1`. Consult `latest` official guidance for current style,
 but do not write APIs from a newer release until Cargo dependencies, MSRV, CI,
 and migration notes are updated together.
 

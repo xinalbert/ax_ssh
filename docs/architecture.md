@@ -1895,7 +1895,7 @@ remains responsible for producing the changed-row list, while Slint's own
 renderer continues to visit its retained item tree and track internal dirty
 regions.
 
-The locked Slint 1.17.1 winit software backend is patched under
+The locked Slint 1.18.1 winit software backend is patched under
 `vendor/i-slint-backend-winit/` to forward every physical dirty rectangle
 instead of collapsing them into one bounding box. The macOS `softbuffer`
 CoreGraphics backend keeps one persistent CPU framebuffer and partitions its

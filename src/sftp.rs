@@ -174,7 +174,9 @@ where
         PacketLimitedStream::new(stream),
         Config {
             max_packet_len: MAX_PACKET_BYTES,
+            max_concurrent_reads: 16,
             max_concurrent_writes: 1,
+            max_write_packet_len: MAX_PACKET_BYTES,
             request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
         },
     );
@@ -703,7 +705,9 @@ where
         PacketLimitedStream::new(stream),
         Config {
             max_packet_len: MAX_PACKET_BYTES,
+            max_concurrent_reads: 16,
             max_concurrent_writes: 1,
+            max_write_packet_len: MAX_PACKET_BYTES,
             request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
         },
     );

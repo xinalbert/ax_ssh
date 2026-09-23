@@ -16,7 +16,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, Generate, Key, KeyInit},
 };
 use directories::ProjectDirs;
 use keyring::{Entry, Error};
@@ -120,9 +120,11 @@ impl CredentialStore {
         let key = derive_vault_key(vault_password, &salt)?;
         let cipher = XChaCha20Poly1305::new_from_slice(key.as_ref())
             .map_err(|_| anyhow::anyhow!("invalid derived vault key"))?;
+        let nonce = XNonce::try_from(nonce.as_slice())
+            .map_err(|_| anyhow::anyhow!("invalid encrypted credential nonce"))?;
         let plaintext = cipher
             .decrypt(
-                XNonce::from_slice(&nonce),
+                &nonce,
                 chacha20poly1305::aead::Payload {
                     msg: &ciphertext,
                     aad: &vault_aad(session_id),
@@ -146,8 +148,8 @@ impl CredentialStore {
     ) -> Result<()> {
         validate_password(password, "password")?;
         validate_password(vault_password, "vault password")?;
-        let salt = XChaCha20Poly1305::generate_key(&mut OsRng);
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+        let salt = Key::<XChaCha20Poly1305>::generate();
+        let nonce = XNonce::generate();
         let key = derive_vault_key(vault_password, salt.as_ref())?;
         let cipher = XChaCha20Poly1305::new_from_slice(key.as_ref())
             .map_err(|_| anyhow::anyhow!("invalid derived vault key"))?;

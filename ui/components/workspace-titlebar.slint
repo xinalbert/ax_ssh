@@ -443,9 +443,9 @@ export component WorkspaceTitlebar inherits Rectangle {
 
     function scroll-tabs(delta-x: length, delta-y: length) {
         let delta = delta-x != 0px ? delta-x : delta-y;
-        tabs-flick.viewport-x = max(
-            tabs-flick.width - tabs-flick.viewport-width,
-            min(0px, tabs-flick.viewport-x + delta),
+        tabs-flick.content-x = max(
+            tabs-flick.width - tabs-flick.content-width,
+            min(0px, tabs-flick.content-x + delta),
         );
     }
 
@@ -457,16 +457,16 @@ export component WorkspaceTitlebar inherits Rectangle {
 
         let tab-left = index * root.tab-width * 1px;
         let tab-right = tab-left + root.tab-width * 1px;
-        let visible-left = -tabs-flick.viewport-x;
+        let visible-left = -tabs-flick.content-x;
         let visible-right = visible-left + tabs-flick.width;
         let next-viewport-x = tab-left < visible-left
             ? -tab-left
             : (tab-right > visible-right
                 ? tabs-flick.width - tab-right
-                : tabs-flick.viewport-x);
+                : tabs-flick.content-x);
 
-        tabs-flick.viewport-x = max(
-            tabs-flick.width - tabs-flick.viewport-width,
+        tabs-flick.content-x = max(
+            tabs-flick.width - tabs-flick.content-width,
             min(0px, next-viewport-x),
         );
     }
@@ -545,11 +545,11 @@ export component WorkspaceTitlebar inherits Rectangle {
                 width: parent.width;
                 height: parent.height;
                 interactive: false;
-                viewport-width: max(
+                content-width: max(
                     self.width,
                     root.tabs.length * root.tab-width * 1px,
                 );
-                viewport-height: self.height;
+                content-height: self.height;
 
                 for tab[index] in root.tabs : Rectangle {
                     private property <bool> tab-active:
@@ -557,7 +557,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                     private property <int> tab-visibility-key:
                         root.tab-visibility-revision * 2
                             + floor(tabs-flick.width / 1px)
-                            + floor(tabs-flick.viewport-width / 1px)
+                            + floor(tabs-flick.content-width / 1px)
                             + (self.tab-active ? 1 : 0);
                     changed tab-visibility-key => {
                         if self.tab-active {
@@ -755,7 +755,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 pointer-event(event) => {
                     if event.kind == PointerEventKind.up {
                         root.finish-tab-drag-at-content(
-                            self.mouse-x - tabs-flick.viewport-x,
+                            self.mouse-x - tabs-flick.content-x,
                         );
                     } else if event.kind == PointerEventKind.cancel {
                         root.clear-tab-drag();
@@ -763,7 +763,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 }
                 moved => {
                     root.update-tab-drag-at-content(
-                        self.mouse-x - tabs-flick.viewport-x,
+                        self.mouse-x - tabs-flick.content-x,
                     );
                 }
             }
@@ -773,7 +773,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                     0px,
                     min(
                         parent.width - self.width,
-                        root.drag-pointer-content-x + tabs-flick.viewport-x
+                        root.drag-pointer-content-x + tabs-flick.content-x
                             - root.drag-pointer-offset-x,
                     ),
                 );

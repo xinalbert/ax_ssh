@@ -328,8 +328,8 @@ export component SettingsPage inherits Rectangle {
         height: parent.height;
         vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-        viewport-width: self.visible-width;
-        viewport-height: max(
+        content-width: self.visible-width;
+        content-height: max(
             self.visible-height,
             settings-content.preferred-height + 2 * Theme.space-xl,
         );
@@ -354,7 +354,7 @@ export component SettingsPage inherits Rectangle {
         }
     }
 
-    changed scroll-revision => { settings-scroll.viewport-y = 0px; }
+    changed scroll-revision => { settings-scroll.content-y = 0px; }
 }
 
 export component SettingsHeader inherits Rectangle {

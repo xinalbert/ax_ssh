@@ -16,8 +16,10 @@ use euclid::approxeq::ApproxEq;
 
 #[cfg(muda)]
 use i_slint_core::api::LogicalPosition;
+use i_slint_core::cursor::{MouseCursorInner, scaled_hotspot};
 use i_slint_core::lengths::{PhysicalPx, ScaleFactor};
 use i_slint_core::renderer::DrawOutcome;
+use winit::event::WindowEvent as WinitWindowEvent;
 use winit::event_loop::ActiveEventLoop;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
@@ -28,11 +30,15 @@ use winit::platform::windows::WindowExtWindows;
 use crate::muda::MudaType;
 use crate::renderer::WinitCompatibleRenderer;
 use crate::winit_compat::WindowSurfaceSizeExt;
+use crate::drag_resize_window::{handle_cursor_move_for_resize, handle_resize};
 
 use corelib::item_tree::ItemTreeRc;
 #[cfg(enable_accesskit)]
 use corelib::item_tree::{ItemTreeRef, ItemTreeRefPin};
-use corelib::items::{ColorScheme, MouseCursor};
+use corelib::input::{BackendMouseEvent, InternalKeyEvent, KeyEvent, KeyEventType, TouchPhase};
+use corelib::graphics::euclid;
+use corelib::items::{BuiltInMouseCursor, ColorScheme, PointerEventButton};
+use corelib::SharedString;
 #[cfg(enable_accesskit)]
 use corelib::items::{ItemRc, ItemRef};
 
@@ -48,7 +54,9 @@ use corelib::{Coord, graphics::*};
 use i_slint_core::{self as corelib};
 #[cfg(any(enable_accesskit, muda))]
 use winit::event_loop::EventLoopProxy;
+use winit::window::CustomCursorSource;
 use winit::window::{WindowAttributes, WindowButtons};
+use winit::window::ResizeDirection;
 
 pub(crate) fn position_to_winit(pos: &corelib::api::WindowPosition) -> winit::dpi::Position {
     match pos {
@@ -112,6 +120,44 @@ fn apply_scale_factor_to_logical_sizes_in_attributes(
     fixup(&mut attributes.min_inner_size);
     fixup(&mut attributes.max_inner_size);
     fixup(&mut attributes.resize_increments);
+}
+
+fn winit_touch_phase(phase: winit::event::TouchPhase) -> TouchPhase {
+    match phase {
+        winit::event::TouchPhase::Started => TouchPhase::Started,
+        winit::event::TouchPhase::Moved => TouchPhase::Moved,
+        winit::event::TouchPhase::Ended => TouchPhase::Ended,
+        winit::event::TouchPhase::Cancelled => TouchPhase::Cancelled,
+    }
+}
+
+pub(crate) fn forward_mouse_move(
+    window: &corelib::api::Window,
+    position: corelib::lengths::LogicalPoint,
+) {
+    let _ = window.dispatch_event_with_result(WindowEvent::internal(
+        BackendMouseEvent::Moved {
+            position,
+            touch_finger_id: 0,
+        },
+    ));
+}
+
+fn to_slint_key(event: &winit::event::KeyEvent, key_code: &winit::keyboard::Key) -> SharedString {
+    macro_rules! winit_key_to_char {
+        ($($char:literal # $name:ident # $($shifted:ident)? $(=> $($_muda:ident)? # $($_qt:ident)|* # $($winit:ident $(($pos:ident))?)|* # $($_xkb:ident)|* )? ;)*) => {
+            #[cfg_attr(slint_nightly_test, allow(non_exhaustive_omitted_patterns))]
+            match key_code {
+                $( $( $(
+                    winit::keyboard::Key::Named(winit::keyboard::NamedKey::$winit)
+                    $(if event.location == winit::keyboard::KeyLocation::$pos)? => $char.into(),
+                )* )? )*
+                winit::keyboard::Key::Character(value) => value.as_str().into(),
+                _ => event.text.as_ref().map_or_else(SharedString::default, |text| text.as_str().into()),
+            }
+        }
+    }
+    i_slint_common::for_each_keys!(winit_key_to_char)
 }
 
 fn icon_to_winit(
@@ -372,6 +418,13 @@ pub struct WinitWindowAdapter {
     /// Winit's window_icon API has no way of checking if the window icon is
     /// the same as a previously set one, so keep track of that here.
     window_icon_cache_key: RefCell<Option<ImageCacheKey>>,
+
+    custom_cursor_source: Cell<Option<CustomCursorSource>>,
+    cursor_pos: Cell<corelib::lengths::LogicalPoint>,
+    pressed: Cell<bool>,
+    current_resize_direction: Cell<Option<ResizeDirection>>,
+    #[cfg(target_os = "ios")]
+    touch_finger_ids: RefCell<crate::ios::TouchFingerIdAllocator>,
 }
 
 impl WinitWindowAdapter {
@@ -415,6 +468,12 @@ impl WinitWindowAdapter {
             #[cfg(all(muda, target_os = "macos"))]
             muda_enable_default_menu_bar,
             window_icon_cache_key: Default::default(),
+            custom_cursor_source: Cell::new(None),
+            cursor_pos: Default::default(),
+            pressed: Default::default(),
+            current_resize_direction: Default::default(),
+            #[cfg(target_os = "ios")]
+            touch_finger_ids: Default::default(),
         });
 
         self_rc.shared_backend_data.register_inactive_window((self_rc.clone()) as _);
@@ -504,7 +563,8 @@ impl WinitWindowAdapter {
 
         let scale_factor =
             overriding_scale_factor.unwrap_or_else(|| winit_window.scale_factor() as f32);
-        self.window().try_dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor })?;
+        self.window()
+            .dispatch_event_with_result(WindowEvent::ScaleFactorChanged { scale_factor })?;
 
         #[cfg(target_os = "ios")]
         let (content_view, keyboard_curve_self) = {
@@ -832,7 +892,7 @@ impl WinitWindowAdapter {
             let scale_factor = WindowInner::from_pub(self.window()).scale_factor();
 
             let size = physical_size.to_logical(scale_factor);
-            self.window().try_dispatch_event(WindowEvent::Resized { size })?;
+            self.window().dispatch_event_with_result(WindowEvent::Resized { size })?;
 
             WindowInner::from_pub(self.window())
                 .set_window_item_safe_area(self.safe_area_inset().to_logical(scale_factor));
@@ -1028,7 +1088,7 @@ impl WinitWindowAdapter {
         // We don't render popups as separate windows yet, so treat
         // focus to be the same as being active.
         if have_focus != runtime_window.active() {
-            slint_window.try_dispatch_event(
+            slint_window.dispatch_event_with_result(
                 corelib::platform::WindowEvent::WindowActiveChanged(have_focus),
             )?;
         }
@@ -1052,6 +1112,270 @@ impl WinitWindowAdapter {
             }
         }
 
+        Ok(())
+    }
+
+    fn dispatch_internal_event(
+        &self,
+        event: impl Into<corelib::platform::InternalEvent>,
+    ) -> Result<(), PlatformError> {
+        self.window()
+            .dispatch_event_with_result(WindowEvent::internal(event))?;
+        Ok(())
+    }
+
+    fn maybe_set_custom_cursor(
+        &self,
+        active_event_loop: &ActiveEventLoop,
+        winit_window: &winit::window::Window,
+    ) {
+        if let Some(source) = self.custom_cursor_source.take() {
+            winit_window.set_cursor(active_event_loop.create_custom_cursor(source));
+        }
+    }
+
+    pub(crate) fn dispatch_winit_window_event(
+        &self,
+        active_event_loop: &ActiveEventLoop,
+        winit_window: &winit::window::Window,
+        event: WinitWindowEvent,
+    ) -> Result<(), PlatformError> {
+        if let Some(mut filter) = self.window_event_filter.take() {
+            let result = filter(self.window(), &event);
+            self.window_event_filter.set(Some(filter));
+            if matches!(result, EventResult::PreventDefault) {
+                return Ok(());
+            }
+        }
+
+        if self.winit_window().is_none() {
+            return Ok(());
+        }
+
+        #[cfg(enable_accesskit)]
+        self.accesskit_adapter()
+            .expect("internal error: accesskit adapter must exist when window exists")
+            .borrow_mut()
+            .process_event(winit_window, &event);
+
+        self.maybe_set_custom_cursor(active_event_loop, winit_window);
+        let runtime_window = WindowInner::from_pub(self.window());
+        if !matches!(
+            event,
+            WinitWindowEvent::CursorMoved { .. } | WinitWindowEvent::AxisMotion { .. }
+        ) {
+            self.shared_backend_data.flush_pending_mouse_move();
+        }
+
+        match event {
+            WinitWindowEvent::RedrawRequested => self.draw()?,
+            WinitWindowEvent::Resized(size) => {
+                self.resize_event(size)?;
+                self.window_state_event();
+                #[cfg(target_os = "windows")]
+                if size.width == 0 || size.height == 0 {
+                    self.renderer.occluded(true);
+                }
+            }
+            WinitWindowEvent::CloseRequested => {
+                self.window()
+                    .dispatch_event_with_result(WindowEvent::CloseRequested)?;
+            }
+            WinitWindowEvent::Focused(have_focus) => {
+                let have_focus = if cfg!(target_os = "macos") {
+                    self.winit_window().map_or(have_focus, |window| window.has_focus())
+                } else {
+                    have_focus
+                };
+                self.activation_changed(have_focus)?;
+            }
+            WinitWindowEvent::KeyboardInput { event, is_synthetic, .. } => {
+                let key_code = event.logical_key.clone();
+                let key_code = if i_slint_core::is_apple_platform() {
+                    match key_code {
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Control) => {
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::Super)
+                        }
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Super) => {
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::Control)
+                        }
+                        code => code,
+                    }
+                } else {
+                    key_code
+                };
+
+                let text = to_slint_key(&event, &key_code);
+                if text.is_empty() {
+                    return Ok(());
+                }
+                if is_synthetic {
+                    use winit::keyboard::{Key::Named, NamedKey as N};
+                    if !matches!(
+                        key_code,
+                        Named(N::Control | N::Shift | N::Super | N::Alt | N::AltGraph)
+                    ) {
+                        return Ok(());
+                    }
+                }
+                let mut key_event = KeyEvent::default();
+                key_event.text = text;
+                self.dispatch_internal_event(InternalKeyEvent {
+                    key_event,
+                    event_type: match event.state {
+                        winit::event::ElementState::Pressed => KeyEventType::KeyPressed,
+                        winit::event::ElementState::Released => KeyEventType::KeyReleased,
+                    },
+                    ..Default::default()
+                })?;
+            }
+            WinitWindowEvent::Ime(winit::event::Ime::Preedit(text, selection)) => {
+                self.dispatch_internal_event(InternalKeyEvent {
+                    event_type: KeyEventType::UpdateComposition,
+                    preedit_text: text.into(),
+                    preedit_selection: selection.map(|range| range.0 as i32..range.1 as i32),
+                    ..Default::default()
+                })?;
+            }
+            WinitWindowEvent::Ime(winit::event::Ime::Commit(text)) => {
+                let mut key_event = KeyEvent::default();
+                key_event.text = text.into();
+                self.dispatch_internal_event(InternalKeyEvent {
+                    event_type: KeyEventType::CommitComposition,
+                    key_event,
+                    ..Default::default()
+                })?;
+            }
+            WinitWindowEvent::CursorMoved { position, .. } => {
+                let direction = handle_cursor_move_for_resize(
+                    winit_window,
+                    position,
+                    self.current_resize_direction.get(),
+                    runtime_window
+                        .window_item()
+                        .map_or(0_f64, |item| item.as_pin_ref().resize_border_width().get().into()),
+                );
+                self.current_resize_direction.set(direction);
+                let position = position.to_logical(runtime_window.scale_factor() as f64);
+                let position = euclid::point2(position.x, position.y);
+                self.cursor_pos.set(position);
+                self.shared_backend_data.set_pending_mouse_move(winit_window.id(), position);
+            }
+            WinitWindowEvent::CursorLeft { .. } => {
+                if cfg!(target_arch = "wasm32") || !self.pressed.get() {
+                    self.pressed.set(false);
+                    self.dispatch_internal_event(BackendMouseEvent::Exit)?;
+                }
+            }
+            WinitWindowEvent::MouseWheel { delta, phase, .. } => {
+                let (delta_x, delta_y) = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => (x * 60., y * 60.),
+                    winit::event::MouseScrollDelta::PixelDelta(position) => {
+                        let position = position.to_logical(runtime_window.scale_factor() as f64);
+                        (position.x, position.y)
+                    }
+                };
+                self.dispatch_internal_event(BackendMouseEvent::Wheel {
+                    position: self.cursor_pos.get(),
+                    delta_x,
+                    delta_y,
+                    phase: winit_touch_phase(phase),
+                })?;
+            }
+            WinitWindowEvent::MouseInput { state, button, .. } => {
+                let button = match button {
+                    winit::event::MouseButton::Left => PointerEventButton::Left,
+                    winit::event::MouseButton::Right => PointerEventButton::Right,
+                    winit::event::MouseButton::Middle => PointerEventButton::Middle,
+                    winit::event::MouseButton::Back => PointerEventButton::Back,
+                    winit::event::MouseButton::Forward => PointerEventButton::Forward,
+                    winit::event::MouseButton::Other(_) => PointerEventButton::Other,
+                };
+                let event = match state {
+                    winit::event::ElementState::Pressed => {
+                        if button == PointerEventButton::Left && self.current_resize_direction.get().is_some() {
+                            handle_resize(winit_window, self.current_resize_direction.get());
+                            return Ok(());
+                        }
+                        self.pressed.set(true);
+                        BackendMouseEvent::Pressed {
+                            position: self.cursor_pos.get(),
+                            button,
+                            click_count: 0,
+                            touch_finger_id: 0,
+                        }
+                    }
+                    winit::event::ElementState::Released => {
+                        self.pressed.set(false);
+                        BackendMouseEvent::Released {
+                            position: self.cursor_pos.get(),
+                            button,
+                            click_count: 0,
+                            touch_finger_id: 0,
+                        }
+                    }
+                };
+                self.dispatch_internal_event(event)?;
+            }
+            WinitWindowEvent::Touch(touch) => {
+                let location = touch.location.to_logical(runtime_window.scale_factor() as f64);
+                let position = euclid::point2(location.x, location.y);
+                #[cfg(not(target_os = "ios"))]
+                let finger_id = Some(i32::try_from(touch.id).expect("winit touch id out of i32 range"));
+                #[cfg(target_os = "ios")]
+                let finger_id = match touch.phase {
+                    winit::event::TouchPhase::Started | winit::event::TouchPhase::Moved => {
+                    self.touch_finger_ids.borrow_mut().id_for(touch.id)
+                    }
+                    winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => {
+                    self.touch_finger_ids.borrow_mut().take(touch.id)
+                    }
+                };
+                if let Some(finger_id) = finger_id {
+                    self.window().dispatch_event_with_result(WindowEvent::internal(
+                        corelib::platform::InternalEvent::Touch {
+                            id: finger_id,
+                            position,
+                            phase: winit_touch_phase(touch.phase),
+                        },
+                    ))?;
+                }
+            }
+            WinitWindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if std::env::var("SLINT_SCALE_FACTOR").is_err() {
+                    self.window().dispatch_event_with_result(WindowEvent::ScaleFactorChanged {
+                        scale_factor: scale_factor as f32,
+                    })?;
+                }
+            }
+            WinitWindowEvent::ThemeChanged(theme) => {
+                self.set_color_scheme(match theme {
+                    winit::window::Theme::Dark => ColorScheme::Dark,
+                    winit::window::Theme::Light => ColorScheme::Light,
+                });
+                self.update_accent_color();
+            }
+            WinitWindowEvent::Occluded(occluded) => {
+                self.renderer.occluded(occluded);
+                self.window_state_event();
+            }
+            WinitWindowEvent::PinchGesture { delta, phase, .. } => {
+                self.dispatch_internal_event(BackendMouseEvent::PinchGesture {
+                    position: self.cursor_pos.get(),
+                    delta: delta as f32,
+                    phase: winit_touch_phase(phase),
+                })?;
+            }
+            WinitWindowEvent::RotationGesture { delta, phase, .. } => {
+                self.dispatch_internal_event(BackendMouseEvent::RotationGesture {
+                    position: self.cursor_pos.get(),
+                    delta: -delta,
+                    phase: winit_touch_phase(phase),
+                })?;
+            }
+            WinitWindowEvent::AxisMotion { .. } => {}
+            _ => {}
+        }
         Ok(())
     }
 
@@ -1370,7 +1694,7 @@ impl WindowAdapter for WinitWindowAdapter {
 
         if must_resize {
             self.window()
-                .try_dispatch_event(WindowEvent::Resized {
+                .dispatch_event_with_result(WindowEvent::Resized {
                     size: i_slint_core::api::LogicalSize::new(width, height),
                 })
                 .unwrap();
@@ -1455,42 +1779,69 @@ impl WindowAdapter for WinitWindowAdapter {
 }
 
 impl WindowAdapterInternal for WinitWindowAdapter {
-    fn set_mouse_cursor(&self, cursor: MouseCursor) {
-        let winit_cursor = match cursor {
-            MouseCursor::Default => winit::window::CursorIcon::Default,
-            MouseCursor::None => winit::window::CursorIcon::Default,
-            MouseCursor::Help => winit::window::CursorIcon::Help,
-            MouseCursor::Pointer => winit::window::CursorIcon::Pointer,
-            MouseCursor::Progress => winit::window::CursorIcon::Progress,
-            MouseCursor::Wait => winit::window::CursorIcon::Wait,
-            MouseCursor::Crosshair => winit::window::CursorIcon::Crosshair,
-            MouseCursor::Text => winit::window::CursorIcon::Text,
-            MouseCursor::Alias => winit::window::CursorIcon::Alias,
-            MouseCursor::Copy => winit::window::CursorIcon::Copy,
-            MouseCursor::Move => winit::window::CursorIcon::Move,
-            MouseCursor::NoDrop => winit::window::CursorIcon::NoDrop,
-            MouseCursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
-            MouseCursor::Grab => winit::window::CursorIcon::Grab,
-            MouseCursor::Grabbing => winit::window::CursorIcon::Grabbing,
-            MouseCursor::ColResize => winit::window::CursorIcon::ColResize,
-            MouseCursor::RowResize => winit::window::CursorIcon::RowResize,
-            MouseCursor::NResize => winit::window::CursorIcon::NResize,
-            MouseCursor::EResize => winit::window::CursorIcon::EResize,
-            MouseCursor::SResize => winit::window::CursorIcon::SResize,
-            MouseCursor::WResize => winit::window::CursorIcon::WResize,
-            MouseCursor::NeResize => winit::window::CursorIcon::NeResize,
-            MouseCursor::NwResize => winit::window::CursorIcon::NwResize,
-            MouseCursor::SeResize => winit::window::CursorIcon::SeResize,
-            MouseCursor::SwResize => winit::window::CursorIcon::SwResize,
-            MouseCursor::EwResize => winit::window::CursorIcon::EwResize,
-            MouseCursor::NsResize => winit::window::CursorIcon::NsResize,
-            MouseCursor::NeswResize => winit::window::CursorIcon::NeswResize,
-            MouseCursor::NwseResize => winit::window::CursorIcon::NwseResize,
-            _ => winit::window::CursorIcon::Default,
+    fn set_mouse_cursor(&self, cursor: MouseCursorInner) {
+        let winit_cursor = match &cursor {
+            MouseCursorInner::BuiltIn(cursor) => Some(match cursor {
+                BuiltInMouseCursor::Default | BuiltInMouseCursor::None => {
+                    winit::window::CursorIcon::Default
+                }
+                BuiltInMouseCursor::Help => winit::window::CursorIcon::Help,
+                BuiltInMouseCursor::Pointer => winit::window::CursorIcon::Pointer,
+                BuiltInMouseCursor::Progress => winit::window::CursorIcon::Progress,
+                BuiltInMouseCursor::Wait => winit::window::CursorIcon::Wait,
+                BuiltInMouseCursor::Crosshair => winit::window::CursorIcon::Crosshair,
+                BuiltInMouseCursor::Text => winit::window::CursorIcon::Text,
+                BuiltInMouseCursor::Alias => winit::window::CursorIcon::Alias,
+                BuiltInMouseCursor::Copy => winit::window::CursorIcon::Copy,
+                BuiltInMouseCursor::Move => winit::window::CursorIcon::Move,
+                BuiltInMouseCursor::NoDrop => winit::window::CursorIcon::NoDrop,
+                BuiltInMouseCursor::NotAllowed => winit::window::CursorIcon::NotAllowed,
+                BuiltInMouseCursor::Grab => winit::window::CursorIcon::Grab,
+                BuiltInMouseCursor::Grabbing => winit::window::CursorIcon::Grabbing,
+                BuiltInMouseCursor::ColResize => winit::window::CursorIcon::ColResize,
+                BuiltInMouseCursor::RowResize => winit::window::CursorIcon::RowResize,
+                BuiltInMouseCursor::NResize => winit::window::CursorIcon::NResize,
+                BuiltInMouseCursor::EResize => winit::window::CursorIcon::EResize,
+                BuiltInMouseCursor::SResize => winit::window::CursorIcon::SResize,
+                BuiltInMouseCursor::WResize => winit::window::CursorIcon::WResize,
+                BuiltInMouseCursor::NeResize => winit::window::CursorIcon::NeResize,
+                BuiltInMouseCursor::NwResize => winit::window::CursorIcon::NwResize,
+                BuiltInMouseCursor::SeResize => winit::window::CursorIcon::SeResize,
+                BuiltInMouseCursor::SwResize => winit::window::CursorIcon::SwResize,
+                BuiltInMouseCursor::EwResize => winit::window::CursorIcon::EwResize,
+                BuiltInMouseCursor::NsResize => winit::window::CursorIcon::NsResize,
+                BuiltInMouseCursor::NeswResize => winit::window::CursorIcon::NeswResize,
+                BuiltInMouseCursor::NwseResize => winit::window::CursorIcon::NwseResize,
+                _ => winit::window::CursorIcon::Default,
+            }),
+            MouseCursorInner::CustomMouseCursor { image, hotspot_x, hotspot_y } => {
+                let source_size = image.size();
+                let scale = self.window().scale_factor();
+                let target_size = IntSize::new(
+                    (source_size.width as f32 * scale) as u32,
+                    (source_size.height as f32 * scale) as u32,
+                );
+                if let Some(pixels) = corelib::graphics::image_to_rgba8_with_target_size(image, target_size) {
+                    let source = winit::window::CustomCursor::from_rgba(
+                        pixels.as_bytes(),
+                        pixels.width() as u16,
+                        pixels.height() as u16,
+                        scaled_hotspot(*hotspot_x, source_size.width, pixels.width()) as u16,
+                        scaled_hotspot(*hotspot_y, source_size.height, pixels.height()) as u16,
+                    );
+                    self.custom_cursor_source.set(source.ok());
+                }
+                None
+            }
+            _ => None,
         };
         if let Some(winit_window) = self.winit_window_or_none.borrow().as_window() {
-            winit_window.set_cursor_visible(cursor != MouseCursor::None);
-            winit_window.set_cursor(winit_cursor);
+            winit_window.set_cursor_visible(
+                cursor != MouseCursorInner::BuiltIn(BuiltInMouseCursor::None),
+            );
+            if let Some(winit_cursor) = winit_cursor {
+                winit_window.set_cursor(winit_cursor);
+            }
         }
     }
 

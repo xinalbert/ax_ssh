@@ -704,8 +704,8 @@ export component SessionNavigation inherits Rectangle {
                 if root.sessions.length > 0 : groups-flick := Flickable {
                     width: parent.width;
                     height: parent.height;
-                    viewport-width: self.width;
-                    viewport-height: max(self.height, groups-layout.preferred-height);
+                    content-width: self.width;
+                    content-height: max(self.height, groups-layout.preferred-height);
 
                     groups-layout := VerticalLayout {
                         width: parent.width;
@@ -841,8 +841,8 @@ export component SessionNavigation inherits Rectangle {
                 if root.sessions.length > 0 : expanded-groups-flick := Flickable {
                     width: parent.width;
                     height: parent.height;
-                    viewport-width: self.width;
-                    viewport-height: max(self.height, expanded-groups-layout.preferred-height);
+                    content-width: self.width;
+                    content-height: max(self.height, expanded-groups-layout.preferred-height);
 
                     expanded-groups-layout := VerticalLayout {
                         width: parent.width;

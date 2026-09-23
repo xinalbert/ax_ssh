@@ -218,9 +218,9 @@ export component ThemedComboBox inherits FocusScope {
                     y: Theme.combo-box-popup-padding;
                     width: parent.width - 2 * Theme.combo-box-popup-padding;
                     height: parent.height - 2 * Theme.combo-box-popup-padding;
-                    viewport-width: self.width;
-                    viewport-y <=> root.popup-scroll-y;
-                    viewport-height: max(
+                    content-width: self.width;
+                    content-y <=> root.popup-scroll-y;
+                    content-height: max(
                         self.height,
                         root.model.length * Theme.combo-box-popup-row-height,
                     );
@@ -288,8 +288,8 @@ export component ThemedComboBox inherits FocusScope {
                     border-radius: self.width / 2;
 
                     scroll-thumb := Rectangle {
-                        y: (-options-flick.viewport-y
-                            / (options-flick.viewport-height - options-flick.height))
+                        y: (-options-flick.content-y
+                            / (options-flick.content-height - options-flick.height))
                             * (parent.height - self.height);
                         width: parent.width;
                         height: max(

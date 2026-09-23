@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.92"
 name = "i-slint-backend-winit"
-version = "1.17.1"
+version = "1.18.1"
 authors = ["Slint Developers <info@slint.dev>"]
 build = "build.rs"
 autolib = false
@@ -133,34 +133,34 @@ features = [
 default-features = false
 
 [dependencies.i-slint-common]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 default-features = false
 
 [dependencies.i-slint-core]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 default-features = false
 
 [dependencies.i-slint-core-macros]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 default-features = false
 
 [dependencies.i-slint-renderer-femtovg]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 optional = true
 default-features = false
 
 [dependencies.i-slint-renderer-skia]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 optional = true
 default-features = false
 
 [dependencies.i-slint-renderer-software]
-version = "=1.17.1"
+version = "=1.18.1"
 optional = true
 default-features = false
 
@@ -232,7 +232,7 @@ optional = true
 default-features = false
 
 [target.'cfg(all(target_vendor = "apple", not(target_os = "macos")))'.dependencies.i-slint-renderer-skia]
-version = "=1.17.1"
+version = "=1.18.1"
 features = ["default"]
 default-features = false
 
@@ -242,7 +242,7 @@ optional = true
 default-features = false
 
 [target.'cfg(any(target_os = "macos", target_family = "windows"))'.dependencies.vtable]
-version = "0.4"
+version = "0.5"
 
 [target.'cfg(not(any(target_family = "windows", target_vendor = "apple", target_arch = "wasm32", target_os = "android")))'.dependencies.futures]
 version = "0.3.31"

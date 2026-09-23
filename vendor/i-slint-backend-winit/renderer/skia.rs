@@ -188,6 +188,7 @@ impl super::WinitCompatibleRenderer for WinitSkiaRenderer {
             winit_window.clone(),
             physical_size_to_slint(&size),
             self.requested_graphics_api.clone(),
+            false,
         )?;
 
         self.renderer.set_pre_present_callback(Some(Box::new({

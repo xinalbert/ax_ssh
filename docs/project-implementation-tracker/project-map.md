@@ -22,7 +22,7 @@
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `vendor/vt100/` | 历史终端网格补丁的 MIT 保留副本 | 审计旧差异、许可证或移除遗留文件时 | 不在 Cargo 依赖图中；当前迁移不修改其源码，也不得再作为新的终端功能实现点 |
-| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.17.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 只保留 `PhysicalRegion::iter()` 到 `softbuffer::Rect` 的多矩形转发，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；不得承载 AxSSH UI、终端或 SSH 逻辑 |
+| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 只保留 `PhysicalRegion::iter()` 到 `softbuffer::Rect` 的多矩形转发，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；不得承载 AxSSH UI、终端或 SSH 逻辑 |
 | `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |

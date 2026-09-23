@@ -1099,7 +1099,7 @@ Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`Te
 仍共用一套行坐标；行 model 更新也不等于 framebuffer partial present。`TerminalModel` 的上游 `TermDamage` 负责
 产生变化行列表，Slint renderer 仍会访问保留的 item tree 并维护自身 dirty region。
 
-锁定的 Slint 1.17.1 winit software backend 在 `vendor/i-slint-backend-winit/` 中携带本地补丁，把每个物理
+锁定的 Slint 1.18.1 winit software backend 在 `vendor/i-slint-backend-winit/` 中携带本地补丁，把每个物理
 脏矩形直接转发给 softbuffer，不再合并成一个 bounding box。macOS `softbuffer` CoreGraphics backend 持有
 一个持久 CPU framebuffer，并把 presentation surface 划分为安全的 Core Animation layer。`TerminalPane` 以逻辑坐标
 发布终端 pane 几何，backend 边界再转换为物理像素；pane 区域内的 layer 覆盖整个 pane 宽度，垂直边界落在设置的

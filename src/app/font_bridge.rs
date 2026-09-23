@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use slint::ComponentHandle;
-use slint::fontique_010::fontique;
+use slint::fontique_011::fontique;
 
 const MAX_FONT_FAMILY_CHARS: usize = 128;
 const MAX_FONT_OPTIONS: usize = 256;
@@ -246,7 +246,7 @@ impl FontRegistry {
         if self.registered_families.contains(font.family) {
             return Ok(());
         }
-        let mut collection = slint::fontique_010::shared_collection();
+        let mut collection = slint::fontique_011::shared_collection();
         let family = font.family;
         register_loaded_font_in_collection(&mut collection, font)?;
         self.registered_families.insert(family);

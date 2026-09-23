@@ -1,3 +1,13 @@
+# 2026-09-23 Slint 1.18.1 与依赖升级验证
+
+- 项目边界：Rust 2024 AxSSH；本轮涉及 Cargo 依赖、Slint fontique 字体桥接、凭据加密 API、SFTP v3 配置、本地 Winit backend patch 和双语架构事实；不改变 SSH host-key 信任策略、凭据持久化边界或 UI/worker 所有权。
+- 依赖变化：Slint/i-slint-core/slint-build 升至 1.18.1，字体 API/feature 使用 fontique-011；升级 argon2 0.6、chacha20poly1305 0.11、fontdb 0.24、russh-sftp 3.0 及兼容锁定依赖。`base64` 直接约束保持 0.22，以满足 alacritty_terminal 的 `^0.22`；Slint 子依赖另解析 0.23。
+- Winit 适配：本地 `vendor/i-slint-backend-winit` 同步到 Slint 1.18.1，并迁移到新 window-adapter 输入事件分发 API；Skia、新 SFTP v3 并发/包长字段和 AEAD key/nonce API 已适配。
+- 环境记忆状态：Rust/Cargo 1.97.1、声明 MSRV 1.92.0；本机安装 aarch64-apple-darwin 与 x86_64-pc-windows-msvc targets。通过 127.0.0.1:7897 代理完成 Cargo 更新和所需 crate 下载。
+- macOS ARM64 验证：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（库 280、应用 267、Doc tests 0）和 `git diff --check` 通过；UI build 重新编译 Slint 1.18.1。
+- 跨平台检查：Windows `cargo check --locked --target x86_64-pc-windows-msvc` 已运行到本地 vendor backend，但 `aws-lc-sys` 缺少 Windows/MSVC SDK 头文件（`windows.h`、`stdlib.h`）失败；Linux x86_64/ARM64 和 macOS x86_64 targets 未安装，本机未声称通过，需 CI runner 验证。
+- 开工判定：本机实现和验证完成；目标平台 CI 及用户 GUI 视觉/焦点验收仍待完成。
+
 # 2026-09-22 ARM Linux cfg/Clippy 回归修复环境验证
 
 - 项目边界：本轮仅涉及 `src/app/terminal_bridge.rs`、根目录 `AGENTS.md` 与跨平台实施记录；不改变键盘编码语义、Slint UI 契约、SSH trust、凭据或 worker 所有权。

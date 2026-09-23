@@ -20,6 +20,16 @@
 - 是否需要联网：否
 - 多 agent：未使用
 
+## 本轮依赖升级
+
+- 目标 ID：DEPS-SLINT-20260923
+- 目标：升级兼容依赖锁定版本，并将 Slint 及本地 Winit backend patch 统一适配到 1.18.1。
+- 状态：实施与本机验证完成；Linux/Windows CI runner 验证待执行。
+- 已完成：升级 Slint 1.18.1、fontdb 0.24、argon2 0.6、chacha20poly1305 0.11、russh-sftp 3.0 和兼容锁定依赖；Slint 字体桥接切换到 fontique-011；本地 Winit patch 迁移至 1.18 window-adapter input dispatch API；补齐凭据加密与 SFTP v3 新配置适配；同步双语架构、项目地图和版本基线。
+- 约束：`base64` 0.22 仍由 `alacritty_terminal` 的 `^0.22` 约束要求；Slint 依赖图同时解析出自身所需的 0.23。未扩大 alacritty API 约束。
+- 验证：macOS ARM64 fmt/check/严格 Clippy/test（库 280、应用 267、Doc tests 0）通过；Windows MSVC target 已尝试但 macOS 缺 Windows SDK/MSVC headers，Linux targets 和 macOS x86_64 未安装，交由对应 CI runner 验证。
+- 风险/待办：Windows、Linux x86_64/ARM64 和 macOS x86_64 的 target-specific check/Clippy/build/test 仍待 CI；Slint UI 的视觉/焦点行为由用户验收。
+
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |

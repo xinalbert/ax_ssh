@@ -12,6 +12,7 @@ extern crate alloc;
 
 use event_loop::{CustomEvent, EventLoopState};
 use i_slint_core::api::EventLoopError;
+use i_slint_core as corelib;
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_core::platform::{EventLoopProxy, PlatformError};
 use i_slint_core::window::WindowAdapter;
@@ -23,6 +24,19 @@ use std::rc::Weak;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use winit::event_loop::ActiveEventLoop;
+
+static GLOBAL_PROXY: std::sync::Mutex<Option<winit::event_loop::EventLoopProxy<SlintEvent>>> =
+    std::sync::Mutex::new(None);
+
+/// Schedule a callback on the active winit event loop.
+pub fn invoke_from_active_event_loop(
+    func: impl FnOnce(&ActiveEventLoop) + Send + 'static,
+) -> Result<(), EventLoopError> {
+    let proxy = GLOBAL_PROXY.lock().unwrap().clone().ok_or(EventLoopError::NoEventLoopProvider)?;
+    proxy
+        .send_event(SlintEvent(CustomEvent::UserEventWithEventLoop(Box::new(func))))
+        .map_err(|_| EventLoopError::EventLoopTerminated)
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 mod clipboard;
@@ -414,6 +428,7 @@ pub(crate) struct SharedBackendData {
     /// The generation is used to determine if a quit_event_loop call is meant for the current
     /// event loop or is from a stale event.
     event_loop_generation: Arc<AtomicUsize>,
+    pending_mouse_move: RefCell<Option<(winit::window::WindowId, corelib::lengths::LogicalPoint)>>,
     is_wayland: bool,
     /// Desktop settings read from the XDG portal (cursor blink, appearance query).
     #[cfg(xdg_desktop_settings)]
@@ -504,6 +519,7 @@ impl SharedBackendData {
             not_running_event_loop: RefCell::new(Some(event_loop)),
             event_loop_proxy,
             event_loop_generation: Default::default(),
+            pending_mouse_move: Default::default(),
             is_wayland,
             #[cfg(xdg_desktop_settings)]
             desktop_settings: xdg_desktop_settings::DesktopSettings::new(),
@@ -598,6 +614,22 @@ impl SharedBackendData {
 
     pub fn window_by_id(&self, id: winit::window::WindowId) -> Option<Rc<WinitWindowAdapter>> {
         self.active_windows.borrow().get(&id).and_then(|weakref| weakref.upgrade())
+    }
+
+    fn set_pending_mouse_move(
+        &self,
+        window_id: winit::window::WindowId,
+        position: corelib::lengths::LogicalPoint,
+    ) {
+        self.pending_mouse_move.replace(Some((window_id, position)));
+    }
+
+    fn flush_pending_mouse_move(&self) {
+        if let Some((window_id, position)) = self.pending_mouse_move.borrow_mut().take()
+            && let Some(window) = self.window_by_id(window_id)
+        {
+            winitwindowadapter::forward_mouse_move(&window.window(), position);
+        }
     }
 }
 
@@ -871,6 +903,7 @@ impl i_slint_core::platform::Platform for Backend {
                     .map_err(|_| EventLoopError::EventLoopTerminated)
             }
         }
+        *GLOBAL_PROXY.lock().unwrap() = Some(self.shared_data.event_loop_proxy.clone());
         Some(Box::new(Proxy(
             self.shared_data.event_loop_proxy.clone(),
             Arc::clone(&self.shared_data.event_loop_generation),
