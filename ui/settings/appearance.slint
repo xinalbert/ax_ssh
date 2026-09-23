@@ -101,6 +101,7 @@ export component AppearanceSettingsPage inherits Rectangle {
     in-out property <string> draft-application-font-family;
     in-out property <int> draft-application-font-index;
     in-out property <string> draft-renderer-preference;
+    in-out property <string> draft-terminal-drawing-preference;
     in-out property <string> draft-software-presentation;
     in property <bool> apple-platform;
     in-out property <bool> draft-terminal-compact-rendering;
@@ -200,6 +201,20 @@ export component AppearanceSettingsPage inherits Rectangle {
                                 root.draft-renderer-preference = index == 1 ? "gpu"
                                     : (index == 2 ? "software" : "automatic");
                             }
+                        }
+                    }
+                }
+                SettingsRow {
+                    label: @tr("Terminal drawing");
+                    description: @tr("The Canvas drawing path is reserved for a future renderer");
+                    SettingsField {
+                        ThemedComboBox {
+                            width: parent.width;
+                            height: Theme.settings-control-height;
+                            model: [@tr("Item tree (current)"), @tr("Canvas (not available yet)")];
+                            current-index: 0;
+                            enabled: false;
+                            accessible-label: @tr("Terminal drawing path");
                         }
                     }
                 }

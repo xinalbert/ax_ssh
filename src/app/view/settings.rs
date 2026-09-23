@@ -12,6 +12,13 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         &settings.appearance.application_font_family,
     ));
     ui.set_renderer_preference(settings.appearance.renderer_preference.as_setting().into());
+    ui.set_terminal_drawing_preference(
+        settings
+            .appearance
+            .terminal_drawing_preference
+            .as_setting()
+            .into(),
+    );
     ui.set_software_presentation_mode(
         settings
             .appearance

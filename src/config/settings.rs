@@ -94,6 +94,44 @@ pub enum RendererPreference {
     Software,
 }
 
+/// Selects how the terminal grid is drawn inside the selected Slint backend.
+///
+/// `ItemTree` is the existing, fully supported renderer. `Canvas` reserves a
+/// stable configuration boundary for the future batched glyph renderer while
+/// preserving the current default and persisted-settings compatibility.
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminalDrawingPreference {
+    #[default]
+    ItemTree,
+    Canvas,
+}
+
+impl TerminalDrawingPreference {
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::ItemTree => "item-tree",
+            Self::Canvas => "canvas",
+        }
+    }
+
+    pub fn from_setting(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "canvas" => Self::Canvas,
+            _ => Self::ItemTree,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TerminalDrawingPreference {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::from_setting(&String::deserialize(deserializer)?))
+    }
+}
+
 impl RendererPreference {
     pub const fn as_setting(self) -> &'static str {
         match self {
@@ -160,6 +198,7 @@ impl<'de> Deserialize<'de> for SoftwarePresentationMode {
 #[derive(Clone, Copy, Debug)]
 pub struct AppearanceSettingsInput<'a> {
     pub renderer_preference: &'a str,
+    pub terminal_drawing_preference: &'a str,
     pub software_presentation: &'a str,
     pub application_font_family: &'a str,
     pub terminal_font_family: &'a str,
@@ -227,6 +266,8 @@ pub struct AppearanceSettings {
     #[serde(default)]
     pub renderer_preference: RendererPreference,
     #[serde(default)]
+    pub terminal_drawing_preference: TerminalDrawingPreference,
+    #[serde(default)]
     pub software_presentation: SoftwarePresentationMode,
     #[serde(default = "default_application_font_family")]
     pub application_font_family: String,
@@ -285,6 +326,9 @@ impl AppearanceSettings {
     fn normalized_with_theme(input: AppearanceSettingsInput<'_>, theme: ThemeSettings) -> Self {
         Self {
             renderer_preference: RendererPreference::from_setting(input.renderer_preference),
+            terminal_drawing_preference: TerminalDrawingPreference::from_setting(
+                input.terminal_drawing_preference,
+            ),
             software_presentation: SoftwarePresentationMode::from_setting(
                 input.software_presentation,
             ),
@@ -344,6 +388,7 @@ impl AppearanceSettings {
         );
         let input = AppearanceSettingsInput {
             renderer_preference: self.renderer_preference.as_setting(),
+            terminal_drawing_preference: self.terminal_drawing_preference.as_setting(),
             software_presentation: self.software_presentation.as_setting(),
             application_font_family: &self.application_font_family,
             terminal_font_family: &self.terminal_font_family,
@@ -378,6 +423,7 @@ impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             renderer_preference: RendererPreference::Automatic,
+            terminal_drawing_preference: TerminalDrawingPreference::ItemTree,
             software_presentation: SoftwarePresentationMode::default(),
             application_font_family: default_application_font_family(),
             terminal_font_family: default_terminal_font_family(),

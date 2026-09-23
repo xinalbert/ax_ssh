@@ -124,7 +124,7 @@
 | `ui/components/sidebar-controls.slint` | 会话导航基础图标/窄栏项 | `SidebarTerminalGlyph`、`SidebarToggleGlyph`、`SidebarRailToggle`、`SidebarRailItem` | 修改独立侧栏开关的 rail/行内尺寸、Local Shell 图标及带可访问展开语义的收起态 Group/服务器项 |
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsSearchResult`、`SettingsPage`、`SettingsField`、`SettingsRow`、`SettingsInfoRow` | 统一 Settings 矢量图标、导航、固定搜索标题、结果行、详情滚动容器、紧凑字段和行布局；InfoRow 用于只读固定快捷键展示；标题不再承载 Save/Close 状态操作 |
 | `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsSearchEntry`、`SettingsViewState`、统一草稿、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿/搜索查询；有界、无持久化的结果目录仅搜索分类名、标题和说明；Shortcuts 固定项随平台显示只读快捷键；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
-| `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | 所有分类详情区各自可滚动；Appearance 拥有应用字体/主题；Terminal 拥有文字亮度、默认关闭的语义高亮及启用后可见的四项状态颜色草稿；URL/路径不提供常驻颜色设置，只在 Cmd/Ctrl 交互时显示下划线；X11 拥有本机 provider/path/启动/兼容选择；Shortcuts 同时展示可配置项和 Select All/Previous Tab/Next Tab 固定只读项；About 展示 GPL、标准 `AboutSlint` 和问题/日志/诊断操作 |
+| `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | Appearance 显示 terminal drawing preference，当前 item-tree 可用、Canvas 明确不可用；其它设置保持原有归属与映射 |
 | `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`private-key-mode-changed`、`serial-mode-changed`、`submit` | 组件私有 profile 草稿、按模式发现/释放意图、Password/Private key/SSH agent 选择、SSH-only X11 forwarding 专用 Off/`-X`/`-Y` 下拉、内嵌遮蔽密码/保险库口令、预选 Group 和私钥路径；agent 模式不显示秘密输入，新建 SSH 可 Save & connect |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
@@ -212,6 +212,7 @@
 - 2026-09-18 15:40 +0800：macOS Finder 拖入以每个已送达 `DroppedFile` 的当前 AppKit 坐标精确命中可见 Remote files；几何只负责选择目标，实时 SFTP 状态由 `sftp_bridge` 在入队前最终校验。固定目标结果和无敏感原生日志留在 `terminal_bridge`，SFTP queue/worker 边界不变。
 - 2026-09-20：OSC 52 由 `TerminalModel` 以默认关闭的 `Osc52::CopyPaste` opt-in 实现；应用层只接受默认 clipboard，`TerminalOutputEffects` 将有界写入经 `dispatch_ui` 投递到平台 API，读取请求以 Tab-local token/generation pending 状态等待 Allow/Deny。配置、Settings preview/save、四类 transport monitor 和双语文档已同步；selection clipboard、Sixel、Kitty、iTerm2 图形协议仍关闭，剪贴板内容不进入日志/持久化。
 - 2026-09-22：移除物理数字小键盘 application-keypad/SS3 专用拦截、`TerminalKeypadKey`、`encode_key_with_modes` 和终端 keypad model 读取；小键盘保留物理事件元数据并统一走标准 Slint/Winit 文本或逻辑键路径，Kitty keyboard/CSI-u 与 `modifyOtherKeys` 仍关闭。
+- 2026-09-23：新增终端绘制策略配置边界；item-tree 保持唯一活动实现，Canvas 仅作为后续绘制原型的持久化预留值。
 - 2026-09-17：终端换行责任下移至 PTY 行规程：Unix Local PTY 在 shell exec 前启用 `OPOST | ONLCR`，SSH 保持 `pty-req` 同一模式；移除 logging writer 的 CRLF 改写，TerminalModel/reflow 保留原始 `LF` 语义。
 - 2026-09-19：终端呈现事务改由标准 `CSI ?2026h/l` 和上游 deadline 控制；DEC `CSI ?25l/h` 只改变光标可见性，首帧没有旧 snapshot 时也不发布局部输出。解析、协议应答、soft-wrap/reflow、mouse reporting 和 transport 边界不变。
 - 2026-09-01 21:57 +0800：Shortcuts 页面补齐固定的 Select All、Previous Tab、Next Tab 平台快捷键展示；普通 FlatTextInput 与原生 TextEdit 保留 Copy/Cut/Paste/Select All，SecretTextInput 增加仅粘贴的右键操作并继续阻止秘密复制。

@@ -10,15 +10,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-msgid "Allow remote OSC 52 clipboard access"
-msgstr "允许远端 OSC 52 访问剪贴板"
-
-msgid "CLIPBOARD"
-msgstr "剪贴板"
-
-msgid "Allow writes to the default clipboard; ask before remote reads"
-msgstr "允许写入默认剪贴板；远端读取前需要确认"
-
 msgid "%"
 msgstr "%"
 
@@ -103,6 +94,12 @@ msgstr "强调色 / 焦点"
 msgid "Allow local connections without X authority"
 msgstr "允许无 X authority 的本地连接"
 
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "允许远端 OSC 52 访问剪贴板"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "允许写入默认剪贴板；远端读取前需要确认"
+
 msgid "Appearance"
 msgstr "外观"
 
@@ -166,6 +163,9 @@ msgstr "粗体文字使用亮色"
 msgid "Bug reports"
 msgstr "问题报告"
 
+msgid "CLIPBOARD"
+msgstr "剪贴板"
+
 msgid "COMPATIBILITY"
 msgstr "兼容性"
 
@@ -189,6 +189,9 @@ msgstr "取消所选"
 
 msgid "Cancel {0}"
 msgstr "取消 {0}"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas（尚不可用）"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "重启 AxSSH 后生效"
@@ -534,6 +537,9 @@ msgstr "界面"
 
 msgid "Interface language"
 msgstr "界面语言"
+
+msgid "Item tree (current)"
+msgstr "Item tree（当前方式）"
 
 msgid "KEYBOARD"
 msgstr "键盘"
@@ -1198,6 +1204,12 @@ msgstr "终端字符单元格字体"
 msgid "Terminal command"
 msgstr "终端命令"
 
+msgid "Terminal drawing"
+msgstr "终端绘制"
+
+msgid "Terminal drawing path"
+msgstr "终端绘制方式"
+
 msgid "Terminal error highlight color"
 msgstr "终端错误高亮颜色"
 
@@ -1242,6 +1254,9 @@ msgstr "文字"
 
 msgid "Text brightness"
 msgstr "文字亮度"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Canvas 绘制方式为未来 renderer 预留"
 
 msgid "Theme default"
 msgstr "主题默认值"

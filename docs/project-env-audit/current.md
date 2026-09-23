@@ -7,6 +7,15 @@
 - 规则收口：`AGENTS.md` 明确要求平台专属事件 arm 的 `cfg` 覆盖整个 arm，包括 bindings 和 guard；不得使用未保护 arm 配合 cfg-only body 规避 Clippy。
 - 开工判定：施工完成；ARM Linux runner 的源码编译和 GUI 行为仍需 CI/用户验收。
 
+# 2026-09-23 终端绘制策略设置环境验证
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；本轮涉及设置配置、Slint Settings callback 与双语架构记录；不修改 parser、`TerminalModel`、PTY/transport、Slint backend renderer、SSH trust 或凭据。
+- 环境记忆状态：Rust/Cargo 1.97.1，MSRV 1.92.0，Slint 1.17.1；未新增依赖或改 Cargo.lock。旧设置缺少策略时由 serde 默认 `item-tree`。
+- 运行环境：`TerminalDrawingPreference` 将 terminal grid drawing strategy 与进程级 `RendererPreference` 分离；现阶段 item-tree 唯一可用，Canvas 仅保留枚举值并在 UI 禁止选择，避免偏好和真实绘制不一致。
+- 测试环境：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 Cargo 测试（库 280、应用 267、Doc tests 0）、474 条中文翻译、tracker validator 和 `git diff --check` 均通过；`ui/app.slint` 已重新编译。
+- 环境变化检查：是；新增私有持久化外观设置字段与 Settings 控件，无依赖、工具链、schema 显式版本或跨 transport 行为变化。
+- 开工判定：DRAW1 施工完成；Canvas 绘制原型及 GUI 视觉交互验收属于后续阶段。
+
 # 2026-09-22 跨平台 cfg/Clippy 回归修复环境验证
 
 - 项目边界：Rust 2024 独立桌面应用；本轮仅涉及 `src/app/input.rs`、`src/app/terminal_bridge.rs`、根目录 `AGENTS.md` 与 target-specific Clippy 验证，不改变 Slint UI 契约、SSH trust、凭据或 worker 所有权。

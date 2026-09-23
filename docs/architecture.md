@@ -338,6 +338,14 @@ renderer is process-global and cannot be safely switched once a Metal surface
 is live. The copyable diagnostics report therefore labels shader fault counts
 as application-errors-only and includes the renderer source, fallback reason,
 Metal device, and live window count.
+`RendererPreference` selects the process-wide Slint backend; the independent
+`TerminalDrawingPreference` selects the terminal grid drawing implementation
+inside that backend. `item-tree` is the only implemented and active path: the
+existing `TerminalGrid` retained Slint item tree remains unchanged. The
+persisted `canvas` enum value reserves a future batched custom-paint path, but
+Settings displays it as unavailable and does not allow selecting or saving it
+until that renderer and its compatibility checks exist. This preference does
+not alter `TerminalModel`, parser behavior, PTY geometry, or backend selection.
 `AppearanceSettings::software_presentation` independently selects the macOS
 CPU presentation implementation. Startup maps `layer-images` or
 `damage-backing-store` into a process-local softbuffer switch before the first

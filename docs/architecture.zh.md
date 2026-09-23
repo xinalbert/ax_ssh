@@ -224,6 +224,11 @@ GPU/Skia/Metal fault 后持久化一个不含秘密的本地回退标记，并�
 一次干净的 Skia 运行会清除该标记。这里明确不宣称能捕获 Skia 仅写到 stderr 的生成 Metal shader source：
 Slint 的 renderer 是进程全局状态，Metal surface 存活后不能安全热切换。可复制诊断因此会把 shader
 fault count 标记为 application-errors-only，并包含 renderer 来源、回退原因、Metal device 和实时窗口数。
+`RendererPreference` 选择进程级 Slint backend；独立的
+`TerminalDrawingPreference` 选择该 backend 内的终端网格绘制实现。当前唯一已实现且实际生效的路径是
+`item-tree`，继续使用既有 `TerminalGrid` 保留式 Slint item tree。持久化枚举中的 `canvas` 只为未来批量
+custom-paint 路径预留；在绘制实现及兼容性验证完成前，Settings 将其显示为不可用，不允许用户选择或保存。
+该偏好不改变 `TerminalModel`、parser、PTY 几何或 Slint backend 选择。
 `AppearanceSettings::software_presentation` 独立选择 macOS CPU 呈现实现。启动过程在首个窗口创建
 surface 前将 `layer-images` 或 `damage-backing-store` 映射到进程内 softbuffer 开关。已有 surface
 绝不热切换，其它平台 backend 不读取该值。

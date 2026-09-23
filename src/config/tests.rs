@@ -325,6 +325,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
             renderer_preference: "gpu",
+            terminal_drawing_preference: "item-tree",
             software_presentation: "damage-backing-store",
             application_font_family: "  JetBrains Mono  ",
             terminal_font_family: "  Menlo  ",
@@ -353,6 +354,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
         }),
         AppearanceSettings {
             renderer_preference: RendererPreference::Gpu,
+            terminal_drawing_preference: TerminalDrawingPreference::ItemTree,
             software_presentation: SoftwarePresentationMode::DamageBackingStore,
             application_font_family: "JetBrains Mono".into(),
             terminal_font_family: "Menlo".into(),
@@ -389,6 +391,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
     assert_eq!(
         AppearanceSettings::normalized(AppearanceSettingsInput {
             renderer_preference: "unsupported",
+            terminal_drawing_preference: "unsupported",
             software_presentation: "unsupported",
             application_font_family: "",
             terminal_font_family: "",
@@ -417,6 +420,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
         }),
         AppearanceSettings {
             renderer_preference: RendererPreference::Automatic,
+            terminal_drawing_preference: TerminalDrawingPreference::ItemTree,
             software_presentation: SoftwarePresentationMode::DamageBackingStore,
             application_font_family: DEFAULT_APPLICATION_FONT_FAMILY.into(),
             terminal_font_family: DEFAULT_TERMINAL_FONT_FAMILY.into(),
@@ -447,6 +451,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
     let settings = AppSettings::normalized(AppSettingsInput {
         appearance: AppearanceSettingsInput {
             renderer_preference: "automatic",
+            terminal_drawing_preference: "item-tree",
             software_presentation: "layer-images",
             application_font_family: "",
             terminal_font_family: "",
@@ -985,6 +990,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     let settings = AppSettings::normalized(AppSettingsInput {
         appearance: AppearanceSettingsInput {
             renderer_preference: "software",
+            terminal_drawing_preference: "item-tree",
             software_presentation: "layer-images",
             application_font_family: "Maple Mono NF CN",
             terminal_font_family: "",
@@ -1155,6 +1161,71 @@ fn renderer_preference_defaults_and_serializes_stable_values() {
         serde_json::to_value(RendererPreference::Software)
             .expect("software renderer preference should serialize"),
         "software"
+    );
+}
+
+#[test]
+fn terminal_drawing_preference_defaults_and_serializes_stable_values() {
+    let legacy: AppearanceSettings =
+        serde_json::from_str("{}").expect("legacy appearance should load");
+    assert_eq!(
+        legacy.terminal_drawing_preference,
+        TerminalDrawingPreference::ItemTree
+    );
+
+    let invalid: AppearanceSettings =
+        serde_json::from_str(r#"{"terminal_drawing_preference":"unsupported"}"#)
+            .expect("unknown drawing preference should normalize");
+    assert_eq!(
+        invalid.terminal_drawing_preference,
+        TerminalDrawingPreference::ItemTree
+    );
+
+    let canvas: AppearanceSettings =
+        serde_json::from_str(r#"{"terminal_drawing_preference":"canvas"}"#)
+            .expect("reserved canvas preference should load");
+    assert_eq!(
+        canvas.terminal_drawing_preference,
+        TerminalDrawingPreference::Canvas
+    );
+    assert_eq!(
+        serde_json::to_value(TerminalDrawingPreference::Canvas)
+            .expect("canvas preference should serialize"),
+        "canvas"
+    );
+
+    let settings = AppearanceSettings::normalized(AppearanceSettingsInput {
+        renderer_preference: "automatic",
+        terminal_drawing_preference: "canvas",
+        software_presentation: "damage-backing-store",
+        application_font_family: "",
+        terminal_font_family: "",
+        terminal_font_size: 14,
+        terminal_line_height_percent: 120,
+        terminal_software_block_rows: 4,
+        color_scheme: "dark",
+        text_brightness: 1.0,
+        semantic_highlighting: false,
+        terminal_compact_rendering: false,
+        terminal_row_render_cache: false,
+        terminal_cursor_blink: true,
+        focused_terminal_refresh_fps: 60,
+        unfocused_terminal_refresh_fps: 4,
+        terminal_semantic_colors: TerminalSemanticColorsInput {
+            link: "",
+            success: "",
+            info: "",
+            warning: "",
+            error: "",
+        },
+        bright_bold_text: false,
+        right_click_copy_or_paste: false,
+        copy_selection_on_select: false,
+        terminal_mouse_local_selection_priority: false,
+    });
+    assert_eq!(
+        settings.terminal_drawing_preference,
+        TerminalDrawingPreference::Canvas
     );
 }
 

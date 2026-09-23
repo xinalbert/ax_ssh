@@ -646,7 +646,7 @@ export component WorkspaceShell inherits Rectangle {
     callback detach-workspace(string);
     callback return-workspace(string);
     callback save-settings(
-        string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
+        string, string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
@@ -1215,7 +1215,7 @@ export component WorkspaceShell inherits Rectangle {
                         tab-id: root.view.settings_tab_id;
                         requested-section: root.requested-settings-section;
                         requested-section-revision: root.settings-section-request-revision;
-                        save(application-font, renderer-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+                        save(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                              semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                              theme-mode, theme-palette,
                              theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -1231,8 +1231,7 @@ export component WorkspaceShell inherits Rectangle {
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                              sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
                              settings-tab-id, close-after-save) => {
-                            root.save-settings(
-                                application-font, renderer-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
+                            root.save-settings(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                                 semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                                 theme-mode, theme-palette,
                                 theme-light-background, theme-light-panel, theme-light-panel-alt, theme-light-border,
@@ -1245,11 +1244,8 @@ export component WorkspaceShell inherits Rectangle {
                                 theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, osc52-clipboard,
                                 x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                                 sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
-                                toggle-sidebar-key, copy-key,
-                                paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
-                                sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
-                                settings-tab-id, close-after-save,
-                            );
+                                toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
+                                sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, settings-tab-id, close-after-save);
                         }
                         save-ui-language(index) => { root.save-ui-language(index); }
                         format-shortcut(event) => {

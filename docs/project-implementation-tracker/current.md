@@ -2,20 +2,20 @@
 
 ## 当前目标
 
-- 目标 ID：20260922-platform-cfg-clippy
-- 目标：修复 Windows/Linux 严格 `clippy --all-targets -D warnings` 的平台边界回归，并把平台专属声明、导入、调用方、测试和事件匹配的约束固化到仓库协作规则。
-- 交付物：键盘原生 helper/import 的 macOS `cfg` 对齐、非 macOS 文件拖放辅助状态的死代码清理、跨平台键盘事件 guarded match、根目录 `AGENTS.md` 约束，以及目标平台验证边界记录。
+- 目标 ID：20260923-terminal-drawing-alternatives
+- 目标：为现有 item-tree 终端绘制增加独立、持久化的策略设置，并分阶段评估/实现 Canvas 绘制路径；当前只交付不会误导用户的配置契约。
+- 交付物：`TerminalDrawingPreference` 配置类型与 serde 兼容、Appearance 控件和设置桥接、Canvas 禁用态、双语架构边界和三阶段后续计划。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/input.rs`、`src/app/terminal_bridge.rs`、根目录 `AGENTS.md`，以及 CI 中的 Windows/Linux target-specific Clippy 门禁。
-- 本轮范围：macOS-only Winit helper 与 import 的 `cfg` 对齐；非 macOS dead code 清理；键盘事件过滤与 macOS 处理逻辑拆分为 guarded match；补充平台编译/严格 Clippy 的协作约束。
-- 不在本轮范围内：改变键盘编码语义、改变拖放行为、修改依赖/锁文件、放宽 `-D warnings`、修改 CI target matrix、SSH host-key trust、凭据、worker 所有权或 GUI 自动验收边界。
+- 当前范围：`src/config/{settings,tests}.rs`、`src/app/{settings_bridge,view/settings}.rs`、`ui/{app,settings,workspace-shell,settings/appearance}.slint`、双语架构和 tracker 文档。
+- 本轮范围：新增 item-tree/Canvas 策略配置，默认且唯一可选行为保持 item-tree；将 Canvas 显示为未实现/禁用；补齐配置迁移测试和 UI callback 链。
+- 不在本轮范围内：Canvas 绘制实现、终端 parser/`TerminalModel`、PTY/transport、Slint backend renderer 选择、依赖/锁文件、SSH host-key trust、凭据、worker ownership 或自动 GUI 截图验收。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：实施中
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -24,6 +24,9 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| DRAW1 | completed | 持久化 TerminalDrawingPreference、设置 UI 和安全禁用 Canvas | 配置回归、Slint 重编译、fmt/check/Clippy/test/translation/tracker/diff | 库 280/应用 267 测试通过；Canvas 未实现且控件禁用。 |
+| DRAW2 | pending | 在不改 parser/model 的前提下实现 Canvas/custom-paint 最小终端网格原型 | 定向 glyph/grid tests、Slint/Cargo 编译、交互/字体度量检查 | 进入前需核实 Slint 1.17.1 绘制 API；不替换默认 renderer。 |
+| DRAW3 | pending | 验证 renderer 切换兼容性并决定 Canvas 是否可选/默认 | 宽字符/fallback/选区/IME/hyperlink/光标/软件 backend 回归和 A/B 采样 | 只有行为和平台验证完成后才能开放选择；GUI 由用户验收。 |
 | SFTPDRAG1 | completed | 目标命中、Winit/AppKit 路由和标准 copy/drop 契约 | SFTP 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 外部文件只可投到 Remote files；原生远端回拖只可落到 Local files；缺少可靠目标一律拒绝。 |
 | SFTPFOLLOW1 | completed | macOS 原生 drop 坐标和普通下载完成语义 | 状态回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | macOS 在 drop 时读取 AppKit 坐标，普通下载仅完成并保留文件；hover 前置条件已由 MACDROP3 移除。 |
 | MACDROP2 | completed | macOS 原生坐标读取失败时 fail-closed | macOS 定向回归、Slint/Cargo 重新编译、locked/offline Cargo 门禁和差异检查 | 读取失败不得回退到旧 Winit 坐标；MACDROP3 仅移除不可靠 hover 前置条件。 |
@@ -103,7 +106,7 @@
 
 ## 验证
 
-- 已完成：SFTP payload 定向测试、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`、`cargo build --locked --offline` 和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。
+- 已完成（DRAW1）：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（474 条）、tracker validator 与 `git diff --check` 通过；`ui/app.slint` 已由 Cargo 重新编译。
 - 未完成：目标 macOS 需重启新二进制，并以 `ax_ssh::sftp_drag=debug` 复现 Local files 到 Remote files 的内部拖放，提供对应日志阶段。
 - 已完成：MACDROP3 的 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 254、Doc tests 0）、`cargo build --locked --offline` 和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
 - 已完成：MACDROP4 的 `active_sftp_upload_target_revalidates_live_readiness` 与既有 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归，`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 255、Doc tests 0）和 `cargo build --locked --offline` 通过；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
@@ -129,11 +132,14 @@
 
 ## 风险与阻塞
 
+- DRAW1 无代码阻塞；Canvas 尚未实现，故当前只能使用 item-tree，未来实现前需验证 Slint custom-paint API 和终端交互兼容性。
 - 无代码阻塞。当前剩余风险是目标平台上的 GUI 视觉、真实全屏终端程序行为和 PTY 对物理像素尺寸的实际响应，需要用户在新二进制上验收；超过 16 个同批协议回调时仍会按有界背压丢弃超额响应，并通过诊断可见。
 - 代码保持安全边界不变：终端协议应答仍经当前 Tab 的有界 worker 回写；不进入 Slint、持久化或日志，也不扩大 SSH host-key、凭据、Telnet 或 Serial 边界。
 
 ## 下一步
 
+- DRAW2：先核实锁定 Slint 1.17.1 的 custom-paint API，再实现保持 parser/model/worker 不变的 Canvas 网格原型；该阶段完成前 Canvas 继续禁用。
+- DRAW3：覆盖宽字符、fallback 字体、SGR/盒线、选区、IME、hyperlink、光标、Software/GPU backend 与 damage 更新，并进行同负载 A/B；通过后再决定开放选择或默认值。
 - 在 Settings > Terminal 中手工确认 OSC 52 开关的 preview/save 行为；分别用默认目标、selection 目标和超过 64 KiB 的远端写入验证接受/拒绝边界。
 - 在目标平台用真实 TUI 验证远端写入本机默认剪贴板，以及读取请求的 Allow/Deny/20 秒超时行为；确认 selection clipboard、Sixel、Kitty 和 iTerm2 图形协议仍保持关闭。
 - 验证窗口缩放与 detached scrollback：主屏 Detached 保持历史位置，备用屏不做 reflow；改变终端字体或 Retina scale 后，Local/SSH PTY 收到字符和物理像素尺寸，Telnet 仍只协商 NAWS。
@@ -141,6 +147,7 @@
 
 ## 最后更新时间
 
+- 2026-09-23：完成 DRAW1；持久化 terminal drawing preference，保留 item-tree 为唯一可选实现，Canvas 尚未实现并禁用。全量 Rust/Slint、474 条翻译和 tracker 校验通过；目标平台 GUI 视觉由用户验收。
 - 2026-09-21：完成 STDUI5/STDREP1/TELNETSTD1；F13-F24 下发序列与修饰键编码按本机 xterm-256color terminfo 修正，Telnet TTYPE 回报 `xterm-256color`，协议队列满有诊断，CSI 窗口查询、1016、Telnet/Serial 能力边界形成明确结论；真实 TUI 和目标平台行为仍待用户验收。
 - 2026-09-20：完成 OSC52-1–3 与 OSC52READ1–4；设置字段、默认关闭的有界远端写入、带确认的默认剪贴板读取、UI 线程桥接、四类 transport 接入和中英文说明已同步，等待目标平台真实 TUI/剪贴板验收；selection clipboard 与图形协议仍关闭。
 

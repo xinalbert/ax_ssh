@@ -673,6 +673,7 @@ pub(super) fn wire_settings(
     ui.on_save_settings(
         move |application_font_family,
               renderer_preference,
+              terminal_drawing_preference,
               software_presentation,
               terminal_font_family,
               font_size,
@@ -798,6 +799,7 @@ pub(super) fn wire_settings(
             let settings = AppSettings::normalized(AppSettingsInput {
                 appearance: AppearanceSettingsInput {
                     renderer_preference: renderer_preference.as_str(),
+                    terminal_drawing_preference: terminal_drawing_preference.as_str(),
                     software_presentation: software_presentation.as_str(),
                     application_font_family: application_font_family.as_str(),
                     terminal_font_family: terminal_font_family.as_str(),
