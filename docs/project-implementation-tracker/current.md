@@ -35,6 +35,10 @@
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
 | DRAW1 | completed | 持久化 TerminalDrawingPreference、设置 UI 和安全禁用 Canvas | 配置回归、Slint 重编译、fmt/check/Clippy/test/translation/tracker/diff | 库 280/应用 267 测试通过；Canvas 未实现且控件禁用。 |
+| TITLEBAR1 | completed | macOS 主窗口隐藏原生标题文字，将 Tab 条延伸到红绿灯所在标题栏区域 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | 保留原生红绿灯并为其留空；显式 target check/Clippy 被 Skia 下载阻断，视觉由用户验收。 |
+| TITLEBAR2 | completed | 固定 macOS 顶部 Tab 起点，不随侧栏展开/收起移动 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | Tab 横向固定在红绿灯右侧、纵向固定在窗口顶部；视觉由用户验收，显式 target 门禁仍受 Skia 下载限制。 |
+| TITLEBAR3 | completed | 阻止 macOS Tab 拖动同时移动主窗口 | fmt/check/Clippy/test/build/diff | 主窗口内容视图仅在红绿灯留空内允许原生标题栏拖窗，Tab 重排仍由 Slint 处理；实际拖动由用户验收。 |
+| TITLEBAR4 | completed | 让 macOS 标题栏底部分隔线横贯整窗 | Slint 重编译、fmt/check/Clippy/test/build/diff | 单条线包含红绿灯留空与 Tab 区；其他平台保留侧栏右侧起点，视觉由用户验收。 |
 | DRAW2 | pending | 在不改 parser/model 的前提下实现 Canvas/custom-paint 最小终端网格原型 | 定向 glyph/grid tests、Slint/Cargo 编译、交互/字体度量检查 | 进入前需核实 Slint 1.17.1 绘制 API；不替换默认 renderer。 |
 | DRAW3 | pending | 验证 renderer 切换兼容性并决定 Canvas 是否可选/默认 | 宽字符/fallback/选区/IME/hyperlink/光标/软件 backend 回归和 A/B 采样 | 只有行为和平台验证完成后才能开放选择；GUI 由用户验收。 |
 | SFTPDRAG1 | completed | 目标命中、Winit/AppKit 路由和标准 copy/drop 契约 | SFTP 定向回归、Slint 重新编译、locked/offline Cargo 门禁和差异检查 | 外部文件只可投到 Remote files；原生远端回拖只可落到 Local files；缺少可靠目标一律拒绝。 |

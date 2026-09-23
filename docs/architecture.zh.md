@@ -503,9 +503,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    唤醒路径。Local、Serial、SSH 与 Telnet monitor 都会立即解析每个 worker 事件并回送终端
    协议应答；只有 UI publication 按上述 focused 自适应、配置后的可见未聚焦 FPS 或 hidden 策略合并。
    错误、断开、shutdown 和 worker 清理不会等待呈现 deadline。
-9. macOS 应用保留标准原生标题栏，并关闭 AppKit 的整窗背景拖动。窗口移动只由该原生
-   标题栏处理；Slint 工作区 Tab 条作为其下方的普通客户端内容呈现，因此原生窗口拖动
-   不会再与 Tab 重排手势竞争。
+9. macOS 主窗口保留原生红绿灯控件，隐藏原生标题文字，并将 Slint 内容延伸到透明的
+   原生标题栏。工作区 Tab 条占用这一行，在红绿灯右侧保留固定起点，不随侧栏宽度改变。
+   侧栏和收起控件从标题栏下方开始。标题栏底部分隔线横贯主窗口，包括红绿灯留空；
+   其他平台的分隔线仍从侧栏右侧开始。关闭 AppKit 的整窗背景拖动后，原生标题栏
+   仍会把未覆盖的客户区当成窗口拖动区域；因此主窗口 Winit 内容视图在红绿灯
+   留空右侧拒绝原生拖窗，让 Slint 独占 Tab 重排手势，左侧留空仍可拖动窗口。
+   独立窗口保留原有的原生标题栏布局。
 10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
     General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
     中，因此激活 Settings 不会移除返回活动终端的路径。Settings Tab 已存在时再次按其快捷键，
@@ -517,7 +521,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     滚动日志目录，Copy diagnostics 只把版本、revision、系统、架构和构建类型写入剪贴板。
     不上传数据，也不把配置、主机、路径或凭据字段暴露给 Slint。会话侧边栏不再重复 Settings/About，
    并从原生标题栏下方贯穿整个客户端高度；
-   工作区 Tab 条只占其右侧的工作区列。`+` 固定在最右边缘，打开由 Slint 本地持有的
+   macOS 标题栏内的 Tab 条不随侧栏展开或收起移动；其他平台仍从侧栏右缘开始。
+   `+` 固定在最右边缘，打开由 Slint 本地持有的
     选择器，显示全部已保存连接 profile 的遮蔽只读快照，选择后只将 profile UUID 传入
     现有连接 callback。File > New Server、可配置的 `Cmd+N`/`Ctrl+N` 快捷键与侧栏列表
     空白区域的右键菜单仍是独立的新建会话编辑器动作。File 还统一持有剪贴板导入和所选对象

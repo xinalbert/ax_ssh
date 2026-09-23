@@ -840,11 +840,20 @@ tab-local terminal connection notice deliberately remains non-blocking.
    coalesced by the focused adaptive, configured visible-unfocused FPS, or hidden
    policy described above. Errors, disconnect, shutdown, and worker cleanup never
    wait for a presentation deadline.
-9. On macOS, AxSSH keeps the standard native title bar and disables
-   movable-window-background behavior. AppKit alone owns window movement from
-   that title bar; the Slint workspace Tab strip is regular client content
-   immediately below it. This prevents native window dragging from competing
-   with a Tab reorder gesture.
+9. On macOS, the main window keeps the standard traffic-light controls, hides
+   the native title text, and extends Slint content into a transparent native
+   title bar. The workspace Tab strip occupies that title-bar row with a fixed
+   leading clearance for the traffic lights, independent of sidebar width.
+   The sidebar and its collapse control start below the title-bar row.
+   One bottom separator spans the full main-window title-bar row, including
+   the traffic-light clearance; other platforms keep the separator to the
+   right of the sidebar.
+   AppKit still treats uncovered title-bar content as a window drag region even
+   when movable-window-background is disabled. The main Winit content view
+   therefore rejects native window dragging to the right of the traffic-light
+   clearance, leaving Tab reorder gestures to Slint; the left clearance still
+   permits normal title-bar dragging. Detached windows retain their existing
+   native title-bar layout.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so
@@ -867,7 +876,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
     credential fields to Slint.
    The session sidebar does not duplicate Settings
    or About. It spans the full client height directly below the native title
-   bar, while the workspace Tab strip occupies only the column to its right.
+   bar. On macOS, the title-bar Tab strip keeps its fixed leading clearance as
+   the sidebar expands or collapses; on other platforms it starts at the
+   sidebar's right edge.
    Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
    masked, read-only snapshot of every saved connection profile; selection routes only
    the profile UUID through the existing connection callback. File > New
