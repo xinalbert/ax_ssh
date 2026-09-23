@@ -1,5 +1,14 @@
 # 项目环境变化记录
 
+## 2026-09-23 macOS 标题栏拖动区域环境验证
+
+- 日期：2026-09-23
+- 变化摘要：主窗口 Slint 标题栏空白区使用现有 Winit window accessor 调用系统拖窗，AppKit 左侧原生命中区限定到标题栏高度；未新增依赖或修改 Cargo.lock。
+- 受影响文件：`src/app/{macos_window,window_bridge}.rs`、`ui/{app,workspace-shell}.slint`、`ui/components/workspace-titlebar.slint`、双语架构和项目记录。
+- 更新后的命令或环境：本机 rustc/Cargo 1.97.1、MSRV 1.92.0、Slint 1.18.1；首次缺失的锁定依赖通过本机 7897 代理下载后，恢复 locked/offline 验证。
+- 验证结果：fmt、locked/offline check、严格 Clippy、macOS 定向测试、完整 Cargo 测试（库 280、应用 268、Doc tests 0）和 native build 通过；ARM64/x86_64 macOS 显式 target check、严格 Clippy 与 build 均通过，x86_64 仅编译链接。Slint 入口重新编译。
+- 风险/待办：真实系统拖窗、Tab 重排、按钮点击与侧栏命中需要用户在 macOS 主窗口验收。
+
 ## 2026-08-31 RSA 兼容性与 RustSec 风险接受环境验证
 
 - 日期：2026-08-31

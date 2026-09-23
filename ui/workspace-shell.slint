@@ -645,6 +645,7 @@ export component WorkspaceShell inherits Rectangle {
     callback move-tab(string, int);
     callback detach-workspace(string);
     callback return-workspace(string);
+    callback start-native-window-drag();
     callback save-settings(
         string, string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
@@ -1313,6 +1314,8 @@ export component WorkspaceShell inherits Rectangle {
         tab-width: root.view.tab_width;
         connection-picker-open: root.connection-picker-open;
         detached-window: root.detached-window;
+        apple-platform: root.apple-platform;
+        start-native-window-drag => { root.start-native-window-drag(); }
         activate-tab(id) => {
             root.connection-picker-open = false;
             root.activate-tab(id);

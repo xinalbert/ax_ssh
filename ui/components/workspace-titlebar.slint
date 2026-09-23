@@ -406,6 +406,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     in property <bool> connection-picker-open;
     in property <bool> connection-picker-enabled: true;
     in property <bool> detached-window: false;
+    in property <bool> apple-platform: false;
 
     callback activate-tab(string);
     callback close-tab(string);
@@ -414,6 +415,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     callback return-workspace(string);
     callback terminal-pane-command(string);
     callback toggle-connection-picker();
+    callback start-native-window-drag();
 
     private property <int> drag-source-index: -1;
     private property <int> drag-target-index: -1;
@@ -550,6 +552,17 @@ export component WorkspaceTitlebar inherits Rectangle {
                     root.tabs.length * root.tab-width * 1px,
                 );
                 content-height: self.height;
+
+                if root.apple-platform : TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down
+                                && event.button == PointerEventButton.left {
+                            root.start-native-window-drag();
+                        }
+                    }
+                }
 
                 for tab[index] in root.tabs : Rectangle {
                     private property <bool> tab-active:

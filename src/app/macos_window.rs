@@ -73,6 +73,13 @@ const TITLE_BAR_BUTTON_SPACING: f64 = 2.0;
 const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
 // Matches Theme.macos-titlebar-controls-width in the Slint title-bar layout.
 const TITLE_BAR_CONTROLS_WIDTH: f64 = 96.0;
+// Matches Theme.tab-height's current maximum in the main title-bar layout.
+const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
+
+fn in_native_drag_clearance(x: f64, y_from_top: f64) -> bool {
+    (0.0..TITLE_BAR_CONTROLS_WIDTH).contains(&x)
+        && (0.0..TITLE_BAR_ROW_HEIGHT).contains(&y_from_top)
+}
 
 extern "C-unwind" fn content_mouse_down_can_move_window(view: &NSView, _cmd: Sel) -> Bool {
     let Some(mtm) = MainThreadMarker::new() else {
@@ -82,7 +89,14 @@ extern "C-unwind" fn content_mouse_down_can_move_window(view: &NSView, _cmd: Sel
         return Bool::NO;
     };
     let point = view.convertPoint_fromView(event.locationInWindow(), None);
-    Bool::new(point.x - view.bounds().origin.x < TITLE_BAR_CONTROLS_WIDTH)
+    let bounds = view.bounds();
+    let x = point.x - bounds.origin.x;
+    let y_from_top = if view.isFlipped() {
+        point.y - bounds.origin.y
+    } else {
+        bounds.size.height - (point.y - bounds.origin.y)
+    };
+    Bool::new(in_native_drag_clearance(x, y_from_top))
 }
 
 fn keep_tab_gestures_out_of_window_drag(view: &NSView) -> Result<()> {
@@ -556,6 +570,15 @@ fn bind_menu_item(item: &NSMenuItem, target: &NativeMenuTarget, action: Sel) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_drag_clearance_excludes_sidebar_and_tab_strip() {
+        assert!(in_native_drag_clearance(48.0, 16.0));
+        assert!(!in_native_drag_clearance(-1.0, 16.0));
+        assert!(!in_native_drag_clearance(96.0, 16.0));
+        assert!(!in_native_drag_clearance(48.0, -1.0));
+        assert!(!in_native_drag_clearance(48.0, 32.0));
+    }
 
     #[test]
     fn converts_settings_shortcut_keys_to_appkit_equivalents() {

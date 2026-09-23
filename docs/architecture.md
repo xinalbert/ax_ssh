@@ -850,10 +850,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    right of the sidebar.
    AppKit still treats uncovered title-bar content as a window drag region even
    when movable-window-background is disabled. The main Winit content view
-   therefore rejects native window dragging to the right of the traffic-light
-   clearance, leaving Tab reorder gestures to Slint; the left clearance still
-   permits normal title-bar dragging. Detached windows retain their existing
-   native title-bar layout.
+   therefore permits native dragging only in the traffic-light clearance and
+   only within the title-bar row. A Slint hit area behind the Tabs explicitly
+   starts Winit's native window drag on a left press in the remaining empty
+   title-bar space. Tabs and their buttons stay above that hit area and own
+   their click/reorder gestures. Detached windows retain their native title bar.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so

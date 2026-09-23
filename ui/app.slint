@@ -543,6 +543,7 @@ export component AppWindow inherits Window {
     callback refresh-terminal-appearance();
     callback detach-workspace(string);
     callback return-workspace(string);
+    callback start-native-window-drag();
 
     public function request-settings-section(section: string) {
         root.settings-section = section;
@@ -872,6 +873,7 @@ export component AppWindow inherits Window {
             return-workspace(id) => {
                 root.return-workspace(id);
             }
+            start-native-window-drag => { root.start-native-window-drag(); }
             save-settings(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                           semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
                           theme-mode, theme-palette,
