@@ -1894,6 +1894,13 @@ allocated and toggles visibility when the setting changes, avoiding a full row
 item-tree rebuild. Skia and FemtoVG can retain a row image;
 the software renderer has no equivalent layer cache, and the option is therefore
 disabled by default until CPU and graphics-memory measurements justify it.
+The locked Skia 1.18.1 renderer has a local patch under
+`vendor/i-slint-renderer-skia/`: `free_graphics_resources` removes each
+destroyed component from `layer_cache` alongside its image, path, and text
+caches. Upstream 1.17.1 and 1.18.1 omitted this per-component cleanup. A
+terminal row repeater can therefore leave old GPU-backed row images reachable
+while its window remains open when row caching is enabled. Window suspension
+still clears all renderer caches; this patch addresses the active-window path.
 The terminal grid uses one bounded Slint repeater over `TerminalRenderLine`
 values. Rust keeps the outer line model and nested run/background/decoration
 models stable. `TerminalSnapshot` carries the changed visible row indexes, so a

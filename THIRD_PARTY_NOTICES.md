@@ -8,7 +8,7 @@ license terms are not replaced by the AxSSH license.
 
 ## Slint
 
-AxSSH uses Slint 1.17.1 for its user interface. Slint is offered under
+AxSSH uses Slint 1.18.1 for its user interface. Slint is offered under
 `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR
 LicenseRef-Slint-Software-3.0`; AxSSH selects the `GPL-3.0-only` option.
 
@@ -17,11 +17,13 @@ Copyright SixtyFPS GmbH and the Slint contributors.
 The AxSSH About page also displays Slint's standard `AboutSlint` attribution
 component.
 
-AxSSH carries small, source-available local patches for the locked Slint winit
-backend and `softbuffer` 0.4.8 under `vendor/i-slint-backend-winit/` and
+AxSSH carries source-available local patches for the locked Slint winit and
+Skia renderer crates and `softbuffer` 0.4.8 under
+`vendor/i-slint-backend-winit/`, `vendor/i-slint-renderer-skia/`, and
 `vendor/softbuffer/`. The patches preserve their upstream licenses and limit
-the behavior change to forwarding multiple damage rectangles and making the
-macOS CoreGraphics surface use a persistent tiled framebuffer. They do not
+the behavior changes to forwarding multiple damage rectangles, making the
+macOS CoreGraphics surface use a persistent tiled framebuffer, and releasing
+per-component Skia layer images when a component is destroyed. They do not
 change Slint's UI language or application APIs.
 
 ## Bundled Fonts

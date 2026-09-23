@@ -23,6 +23,7 @@
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `vendor/vt100/` | 历史终端网格补丁的 MIT 保留副本 | 审计旧差异、许可证或移除遗留文件时 | 不在 Cargo 依赖图中；当前迁移不修改其源码，也不得再作为新的终端功能实现点 |
 | `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 只保留 `PhysicalRegion::iter()` 到 `softbuffer::Rect` 的多矩形转发，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；不得承载 AxSSH UI、终端或 SSH 逻辑 |
+| `vendor/i-slint-renderer-skia/` | 锁定 Slint 1.18.1 的 Skia GPU layer cache 生命周期补丁 | 修改 GPU 资源释放、行缓存或升级 Slint 时 | 仅在 `free_graphics_resources` 对销毁组件调用 `layer_cache.component_destroyed`；保留原 crate 许可证与其余源码，不承载 AxSSH 状态或 SSH 逻辑 |
 | `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |
@@ -208,6 +209,7 @@
 
 ## 最后更新时间
 
+- 2026-09-23 23:24 +0800：新增锁定 Skia 1.18.1 的 `vendor/i-slint-renderer-skia/` 路由，仅补动态组件销毁时的 layer cache 清理；Cargo patch、许可和双语架构已同步。
 - 2026-09-18：终端文本 run 和一格/两格光标内容按协议 cell span 左边缘绘制；删除非 ASCII 的本地强制居中，不改变宽字符占格、逻辑列或输入/传输安全边界。
 - 2026-09-18 15:40 +0800：macOS Finder 拖入以每个已送达 `DroppedFile` 的当前 AppKit 坐标精确命中可见 Remote files；几何只负责选择目标，实时 SFTP 状态由 `sftp_bridge` 在入队前最终校验。固定目标结果和无敏感原生日志留在 `terminal_bridge`，SFTP queue/worker 边界不变。
 - 2026-09-20：OSC 52 由 `TerminalModel` 以默认关闭的 `Osc52::CopyPaste` opt-in 实现；应用层只接受默认 clipboard，`TerminalOutputEffects` 将有界写入经 `dispatch_ui` 投递到平台 API，读取请求以 Tab-local token/generation pending 状态等待 Allow/Deny。配置、Settings preview/save、四类 transport monitor 和双语文档已同步；selection clipboard、Sixel、Kitty、iTerm2 图形协议仍关闭，剪贴板内容不进入日志/持久化。

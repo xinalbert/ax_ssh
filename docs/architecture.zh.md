@@ -1098,6 +1098,10 @@ IME、键盘焦点、可访问性以及 Copy、Cut、Paste、Select All 快捷�
 紧凑与非紧凑文字内容也固定保留两套子树，设置切换时只改变可见性，避免重建整行 item tree。
 Skia/FemtoVG 可保留行图像，software renderer 没有等价 layer cache；因此该选项默认关闭，需同时测量
 CPU 和图形内存后再决定是否启用。
+锁定的 Skia 1.18.1 renderer 在 `vendor/i-slint-renderer-skia/` 保留一个本地补丁：
+`free_graphics_resources` 在销毁组件时，与 image、path、text 缓存一起清除该组件的 `layer_cache`。
+上游 1.17.1 和 1.18.1 均漏掉了逐组件清理；启用行缓存后，终端行 repeater 的旧 GPU 图像可能在窗口
+持续打开期间仍被缓存持有。窗口 suspend 仍会清空所有 renderer 缓存；本补丁覆盖窗口存活期间的清理路径。
 终端网格现在只使用一个有界的 Slint repeater，直接遍历 `TerminalRenderLine`。
 Rust 保留外层行 model 以及嵌套的 run/background/decoration model。`TerminalSnapshot` 携带实际变化的可见行号，
 因此普通输出只渲染并通知这些行；首帧、视口几何变化、full damage 和渲染 key 变化才回退到有界的整行更新。

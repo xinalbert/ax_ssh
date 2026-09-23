@@ -652,3 +652,20 @@
 - 受影响文件：`src/app/input.rs`、`src/app/terminal_bridge.rs`、`src/terminal/input.rs`、`ui/components/keyboard-input.slint`、`ui/terminal-pane.slint`、双语架构/用法和项目跟踪文档。
 - 更新后的命令或环境：先运行 `cargo test --locked --offline terminal::input::tests` 与 `cargo test --locked --offline app::input::tests`；实现后运行 fmt/check/严格 Clippy/全量测试/翻译检查/`git diff --check`。
 - 风险/待办：Shift 文本 fallback 需保持布局/IME/AltGr 语义；无稳定 xterm/terminfo 定义的组合继续不发序列；目标平台真实键盘布局、IME、NumLock、焦点和应用快捷键仍需用户验收。
+
+# 2026-09-23 Skia 图形内存修复施工预检
+
+- 日期：2026-09-23
+- 变化摘要：Sample 进程主要占用 Metal 图形资源；确认锁定 Skia 1.18.1 的 per-component layer cache 销毁清理缺口，将以精确版本本地 patch 修复。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`vendor/i-slint-renderer-skia/`、双语架构和项目跟踪。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.18.1 和 locked/offline Cargo 门禁；本地 path patch 不新增网络依赖。
+- 风险/待办：1.17.1 安装版与当前 1.18.1 构建不同；需在同一窗口、终端行数和持续输出下比较修复前后 GPU footprint 与纹理数，GUI 视觉由用户验收。
+
+## 2026-09-23 Skia 图形内存修复验证
+
+- 日期：2026-09-23
+- 变化摘要：本地 Skia 1.18.1 patch 在动态组件销毁时清除对应 layer cache；锁文件仅切换该 crate 来源，未改变其它依赖版本。
+- 受影响文件：`vendor/i-slint-renderer-skia/`、`Cargo.toml`、`Cargo.lock`、双语架构和项目跟踪。
+- 更新后的命令或环境：保持既有 locked/offline Cargo 命令，macOS ARM64 原生与 x86_64 交叉 target 均可编译链接；x86_64 测试只在原生 runner 运行。
+- 验证结果：ARM64 fmt/check/严格 Clippy/全量 test/build 通过；x86_64 显式 target check/严格 Clippy/build 通过。实际图形内存走势未在新二进制长期负载下验证。
+- 风险/待办：用户运行中的 1.17.1 安装版未修改；部署后以相同负载对比 `vmmap -summary` 图形区域及 `heap -s` 纹理数。

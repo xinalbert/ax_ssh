@@ -70,10 +70,12 @@ slint-build = "1.18.1"
 
 [patch.crates-io]
 # Keep the application on Slint 1.18.1's public contracts while carrying the
-# two small backend fixes needed for real multi-rectangle presentation. The
-# patches are limited to winit damage forwarding and the macOS softbuffer
-# surface; SSH, terminal, and Slint UI ownership remain application-owned.
+# backend fixes needed for real multi-rectangle presentation and Skia layer
+# lifetime. These patches are limited to winit damage forwarding, the macOS
+# softbuffer surface, and per-component Skia cache release; SSH, terminal, and
+# Slint UI ownership remain application-owned.
 i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
+i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
 softbuffer = { path = "vendor/softbuffer" }
 
 [dev-dependencies]
