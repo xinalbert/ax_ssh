@@ -625,18 +625,18 @@ impl TerminalWorker {
         }
     }
 
-    pub(in crate::app) fn request_list_sftp(&self, path: String) -> Result<()> {
+    pub(in crate::app) fn request_list_sftp(&self, request_id: u64, path: String) -> Result<()> {
         match self {
-            Self::Ssh(worker) => worker.request_list_sftp(path),
+            Self::Ssh(worker) => worker.request_list_sftp(request_id, path),
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }
         }
     }
 
-    pub(in crate::app) fn request_load_more_sftp(&self) -> Result<()> {
+    pub(in crate::app) fn request_load_more_sftp(&self, request_id: u64) -> Result<()> {
         match self {
-            Self::Ssh(worker) => worker.request_load_more_sftp(),
+            Self::Ssh(worker) => worker.request_load_more_sftp(request_id),
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }

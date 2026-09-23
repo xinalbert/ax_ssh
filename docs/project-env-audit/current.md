@@ -1,3 +1,10 @@
+# 2026-09-23 SFTP 首屏目录加载修复
+
+- 项目边界：`src/app/{state/sftp,connection_monitor,sftp_bridge,state/terminal}.rs`、`src/ssh/worker*.rs` 和 `src/sftp.rs` 的目录导航 DTO；不改变 SSH host-key 信任、认证、凭据、远端写入权限或 transfer 并发。
+- 根因：SFTP 浏览器首个目录页使用固定 request ID `0`，而 `Opened` 事件使 AppState 当前 ID 递增至 `1`；过期响应保护因此丢弃了有效首屏，状态持续显示 Loading directory。
+- 修复：request ID 现在只由 AppState 分配，并原样跨 UI bridge、SSH command、worker 和 browser event 传递；首屏目录页和浏览器初始化失败使用 `None` 表示不关联导航请求，仍可被当前 Tab 接收。普通导航、分页和上传后刷新继续只接受匹配的 ID。
+- 验证：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）和 `cargo build --locked --offline` 通过；新增回归覆盖首屏接受、分页和过期响应拒绝。真实 SFTP server 和 GUI 行为仍由用户验收。
+
 # 2026-09-23 Slint 1.18.1 与依赖升级验证
 
 - 项目边界：Rust 2024 AxSSH；本轮涉及 Cargo 依赖、Slint fontique 字体桥接、凭据加密 API、SFTP v3 配置、本地 Winit backend patch 和双语架构事实；不改变 SSH host-key 信任策略、凭据持久化边界或 UI/worker 所有权。

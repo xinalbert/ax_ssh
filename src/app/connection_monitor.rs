@@ -280,11 +280,11 @@ pub(super) fn spawn_session_monitor(
                             profile.id,
                             attempt_id,
                             |terminal| {
-                                let request_path = match terminal
+                                let (request_id, request_path) = match terminal
                                     .sftp
                                     .begin_refresh_after_upload(directory.as_str())
                                 {
-                                    Ok(Some((_, path))) => path,
+                                    Ok(Some(request)) => request,
                                     Ok(None) => return,
                                     Err(error) => {
                                         refresh_error = Some(error);
@@ -295,7 +295,9 @@ pub(super) fn spawn_session_monitor(
                                     .worker
                                     .as_ref()
                                     .context("SFTP tab has no worker")
-                                    .and_then(|worker| worker.request_list_sftp(request_path));
+                                    .and_then(|worker| {
+                                        worker.request_list_sftp(request_id, request_path)
+                                    });
                                 if let Err(error) = result {
                                     terminal.sftp.cancel_navigation();
                                     refresh_error = Some(error);
@@ -831,7 +833,7 @@ fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrows
         SftpBrowserEvent::Failed {
             request_id,
             message,
-        } if request_id.is_none_or(|id| state.accepts_request(id)) => {
+        } if state.accepts_request(request_id) => {
             state.cancel_navigation();
             state.status = message;
         }
@@ -1022,7 +1024,7 @@ mod tests {
     }
 
     #[test]
-    fn sftp_events_replace_append_fail_and_close_recoverably() {
+    fn sftp_events_accept_initial_page_and_reject_stale_requests() {
         let mut state = SftpBrowserState::default();
 
         apply_sftp_event(
@@ -1037,7 +1039,7 @@ mod tests {
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::DirectoryPage {
-                request_id: 1,
+                request_id: None,
                 path: "/home/alice".to_owned(),
                 entries: vec![entry("first")],
                 append: false,
@@ -1045,10 +1047,13 @@ mod tests {
                 truncated: false,
             },
         );
+        let request_id = state
+            .begin_load_more()
+            .expect("the next directory page should be requested");
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::DirectoryPage {
-                request_id: 1,
+                request_id: Some(request_id),
                 path: "/home/alice".to_owned(),
                 entries: vec![entry("second")],
                 append: true,
@@ -1062,7 +1067,7 @@ mod tests {
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::DirectoryPage {
-                request_id: 0,
+                request_id: Some(1),
                 path: "/stale".to_owned(),
                 entries: vec![entry("stale")],
                 append: false,
@@ -1076,7 +1081,7 @@ mod tests {
         apply_sftp_event(
             &mut state,
             SftpBrowserEvent::Failed {
-                request_id: Some(1),
+                request_id: Some(request_id),
                 message: "permission denied".to_owned(),
             },
         );

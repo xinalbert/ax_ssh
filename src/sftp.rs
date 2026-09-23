@@ -55,7 +55,7 @@ pub enum SftpBrowserEvent {
         home: String,
     },
     DirectoryPage {
-        request_id: u64,
+        request_id: Option<u64>,
         path: String,
         entries: Vec<SftpEntry>,
         append: bool,
@@ -152,14 +152,18 @@ pub enum SftpWriteEvent {
 }
 
 enum SftpBrowserCommand {
-    List { request_id: u64, path: String },
-    LoadMore { request_id: u64 },
+    List {
+        request_id: Option<u64>,
+        path: String,
+    },
+    LoadMore {
+        request_id: u64,
+    },
     Close,
 }
 
 pub(crate) struct SftpBrowserHandle {
     command_tx: mpsc::Sender<SftpBrowserCommand>,
-    next_request_id: std::sync::atomic::AtomicU64,
     task: Option<JoinHandle<()>>,
 }
 
@@ -454,7 +458,6 @@ impl SftpBrowserHandle {
         let task = runtime.spawn(run_browser(stream, initial_path, command_rx, event_tx));
         Ok(Self {
             command_tx,
-            next_request_id: std::sync::atomic::AtomicU64::new(1),
             task: Some(task),
         })
     }
@@ -463,24 +466,16 @@ impl SftpBrowserHandle {
         self.task.as_ref().is_none_or(|task| task.is_finished())
     }
 
-    pub(crate) fn request_list(&self, path: String) -> Result<u64> {
+    pub(crate) fn request_list(&self, request_id: Option<u64>, path: String) -> Result<()> {
         validate_remote_path(&path)?;
-        let request_id = self
-            .next_request_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.command_tx
             .try_send(SftpBrowserCommand::List { request_id, path })
-            .map(|()| request_id)
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP directory request: {error}"))
     }
 
-    pub(crate) fn request_load_more(&self) -> Result<u64> {
-        let request_id = self
-            .next_request_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    pub(crate) fn request_load_more(&self, request_id: u64) -> Result<()> {
         self.command_tx
             .try_send(SftpBrowserCommand::LoadMore { request_id })
-            .map(|()| request_id)
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP page request: {error}"))
     }
 
@@ -724,7 +719,7 @@ where
 
     let initial = resolve_remote_path(&home, &home, &initial_path)?;
     let mut initial_cursor = open_directory(&session, initial).await?;
-    emit_page(&session, &mut initial_cursor, 0, false, event_tx).await?;
+    emit_page(&session, &mut initial_cursor, None, false, event_tx).await?;
     let mut cursor = Some(initial_cursor);
 
     while let Some(command) = command_rx.recv().await {
@@ -746,19 +741,27 @@ where
                         }
                     }
                     Err(error) => {
-                        send_request_error(event_tx, Some(request_id), &error).await;
+                        send_request_error(event_tx, request_id, &error).await;
                     }
                 }
             }
-            SftpBrowserCommand::LoadMore { request_id } => {
-                if let Some(cursor) = cursor.as_mut()
-                    && !cursor.done
-                    && let Err(error) =
-                        emit_page(&session, cursor, request_id, true, event_tx).await
-                {
+            SftpBrowserCommand::LoadMore { request_id } => match cursor.as_mut() {
+                Some(cursor) if !cursor.done => {
+                    if let Err(error) =
+                        emit_page(&session, cursor, Some(request_id), true, event_tx).await
+                    {
+                        send_request_error(event_tx, Some(request_id), &error).await;
+                    }
+                }
+                Some(_) => {
+                    let error = anyhow::anyhow!("SFTP directory has no additional page");
                     send_request_error(event_tx, Some(request_id), &error).await;
                 }
-            }
+                None => {
+                    let error = anyhow::anyhow!("SFTP directory is not open");
+                    send_request_error(event_tx, Some(request_id), &error).await;
+                }
+            },
             SftpBrowserCommand::Close => break,
         }
     }
@@ -824,7 +827,7 @@ async fn open_directory(session: &RawSftpSession, path: String) -> Result<Direct
 async fn emit_page(
     session: &RawSftpSession,
     cursor: &mut DirectoryCursor,
-    request_id: u64,
+    request_id: Option<u64>,
     append: bool,
     event_tx: &mpsc::Sender<SftpBrowserEvent>,
 ) -> Result<()> {

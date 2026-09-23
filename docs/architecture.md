@@ -18,9 +18,11 @@ response, and presentation pipeline. Application input receives a sequence
 number and one of `key`, `paste`, `pointer`, `focus`, `protocol`, or `command`;
 diagnostics never contain terminal content.
 
-SFTP directory requests also carry a bounded request ID. A tab accepts only
-pages and failures associated with its current request, so a late response from
-an older navigation cannot overwrite the current directory view.
+The application state owns bounded SFTP directory request IDs and forwards the
+same ID through the SSH worker and browser. A tab accepts only pages and
+failures associated with its current request, while the initial browser page is
+explicitly unassociated with a navigation request. Late responses from an older
+navigation therefore cannot overwrite the current directory view.
 
 The implementation keeps UI, application, persistence, transport, and process
 services in separate ownership boundaries:

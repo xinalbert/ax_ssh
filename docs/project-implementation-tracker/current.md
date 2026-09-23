@@ -71,6 +71,7 @@
 | IOSTD1 | completed | 四类 transport 输出统一为带接收时间的 `TerminalOutputChunk`，应用展示统一消费时间戳 | `cargo check --locked --offline`、定向输出测试、diff | 不记录原始终端内容；队列、上限和 UI 线程边界不变。 |
 | IOSTD2 | completed | 输入统一分配应用序列号，标记类型、字节数、结果和耗时；补齐 monitor 输出诊断 | `cargo fmt --all -- --check`、严格 Clippy、定向测试 | SSH 既有 transport 内部序列保留，应用序列用于跨 transport 对齐。 |
 | IOSTD3 | completed | SFTP 目录请求/响应关联 request ID，过期响应 fail-closed；同步双语架构和环境记录 | 全量 Cargo 门禁、tracker validator、diff | 只接受当前 Tab request ID；关闭/重连会使旧请求失效。 |
+| SFTP-ID-20260923 | completed | 将目录 request ID 收敛为 AppState 唯一 owner；首个目录页不关联导航 ID，修复首屏永久 Loading | 定向 SFTP 状态回归、全量 Cargo 门禁、diff | SSH trust、凭据和传输并发不变；真实服务器交互由用户验收。 |
 | XPLATCFG1 | completed | 平台专属 helper/import/caller/test 的 `cfg` 对齐，并拆分 guarded keyboard event match | macOS 全量 Cargo 门禁；Linux/Windows target 命令已尝试并记录工具链限制；diff | 不使用 `allow(dead_code)` 或放宽 Clippy；保持 macOS 行为不变。 |
 | XPLATCFG2 | completed | 将平台边界和 target-specific 严格 Clippy 要求固化到 `AGENTS.md` | tracker/environment 记录、diff | 目标平台 SDK/linker 缺失时必须记录限制，不能以未验证交叉编译替代 CI。 |
 | XPLATCFG3 | completed | 修正 ARM Linux 暴露的键盘事件 arm/import 边界，并把整条平台专属 match arm 纳入 `cfg` | macOS fmt/check/Clippy/test/diff；ARM target 命令已尝试并记录标准库限制 | 不保留 cfg-only body 的未保护绑定，不增加 `allow`/`expect`；非 macOS 继续由 `_` 兜底。 |
@@ -94,6 +95,7 @@
 - 用户最新复现已确认 `DroppedFile` 和 AppKit 命中均到达，但三次均被 Slint 返回的 `remote-unavailable` 拒绝；该结果来自 presentation snapshot，而 Rust 上传入口仍有独立的实时连接、loading 和远端目录校验。
 - 已完成 MACDROP4：原生路由只以可见 Remote files 的有限几何选择目标；`handle_native_dropped_file_on_remote_pane` 在入队前重新校验当前窗口的 SFTP Tab、连接、loading 和远端目录。被实时状态拒绝时会显示明确状态并记录 `native-upload-target-rejected`，不会静默失败或按活动目录回退。
 - 已完成 SFTPTRANSFER1：SFTP transfer 状态增加显式上传/下载方向；上传使用独立的 `Uploading` 活动阶段，状态快照和 Slint 行 DTO 传递 `Upload`/`Download`，列表文件名前固定显示方向，终态继续分别显示 `Uploaded`/`Downloaded`。
+- 已完成 SFTP-ID-20260923：将远端目录 request ID 收敛为 AppState 唯一 owner，首个目录页使用无关联事件，普通导航、分页和上传后刷新都端到端传递同一 ID，修复首屏持续显示 `Loading directory...`。
 - 已将 SSH profile 的 X11 转发从布尔开关改为专用的 Off、Untrusted (`-X`)、Trusted (`-Y`) 枚举；旧的缺失/true 值迁移为 Trusted，false 迁移为 Off，cookie 与凭据均不进入 profile。
 - 已让 Session Editor 只为 SSH profile 提供 X11 forwarding 下拉框；X server provider/path 继续属于全局本机环境设置，不再以其决定某个服务器的 `-X`/`-Y`。
 - 已让 `-X` 在 host key 已被接受且认证完成后才创建私有短生命周期 xauth authority，受限 cookie 在 20 分钟后拒绝新的远端 X11 channel；准备失败只报告 X11 不可用，不阻断 shell。Trusted (`-Y`) 仍保持首个 X11 channel 才准备本机 X server/cookie 的惰性路径。
@@ -117,6 +119,7 @@
 ## 验证
 
 - 已完成（DRAW1）：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）、`python3 scripts/build_zh_catalog.py`、`python3 scripts/check_translations.py`（474 条）、tracker validator 与 `git diff --check` 通过；`ui/app.slint` 已由 Cargo 重新编译。
+- 已完成 SFTP-ID-20260923：定向 SFTP 事件回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 280、应用 267、Doc tests 0）和 `cargo build --locked --offline` 通过；目标平台真实 SFTP 服务器与 GUI 重连由用户验收。
 - 未完成：目标 macOS 需重启新二进制，并以 `ax_ssh::sftp_drag=debug` 复现 Local files 到 Remote files 的内部拖放，提供对应日志阶段。
 - 已完成：MACDROP3 的 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 254、Doc tests 0）、`cargo build --locked --offline` 和 `git diff --check`；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
 - 已完成：MACDROP4 的 `active_sftp_upload_target_revalidates_live_readiness` 与既有 `macos_file_drop_uses_appkit_position_without_hover_state` 定向回归，`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 259、应用 255、Doc tests 0）和 `cargo build --locked --offline` 通过；`ui/app.slint` 已由 Cargo 重新编译。Finder 图形手势仍待用户目标 macOS 复验。
@@ -157,6 +160,7 @@
 
 ## 最后更新时间
 
+- 2026-09-23 14:55 +0800：完成 SFTP-ID-20260923；修复首屏目录响应被过期 ID 防护误丢弃的问题，并统一普通导航、分页和上传后刷新的 request ID 所有权。全量 Rust/Slint 门禁和 debug 构建通过；真实 SFTP/GUI 由用户验收。
 - 2026-09-23：完成 DRAW1；持久化 terminal drawing preference，保留 item-tree 为唯一可选实现，Canvas 尚未实现并禁用。全量 Rust/Slint、474 条翻译和 tracker 校验通过；目标平台 GUI 视觉由用户验收。
 - 2026-09-21：完成 STDUI5/STDREP1/TELNETSTD1；F13-F24 下发序列与修饰键编码按本机 xterm-256color terminfo 修正，Telnet TTYPE 回报 `xterm-256color`，协议队列满有诊断，CSI 窗口查询、1016、Telnet/Serial 能力边界形成明确结论；真实 TUI 和目标平台行为仍待用户验收。
 - 2026-09-20：完成 OSC52-1–3 与 OSC52READ1–4；设置字段、默认关闭的有界远端写入、带确认的默认剪贴板读取、UI 线程桥接、四类 transport 接入和中英文说明已同步，等待目标平台真实 TUI/剪贴板验收；selection clipboard 与图形协议仍关闭。

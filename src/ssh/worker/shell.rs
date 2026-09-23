@@ -195,7 +195,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         }
                         if sftp.is_some() {
                             if let Some(browser) = sftp.as_ref()
-                                && let Err(error) = browser.request_list(path)
+                                && let Err(error) = browser.request_list(None, path)
                             {
                                 send_sftp_event(
                                     &event_tx,
@@ -255,14 +255,14 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         }
                         continue;
                     }
-                    Some(SshCommand::ListSftp { path }) => {
+                    Some(SshCommand::ListSftp { request_id, path }) => {
                         match sftp.as_ref() {
                             Some(browser) => {
-                                if let Err(error) = browser.request_list(path) {
+                                if let Err(error) = browser.request_list(Some(request_id), path) {
                                     send_sftp_event(
                                         &event_tx,
                                         SftpBrowserEvent::Failed {
-                                            request_id: None,
+                                            request_id: Some(request_id),
                                             message: bounded_error_message(&error),
                                         },
                                         session_id,
@@ -273,7 +273,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 send_sftp_event(
                                     &event_tx,
                                     SftpBrowserEvent::Failed {
-                                        request_id: None,
+                                        request_id: Some(request_id),
                                         message: "SFTP browser is not open".to_owned(),
                                     },
                                     session_id,
@@ -287,14 +287,14 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         }
                         continue;
                     }
-                    Some(SshCommand::LoadMoreSftp) => {
+                    Some(SshCommand::LoadMoreSftp { request_id }) => {
                         match sftp.as_ref() {
                             Some(browser) => {
-                                if let Err(error) = browser.request_load_more() {
+                                if let Err(error) = browser.request_load_more(request_id) {
                                     send_sftp_event(
                                         &event_tx,
                                         SftpBrowserEvent::Failed {
-                                            request_id: None,
+                                            request_id: Some(request_id),
                                             message: bounded_error_message(&error),
                                         },
                                         session_id,
@@ -305,7 +305,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 send_sftp_event(
                                     &event_tx,
                                     SftpBrowserEvent::Failed {
-                                        request_id: None,
+                                        request_id: Some(request_id),
                                         message: "SFTP browser is not open".to_owned(),
                                     },
                                     session_id,

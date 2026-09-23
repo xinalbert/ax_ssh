@@ -92,9 +92,12 @@ pub(crate) enum SshCommand {
         path: String,
     },
     ListSftp {
+        request_id: u64,
         path: String,
     },
-    LoadMoreSftp,
+    LoadMoreSftp {
+        request_id: u64,
+    },
     CloseSftp,
     OpenSftpFile {
         root: SftpDownloadRoot,
@@ -382,16 +385,16 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP open request: {error}"))
     }
 
-    pub fn request_list_sftp(&self, path: String) -> Result<()> {
+    pub fn request_list_sftp(&self, request_id: u64, path: String) -> Result<()> {
         validate_remote_path(&path)?;
         self.command_tx
-            .try_send(SshCommand::ListSftp { path })
+            .try_send(SshCommand::ListSftp { request_id, path })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP directory request: {error}"))
     }
 
-    pub fn request_load_more_sftp(&self) -> Result<()> {
+    pub fn request_load_more_sftp(&self, request_id: u64) -> Result<()> {
         self.command_tx
-            .try_send(SshCommand::LoadMoreSftp)
+            .try_send(SshCommand::LoadMoreSftp { request_id })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP page request: {error}"))
     }
 
@@ -563,7 +566,7 @@ async fn run_session(task: SshSessionTask) {
                     Some(SshCommand::Send { .. })
                     | Some(SshCommand::OpenSftp { .. })
                     | Some(SshCommand::ListSftp { .. })
-                    | Some(SshCommand::LoadMoreSftp)
+                    | Some(SshCommand::LoadMoreSftp { .. })
                     | Some(SshCommand::CloseSftp)
                     | Some(SshCommand::OpenSftpFile { .. })
                     | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
@@ -769,7 +772,7 @@ mod tests {
         let (sender, _receiver) = mpsc::channel(COMMAND_CAPACITY);
         for _ in 0..COMMAND_CAPACITY {
             sender
-                .try_send(SshCommand::LoadMoreSftp)
+                .try_send(SshCommand::LoadMoreSftp { request_id: 1 })
                 .expect("test command should fill the queue");
         }
         assert!(matches!(
@@ -783,7 +786,7 @@ mod tests {
         let (command_tx, _receiver) = mpsc::channel(COMMAND_CAPACITY);
         for _ in 0..COMMAND_CAPACITY {
             command_tx
-                .try_send(SshCommand::LoadMoreSftp)
+                .try_send(SshCommand::LoadMoreSftp { request_id: 1 })
                 .expect("test command should fill the queue");
         }
         let (resize_tx, _resize_rx) = watch::channel(TerminalSize::backend(80, 24));

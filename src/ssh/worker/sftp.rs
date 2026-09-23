@@ -298,9 +298,13 @@ pub(super) async fn run_sftp_session(
             command = command_rx.recv() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
                 let result = match command {
-                    Some(SshCommand::OpenSftp { path })
-                    | Some(SshCommand::ListSftp { path }) => browser.request_list(path).map(|_| ()),
-                    Some(SshCommand::LoadMoreSftp) => browser.request_load_more().map(|_| ()),
+                    Some(SshCommand::OpenSftp { path }) => browser.request_list(None, path),
+                    Some(SshCommand::ListSftp { request_id, path }) => {
+                        browser.request_list(Some(request_id), path)
+                    }
+                    Some(SshCommand::LoadMoreSftp { request_id }) => {
+                        browser.request_load_more(request_id)
+                    }
                     Some(SshCommand::OpenSftpFile { root }) => {
                         let transfer_id = root.transfer_id();
                         let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)

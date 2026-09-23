@@ -552,13 +552,26 @@ impl SftpBrowserState {
         Ok((self.request_id, requested))
     }
 
+    pub(in crate::app) fn begin_load_more(&mut self) -> Result<u64> {
+        if self.loading {
+            anyhow::bail!("SFTP directory request already in progress");
+        }
+        if !self.has_more {
+            anyhow::bail!("SFTP directory has no additional page");
+        }
+        self.loading = true;
+        self.request_id = self.request_id.wrapping_add(1).max(1);
+        self.status = "Loading more files...".to_owned();
+        Ok(self.request_id)
+    }
+
     pub(in crate::app) fn cancel_navigation(&mut self) {
         self.pending_navigation = None;
         self.loading = false;
     }
 
-    pub(in crate::app) fn accepts_request(&self, request_id: u64) -> bool {
-        request_id == self.request_id
+    pub(in crate::app) fn accepts_request(&self, request_id: Option<u64>) -> bool {
+        request_id.is_none_or(|request_id| request_id == self.request_id)
     }
 
     pub(in crate::app) fn reset_navigation(&mut self) {

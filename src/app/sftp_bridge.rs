@@ -809,14 +809,16 @@ pub(super) fn wire_sftp(
         sync_window_active(&router_for_more, window_id, &state_for_more);
         let result =
             with_window_sftp_terminal(&state_for_more, &router_for_more, window_id, |terminal| {
-                terminal
+                let request_id = terminal.sftp.begin_load_more()?;
+                let result = terminal
                     .worker
                     .as_ref()
                     .context("active SSH terminal has no worker")?
-                    .request_load_more_sftp()?;
-                terminal.sftp.request_id = terminal.sftp.request_id.wrapping_add(1).max(1);
-                terminal.sftp.loading = true;
-                terminal.sftp.status = "Loading more files...".to_owned();
+                    .request_load_more_sftp(request_id);
+                if let Err(error) = result {
+                    terminal.sftp.cancel_navigation();
+                    return Err(error);
+                }
                 Ok(())
             });
         match result {
@@ -2402,8 +2404,8 @@ fn queue_remote_navigation_for_terminal(
         .worker
         .as_ref()
         .context("active SSH terminal has no worker")?;
-    let (_, request_path) = terminal.sftp.begin_navigation(kind, path)?;
-    let result = worker.request_list_sftp(request_path);
+    let (request_id, request_path) = terminal.sftp.begin_navigation(kind, path)?;
+    let result = worker.request_list_sftp(request_id, request_path);
     if let Err(error) = result {
         terminal.sftp.cancel_navigation();
         terminal.sftp.status = "SFTP directory request was rejected".to_owned();

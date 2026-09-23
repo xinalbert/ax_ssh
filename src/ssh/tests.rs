@@ -751,7 +751,7 @@ async fn commands_queued_during_authentication_do_not_cancel_the_worker() {
         .request_send(b"ignored-before-auth\r".to_vec())
         .expect("connecting worker should accept bounded terminal input");
     worker
-        .request_list_sftp("/ignored-before-auth".to_owned())
+        .request_list_sftp(1, "/ignored-before-auth".to_owned())
         .expect("connecting worker should accept bounded SFTP input");
 
     let connected = timeout(Duration::from_secs(2), events.recv())

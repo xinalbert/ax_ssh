@@ -15,8 +15,9 @@ Serial 都发送有界的 `TerminalOutputChunk`，其中包含输出字节和 tr
 标记为 key、paste、pointer、focus、protocol 或 command，日志只记录类型、字节数、
 结果和耗时，不记录终端内容。
 
-SFTP 目录请求同样携带有界 request ID。Tab 状态只接受当前 request ID 的目录页或
-失败事件，过期异步响应会被丢弃，避免快速导航时旧目录覆盖新目录。
+应用状态拥有有界的 SFTP 目录 request ID，并将同一个 ID 经 SSH worker 传递给
+浏览器。Tab 状态只接受当前 request ID 的目录页或失败事件；首个浏览器目录页明确
+不关联导航请求。过期异步响应会被丢弃，避免快速导航时旧目录覆盖新目录。
 
 当前实现将 UI、应用、持久化、传输和进程服务拆成独立所有权边界：
 
