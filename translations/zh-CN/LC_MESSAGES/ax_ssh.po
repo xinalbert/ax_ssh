@@ -121,6 +121,9 @@ msgstr "应用界面字体"
 msgid "Apply one color family to both display modes"
 msgstr "为两种显示模式应用同一配色系列"
 
+msgid "Apply this choice to this upload batch"
+msgstr "对本次上传批次应用此选择"
+
 msgid "Async runtime"
 msgstr "异步运行时"
 
@@ -544,6 +547,9 @@ msgstr "Item tree（当前方式）"
 msgid "KEYBOARD"
 msgstr "键盘"
 
+msgid "Keep both"
+msgstr "两者都保留"
+
 msgid "Keyboard Shortcuts"
 msgstr "键盘快捷键"
 
@@ -742,6 +748,9 @@ msgstr "可选；仅在连接或保存时输入"
 msgid "Overlay"
 msgstr "遮罩"
 
+msgid "Overwrite"
+msgstr "覆盖"
+
 msgid "Pane"
 msgstr "窗格"
 
@@ -849,6 +858,12 @@ msgstr "远端已更改"
 
 msgid "Remote default directory"
 msgstr "远端默认目录"
+
+msgid "Remote file already exists"
+msgstr "远端文件已存在"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "远端文件：{0} - 修改时间：{1}"
 
 msgid "Remote files"
 msgstr "远端文件"
@@ -1108,8 +1123,14 @@ msgstr "Simplified Chinese"
 msgid "Size"
 msgstr "大小"
 
+msgid "Skip"
+msgstr "跳过"
+
 msgid "Skip matching names during SFTP uploads and downloads"
 msgstr "SFTP 上传和下载时跳过匹配的名称"
+
+msgid "Skipped"
+msgstr "已跳过"
 
 msgid "Software"
 msgstr "软件"

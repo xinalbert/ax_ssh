@@ -945,11 +945,17 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     let transfer_completed_count = snapshot
         .transfers
         .iter()
-        .filter(|transfer| transfer.phase == SftpTransferPhase::Completed)
+        .filter(|transfer| {
+            matches!(
+                transfer.phase,
+                SftpTransferPhase::Completed | SftpTransferPhase::Skipped
+            )
+        })
         .count() as i32;
     ui.set_sftp_available(snapshot.available);
     ui.set_sftp_open(snapshot.open);
     ui.set_sftp_loading(snapshot.loading);
+    ui.set_sftp_upload_ready(snapshot.upload_ready);
     ui.set_sftp_home(snapshot.home.into());
     ui.set_sftp_path(snapshot.path.into());
     ui.set_sftp_entries(ModelRc::new(VecModel::from(sftp_entry_rows(
@@ -961,11 +967,38 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_sftp_has_more(snapshot.has_more);
     ui.set_sftp_truncated(snapshot.truncated);
     ui.set_sftp_status(snapshot.status.into());
+    if let Some(conflict) = snapshot.upload_conflict {
+        ui.set_sftp_upload_conflict_open(true);
+        ui.set_sftp_upload_conflict_id(conflict.transfer_id.to_string().into());
+        ui.set_sftp_upload_conflict_name(conflict.name.into());
+        ui.set_sftp_upload_conflict_size(
+            conflict
+                .remote_size
+                .map(|size| format_file_size(size, false))
+                .unwrap_or_else(|| "-".to_owned())
+                .into(),
+        );
+        ui.set_sftp_upload_conflict_modified(
+            conflict
+                .remote_modified
+                .map(format_timestamp)
+                .unwrap_or_else(|| "-".to_owned())
+                .into(),
+        );
+    } else {
+        ui.set_sftp_upload_conflict_open(false);
+        ui.set_sftp_upload_conflict_id("".into());
+        ui.set_sftp_upload_conflict_name("".into());
+        ui.set_sftp_upload_conflict_size("".into());
+        ui.set_sftp_upload_conflict_modified("".into());
+    }
     ui.set_sftp_can_go_back(snapshot.can_go_back);
     ui.set_sftp_can_go_forward(snapshot.can_go_forward);
     ui.set_sftp_selected_count(snapshot.selected_count as i32);
     ui.set_sftp_all_selected(snapshot.all_selected);
     ui.set_local_sftp_loading(snapshot.local.loading);
+    ui.set_local_sftp_loaded(snapshot.local.loaded);
+    ui.set_local_sftp_upload_selection_ready(snapshot.local.upload_selection_ready);
     ui.set_local_sftp_path(snapshot.local.path.into());
     ui.set_local_sftp_entries(ModelRc::new(VecModel::from(local_entry_rows(
         snapshot.local.entries,
@@ -986,6 +1019,7 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     for transfer in snapshot.transfers {
         match transfer.phase {
             SftpTransferPhase::Queued
+            | SftpTransferPhase::AwaitingConflict
             | SftpTransferPhase::Downloading
             | SftpTransferPhase::Uploading
             | SftpTransferPhase::Pausing
@@ -993,7 +1027,7 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
             | SftpTransferPhase::Resuming
             | SftpTransferPhase::Cancelling => active.push(transfer),
             SftpTransferPhase::Failed | SftpTransferPhase::Cancelled => failed.push(transfer),
-            SftpTransferPhase::Completed => completed.push(transfer),
+            SftpTransferPhase::Completed | SftpTransferPhase::Skipped => completed.push(transfer),
         }
     }
     ui.set_sftp_active_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(active))));

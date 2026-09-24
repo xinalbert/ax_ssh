@@ -288,6 +288,11 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_sftp_has_more(false);
     ui.set_sftp_truncated(false);
     ui.set_sftp_status("".into());
+    ui.set_sftp_upload_conflict_open(false);
+    ui.set_sftp_upload_conflict_id("".into());
+    ui.set_sftp_upload_conflict_name("".into());
+    ui.set_sftp_upload_conflict_size("".into());
+    ui.set_sftp_upload_conflict_modified("".into());
     ui.set_sftp_can_go_back(false);
     ui.set_sftp_can_go_forward(false);
     ui.set_sftp_selected_count(0);

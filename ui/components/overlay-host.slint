@@ -1,5 +1,6 @@
 import { AuthenticationDialog, HostKeyDialog } from "security-dialogs.slint";
 import { SessionManagementDialog } from "session-management-dialog.slint";
+import { SftpUploadConflictDialog } from "sftp-upload-conflict-dialog.slint";
 import { WorkspaceFileDialog } from "workspace-file-dialog.slint";
 import { TerminalNoticeCard, TerminalNoticeViewState } from "../terminal-pane.slint";
 import { Theme } from "../theme.slint";
@@ -28,6 +29,11 @@ export component OverlayHost inherits Rectangle {
     in property <TerminalNoticeViewState> terminal-notice;
     in property <string> terminal-notice-pane-id;
     in property <bool> window-active: true;
+    in property <bool> upload-conflict-open: false;
+    in property <string> upload-conflict-id;
+    in property <string> upload-conflict-name;
+    in property <string> upload-conflict-size;
+    in property <string> upload-conflict-modified;
 
     callback manage-session-action(string, string, string);
     callback terminal-notice-action(string, string);
@@ -36,16 +42,17 @@ export component OverlayHost inherits Rectangle {
     callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
     callback workspace-file-action(string, string);
+    callback resolve-sftp-upload-conflict(string, string, bool);
 
     private property <bool> security-open: root.security.host_key_open || root.security.password_open;
     out property <bool> modal-open: root.security-open
-        || root.workspace-file-open || root.session-management-open;
+        || root.workspace-file-open || root.session-management-open || root.upload-conflict-open;
     private property <bool> workspace-file-open: false;
     private property <string> workspace-file-mode;
     private property <string> workspace-file-path;
 
     public function show-workspace-file-dialog(mode: string, path: string) {
-        if root.security-open || root.workspace-file-open || root.session-management-open {
+        if root.security-open || root.workspace-file-open || root.session-management-open || root.upload-conflict-open {
             return;
         }
         root.workspace-file-mode = mode;
@@ -71,7 +78,7 @@ export component OverlayHost inherits Rectangle {
                 : "");
 
     public function show-session-management(action: string, target: string, subject: string) {
-        if root.security-open || root.workspace-file-open || root.session-management-open {
+        if root.security-open || root.workspace-file-open || root.session-management-open || root.upload-conflict-open {
             return;
         }
         root.session-management-action = action;
@@ -128,6 +135,16 @@ export component OverlayHost inherits Rectangle {
             root.workspace-file-action(root.workspace-file-mode, value);
         }
         cancel => { root.workspace-file-open = false; }
+    }
+
+    if !root.security-open && !root.workspace-file-open && !root.session-management-open
+        && root.upload-conflict-open : SftpUploadConflictDialog {
+        file-name: root.upload-conflict-name;
+        remote-size: root.upload-conflict-size;
+        remote-modified: root.upload-conflict-modified;
+        resolve(choice, apply-to-batch) => {
+            root.resolve-sftp-upload-conflict(root.upload-conflict-id, choice, apply-to-batch);
+        }
     }
 
     if root.security.host_key_open : HostKeyDialog {

@@ -306,6 +306,7 @@ pub(super) struct SftpBrowserState {
     pending_navigation: Option<PendingSftpNavigation>,
     pub(super) local: LocalDirectoryState,
     pub(super) transfers: VecDeque<SftpTransferState>,
+    pub(super) upload_conflicts: VecDeque<PendingUploadConflict>,
     pub(super) selected_transfers: HashSet<Uuid>,
     pub(super) editor_path: Option<String>,
     pub(super) editor_text: String,
@@ -320,6 +321,7 @@ pub(super) struct SftpBrowserState {
 
 #[derive(Default)]
 pub(super) struct LocalDirectoryState {
+    pub(super) loaded: bool,
     pub(super) loading: bool,
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
@@ -341,6 +343,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) available: bool,
     pub(super) open: bool,
     pub(super) loading: bool,
+    pub(super) upload_ready: bool,
     pub(super) home: String,
     pub(super) path: String,
     pub(super) entries: Vec<SftpEntry>,
@@ -355,6 +358,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) selected: HashSet<String>,
     pub(super) local: LocalDirectorySnapshot,
     pub(super) transfers: Vec<SftpTransferSnapshot>,
+    pub(super) upload_conflict: Option<PendingUploadConflict>,
     pub(super) transfer_selected_active_count: usize,
     pub(super) transfer_selected_pausable_count: usize,
     pub(super) transfer_selected_resumable_count: usize,
@@ -368,7 +372,9 @@ pub(super) struct SftpBrowserSnapshot {
 
 #[derive(Clone, Default)]
 pub(super) struct LocalDirectorySnapshot {
+    pub(super) loaded: bool,
     pub(super) loading: bool,
+    pub(super) upload_selection_ready: bool,
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
     pub(super) sort: SftpSortState,
@@ -391,6 +397,8 @@ pub(super) enum SftpTransferDirection {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SftpTransferPhase {
     Queued,
+    AwaitingConflict,
+    Skipped,
     Downloading,
     Uploading,
     Pausing,
@@ -400,6 +408,15 @@ pub(super) enum SftpTransferPhase {
     Completed,
     Cancelled,
     Failed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PendingUploadConflict {
+    pub(super) transfer_id: Uuid,
+    pub(super) batch_id: Uuid,
+    pub(super) name: String,
+    pub(super) remote_size: Option<u64>,
+    pub(super) remote_modified: Option<u32>,
 }
 
 pub(super) struct SftpTransferState {

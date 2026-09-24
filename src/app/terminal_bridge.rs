@@ -2,7 +2,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     rc::Rc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::input::{clear_native_event_modifiers, update_native_event_modifiers};
@@ -42,12 +42,20 @@ fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
 #[derive(Default)]
 struct NativeFileDropPointer {
     hovered_file_count: u16,
+    upload_batch: Option<(Uuid, Instant)>,
     #[cfg(not(target_os = "macos"))]
     last_physical_position: Option<(f64, f64)>,
 }
 
 impl NativeFileDropPointer {
     fn begin_external_file_hover(&mut self) {
+        if self.hovered_file_count == 0
+            && self
+                .upload_batch
+                .is_some_and(|(_, last)| last.elapsed() > Duration::from_millis(500))
+        {
+            self.upload_batch = None;
+        }
         #[cfg(not(target_os = "macos"))]
         if self.hovered_file_count == 0 {
             self.last_physical_position = None;
@@ -63,6 +71,16 @@ impl NativeFileDropPointer {
         }
     }
 
+    fn upload_batch_id(&mut self) -> Uuid {
+        let now = Instant::now();
+        let id = self
+            .upload_batch
+            .filter(|(_, last)| now.duration_since(*last) <= Duration::from_millis(500))
+            .map_or_else(Uuid::new_v4, |(id, _)| id);
+        self.upload_batch = Some((id, now));
+        id
+    }
+
     #[cfg(not(target_os = "macos"))]
     fn record_cursor_position(&mut self, x: f64, y: f64) {
         if x.is_finite() && y.is_finite() {
@@ -73,11 +91,13 @@ impl NativeFileDropPointer {
     #[cfg(target_os = "macos")]
     fn clear(&mut self) {
         self.hovered_file_count = 0;
+        self.upload_batch = None;
     }
 
     #[cfg(not(target_os = "macos"))]
     fn clear(&mut self) {
         self.hovered_file_count = 0;
+        self.upload_batch = None;
         self.last_physical_position = None;
     }
 
@@ -383,7 +403,7 @@ pub(super) fn install_native_window_input_hook(
                     log_native_file_drop("dropped-ui-gone", 0, None);
                     return EventResult::Propagate;
                 };
-                let (target, hovered_file_count) = {
+                let (target, hovered_file_count, upload_batch_id) = {
                     let mut pointer = native_file_drop_pointer_for_event.borrow_mut();
                     let hovered_file_count = pointer.hovered_file_count;
                     log_native_file_drop("dropped-received", hovered_file_count, None);
@@ -396,11 +416,12 @@ pub(super) fn install_native_window_input_hook(
                         pointer.logical_position(f64::from(ui.window().scale_factor()).max(0.01));
                     let target =
                         logical_position.map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
+                    let upload_batch_id = pointer.upload_batch_id();
                     pointer.complete_external_file_drop();
                     if target.is_none() {
                         log_native_file_drop("position-unavailable", hovered_file_count, None);
                     }
-                    (target, hovered_file_count)
+                    (target, hovered_file_count, upload_batch_id)
                 };
                 match target.as_deref() {
                     Some("remote") => {
@@ -412,6 +433,7 @@ pub(super) fn install_native_window_input_hook(
                             &router_for_drop,
                             window_id,
                             path,
+                            upload_batch_id,
                         );
                     }
                     Some(target) => {
@@ -2214,6 +2236,16 @@ mod tests {
         assert_eq!(quantize_logical(f32::NAN), i32::MIN);
         assert_eq!(quantize_scale(2.0), 2_000);
         assert_eq!(quantize_scale(f64::NAN), 0);
+    }
+
+    #[test]
+    fn consecutive_native_file_events_share_one_upload_batch() {
+        let mut pointer = NativeFileDropPointer::default();
+        let first = pointer.upload_batch_id();
+        pointer.complete_external_file_drop();
+        assert_eq!(pointer.upload_batch_id(), first);
+        pointer.clear();
+        assert_ne!(pointer.upload_batch_id(), first);
     }
 
     #[cfg(not(target_os = "macos"))]

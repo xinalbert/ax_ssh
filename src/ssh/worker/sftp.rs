@@ -7,8 +7,9 @@ use tokio::time::timeout;
 
 use crate::sftp::{
     MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpBrowserHandle,
-    SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot, SftpUploadHandle, SftpWriteEvent,
-    discover_download_requests, execute_sftp_write,
+    SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot, SftpUploadConflictChoice,
+    SftpUploadHandle, SftpUploadRequest, SftpWriteEvent, discover_download_requests,
+    execute_sftp_write,
 };
 
 use super::*;
@@ -28,7 +29,14 @@ struct PendingDiscovery {
 }
 
 type SftpChannelStream = ChannelStream<client::Msg>;
+const MAX_PENDING_UPLOADS: usize = 512;
 
+struct SftpUploadStartContext<'a> {
+    connection: &'a SshConnection,
+    transfer_event_tx: &'a mpsc::Sender<SftpTransferEvent>,
+    event_tx: &'a mpsc::Sender<SshSessionEvent>,
+    session_id: Uuid,
+}
 enum ActiveSftpTransfer {
     Download(SftpDownloadHandle),
     Upload(SftpUploadHandle),
@@ -148,6 +156,17 @@ pub(super) async fn run_sftp_session(
     let mut pending_openings = JoinSet::<Result<SftpChannelStream>>::new();
     let mut pending_by_transfer = HashMap::<Uuid, PendingSftpOpen>::new();
     let mut queued_requests = VecDeque::<SftpDownloadRequest>::new();
+    let mut queued_uploads = VecDeque::<SftpUploadRequest>::new();
+    let mut active_upload_requests = HashMap::<Uuid, SftpUploadRequest>::new();
+    let mut pending_upload_conflicts = HashMap::<Uuid, SftpUploadRequest>::new();
+    let mut batch_policies = HashMap::<Uuid, SftpUploadConflictChoice>::new();
+    let mut recent_policy_batches = VecDeque::<Uuid>::new();
+    let upload_start_context = SftpUploadStartContext {
+        connection: &connection,
+        transfer_event_tx: &transfer_event_tx,
+        event_tx: &event_tx,
+        session_id,
+    };
     let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
     loop {
@@ -294,6 +313,10 @@ pub(super) async fn run_sftp_session(
                     &connection,
                     transfers.len(),
                 );
+                start_queued_uploads(
+                    &mut queued_uploads, &mut active_upload_requests, &mut transfers,
+                    &pending_by_transfer, &upload_start_context,
+                ).await;
             }
             command = command_rx.recv() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
@@ -384,83 +407,77 @@ pub(super) async fn run_sftp_session(
                         }
                         Ok(())
                     }
-                    Some(SshCommand::OpenSftpUpload { request }) => {
-                        let transfer_id = request.transfer_id();
-                        let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
-                            || pending_by_transfer.contains_key(&transfer_id)
-                            || discovery_by_transfer.contains_key(&transfer_id)
-                            || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id);
-                        if already_active {
-                            send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::Failed {
-                                    transfer_id,
-                                    message: "SFTP transfer is already active".to_owned(),
-                                },
-                                session_id,
-                            ).await;
-                        } else if sftp_transfer_limit_reached(
-                            transfers.len(),
-                            pending_by_transfer.len(),
-                        ) {
-                            send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::Failed {
-                                    transfer_id,
-                                    message: "SFTP transfer queue is full".to_owned(),
-                                },
-                                session_id,
-                            ).await;
-                        } else {
-                            let global_slot = match SftpUploadHandle::reserve_global_slot() {
-                                Ok(slot) => slot,
-                                Err(error) => {
-                                    send_sftp_transfer_event(
-                                        &event_tx,
-                                        SftpTransferEvent::Failed {
-                                            transfer_id,
-                                            message: bounded_error_message(&error),
-                                        },
-                                        session_id,
-                                    )
-                                    .await;
-                                    continue;
+                    Some(SshCommand::OpenSftpUploads { requests }) => {
+                        for mut request in requests {
+                            let transfer_id = request.transfer_id();
+                            let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
+                                || pending_by_transfer.contains_key(&transfer_id)
+                                || discovery_by_transfer.contains_key(&transfer_id)
+                                || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id)
+                                || queued_uploads.iter().any(|queued| queued.transfer_id() == transfer_id)
+                                || pending_upload_conflicts.contains_key(&transfer_id);
+                            if already_active || queued_uploads.len() + pending_upload_conflicts.len() >= MAX_PENDING_UPLOADS {
+                                let message = if already_active {
+                                    "SFTP transfer is already active"
+                                } else {
+                                    "SFTP transfer queue is full"
+                                };
+                                send_sftp_transfer_event(
+                                    &event_tx,
+                                    SftpTransferEvent::Failed { transfer_id, message: message.to_owned() },
+                                    session_id,
+                                ).await;
+                                continue;
+                            }
+                            if let Some(&choice) = batch_policies.get(&request.batch_id()) {
+                                request.set_conflict_choice(choice);
+                            }
+                            if send_sftp_transfer_event(&event_tx, upload_queued_event(&request), session_id).await {
+                                queued_uploads.push_back(request);
+                            }
+                        }
+                        start_queued_uploads(
+                            &mut queued_uploads, &mut active_upload_requests, &mut transfers,
+                            &pending_by_transfer, &upload_start_context,
+                        ).await;
+                        Ok(())
+                    }
+                    Some(SshCommand::ResolveSftpUploadConflict { transfer_id, choice, apply_to_batch }) => {
+                        if let Some(mut request) = pending_upload_conflicts.remove(&transfer_id) {
+                            let batch_id = request.batch_id();
+                            if apply_to_batch {
+                                if !batch_policies.contains_key(&batch_id) {
+                                    if recent_policy_batches.len() >= 32
+                                        && let Some(oldest) = recent_policy_batches.pop_front()
+                                    {
+                                        batch_policies.remove(&oldest);
+                                    }
+                                    recent_policy_batches.push_back(batch_id);
                                 }
-                            };
-                            let stream = connection.open_sftp_stream().await;
-                            match stream {
-                                Ok(stream) => {
-                                    send_sftp_transfer_event(
-                                        &event_tx,
-                                        SftpTransferEvent::Queued {
-                                            transfer_id,
-                                            remote_path: String::new(),
-                                            name: request.name().to_owned(),
-                                            total_bytes: request.total_bytes(),
-                                        },
-                                        session_id,
-                                    ).await;
-                                    transfers.push(ActiveSftpTransfer::Upload(
-                                        SftpUploadHandle::spawn(
-                                            &Handle::current(),
-                                            stream,
-                                            request,
-                                            transfer_event_tx.clone(),
-                                            global_slot,
-                                        ),
-                                    ));
-                                }
-                                Err(error) => {
-                                    send_sftp_transfer_event(
-                                        &event_tx,
-                                        SftpTransferEvent::Failed {
-                                            transfer_id,
-                                            message: bounded_error_message(&error),
-                                        },
-                                        session_id,
-                                    ).await;
+                                batch_policies.insert(batch_id, choice);
+                            }
+                            request.set_conflict_choice(choice);
+                            let mut resolved = vec![request];
+                            if apply_to_batch {
+                                let ids = pending_upload_conflicts.iter()
+                                    .filter_map(|(id, pending)| (pending.batch_id() == batch_id).then_some(*id))
+                                    .collect::<Vec<_>>();
+                                for id in ids {
+                                    if let Some(mut pending) = pending_upload_conflicts.remove(&id) {
+                                        pending.set_conflict_choice(choice);
+                                        resolved.push(pending);
+                                    }
                                 }
                             }
+                            for request in resolved {
+                                if send_sftp_transfer_event(&event_tx, upload_queued_event(&request), session_id).await {
+                                    queued_uploads.push_back(request);
+                                }
+                            }
+                            start_queued_uploads(
+                                &mut queued_uploads, &mut active_upload_requests, &mut transfers,
+                                &pending_by_transfer, &upload_start_context,
+                            ).await;
                         }
                         Ok(())
                     }
@@ -488,6 +505,13 @@ pub(super) async fn run_sftp_session(
                                 SftpTransferEvent::Cancelled { transfer_id },
                                 session_id,
                             ).await;
+                            Ok(())
+                        } else if let Some(index) = queued_uploads.iter().position(|request| request.transfer_id() == transfer_id) {
+                            queued_uploads.remove(index);
+                            send_sftp_transfer_event(&event_tx, SftpTransferEvent::Cancelled { transfer_id }, session_id).await;
+                            Ok(())
+                        } else if pending_upload_conflicts.remove(&transfer_id).is_some() {
+                            send_sftp_transfer_event(&event_tx, SftpTransferEvent::Cancelled { transfer_id }, session_id).await;
                             Ok(())
                         } else {
                             match cancel_pending_sftp_open(
@@ -649,7 +673,9 @@ pub(super) async fn run_sftp_session(
                 let terminal_transfer_id = match &transfer_event {
                     SftpTransferEvent::Completed { transfer_id, .. }
                     | SftpTransferEvent::Cancelled { transfer_id }
-                    | SftpTransferEvent::Failed { transfer_id, .. } => Some(*transfer_id),
+                    | SftpTransferEvent::Failed { transfer_id, .. }
+                    | SftpTransferEvent::Skipped { transfer_id }
+                    | SftpTransferEvent::UploadConflict { transfer_id, .. } => Some(*transfer_id),
                     SftpTransferEvent::Queued { .. }
                     | SftpTransferEvent::Started { .. }
                     | SftpTransferEvent::Progress { .. }
@@ -657,9 +683,6 @@ pub(super) async fn run_sftp_session(
                     | SftpTransferEvent::Resumed { .. }
                     | SftpTransferEvent::DiscoveryFailed { .. } => None,
                 };
-                if !send_sftp_transfer_event(&event_tx, transfer_event, session_id).await {
-                    break;
-                }
                 if let Some(transfer_id) = terminal_transfer_id
                     && let Some(index) = transfers
                         .iter()
@@ -669,14 +692,37 @@ pub(super) async fn run_sftp_session(
                     if let Err(error) = transfer.shutdown().await {
                         warn!(%session_id, %transfer_id, %error, "failed to join completed SFTP transfer");
                     }
-                    start_queued_sftp_transfers(
-                        &mut queued_requests,
-                        &mut pending_openings,
-                        &mut pending_by_transfer,
-                        &connection,
-                        transfers.len(),
-                    );
                 }
+                let mut forward_event = true;
+                if let SftpTransferEvent::UploadConflict {
+                    transfer_id, batch_id, remote_size, remote_modified, ..
+                } = &transfer_event
+                    && let Some(mut request) = active_upload_requests.remove(transfer_id)
+                {
+                    request.set_expected_remote(*remote_size, *remote_modified);
+                    if let Some(&choice) = batch_policies.get(batch_id) {
+                        request.set_conflict_choice(choice);
+                        if send_sftp_transfer_event(&event_tx, upload_queued_event(&request), session_id).await {
+                            queued_uploads.push_back(request);
+                        }
+                        forward_event = false;
+                    } else {
+                        pending_upload_conflicts.insert(*transfer_id, request);
+                    }
+                } else if let Some(transfer_id) = terminal_transfer_id {
+                    active_upload_requests.remove(&transfer_id);
+                }
+                if forward_event && !send_sftp_transfer_event(&event_tx, transfer_event, session_id).await {
+                    break;
+                }
+                start_queued_sftp_transfers(
+                    &mut queued_requests, &mut pending_openings, &mut pending_by_transfer,
+                    &connection, transfers.len(),
+                );
+                start_queued_uploads(
+                    &mut queued_uploads, &mut active_upload_requests, &mut transfers,
+                    &pending_by_transfer, &upload_start_context,
+                ).await;
             }
             event = browser_events.recv() => {
                 let Some(event) = event else {
@@ -858,6 +904,68 @@ fn start_queued_sftp_transfers(
             break;
         };
         spawn_pending_sftp_open(pending_openings, pending_by_transfer, connection, request);
+    }
+}
+
+fn upload_queued_event(request: &SftpUploadRequest) -> SftpTransferEvent {
+    SftpTransferEvent::Queued {
+        transfer_id: request.transfer_id(),
+        remote_path: String::new(),
+        name: request.name().to_owned(),
+        total_bytes: request.total_bytes(),
+    }
+}
+
+async fn start_queued_uploads(
+    queued_uploads: &mut VecDeque<SftpUploadRequest>,
+    active_upload_requests: &mut HashMap<Uuid, SftpUploadRequest>,
+    transfers: &mut Vec<ActiveSftpTransfer>,
+    pending_downloads: &HashMap<Uuid, PendingSftpOpen>,
+    context: &SftpUploadStartContext<'_>,
+) {
+    while !sftp_transfer_limit_reached(transfers.len(), pending_downloads.len()) {
+        let Some(request) = queued_uploads.pop_front() else {
+            break;
+        };
+        let transfer_id = request.transfer_id();
+        let slot = match SftpUploadHandle::reserve_global_slot() {
+            Ok(slot) => slot,
+            Err(error) => {
+                let _ = send_sftp_transfer_event(
+                    context.event_tx,
+                    SftpTransferEvent::Failed {
+                        transfer_id,
+                        message: bounded_error_message(&error),
+                    },
+                    context.session_id,
+                )
+                .await;
+                continue;
+            }
+        };
+        match context.connection.open_sftp_stream().await {
+            Ok(stream) => {
+                active_upload_requests.insert(transfer_id, request.clone());
+                transfers.push(ActiveSftpTransfer::Upload(SftpUploadHandle::spawn(
+                    &Handle::current(),
+                    stream,
+                    request,
+                    context.transfer_event_tx.clone(),
+                    slot,
+                )));
+            }
+            Err(error) => {
+                let _ = send_sftp_transfer_event(
+                    context.event_tx,
+                    SftpTransferEvent::Failed {
+                        transfer_id,
+                        message: bounded_error_message(&error),
+                    },
+                    context.session_id,
+                )
+                .await;
+            }
+        }
     }
 }
 

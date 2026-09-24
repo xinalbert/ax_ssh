@@ -1206,6 +1206,105 @@ fn queued_upload_is_not_reclassified_by_worker_queue_event() {
 }
 
 #[test]
+fn upload_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
+    let mut sftp = SftpBrowserState::default();
+    let batch = Uuid::new_v4();
+    let other_batch = Uuid::new_v4();
+    let ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+    for (index, id) in ids.iter().copied().enumerate() {
+        sftp.queue_upload_transfer(
+            id,
+            format!("file-{index}.txt"),
+            10,
+            format!("/tmp/file-{index}.txt").into(),
+            format!("/remote/file-{index}.txt"),
+        )
+        .expect("upload should be queued");
+        sftp.start_transfer(
+            id,
+            format!("/remote/file-{index}.txt"),
+            format!("file-{index}.txt"),
+            10,
+        );
+        sftp.record_upload_conflict(PendingUploadConflict {
+            transfer_id: id,
+            batch_id: if index < 2 { batch } else { other_batch },
+            name: format!("file-{index}.txt"),
+            remote_size: Some(5),
+            remote_modified: Some(42),
+        });
+    }
+
+    assert_eq!(
+        sftp.snapshot(true)
+            .upload_conflict
+            .as_ref()
+            .map(|item| item.transfer_id),
+        Some(ids[0])
+    );
+    sftp.resolve_upload_conflict(ids[0], true);
+    assert_eq!(
+        sftp.snapshot(true)
+            .upload_conflict
+            .as_ref()
+            .map(|item| item.transfer_id),
+        Some(ids[2])
+    );
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Queued);
+    assert_eq!(sftp.transfers[2].phase, SftpTransferPhase::AwaitingConflict);
+
+    sftp.queue_transfer(ids[0], "file-0.txt".to_owned(), 10)
+        .expect("worker retry acknowledgement should be accepted");
+    sftp.start_transfer(
+        ids[0],
+        "/remote/file-0.txt".to_owned(),
+        "file-0.txt".to_owned(),
+        10,
+    );
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Uploading);
+    sftp.finish_transfer(
+        ids[0],
+        SftpTransferPhase::Skipped,
+        "Skipped existing remote file".to_owned(),
+    );
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Skipped);
+}
+
+#[test]
+fn upload_retry_acknowledgement_clears_a_late_conflict_event() {
+    let mut sftp = SftpBrowserState::default();
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "report.txt".to_owned(),
+        10,
+        "/tmp/report.txt".into(),
+        "/remote/report.txt".to_owned(),
+    )
+    .expect("upload should be queued");
+    sftp.start_transfer(
+        id,
+        "/remote/report.txt".to_owned(),
+        "report.txt".to_owned(),
+        10,
+    );
+    sftp.record_upload_conflict(PendingUploadConflict {
+        transfer_id: id,
+        batch_id: Uuid::new_v4(),
+        name: "report.txt".to_owned(),
+        remote_size: Some(5),
+        remote_modified: Some(42),
+    });
+
+    sftp.queue_transfer(id, "report.txt".to_owned(), 10)
+        .expect("worker retry acknowledgement should be accepted");
+
+    assert!(sftp.upload_conflicts.is_empty());
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+}
+
+#[test]
 fn sftp_upload_transfer_does_not_expose_pause_controls() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();
@@ -1312,6 +1411,33 @@ fn completed_upload_refreshes_only_its_visible_remote_directory() {
     );
     assert!(sftp.remove_finished_transfer(transfer_id));
     assert!(sftp.transfers.is_empty());
+}
+
+#[test]
+fn nested_upload_refreshes_visible_ancestor() {
+    let mut sftp = SftpBrowserState {
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "nested.txt".to_owned(),
+        5,
+        "/tmp/nested.txt".into(),
+        "/home/alice/folder/nested.txt".to_owned(),
+    )
+    .expect("nested upload should queue");
+    sftp.start_transfer(
+        id,
+        "/home/alice/folder/nested.txt".to_owned(),
+        "nested.txt".to_owned(),
+        5,
+    );
+    assert_eq!(
+        sftp.finish_uploaded_transfer(id),
+        Some("/home/alice".to_owned())
+    );
 }
 
 #[test]
@@ -1527,6 +1653,71 @@ fn local_navigation_history_survives_failures_and_resets_forward_branch() {
             .begin_navigation(SftpNavigation::Forward, None)
             .is_err()
     );
+}
+
+#[test]
+fn local_refresh_keeps_visible_selection_available_for_upload() {
+    let directory = std::env::temp_dir().join(format!("ax-ssh-local-refresh-{}", Uuid::new_v4()));
+    std::fs::create_dir(&directory).expect("create local fixture directory");
+    std::fs::write(directory.join("selected.txt"), b"upload").expect("create local fixture");
+    let listing = crate::app::local_files::read_local_directory(
+        directory.to_str().expect("fixture path is UTF-8"),
+    )
+    .expect("list local fixture");
+    let path = listing.path;
+    let mut local = LocalDirectoryState {
+        path: path.clone(),
+        ..LocalDirectoryState::default()
+    };
+    assert!(!local.snapshot().loaded);
+    local.complete(path.clone(), listing.entries, false, 0);
+    assert!(local.snapshot().loaded);
+    assert!(local.upload_selection_ready());
+    let selected = local.entries[0].path.clone();
+    assert!(local.toggle_selection(&selected, true));
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some(path.clone()))
+        .expect("same directory refresh should start");
+    assert!(local.upload_selection_ready());
+    assert!(local.entries.iter().any(|entry| entry.path == selected));
+    assert!(local.selected.contains(&selected));
+    local.fail("refresh failed".to_owned());
+    assert!(local.upload_selection_ready());
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some(format!("{path}/other")))
+        .expect("different directory navigation should start");
+    assert!(!local.upload_selection_ready());
+    local.fail("navigation failed".to_owned());
+    assert!(local.upload_selection_ready());
+    assert!(local.entries.iter().any(|entry| entry.path == selected));
+
+    let (stale_request_id, _) = local
+        .begin_navigation(SftpNavigation::Direct, Some(path.clone()))
+        .expect("refresh before reconnect should start");
+    let mut sftp = SftpBrowserState {
+        open: true,
+        path: "/remote/current".to_owned(),
+        local,
+        ..SftpBrowserState::default()
+    };
+    sftp.reset();
+    assert!(!sftp.open);
+    assert!(sftp.path.is_empty());
+    assert_eq!(sftp.local.path, path);
+    assert!(sftp.local.loaded);
+    assert!(!sftp.local.loading);
+    assert_ne!(sftp.local.request_id, stale_request_id);
+    assert!(sftp.local.upload_selection_ready());
+    assert!(sftp.local.selected.contains(&selected));
+    assert!(
+        sftp.local
+            .entries
+            .iter()
+            .any(|entry| entry.path == selected)
+    );
+    std::fs::remove_dir_all(directory).expect("remove local fixture");
 }
 
 #[test]

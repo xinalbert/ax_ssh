@@ -1,0 +1,62 @@
+import { CheckBox } from "std-widgets.slint";
+import { ElidedButton } from "elided-controls.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { Theme } from "../theme.slint";
+
+export component SftpUploadConflictDialog inherits ModalFrame {
+    in property <string> file-name;
+    in property <string> remote-size;
+    in property <string> remote-modified;
+    callback resolve(string, bool);
+
+    private property <bool> apply-to-batch: false;
+
+    dialog-width: Theme.host-dialog-width;
+    dialog-height: 278px;
+    dismissed => { root.resolve("skip", root.apply-to-batch); }
+
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: @tr("Remote file already exists");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        Text {
+            text: root.file-name;
+            color: Theme.text;
+            font-size: Theme.font-body;
+            wrap: word-wrap;
+            overflow: elide;
+        }
+        Text {
+            text: @tr("Remote file: {0} - Modified: {1}", root.remote-size, root.remote-modified);
+            color: Theme.muted;
+            font-size: Theme.font-body;
+            wrap: word-wrap;
+        }
+        CheckBox {
+            text: @tr("Apply this choice to this upload batch");
+            checked <=> root.apply-to-batch;
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton {
+                text: @tr("Skip");
+                clicked => { root.resolve("skip", root.apply-to-batch); }
+            }
+            ElidedButton {
+                text: @tr("Keep both");
+                clicked => { root.resolve("keep-both", root.apply-to-batch); }
+            }
+            ElidedButton {
+                text: @tr("Overwrite");
+                clicked => { root.resolve("overwrite", root.apply-to-batch); }
+            }
+        }
+    }
+}

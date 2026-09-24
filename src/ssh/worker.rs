@@ -20,8 +20,9 @@ use zeroize::Zeroizing;
 
 use crate::config::{SessionProfile, X11Settings};
 use crate::sftp::{
-    SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest,
-    SftpWriteEvent, SftpWriteOperation, validate_remote_path,
+    SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot, SftpTransferEvent,
+    SftpUploadConflictChoice, SftpUploadRequest, SftpWriteEvent, SftpWriteOperation,
+    validate_remote_path,
 };
 use crate::terminal::TerminalOutputChunk;
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
@@ -105,8 +106,13 @@ pub(crate) enum SshCommand {
     OpenSftpFileAtLocalPath {
         request: SftpDownloadRequest,
     },
-    OpenSftpUpload {
-        request: SftpUploadRequest,
+    OpenSftpUploads {
+        requests: Vec<SftpUploadRequest>,
+    },
+    ResolveSftpUploadConflict {
+        transfer_id: Uuid,
+        choice: SftpUploadConflictChoice,
+        apply_to_batch: bool,
     },
     CancelSftpTransfer {
         transfer_id: Uuid,
@@ -444,15 +450,55 @@ impl SshSessionHandle {
     pub fn request_open_sftp_upload(
         &self,
         transfer_id: Uuid,
+        batch_id: Uuid,
         path: String,
         local_path: std::path::PathBuf,
         total_bytes: u64,
     ) -> Result<()> {
-        let request =
-            SftpUploadRequest::from_local_file(transfer_id, path, local_path, total_bytes)?;
+        let request = SftpUploadRequest::from_local_file(
+            transfer_id,
+            batch_id,
+            path,
+            local_path,
+            total_bytes,
+            Vec::new(),
+        )?;
         self.command_tx
-            .try_send(SshCommand::OpenSftpUpload { request })
+            .try_send(SshCommand::OpenSftpUploads {
+                requests: vec![request],
+            })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))
+    }
+
+    pub fn request_open_sftp_upload_batch(
+        &self,
+        batch_id: Uuid,
+        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
+    ) -> Result<()> {
+        let requests = files
+            .into_iter()
+            .map(|(id, path, local, size, directories)| {
+                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.command_tx
+            .try_send(SshCommand::OpenSftpUploads { requests })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
+    }
+
+    pub fn request_resolve_sftp_upload_conflict(
+        &self,
+        transfer_id: Uuid,
+        choice: SftpUploadConflictChoice,
+        apply_to_batch: bool,
+    ) -> Result<()> {
+        self.command_tx
+            .try_send(SshCommand::ResolveSftpUploadConflict {
+                transfer_id,
+                choice,
+                apply_to_batch,
+            })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload decision: {error}"))
     }
 
     pub fn request_pause_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
@@ -570,7 +616,8 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::CloseSftp)
                     | Some(SshCommand::OpenSftpFile { .. })
                     | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
-                    | Some(SshCommand::OpenSftpUpload { .. })
+                    | Some(SshCommand::OpenSftpUploads { .. })
+                    | Some(SshCommand::ResolveSftpUploadConflict { .. })
                     | Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })
                     | Some(SshCommand::ResumeSftpTransfer { .. })

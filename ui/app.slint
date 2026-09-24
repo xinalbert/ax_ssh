@@ -102,6 +102,7 @@ export component AppWindow inherits Window {
     in property <bool> sftp-available: false;
     in property <bool> sftp-open: false;
     in property <bool> sftp-loading: false;
+    in property <bool> sftp-upload-ready: false;
     in property <string> sftp-home: "";
     in property <string> sftp-path: "";
     in property <[SftpEntryRow]> sftp-entries;
@@ -110,11 +111,18 @@ export component AppWindow inherits Window {
     in property <bool> sftp-has-more: false;
     in property <bool> sftp-truncated: false;
     in property <string> sftp-status: "";
+    in property <bool> sftp-upload-conflict-open: false;
+    in property <string> sftp-upload-conflict-id: "";
+    in property <string> sftp-upload-conflict-name: "";
+    in property <string> sftp-upload-conflict-size: "";
+    in property <string> sftp-upload-conflict-modified: "";
     in property <bool> sftp-can-go-back: false;
     in property <bool> sftp-can-go-forward: false;
     in property <int> sftp-selected-count: 0;
     in property <bool> sftp-all-selected: false;
     in property <bool> local-sftp-loading: false;
+    in property <bool> local-sftp-loaded: false;
+    in property <bool> local-sftp-upload-selection-ready: false;
     in property <string> local-sftp-path: "";
     in property <[SftpEntryRow]> local-sftp-entries;
     in property <string> local-sftp-sort-column: "modified";
@@ -294,12 +302,15 @@ export component AppWindow inherits Window {
         terminal_dividers: root.terminal-dividers,
         sftp: {
             available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
+            upload_ready: root.sftp-upload-ready,
             home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
             remote_sort_column: root.sftp-sort-column, remote_sort_descending: root.sftp-sort-descending,
             has_more: root.sftp-has-more, truncated: root.sftp-truncated, status: root.sftp-status,
             can_go_back: root.sftp-can-go-back, can_go_forward: root.sftp-can-go-forward,
             selected_count: root.sftp-selected-count, all_selected: root.sftp-all-selected,
-            local_loading: root.local-sftp-loading, local_path: root.local-sftp-path,
+            local_loading: root.local-sftp-loading, local_loaded: root.local-sftp-loaded,
+            local_upload_selection_ready: root.local-sftp-upload-selection-ready,
+            local_path: root.local-sftp-path,
             local_entries: root.local-sftp-entries, local_sort_column: root.local-sftp-sort-column,
             local_sort_descending: root.local-sftp-sort-descending, local_has_more: root.local-sftp-has-more,
             local_truncated: root.local-sftp-truncated,
@@ -517,6 +528,7 @@ export component AppWindow inherits Window {
     callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
+    callback resolve-sftp-upload-conflict(string, string, bool);
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
     callback close-sftp();
@@ -1064,6 +1076,14 @@ export component AppWindow inherits Window {
         terminal-notice-pane-id: root.active-pane-id;
         window-active: root.window-active;
         monospace-font-family: root.application-font-family;
+        upload-conflict-open: root.sftp-upload-conflict-open;
+        upload-conflict-id: root.sftp-upload-conflict-id;
+        upload-conflict-name: root.sftp-upload-conflict-name;
+        upload-conflict-size: root.sftp-upload-conflict-size;
+        upload-conflict-modified: root.sftp-upload-conflict-modified;
+        resolve-sftp-upload-conflict(id, choice, apply-to-batch) => {
+            root.resolve-sftp-upload-conflict(id, choice, apply-to-batch);
+        }
         terminal-notice-action(id, command) => {
             root.terminal-pane-command(id, command);
         }

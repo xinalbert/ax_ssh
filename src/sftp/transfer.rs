@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use russh_sftp::client::{Config, RawSftpSession};
-use russh_sftp::protocol::{File, FileAttributes, OpenFlags, StatusCode};
+use russh_sftp::protocol::{File, FileAttributes, OpenFlags, Packet, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc};
@@ -59,6 +59,16 @@ const MAX_CACHE_FILES: usize = 128;
 static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static GLOBAL_UPLOAD_SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
+const POSIX_RENAME_EXTENSION: &str = "posix-rename@openssh.com";
+const MAX_KEEP_BOTH_CANDIDATES: usize = 100;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SftpUploadConflictChoice {
+    Skip,
+    Overwrite,
+    KeepBoth,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SftpTransferEvent {
     Queued {
@@ -93,6 +103,16 @@ pub enum SftpTransferEvent {
         name: String,
         message: String,
     },
+    UploadConflict {
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        name: String,
+        remote_size: Option<u64>,
+        remote_modified: Option<u32>,
+    },
+    Skipped {
+        transfer_id: Uuid,
+    },
     Completed {
         transfer_id: Uuid,
         local_path: PathBuf,
@@ -110,11 +130,21 @@ pub enum SftpTransferEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SftpUploadRequest {
     transfer_id: Uuid,
+    batch_id: Uuid,
     remote_path: String,
     name: String,
     local_path: PathBuf,
+    remote_directories: Vec<String>,
     total_bytes: u64,
     local_identity: Arc<LocalUploadIdentity>,
+    conflict_choice: Option<SftpUploadConflictChoice>,
+    expected_remote: Option<RemoteUploadFingerprint>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RemoteUploadFingerprint {
+    size: Option<u64>,
+    modified: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,9 +161,11 @@ struct LocalUploadIdentity {
 impl SftpUploadRequest {
     pub(crate) fn from_local_file(
         transfer_id: Uuid,
+        batch_id: Uuid,
         remote_path: String,
         local_path: PathBuf,
         total_bytes: u64,
+        remote_directories: Vec<String>,
     ) -> Result<Self> {
         let metadata = fs::symlink_metadata(&local_path)
             .with_context(|| format!("cannot inspect local upload file {local_path:?}"))?;
@@ -144,6 +176,14 @@ impl SftpUploadRequest {
             anyhow::bail!("local upload file size changed before it was queued");
         }
         validate_remote_path(&remote_path)?;
+        for directory in &remote_directories {
+            validate_remote_path(directory)?;
+            if directory.is_empty()
+                || !remote_path.starts_with(&format!("{}/", directory.trim_end_matches('/')))
+            {
+                anyhow::bail!("remote upload directory is invalid");
+            }
+        }
         if total_bytes > super::MAX_UPLOAD_BYTES {
             anyhow::bail!(
                 "upload content exceeds the {}-byte limit",
@@ -166,16 +206,32 @@ impl SftpUploadRequest {
         let name = name.to_owned();
         Ok(Self {
             transfer_id,
+            batch_id,
             remote_path,
             name,
             local_path,
+            remote_directories,
             total_bytes,
             local_identity: Arc::new(local_upload_identity(&metadata)),
+            conflict_choice: None,
+            expected_remote: None,
         })
     }
 
     pub(crate) fn transfer_id(&self) -> Uuid {
         self.transfer_id
+    }
+
+    pub(crate) fn batch_id(&self) -> Uuid {
+        self.batch_id
+    }
+
+    pub(crate) fn set_conflict_choice(&mut self, choice: SftpUploadConflictChoice) {
+        self.conflict_choice = Some(choice);
+    }
+
+    pub(crate) fn set_expected_remote(&mut self, size: Option<u64>, modified: Option<u32>) {
+        self.expected_remote = Some(RemoteUploadFingerprint { size, modified });
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -648,10 +704,22 @@ async fn run_upload<S>(
     }
     let result = upload_initialized(stream, &request, &cancellation, &event_tx).await;
     let terminal = match result {
-        Ok(()) if cancellation.is_cancelled() => SftpTransferEvent::Cancelled {
+        Ok(UploadOutcome::Conflict(remote)) => SftpTransferEvent::UploadConflict {
+            transfer_id: request.transfer_id,
+            batch_id: request.batch_id,
+            name: request.name.clone(),
+            remote_size: remote.size,
+            remote_modified: remote.modified,
+        },
+        Ok(UploadOutcome::Skipped) => SftpTransferEvent::Skipped {
             transfer_id: request.transfer_id,
         },
-        Ok(()) => SftpTransferEvent::Completed {
+        Ok(UploadOutcome::Published) if cancellation.is_cancelled() => {
+            SftpTransferEvent::Cancelled {
+                transfer_id: request.transfer_id,
+            }
+        }
+        Ok(UploadOutcome::Published) => SftpTransferEvent::Completed {
             transfer_id: request.transfer_id,
             local_path: PathBuf::new(),
             total_bytes,
@@ -671,12 +739,18 @@ fn global_upload_slots() -> &'static Arc<Semaphore> {
     GLOBAL_UPLOAD_SLOTS.get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_UPLOADS)))
 }
 
+enum UploadOutcome {
+    Published,
+    Conflict(RemoteUploadFingerprint),
+    Skipped,
+}
+
 async fn upload_initialized<S>(
     stream: S,
     request: &SftpUploadRequest,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
-) -> Result<()>
+) -> Result<UploadOutcome>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -691,7 +765,7 @@ where
             request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
         },
     );
-    await_step(
+    let version = await_step(
         cancellation,
         deadline,
         REQUEST_TIMEOUT,
@@ -709,12 +783,73 @@ where
         "{parent}/.{}.axssh-upload-{}",
         request.name, request.transfer_id
     );
-    let target_check =
-        ensure_remote_target_absent_for_transfer(&session, &request.remote_path).await;
-    if let Err(error) = target_check {
+    if let Err(error) =
+        ensure_remote_upload_directories(&session, &request.remote_directories).await
+    {
         let _ = session.close_session();
         return Err(error);
     }
+    let existing = match inspect_remote_upload_target(&session, &request.remote_path).await {
+        Ok(existing) => existing,
+        Err(error) => {
+            let _ = session.close_session();
+            return Err(error);
+        }
+    };
+    let target_result = match (existing, request.conflict_choice) {
+        (Some(remote), None) => {
+            let _ = session.close_session();
+            return Ok(UploadOutcome::Conflict(remote));
+        }
+        (Some(_), Some(SftpUploadConflictChoice::Skip)) => {
+            let _ = session.close_session();
+            return Ok(UploadOutcome::Skipped);
+        }
+        (Some(remote), Some(SftpUploadConflictChoice::Overwrite)) => {
+            if request
+                .expected_remote
+                .is_some_and(|expected| expected.size.is_none() && expected.modified.is_none())
+            {
+                Err(anyhow::anyhow!(
+                    "server did not provide a remote fingerprint for overwrite"
+                ))
+            } else if request
+                .expected_remote
+                .is_some_and(|expected| expected != remote)
+            {
+                Err(anyhow::anyhow!(
+                    "remote upload target changed while awaiting confirmation"
+                ))
+            } else if version
+                .extensions
+                .get(POSIX_RENAME_EXTENSION)
+                .map(String::as_str)
+                != Some("1")
+            {
+                Err(anyhow::anyhow!(
+                    "server does not support atomic SFTP overwrite"
+                ))
+            } else {
+                Ok((request.remote_path.clone(), true))
+            }
+        }
+        (Some(_), Some(SftpUploadConflictChoice::KeepBoth)) => {
+            find_keep_both_path(&session, &request.remote_path)
+                .await
+                .map(|path| (path, false))
+        }
+        (None, _) if request.expected_remote.is_some() => Err(anyhow::anyhow!(
+            "remote upload target changed while awaiting confirmation"
+        )),
+        (None, _) => Ok((request.remote_path.clone(), false)),
+    };
+    let (target_path, overwrite) = match target_result {
+        Ok(target) => target,
+        Err(error) => {
+            let _ = session.close_session();
+            return Err(error);
+        }
+    };
     let handle = await_step(
         cancellation,
         deadline,
@@ -777,21 +912,38 @@ where
     .await;
     let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
     if result.is_ok() && !cancellation.is_cancelled() {
-        if let Err(error) = timeout(
-            REQUEST_TIMEOUT,
-            session.rename(temporary.clone(), request.remote_path.clone()),
-        )
-        .await
-        .context("publishing remote upload timed out")?
-        {
+        let published = async {
+            let current = inspect_remote_upload_target(&session, &target_path).await?;
+            if overwrite {
+                if current != existing {
+                    anyhow::bail!("remote upload target changed before publication");
+                }
+                posix_rename_upload(&session, &temporary, &target_path).await
+            } else {
+                if current.is_some() {
+                    anyhow::bail!("remote upload target appeared before publication");
+                }
+                timeout(
+                    REQUEST_TIMEOUT,
+                    session.rename(temporary.clone(), target_path.clone()),
+                )
+                .await
+                .context("publishing remote upload timed out")?
+                .context("cannot publish remote upload")?;
+                Ok(())
+            }
+        }
+        .await;
+        if let Err(error) = published {
             let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
-            return Err(error.into());
+            let _ = session.close_session();
+            return Err(error);
         }
     } else {
         let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
     }
     let _ = session.close_session();
-    result
+    result.map(|()| UploadOutcome::Published)
 }
 
 async fn read_local_upload_chunk(
@@ -857,19 +1009,103 @@ fn local_upload_identity(metadata: &fs::Metadata) -> LocalUploadIdentity {
     }
 }
 
-async fn ensure_remote_target_absent_for_transfer(
+async fn inspect_remote_upload_target(
     session: &RawSftpSession,
     path: &str,
-) -> Result<()> {
+) -> Result<Option<RemoteUploadFingerprint>> {
     match timeout(REQUEST_TIMEOUT, session.lstat(path.to_owned())).await {
-        Ok(Ok(_)) => anyhow::bail!("remote target already exists; upload was rejected"),
+        Ok(Ok(attrs)) if attrs.attrs.is_regular() => Ok(Some(RemoteUploadFingerprint {
+            size: attrs.attrs.size,
+            modified: attrs.attrs.mtime,
+        })),
+        Ok(Ok(_)) => anyhow::bail!("remote upload target is not a regular file"),
         Ok(Err(russh_sftp::client::error::Error::Status(status)))
             if status.status_code == StatusCode::NoSuchFile =>
         {
-            Ok(())
+            Ok(None)
         }
         Ok(Err(error)) => Err(error).context("SFTP upload target check failed"),
         Err(_) => anyhow::bail!("SFTP upload target check timed out"),
+    }
+}
+
+async fn ensure_remote_upload_directories(
+    session: &RawSftpSession,
+    directories: &[String],
+) -> Result<()> {
+    for directory in directories {
+        let check = timeout(REQUEST_TIMEOUT, session.lstat(directory.clone()))
+            .await
+            .context("SFTP upload directory check timed out")?;
+        match check {
+            Ok(attrs) if attrs.attrs.is_dir() => continue,
+            Ok(_) => anyhow::bail!("remote upload directory is not a directory"),
+            Err(russh_sftp::client::error::Error::Status(status))
+                if status.status_code == StatusCode::NoSuchFile => {}
+            Err(error) => return Err(error).context("SFTP upload directory check failed"),
+        }
+        let created = timeout(
+            REQUEST_TIMEOUT,
+            session.mkdir(directory.clone(), FileAttributes::default()),
+        )
+        .await
+        .context("creating remote upload directory timed out")?;
+        if let Err(error) = created {
+            let check = timeout(REQUEST_TIMEOUT, session.lstat(directory.clone()))
+                .await
+                .context("rechecking remote upload directory timed out")?;
+            match check {
+                Ok(attrs) if attrs.attrs.is_dir() => continue,
+                _ => return Err(error).context("cannot create remote upload directory"),
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn find_keep_both_path(session: &RawSftpSession, original: &str) -> Result<String> {
+    let (parent, name) = original
+        .rsplit_once('/')
+        .context("remote upload path is invalid")?;
+    let (stem, extension) = name
+        .rsplit_once('.')
+        .filter(|(stem, _)| !stem.is_empty())
+        .map_or((name, ""), |(stem, extension)| (stem, extension));
+    for number in 1..=MAX_KEEP_BOTH_CANDIDATES {
+        let candidate_name = if extension.is_empty() {
+            format!("{stem} ({number})")
+        } else {
+            format!("{stem} ({number}).{extension}")
+        };
+        if candidate_name.chars().count() > MAX_NAME_CHARS {
+            anyhow::bail!("remote file name is too long to keep both copies");
+        }
+        let candidate = format!("{parent}/{candidate_name}");
+        validate_remote_path(&candidate)?;
+        if inspect_remote_upload_target(session, &candidate)
+            .await?
+            .is_none()
+        {
+            return Ok(candidate);
+        }
+    }
+    anyhow::bail!("no available remote name for another copy")
+}
+
+async fn posix_rename_upload(session: &RawSftpSession, from: &str, to: &str) -> Result<()> {
+    let payload = russh_sftp::ser::to_bytes(&(from, to))
+        .context("cannot encode SFTP atomic overwrite request")?;
+    match timeout(
+        REQUEST_TIMEOUT,
+        session.extended(POSIX_RENAME_EXTENSION, payload.to_vec()),
+    )
+    .await
+    .context("SFTP atomic overwrite timed out")?
+    .context("SFTP atomic overwrite failed")?
+    {
+        Packet::Status(status) if status.status_code == StatusCode::Ok => Ok(()),
+        Packet::Status(status) => anyhow::bail!("SFTP atomic overwrite failed: {status:?}"),
+        _ => anyhow::bail!("SFTP atomic overwrite returned an unexpected response"),
     }
 }
 
@@ -1873,9 +2109,10 @@ fn join_remote_path(parent: &str, child: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
     use std::sync::Mutex;
 
-    use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status};
+    use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status, Version};
 
     #[test]
     fn transfer_filter_patterns_match_exact_names_and_wildcards() {
@@ -1928,15 +2165,311 @@ mod tests {
         fs::write(&path, vec![0_u8; 64 * 1024]).expect("request fixture should write");
         let request = SftpUploadRequest::from_local_file(
             Uuid::new_v4(),
+            Uuid::new_v4(),
             "/remote/example.bin".to_owned(),
             path.clone(),
             64 * 1024,
+            Vec::new(),
         )
         .expect("local upload request should validate");
 
         assert_eq!(request.local_path, path);
         assert_eq!(request.total_bytes(), 64 * 1024);
         fs::remove_file(path).expect("request fixture should be removed");
+    }
+
+    struct UploadTestServer {
+        files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        directories: Arc<Mutex<HashSet<String>>>,
+    }
+
+    fn upload_test_status(id: u32) -> Status {
+        Status {
+            id,
+            status_code: StatusCode::Ok,
+            error_message: "Ok".to_owned(),
+            language_tag: "en-US".to_owned(),
+        }
+    }
+
+    impl russh_sftp::server::Handler for UploadTestServer {
+        type Error = StatusCode;
+
+        fn unimplemented(&self) -> Self::Error {
+            StatusCode::OpUnsupported
+        }
+
+        async fn init(
+            &mut self,
+            _version: u32,
+            _extensions: HashMap<String, String>,
+        ) -> std::result::Result<Version, Self::Error> {
+            let mut version = Version::new();
+            version
+                .extensions
+                .insert(POSIX_RENAME_EXTENSION.to_owned(), "1".to_owned());
+            Ok(version)
+        }
+
+        async fn lstat(
+            &mut self,
+            id: u32,
+            path: String,
+        ) -> std::result::Result<Attrs, Self::Error> {
+            let files = self.files.lock().map_err(|_| StatusCode::Failure)?;
+            let mut attrs = FileAttributes::empty();
+            if let Some(content) = files.get(&path) {
+                attrs.set_regular(true);
+                attrs.size = Some(content.len() as u64);
+                attrs.mtime = Some(1234);
+            } else if self
+                .directories
+                .lock()
+                .map_err(|_| StatusCode::Failure)?
+                .contains(&path)
+            {
+                attrs.set_dir(true);
+            } else {
+                return Err(StatusCode::NoSuchFile);
+            }
+            Ok(Attrs { id, attrs })
+        }
+
+        async fn mkdir(
+            &mut self,
+            id: u32,
+            path: String,
+            _attrs: FileAttributes,
+        ) -> std::result::Result<Status, Self::Error> {
+            let mut directories = self.directories.lock().map_err(|_| StatusCode::Failure)?;
+            let parent = path
+                .rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or("");
+            if !directories.contains(parent) || !directories.insert(path) {
+                return Err(StatusCode::Failure);
+            }
+            Ok(upload_test_status(id))
+        }
+
+        async fn open(
+            &mut self,
+            id: u32,
+            filename: String,
+            flags: OpenFlags,
+            _attrs: FileAttributes,
+        ) -> std::result::Result<RemoteHandle, Self::Error> {
+            if !flags.contains(OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE) {
+                return Err(StatusCode::PermissionDenied);
+            }
+            let mut files = self.files.lock().map_err(|_| StatusCode::Failure)?;
+            if files.contains_key(&filename) {
+                return Err(StatusCode::Failure);
+            }
+            files.insert(filename.clone(), Vec::new());
+            Ok(RemoteHandle {
+                id,
+                handle: filename,
+            })
+        }
+
+        async fn write(
+            &mut self,
+            id: u32,
+            handle: String,
+            offset: u64,
+            data: Vec<u8>,
+        ) -> std::result::Result<Status, Self::Error> {
+            let mut files = self.files.lock().map_err(|_| StatusCode::Failure)?;
+            let file = files.get_mut(&handle).ok_or(StatusCode::NoSuchFile)?;
+            if file.len() != offset as usize {
+                return Err(StatusCode::BadMessage);
+            }
+            file.extend(data);
+            Ok(upload_test_status(id))
+        }
+
+        async fn close(
+            &mut self,
+            id: u32,
+            _handle: String,
+        ) -> std::result::Result<Status, Self::Error> {
+            Ok(upload_test_status(id))
+        }
+
+        async fn rename(
+            &mut self,
+            id: u32,
+            oldpath: String,
+            newpath: String,
+        ) -> std::result::Result<Status, Self::Error> {
+            let mut files = self.files.lock().map_err(|_| StatusCode::Failure)?;
+            if files.contains_key(&newpath) {
+                return Err(StatusCode::Failure);
+            }
+            let content = files.remove(&oldpath).ok_or(StatusCode::NoSuchFile)?;
+            files.insert(newpath, content);
+            Ok(upload_test_status(id))
+        }
+
+        async fn extended(
+            &mut self,
+            id: u32,
+            request: String,
+            data: Vec<u8>,
+        ) -> std::result::Result<Packet, Self::Error> {
+            if request != POSIX_RENAME_EXTENSION || data.is_empty() {
+                return Err(StatusCode::OpUnsupported);
+            }
+            let mut files = self.files.lock().map_err(|_| StatusCode::Failure)?;
+            let temporary = files
+                .keys()
+                .find(|path| path.starts_with("/srv/.report.txt.axssh-upload-"))
+                .cloned()
+                .ok_or(StatusCode::NoSuchFile)?;
+            let content = files.remove(&temporary).ok_or(StatusCode::NoSuchFile)?;
+            files.insert("/srv/report.txt".to_owned(), content);
+            Ok(Packet::Status(upload_test_status(id)))
+        }
+
+        async fn remove(
+            &mut self,
+            id: u32,
+            filename: String,
+        ) -> std::result::Result<Status, Self::Error> {
+            self.files
+                .lock()
+                .map_err(|_| StatusCode::Failure)?
+                .remove(&filename);
+            Ok(upload_test_status(id))
+        }
+    }
+
+    async fn run_upload_test(
+        request: &SftpUploadRequest,
+        files: &Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        cancellation: &TransferCancellation,
+        event_tx: &mpsc::Sender<SftpTransferEvent>,
+    ) -> Result<UploadOutcome> {
+        let (client, server) = tokio::io::duplex(64 * 1024);
+        russh_sftp::server::run(
+            server,
+            UploadTestServer {
+                files: files.clone(),
+                directories: Arc::new(Mutex::new(HashSet::from(["/srv".to_owned()]))),
+            },
+        )
+        .await;
+        upload_initialized(client, request, cancellation, event_tx).await
+    }
+
+    #[tokio::test]
+    async fn upload_conflict_choices_preserve_or_publish_the_expected_remote_file() {
+        let path =
+            std::env::temp_dir().join(format!("ax-ssh-upload-conflict-{}.txt", Uuid::new_v4()));
+        fs::write(&path, b"new content").expect("local upload fixture should write");
+        let files = Arc::new(Mutex::new(HashMap::from([(
+            "/srv/report.txt".to_owned(),
+            b"old".to_vec(),
+        )])));
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "/srv/report.txt".to_owned(),
+            path.clone(),
+            11,
+            Vec::new(),
+        )
+        .expect("upload request should validate");
+        let cancellation = TransferCancellation::new();
+        let (event_tx, _events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+
+        assert!(matches!(
+            run_upload_test(&request, &files, &cancellation, &event_tx)
+                .await
+                .expect("conflict should be reported"),
+            UploadOutcome::Conflict(_)
+        ));
+        let mut skip = request.clone();
+        skip.set_conflict_choice(SftpUploadConflictChoice::Skip);
+        assert!(matches!(
+            run_upload_test(&skip, &files, &cancellation, &event_tx)
+                .await
+                .expect("skip should finish"),
+            UploadOutcome::Skipped
+        ));
+        assert_eq!(
+            files.lock().expect("remote files should lock")["/srv/report.txt"],
+            b"old"
+        );
+
+        let mut keep_both = request.clone();
+        keep_both.set_conflict_choice(SftpUploadConflictChoice::KeepBoth);
+        assert!(matches!(
+            run_upload_test(&keep_both, &files, &cancellation, &event_tx)
+                .await
+                .expect("second copy should publish"),
+            UploadOutcome::Published
+        ));
+        assert_eq!(
+            files.lock().expect("remote files should lock")["/srv/report (1).txt"],
+            b"new content"
+        );
+
+        let mut overwrite = request;
+        overwrite.set_conflict_choice(SftpUploadConflictChoice::Overwrite);
+        overwrite.set_expected_remote(Some(4), Some(1234));
+        assert!(
+            run_upload_test(&overwrite, &files, &cancellation, &event_tx)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            files.lock().expect("remote files should lock")["/srv/report.txt"],
+            b"old"
+        );
+        overwrite.set_expected_remote(Some(3), Some(1234));
+        assert!(matches!(
+            run_upload_test(&overwrite, &files, &cancellation, &event_tx)
+                .await
+                .expect("overwrite should publish"),
+            UploadOutcome::Published
+        ));
+        assert_eq!(
+            files.lock().expect("remote files should lock")["/srv/report.txt"],
+            b"new content"
+        );
+        fs::remove_file(path).expect("local upload fixture should be removed");
+    }
+
+    #[tokio::test]
+    async fn upload_creates_nested_remote_directories_before_publishing() {
+        let path =
+            std::env::temp_dir().join(format!("ax-ssh-nested-upload-{}.txt", Uuid::new_v4()));
+        fs::write(&path, b"nested").expect("nested upload fixture should write");
+        let files = Arc::new(Mutex::new(HashMap::new()));
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "/srv/folder/nested/file.txt".to_owned(),
+            path.clone(),
+            6,
+            vec!["/srv/folder".to_owned(), "/srv/folder/nested".to_owned()],
+        )
+        .expect("nested upload request should validate");
+        let cancellation = TransferCancellation::new();
+        let (event_tx, _events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+        assert!(matches!(
+            run_upload_test(&request, &files, &cancellation, &event_tx)
+                .await
+                .expect("nested upload should publish"),
+            UploadOutcome::Published
+        ));
+        assert_eq!(
+            files.lock().expect("remote files should lock")["/srv/folder/nested/file.txt"],
+            b"nested"
+        );
+        fs::remove_file(path).expect("nested upload fixture should be removed");
     }
 
     struct TestCacheDir(PathBuf);

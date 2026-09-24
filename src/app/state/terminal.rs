@@ -690,16 +690,28 @@ impl TerminalWorker {
         }
     }
 
-    pub(in crate::app) fn request_open_sftp_upload(
+    pub(in crate::app) fn request_open_sftp_upload_batch(
+        &self,
+        batch_id: Uuid,
+        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
+    ) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_open_sftp_upload_batch(batch_id, files),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(in crate::app) fn request_resolve_sftp_upload_conflict(
         &self,
         transfer_id: Uuid,
-        path: String,
-        local_path: std::path::PathBuf,
-        total_bytes: u64,
+        choice: ax_ssh::sftp::SftpUploadConflictChoice,
+        apply_to_batch: bool,
     ) -> Result<()> {
         match self {
             Self::Ssh(worker) => {
-                worker.request_open_sftp_upload(transfer_id, path, local_path, total_bytes)
+                worker.request_resolve_sftp_upload_conflict(transfer_id, choice, apply_to_batch)
             }
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")

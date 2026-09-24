@@ -44,6 +44,7 @@ impl SftpBrowserState {
             available,
             open: self.open,
             loading: self.loading,
+            upload_ready: available && self.upload_directory().is_some(),
             home: self.home.clone(),
             path: self.path.clone(),
             entries: self.entries.clone(),
@@ -62,6 +63,7 @@ impl SftpBrowserState {
                 .iter()
                 .map(|transfer| transfer.snapshot(self.selected_transfers.contains(&transfer.id)))
                 .collect(),
+            upload_conflict: self.upload_conflicts.front().cloned(),
             transfer_selected_active_count,
             transfer_selected_pausable_count,
             transfer_selected_resumable_count,
@@ -124,6 +126,16 @@ impl SftpBrowserState {
         )
     }
 
+    pub(in crate::app) fn can_queue_uploads(&self, count: usize) -> bool {
+        count <= SFTP_TRANSFER_HISTORY_LIMIT
+            && self
+                .transfers
+                .iter()
+                .filter(|transfer| transfer.phase.active())
+                .count()
+                <= SFTP_TRANSFER_HISTORY_LIMIT - count
+    }
+
     fn queue_transfer_with_pause(
         &mut self,
         id: Uuid,
@@ -133,8 +145,18 @@ impl SftpBrowserState {
         local_path: Option<std::path::PathBuf>,
         remote_path: Option<String>,
     ) -> Result<()> {
+        self.upload_conflicts
+            .retain(|conflict| conflict.transfer_id != id);
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
-            if transfer.phase == SftpTransferPhase::Queued {
+            if transfer.phase == SftpTransferPhase::Queued
+                || (transfer.direction == SftpTransferDirection::Upload
+                    && matches!(
+                        transfer.phase,
+                        SftpTransferPhase::AwaitingConflict | SftpTransferPhase::Uploading
+                    ))
+            {
+                transfer.phase = SftpTransferPhase::Queued;
+                transfer.status = "Queued".to_owned();
                 transfer.name = name;
                 transfer.total_bytes = total_bytes;
                 if local_path.is_some() {
@@ -203,7 +225,9 @@ impl SftpBrowserState {
         };
         if !matches!(
             transfer.phase,
-            SftpTransferPhase::Queued | SftpTransferPhase::Resuming
+            SftpTransferPhase::Queued
+                | SftpTransferPhase::AwaitingConflict
+                | SftpTransferPhase::Resuming
         ) {
             return;
         }
@@ -215,6 +239,53 @@ impl SftpBrowserState {
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
         transfer.status = transfer.direction.active_status().to_owned();
+    }
+
+    pub(in crate::app) fn record_upload_conflict(&mut self, conflict: PendingUploadConflict) {
+        let Some(transfer) = self
+            .transfers
+            .iter_mut()
+            .find(|item| item.id == conflict.transfer_id)
+        else {
+            return;
+        };
+        if transfer.direction != SftpTransferDirection::Upload
+            || !matches!(
+                transfer.phase,
+                SftpTransferPhase::Queued | SftpTransferPhase::Uploading
+            )
+        {
+            return;
+        }
+        transfer.phase = SftpTransferPhase::AwaitingConflict;
+        transfer.status = "Waiting for file conflict decision".to_owned();
+        self.upload_conflicts.push_back(conflict);
+    }
+
+    pub(in crate::app) fn resolve_upload_conflict(&mut self, id: Uuid, apply_to_batch: bool) {
+        let batch_id = self
+            .upload_conflicts
+            .iter()
+            .find(|item| item.transfer_id == id)
+            .map(|item| item.batch_id);
+        let resolved = self
+            .upload_conflicts
+            .iter()
+            .filter(|item| {
+                item.transfer_id == id || (apply_to_batch && Some(item.batch_id) == batch_id)
+            })
+            .map(|item| item.transfer_id)
+            .collect::<HashSet<_>>();
+        self.upload_conflicts
+            .retain(|item| !resolved.contains(&item.transfer_id));
+        for transfer in &mut self.transfers {
+            if resolved.contains(&transfer.id)
+                && transfer.phase == SftpTransferPhase::AwaitingConflict
+            {
+                transfer.phase = SftpTransferPhase::Queued;
+                transfer.status = "Queued".to_owned();
+            }
+        }
     }
 
     pub(in crate::app) fn update_transfer_progress(
@@ -296,8 +367,13 @@ impl SftpBrowserState {
             })
             .and_then(|transfer| transfer.remote_path.as_deref())
             .and_then(remote_parent)
-            .filter(|directory| !self.loading && *directory == self.path)
-            .map(str::to_owned);
+            .filter(|directory| {
+                !self.loading
+                    && (self.path == *directory
+                        || (self.path == "/" && directory.starts_with('/'))
+                        || directory.starts_with(&format!("{}/", self.path.trim_end_matches('/'))))
+            })
+            .map(|_| self.path.clone());
         self.finish_transfer(id, SftpTransferPhase::Completed, "Uploaded".to_owned());
         refresh_path
     }
@@ -311,6 +387,20 @@ impl SftpBrowserState {
         }
         self.begin_navigation(SftpNavigation::Direct, Some(directory.to_owned()))
             .map(Some)
+    }
+
+    pub(in crate::app) fn upload_directory(&self) -> Option<&str> {
+        if !self.open || self.path.trim().is_empty() {
+            return None;
+        }
+        if self
+            .pending_navigation
+            .as_ref()
+            .is_some_and(|pending| pending.requested != self.path)
+        {
+            return None;
+        }
+        Some(self.path.as_str())
     }
 
     pub(in crate::app) fn completed_transfer_local_path(
@@ -474,6 +564,8 @@ impl SftpBrowserState {
         phase: SftpTransferPhase,
         status: String,
     ) {
+        self.upload_conflicts
+            .retain(|conflict| conflict.transfer_id != id);
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return;
         };
@@ -481,10 +573,20 @@ impl SftpBrowserState {
             (transfer.phase, phase),
             (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Queued, SftpTransferPhase::Skipped)
+                | (
+                    SftpTransferPhase::AwaitingConflict,
+                    SftpTransferPhase::Cancelled
+                )
+                | (
+                    SftpTransferPhase::AwaitingConflict,
+                    SftpTransferPhase::Failed
+                )
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Uploading, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Uploading, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Uploading, SftpTransferPhase::Skipped)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Paused, SftpTransferPhase::Cancelled)
@@ -682,7 +784,19 @@ impl SftpBrowserState {
     }
 
     pub(in crate::app) fn reset(&mut self) {
+        let mut local = std::mem::take(&mut self.local);
+        local.request_id = local.request_id.wrapping_add(1).max(1);
+        local.pending_navigation = None;
+        if local.loading {
+            local.loading = false;
+            if local.loaded {
+                local.update_status();
+            } else {
+                local.status = "Local directory not loaded".to_owned();
+            }
+        }
         *self = Self::default();
+        self.local = local;
     }
 
     pub(in crate::app) fn set_editor_text(&mut self, text: String) -> Option<(String, u64)> {
@@ -750,11 +864,6 @@ impl LocalDirectoryState {
         });
         self.request_id = self.request_id.wrapping_add(1);
         self.loading = true;
-        self.entries.clear();
-        self.pending_entries.clear();
-        self.has_more = false;
-        self.truncated = false;
-        self.skipped_entries = 0;
         self.status = "Loading local directory...".to_owned();
         Ok((self.request_id, requested))
     }
@@ -799,6 +908,7 @@ impl LocalDirectoryState {
             self.selected.clear();
         }
         self.loading = false;
+        self.loaded = true;
         self.path = path;
         self.entries.clear();
         self.pending_entries = entries.into();
@@ -868,6 +978,14 @@ impl LocalDirectoryState {
         self.status = message;
     }
 
+    pub(in crate::app) fn upload_selection_ready(&self) -> bool {
+        self.loaded
+            && self
+                .pending_navigation
+                .as_ref()
+                .is_none_or(|pending| pending.requested == self.path)
+    }
+
     pub(in crate::app) fn toggle_selection(&mut self, path: &str, selected: bool) -> bool {
         if !self.entries.iter().any(|entry| entry.path == path) {
             return false;
@@ -902,7 +1020,9 @@ impl LocalDirectoryState {
 
     pub(in crate::app) fn snapshot(&self) -> LocalDirectorySnapshot {
         LocalDirectorySnapshot {
+            loaded: self.loaded,
             loading: self.loading,
+            upload_selection_ready: self.upload_selection_ready(),
             path: self.path.clone(),
             entries: self.entries.clone(),
             sort: self.sort,
@@ -1003,6 +1123,8 @@ impl SftpTransferPhase {
     pub(in crate::app) fn as_str(self) -> &'static str {
         match self {
             Self::Queued => "queued",
+            Self::AwaitingConflict => "awaiting-conflict",
+            Self::Skipped => "skipped",
             Self::Downloading => "downloading",
             Self::Uploading => "uploading",
             Self::Pausing => "pausing",
@@ -1019,6 +1141,7 @@ impl SftpTransferPhase {
         matches!(
             self,
             Self::Queued
+                | Self::AwaitingConflict
                 | Self::Downloading
                 | Self::Uploading
                 | Self::Pausing
@@ -1039,6 +1162,7 @@ impl SftpTransferPhase {
         matches!(
             self,
             Self::Queued
+                | Self::AwaitingConflict
                 | Self::Downloading
                 | Self::Uploading
                 | Self::Pausing
@@ -1052,6 +1176,7 @@ impl SftpTransferPhase {
         matches!(
             self,
             Self::Queued
+                | Self::AwaitingConflict
                 | Self::Downloading
                 | Self::Uploading
                 | Self::Pausing

@@ -232,6 +232,21 @@ pub(super) fn spawn_session_monitor(
                                     .sftp
                                     .record_transfer_failure(transfer_id, name, message);
                             }
+                            SftpTransferEvent::UploadConflict {
+                                transfer_id, batch_id, name, remote_size, remote_modified,
+                            } => {
+                                terminal.sftp.record_upload_conflict(
+                                    super::state::PendingUploadConflict {
+                                        transfer_id, batch_id, name, remote_size, remote_modified,
+                                    },
+                                );
+                            }
+                            SftpTransferEvent::Skipped { transfer_id } => {
+                                terminal.sftp.finish_transfer(
+                                    transfer_id, SftpTransferPhase::Skipped,
+                                    "Skipped".to_owned(),
+                                );
+                            }
                             SftpTransferEvent::Completed {
                                 transfer_id,
                                 local_path,

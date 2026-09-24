@@ -49,6 +49,7 @@ export struct SftpViewState {
     available: bool,
     open: bool,
     loading: bool,
+    upload_ready: bool,
     home: string,
     path: string,
     entries: [SftpEntryRow],
@@ -62,6 +63,8 @@ export struct SftpViewState {
     selected_count: int,
     all_selected: bool,
     local_loading: bool,
+    local_loaded: bool,
+    local_upload_selection_ready: bool,
     local_path: string,
     local_entries: [SftpEntryRow],
     local_sort_column: string,
@@ -375,7 +378,7 @@ component SftpEntry inherits Rectangle {
             ? [
                 root.action("open", root.entry.kind == "folder" ? @tr("Open folder") : @tr("Open"), root.entry.kind == "file" || root.entry.kind == "folder"),
                 root.action("show-in-folder", @tr("Show in Folder"), root.entry.kind != "link"),
-                root.action("upload", @tr("Upload"), root.entry.kind == "file"),
+                root.action("upload", @tr("Upload"), root.entry.kind == "file" || root.entry.kind == "folder"),
             ]
             : []);
 
@@ -529,8 +532,7 @@ component SftpEntry inherits Rectangle {
         width: max(0px, parent.width - self.x);
         height: parent.height;
         enabled: root.shown && root.interactive && root.drag-enabled
-            && (root.entry.kind == "file"
-                || (root.entry.kind == "folder" && root.remote-actions))
+            && (root.entry.kind == "file" || root.entry.kind == "folder")
             && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
         allow-copy: true;
         data: root.drag-data(root.entry.path);
@@ -550,8 +552,7 @@ component SftpEntry inherits Rectangle {
             width: parent.width;
             height: parent.height;
             enabled: root.shown && root.interactive && root.drag-enabled
-                && (root.entry.kind == "file"
-                    || (root.entry.kind == "folder" && root.remote-actions))
+                && (root.entry.kind == "file" || root.entry.kind == "folder")
                 && !(root.native-file-drag-enabled && root.remote-actions
                     && root.entry.kind == "file");
             mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
@@ -623,6 +624,7 @@ component SftpDirectoryPane inherits Rectangle {
     in property <string> title;
     in property <[SftpEntryRow]> entries;
     in property <bool> loading;
+    in property <bool> upload-ready: false;
     in property <string> path;
     in property <bool> truncated;
     in property <string> status;
@@ -771,7 +773,7 @@ component SftpDirectoryPane inherits Rectangle {
                     text: @tr("Upload");
                     subtle: true;
                     accessible-name: @tr("Upload selected local files");
-                    enabled: root.interactive && !root.loading;
+                    enabled: root.interactive && root.upload-ready;
                     clicked => { root.upload-selected(); }
                 }
             }
@@ -947,7 +949,8 @@ component SftpDirectoryPane inherits Rectangle {
     }
 
     DropArea {
-        enabled: root.allow-drop && root.interactive && !root.loading;
+        enabled: root.allow-drop && root.interactive
+            && (root.local-actions ? !root.loading : root.upload-ready);
         x: 0px;
         y: 0px;
         width: parent.width;
@@ -1015,7 +1018,8 @@ component SftpTransferEntry inherits Rectangle {
     private property <color> state-color: root.transfer.state == "failed"
         ? Theme.danger
         : (root.transfer.state == "completed" ? Theme.success
-        : (root.transfer.state == "cancelled" ? Theme.muted : Theme.accent));
+        : (root.transfer.state == "skipped" || root.transfer.state == "cancelled" ? Theme.muted
+        : Theme.accent));
     private property <bool> selectable: root.transfer.pausable || root.transfer.resumable
         || root.transfer.cancellable;
 
@@ -1023,7 +1027,8 @@ component SftpTransferEntry inherits Rectangle {
     clip: true;
     background: action-button.has-focus ? Theme.hover : transparent;
     accessible-role: list-item;
-    accessible-label: root.transfer.direction + ", " + root.transfer.name + ", " + root.transfer.status
+    accessible-label: root.transfer.direction + ", " + root.transfer.name + ", "
+        + (root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status)
         + (root.transfer.size.is-empty ? "" : ", " + root.transfer.size);
 
     Rectangle {
@@ -1078,7 +1083,7 @@ component SftpTransferEntry inherits Rectangle {
         x: root.status-x;
         width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
         height: parent.height - Theme.space-sm;
-        text: root.transfer.status;
+        text: root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status;
         color: root.state-color;
         font-size: Theme.font-caption;
         overflow: elide;
@@ -1561,7 +1566,7 @@ export component SftpPane inherits Rectangle {
     init => {
         root.native-remote-drop-region-changed(root.native-remote-drop-region);
         root.native-local-drop-region-changed(root.native-local-drop-region);
-        if !root.view.local_path.is-empty {
+        if !root.view.local_loaded && !root.view.local_path.is-empty {
             root.list-local-directory(root.view.local_path);
         }
     }
@@ -1583,6 +1588,7 @@ export component SftpPane inherits Rectangle {
                 interactive: root.view.available;
                 entries: root.view.entries;
                 loading: root.view.loading;
+                upload-ready: root.view.upload_ready;
                 path: root.view.path;
                 truncated: root.view.truncated;
                 status: root.view.status;
@@ -1658,6 +1664,8 @@ export component SftpPane inherits Rectangle {
                 allow-hidden: false;
                 entries: root.view.local_entries;
                 loading: root.view.local_loading;
+                upload-ready: root.view.upload_ready && root.view.local_upload_selection_ready;
+                allow-refresh: true;
                 path: root.view.local_path;
                 has-more: root.view.local_has_more;
                 truncated: root.view.local_truncated;
@@ -1667,6 +1675,7 @@ export component SftpPane inherits Rectangle {
                 sort-column: root.view.local_sort_column;
                 sort-descending: root.view.local_sort_descending;
                 list-directory(path) => { root.list-local-directory(path); }
+                refresh => { root.list-local-directory(root.view.local_path); }
                 load-more => { root.load-more-local(); }
                 navigate-back => { root.navigate-local-back(); }
                 navigate-forward => { root.navigate-local-forward(); }
