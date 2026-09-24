@@ -165,6 +165,10 @@ rows whose source or settings changed and resets the same model only when the
 visible row count changes; it does not replace the dynamic line repeater on
 every output snapshot. This optimization is UI-model ownership only and does
 not change selection, worker, or transport contracts.
+The terminal grid retains Tab cells and their upstream tab-stop positions for
+content and selection extraction. Styled text runs and cursor text project a
+Tab cell as one blank display cell, so Slint never receives a control character
+for glyph drawing; following cells keep their original columns.
 The first local selection gesture is a left-button double-click when the gesture
 is not owned by mouse reporting, a Shift bypass, or primary-modifier target
 activation. It selects a complete valid HTTP(S) URL first, including across soft

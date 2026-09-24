@@ -294,15 +294,27 @@ pub(super) fn cursor_geometry(
 
 pub(super) fn cell_text(cell: &Cell) -> String {
     let mut text = String::new();
-    append_cell_text(&mut text, cell);
+    append_display_cell_text(&mut text, cell);
     text
 }
 
 pub(super) fn append_cell_text(text: &mut String, cell: &Cell) {
+    append_cell_text_with_tab(text, cell, '\t');
+}
+
+fn append_display_cell_text(text: &mut String, cell: &Cell) {
+    append_cell_text_with_tab(text, cell, ' ');
+}
+
+fn append_cell_text_with_tab(text: &mut String, cell: &Cell, tab_character: char) {
     if is_wide_continuation(cell) {
         return;
     }
-    text.push(cell.c);
+    text.push(if cell.c == '\t' {
+        tab_character
+    } else {
+        cell.c
+    });
     for character in cell.zerowidth().into_iter().flatten() {
         text.push(*character);
     }
@@ -371,7 +383,7 @@ pub(super) fn styled_line(
         let is_wide = cell.flags.contains(Flags::WIDE_CHAR);
         let batch_kind = (!is_wide).then(|| text_batch_kind(cell)).flatten();
         let mut text = String::new();
-        append_cell_text(&mut text, cell);
+        append_display_cell_text(&mut text, cell);
         let mut cells = if is_wide { 2 } else { 1 };
         column = column.saturating_add(cells).min(columns);
 
@@ -396,7 +408,7 @@ pub(super) fn styled_line(
                 {
                     break;
                 }
-                append_cell_text(&mut text, next);
+                append_display_cell_text(&mut text, next);
                 cells += 1;
                 column += 1;
             }

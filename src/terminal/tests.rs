@@ -435,6 +435,33 @@ fn wide_characters_occupy_two_grid_cells() {
 }
 
 #[test]
+fn tab_indentation_renders_as_spaces_without_changing_copy_or_cell_columns() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\tmodified: src/main.rs");
+    let snapshot = terminal.snapshot();
+
+    assert!(
+        snapshot.lines[0]
+            .runs
+            .iter()
+            .all(|run| !run.text.contains('\t'))
+    );
+    assert!(
+        snapshot.lines[0].runs[0]
+            .text
+            .starts_with("        modified: src/main.rs")
+    );
+    assert_eq!(snapshot.lines[0].runs[0].column, 0);
+    assert_eq!(snapshot.lines[0].runs[0].cells, 80);
+    assert_eq!(snapshot.cursor_column, 29);
+    assert!(terminal.contents().starts_with('\t'));
+    assert_eq!(terminal.selection_text(0, 0, 0, 0), "\t");
+
+    terminal.process(b"\r");
+    assert_eq!(terminal.snapshot().cursor_text, " ");
+}
+
+#[test]
 fn cursor_on_a_wide_cell_uses_its_leading_column_and_width() {
     let mut terminal = TerminalModel::new(20, 3, 10);
     terminal.process("中\x1b[1G".as_bytes());

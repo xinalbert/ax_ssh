@@ -130,6 +130,8 @@ damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复�
 revision 与覆盖全部渲染设置的 64-bit key 缓存结果，再复用已有外层 `TerminalRenderLine` model 及其
 嵌套 run model；只更新来源或设置确实变化的行，只有可见行数变化时才 reset 同一 model，不会在每次
 输出 snapshot 时替换动态行 repeater。该优化只属于 UI model 所有权，不改变选区、worker 或 transport 契约。
+终端网格保留 Tab 单元格和上游 Tab stop 位置，内容与选区提取仍读取原始字符。文字 run 与光标文字
+在显示快照中把 Tab 单元格映射为一个空格，避免将控制字符交给 Slint 字形绘制；后续单元格列位置不变。
 第一版本地选区只响应左键双击，且手势不能已经交给 mouse reporting、Shift 绕过键或主修饰键目标激活。
 双击会优先选中完整、有效的 HTTP(S) URL：连续软换行会合并，末尾终端标点不会纳入选区。若当前位置不是 URL，
 `TerminalModel` 临时创建 `alacritty_terminal::SelectionType::Semantic`，只返回有界、相对当前视口的范围 DTO，
