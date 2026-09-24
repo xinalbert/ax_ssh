@@ -11,7 +11,7 @@ import {
     SftpTransferRow,
     SftpViewState,
 } from "sftp-pane.slint";
-import { TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
+import { TerminalNoticeViewState, TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
 import {
     TerminalPaneDividerView,
     TerminalPaneView,
@@ -429,6 +429,16 @@ export component AppWindow inherits Window {
         password_private_key: root.password-private-key, password_vault_storage: root.password-vault-storage,
         password_vault_unlock_only: root.password-vault-unlock-only, password_key_path: root.password-key-path,
         password_prompt_id: root.password-dialog-tab-id, default_credential_storage: root.credential-storage,
+    };
+    private property <TerminalNoticeViewState> terminal-notice-overlay: {
+        visible: root.active-tab-notice-visible,
+        severity: root.active-tab-notice-severity,
+        title: root.active-tab-notice-title,
+        message: root.active-tab-notice-message,
+        primary_action: root.active-tab-notice-primary-action,
+        primary_label: root.active-tab-notice-primary-label,
+        secondary_action: root.active-tab-notice-secondary-action,
+        secondary_label: root.active-tab-notice-secondary-label,
     };
 
     callback new-session();
@@ -1050,7 +1060,13 @@ export component AppWindow inherits Window {
         width: parent.width;
         height: parent.height;
         security: root.security-overlay;
+        terminal-notice: root.terminal-notice-overlay;
+        terminal-notice-pane-id: root.active-pane-id;
+        window-active: root.window-active;
         monospace-font-family: root.application-font-family;
+        terminal-notice-action(id, command) => {
+            root.terminal-pane-command(id, command);
+        }
         manage-session-action(action, target, value) => {
             root.manage-session-action(action, target, value);
         }

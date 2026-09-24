@@ -1,3 +1,4 @@
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import {
     ElidedButton,
@@ -155,58 +156,118 @@ component TerminalPaneCloseButton inherits FocusScope {
     }
 }
 
-component TerminalNoticeBanner inherits Rectangle {
+export component TerminalNoticeCard inherits FocusScope {
     in property <TerminalNoticeViewState> notice;
+    in property <bool> pane-focused;
     callback action(string);
 
-    height: Theme.terminal-pane-notice-height;
-    background: root.notice.severity == "error"
-        ? Theme.danger.with-alpha(0.14)
-        : Theme.accent.with-alpha(0.12);
-    border-width: Theme.hairline;
-    border-color: root.notice.severity == "error" ? Theme.danger : Theme.accent;
-    border-radius: Theme.radius-small;
-    clip: true;
-    accessible-role: text;
-    accessible-label: root.notice.title + ": " + root.notice.message;
+    private property <bool> stacked-actions:
+        root.width < Theme.terminal-notice-stack-threshold;
 
-    HorizontalLayout {
-        padding-left: Theme.space-md;
-        padding-right: Theme.space-md;
-        padding-top: Theme.space-sm;
-        padding-bottom: Theme.space-sm;
-        spacing: Theme.space-md;
+    accessible-role: groupbox;
+    accessible-label: root.notice.title + ": " + root.notice.message;
+    focus-on-tab-navigation: true;
+
+    init => {
+        if root.pane-focused {
+            root.focus();
+        }
+    }
+    changed pane-focused => {
+        if root.pane-focused {
+            root.focus();
+        }
+    }
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape
+            && root.notice.secondary_action == "deny-osc52-clipboard-read" {
+            root.action(root.notice.secondary_action);
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: Theme.panel-alt;
+        border-width: Theme.hairline;
+        border-color: Theme.frame-border;
+        border-radius: Theme.radius;
+        clip: true;
+
+        Rectangle {
+            width: Theme.terminal-notice-indicator-width;
+            height: parent.height;
+            background: root.notice.severity == "error" ? Theme.danger : Theme.accent;
+        }
 
         VerticalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.space-xxs;
+            width: parent.width;
+            height: parent.height;
+            padding: Theme.dialog-padding;
+            spacing: Theme.space-xl;
 
             Text {
                 text: root.notice.title;
                 color: Theme.text;
-                font-size: Theme.font-small;
+                font-size: Theme.font-body-strong;
                 font-weight: 700;
                 overflow: elide;
             }
-            Text {
-                text: root.notice.message;
-                color: Theme.text;
-                font-size: Theme.font-caption;
-                overflow: elide;
-            }
-        }
 
-        ElidedButton {
-            visible: !root.notice.primary_action.is-empty;
-            width: self.visible ? self.preferred-width : 0px;
-            text: root.notice.primary_label;
-            clicked => { root.action(root.notice.primary_action); }
-        }
-        ElidedButton {
-            visible: !root.notice.secondary_action.is-empty;
-            width: self.visible ? self.preferred-width : 0px;
-            text: root.notice.secondary_label;
-            clicked => { root.action(root.notice.secondary_action); }
+            message-scroll := ScrollView {
+                vertical-stretch: 1;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                content-width: self.visible-width;
+                content-height: max(self.visible-height, message-text.preferred-height);
+
+                Rectangle {
+                    width: message-scroll.visible-width;
+                    height: max(message-scroll.visible-height, message-text.preferred-height);
+
+                    message-text := Text {
+                        width: parent.width;
+                        height: self.preferred-height;
+                        text: root.notice.message;
+                        color: Theme.text;
+                        font-size: Theme.font-body;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            if !root.stacked-actions : HorizontalLayout {
+                alignment: end;
+                spacing: Theme.space-md;
+
+                if !root.notice.secondary_action.is-empty : ElidedButton {
+                    text: root.notice.secondary_label;
+                    clicked => { root.action(root.notice.secondary_action); }
+                }
+                if !root.notice.primary_action.is-empty : ElidedButton {
+                    text: root.notice.primary_label;
+                    primary: true;
+                    clicked => { root.action(root.notice.primary_action); }
+                }
+            }
+
+            if root.stacked-actions : VerticalLayout {
+                spacing: Theme.space-sm;
+
+                if !root.notice.primary_action.is-empty : ElidedButton {
+                    width: parent.width;
+                    text: root.notice.primary_label;
+                    primary: true;
+                    clicked => { root.action(root.notice.primary_action); }
+                }
+                if !root.notice.secondary_action.is-empty : ElidedButton {
+                    width: parent.width;
+                    text: root.notice.secondary_label;
+                    clicked => { root.action(root.notice.secondary_action); }
+                }
+            }
         }
     }
 }
@@ -256,7 +317,8 @@ export component TerminalPane inherits Rectangle {
     private property <bool> mouse-local-selection-priority:
         root.view.mouse_local_selection_priority;
     private property <bool> terminal-focus-active:
-        root.visible && root.focused && root.connected && root.window-active && !root.input-blocked;
+        root.visible && root.focused && root.connected && root.window-active
+        && !root.input-blocked && !root.notice.visible;
     private property <string> reported-terminal-focus-id: "";
     private property <bool> reported-terminal-focus-active: false;
 
@@ -411,7 +473,7 @@ export component TerminalPane inherits Rectangle {
     };
 
     function focus-input() {
-        if root.connected {
+        if root.connected && !root.notice.visible && !root.input-blocked {
             ime-input.focus();
         }
     }
@@ -701,8 +763,9 @@ export component TerminalPane inherits Rectangle {
         root.sync-terminal-focus-report();
     }
     changed notice => {
-        root.schedule-geometry-report();
-        root.schedule-presentation-layout-update();
+        if !root.notice.visible && root.focused && root.connected && !root.input-blocked {
+            root.focus-input();
+        }
     }
     changed presentation-layout-revision => { root.schedule-presentation-layout-update(); }
     changed software-presentation-enabled => {
@@ -862,7 +925,7 @@ export component TerminalPane inherits Rectangle {
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         accessible-role: none;
-        enabled: root.connected;
+        enabled: root.connected && !root.notice.visible && !root.input-blocked;
 
         changed has-focus => {
             if self.has-focus {
@@ -1015,12 +1078,6 @@ export component TerminalPane inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 activated => { root.pane-command(root.terminal-id, "close"); }
             }
-        }
-
-        if root.notice.visible : TerminalNoticeBanner {
-            width: parent.width;
-            notice: root.notice;
-            action(command) => { root.pane-command(root.terminal-id, command); }
         }
 
         grid-clip := Rectangle {
@@ -1235,4 +1292,5 @@ export component TerminalPane inherits Rectangle {
             }
         }
     }
+
 }

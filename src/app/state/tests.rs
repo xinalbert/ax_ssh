@@ -115,6 +115,17 @@ fn terminal_notice_shows_retry_for_exhausted_reconnects() {
 }
 
 #[test]
+fn terminal_notice_omits_repeated_failure_title() {
+    let notice = TerminalNoticeSnapshot::failed(
+        "Connection failed: Network is unreachable (os error 51)",
+        "Retry",
+    );
+
+    assert_eq!(notice.title, "Connection failed");
+    assert_eq!(notice.message, "Network is unreachable (os error 51)");
+}
+
+#[test]
 fn terminal_notice_hides_security_prompt_phases() {
     let mut state = test_state();
     let profile = SessionProfile::new("remote", "remote.example", "alice");

@@ -1,6 +1,8 @@
 import { AuthenticationDialog, HostKeyDialog } from "security-dialogs.slint";
 import { SessionManagementDialog } from "session-management-dialog.slint";
 import { WorkspaceFileDialog } from "workspace-file-dialog.slint";
+import { TerminalNoticeCard, TerminalNoticeViewState } from "../terminal-pane.slint";
+import { Theme } from "../theme.slint";
 
 // Rust remains authoritative for the security prompt. This DTO is deliberately
 // read-only so the host cannot dismiss an SSH trust/authentication phase early.
@@ -23,8 +25,12 @@ export struct SecurityOverlayViewState {
 export component OverlayHost inherits Rectangle {
     in property <SecurityOverlayViewState> security;
     in property <string> monospace-font-family;
+    in property <TerminalNoticeViewState> terminal-notice;
+    in property <string> terminal-notice-pane-id;
+    in property <bool> window-active: true;
 
     callback manage-session-action(string, string, string);
+    callback terminal-notice-action(string, string);
     callback confirm-host-key();
     callback reject-host-key();
     callback authenticate-session(string, string, bool, string) -> bool;
@@ -73,6 +79,27 @@ export component OverlayHost inherits Rectangle {
         root.session-management-subject = subject;
         root.session-management-value = action == "rename-group" ? subject : "";
         root.session-management-open = true;
+    }
+
+    if !root.modal-open && root.terminal-notice.visible
+        && !root.terminal-notice-pane-id.is-empty : TerminalNoticeCard {
+        width: min(
+            Theme.terminal-notice-max-width,
+            max(0px, parent.width - 2 * Theme.space-xxl),
+        );
+        height: min(
+            self.width < Theme.terminal-notice-stack-threshold
+                ? Theme.terminal-notice-stacked-height
+                : Theme.terminal-notice-height,
+            max(0px, parent.height - 2 * Theme.space-xxl),
+        );
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        notice: root.terminal-notice;
+        pane-focused: root.window-active;
+        action(command) => {
+            root.terminal-notice-action(root.terminal-notice-pane-id, command);
+        }
     }
 
     // Security confirmation always wins. A local dialog stays in state while it

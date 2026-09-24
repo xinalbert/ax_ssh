@@ -563,7 +563,10 @@ impl TerminalNoticeSnapshot {
             visible: true,
             severity: "error",
             title: "Connection failed",
-            message: message.to_owned(),
+            message: message
+                .strip_prefix("Connection failed: ")
+                .unwrap_or(message)
+                .to_owned(),
             primary_action: "retry",
             primary_label: retry_label,
             secondary_action: "close-tab",
