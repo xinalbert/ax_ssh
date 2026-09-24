@@ -1,5 +1,41 @@
 # 项目环境变化记录
 
+## 2026-09-24 macOS 标题栏前沿间距施工预检
+
+- 日期：2026-09-24
+- 变化摘要：确认标题栏留白调整沿用现有 Slint token、AppKit 命中边界和 Cargo locked/offline 环境；不新增依赖。
+- 受影响文件：`ui/theme.slint`、`ui/workspace-shell.slint`、`src/app/macos_window.rs`、双语架构与项目记录。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Slint 1.18.1 和现有 CI target 矩阵。
+- 验证结果：已核对当前 60px 前沿、36px 分栏尾部间距和 AppKit 60px 命中阈值；施工后门禁待执行。
+- 风险/待办：标题栏实际视觉和拖动边界需用户在 macOS 新构建中确认。
+
+## 2026-09-24 macOS 标题栏前沿间距环境验证
+
+- 日期：2026-09-24
+- 变化摘要：macOS 标题栏前沿从 60px 增至 80px，AppKit 原生拖窗命中同步；36px 分栏尾部间距保留，未新增依赖或改变 CI 矩阵。
+- 受影响文件：`ui/theme.slint`、`src/app/macos_window.rs`、双语架构与项目记录。
+- 更新后的命令或环境：继续使用 Rust 2024、MSRV 1.92.0、Slint 1.18.1、Cargo locked/offline。
+- 验证结果：定向命中测试、fmt、check、严格 Clippy、完整测试（库 283、应用 276、Doc tests 0）、debug build、tracker validator 和 diff 检查通过。
+- 风险/待办：用户仍需确认实际标题栏视觉和拖动行为。
+
+## 2026-09-24 终端 Tab 方框显示施工预检
+
+- 日期：2026-09-24
+- 变化摘要：核对本轮终端显示投影修复的环境；工具链、锁定依赖和 CI 测试矩阵无变化。
+- 受影响文件：`src/terminal/render.rs`、`src/terminal/tests.rs`、双语架构与项目记录。
+- 更新后的命令或环境：保持 Rust 2024、MSRV 1.92.0、Cargo locked/offline 门禁；本机 rustc/Cargo 1.97.1 和 macOS ARM64/x86_64 target 可用。
+- 验证结果：施工前确认 `Cargo.toml`、`Cargo.lock` 和 `.github/workflows/ci.yml`；定向与完整门禁待执行。
+- 风险/待办：终端实际字体绘制仍由用户在目标平台视觉验收。
+
+## 2026-09-24 终端 Tab 方框显示环境验证
+
+- 日期：2026-09-24
+- 变化摘要：终端显示快照将 Tab 单元格绘制为空格；内容/选区仍保留原始 Tab，依赖、工具链、锁文件和 CI 未变。
+- 受影响文件：`src/terminal/render.rs`、`src/terminal/tests.rs`、双语架构与项目记录。
+- 更新后的命令或环境：继续使用原有 Cargo locked/offline 和三平台原生 CI target 门禁。
+- 验证结果：定向 Tab 回归、fmt、check、严格 Clippy、完整测试（库 283、应用 276、Doc tests 0）、debug build、Markdown 相对链接、tracker validator 和 diff 检查通过。
+- 风险/待办：新构建的终端实际字形显示待用户在目标平台验收。
+
 ## 2026-09-23 macOS 标题栏拖动区域环境验证
 
 - 日期：2026-09-23

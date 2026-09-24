@@ -852,9 +852,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
 9. On macOS, the main window keeps the standard traffic-light controls, hides
    the native title text, and extends Slint content into a transparent native
    title bar. The workspace Tab strip occupies that title-bar row with a fixed
-   leading clearance for the traffic lights, independent of sidebar width. The
-   former excess part of that clearance is retained as a trailing gap immediately
-   before the terminal split controls.
+   80px leading clearance for the traffic lights, independent of sidebar width.
+   A separate 36px trailing gap remains immediately before the terminal split
+   controls.
    The sidebar and its collapse control start below the title-bar row.
    One bottom separator spans the full main-window title-bar row, including
    the traffic-light clearance; other platforms keep the separator to the

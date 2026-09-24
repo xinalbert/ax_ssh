@@ -2,16 +2,16 @@
 
 ## 当前目标
 
-- 目标 ID：20260923-skia-layer-cache-memory
-- 目标：定位约 1.3 GB footprint 的主要来源，并修复动态终端行销毁后 Skia layer GPU 图像仍被缓存的问题。
-- 交付物：锁定 Slint 1.18.1 的 Skia 缓存生命周期补丁、依赖锁定、双语架构说明和采样/验证记录。
+- 目标 ID：20260924-titlebar-clearance
+- 目标：增加 macOS 原生红绿灯与首个工作区 Tab 之间的视觉留白。
+- 交付物：统一的标题栏前沿间距、同步原生拖窗命中边界、双语契约与验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`vendor/i-slint-renderer-skia/`、`Cargo.toml`、`Cargo.lock`、第三方声明、双语架构和 tracker 文档。
-- 本轮范围：Skia renderer 的 per-component layer cache 释放；用现有进程的 sample、vmmap、heap 与锁定源码确定问题边界。
-- 不在本轮范围内：终端模型、PTY/transport、SSH host-key trust、凭据、worker ownership 或自动 GUI 截图验收。
+- 当前范围：`ui/theme.slint`、`ui/workspace-shell.slint`、`src/app/macos_window.rs`、双语架构和实施/环境记录。
+- 本轮范围：仅调整 macOS 标题栏前沿留白及与其对应的 AppKit 拖窗命中边界。
+- 不在本轮范围内：工作区 Tab 宽度/排序、终端内容、PTY/transport、SSH host-key trust、凭据或自动 GUI 截图验收。
 
 ## 当前状态
 
@@ -34,6 +34,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| TITLEBAR9 | completed | 将 macOS 标题栏前沿从 60px 调整为 80px，并同步原生拖窗命中阈值 | Slint 重编译、macOS 定向命中测试已通过 | 保留 36px 分栏按钮前尾部间距；不改其他平台。 |
+| TITLEBAR10 | completed | 双语契约、环境/实施记录和完整离线门禁 | fmt/check/Clippy/test/build/diff、tracker 校验已通过 | 实际视觉由用户确认。 |
+| TABDISPLAY1 | completed | 文字 run 和光标快照把网格 Tab 绘制为空格，仍保留原始内容与选区 | 定向 terminal 回归已通过 | 只改 Rust 显示投影，不改 parser/Slint contract。 |
+| TABDISPLAY2 | completed | 双语终端契约、环境与实施记录，以及完整离线门禁 | fmt/check/Clippy/test/diff、Markdown/tracker 校验已通过 | GUI 视觉由用户验收。 |
 | SFTPLIVE1 | completed | 返回 SFTP Tab 和断线重连后保留本地选择，同目录刷新继续上传，目录切换时锁定目标 | 状态定向测试、Slint 重编译、离线 Rust 门禁和 diff 已通过 | 复用现有 Tab/worker；真实窗口切换与服务器上传由用户验收。 |
 | SFTPUPLOADBATCH1 | completed | 本地/Finder 多选和目录递归上传、单命令批次队列、远端目录创建 | 递归发现与远端目录定向测试、Slint 重编译、完整离线门禁 | 并发仍为每 Tab 2 条；超出扫描上限整批拒绝；真实服务器和 GUI 行为待用户验收。 |
 | SFTPCONFLICT1 | completed | 远端同名上传标准弹窗、按批次选择、worker 端重验与安全发布 | SFTP 状态/传输定向测试、Slint 重编译、完整离线门禁和翻译检查 | 默认询问；覆盖需 POSIX rename 扩展；真实服务器和视觉行为待用户验收。 |
@@ -93,6 +97,7 @@
 
 ## 已完成
 
+- TABDISPLAY1：显示快照中的 Tab 单元格变为空格；原始内容、复制、Tab stop、后续文字列位置不变；定向回归已通过。
 - 已定位 2026-09-23 22:31 安装版 Sample 的 1.3 GB footprint 主要在 Metal 图形资源：同 PID 的 `vmmap -summary` 报约 1.1 GB `IOAccelerator (graphics)`、80 MB `IOSurface`，malloc 实际分配约 76 MB；`heap` 有数千个 AGX texture。安装版是 Slint 1.17.1，而当前源码锁定 1.18.1；这不是修复后内存测量。
 - 已确认本机持久化设置选择 GPU 且打开 terminal row render cache。Slint `ItemCache` 的组件指针缓存要求销毁时执行 `component_destroyed`，两版 Skia 的 `free_graphics_resources` 均漏掉 `layer_cache`；修复在当前 1.18.1 的本地补丁中补齐，并保留其他 renderer、配置与应用状态边界。
 - 已完成 TITLEBAR5：macOS 主窗口在 Tab 下层空白区域按下左键时通过 `AppWindow` callback 同步请求 Winit 系统拖窗；Tab 和按钮仍在上层处理原手势。AppKit content view 仅允许顶部标题栏前沿的红绿灯留空原生拖窗，避免侧栏被误判为标题栏。TITLEBAR6 将前沿从 96px 收紧为 60px，并把剩余 36px 放到终端分栏按钮之前；TITLEBAR7 让这段尾部空白也可拖动窗口；TITLEBAR8 将 Tab 外空白拖窗回调扩展到 Windows/Linux。
@@ -137,6 +142,10 @@
 
 ## 验证
 
+- 已完成 TITLEBAR9–10：Slint 重编译、`cargo fmt --all -- --check`、macOS 定向命中测试、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 283、应用 276、Doc tests 0）、`cargo build --locked --offline`、tracker validator 和 `git diff --check` 均通过。
+- 未完成视觉验收：macOS 新构建中需确认绿色原生按钮与首个 Tab 状态点的间距、Tab 排序和标题栏拖动命中。
+- 已完成 TABDISPLAY1–2：定向 Tab 回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 283、应用 276、Doc tests 0）、`cargo build --locked --offline`、Markdown 相对链接、tracker validator 和 `git diff --check` 均通过。
+- 未完成 TABDISPLAY 视觉验收：新构建的终端中执行 `git status`，确认缩进为空白且文字从正确列开始；依仓库规则由用户确认，不自行截图。
 - 已完成 MEM1–3：排除未使用的上游 crate `Cargo.lock` 后，vendor 与上游 1.18.1 `diff -ru` 仅 `layer_cache.component_destroyed(component)` 一行；根 `Cargo.lock` 仅改变 Skia 来源。`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 280、应用 268、Doc tests 0）、`cargo build --locked --offline` 均通过；x86_64 macOS 显式 target check、严格 Clippy、build 通过，未在 ARM64 上运行 x86_64 测试。
 - 未完成 MEM 运行时对照：补丁尚未安装到正在运行的旧版进程；其相同 pane/尺寸/输出负载下的 footprint、`IOAccelerator (graphics)` 和 AGX texture 数需要新二进制长期采样。
 - 已完成 TITLEBAR5：定向 macOS 命中边界测试 3 项、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 280、应用 268、Doc tests 0）及 `cargo build --locked --offline` 通过；两个 macOS target 的显式 check、严格 Clippy 和 build 也通过。Slint 入口重新编译。首次缺失的 Slint 1.18.1 依赖通过本机 7897 代理按锁文件获取，锁文件未改；x86_64 仅编译链接，没有在 ARM64 主机运行测试。
@@ -169,6 +178,8 @@
 
 ## 风险与阻塞
 
+- TITLEBAR9 无代码阻塞；实际 macOS 标题栏视觉和拖动行为仍需用户确认。
+- TABDISPLAY 无代码阻塞；实际 Slint 字形效果仍需用户在目标平台确认。
 - Skia 逐组件缓存持有是源码确认的增长机制，但单次旧版 Sample 不能量化其在 1.3 GB 中的精确贡献；Skia/Metal 仍可能有其它保留资源。当前修复未调整全局 renderer 或用户的行缓存设置。
 - TITLEBAR5 无代码阻塞；AppKit/Winit 系统拖窗的真实交互仍需用户验收，尤其是空白、Tab、按钮和侧栏的互斥命中。
 - DRAW1 无代码阻塞；Canvas 尚未实现，故当前只能使用 item-tree，未来实现前需验证 Slint custom-paint API 和终端交互兼容性。
@@ -177,6 +188,8 @@
 
 ## 下一步
 
+- 在新构建中确认红绿灯右侧留白和 Tab/空白区拖动行为。
+- 在新构建的终端运行 `git status`，确认 `modified:` 前的 Tab 缩进显示为空白，选中复制仍保留原始 Tab。
 - 在新构建上保留 GPU 与当前行缓存设置，以相同窗口尺寸、pane 数和持续输出重复采样启动、持续输出和关闭 Tab 后的 `vmmap -summary` 与 `heap -s`；关注 `IOAccelerator (graphics)`、AGX texture 数是否趋于平台期。若需要立即降低旧安装版占用，可在 Appearance 中关闭 Terminal row render cache 并重启应用；Software renderer 可作独立 A/B，但其 CPU 行为不同。
 - 在 macOS 主窗口分别拖动红绿灯右侧空白、Tab、Tab 内按钮和侧栏，确认只有两个空白区移动窗口；Tab 重排和按钮动作各自独立。
 - DRAW2：先核实锁定 Slint 1.17.1 的 custom-paint API，再实现保持 parser/model/worker 不变的 Canvas 网格原型；该阶段完成前 Canvas 继续禁用。
@@ -188,6 +201,8 @@
 
 ## 最后更新时间
 
+- 2026-09-24 21:12 +0800：完成 TITLEBAR9–10；macOS 标题栏前沿从 60px 增至 80px，原生拖窗命中同步，完整门禁通过；实际视觉由用户验收。
+- 2026-09-24 20:58 +0800：完成 TABDISPLAY1–2；终端显示快照不再把 Tab 当字形绘制，定向及完整离线门禁通过；目标平台视觉由用户验收。
 - 2026-09-24 17:43 +0800：完成 SFTPLIVE1；SFTP 重连保留本地路径和选择，同目录刷新保持上传目标，完整离线 Rust 门禁通过；真实服务器与窗口操作由用户验收。
 - 2026-09-24 10:19 +0800：完成 TITLEBAR8，将主窗口 Tab 外空白拖窗扩展到 Windows/Linux；用户实际拖动验收待执行。
 - 2026-09-24 09:48 +0800：完成 TITLEBAR7 标题栏剩余空白拖窗命中；用户实际拖动验收待执行。

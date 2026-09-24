@@ -1,3 +1,39 @@
+# 2026-09-24 终端 Tab 方框显示施工预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；本轮仅改 `src/terminal/render.rs` 的显示投影、`src/terminal/tests.rs` 回归及双语架构/项目记录。
+- 环境记忆状态：已读取现有 `docs/project-env-audit/current.md` 和 `changes.md`；与 `Cargo.toml`、`Cargo.lock`、CI 对照，工具链/依赖记录可沿用。
+- 运行环境：声明 MSRV 1.92.0；本机 rustc/Cargo 1.97.1，已安装 macOS ARM64/x86_64 target；锁定 `alacritty_terminal 0.26.0`、Slint 1.18.1，不新增依赖。
+- 测试环境：先跑 Tab 定向回归，再跑 fmt、locked/offline check、严格 all-target Clippy、完整 locked/offline test、diff；CI 仍由各原生 runner 验证对应 target。
+- 环境变化检查：否；不改 Cargo、锁文件、工具链、CI、UI/worker/SSH 边界。
+- 开工判定：允许开工。
+
+# 2026-09-24 macOS 标题栏前沿间距环境预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；本轮仅改 `ui/theme.slint`、`ui/workspace-shell.slint`、`src/app/macos_window.rs` 及双语/项目记录。
+- 环境记忆状态：已有标题栏拖窗记录可复用；当前锁定 Slint 1.18.1、Rust 2024、MSRV 1.92.0，未发现依赖或工具链变化。
+- 运行环境：本机 rustc/Cargo 1.97.1；macOS 原生窗口命中测试可运行，UI 入口仍由 `build.rs` 编译 `ui/app.slint`。
+- 测试环境：先跑 macOS 标题栏命中定向测试，再跑 fmt、locked/offline check、严格 Clippy、完整 locked/offline test/build、tracker 和 diff 检查。
+- 环境变化检查：否；仅调整标题栏几何 token 与同步常量，不改变 worker、SSH、凭据或终端协议边界。
+- 开工判定：允许开工。
+
+# 2026-09-24 macOS 标题栏前沿间距环境验证
+
+- 目的：确认标题栏 80px 前沿调整在当前 Rust/Slint/Cargo 环境中可编译、可测试。
+- 改动范围：`ui/theme.slint`、`src/app/macos_window.rs`、双语架构与项目记录；`ui/workspace-shell.slint` 继续复用既有 token 绑定。
+- 执行内容：定向 macOS 命中测试、fmt、locked/offline check、严格 Clippy、完整 locked/offline test/build、tracker 和 diff 检查。
+- 验证结果：上述门禁全部通过；库 283 项、应用 276 项、Doc tests 0。Slint 入口已重新编译。
+- 风险/待办：标题栏实际视觉、Tab 重排和拖动命中需用户在 macOS 新构建中确认。
+- 开工判定：施工完成。
+
+# 2026-09-24 终端 Tab 方框显示环境验证
+
+- 目的：确认显示投影修复在锁定 Rust/Slint 运行与测试环境中可用。
+- 改动范围：`src/terminal/render.rs`、`src/terminal/tests.rs`、双语架构与项目记录；无工具链、依赖、锁文件或 CI 变更。
+- 执行内容：定向 Tab 回归、fmt、locked/offline check、严格 Clippy、完整 locked/offline test/build、Markdown 相对链接、tracker validator 和 diff 检查。
+- 验证结果：上述门禁均通过；库 283 项、应用 276 项、Doc tests 0。GUI 视觉按仓库规则由用户验收。
+- 风险/待办：在目标平台新构建中运行 `git status`，确认 Tab 缩进不再显示方框；不自行截图。
+- 开工判定：施工完成。
+
 # 2026-09-23 SFTP 首屏目录加载修复
 
 - 项目边界：`src/app/{state/sftp,connection_monitor,sftp_bridge,state/terminal}.rs`、`src/ssh/worker*.rs` 和 `src/sftp.rs` 的目录导航 DTO；不改变 SSH host-key 信任、认证、凭据、远端写入权限或 transfer 并发。

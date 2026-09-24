@@ -71,9 +71,9 @@ const TITLE_BAR_BUTTON_WIDTH: f64 = 28.0;
 const TITLE_BAR_BUTTON_HEIGHT: f64 = 20.0;
 const TITLE_BAR_BUTTON_SPACING: f64 = 2.0;
 const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
-// Matches Theme.macos-titlebar-leading-clearance. The remaining former
-// clearance is now placed before the terminal split controls in Slint.
-const TITLE_BAR_LEADING_CLEARANCE: f64 = 60.0;
+// Matches Theme.macos-titlebar-leading-clearance. Keep native drag hit testing
+// aligned with the visual gap before the first workspace Tab.
+const TITLE_BAR_LEADING_CLEARANCE: f64 = 80.0;
 // Matches Theme.tab-height's current maximum in the main title-bar layout.
 const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
 
@@ -576,8 +576,8 @@ mod tests {
     fn native_drag_clearance_excludes_sidebar_and_tab_strip() {
         assert!(in_native_drag_clearance(48.0, 16.0));
         assert!(!in_native_drag_clearance(-1.0, 16.0));
-        assert!(in_native_drag_clearance(59.0, 16.0));
-        assert!(!in_native_drag_clearance(60.0, 16.0));
+        assert!(in_native_drag_clearance(79.0, 16.0));
+        assert!(!in_native_drag_clearance(80.0, 16.0));
         assert!(!in_native_drag_clearance(48.0, -1.0));
         assert!(!in_native_drag_clearance(48.0, 32.0));
     }
