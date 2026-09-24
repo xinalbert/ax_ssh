@@ -36,6 +36,7 @@
 | --- | --- | --- | --- | --- |
 | TITLEBAR9 | completed | 将 macOS 标题栏前沿从 60px 调整为 80px，并同步原生拖窗命中阈值 | Slint 重编译、macOS 定向命中测试已通过 | 保留 36px 分栏按钮前尾部间距；不改其他平台。 |
 | TITLEBAR10 | completed | 双语契约、环境/实施记录和完整离线门禁 | fmt/check/Clippy/test/build/diff、tracker 校验已通过 | 实际视觉由用户确认。 |
+| WINDOWRACE1 | completed | detached 创建/恢复的 pending 生命周期、失败回滚和工作区替换取消 | fmt/check、严格 Clippy、完整离线测试、窗口路由定向测试、diff | UI timer/native close 的真实交错仍需目标 macOS 用户验收。 |
 | TABDISPLAY1 | completed | 文字 run 和光标快照把网格 Tab 绘制为空格，仍保留原始内容与选区 | 定向 terminal 回归已通过 | 只改 Rust 显示投影，不改 parser/Slint contract。 |
 | TABDISPLAY2 | completed | 双语终端契约、环境与实施记录，以及完整离线门禁 | fmt/check/Clippy/test/diff、Markdown/tracker 校验已通过 | GUI 视觉由用户验收。 |
 | SFTPLIVE1 | completed | 返回 SFTP Tab 和断线重连后保留本地选择，同目录刷新继续上传，目录切换时锁定目标 | 状态定向测试、Slint 重编译、离线 Rust 门禁和 diff 已通过 | 复用现有 Tab/worker；真实窗口切换与服务器上传由用户验收。 |
@@ -373,6 +374,7 @@
 
 ## 最后更新时间
 
+- 2026-09-24：完成 WINDOWRACE1；detached 延迟创建改用可取消 pending token，创建前重新校验当前 Tab/pane，工作区替换会取消旧 timer；恢复和展示失败统一移除 route、恢复主窗口并释放 UI 资源。窗口路由 13 项定向测试、完整 283/277 Rust 测试、locked/offline check 和严格 Clippy 通过；目标 macOS 的真实 timer/native close 交错仍待用户验收。
 - 2026-09-03：完成 CRED1；选择加密保险库但未填写用户口令时，认证弹窗和会话编辑器为 profile 生成随机隐藏解锁密钥并单独保存到系统密钥库，SSH 密码仍保存在加密记录中；更新双语架构说明与界面提示，随机值不进入 profile、UI 或日志。
 - 2026-09-01 21:57 +0800：完成 SHORT1/INPUT1；Shortcuts 展示三个固定平台快捷键，普通文本输入和 TextEdit 使用完整原生剪贴板操作，SecretTextInput 仅新增粘贴入口并保持秘密不可复制。完整 Rust/Slint、翻译和差异门禁通过；目标平台输入法、快捷键和菜单视觉待用户验收。
 - 2026-09-01 15:55 +0800：完成 MODAL1 阻塞式 dialog 统一与窗口路由锁定；共享 `ModalFrame`、`OverlayHost` 安全优先仲裁和 Rust 侧 Tab/Pane/workspace 动作复核已接通，完整离线门禁通过，目标平台焦点/菜单验收待用户执行。

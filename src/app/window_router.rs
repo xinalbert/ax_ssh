@@ -16,6 +16,7 @@ pub(super) struct WindowRouter {
 
 struct WindowRouterState {
     routes: HashMap<Uuid, WindowRoute>,
+    pending_detaches: HashMap<Uuid, Uuid>,
 }
 
 struct WindowRoute {
@@ -75,7 +76,10 @@ impl WindowRouter {
             },
         );
         Self {
-            inner: Arc::new(Mutex::new(WindowRouterState { routes })),
+            inner: Arc::new(Mutex::new(WindowRouterState {
+                routes,
+                pending_detaches: HashMap::new(),
+            })),
             terminal_presentation_changes,
             terminal_presentation_policy,
         }
@@ -333,6 +337,15 @@ impl WindowRouter {
             .unwrap_or_default()
     }
 
+    pub(super) fn has_detached(&self, window_id: Uuid) -> bool {
+        self.inner.lock().is_ok_and(|router| {
+            router
+                .routes
+                .get(&window_id)
+                .is_some_and(|route| route.transfer.is_some())
+        })
+    }
+
     pub(super) fn active_tab(&self, window_id: Uuid) -> Option<Uuid> {
         self.inner.lock().ok().and_then(|router| {
             let route = router.routes.get(&window_id)?;
@@ -355,24 +368,60 @@ impl WindowRouter {
         }
     }
 
+    pub(super) fn begin_detach(&self, window_id: Uuid) -> Option<Uuid> {
+        let mut router = self.inner.lock().ok()?;
+        if !router
+            .pending_detaches
+            .values()
+            .any(|pending_window_id| *pending_window_id == window_id)
+        {
+            let token = Uuid::new_v4();
+            router.pending_detaches.insert(token, window_id);
+            Some(token)
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn is_pending_detach(&self, window_id: Uuid, token: Uuid) -> bool {
+        self.inner
+            .lock()
+            .is_ok_and(|router| router.pending_detaches.get(&token) == Some(&window_id))
+    }
+
+    pub(super) fn finish_detach(&self, token: Uuid) -> bool {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut router| router.pending_detaches.remove(&token))
+            .is_some()
+    }
+
     /// Modal input is enforced at the routing boundary as well as in Slint.
     /// The state check makes security prompts fail closed before the UI callback
     /// reporting the overlay has reached this router.
     pub(super) fn workspace_actions_locked(&self, window_id: Uuid, app: &AppState) -> bool {
-        let Some((modal_open, active_tab_id)) = self.inner.lock().ok().and_then(|router| {
-            let route = router.routes.get(&window_id)?;
-            let active_tab_id = route.active_tab_id.map(|workspace_tab_id| {
-                route
-                    .pane_trees
-                    .get(&workspace_tab_id)
-                    .map(PaneTree::focused_tab_id)
-                    .unwrap_or(workspace_tab_id)
-            });
-            Some((route.modal_open, active_tab_id))
-        }) else {
+        let Some((modal_open, active_tab_id, detach_pending)) =
+            self.inner.lock().ok().and_then(|router| {
+                let route = router.routes.get(&window_id)?;
+                let active_tab_id = route.active_tab_id.map(|workspace_tab_id| {
+                    route
+                        .pane_trees
+                        .get(&workspace_tab_id)
+                        .map(PaneTree::focused_tab_id)
+                        .unwrap_or(workspace_tab_id)
+                });
+                let detach_pending = router
+                    .pending_detaches
+                    .values()
+                    .any(|pending_window_id| *pending_window_id == window_id);
+                Some((route.modal_open, active_tab_id, detach_pending))
+            })
+        else {
             return true;
         };
-        modal_open
+        detach_pending
+            || modal_open
             || active_tab_id.is_some_and(|tab_id| {
                 !matches!(
                     app.security_prompt_for(Some(tab_id)),
@@ -778,6 +827,7 @@ impl WindowRouter {
             .inner
             .lock()
             .map(|mut router| {
+                router.pending_detaches.clear();
                 let ids = router
                     .routes
                     .iter()

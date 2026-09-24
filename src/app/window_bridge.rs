@@ -91,8 +91,16 @@ pub(super) fn restore_detached_workspaces(
         if let Err(error) = detached_ui.show() {
             log_renderer_fault("show-restored-detached-window", &error);
             warn!(%error, window_id = %new_window_id, "failed to show restored detached workspace");
-            software_presentation::remove_layout(&detached_ui, new_window_id);
-            renderer_window_destroyed("detached");
+            if window_router.has_detached(new_window_id) {
+                restore_detached_after_failure(window_router, state, new_window_id);
+                prepare_detached_window_for_release(&detached_ui, new_window_id);
+                if let Some(main_ui) = window_router.main_ui() {
+                    refresh_workspace(&main_ui, state);
+                }
+            }
+            continue;
+        }
+        if !window_router.has_detached(new_window_id) {
             continue;
         }
         install_native_window_input_hook(
@@ -336,6 +344,22 @@ fn prepare_detached_window_for_release(ui: &AppWindow, window_id: Uuid) {
     renderer_window_destroyed("detached");
 }
 
+fn restore_detached_after_failure(
+    window_router: &WindowRouter,
+    state: &Arc<Mutex<AppState>>,
+    window_id: Uuid,
+) {
+    let Some(detached) = window_router.remove_detached(window_id) else {
+        return;
+    };
+    let active_tab_id = window_router.restore_detached(&detached);
+    if let Some(active_tab_id) = active_tab_id
+        && let Ok(mut app) = state.lock()
+    {
+        let _ = app.activate_tab(active_tab_id);
+    }
+}
+
 pub(super) fn release_detached_windows(detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>) {
     let windows = detached_windows.borrow_mut().drain().collect::<Vec<_>>();
     for (window_id, ui) in &windows {
@@ -401,43 +425,20 @@ pub(super) fn wire_window_actions(
             Some(tab_id) => tab_id,
             None => return,
         };
-        let (transfer, pane_tree) = match state_for_detach.lock() {
-            Ok(mut app) => {
-                if router_for_detach.workspace_actions_locked(window_id, &app) {
-                    return;
-                }
-                if !router_for_detach.tab_ids(window_id, &app).contains(&tab_id) {
-                    set_status(&ui_for_detach, "Tab not found in this window");
-                    return;
-                }
-                let pane_anchor = app.terminal_companion_id(tab_id).or_else(|| {
-                    app.terminal(tab_id)
-                        .is_some_and(|terminal| !terminal.is_sftp())
-                        .then_some(tab_id)
-                });
-                let pane_tab_ids = pane_anchor
-                    .map(|anchor| router_for_detach.pane_tab_ids(window_id, anchor))
-                    .unwrap_or_default();
-                let transfer = if pane_tab_ids.is_empty() {
-                    app.workspace_transfer_for_sftp(tab_id, window_id)
-                } else {
-                    app.workspace_transfer_for_terminal_panes(&pane_tab_ids, window_id, tab_id)
-                };
-                if transfer.is_some() {
-                    let _ = app.activate_tab(tab_id);
-                }
-                let pane_tree = pane_anchor.and_then(|anchor| {
-                    router_for_detach.take_pane_tree_for_detach(window_id, anchor)
-                });
-                (transfer, pane_tree)
-            }
-            Err(_) => {
-                set_status(&ui_for_detach, "Cannot read workspace state");
-                return;
-            }
+        let Ok(app) = state_for_detach.lock() else {
+            set_status(&ui_for_detach, "Cannot read workspace state");
+            return;
         };
-        let Some(transfer) = transfer else {
-            set_status(&ui_for_detach, "Select a terminal workspace first");
+        if router_for_detach.workspace_actions_locked(window_id, &app) {
+            return;
+        }
+        if !router_for_detach.tab_ids(window_id, &app).contains(&tab_id) {
+            set_status(&ui_for_detach, "Tab not found in this window");
+            return;
+        }
+        drop(app);
+        let Some(detach_token) = router_for_detach.begin_detach(window_id) else {
+            set_status(&ui_for_detach, "A workspace detach is already in progress");
             return;
         };
         // Winit delivers Slint callbacks while dispatching the source-window
@@ -451,9 +452,10 @@ pub(super) fn wire_window_actions(
         let windows_for_show = windows_for_detach.clone();
         let log_directory_for_show = log_directory.clone();
         slint::Timer::single_shot(Duration::from_millis(0), move || {
+            if !router_for_show.is_pending_detach(window_id, detach_token) {
+                return;
+            }
             let detached_id = Uuid::new_v4();
-            #[cfg(target_os = "macos")]
-            let show_terminal_titlebar_actions = pane_tree.is_some();
             let detached_ui = match AppWindow::new()
                 .context("failed to create detached Slint window")
                 .and_then(|detached_ui| {
@@ -467,15 +469,7 @@ pub(super) fn wire_window_actions(
                 Ok(detached_ui) => detached_ui,
                 Err(error) => {
                     log_renderer_fault("create-detached-window", &error);
-                    let active_tab_id = router_for_show.restore_detached(&DetachedRoute {
-                        transfer: transfer.clone(),
-                        pane_tree: pane_tree.clone(),
-                    });
-                    if let Some(active_tab_id) = active_tab_id
-                        && let Ok(mut app) = state_for_show.lock()
-                    {
-                        let _ = app.activate_tab(active_tab_id);
-                    }
+                    router_for_show.finish_detach(detach_token);
                     warn!(%error, "failed to create detached workspace window");
                     set_status(
                         &ui_for_show,
@@ -484,6 +478,55 @@ pub(super) fn wire_window_actions(
                     return;
                 }
             };
+
+            let (transfer, pane_tree) = match state_for_show.lock() {
+                Ok(mut app) => {
+                    if !router_for_show
+                        .tab_ids(MAIN_WINDOW_ID, &app)
+                        .contains(&tab_id)
+                    {
+                        router_for_show.finish_detach(detach_token);
+                        prepare_detached_window_for_release(&detached_ui, detached_id);
+                        set_status(&ui_for_show, "Tab is no longer available for detaching");
+                        return;
+                    }
+                    let pane_anchor = app.terminal_companion_id(tab_id).or_else(|| {
+                        app.terminal(tab_id)
+                            .is_some_and(|terminal| !terminal.is_sftp())
+                            .then_some(tab_id)
+                    });
+                    let pane_tab_ids = pane_anchor
+                        .map(|anchor| router_for_show.pane_tab_ids(MAIN_WINDOW_ID, anchor))
+                        .unwrap_or_default();
+                    let Some(transfer) = (if pane_tab_ids.is_empty() {
+                        app.workspace_transfer_for_sftp(tab_id, MAIN_WINDOW_ID)
+                    } else {
+                        app.workspace_transfer_for_terminal_panes(
+                            &pane_tab_ids,
+                            MAIN_WINDOW_ID,
+                            tab_id,
+                        )
+                    }) else {
+                        router_for_show.finish_detach(detach_token);
+                        prepare_detached_window_for_release(&detached_ui, detached_id);
+                        set_status(&ui_for_show, "Select a terminal workspace first");
+                        return;
+                    };
+                    let _ = app.activate_tab(tab_id);
+                    let pane_tree = pane_anchor.and_then(|anchor| {
+                        router_for_show.take_pane_tree_for_detach(MAIN_WINDOW_ID, anchor)
+                    });
+                    (transfer, pane_tree)
+                }
+                Err(_) => {
+                    router_for_show.finish_detach(detach_token);
+                    prepare_detached_window_for_release(&detached_ui, detached_id);
+                    set_status(&ui_for_show, "Cannot read workspace state");
+                    return;
+                }
+            };
+            #[cfg(target_os = "macos")]
+            let show_terminal_titlebar_actions = pane_tree.is_some();
             router_for_show.register_detached(
                 detached_id,
                 detached_ui.as_weak(),
@@ -505,22 +548,22 @@ pub(super) fn wire_window_actions(
             if let Err(error) = detached_ui.show() {
                 log_renderer_fault("show-detached-window", &error);
                 warn!(%error, "failed to show detached workspace window");
-                software_presentation::remove_layout(&detached_ui, detached_id);
-                renderer_window_destroyed("detached");
-                if let Some(detached) = router_for_show.remove_detached(detached_id) {
-                    let active_tab_id = router_for_show.restore_detached(&detached);
-                    if let Some(active_tab_id) = active_tab_id
-                        && let Ok(mut app) = state_for_show.lock()
-                    {
-                        let _ = app.activate_tab(active_tab_id);
-                    }
+                if router_for_show.has_detached(detached_id) {
+                    restore_detached_after_failure(&router_for_show, &state_for_show, detached_id);
+                    prepare_detached_window_for_release(&detached_ui, detached_id);
                 }
+                router_for_show.finish_detach(detach_token);
                 set_status(
                     &ui_for_show,
                     &format!("Cannot show detached workspace: {error}"),
                 );
                 return;
             }
+            if !router_for_show.has_detached(detached_id) {
+                router_for_show.finish_detach(detach_token);
+                return;
+            }
+            router_for_show.finish_detach(detach_token);
             #[cfg(target_os = "macos")]
             schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_titlebar_actions);
             refresh_workspace(&detached_ui.as_weak(), &state_for_show);

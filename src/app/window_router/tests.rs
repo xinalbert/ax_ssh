@@ -153,6 +153,25 @@ fn blocking_modal_prevents_tab_navigation_until_it_is_dismissed() {
 }
 
 #[test]
+fn pending_detach_locks_the_source_and_is_cancelled_by_workspace_discard() {
+    let router = test_router();
+    let app = router_test_state();
+    let token = router
+        .begin_detach(MAIN_WINDOW_ID)
+        .expect("first detach should reserve the source window");
+
+    assert!(router.is_pending_detach(MAIN_WINDOW_ID, token));
+    assert!(router.workspace_actions_locked(MAIN_WINDOW_ID, &app));
+    assert!(router.begin_detach(MAIN_WINDOW_ID).is_none());
+
+    router.discard_detached();
+
+    assert!(!router.is_pending_detach(MAIN_WINDOW_ID, token));
+    assert!(!router.workspace_actions_locked(MAIN_WINDOW_ID, &app));
+    assert!(!router.finish_detach(token));
+}
+
+#[test]
 fn pending_authentication_locks_tab_navigation_before_ui_modal_state_arrives() {
     let router = test_router();
     let mut app = router_test_state();
