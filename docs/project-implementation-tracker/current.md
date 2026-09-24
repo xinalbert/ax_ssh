@@ -34,6 +34,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| SFTPLIVE1 | completed | 返回 SFTP Tab 和断线重连后保留本地选择，同目录刷新继续上传，目录切换时锁定目标 | 状态定向测试、Slint 重编译、离线 Rust 门禁和 diff 已通过 | 复用现有 Tab/worker；真实窗口切换与服务器上传由用户验收。 |
+| SFTPUPLOADBATCH1 | completed | 本地/Finder 多选和目录递归上传、单命令批次队列、远端目录创建 | 递归发现与远端目录定向测试、Slint 重编译、完整离线门禁 | 并发仍为每 Tab 2 条；超出扫描上限整批拒绝；真实服务器和 GUI 行为待用户验收。 |
+| SFTPCONFLICT1 | completed | 远端同名上传标准弹窗、按批次选择、worker 端重验与安全发布 | SFTP 状态/传输定向测试、Slint 重编译、完整离线门禁和翻译检查 | 默认询问；覆盖需 POSIX rename 扩展；真实服务器和视觉行为待用户验收。 |
+| NOTICE1 | in_progress | 活动 pane 的连接/剪贴板 notice 在窗口居中限宽、长文换行滚动、窄窗口动作纵排与重复标题清理 | Slint 重编译、notice 定向回归、fmt/check/Clippy/test/diff；用户视觉验收 | 保持 pane UUID 动作路由和非阻塞 Tab 切换；不改 SSH 信任或凭据边界。 |
 | MEM1 | completed | Sample/vmmap/heap 与 1.17.1/1.18.1 缓存生命周期根因核对 | 进程类别、配置和锁定源码交叉核对 | 运行中安装版为 1.17.1；GPU row cache 已启用。 |
 | MEM2 | completed | 1.18.1 Skia `layer_cache.component_destroyed` 本地补丁和 Cargo patch | Cargo locked/offline 编译、严格 Clippy、测试 | 本地 vendor 源码与上游仅差该一行；根锁文件仅改变 crate 来源。 |
 | MEM3 | completed | 双语架构、项目地图、采样复核说明和完整门禁 | fmt/check/Clippy/test/build、tracker/diff；用户真实负载对照 | ARM64/x86_64 macOS 编译门禁通过；内存降幅仍待同负载采样。 |
@@ -184,6 +188,7 @@
 
 ## 最后更新时间
 
+- 2026-09-24 17:43 +0800：完成 SFTPLIVE1；SFTP 重连保留本地路径和选择，同目录刷新保持上传目标，完整离线 Rust 门禁通过；真实服务器与窗口操作由用户验收。
 - 2026-09-24 10:19 +0800：完成 TITLEBAR8，将主窗口 Tab 外空白拖窗扩展到 Windows/Linux；用户实际拖动验收待执行。
 - 2026-09-24 09:48 +0800：完成 TITLEBAR7 标题栏剩余空白拖窗命中；用户实际拖动验收待执行。
 - 2026-09-23 22:59 +0800：完成 TITLEBAR5 的拖动分区实现、本机 Rust/Slint 门禁及两个 macOS target 的 check/Clippy/build；实际拖动由用户验收。

@@ -187,8 +187,11 @@ Terminal panes intentionally have no visual frame, and `AppWindow` does not add
 an additional client-area frame around the application window.
 The Rust-owned terminal snapshot may also carry one small, tab-local connection
 notice. A failed connection, unexpected disconnect, reconnect countdown, or
-exhausted retry budget appears as a non-blocking banner in that terminal pane,
-including split panes and detached Terminal windows. Its Retry and Close intents
+exhausted retry budget appears as a centered, size-limited non-blocking card in
+the current window, including split-pane and detached Terminal windows. The
+card represents the active pane's notice; switching Tabs or panes remains
+available. Details wrap and scroll within the card, and narrow windows stack
+the actions. The notice does not reduce the terminal grid. Its Retry and Close intents
 carry the pane UUID back to the application, which revalidates the window route
 before restarting the existing worker route or closing the affected tab. The
 notice is deliberately absent while a host-key or authentication security phase
@@ -473,6 +476,8 @@ either dialog before the Rust state transition accepts it.
 local management or workspace-file dialog; the covered local dialog and its
 draft remain intact and resume after the security decision. A second local
 request while any dialog is open is ignored rather than replacing unsaved input.
+The active terminal pane's non-blocking notice shares this window layer, but
+does not set `modal-open`; blocking dialogs temporarily cover it.
 Its derived `modal-open` state disables application menu actions and is reported
 to `WindowRouter`. The router independently treats the active Tab's pending
 security phase as locked, so Tab activation, cycling, reordering, closing, pane
@@ -1398,9 +1403,17 @@ Each bounded transfer row retains its optional local path and remote target only
 inside application state. Terminal records can reveal a non-symlink local path
 from a blocking platform opener; Slint receives only a boolean capability and
 the opaque transfer ID. A completed upload may start one fresh listing request
-only when the active remote path still equals its destination parent and no
+only when the active remote path is its destination parent or a visible ancestor and no
 navigation is loading. The refresh uses the ordinary SFTP navigation request,
 does not add history, and is skipped for cancelled or stale completions.
+Upload target readiness is derived from the last opened remote path and its
+pending navigation, independently of directory listing progress. Refreshing or
+paging that same path keeps it usable; a pending move to another path blocks
+new uploads. The local listing retains its rows and selection until a new path
+succeeds, and the SFTP pane initializes it only before its first successful load.
+Later activations reuse that state; a local Refresh action requests a new listing.
+SFTP session reset also retains the local directory and selection while invalidating
+any pending local listing result; remote browser and transfer state still reset.
 
 The local writer validates every path component, rejects symlink traversal and
 existing targets, creates a task-specific `0600` `.part` file on Unix, then
@@ -1411,17 +1424,33 @@ publication removes the completed target before it can be reported successful.
 Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
 menu owns bounded Download and Delete intents; the remote toolbar retains
-rename, UTF-8 edit, and Save As operations. Local regular files
-can be uploaded through the same transfer queue. The application passes only a
+rename, UTF-8 edit, and Save As operations. All selected local files and folders,
+internal drag roots, and native dropped roots enter one batch command. Blocking
+local discovery preserves relative paths, skips links and filtered names, and
+caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,
+512 KiB of path text, 1 GiB aggregate bytes, and 512 MiB per file. The worker
+creates missing remote directories through its SFTP session, rejecting links or
+unexpected target types. At most two transfers run concurrently per Tab; the
+remaining accepted files wait in the bounded worker queue. The application passes only a
 validated path and size; the worker revalidates the source and streams one
 64 KiB chunk at a time. A process-wide eight-upload semaphore bounds the
 resident upload chunks (about 512 KiB at this boundary), so a 512 MiB upload
-does not become a resident buffer. Editor monitoring polls a
-remote size/mtime fingerprint while the editor is open. Automatic upload is
+does not become a resident buffer. Editor monitoring polls a remote size/mtime
+fingerprint while the editor is open. A regular remote upload target triggers
+a Rust-owned conflict queue and a shared `ModalFrame` prompt.
+The user can skip, overwrite, or keep both; the optional batch choice applies
+only to the files from one upload/drop intent in that SFTP worker. New uploads
+default to asking again. The worker rechecks the remote fingerprint before
+publishing an overwrite with the server's `posix-rename@openssh.com` extension;
+if the extension is unavailable or the target changed, the upload fails without
+replacing the original. Keep both chooses a numbered free name. Pending upload
+intents and prompts remain bounded, and closing the Tab drops their decisions.
+Automatic upload is
 explicit and off by default, debounced, and still guarded by the observed
 fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
-local/remote source prefix: local paths dropped on Remote files queue uploads,
+local/remote source prefix: selected local rows carry the current selection and
+unselected rows carry only themselves. Local paths dropped on Remote files queue uploads,
 and remote files or folders dropped on Local files queue downloads. External
 Finder uploads use the same target contract. macOS reads the current AppKit
 cursor position for every received `DroppedFile`; it does not require a prior
@@ -1431,11 +1460,12 @@ precondition for a delivered native drop. Other platforms use the latest Winit
 the declarative SFTP geometry whether that position is inside the visible
 Remote files target. That geometry only selects the target: immediately before
 queueing, the application bridge revalidates the active SFTP tab's current
-connection, loading state, and remote directory. This avoids a stale Slint
+connection and stable remote directory. This avoids a stale Slint
 presentation snapshot silently rejecting a valid native drop, while still
 rejecting a missing AppKit/hover coordinate, any other target, or a state that
 is not ready rather than guessing from the active directory.
-Slint `DropArea` continues to handle the in-process paths.
+Slint `DropArea` continues to handle the in-process paths. Consecutive native
+dropped-file events share one short-lived upload batch for conflict decisions.
 
 On macOS, beginning a drag on a visible remote regular file instead creates an
 AppKit `NSFilePromiseProvider` with copy-only semantics. Its main-thread

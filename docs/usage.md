@@ -199,7 +199,7 @@ and opens the completed read-only snapshot. Replacing the original path after
 validation cannot redirect the open request.
 
 Right-click a local row to open a file or folder, reveal a non-link entry in its
-local folder, or upload one regular file. The local and remote list checkboxes,
+local folder, or upload the selected files and folders. The local and remote list checkboxes,
 including their header controls, update the active SFTP Tab's selection before a
 menu action runs.
 
@@ -219,8 +219,8 @@ SFTP transfers can omit generated system files. In **Settings > General**, enabl
 `.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd`; Windows and
 Linux have their corresponding common metadata names). Add one custom filename
 pattern per line; `*` matches any characters. The same filter applies to local
-uploads, Finder drops, remote downloads, and every level of a recursive directory
-download. **Restore platform defaults** clears custom patterns and re-enables the
+uploads, Finder drops, remote downloads, and every level of recursive directory
+transfers. **Restore platform defaults** clears custom patterns and re-enables the
 platform preset; settings changes follow the normal Settings draft/save flow.
 
 The Transfers area has separate **Transferring**, **Failed**, and **Success**
@@ -230,7 +230,7 @@ actions share the page bar instead of reserving a separate row. Pause/resume
 preserves the downloaded prefix through the live
 worker and continues from that offset; it is available only while this
 application and SFTP worker remain running. Each SFTP Tab runs at most two
-active downloads at once. Cancel removes the task's partial content,
+active transfers at once; additional files wait in the queue. Cancel removes the task's partial content,
 including a file published just before cancellation wins; failures remove the
 `.part` file, while completed local downloads remain in the chosen directory.
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
@@ -240,13 +240,24 @@ Every transfer row prefixes its filename with **Upload** or **Download**,
 including queued, in-progress, failed, cancelled, and successful records. The
 progress column continues to show the percentage or terminal result such as
 `Uploaded` or `Downloaded`.
+When an upload finds a remote file with the same name, a dialog offers **Skip**,
+**Keep both**, or **Overwrite**. **Apply this choice to this upload batch** uses
+the same choice for the remaining files in that upload/drop batch. Skip appears
+as a completed `Skipped` transfer. Overwrite requires server support for atomic
+replacement; if the remote file changes during the upload, it fails and leaves
+the existing file intact.
 
 Right-click an active transfer for its applicable Pause, Resume, or Cancel
 action. Right-click a failed, cancelled, or successful record to remove it, or
 to reveal its local source or downloaded file when that path is available.
 After an upload completes, AxSSH refreshes **Remote files** automatically only
-when that pane is still showing the upload's destination directory and no other
+when that pane is still showing the upload's destination directory or an ancestor and no other
 directory request is in progress; it does not interrupt later navigation.
+Uploads can still target the current remote directory while that same directory
+is refreshing. Navigation to another remote directory pauses new uploads until
+its destination is known. Returning to an SFTP Tab keeps the loaded Local files
+selection, including after an SFTP reconnect; use **Refresh** in Local files to
+read changes made outside AxSSH.
 
 The remote row context menu also supports deleting its selected files and
 directories (directories are non-recursive). Download and Delete no longer
@@ -254,9 +265,16 @@ occupy the directory toolbar. The remaining remote controls support renaming
 one selected entry, editing bounded UTF-8 text, and saving to an explicit
 remote path. While the editor is open, a worker-owned
 poll checks the remote size/mtime fingerprint; a change disables Save and
-reports a conflict. The local toolbar uploads one selected regular file. Dragging a
-local or Finder file onto Remote files queues an upload into the current remote
-directory. Dragging a remote file or folder onto Local files queues a download
+reports a conflict. The local toolbar uploads all selected files and folders.
+Dragging a selected local row carries the current selection; dragging an unselected
+row carries that row. Local and Finder files or folders dropped onto Remote files
+upload to the current remote directory. Folder uploads recursively discover regular
+files, preserve relative paths, and create needed remote directories. Empty folders
+without eligible files do not create a remote directory. Symbolic links and filtered
+names are skipped. A batch is bounded to 512 files, 256 directories,
+16 levels, 4,096 scanned entries, 512 KiB of path text, 1 GiB total, and 512 MiB
+per file; exceeding a limit rejects the batch before upload.
+Dragging a remote file or folder onto Local files queues a download
 into the current local directory. Completed downloads remain there and never
 open automatically. On macOS, dragging a remote regular file can
 also be dropped into Finder as a native file: AxSSH downloads it only after the
@@ -354,7 +372,9 @@ their SSH/SFTP companions move as one workspace group and keep existing terminal
 output, SFTP directory state, transfers, host-key prompts, and authentication
 phases. SSH, Telnet, and Serial tabs automatically reconnect after an unexpected
 disconnect using at most five attempts with 1, 2, 4, 8, and 16 second backoff
-(capped at 30 seconds). A detached Terminal window shows only its
+(capped at 30 seconds). Connection errors and retry prompts for the active
+pane appear in a centered card in the current window; its details can scroll
+without blocking other Tabs. A detached Terminal window shows only its
 terminal panes, while a detached SFTP view shows only SFTP. In the detached
 macOS window, the native title bar matches the active Terminal or SFTP surface
 and its overlapping-window return icon merges the same workspace layout back. Hovering

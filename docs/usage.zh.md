@@ -124,7 +124,7 @@ Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独�
 链接不会打开。AxSSH 会在 UI 线程外核对已打开文件的平台 identity，从该精确 handle 复制到私有有界
 缓存，完整发布后再请求操作系统打开；验证后替换原路径不能重定向这次打开请求。
 
-右击本地文件行可打开文件或目录、在本地文件夹中显示非链接条目，或上传一个 regular file。本地和远端
+右击本地文件行可打开文件或目录、在本地文件夹中显示非链接条目，或上传当前选中的文件与目录。本地和远端
 列表的行勾选框及表头勾选框都会先更新活动 SFTP Tab 的选中状态，再执行菜单动作。
 
 右击远端文件或目录后选择 **Download**。右击未选中的行会先把它设为唯一选中项；右击已选中的行会保留
@@ -136,30 +136,36 @@ SFTP 传输可以过滤系统生成的文件。在 **Settings > General** 中开
 **Filter system files** 后，会使用当前平台的默认规则（macOS 包含 `.DS_Store`、
 `._*`、`.Spotlight-V100`、`.Trashes` 和 `.fseventsd`；Windows、Linux 使用各自常见的
 系统元数据名称）。自定义过滤规则每行填写一个文件名模式，`*` 匹配任意字符。同一规则
-同时用于本地上传、Finder 拖入、远端下载以及递归目录下载的每一层。点击
+同时用于本地上传、Finder 拖入、远端下载以及递归目录传输的每一层。点击
 **Restore platform defaults** 会清空自定义规则并重新启用平台默认值；配置仍遵循设置页
 草稿和保存流程。
 
 Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。可用勾选框选择活动行并批量暂停、
 继续或取消，操作位于 **Transferring** 页签栏右侧，不再单独占用一行。暂停/继续会由仍存活的 worker
 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
-仍运行期间可用。每个 SFTP Tab 最多同时运行两个下载。取消会删除该任务的部分内容，包括刚发布但
+仍运行期间可用。每个 SFTP Tab 最多同时运行两个传输，其余文件在队列中等待。取消会删除该任务的部分内容，包括刚发布但
 取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
 待发现、待打开 subsystem 和活动下载，再关闭浏览器和 SSH transport。
 
 每条 transfer 的文件名之前都会显示 **Upload** 或 **Download**，排队中、进行中、失败、取消和成功记录都保持该方向标识。
 进度列继续显示百分比，终态则显示 **Uploaded** 或 **Downloaded**。
+上传遇到同名远端文件时，弹窗提供 **Skip**、**Keep both** 和 **Overwrite**。勾选
+**Apply this choice to this upload batch** 后，同一次上传/拖入批次的剩余文件沿用该选择；下一批次仍会询问。
+跳过的文件以 `Skipped` 终态显示。覆盖要求服务器支持原子替换；上传期间远端文件发生变化时会失败并保留原文件。
 
 右击活动 transfer 可执行其适用的暂停、继续或取消操作。右击 Failed、Cancelled 或 Success 记录可移除
 记录；在该记录仍有本地源文件或下载文件路径时，也可直接在本地文件夹中显示。上传完成后，只有当前
-**Remote files** 仍显示上传目标目录且没有其他目录请求时，AxSSH 才会自动刷新该列表；之后的导航不会被
+**Remote files** 仍显示上传目标目录或其祖先目录且没有其他目录请求时，AxSSH 才会自动刷新该列表；之后的导航不会被
 上传完成事件打断。
+当前远端目录自身刷新时仍可向该目录上传；切换到其他远端目录期间，待新目标确定后才能继续上传。
+重新打开 SFTP Tab 或 SFTP 断线重连后，会保留已加载的 Local files 列表和选择；需要读取应用外的变化时，可点击本地栏的 **Refresh**。
 
 远端文件行右键菜单支持删除选中条目（目录不递归）；**Download** 和 **Delete** 不再占用目录顶部工具栏。
-其余远端控件保留重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地 regular file 可通过上传按钮，或将本地/Finder
-文件拖到 Remote files 区上传到当前远端目录。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。成功下载保留在该目录，不会自动打开。在 macOS 上，远端普通文件还可作为原生文件拖到 Finder；只有目标接受拖放后 AxSSH 才会下载。将同一次拖动返回发起它的 AxSSH SFTP 窗口时，文件会下载到开始拖动时可见的 Local files 目录。目录、链接和被过滤条目仍采用应用内拖动；Finder 拖入 Remote files 的上传行为不变。打开编辑器期间会按远端 size/mtime fingerprint 轮询；
+其余远端控件保留重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地上传按钮会上传全部选中项。拖动已选中的本地行会带上当前选择，拖动未选中行仅带上该行；本地或 Finder 文件、目录拖到 Remote files 区会上传到当前远端目录。目录递归发现普通文件并保留相对路径，按需创建远端目录；符号链接和被过滤名称跳过。每批最多 512 个文件、256 个目录、16 层、扫描 4,096 项、512 KiB 路径文本、1 GiB 总大小，单文件最多 512 MiB；超限时整批拒绝。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。成功下载保留在该目录，不会自动打开。在 macOS 上，远端普通文件还可作为原生文件拖到 Finder；只有目标接受拖放后 AxSSH 才会下载。将同一次拖动返回发起它的 AxSSH SFTP 窗口时，文件会下载到开始拖动时可见的 Local files 目录。链接和被过滤条目仍采用应用内拖动；打开编辑器期间会按远端 size/mtime fingerprint 轮询；
 发现变化会禁用保存并提示冲突。自动上传需要勾选 **Auto upload**，默认关闭，且会经过 500ms 防抖与 fingerprint
 校验。跨进程恢复和更复杂的冲突合并仍未提供。
+
+没有可上传文件的空目录不会单独创建远端目录。
 
 ## 工作区与终端操作
 
@@ -218,7 +224,7 @@ Tab 时保留侧栏当前选择，终端和编辑器的键盘输入焦点不会�
 要把已连接 Terminal 及其当前工作区中的 terminal pane 作为独立原生窗口使用，可点击连接
 Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
 及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
-主机密钥提示和认证阶段。SSH、Telnet、Serial 在非主动断开后会自动重连，最多 5 次，退避为 1、2、4、8、16 秒并封顶 30 秒。detached Terminal 窗口只显示 terminal pane，detached
+主机密钥提示和认证阶段。SSH、Telnet、Serial 在非主动断开后会自动重连，最多 5 次，退避为 1、2、4、8、16 秒并封顶 30 秒。当前活动 pane 的连接错误和重试提示在窗口中央显示，详情可滚动，不阻止切换其他 Tab。detached Terminal 窗口只显示 terminal pane，detached
 SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前 Terminal 或 SFTP 客户区表面色；点击同一行的重叠窗口
 返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话

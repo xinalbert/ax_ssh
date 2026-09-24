@@ -140,7 +140,9 @@ revision 与覆盖全部渲染设置的 64-bit key 缓存结果，再复用已�
 并在平台双击间隔后过期；reporting、Shift、目标激活、焦点、刷新和 Copy 继续使用相同优先级。
 Terminal pane 不绘制自身框线；`AppWindow` 也不在整个应用窗口客户区额外绘制框线。
 Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属的连接 notice。连接失败、非主动断开、
-重连倒计时或达到重试上限时，该 terminal pane（包括分屏和 detached Terminal 窗口）内部会显示非阻塞 banner。
+重连倒计时或达到重试上限时，当前窗口（包括分屏和 detached Terminal 窗口）中央会显示
+限宽限高的非阻塞提示卡片，内容归属当前活动 pane；Tab/pane 仍可切换。详情在卡片内换行和滚动，
+窄窗口的动作按钮纵向排列，提示不压缩终端网格。
 其中的 Retry 与 Close 意图会把 pane UUID 交回 application；application 在重新启动既有 worker 路由或关闭对应
 Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不显示该 notice，既有的阻塞式安全覆盖层仍是唯一权威。
 只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
@@ -303,7 +305,9 @@ confirm/reject/authenticate/cancel 意图，不能在 Rust 接受状态转换前
 `OverlayHost` 同一时刻最多呈现一个 dialog。安全提示优先于本地管理或 workspace-file
 dialog；被覆盖的本地 dialog 与其草稿保持不变，安全决策结束后恢复。任一 dialog 打开时再次
 请求本地 dialog 会被忽略，避免替换未保存输入。派生的 `modal-open` 会禁用 application
-菜单动作并回传 `WindowRouter`。Router 还独立把 active Tab 的 pending security phase 视为
+菜单动作并回传 `WindowRouter`。当前活动 pane 的非阻塞 notice 也由该窗口层显示，但不设置
+`modal-open`；阻塞式 dialog 会暂时覆盖它。
+Router 还独立把 active Tab 的 pending security phase 视为
 locked，因此 Tab 激活、循环、排序、关闭、pane command 和 workspace 转移都不能与 UI 状态
 callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保持非阻塞。
 
@@ -855,19 +859,28 @@ subsystem stream。
 暂停/继续是 worker 生命周期内的契约：writer 保留部分文件，流只在该 worker 存活时从当前 offset 继续。
 
 每条有界 transfer 行只在应用状态中保留可选的本地路径和远端目标。终态记录可由 blocking 平台 opener 显示
-非符号链接的本地路径；Slint 只得到布尔能力和不透明 transfer ID。上传完成时，只有活动远端路径仍等于
-目标父目录且没有导航加载中，才会发起一次新的列表请求。该刷新复用普通 SFTP 导航请求、不写入历史，且
+非符号链接的本地路径；Slint 只得到布尔能力和不透明 transfer ID。上传完成时，只有活动远端路径仍为
+目标父目录或其可见祖先目录且没有导航加载中，才会发起一次新的列表请求。该刷新复用普通 SFTP 导航请求、不写入历史，且
 已取消或迟到的完成事件不会触发刷新。
+上传目标就绪状态取决于最后打开的远端路径和待处理导航，与目录列表加载状态分离；同路径刷新或分页不阻止
+继续上传，导航到其他路径期间则暂停新上传。本地列表在新路径成功返回前保留旧行和选择，SFTP 面板仅在首次
+成功加载前自动读取本地目录；之后重新激活复用原状态，本地 Refresh 可主动重新读取。
+SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读取结果失效；远端浏览和传输状态仍重置。
 
 本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
 和活动 transfer。远端文件行右键菜单负责有界下载和删除 intent；远端工具栏保留重命名、UTF-8 编辑和
-Save As。本地 regular file 通过同一 transfer queue 上传。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
+Save As。全部选中的本地文件和目录、内部拖动根及系统拖入根会进入单条批次命令。本地递归发现在线程池中保留相对路径、跳过链接和过滤项；每批最多扫描 4,096 项，接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总大小，单文件最多 512 MiB。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 最多同时运行两个传输，其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
 每次只流式读取一个 64 KiB chunk；进程级最多同时运行 8 个上传，进一步把此边界的常驻 chunk
 内存限制在约 512 KiB，因此 512 MiB 上传不会变成常驻内存缓冲。
+同名远端普通文件进入 Rust 所有的冲突队列，并由共享 `ModalFrame` 弹窗询问跳过、覆盖或两者都保留。
+可选的“应用到本批次”只作用于本次上传/拖入意图中的文件及当前 SFTP worker 生命周期；新上传仍默认询问。
+覆盖发布前重新核对远端 size/mtime fingerprint，并要求服务器支持 `posix-rename@openssh.com` 原子替换扩展；
+扩展缺失或目标变化时失败且保留原文件。两者都保留时寻找带序号的空闲名称。待传上传意图和冲突提示均有界，
+关闭 Tab 会丢弃这些决策。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
-拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部 Finder 上传遵循同一目标契约：macOS 每次收到 `DroppedFile` 都读取当前 AppKit 光标坐标，不再要求先收到 `HoveredFile` 通知，因为该通知不是原生 drop 已送达时可靠的前置条件；其他平台仍使用当前外部文件 hover 的最新 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于可见的 Remote files 目标。该几何只负责选择目标；在排队前，application bridge 会重新校验活动 SFTP Tab 的当前连接、loading 状态和远端目录。这样 Slint 的陈旧 presentation snapshot 不会静默拒绝有效的原生 drop，同时缺少 AppKit/hover 坐标、落在其他目标或实时状态尚未就绪时仍会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。
+拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：已选中的本地行携带当前选择，未选中行只携带自身；本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部 Finder 上传遵循同一目标契约：macOS 每次收到 `DroppedFile` 都读取当前 AppKit 光标坐标，不再要求先收到 `HoveredFile` 通知，因为该通知不是原生 drop 已送达时可靠的前置条件；其他平台仍使用当前外部文件 hover 的最新 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于可见的 Remote files 目标。该几何只负责选择目标；在排队前，application bridge 会重新校验活动 SFTP Tab 的当前连接和稳定的远端目录。这样 Slint 的陈旧 presentation snapshot 不会静默拒绝有效的原生 drop，同时缺少 AppKit/hover 坐标、落在其他目标或实时状态尚未就绪时仍会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。连续送达的原生文件事件共用短生命周期上传批次，使同名冲突的本批次选择作用于该次拖动的文件。
 
 在 macOS 上，从可见远端普通文件开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。远端目录、链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
 
