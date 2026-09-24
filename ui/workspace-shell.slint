@@ -1305,7 +1305,9 @@ export component WorkspaceShell inherits Rectangle {
 
     workspace-titlebar := WorkspaceTitlebar {
         visible: !root.detached-window;
-        x: root.apple-platform ? Theme.macos-titlebar-controls-width : session-navigation.width;
+        x: root.apple-platform
+            ? Theme.macos-titlebar-leading-clearance
+            : session-navigation.width;
         y: 0px;
         width: max(0px, parent.width - self.x);
         tabs: root.view.workspace_tabs;

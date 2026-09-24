@@ -843,18 +843,24 @@ tab-local terminal connection notice deliberately remains non-blocking.
 9. On macOS, the main window keeps the standard traffic-light controls, hides
    the native title text, and extends Slint content into a transparent native
    title bar. The workspace Tab strip occupies that title-bar row with a fixed
-   leading clearance for the traffic lights, independent of sidebar width.
+   leading clearance for the traffic lights, independent of sidebar width. The
+   former excess part of that clearance is retained as a trailing gap immediately
+   before the terminal split controls.
    The sidebar and its collapse control start below the title-bar row.
    One bottom separator spans the full main-window title-bar row, including
    the traffic-light clearance; other platforms keep the separator to the
    right of the sidebar.
+   On Windows and Linux, the main-window title-bar row begins at the sidebar's
+   right edge. Its Slint hit area behind uncovered Tab-row space uses the same
+   Winit window-drag callback, so empty space outside Tabs can move the main
+   window there as well.
    AppKit still treats uncovered title-bar content as a window drag region even
    when movable-window-background is disabled. The main Winit content view
    therefore permits native dragging only in the traffic-light clearance and
-   only within the title-bar row. A Slint hit area behind the Tabs explicitly
-   starts Winit's native window drag on a left press in the remaining empty
-   title-bar space. Tabs and their buttons stay above that hit area and own
-   their click/reorder gestures. Detached windows retain their native title bar.
+   only within the title-bar row. Slint hit areas behind the Tabs and in the
+   gap before the terminal split controls explicitly start Winit's native
+   window drag on a left press. Tabs and title-bar buttons keep their own click
+   and reorder gestures. Detached windows retain their native title bar.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so

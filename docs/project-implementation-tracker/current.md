@@ -38,6 +38,9 @@
 | MEM2 | completed | 1.18.1 Skia `layer_cache.component_destroyed` 本地补丁和 Cargo patch | Cargo locked/offline 编译、严格 Clippy、测试 | 本地 vendor 源码与上游仅差该一行；根锁文件仅改变 crate 来源。 |
 | MEM3 | completed | 双语架构、项目地图、采样复核说明和完整门禁 | fmt/check/Clippy/test/build、tracker/diff；用户真实负载对照 | ARM64/x86_64 macOS 编译门禁通过；内存降幅仍待同负载采样。 |
 | TITLEBAR5 | completed | macOS 空白标题栏显式拖窗，Tab/按钮手势互斥，左侧原生命中仅限标题栏高度 | Slint 重编译、fmt/check/Clippy/test/build/diff；用户实际拖动验收 | 复用 Winit `drag_window()` 和现有 AppKit content-view subclass；不增加依赖。 |
+| TITLEBAR6 | completed | 将 macOS 标题栏前沿多余空白转移到终端分栏按钮前 | Slint 重编译、fmt/check/Clippy/test/diff；用户视觉验收 | 保留红绿灯安全区和 TITLEBAR5 的拖动/手势边界；只调整标题栏空白分配。 |
+| TITLEBAR7 | completed | 允许拖动标题栏分栏按钮前的空白区域移动窗口 | Slint 重编译、locked/offline Cargo 门禁、diff；用户实际拖动验收 | 仅 macOS 主窗口；Tab 和标题栏按钮保留原手势。 |
+| TITLEBAR8 | completed | Windows/Linux 主窗口 Tab 外空白区域支持拖窗 | Slint 重编译、locked/offline Cargo 门禁、diff；目标平台实际拖动验收 | 将 Winit `drag_window()` 回调扩展到桌面平台；Tab、分栏、连接按钮保留原手势。Windows target 跨编译受本机缺少 MSVC/Windows SDK 阻断，Linux target 未安装。 |
 | DRAW1 | completed | 持久化 TerminalDrawingPreference、设置 UI 和安全禁用 Canvas | 配置回归、Slint 重编译、fmt/check/Clippy/test/translation/tracker/diff | 库 280/应用 267 测试通过；Canvas 未实现且控件禁用。 |
 | TITLEBAR1 | completed | macOS 主窗口隐藏原生标题文字，将 Tab 条延伸到红绿灯所在标题栏区域 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | 保留原生红绿灯并为其留空；显式 target check/Clippy 被 Skia 下载阻断，视觉由用户验收。 |
 | TITLEBAR2 | completed | 固定 macOS 顶部 Tab 起点，不随侧栏展开/收起移动 | Slint 重编译、fmt/check/Clippy/test/build、翻译/diff | Tab 横向固定在红绿灯右侧、纵向固定在窗口顶部；视觉由用户验收，显式 target 门禁仍受 Skia 下载限制。 |
@@ -88,7 +91,7 @@
 
 - 已定位 2026-09-23 22:31 安装版 Sample 的 1.3 GB footprint 主要在 Metal 图形资源：同 PID 的 `vmmap -summary` 报约 1.1 GB `IOAccelerator (graphics)`、80 MB `IOSurface`，malloc 实际分配约 76 MB；`heap` 有数千个 AGX texture。安装版是 Slint 1.17.1，而当前源码锁定 1.18.1；这不是修复后内存测量。
 - 已确认本机持久化设置选择 GPU 且打开 terminal row render cache。Slint `ItemCache` 的组件指针缓存要求销毁时执行 `component_destroyed`，两版 Skia 的 `free_graphics_resources` 均漏掉 `layer_cache`；修复在当前 1.18.1 的本地补丁中补齐，并保留其他 renderer、配置与应用状态边界。
-- 已完成 TITLEBAR5：macOS 主窗口在 Tab 下层空白区域按下左键时通过 `AppWindow` callback 同步请求 Winit 系统拖窗；Tab 和按钮仍在上层处理原手势。AppKit content view 仅允许顶部 96×32 逻辑点的红绿灯留空原生拖窗，避免侧栏被误判为标题栏。
+- 已完成 TITLEBAR5：macOS 主窗口在 Tab 下层空白区域按下左键时通过 `AppWindow` callback 同步请求 Winit 系统拖窗；Tab 和按钮仍在上层处理原手势。AppKit content view 仅允许顶部标题栏前沿的红绿灯留空原生拖窗，避免侧栏被误判为标题栏。TITLEBAR6 将前沿从 96px 收紧为 60px，并把剩余 36px 放到终端分栏按钮之前；TITLEBAR7 让这段尾部空白也可拖动窗口；TITLEBAR8 将 Tab 外空白拖窗回调扩展到 Windows/Linux。
 
 - 已完成 OSC52-1–3：Terminal Settings 新增默认关闭的 `osc52_clipboard`；开启后 `alacritty_terminal` 使用 `Osc52::CopyPaste`，但应用层只接受默认 clipboard，selection 仍拒绝；协议事件限制为 64 KiB 解码文本并通过有界 DTO 传递。
 - 已完成 OSC52 UI bridge：Local、SSH、Telnet、Serial 四类 transport 共用 `TerminalOutputEffects`，monitor 取得剪贴板事件后经 `dispatch_ui` 调用平台默认剪贴板 API；不记录、不持久化、不在 worker 线程触碰 UI/平台剪贴板。
@@ -181,7 +184,8 @@
 
 ## 最后更新时间
 
-- 2026-09-23 23:24 +0800：完成 MEM1–3 的根因核对、Skia 1.18.1 per-component layer cache 释放补丁及两个 macOS target 编译门禁；运行时内存曲线待新版本同负载复核。
+- 2026-09-24 10:19 +0800：完成 TITLEBAR8，将主窗口 Tab 外空白拖窗扩展到 Windows/Linux；用户实际拖动验收待执行。
+- 2026-09-24 09:48 +0800：完成 TITLEBAR7 标题栏剩余空白拖窗命中；用户实际拖动验收待执行。
 - 2026-09-23 22:59 +0800：完成 TITLEBAR5 的拖动分区实现、本机 Rust/Slint 门禁及两个 macOS target 的 check/Clippy/build；实际拖动由用户验收。
 - 2026-09-23 14:55 +0800：完成 SFTP-ID-20260923；修复首屏目录响应被过期 ID 防护误丢弃的问题，并统一普通导航、分页和上传后刷新的 request ID 所有权。全量 Rust/Slint 门禁和 debug 构建通过；真实 SFTP/GUI 由用户验收。
 - 2026-09-23：完成 DRAW1；持久化 terminal drawing preference，保留 item-tree 为唯一可选实现，Canvas 尚未实现并禁用。全量 Rust/Slint、474 条翻译和 tracker 校验通过；目标平台 GUI 视觉由用户验收。

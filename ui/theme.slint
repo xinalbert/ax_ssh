@@ -165,7 +165,10 @@ export global Theme {
         tab-close-min-size + 2 * tab-content-padding-y,
         terminal-split-button-size + 2 * tab-surface-inset,
     );
-    out property <length> macos-titlebar-controls-width: 96px;
+    // Reserve enough leading title-bar space for the native traffic lights;
+    // place the remaining former clearance before the terminal split tools.
+    out property <length> macos-titlebar-leading-clearance: 60px;
+    out property <length> macos-titlebar-trailing-gap: 36px;
     out property <float> tab-drag-source-opacity: 0.32;
     out property <float> tab-drag-ghost-opacity: 0.96;
     out property <length> titlebar-connection-picker-width: 300px;

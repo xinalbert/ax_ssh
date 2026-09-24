@@ -553,7 +553,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 );
                 content-height: self.height;
 
-                if root.apple-platform : TouchArea {
+                TouchArea {
                     width: parent.width;
                     height: parent.height;
                     pointer-event(event) => {
@@ -839,6 +839,24 @@ export component WorkspaceTitlebar inherits Rectangle {
                     connected: root.drag-connected;
                     active: true;
                     order: root.drag-order;
+                }
+            }
+        }
+        if root.apple-platform : Rectangle {
+            // Keep the former excess leading clearance before the terminal
+            // split controls; the smaller leading segment remains for the
+            // native traffic lights.
+            width: Theme.macos-titlebar-trailing-gap;
+            background: Theme.panel;
+
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down
+                            && event.button == PointerEventButton.left {
+                        root.start-native-window-drag();
+                    }
                 }
             }
         }
