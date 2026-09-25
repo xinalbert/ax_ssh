@@ -17,6 +17,140 @@ fn terminal_pane_view(tab_id: Uuid, x: f32, width: f32) -> TerminalPaneView {
 }
 
 #[test]
+fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
+    // A dedicated thread isolates Slint's thread-local platform from other tests.
+    std::thread::spawn(|| {
+        use std::cell::{Cell, RefCell};
+        use std::collections::BTreeSet;
+        use std::rc::Rc;
+        use std::time::Duration;
+
+        use slint::platform::software_renderer::{
+            MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
+        };
+        use slint::platform::{Platform, WindowAdapter};
+
+        struct LayoutPlatform {
+            window: Rc<MinimalSoftwareWindow>,
+            time: Rc<Cell<Duration>>,
+        }
+
+        impl Platform for LayoutPlatform {
+            fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+                Ok(self.window.clone())
+            }
+
+            fn duration_since_start(&self) -> Duration {
+                self.time.get()
+            }
+        }
+
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+        let time = Rc::new(Cell::new(Duration::ZERO));
+        slint::platform::set_platform(Box::new(LayoutPlatform {
+            window: window.clone(),
+            time: time.clone(),
+        }))
+        .expect("isolated layout platform should initialize");
+        let mut fonts = font_bridge::FontRegistry::new();
+        let font = fonts
+            .resources()
+            .load_bundled_font("JetBrains Mono")
+            .expect("test font should load")
+            .expect("test font should be bundled");
+        fonts
+            .register_loaded_font(font)
+            .expect("test font should register");
+
+        let ui = AppWindow::new().expect("test UI should instantiate");
+        ui.set_detached_window(true);
+        ui.set_active_tab_kind("terminal".into());
+        ui.set_sidebar_width(220);
+        let mut pane = terminal_pane_view(Uuid::from_u128(1), 0.0, 1.0);
+        pane.focused = false;
+        pane.terminal.connected = true;
+        pane.terminal.font_family = "JetBrains Mono".into();
+        pane.terminal.font_size = 16.0;
+        pane.terminal.line_height_percent = 100;
+        ui.set_terminal_panes(ModelRc::new(VecModel::from(vec![pane])));
+
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let requests_for_callback = requests.clone();
+        ui.on_resize_terminal(move |_, columns, rows, _, _| {
+            requests_for_callback.borrow_mut().push((columns, rows));
+        });
+        ui.show().expect("headless window should show");
+        window.set_size(slint::PhysicalSize::new(1180, 740));
+
+        let mut pixels = Vec::new();
+        let mut settle_layout = || {
+            for _ in 0..16 {
+                time.set(time.get() + Duration::from_millis(20));
+                slint::platform::update_timers_and_animations();
+                let size = window.window().size();
+                pixels.resize(
+                    size.width as usize * size.height as usize,
+                    Rgb565Pixel::default(),
+                );
+                // Render only to resolve layout. No image is saved or inspected.
+                window.draw_if_needed(|renderer| {
+                    renderer.render(&mut pixels, size.width as usize);
+                });
+            }
+        };
+        settle_layout();
+        let sizes: BTreeSet<_> = requests.borrow_mut().drain(..).collect();
+        assert_eq!(
+            sizes.len(),
+            1,
+            "one visible pane must have one size: {sizes:?}"
+        );
+        let initial_columns = sizes.first().expect("pane should report its size").0;
+
+        ui.set_sidebar_width(360);
+        settle_layout();
+        assert!(
+            requests.borrow().is_empty(),
+            "a detached terminal must not resize when the main sidebar changes: {:?}",
+            requests.borrow()
+        );
+
+        window.set_size(slint::PhysicalSize::new(1342, 805));
+        settle_layout();
+        let sizes: BTreeSet<_> = requests.borrow_mut().drain(..).collect();
+        assert_eq!(
+            sizes.len(),
+            1,
+            "window resize must have one size: {sizes:?}"
+        );
+        let detached_columns = sizes.first().expect("pane should resize with its window").0;
+        assert!(detached_columns > initial_columns);
+
+        ui.set_detached_window(false);
+        settle_layout();
+        let main_columns = requests
+            .borrow_mut()
+            .drain(..)
+            .next_back()
+            .expect("main terminal should mount and report its size")
+            .0;
+        assert!(main_columns < detached_columns);
+        ui.set_sidebar_width(220);
+        settle_layout();
+        assert!(
+            requests
+                .borrow()
+                .last()
+                .is_some_and(|size| size.0 > main_columns),
+            "main terminal should continue to follow its sidebar width"
+        );
+        ui.hide().expect("headless window should hide");
+    })
+    .join()
+    .expect("terminal layout assertions should pass");
+}
+
+#[test]
 fn terminal_pane_snapshots_update_existing_model_rows() {
     let first_id = Uuid::from_u128(1);
     let second_id = Uuid::from_u128(2);

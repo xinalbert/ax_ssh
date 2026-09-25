@@ -2,20 +2,20 @@
 
 ## 当前目标
 
-- 目标 ID：20260924-titlebar-clearance
-- 目标：增加 macOS 原生红绿灯与首个工作区 Tab 之间的视觉留白。
-- 交付物：统一的标题栏前沿间距、同步原生拖窗命中边界、双语契约与验证记录。
+- 目标 ID：20260925-detached-terminal-owner
+- 目标：消除子窗口隐藏主布局中的第二份终端，修复同一 PTY 被较窄尺寸覆盖导致的右侧空白。
+- 交付物：互斥的终端组件创建条件、数值布局回归、双语契约和验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/theme.slint`、`ui/workspace-shell.slint`、`src/app/macos_window.rs`、双语架构和实施/环境记录。
-- 本轮范围：仅调整 macOS 标题栏前沿留白及与其对应的 AppKit 拖窗命中边界。
-- 不在本轮范围内：工作区 Tab 宽度/排序、终端内容、PTY/transport、SSH host-key trust、凭据或自动 GUI 截图验收。
+- 当前范围：`ui/workspace-shell.slint`、`src/app/view/tests.rs`、双语架构及实施/环境记录。
+- 本轮范围：让主布局的 TerminalPaneGroup 仅在主窗口创建，验证 detached 尺寸不受隐藏侧栏影响。
+- 不在本轮范围内：PTY/transport 实现、SSH host-key trust、凭据和自动 GUI 截图验收。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
 - 是否需要联网：否
 - 多 agent：未使用
@@ -34,6 +34,10 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
+| GEOMETRY1 | completed | 核对共享尺寸链路；快照驱动的重试在视觉验收失败后撤回 | 原尝试静态门禁通过；用户报告持续闪烁，新构建已确认不闪 | 代码及双语架构已回到 HEAD；原列宽异常仍在排查。 |
+| GEOMETRY2 | completed | 记录先前尺寸重试的静态门禁及失败的用户视觉验收 | fmt/check/Clippy/test/build 通过，但闪烁使该方案失效 | 已撤回；不能视为列宽修复。 |
+| GEOMETRY3 | completed | 用户红框明确右侧留白，定位隐藏主布局中的重复 TerminalPaneGroup | 静态核对两个组件共用窗口和终端 UUID；隐藏仅影响绘制，计时 resize 仍可执行 | 较窄尺寸比可见区域少了主窗口侧栏；此前回车/换行诊断偏离用户目标。 |
+| GEOMETRY4 | completed | 限制主终端组件创建，增加无原生窗口的尺寸上报回归并完成文档/门禁 | 旧代码复现两组尺寸；修复后定向回归、fmt/check/Clippy、tracker/diff 通过 | 不增加 resize 重试或延时；新构建红框区域待用户确认。 |
 | TITLEBAR9 | completed | 将 macOS 标题栏前沿从 60px 调整为 80px，并同步原生拖窗命中阈值 | Slint 重编译、macOS 定向命中测试已通过 | 保留 36px 分栏按钮前尾部间距；不改其他平台。 |
 | TITLEBAR10 | completed | 双语契约、环境/实施记录和完整离线门禁 | fmt/check/Clippy/test/build/diff、tracker 校验已通过 | 实际视觉由用户确认。 |
 | WINDOWRACE1 | completed | detached 创建/恢复的 pending 生命周期、失败回滚和工作区替换取消 | fmt/check、严格 Clippy、完整离线测试、窗口路由定向测试、diff | UI timer/native close 的真实交错仍需目标 macOS 用户验收。 |
@@ -143,6 +147,11 @@
 
 ## 验证
 
+- GEOMETRY1：原尺寸重试通过静态检查和测试，但用户发现持续闪烁；撤回并重新构建后，用户确认新进程不再闪烁。
+- GEOMETRY2：先前门禁成功不能作为列宽修复的证据，用户视觉验收发现闪烁后已撤回。
+- GEOMETRY3：审查确认 UI 的稳定尺寸由同一回调交给模型与 worker，且本地 PTY/SSH/Telnet 分别合并最新请求；现有 `terminal-geometry` 诊断可记录布局宽度、字格宽度、列数和缩放比。今天默认日志级别未留下该 debug 记录，原列宽异常也没有与截图同时刻的 `stty size`，故等待现场数据。
+- GEOMETRY3 新证据：用户 09:18 截图中日志首行从不同列开始、续行回到左侧，符合裸 LF 保留光标列的阶梯式表现；截图内容时间为本地 06:14，不能用当前进程的 PTY 模式倒推当时状态。当前源码在本地 shell 启动前启用 `OPOST | ONLCR`，定向 PTY 换行测试及 5 项 hard-break/reflow 测试通过；用户随后确认异常子窗口内新输出的三行 `printf` 均左对齐，当前普通换行可正确回到行首。旧日志起始列异常与当前右侧留白分开排查；尚未取得现场原始字节，不能断言当时哪个程序改变了换行或光标状态。
+- GEOMETRY4：旧代码在一个 detached UI 中复现 `(98, 32)` 与 `(120, 33)` 两组 resize；修复后只保留可见 detached group 的一组尺寸，侧栏变化不再触发子窗口 resize，主窗口仍随侧栏变化。
 - 已完成 TITLEBAR9–10：Slint 重编译、`cargo fmt --all -- --check`、macOS 定向命中测试、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 283、应用 276、Doc tests 0）、`cargo build --locked --offline`、tracker validator 和 `git diff --check` 均通过。
 - 未完成视觉验收：macOS 新构建中需确认绿色原生按钮与首个 Tab 状态点的间距、Tab 排序和标题栏拖动命中。
 - 已完成 TABDISPLAY1–2：定向 Tab 回归、`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整 `cargo test --locked --offline`（库 283、应用 276、Doc tests 0）、`cargo build --locked --offline`、Markdown 相对链接、tracker validator 和 `git diff --check` 均通过。
@@ -179,6 +188,7 @@
 
 ## 风险与阻塞
 
+- GEOMETRY3 的右侧留白根因已定位为 detached UI 中隐藏主布局的重复 TerminalPaneGroup；左侧旧日志起点异常仍只作为历史内容线索，不影响当前新输出。
 - TITLEBAR9 无代码阻塞；实际 macOS 标题栏视觉和拖动行为仍需用户确认。
 - TABDISPLAY 无代码阻塞；实际 Slint 字形效果仍需用户在目标平台确认。
 - Skia 逐组件缓存持有是源码确认的增长机制，但单次旧版 Sample 不能量化其在 1.3 GB 中的精确贡献；Skia/Metal 仍可能有其它保留资源。当前修复未调整全局 renderer 或用户的行缓存设置。
@@ -189,6 +199,8 @@
 
 ## 下一步
 
+- 在列宽异常出现时保持窗口尺寸不变，对照同一终端的 `stty size`、新输出的折行列数和实际可见格宽。
+- 用户已确认当前三行普通换行输出对齐；若重新执行原命令后新日志仍错位，再读取同一会话当时的 PTY 输出模式和终端状态。不要用 resize 重试或全局改写 LF 来掩盖协议状态。
 - 在新构建中确认红绿灯右侧留白和 Tab/空白区拖动行为。
 - 在新构建的终端运行 `git status`，确认 `modified:` 前的 Tab 缩进显示为空白，选中复制仍保留原始 Tab。
 - 在新构建上保留 GPU 与当前行缓存设置，以相同窗口尺寸、pane 数和持续输出重复采样启动、持续输出和关闭 Tab 后的 `vmmap -summary` 与 `heap -s`；关注 `IOAccelerator (graphics)`、AGX texture 数是否趋于平台期。若需要立即降低旧安装版占用，可在 Appearance 中关闭 Terminal row render cache 并重启应用；Software renderer 可作独立 A/B，但其 CPU 行为不同。
@@ -202,6 +214,8 @@
 
 ## 最后更新时间
 
+- 2026-09-25 09:39 +0800：定位并修复 detached 窗口隐藏主布局重复创建 TerminalPaneGroup 的尺寸竞争；无原生窗口回归复现两组尺寸，修复后定向测试通过，完整门禁待收口。
+- 2026-09-25 09:49 +0800：修复 detached 隐藏主布局的重复 TerminalPaneGroup；完整门禁通过，用户需重启新构建确认红框右侧空白。
 - 2026-09-24 21:12 +0800：完成 TITLEBAR9–10；macOS 标题栏前沿从 60px 增至 80px，原生拖窗命中同步，完整门禁通过；实际视觉由用户验收。
 - 2026-09-24 20:58 +0800：完成 TABDISPLAY1–2；终端显示快照不再把 Tab 当字形绘制，定向及完整离线门禁通过；目标平台视觉由用户验收。
 - 2026-09-24 17:43 +0800：完成 SFTPLIVE1；SFTP 重连保留本地路径和选择，同目录刷新保持上传目标，完整离线 Rust 门禁通过；真实服务器与窗口操作由用户验收。

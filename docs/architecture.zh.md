@@ -642,6 +642,10 @@ Tokio receiver、终端缓冲区或秘密。
 客户区表面色更新其 AppKit 标题栏背景。此纯外观路径保持各窗口本地 Slint theme 一致，
 不会把 AppKit 状态写入 `AppState`。
 独立 Terminal 虽然不增加客户区菜单，仍保留相同的 Copy/Paste/Select All 直接键盘处理。
+主布局仅在非 detached 窗口创建自己的 `TerminalPaneGroup`。仅隐藏布局不会停止终端计时器，
+其扣除侧栏后的较窄几何仍可能按同一个 UUID 覆盖可见子窗口终端的尺寸。因此每个窗口只为
+当前工作区创建一份终端组，由它负责尺寸、焦点和几何回调。Slint 数值回归通过调整窗口与
+侧栏宽度检查 resize 回调，不打开原生窗口。
 
 `WindowRouter` 按转移后的 Tab UUID 映射当前窗口的 weak UI handle。刷新时每个路由
 得到过滤后的 Tab model 和对应 snapshot，因此 worker 的迟到事件仍会更新当前拥有该

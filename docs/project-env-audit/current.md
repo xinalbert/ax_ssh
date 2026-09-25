@@ -1,3 +1,44 @@
+# 2026-09-25 子窗口重复终端组件施工预检
+
+- 项目边界：Slint 的主/独立窗口组合，及 Rust 侧无原生窗口的 UI 数值回归；`AppState`/PTY 请求与 SSH 安全边界不变。
+- 环境记忆状态：沿用本轮已核对的 Rust 2024、MSRV 1.92.0、本机 rustc/Cargo 1.97.1 与 Slint 1.18.1；不改依赖、锁文件或 CI。
+- 当前证据：此前 `workspace-main` 仅设为不可见，其中的 `TerminalPaneGroup` 仍在子窗口创建并用减去侧栏的宽度发送 resize；现已限制为仅主窗口创建，消除与可见 detached TerminalPaneGroup 的竞争。
+- 测试环境：使用已有 Slint `MinimalSoftwareWindow` 和虚拟计时驱动数值回归，无新依赖；不保存或检视应用截图。
+- 开工判定：代码施工完成；等待用户重启新构建确认红框区域。
+
+# 2026-09-25 子窗口重复终端组件环境验证
+
+- 改动范围：`ui/workspace-shell.slint`、`src/app/view/tests.rs`、双语架构、项目地图及实施/环境记录；不改依赖、锁文件、PTY worker 或 SSH trust。
+- 关键结果：旧代码数值回归复现同一 detached UI 同时上报 98x32 和 120x33；修复后仅上报可见 detached group 的尺寸，主窗口仍保留侧栏尺寸行为。
+- 验证状态：定向回归、fmt、locked/offline check、严格 Clippy、完整测试（库 283、应用 278、Doc tests 0）、debug build、tracker validator 和 diff 检查均通过。
+- 用户验收：需重启最新 `cargo run`，确认红框右侧空白消失。
+
+# 2026-09-25 终端闪烁回归后的当前环境状态
+
+- 项目边界：Rust 2024/Slint 桌面应用；本轮仅撤回共享 `TerminalPane` 的快照驱动 resize 尝试，并核实构建及记录。
+- 当前代码：`ui/terminal-pane.slint` 与 HEAD 一致；先前新增的 `content-columns` / `render-lines` 变化触发器已撤回。
+- 运行环境：MSRV 1.92.0，本机 rustc/Cargo 1.97.1；Slint 1.18.1 和其余依赖仍由 Cargo 锁定，无工具链、依赖或 CI 变化。
+- 验证状态：先前尝试通过静态检查及测试，但用户视觉验收发现持续闪烁，故不能视作成功修复。撤回后的 debug build、fmt、locked/offline check、严格 Clippy 和完整测试（库 283、应用 277、Doc tests 0）均通过；用户确认新进程不再闪烁。
+- 待查问题：原列宽异常仍未定位，缺少异常发生同一时刻的 `stty size` 和 debug 级 `terminal-geometry` 记录；不得用之后调过尺寸的列数倒推截图时 PTY 状态。
+
+# 2026-09-25 子窗口终端列宽同步施工预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；曾尝试调整共享 `ui/terminal-pane.slint` 的尺寸触发条件，后因用户视觉验收发现闪烁而撤回。
+- 环境记忆状态：已读取现有记录，并核对 `Cargo.toml`、`Cargo.lock`、`build.rs` 与 `.github/workflows/ci.yml`；依赖和构建入口没有漂移。
+- 运行环境：声明 MSRV 1.92.0，本机 rustc/Cargo 1.97.1；Slint 1.18.1、Tokio 1、`alacritty_terminal` 0.26.0 均由 Cargo 锁定，不新增依赖。
+- 测试环境：Slint 由 `build.rs` 编译 `ui/app.slint`；执行 locked/offline check、fmt、严格 Clippy、完整 test 和 diff 检查，真实 GUI 由用户验收。
+- 环境变化检查：否；不改 Cargo、锁文件、CI、SSH trust、凭据或 worker 所有权。
+- 开工判定：允许开工。
+
+# 2026-09-25 子窗口终端列宽同步环境验证
+
+- 目的：验证曾尝试的共享 Slint 尺寸重试在当前锁定工具链上可编译、可测试；该尝试已撤回。
+- 改动范围：曾涉及 `ui/terminal-pane.slint`、双语架构、环境与实施记录；当前仅环境与实施记录有未提交差异。
+- 执行内容：重新编译 Slint 入口，执行 fmt、locked/offline check、严格 Clippy、完整 test、debug build 和 diff 检查。
+- 验证结果：上述静态门禁通过；库 283 项、应用 277 项、Doc tests 0。随后用户视觉验收发现持续闪烁，该结果已否定此次修复。
+- 风险/待办：撤回后新进程已由用户确认不闪；仍需列宽异常对应尺寸下的 `stty size` 判定 PTY 是否同步。
+- 开工判定：尝试已撤回；原列宽问题仍待定位。
+
 # 2026-09-24 终端 Tab 方框显示施工预检
 
 - 项目边界：独立 Rust 2024/Slint 桌面应用；本轮仅改 `src/terminal/render.rs` 的显示投影、`src/terminal/tests.rs` 回归及双语架构/项目记录。

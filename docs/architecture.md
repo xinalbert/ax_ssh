@@ -1035,6 +1035,13 @@ client surface color. This appearance-only path keeps each window's local
 Slint theme coherent without routing AppKit state through `AppState`.
 Detached Terminal panes keep the same direct Copy/Paste/Select All keyboard
 handling even though no client menu is added.
+The main layout instantiates its `TerminalPaneGroup` only when the window is
+not detached. Hiding that layout alone leaves terminal timers active, allowing
+its narrower geometry (after subtracting the sidebar) to overwrite the visible
+detached terminal's size for the same UUID. Each window therefore creates only
+one terminal group for its active workspace, which owns size, focus, and
+geometry callbacks. A numerical Slint regression checks the resize callbacks
+through window resizing and sidebar changes without opening a native window.
 
 `WindowRouter` maps each transferred Tab UUID to the current window's weak UI
 handle. Refreshes publish a filtered Tab model and the snapshot for each route,
