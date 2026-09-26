@@ -732,3 +732,20 @@
 - 更新后的命令或环境：保持既有 locked/offline Cargo 命令，macOS ARM64 原生与 x86_64 交叉 target 均可编译链接；x86_64 测试只在原生 runner 运行。
 - 验证结果：ARM64 fmt/check/严格 Clippy/全量 test/build 通过；x86_64 显式 target check/严格 Clippy/build 通过。实际图形内存走势未在新二进制长期负载下验证。
 - 风险/待办：用户运行中的 1.17.1 安装版未修改；部署后以相同负载对比 `vmmap -summary` 图形区域及 `heap -s` 纹理数。
+
+## 2026-09-26 窗口保持环境预检与实施
+
+- 项目边界：AxSSH 独立 Rust/Slint 桌面应用的工作区持久化及原生窗口恢复。
+- 证据：Cargo.toml、Cargo.lock、build.rs、CI、Slint 1.18.1/Winit 0.30.13 本机源码。
+- 环境：本机 macOS ARM64，Rust/Cargo 1.97.1，已安装 ARM64/x86_64 macOS target；保持 Rust 2024、MSRV 1.92.0 与依赖锁定，无依赖/工具链变更。
+- 实施：兼容 placement DTO、DPI/屏幕范围恢复、后台串行自动保存与退出 flush；SFTP-only 和非活动分屏恢复回归。
+- 验证：首轮完整库 285/应用 288 测试、fmt/check/严格 Clippy 与本机 debug build 通过；最终代码及显式 target 验证仍在执行，结果见 current.md。
+- 限制：Windows/Linux 缺少本机 target/SDK，需 CI 原生验证；GUI、真实多屏与最大化由用户验收，不自行截图。
+
+## 2026-09-26 窗口保持最终验证
+
+- 实施结果：主/独立窗口普通几何与最大化恢复、屏幕校验、后台自动保存和多窗口恢复已完成；双语架构/用法与项目地图同步。
+- 本机验证：最终 fmt、locked/offline check、严格 all-target Clippy、285 项库测试、288 项应用测试、Doc tests 0 和 debug build 通过。
+- 平台验证：ARM64/x86_64 macOS 的显式 target check、严格 Clippy 和 build 全部通过；仅运行原生 ARM64 测试。
+- 其他门禁：Markdown、skill、tracker、diff 通过。没有依赖/锁文件/工具链变化。
+- 待验收：Windows/Linux 原生 CI；真实 GUI、全屏/最大化动画和多屏恢复由用户验收。

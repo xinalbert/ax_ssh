@@ -1,3 +1,16 @@
+# 2026-09-26 窗口保持环境验证
+
+- 项目边界：独立 Rust 2024/Slint 应用的窗口生命周期与工作区快照；SSH trust、凭据和 worker 所有权不变。
+- 环境记忆状态：已核对 Cargo、build.rs、CI 与 Slint/Winit 源码，无依赖或工具链变化。
+- 运行环境：声明 MSRV 1.92.0，本机 Rust/Cargo 1.97.1；锁定 Slint 1.18.1/Winit 0.30.13；安装 macOS ARM64/x86_64 target。
+- 实现：普通几何/最大化恢复、屏幕范围与 DPI 适配、有界串行防抖自动保存、退出 flush；启动优先私有 checkpoint；补齐 SFTP-only 与非活动分屏恢复；macOS 主窗在 FullSizeContentView 设置后恢复。
+- 本机验证：fmt、locked/offline check、严格 all-target Clippy、完整测试（库 285、应用 288、Doc tests 0）和 debug build 通过。
+- 目标验证：CI 同款 `cargo check --locked --target <target>`、`cargo clippy --all-targets --locked --target <target> -- -D warnings`、`cargo build --locked --target <target>` 在两个 macOS target 上通过；以 `CARGO_NET_OFFLINE=true` 使用本机缓存，未运行非原生 Intel 测试。
+- 文档验证：Markdown 相对链接、skill/tracker validators 与 diff 检查通过；先计划后施工，不联网检索、不使用多 agent。
+- 可执行命令：`cargo run --locked --offline`。
+- 风险与缺口：Windows/Linux target/SDK 未安装，交由原生 CI；Wayland 绝对定位由 compositor 管理。GUI、窗口最大化/恢复和真实显示器热插拔仍由用户验收，不自行截图。
+- 开工判定：施工和本机验证完成。
+
 # 2026-09-25 子窗口重复终端组件施工预检
 
 - 项目边界：Slint 的主/独立窗口组合，及 Rust 侧无原生窗口的 UI 数值回归；`AppState`/PTY 请求与 SSH 安全边界不变。
