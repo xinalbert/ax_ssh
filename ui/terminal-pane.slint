@@ -197,6 +197,8 @@ export component TerminalNoticeCard inherits FocusScope {
         clip: true;
 
         Rectangle {
+            x: 0px;
+            y: 0px;
             width: Theme.terminal-notice-indicator-width;
             height: parent.height;
             background: root.notice.severity == "error" ? Theme.danger : Theme.accent;
