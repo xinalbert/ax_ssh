@@ -515,3 +515,74 @@ fn child_pane_sftp_companion_stays_visible_and_returns_to_the_group() {
     );
     assert_eq!(view.active_tab_id, Some(sftp_tab_id));
 }
+
+#[test]
+fn workspace_round_trip_keeps_inactive_splits_and_per_window_placement() {
+    use ax_ssh::config::{WindowPlacement, WindowPosition};
+    let router = test_router();
+    let mut app = router_test_state();
+    let root = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, root, &mut app));
+    let child = app.open_local_shell_tab();
+    assert!(router.complete_pane_split(
+        MAIN_WINDOW_ID,
+        root,
+        PaneDirection::Right,
+        child,
+        &mut app
+    ));
+    assert!(
+        router
+            .resize_terminal_divider(MAIN_WINDOW_ID, 0, 0.7)
+            .is_some()
+    );
+    let other = app.open_local_shell_tab();
+    assert!(router.activate_tab(MAIN_WINDOW_ID, other, &mut app));
+    let other_child = app.open_local_shell_tab();
+    assert!(router.complete_pane_split(
+        MAIN_WINDOW_ID,
+        other,
+        PaneDirection::Down,
+        other_child,
+        &mut app
+    ));
+    let placement = WindowPlacement {
+        width: 940,
+        height: 620,
+        position: Some(WindowPosition { x: -1500, y: 90 }),
+        maximized: true,
+    };
+    router.set_placement(MAIN_WINDOW_ID, Some(placement));
+    app.terminal_mut(root)
+        .expect("terminal")
+        .terminal
+        .as_mut()
+        .expect("model")
+        .process(b"checkpoint output");
+    let snapshot = router.snapshot(&app);
+    snapshot.validate().expect("valid snapshot");
+    assert_eq!(snapshot.windows[0].placement, Some(placement));
+    assert_eq!(snapshot.windows[0].panes.len(), 2);
+    let metadata = router.layout_snapshot(&app);
+    assert_eq!(metadata.windows, snapshot.windows);
+    assert!(metadata.tabs.iter().all(|tab| tab.terminal_text.is_empty()));
+    assert!(
+        snapshot
+            .tabs
+            .iter()
+            .any(|tab| tab.terminal_text.contains("checkpoint output"))
+    );
+
+    let restored = test_router();
+    let mut restored_app = router_test_state();
+    restored_app.restore_workspace_tabs(&snapshot.tabs);
+    restored.apply_snapshot(&snapshot, &mut restored_app);
+    assert_eq!(restored.snapshot(&restored_app).windows, snapshot.windows);
+    assert!(restored.activate_tab(MAIN_WINDOW_ID, root, &mut restored_app));
+    let view = restored
+        .views(&mut restored_app)
+        .pop()
+        .expect("main window");
+    assert_eq!(view.terminal_panes.len(), 2);
+    assert!((view.terminal_dividers[0].ratio - 0.7).abs() < f32::EPSILON);
+}

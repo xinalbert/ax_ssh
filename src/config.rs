@@ -39,8 +39,8 @@ pub use self::theme::{
     TerminalColorScheme, ThemeMode, ThemePalette, ThemePaletteKind, ThemeSettings,
 };
 pub use self::workspace::{
-    PaneNodeSnapshot, WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot, WorkspaceTabSnapshot,
-    WorkspaceWindowSnapshot,
+    PaneNodeSnapshot, WORKSPACE_SNAPSHOT_VERSION, WindowPlacement, WindowPosition,
+    WorkspaceSnapshot, WorkspaceTabSnapshot, WorkspaceWindowSnapshot,
 };
 
 #[cfg(test)]

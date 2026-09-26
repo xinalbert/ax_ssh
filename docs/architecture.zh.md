@@ -58,6 +58,8 @@ Slint UI（.slint）
 | `src/app/runtime.rs` | renderer 选择、有界 Tokio runtime/thread 配置和启动自带字体读取 | 生成 Slint 类型、功能 callback、传输或持久化 |
 | `src/app/window_bridge.rs` | detached workspace 创建/恢复/返回/关闭、窗口激活 hook、原生标题栏动作和显式 Slint 窗口资源释放 | transport 所有权、持久化 schema 或 worker 内部实现 |
 | `src/app/platform_support.rs` | 剪贴板、仅构建元数据诊断、外部打开器和 macOS application menu 接线 | 秘密、session 持久化或 SSH/worker 状态 |
+| `src/app/window_state.rs` | UI 线程普通窗口几何采集、屏幕/DPI 适配和最大化恢复 | 文件系统、worker、凭据或生成组件声明 |
+| `src/app/workspace_autosave.rs` | 防抖快照、单槽最新待写状态、后台串行写盘与退出排空 | 原生窗口所有权、凭据或 SSH 状态 |
 | `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
@@ -614,10 +616,27 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 终端恢复只是有界文本回放，不会恢复远端进程或 alternate screen 状态。
 已删除的 profile 会跳过，其余工作区继续恢复。
 
+主窗口和独立窗口还可保存普通状态下的逻辑客户区尺寸、可取得的物理外框坐标及最大化标志。
+缺少可选 placement 的旧版 v1 快照仍可加载。全屏、最小化和零尺寸事件不覆盖普通几何，
+重启时不自动进入全屏或最小化。UI bridge 根据旧坐标选择当前显示器；副屏拔出时回退到主屏/
+当前屏，并按屏幕范围限制尺寸和位置，给原生标题栏和桌面栏留出空间。逻辑尺寸适配显示器缩放，
+应用最小尺寸仍为 520x360。Wayland 的绝对定位交给 compositor；macOS 主窗口在设置
+FullSizeContentView 标题栏后再恢复尺寸，保证采集与恢复的客户区尺寸口径一致。快照不保存
+显示器身份或原生句柄。
+
+500ms UI timer 仅比较布局元数据，不反复复制终端文本。变化停止一秒后保存，连续拖动时最多
+等待五秒；终端文本每 30 秒采样一次。单一 Tokio writer 只保留一份最新待写快照，原子替换
+在 blocking pool 执行，相同快照不重复写盘；写入失败记录日志，后续 checkpoint 再尝试。
+退出时停止 timer、提交最终快照并等待 writer 完成，然后清理 worker/runtime，避免旧写入覆盖
+退出状态。强制终止可能丢失最后一次成功 checkpoint 后的变化。自动保存只写私有文件，
+手动工作区文件只在显式 Save 时覆盖。纯 SFTP 独立窗口无需 terminal pane tree 也能恢复；
+主窗口非活动 Tab 的分屏树与比例保留，窗口级焦点只应用到包含该 pane 的树。
+
 私有 `sessions.json` 另外保存最多八条经过校验的非敏感最近工作区路径。
 用户成功打开工作区后，该路径会移到有界 MRU 列表首位；**File > Open Recent**
-和 **Clear Recent** 只操作这些路径。启动时按最新到最旧尝试这些文件，无法读取的
-路径会被移除；如果没有可用的最近文件，则回退到私有 `workspace.json`。历史元数据
+和 **Clear Recent** 只操作这些路径。启动时优先读取私有 `workspace.json` 恢复快照，
+避免旧的手动工作区文件覆盖最新布局；快照不存在或无效时，才按最新到最旧尝试最近文件，
+并移除不可用路径。历史元数据
 不会保存工作区内容、凭据、活动句柄或终端输出。
 
 File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只拥有路径输入弹层并
@@ -671,7 +690,7 @@ detached 初始化时不再填充 sidebar、连接选择器、Settings、会话�
 键盘焦点使用 accent 色与较粗线条，但不改变命中区域尺寸。鼠标拖动、对应方向键、Home/End、
 无障碍 slider 操作，以及双击或 Enter/Space 复位都会映射到 0.1-0.9 的比例。比例变化复用每个 pane
 按 UUID 定向的 terminal resize 路径，因此 PTY/NAWS/本地模型尺寸会跟随新几何。比例在 Tab 切换和
-detached/return 转移中保留，但应用重启后恢复默认，也不会进入设置、worker 或 transport 状态。
+detached/return 转移中保留，并随 workspace 快照恢复；不进入设置、worker 或 transport 状态。
 divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只请求当前 focused、connected terminal pane
 的 IME proxy 取得焦点。键盘和无障碍 divider 操作继续保留自身焦点。
 

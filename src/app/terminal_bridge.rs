@@ -397,6 +397,15 @@ pub(super) fn install_native_window_input_hook(
     let native_file_drop_pointer = Rc::new(RefCell::new(NativeFileDropPointer::default()));
     let native_file_drop_pointer_for_event = native_file_drop_pointer.clone();
     ui.window().on_winit_window_event(move |_window, event| {
+        if matches!(
+            event,
+            WindowEvent::Moved(_)
+                | WindowEvent::Resized(_)
+                | WindowEvent::CloseRequested
+                | WindowEvent::ScaleFactorChanged { .. }
+        ) {
+            _window.with_winit_window(|window| window_router.capture_placement(window_id, window));
+        }
         match event {
             WindowEvent::DroppedFile(path) => {
                 let Some(ui) = ui_for_drop.upgrade() else {

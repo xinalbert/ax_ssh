@@ -183,6 +183,12 @@ fn workspace_snapshot_round_trips_separately_from_session_store() {
             active_tab_id: Some(tab_id),
             focused_tab_id: Some(tab_id),
             panes: vec![PaneNodeSnapshot::Leaf(tab_id)],
+            placement: Some(WindowPlacement {
+                width: 980,
+                height: 640,
+                position: Some(WindowPosition { x: -1200, y: 80 }),
+                maximized: true,
+            }),
         }],
     };
     store

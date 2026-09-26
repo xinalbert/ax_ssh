@@ -130,6 +130,12 @@ pub(in crate::app) fn wire_workspace_file_actions(
             ui.set_status("Cannot apply workspace state".into());
             return;
         }
+        let main_placement = snapshot
+            .windows
+            .iter()
+            .find(|window| window.id == MAIN_WINDOW_ID)
+            .and_then(|window| window.placement);
+        window_state::restore(&ui, main_placement, &router_for_apply, MAIN_WINDOW_ID);
         let connection = ConnectionContext::new(
             ui.as_weak(),
             state_for_apply.clone(),
@@ -241,6 +247,7 @@ fn save_workspace_file(
     window_router: &WindowRouter,
     path: PathBuf,
 ) {
+    window_router.capture_placements();
     let snapshot = match state.lock() {
         Ok(app) => window_router.snapshot(&app),
         Err(_) => {

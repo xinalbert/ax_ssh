@@ -28,37 +28,31 @@ pub(super) fn restore_detached_workspaces(
     window_router: &WindowRouter,
     detached_windows: &Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 ) {
+    let available_tabs = state
+        .lock()
+        .map(|app| {
+            app.tab_summaries()
+                .into_iter()
+                .map(|tab| tab.id)
+                .collect::<std::collections::HashSet<_>>()
+        })
+        .unwrap_or_default();
     for window in snapshot
         .windows
         .iter()
         .filter(|window| window.id != MAIN_WINDOW_ID)
     {
-        let Some(pane_snapshot) = window.panes.first().cloned() else {
+        let Some((transfer, pane_tree)) = restored_detached_route(window, &available_tabs) else {
             continue;
         };
-        let Some(workspace_tab_id) = pane_root_tab_id(&pane_snapshot) else {
-            continue;
-        };
-        let focused_tab_id = window.focused_tab_id.unwrap_or(workspace_tab_id);
-        let Some(pane_tree) =
-            PaneTree::from_snapshot(workspace_tab_id, pane_snapshot, focused_tab_id)
-        else {
-            warn!(window_id = %window.id, "skipping invalid detached workspace pane tree");
-            continue;
-        };
-        let Some(active_tab_id) = window.active_tab_id else {
-            continue;
-        };
-        let transfer = WorkspaceTransfer {
-            source_window_id: MAIN_WINDOW_ID,
-            tab_ids: window.tab_ids.clone(),
-            active_tab_id: Some(active_tab_id),
-        };
+        #[cfg(target_os = "macos")]
+        let show_terminal_actions = pane_tree.is_some();
         let detached_ui = match AppWindow::new().and_then(|ui| {
             initialize_detached_component(&ui, state)
                 .map_err(|error| slint::PlatformError::from(error.to_string()))?;
             ui.set_detached_window(true);
             ui.set_software_presentation_enabled(software_presentation::is_enabled());
+            window_state::prepare(&ui, window.placement);
             renderer_window_created("detached");
             Ok(ui)
         }) {
@@ -70,12 +64,8 @@ pub(super) fn restore_detached_workspaces(
             }
         };
         let new_window_id = Uuid::new_v4();
-        window_router.register_detached(
-            new_window_id,
-            detached_ui.as_weak(),
-            transfer,
-            Some(pane_tree),
-        );
+        window_router.register_detached(new_window_id, detached_ui.as_weak(), transfer, pane_tree);
+        window_router.set_placement(new_window_id, window.placement);
         wire_callbacks(
             &detached_ui,
             WindowCallbackContext {
@@ -103,6 +93,7 @@ pub(super) fn restore_detached_workspaces(
         if !window_router.has_detached(new_window_id) {
             continue;
         }
+        window_state::restore(&detached_ui, window.placement, window_router, new_window_id);
         install_native_window_input_hook(
             &detached_ui,
             state.clone(),
@@ -111,11 +102,49 @@ pub(super) fn restore_detached_workspaces(
             new_window_id,
         );
         refresh_workspace(&detached_ui.as_weak(), state);
+        #[cfg(target_os = "macos")]
+        schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_actions);
         schedule_detached_presentation_refresh(&detached_ui, new_window_id);
         detached_windows
             .borrow_mut()
             .insert(new_window_id, detached_ui);
     }
+}
+
+fn restored_detached_route(
+    window: &ax_ssh::config::WorkspaceWindowSnapshot,
+    available: &std::collections::HashSet<Uuid>,
+) -> Option<(WorkspaceTransfer, Option<PaneTree>)> {
+    let tab_ids = window
+        .tab_ids
+        .iter()
+        .copied()
+        .filter(|id| available.contains(id))
+        .collect::<Vec<_>>();
+    let active_tab_id = window
+        .active_tab_id
+        .filter(|id| tab_ids.contains(id))
+        .or_else(|| tab_ids.first().copied())?;
+    // SFTP-only detached windows have no terminal pane tree.
+    let pane_tree = if let Some(pane) = window.panes.first() {
+        let root = pane_root_tab_id(pane)?;
+        let focused = window.focused_tab_id.unwrap_or(root);
+        let tree = PaneTree::from_snapshot(root, pane.clone(), focused)?;
+        if !tree.tab_ids().iter().all(|id| available.contains(id)) {
+            return None;
+        }
+        Some(tree)
+    } else {
+        None
+    };
+    Some((
+        WorkspaceTransfer {
+            source_window_id: MAIN_WINDOW_ID,
+            tab_ids,
+            active_tab_id: Some(active_tab_id),
+        },
+        pane_tree,
+    ))
 }
 
 fn schedule_detached_presentation_refresh(ui: &AppWindow, window_id: Uuid) {
@@ -693,5 +722,55 @@ pub(super) fn detached_titlebar_background(ui: &AppWindow) -> Color {
         ui.get_theme_terminal_background()
     } else {
         ui.global::<Theme>().get_background()
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+    use ax_ssh::config::{PaneNodeSnapshot, WorkspaceWindowSnapshot};
+    use std::collections::HashSet;
+
+    #[test]
+    fn sftp_only_detached_window_restores_without_a_pane_tree() {
+        let tab = Uuid::new_v4();
+        let window = WorkspaceWindowSnapshot {
+            id: Uuid::new_v4(),
+            tab_ids: vec![tab],
+            active_tab_id: Some(tab),
+            ..Default::default()
+        };
+        let (transfer, tree) =
+            restored_detached_route(&window, &HashSet::from([tab])).expect("SFTP route");
+        assert_eq!(transfer.tab_ids, vec![tab]);
+        assert_eq!(transfer.active_tab_id, Some(tab));
+        assert!(tree.is_none());
+        assert!(restored_detached_route(&window, &HashSet::new()).is_none());
+    }
+
+    #[test]
+    fn restored_split_retains_ratio_and_focus_but_rejects_missing_sessions() {
+        let root = Uuid::new_v4();
+        let child = Uuid::new_v4();
+        let pane = PaneNodeSnapshot::Split {
+            axis: "columns".into(),
+            ratio_milli: 700,
+            first: Box::new(PaneNodeSnapshot::Leaf(root)),
+            second: Box::new(PaneNodeSnapshot::Leaf(child)),
+        };
+        let window = WorkspaceWindowSnapshot {
+            id: Uuid::new_v4(),
+            tab_ids: vec![root, child],
+            active_tab_id: Some(root),
+            focused_tab_id: Some(child),
+            panes: vec![pane.clone()],
+            ..Default::default()
+        };
+        let (_, tree) =
+            restored_detached_route(&window, &HashSet::from([root, child])).expect("split route");
+        let tree = tree.expect("split tree");
+        assert_eq!(tree.snapshot(), pane);
+        assert_eq!(tree.focused_tab_id(), child);
+        assert!(restored_detached_route(&window, &HashSet::from([root])).is_none());
     }
 }

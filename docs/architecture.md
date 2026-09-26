@@ -64,6 +64,8 @@ Process startup (src/main.rs)
 | `src/app/runtime.rs` | Renderer selection, bounded Tokio runtime/thread configuration, and startup bundled-font loading | Generated Slint types, feature callbacks, transport, or persistence |
 | `src/app/window_bridge.rs` | Detached workspace creation/restore/return/close, window activation hook, native titlebar actions, and explicit Slint window-resource release | Transport ownership, persistence schema, or worker internals |
 | `src/app/platform_support.rs` | Clipboard access, build-only diagnostics, external opener calls, and macOS application-menu wiring | Secrets, session state persistence, or SSH/worker state |
+| `src/app/window_state.rs` | UI-thread normal window geometry capture, monitor/DPI fitting and maximized restoration | Filesystem, workers, credentials or generated component declarations |
+| `src/app/workspace_autosave.rs` | Debounced checkpoints, one latest pending snapshot and serialized background writes with shutdown drain | Native window ownership, credentials or SSH state |
 | `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
@@ -1605,12 +1607,40 @@ host keys still require explicit confirmation. Terminal restore is bounded text
 replay and does not recreate remote processes or alternate-screen state. Missing
 profiles are skipped while the remaining workspace is restored.
 
+Each main or detached window can also store its normal logical client size,
+physical outer position (when available), and maximized flag. Older version-1
+files without this optional placement still load. Fullscreen, minimized and
+zero-size observations never replace normal bounds; fullscreen and minimized
+states are not restored. The UI bridge selects a current monitor from the saved
+position, falls back to the primary/current monitor when needed, and fits size
+and position within its bounds with room for native decorations and desktop
+bars. Logical sizes account for the target display scale; the application's
+520x360 minimum still applies. Wayland absolute placement remains compositor
+owned. On macOS the main window restores after its FullSizeContentView titlebar
+configuration, so capture and restore use the same client-size convention.
+No monitor identity or native handle enters the snapshot.
+
+A 500 ms UI timer compares layout metadata without copying terminal text.
+Changes are checkpointed after one quiet second, with a five-second maximum
+pending delay during continuous movement; terminal text is sampled every 30
+seconds. A single Tokio writer consumes the latest pending snapshot and runs
+atomic file replacement on the blocking pool. Identical snapshots are skipped,
+errors are logged and retried on a later checkpoint. Shutdown stops the timer,
+queues the final snapshot and joins the writer before worker/runtime teardown,
+so an older in-flight write cannot overwrite the exit state. Forced termination
+can lose changes newer than the last completed checkpoint. Manual workspace
+files are only overwritten by explicit Save; autosave targets the private file.
+SFTP-only detached windows restore without a terminal pane tree. Split ratios
+are retained, including trees belonging to inactive main-window Tabs; a
+window-level focused pane is applied only to the tree containing that pane.
+
 The private `sessions.json` also stores at most eight validated, non-secret
 recent workspace paths. A successful user-selected open moves its path to the
 front of this bounded MRU list; **File > Open Recent** and **Clear Recent** only
-operate on these paths. Startup tries the list from newest to oldest, removes
-paths whose files cannot be loaded, and falls back to the private
-`workspace.json` when no recent file is usable. Workspace contents, credentials,
+operate on these paths. Startup first loads the private `workspace.json` recovery
+checkpoint so that an older manually opened file cannot overwrite the latest layout.
+If that checkpoint is missing or invalid, startup tries recent files from newest
+to oldest and removes unavailable entries. Workspace contents, credentials,
 live handles, and terminal output are never stored in the history metadata.
 
 The File menu exposes the same contract through user-selected workspace paths.

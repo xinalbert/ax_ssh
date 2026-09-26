@@ -287,9 +287,14 @@ three-way conflict merging remain outside the current scope.
 
 ## Workspace and terminal controls
 
-AxSSH saves the open workspace on exit in a separate private `workspace.json`.
-After restart it restores tab order, the active tab, split panes, bounded
-terminal text, and SFTP browser paths. Saved connections are recreated as new
+AxSSH automatically saves the open workspace after layout changes settle and
+again on exit in a separate private `workspace.json`. After restart it restores
+main/detached window sizes, positions and maximized state, tab order, the active
+tab, terminal split panes and ratios, bounded terminal text, and SFTP browser paths.
+Fullscreen and minimized states are not restored. If a display has been removed,
+windows are fitted to a remaining display; Wayland controls absolute positioning.
+Changes normally save about one second after you stop moving/resizing, while
+forced termination can lose the latest changes that have not reached disk. Saved connections are recreated as new
 workers rather than persisted live connections. SSH still follows the normal
 trusted host-key and authentication flow, and missing profiles are skipped.
 
@@ -300,9 +305,10 @@ Workspace** validates the selected JSON before changing the current workspace,
 then stops its workers, restores all valid Tabs and pane/window layouts, and
 starts fresh workers through the normal trust and authentication flow. A custom
 path can be used for named snapshots. Successful opens are kept in **File >
-Open Recent** (up to eight paths), and the next launch tries the most recent
-available path first. Missing or invalid recent files are removed automatically;
-if none remain usable, startup falls back to the private `workspace.json`.
+Open Recent** (up to eight paths). The next launch first restores the private
+`workspace.json` checkpoint; only when it is missing or invalid does AxSSH try
+recent files from newest to oldest and remove unavailable entries. Autosave does
+not overwrite named workspace files; use Save Workspace to update them.
 **Clear Recent** removes only this path history. Saving a snapshot does not
 change the recent-open order, and the Save dialog still defaults to the private
 `workspace.json` to avoid accidental overwrites.

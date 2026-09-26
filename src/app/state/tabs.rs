@@ -681,6 +681,7 @@ impl AppState {
 
     pub(in crate::app) fn workspace_tab_snapshots(
         &self,
+        include_text: bool,
     ) -> Vec<ax_ssh::config::WorkspaceTabSnapshot> {
         self.tabs
             .iter()
@@ -693,6 +694,7 @@ impl AppState {
                             terminal
                                 .terminal
                                 .as_ref()
+                                .filter(|_| include_text)
                                 .map(TerminalModel::contents)
                                 .unwrap_or_default(),
                             terminal.sftp.path.clone(),
@@ -738,9 +740,17 @@ impl AppState {
     }
 
     pub(in crate::app) fn workspace_snapshot(&self) -> WorkspaceSnapshot {
+        self.workspace_snapshot_with_text(true)
+    }
+
+    pub(in crate::app) fn workspace_layout_snapshot(&self) -> WorkspaceSnapshot {
+        self.workspace_snapshot_with_text(false)
+    }
+
+    fn workspace_snapshot_with_text(&self, include_text: bool) -> WorkspaceSnapshot {
         WorkspaceSnapshot {
             version: WORKSPACE_SNAPSHOT_VERSION,
-            tabs: self.workspace_tab_snapshots(),
+            tabs: self.workspace_tab_snapshots(include_text),
             active_tab_id: self.active_tab_id,
             windows: Vec::new(),
         }

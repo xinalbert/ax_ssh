@@ -21,6 +21,7 @@ struct WindowRouterState {
 
 struct WindowRoute {
     ui: slint::Weak<AppWindow>,
+    placement: Option<ax_ssh::config::WindowPlacement>,
     transfer: Option<WorkspaceTransfer>,
     /// UI-local blocking modals are reported by the Slint overlay host.
     modal_open: bool,
@@ -68,6 +69,7 @@ impl WindowRouter {
             MAIN_WINDOW_ID,
             WindowRoute {
                 ui: main_ui,
+                placement: None,
                 transfer: None,
                 modal_open: false,
                 window_active: true,
@@ -99,26 +101,24 @@ impl WindowRouter {
         };
         main.pane_trees.clear();
         main.active_tab_id = snapshot.active_tab_id;
-        for window in &snapshot.windows {
-            if window.id == MAIN_WINDOW_ID {
-                continue;
-            }
-            // Detached native windows are intentionally rebuilt later; their IDs
-            // are layout labels and never reused as native handles.
-        }
+        // Detached native windows are rebuilt later with fresh native identities.
         for window in &snapshot.windows {
             if window.id != MAIN_WINDOW_ID {
                 continue;
             }
             main.active_tab_id = window.active_tab_id.or(snapshot.active_tab_id);
+            main.placement = window.placement;
             for pane in &window.panes {
                 let Some(workspace_tab_id) = pane_tab_root(pane) else {
                     continue;
                 };
                 let focused = window.focused_tab_id.unwrap_or(workspace_tab_id);
-                if let Some(tree) = PaneTree::from_snapshot(workspace_tab_id, pane.clone(), focused)
+                if let Some(mut tree) =
+                    PaneTree::from_snapshot(workspace_tab_id, pane.clone(), workspace_tab_id)
                     && tree.tab_ids().iter().all(|id| app_tab_ids.contains(id))
                 {
+                    // The window-level focus belongs to its active tree only.
+                    let _ = tree.set_focused(focused);
                     main.pane_trees.insert(workspace_tab_id, tree);
                 }
             }
@@ -129,7 +129,20 @@ impl WindowRouter {
     }
 
     pub(super) fn snapshot(&self, app: &AppState) -> WorkspaceSnapshot {
-        let mut snapshot = app.workspace_snapshot();
+        self.snapshot_with_text(app, true)
+    }
+
+    /// Metadata only: frequent change detection must not copy terminal buffers.
+    pub(super) fn layout_snapshot(&self, app: &AppState) -> WorkspaceSnapshot {
+        self.snapshot_with_text(app, false)
+    }
+
+    fn snapshot_with_text(&self, app: &AppState, include_text: bool) -> WorkspaceSnapshot {
+        let mut snapshot = if include_text {
+            app.workspace_snapshot()
+        } else {
+            app.workspace_layout_snapshot()
+        };
         let Ok(router) = self.inner.lock() else {
             return snapshot;
         };
@@ -140,10 +153,11 @@ impl WindowRouter {
                 .as_ref()
                 .map(|transfer| transfer.tab_ids.clone())
                 .unwrap_or_else(|| app.tab_summaries().into_iter().map(|tab| tab.id).collect());
-            let panes = route
-                .pane_trees
-                .values()
-                .map(PaneTree::snapshot)
+            let mut trees = route.pane_trees.iter().collect::<Vec<_>>();
+            trees.sort_by_key(|(id, _)| **id);
+            let panes = trees
+                .into_iter()
+                .map(|(_, tree)| tree.snapshot())
                 .collect::<Vec<PaneNodeSnapshot>>();
             let focused_tab_id = route
                 .active_tab_id
@@ -154,10 +168,61 @@ impl WindowRouter {
                 active_tab_id: route.active_tab_id,
                 focused_tab_id,
                 panes,
+                placement: route.placement,
             });
         }
+        windows.sort_by_key(|window| window.id);
         snapshot.windows = windows;
         snapshot
+    }
+
+    pub(super) fn set_placement(
+        &self,
+        window_id: Uuid,
+        placement: Option<ax_ssh::config::WindowPlacement>,
+    ) {
+        if let Ok(mut router) = self.inner.lock()
+            && let Some(route) = router.routes.get_mut(&window_id)
+        {
+            route.placement = placement;
+        }
+    }
+
+    pub(super) fn capture_placement(
+        &self,
+        window_id: Uuid,
+        window: &slint::winit_030::winit::window::Window,
+    ) {
+        let previous = self
+            .inner
+            .lock()
+            .ok()
+            .and_then(|router| router.routes.get(&window_id).map(|route| route.placement));
+        if let Some(previous) = previous {
+            // Native calls happen without a router lock: platform callbacks may reenter.
+            self.set_placement(window_id, window_state::capture(window, previous));
+        }
+    }
+
+    pub(super) fn capture_placements(&self) {
+        use slint::winit_030::WinitWindowAccessor;
+        let windows = self
+            .inner
+            .lock()
+            .map(|router| {
+                router
+                    .routes
+                    .iter()
+                    .map(|(id, route)| (*id, route.ui.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (id, weak) in windows {
+            if let Some(ui) = weak.upgrade() {
+                ui.window()
+                    .with_winit_window(|window| self.capture_placement(id, window));
+            }
+        }
     }
 
     pub(super) fn register_detached(
@@ -176,6 +241,7 @@ impl WindowRouter {
             router.routes.insert(
                 window_id,
                 WindowRoute {
+                    placement: None,
                     active_tab_id: transfer.active_tab_id,
                     ui,
                     transfer: Some(transfer),

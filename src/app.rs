@@ -100,7 +100,9 @@ mod terminal_targets;
 mod view;
 mod window_bridge;
 mod window_router;
+mod window_state;
 mod workspace;
+mod workspace_autosave;
 
 use self::connection::*;
 use self::connection_monitor::*;
@@ -159,6 +161,13 @@ fn load_startup_workspace(
     config: &ConfigStore,
     sessions: &mut SessionStore,
 ) -> Option<ax_ssh::config::WorkspaceSnapshot> {
+    // The recovery checkpoint reflects the most recent running workspace.
+    // A manually opened file is a template until the user explicitly saves it.
+    match config.load_workspace() {
+        Ok(Some(snapshot)) => return Some(snapshot),
+        Ok(None) => {}
+        Err(error) => warn!(%error, "automatic workspace checkpoint could not be loaded"),
+    }
     let recent_paths = sessions.recent_workspace_paths().to_vec();
     let mut removed_unavailable_path = false;
     for path in recent_paths {
@@ -178,13 +187,7 @@ fn load_startup_workspace(
     if removed_unavailable_path && let Err(error) = config.save(sessions) {
         warn!(%error, "failed to persist cleaned recent workspace history");
     }
-    match config.load_workspace() {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
-            warn!(%error, "workspace snapshot could not be loaded; starting with an empty workspace");
-            None
-        }
-    }
+    None
 }
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
@@ -379,6 +382,14 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             }
         }
     }
+    let main_placement = workspace_snapshot.as_ref().and_then(|snapshot| {
+        snapshot
+            .windows
+            .iter()
+            .find(|window| window.id == MAIN_WINDOW_ID)
+            .and_then(|window| window.placement)
+    });
+    window_state::prepare(&ui, main_placement);
     if let Err(error) = ui.show() {
         if log_renderer_fault("show-main-window", &error) {
             persist_renderer_fallback(&log_directory, renderer_preference, &error);
@@ -386,6 +397,8 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         renderer_window_destroyed("main");
         return Err(error).context("failed to show main window");
     }
+    #[cfg(not(target_os = "macos"))]
+    window_state::restore(&ui, main_placement, &window_router, MAIN_WINDOW_ID);
     install_native_window_input_hook(
         &ui,
         state.clone(),
@@ -416,6 +429,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         let ui_for_window = ui.as_weak();
+        let router_for_window = window_router.clone();
         slint::Timer::single_shot(Duration::from_millis(100), move || {
             let Some(ui) = ui_for_window.upgrade() else {
                 return;
@@ -426,9 +440,17 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             if let Err(error) = macos_window::configure(ui.window()) {
                 warn!(%error, "failed to configure the standard macOS title bar");
             }
+            // FullSizeContentView changes the client-size convention. Restore
+            // only after configuring it, matching the geometry we capture.
+            window_state::restore(&ui, main_placement, &router_for_window, MAIN_WINDOW_ID);
             schedule_macos_application_menu_configuration(&ui);
         });
     }
+    let autosave = workspace_autosave::WorkspaceAutosave::start(
+        state.clone(),
+        window_router.clone(),
+        runtime.handle(),
+    )?;
     info!("AxSSH UI initialized");
     let ui_result = slint::run_event_loop().context("Slint event loop failed");
     if let Err(error) = &ui_result {
@@ -439,12 +461,9 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         clear_renderer_fallback(&log_directory);
     }
 
-    if let Ok(app) = state.lock() {
-        let snapshot = window_router.snapshot(&app);
-        if let Err(error) = app.config.save_workspace(&snapshot) {
-            warn!(%error, "failed to save workspace snapshot during shutdown");
-        }
-    }
+    window_router.capture_placements();
+    let final_snapshot = state.lock().ok().map(|app| window_router.snapshot(&app));
+    runtime.block_on(autosave.finish(final_snapshot));
     let (workers, pending_probes) = match state.lock() {
         Ok(mut app) => app.drain_runtime_resources(),
         Err(_) => {
@@ -788,6 +807,43 @@ mod tests {
         assert_eq!(2, super::tokio_worker_thread_count_for_parallelism(2));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(4));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(32));
+    }
+
+    #[test]
+    fn startup_uses_latest_checkpoint_instead_of_stale_recent_template() {
+        let root = std::env::temp_dir().join(format!("axssh-startup-{}", Uuid::new_v4()));
+        let config = ConfigStore::new(root.join("sessions.json"));
+        let template = root.join("template.json");
+        let old = ax_ssh::config::WorkspaceSnapshot {
+            version: ax_ssh::config::WORKSPACE_SNAPSHOT_VERSION,
+            ..Default::default()
+        };
+        ConfigStore::save_workspace_file(&template, &old).expect("template");
+        let mut latest = old.clone();
+        latest
+            .windows
+            .push(ax_ssh::config::WorkspaceWindowSnapshot {
+                placement: Some(ax_ssh::config::WindowPlacement {
+                    width: 900,
+                    height: 600,
+                    position: None,
+                    maximized: true,
+                }),
+                ..Default::default()
+            });
+        config.save_workspace(&latest).expect("checkpoint");
+        let mut sessions = SessionStore::default();
+        sessions
+            .record_workspace_path(&template)
+            .expect("recent template");
+        assert_eq!(load_startup_workspace(&config, &mut sessions), Some(latest));
+        assert_eq!(
+            ConfigStore::load_workspace_file(&template).expect("unchanged template"),
+            old
+        );
+        std::fs::write(config.workspace_path(), b"invalid JSON").expect("corrupt checkpoint");
+        assert_eq!(load_startup_workspace(&config, &mut sessions), Some(old));
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]

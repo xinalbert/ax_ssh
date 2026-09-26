@@ -55,6 +55,41 @@ pub struct WorkspaceWindowSnapshot {
     pub focused_tab_id: Option<Uuid>,
     #[serde(default)]
     pub panes: Vec<PaneNodeSnapshot>,
+    /// Normal window bounds; absent in older workspace files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<WindowPlacement>,
+}
+
+/// Logical client size and optional physical outer position, independent of UI types.
+/// Fullscreen and minimized states are intentionally not restored.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct WindowPlacement {
+    pub width: u32,
+    pub height: u32,
+    #[serde(default)]
+    pub position: Option<WindowPosition>,
+    #[serde(default)]
+    pub maximized: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct WindowPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl WindowPlacement {
+    pub fn validate(&self) -> Result<()> {
+        if !(1..=32_768).contains(&self.width) || !(1..=32_768).contains(&self.height) {
+            bail!("window logical size is outside the supported range");
+        }
+        if self.position.is_some_and(|position| {
+            position.x.unsigned_abs() > 1_000_000 || position.y.unsigned_abs() > 1_000_000
+        }) {
+            bail!("window position is outside the supported range");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -105,6 +140,9 @@ impl WorkspaceSnapshot {
             bail!("active tab does not exist");
         }
         for window in &self.windows {
+            if let Some(placement) = window.placement {
+                placement.validate()?;
+            }
             if window.tab_ids.len() > MAX_TABS {
                 bail!("workspace window contains too many tabs");
             }
@@ -191,6 +229,44 @@ fn validate_text(value: &str, max_bytes: usize, label: &str, reject_controls: bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_windows_without_placement_still_load() {
+        let snapshot: WorkspaceSnapshot = serde_json::from_str(
+            r#"{"version":1,"windows":[{"id":"00000000-0000-0000-0000-000000000000"}]}"#,
+        )
+        .expect("legacy workspace");
+        snapshot.validate().expect("valid legacy workspace");
+        assert_eq!(snapshot.windows[0].placement, None);
+    }
+
+    #[test]
+    fn invalid_geometry_is_rejected_before_native_window_creation() {
+        let mut snapshot = WorkspaceSnapshot {
+            version: WORKSPACE_SNAPSHOT_VERSION,
+            windows: vec![WorkspaceWindowSnapshot {
+                placement: Some(WindowPlacement {
+                    width: 900,
+                    height: 600,
+                    position: Some(WindowPosition { x: -1500, y: 80 }),
+                    maximized: true,
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        snapshot
+            .validate()
+            .expect("negative monitor coordinates are valid");
+        snapshot.windows[0].placement.as_mut().unwrap().width = 0;
+        assert!(snapshot.validate().is_err());
+        snapshot.windows[0].placement.as_mut().unwrap().width = 32_769;
+        assert!(snapshot.validate().is_err());
+        snapshot.windows[0].placement.as_mut().unwrap().width = 900;
+        snapshot.windows[0].placement.as_mut().unwrap().position =
+            Some(WindowPosition { x: i32::MIN, y: 0 });
+        assert!(snapshot.validate().is_err());
+    }
 
     #[test]
     fn rejects_unknown_version_and_duplicate_ids() {
