@@ -84,6 +84,8 @@ mod local_files;
 mod macos_file_drag;
 #[cfg(target_os = "macos")]
 mod macos_window;
+#[cfg(not(target_os = "macos"))]
+mod native_file_drop;
 mod panes;
 mod platform_support;
 mod runtime;

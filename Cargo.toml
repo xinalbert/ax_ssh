@@ -53,6 +53,7 @@ libc = "0.2.186"
 [target.'cfg(target_os = "linux")'.dependencies]
 freedesktop-icons = "0.4.0"
 mime_guess = { version = "2.0.5", default-features = false }
+x11-dl = "2.21.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 softbuffer = { path = "vendor/softbuffer" }

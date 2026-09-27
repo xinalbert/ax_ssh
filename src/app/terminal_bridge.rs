@@ -35,10 +35,11 @@ fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
     }
 }
 
-/// A `DroppedFile` has no location. On macOS, the native bridge obtains the
-/// current AppKit cursor position at drop time; other platforms rely on the
-/// latest Winit cursor move from the current external-file hover. Every route
-/// resolves the declared Remote files target before it creates an upload.
+/// A `DroppedFile` has no location. macOS, Windows, and X11 query their native
+/// cursor position at drop time; platforms without a synchronous cursor API
+/// use the latest Winit cursor move from the current external-file hover.
+/// Every route resolves the declared Remote files target before it creates an
+/// upload.
 #[derive(Default)]
 struct NativeFileDropPointer {
     hovered_file_count: u16,
@@ -421,8 +422,14 @@ pub(super) fn install_native_window_input_hook(
                         super::macos_window::current_cursor_position(ui.window()).ok()
                     });
                     #[cfg(not(target_os = "macos"))]
-                    let logical_position =
-                        pointer.logical_position(f64::from(ui.window().scale_factor()).max(0.01));
+                    let logical_position = {
+                        let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
+                        super::native_file_drop::logical_position(
+                            _window,
+                            scale_factor,
+                            pointer.logical_position(scale_factor),
+                        )
+                    };
                     let target =
                         logical_position.map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
                     let upload_batch_id = pointer.upload_batch_id();
