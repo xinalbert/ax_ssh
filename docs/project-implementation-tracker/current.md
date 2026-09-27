@@ -2,14 +2,14 @@
 
 ## 当前目标
 
-- 目标：主窗口及独立工作区保持普通尺寸、位置和最大化状态，防抖自动保存并可靠恢复。
-- 交付物：向后兼容窗口快照、屏幕范围/DPI 恢复、后台串行自动保存、多窗口恢复回归及双语契约。
+- 目标：修复 Windows、Linux、Wayland 等其他平台上系统文件管理器文件/文件夹拖入 SFTP Remote files 的命中和上传路由，并核对 SFTP Tab 内部拖动。
+- 交付物：跨平台原生光标坐标桥接、无坐标安全拒绝、双语行为契约、项目地图与验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config/workspace.rs`、`src/app.rs`、`src/app/window_router.rs`、`src/app/window_bridge.rs`、窗口持久化模块及工作区读写入口。
-- 不在本轮范围内：依赖升级、SSH 信任/认证修改、恢复活动进程、自动恢复全屏或最小化、自动截图。
+- 当前范围：`src/app/native_file_drop.rs`、`src/app/terminal_bridge.rs`、`src/app.rs`、`Cargo.toml`、`Cargo.lock`、SFTP 拖放相关 UI/bridge 文档与跟踪文件。
+- 不在本轮范围内：`third_package/axshell`、`AXtoolkit/`、SSH host-key/认证、SFTP worker 协议、用户 GUI 截图验收和非原生平台运行时验证。
 
 ## 当前状态
 
@@ -22,34 +22,31 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| WKEEP1 | completed | 窗口 DTO、普通几何缓存、DPI 与屏幕范围恢复 | 配置兼容及几何边界回归 | 最大化独立保存，保留普通尺寸 |
-| WKEEP2 | completed | 有界串行自动保存、退出 flush、最近快照优先和 detached 恢复 | 保存顺序、恢复路由和启动优先级回归 | 不在 UI 线程写盘 |
-| WKEEP3 | completed | 双语文档、地图、完整门禁及构建 | fmt/check/Clippy/test/build、tracker/Markdown/diff | 实际 GUI 由用户验收 |
+| DROP1 | completed | 审查内部 SFTP 拖动、原生 DroppedFile 路由和上传目标重验 | 代码路径、测试与安全边界审查 | 无活动目录 fallback |
+| DROP2 | completed | Windows/ Linux 原生光标坐标查询及 Wayland/Winit 回退 | 平台 cfg、坐标转换测试、Cargo 锁定依赖 | Windows/Linux 原生 GUI 交 CI |
+| DROP3 | completed | 双语文档、地图、tracker 与完整离线 Rust 门禁 | fmt/check/Clippy/test/diff/tracker/Markdown | Windows/Linux 原生 GUI 交 CI/用户验收 |
 
 ## 已完成
 
-- 已读取项目地图、架构及专项 skill；核实当前 schema 无窗口几何，仅退出自动保存。
-- 环境预检：本机 macOS ARM64，Rust/Cargo 1.97.1，Slint 1.18.1；保持 MSRV 1.92，不新增依赖。
-- 先写计划后施工；此前实施历史保留在月度 changes 中。
-- macOS 主窗口在 FullSizeContentView 设置后恢复几何，保持内外框尺寸口径一致；已有最大化窗口加载快照时显式同步原生 zoom。
+- 已确认内部 Local files -> Remote files、Remote files -> Local files、系统文件管理器拖入都复用有界 SFTP transfer queue；目录递归、过滤、冲突批次和当前远端目录重验保持不变。
+- macOS 继续在每个 `DroppedFile` 到达时读取 AppKit 光标；Windows 使用 Win32 `GetCursorPos`/`ScreenToClient`；Linux X11 使用 `XQueryPointer`；Wayland/其他平台使用当前外部 hover 的 Winit 坐标。
+- 无坐标、落在本地 pane/其他区域、SFTP 状态未就绪时拒绝，不按活动目录猜测；新增模块不持有文件系统、worker、凭据或 transport。
 
 ## 验证
 
-- 已完成：定向回归及最终完整测试（库 285、应用 288、Doc tests 0）；fmt、locked/offline check、严格 all-target Clippy、debug build；macOS ARM64/x86_64 的 CI 同款 target check/Clippy/build 均通过；Markdown 相对链接、skill、tracker 和 diff 校验通过。
-- 未完成：Windows/Linux 原生 CI 和真实 GUI/多屏验收；未运行非原生 Intel 测试。
+- 已完成：坐标转换与现有 SFTP/native drop 回归审查；`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 `cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（288 项应用测试，库测试合计 285，Doc tests 0）、`git diff --check`、Markdown 相对链接和 tracker validator 均通过；本机 Intel macOS target 的 locked/offline check 与严格 all-target Clippy 也通过。
+- 未完成：Windows/Linux/Wayland 原生 GUI 行为未在本机执行；Linux target 因本机未安装 `x86_64-unknown-linux-gnu` 无法进行 target check。
 
 ## 风险与阻塞
 
-- Wayland 不提供绝对窗口定位，位置交给 compositor；Windows/Linux 本机缺少 SDK/target，需 CI 原生验证。
-- 强制终止可能丢失最后一次防抖尚未写盘的变化；终端只恢复既有有界文本。
-- macOS 全屏/最大化动画和显示器热插拔需真实平台验收，不采集应用截图。
+- 本机仅有 macOS targets，无法替代 Windows/Linux 原生窗口拖动验收；CI 需覆盖 Windows、Linux X11/Wayland 构建和实际事件路径。
+- Wayland 不提供统一的同步窗口指针查询，依赖外部拖动期间可用的 Winit `CursorMoved`；若没有坐标会安全拒绝上传。
+- GUI 视觉和真实系统文件夹拖动仍需用户在对应平台验收；代理不采集自身应用截图作为证据。
 
 ## 下一步
 
-- 运行 `cargo run --locked --offline` 使用新构建进行实际窗口验收。
-- 用户验收：调整主窗/独立 Terminal/SFTP 窗口位置尺寸，修改分屏比例，等约两秒后退出重开；核对位置、尺寸、最大化及分屏。
-- 多屏验收：在副屏保存窗口后拔出副屏，重启确认窗口位于可见屏幕；全屏和最小化退出后应恢复普通窗口或先前最大化状态。
+- 在原生 Windows、Linux X11/Wayland 构建上拖入文件和文件夹，确认只在 Remote files 上传，并确认拖到 Local files、Terminal、空白区域均不上传。
 
 ## 最后更新时间
 
-- 2026-09-26
+- 2026-09-26 Asia/Shanghai

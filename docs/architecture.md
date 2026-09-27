@@ -68,6 +68,7 @@ Process startup (src/main.rs)
 | `src/app/workspace_autosave.rs` | Debounced checkpoints, one latest pending snapshot and serialized background writes with shutdown drain | Native window ownership, credentials or SSH state |
 | `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
+| `src/app/native_file_drop.rs` | Windows and Linux native cursor lookup for external file-manager drops, with logical-coordinate conversion and safe fallback boundaries | Filesystem access, SFTP state, transfer queue, or target selection |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
 | `src/app/file_icons.rs` and `src/app/file_icons/platform/` | Bounded process-local file-icon keys/cache and owned RGBA fallbacks; cfg-scoped platform resolvers | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
@@ -1465,17 +1466,17 @@ bridge validation and transfer queue. Internal drag payloads carry an explicit
 local/remote source prefix: selected local rows carry the current selection and
 unselected rows carry only themselves. Local paths dropped on Remote files queue uploads,
 and remote files or folders dropped on Local files queue downloads. External
-Finder uploads use the same target contract. macOS reads the current AppKit
-cursor position for every received `DroppedFile`; it does not require a prior
-`HoveredFile` notification, because that notification is not a reliable
-precondition for a delivered native drop. Other platforms use the latest Winit
-`CursorMoved` position from the current external-file hover. The bridge asks
-the declarative SFTP geometry whether that position is inside the visible
-Remote files target. That geometry only selects the target: immediately before
-queueing, the application bridge revalidates the active SFTP tab's current
-connection and stable remote directory. This avoids a stale Slint
+system file-manager uploads use the same target contract. macOS reads the
+current AppKit cursor position for every received `DroppedFile`; Windows
+queries the Win32 screen cursor and converts it to client coordinates; Linux
+X11 queries the live Xlib window pointer. Wayland and other platforms use the
+latest Winit `CursorMoved` position from the current external-file hover. The
+bridge asks the declarative SFTP geometry whether that position is inside the
+visible Remote files target. That geometry only selects the target: immediately
+before queueing, the application bridge revalidates the active SFTP tab's
+current connection and stable remote directory. This avoids a stale Slint
 presentation snapshot silently rejecting a valid native drop, while still
-rejecting a missing AppKit/hover coordinate, any other target, or a state that
+rejecting a missing native/hover coordinate, any other target, or a state that
 is not ready rather than guessing from the active directory.
 Slint `DropArea` continues to handle the in-process paths. Consecutive native
 dropped-file events share one short-lived upload batch for conflict decisions.

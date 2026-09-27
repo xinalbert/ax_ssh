@@ -62,6 +62,7 @@ Slint UI（.slint）
 | `src/app/workspace_autosave.rs` | 防抖快照、单槽最新待写状态、后台串行写盘与退出排空 | 原生窗口所有权、凭据或 SSH 状态 |
 | `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
+| `src/app/native_file_drop.rs` | Windows 与 Linux 系统文件管理器拖入时的原生光标查询、逻辑坐标转换和安全回退边界 | 文件系统访问、SFTP 状态、transfer queue 或目标选择 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
 | `src/app/file_icons.rs` 与 `src/app/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
@@ -905,7 +906,7 @@ Save As。全部选中的本地文件和目录、内部拖动根及系统拖入�
 扩展缺失或目标变化时失败且保留原文件。两者都保留时寻找带序号的空闲名称。待传上传意图和冲突提示均有界，
 关闭 Tab 会丢弃这些决策。
 编辑器打开期间按远端 size/mtime fingerprint 轮询监控；自动上传必须显式开启、默认关闭并经过防抖与 fingerprint 校验。
-拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：已选中的本地行携带当前选择，未选中行只携带自身；本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部 Finder 上传遵循同一目标契约：macOS 每次收到 `DroppedFile` 都读取当前 AppKit 光标坐标，不再要求先收到 `HoveredFile` 通知，因为该通知不是原生 drop 已送达时可靠的前置条件；其他平台仍使用当前外部文件 hover 的最新 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于可见的 Remote files 目标。该几何只负责选择目标；在排队前，application bridge 会重新校验活动 SFTP Tab 的当前连接和稳定的远端目录。这样 Slint 的陈旧 presentation snapshot 不会静默拒绝有效的原生 drop，同时缺少 AppKit/hover 坐标、落在其他目标或实时状态尚未就绪时仍会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。连续送达的原生文件事件共用短生命周期上传批次，使同名冲突的本批次选择作用于该次拖动的文件。
+拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：已选中的本地行携带当前选择，未选中行只携带自身；本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部系统文件管理器上传遵循同一目标契约：macOS 每次收到 `DroppedFile` 都读取当前 AppKit 光标坐标；Windows 查询 Win32 屏幕光标并转换为客户区坐标；Linux X11 查询实时 Xlib 窗口指针；Wayland 和其他平台使用当前外部文件 hover 的最新 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于可见的 Remote files 目标。该几何只负责选择目标；在排队前，application bridge 会重新校验活动 SFTP Tab 的当前连接和稳定的远端目录。这样 Slint 的陈旧 presentation snapshot 不会静默拒绝有效的原生 drop，同时缺少原生/hover 坐标、落在其他目标或实时状态尚未就绪时仍会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。连续送达的原生文件事件共用短生命周期上传批次，使同名冲突的本批次选择作用于该次拖动的文件。
 
 在 macOS 上，从可见远端普通文件开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。远端目录、链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
 

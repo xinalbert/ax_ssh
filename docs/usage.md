@@ -219,7 +219,7 @@ SFTP transfers can omit generated system files. In **Settings > General**, enabl
 `.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd`; Windows and
 Linux have their corresponding common metadata names). Add one custom filename
 pattern per line; `*` matches any characters. The same filter applies to local
-uploads, Finder drops, remote downloads, and every level of recursive directory
+uploads, system file-manager drops, remote downloads, and every level of recursive directory
 transfers. **Restore platform defaults** clears custom patterns and re-enables the
 platform preset; settings changes follow the normal Settings draft/save flow.
 
@@ -267,8 +267,9 @@ remote path. While the editor is open, a worker-owned
 poll checks the remote size/mtime fingerprint; a change disables Save and
 reports a conflict. The local toolbar uploads all selected files and folders.
 Dragging a selected local row carries the current selection; dragging an unselected
-row carries that row. Local and Finder files or folders dropped onto Remote files
-upload to the current remote directory. Folder uploads recursively discover regular
+row carries that row. Local files and folders, or files and folders dragged from a
+system file manager such as Finder, Windows Explorer, or a Linux file manager,
+dropped onto Remote files upload to the current remote directory. Folder uploads recursively discover regular
 files, preserve relative paths, and create needed remote directories. Empty folders
 without eligible files do not create a remote directory. Symbolic links and filtered
 names are skipped. A batch is bounded to 512 files, 256 directories,
