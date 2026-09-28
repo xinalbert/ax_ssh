@@ -424,11 +424,16 @@ pub(super) fn install_native_window_input_hook(
                     #[cfg(not(target_os = "macos"))]
                     let logical_position = {
                         let scale_factor = f64::from(ui.window().scale_factor()).max(0.01);
-                        super::native_file_drop::logical_position(
-                            _window,
-                            scale_factor,
-                            pointer.logical_position(scale_factor),
-                        )
+                        let hover_position = pointer.logical_position(scale_factor);
+                        _window
+                            .with_winit_window(|window| {
+                                super::native_file_drop::logical_position(
+                                    window,
+                                    scale_factor,
+                                    hover_position,
+                                )
+                            })
+                            .unwrap_or(hover_position)
                     };
                     let target =
                         logical_position.map(|(x, y)| ui.invoke_native_sftp_drop_target_at(x, y));
