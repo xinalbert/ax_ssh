@@ -669,6 +669,18 @@ fn primary_reflow_preserves_hard_breaks_and_wide_characters() {
 }
 
 #[test]
+fn workspace_text_roundtrip_restores_hard_break_columns() {
+    let mut terminal = TerminalModel::new(20, 5, 20);
+    terminal.process(b"first\r\nsecond");
+
+    let text = terminal.contents();
+    let restored = TerminalModel::from_text(&text, 20, 5, 20);
+
+    assert_eq!(text, "first\nsecond");
+    assert_eq!(restored.contents(), text);
+}
+
+#[test]
 fn alternate_screen_resize_does_not_reflow_existing_rows() {
     let mut terminal = TerminalModel::new(20, 5, 20);
     terminal.process(b"\x1b[?1049h0123456789abcdefghij");

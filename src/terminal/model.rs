@@ -177,7 +177,23 @@ impl TerminalModel {
     /// Process state, alternate-screen mode, and ANSI cursor state are not persisted.
     pub fn from_text(text: &str, columns: usize, rows: usize, scrollback_lines: usize) -> Self {
         let mut terminal = Self::new(columns, rows, scrollback_lines);
-        terminal.process(text.as_bytes());
+        // `contents()` stores hard breaks as LF because that is the portable
+        // workspace representation. A terminal parser treats a bare LF as a
+        // line feed that keeps the current column, while PTY output normally
+        // arrives with ONLCR and therefore uses CRLF for a hard break. Restore
+        // the carriage return at this boundary so the next line starts at
+        // column zero. Avoid duplicating CR when loading an older hand-edited
+        // snapshot that already contains CRLF.
+        let mut replay = String::with_capacity(text.len());
+        let mut previous_was_cr = false;
+        for character in text.chars() {
+            if character == '\n' && !previous_was_cr {
+                replay.push('\r');
+            }
+            replay.push(character);
+            previous_was_cr = character == '\r';
+        }
+        terminal.process(replay.as_bytes());
         terminal
     }
 
