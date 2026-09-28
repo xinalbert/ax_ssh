@@ -273,6 +273,12 @@ impl<D: HasDisplayHandle, W: HasWindowHandle> SurfaceInterface<D, W> for Win32Im
         DamageSupport::Rectangles
     }
 
+    fn invalidate(&mut self) {
+        if let Some(buffer) = self.buffer.as_mut() {
+            buffer.presented = false;
+        }
+    }
+
     fn buffer_mut(&mut self) -> Result<BufferImpl<'_, D, W>, SoftBufferError> {
         if self.buffer.is_none() {
             panic!("Must set size of surface before calling `buffer_mut()`");

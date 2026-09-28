@@ -1188,6 +1188,14 @@ impl WinitWindowAdapter {
                     have_focus
                 };
                 self.activation_changed(have_focus)?;
+                #[cfg(target_os = "windows")]
+                if have_focus {
+                    // Win32 may discard the visible surface while another window
+                    // covers it without sending an Occluded event. Repaint the
+                    // whole retained software buffer when this window returns.
+                    self.renderer.invalidate();
+                    self.request_redraw();
+                }
             }
             WinitWindowEvent::KeyboardInput { event, is_synthetic, .. } => {
                 let key_code = event.logical_key.clone();

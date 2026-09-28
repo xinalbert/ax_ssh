@@ -427,15 +427,12 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
     private property <int> tab-visibility-revision: 0;
-    private property <int> active-tab-focus-revision: 0;
     changed tabs => {
         if root.drag-source-index >= root.tabs.length {
             root.clear-tab-drag();
         }
         root.tab-visibility-revision += 1;
-        root.active-tab-focus-revision += 1;
     }
-    changed active-tab-id => { root.active-tab-focus-revision += 1; }
     changed tab-width => {
         root.tab-visibility-revision += 1;
     }
@@ -588,10 +585,8 @@ export component WorkspaceTitlebar inherits Rectangle {
 
                     tab-focus := FocusScope {
                         private property <bool> active: tab.id == root.active-tab-id;
-                        private property <int> focus-revision: root.active-tab-focus-revision;
-                        // New repeater items can be active on their first evaluation, so
-                        // initialize the deferred focus/visibility pass from that state.
-                        private property <bool> focus-pending: active;
+                        // New repeater items can be active on their first evaluation.
+                        // Keep their tab visible without taking focus from the page.
                         private property <bool> visibility-pending: active;
                         width: parent.width;
                         height: parent.height;
@@ -602,13 +597,6 @@ export component WorkspaceTitlebar inherits Rectangle {
 
                         changed active => {
                             if self.active {
-                                self.focus-pending = true;
-                                self.visibility-pending = true;
-                            }
-                        }
-                        changed focus-revision => {
-                            if self.active {
-                                self.focus-pending = true;
                                 self.visibility-pending = true;
                             }
                         }
@@ -621,18 +609,6 @@ export component WorkspaceTitlebar inherits Rectangle {
                             return EventResult.reject;
                         }
 
-                        Timer {
-                            running: tab-focus.focus-pending;
-                            interval: 16ms;
-                            triggered => {
-                                tab-focus.focus-pending = false;
-                                if tab-focus.active {
-                                    tab-focus.focus();
-                                    root.ensure-tab-visible(index);
-                                    tab-focus.visibility-pending = true;
-                                }
-                            }
-                        }
                         Timer {
                             running: tab-focus.visibility-pending;
                             interval: 32ms;

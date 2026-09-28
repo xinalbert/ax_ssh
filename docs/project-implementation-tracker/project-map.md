@@ -22,9 +22,9 @@
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `vendor/vt100/` | 历史终端网格补丁的 MIT 保留副本 | 审计旧差异、许可证或移除遗留文件时 | 不在 Cargo 依赖图中；当前迁移不修改其源码，也不得再作为新的终端功能实现点 |
-| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 只保留 `PhysicalRegion::iter()` 到 `softbuffer::Rect` 的多矩形转发，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；不得承载 AxSSH UI、终端或 SSH 逻辑 |
+| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 转发 `PhysicalRegion::iter()` 的多矩形 damage，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；Windows 窗口重新聚焦时使 renderer 失效并请求整窗重绘；不得承载 AxSSH UI、终端或 SSH 逻辑 |
 | `vendor/i-slint-renderer-skia/` | 锁定 Slint 1.18.1 的 Skia GPU layer cache 生命周期补丁 | 修改 GPU 资源释放、行缓存或升级 Slint 时 | 仅在 `free_graphics_resources` 对销毁组件调用 `layer_cache.component_destroyed`；保留原 crate 许可证与其余源码，不承载 AxSSH 状态或 SSH 逻辑 |
-| `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
+| `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。Win32 surface 在失效时重置 buffer age；macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
 | `docs/` | 架构、开发、审计和实施记录 | 修改边界、命令或计划时 | 双语页面保持结构对齐 |
 | `.github/workflows/` | 三平台 CI、日期 tag 自动发布和多平台 GitHub Release | 修改工具链、缓存、版本或打包/发布门禁时 | 发布者用版本脚本同步元数据并推送 annotated 日期 tag；匹配 `20*-*-*` 的 tag push 直接进入 Release，先校验 annotated tag 和版本元数据，再构建 Windows/Linux/macOS 资产并发布；CI 只为默认分支保存共享 cache，不 checkout 或打包参考子模块 |
@@ -214,6 +214,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-09-28 10:48 +0800：Windows 窗口重新聚焦触发 renderer 失效和整窗重绘，Win32 softbuffer 失效时重置 buffer age；活动 Tab 条仅滚动显示，不再延迟夺取终端 IME 焦点。
 
 - 2026-09-24 17:43 +0800：SFTP 会话重置保留本地目录、已加载行与选择，同时废弃在途本地列表结果；远端同路径刷新继续允许上传，目标切换仍阻止误传。
 - 2026-09-23 23:24 +0800：新增锁定 Skia 1.18.1 的 `vendor/i-slint-renderer-skia/` 路由，仅补动态组件销毁时的 layer cache 清理；Cargo patch、许可和双语架构已同步。

@@ -514,7 +514,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    this same list and wraps at either end; zero or one Tab leaves state unchanged.
    The Slint Tab strip keeps an activated Tab visible by adjusting its local
    `Flickable.viewport-x`; this presentation-only scroll is not persisted or
-   sent through the application boundary.
+   sent through the application boundary. The Tab strip does not take keyboard
+   focus when an activation snapshot arrives. Its `FocusScope` remains reachable
+   by keyboard navigation and focuses on direct pointer interaction, while a
+   selected terminal pane gives focus to its transparent IME input after layout.
    Each SSH Tab also owns its current connection phase: idle, cancellable host-key
    probe, pending host-key confirmation, pending authentication, or stored-
    credential loading. There is no global pending-probe, trust, or authentication
@@ -1390,11 +1393,14 @@ links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
 Discovery scans at most 4,096 entries and is bounded to 512 files, 256
 directories, depth 16, 512 KiB of path text, 1 GiB aggregate bytes, and 512
-MiB per file. Each SFTP Tab permits at most two active transfers, and each
-transfer owns a separate SFTP
+MiB per file. Each SFTP Tab permits a configurable number of active transfers
+(1-16, default 2), and each transfer owns a separate SFTP
 subsystem stream.
 
-The transfer root also carries the effective bounded filename-filter patterns.
+The process-wide upload limiter is also configurable from Settings > General
+(1-32 simultaneous uploads, default 8). Lowering the setting does not cancel
+uploads that already hold a permit; it limits subsequent uploads. The transfer
+root also carries the effective bounded filename-filter patterns.
 The application bridge rejects matching direct upload/download intents, while
 the worker applies the same basename-only `*` matcher during recursive discovery
 to skip generated files and directories. The browser's Hidden toggle remains a
@@ -1444,10 +1450,11 @@ local discovery preserves relative paths, skips links and filtered names, and
 caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,
 512 KiB of path text, 1 GiB aggregate bytes, and 512 MiB per file. The worker
 creates missing remote directories through its SFTP session, rejecting links or
-unexpected target types. At most two transfers run concurrently per Tab; the
-remaining accepted files wait in the bounded worker queue. The application passes only a
-validated path and size; the worker revalidates the source and streams one
-64 KiB chunk at a time. A process-wide eight-upload semaphore bounds the
+unexpected target types. The configured per-Tab transfer limit (1-16, default
+2) applies to uploads and downloads; remaining accepted files wait in the
+bounded worker queue. The application passes only a validated path and size;
+the worker revalidates the source and streams one 64 KiB chunk at a time. The
+configured process-wide upload limit (1-32, default 8) bounds the
 resident upload chunks (about 512 KiB at this boundary), so a 512 MiB upload
 does not become a resident buffer. Editor monitoring polls a remote size/mtime
 fingerprint while the editor is open. A regular remote upload target triggers
@@ -2020,6 +2027,13 @@ application FPS cap. A large dirty region can still refresh all layers, and the
 Slint API and terminal ownership boundaries remain unchanged. GPU/Metal still
 clips Skia drawing to dirty regions but presents its drawable as a normal full
 drawable, so it should be measured separately.
+
+On Windows, returning keyboard focus also invalidates the winit renderer and
+requests a redraw because a covered Win32 window may lose its visible pixels
+without receiving an occlusion event. The Win32 softbuffer surface resets its
+buffer age on invalidation, so software rendering redraws and presents the
+entire window before returning to partial damage updates. Other renderer paths
+retain their usual redraw behavior.
 
 The patched `softbuffer::Surface::damage_support()` exposes the native
 presentation contract without changing the `present_with_damage` call. Windows,

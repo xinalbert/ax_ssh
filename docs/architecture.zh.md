@@ -331,7 +331,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    列表位置派生，而 `#1` 这类实例后缀仍是稳定标题的一部分。Previous/Next Tab 意图会让
    `AppState` 在同一列表中激活相邻 UUID 并首尾循环；零个或一个 Tab 时状态不变。每个
    Slint Tab 条会通过调整本地 `Flickable.viewport-x` 保持激活 Tab 可见；这项仅用于呈现的
-   滚动不会持久化，也不会跨越应用边界。
+   滚动不会持久化，也不会跨越应用边界。激活快照到达时 Tab 条不主动夺取键盘焦点；其
+   `FocusScope` 仍可通过键盘导航到达，并在直接指针操作时获得焦点。选中的终端 pane 则在布局
+   完成后将焦点交给透明 IME 输入框。
    SSH Tab 还独占当前
    连接阶段：idle、可取消的主机密钥探测、等待主机密钥确认、等待认证或读取已存凭据；不再
    存在全局的 probe、信任或认证等待槽位。
@@ -870,10 +872,10 @@ identity 或 fingerprint 不匹配的条目都会在调度前被拒绝，验证�
 小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
 拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
 目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总字节，
-每个文件最多 512 MiB。每个 SFTP Tab 最多允许两个活动 transfer，每个 transfer 独占单独的 SFTP
+每个文件最多 512 MiB。每个 SFTP Tab 的活动 transfer 数可在 Settings > General 中设置为 1-16（默认 2），每个 transfer 独占单独的 SFTP
 subsystem stream。
 
-下载根 intent 还携带有界的生效文件名过滤模式。application bridge 会拒绝匹配的直接上传/下载
+所有 SFTP Tab 共享的同时上传数也可在 Settings > General 中设置为 1-32（默认 8）。降低该值不会取消已经取得许可的上传，只会限制后续上传。下载根 intent 还携带有界的生效文件名过滤模式。application bridge 会拒绝匹配的直接上传/下载
 意图，worker 在递归发现时使用同一个仅匹配 basename 的 `*` 匹配器，跳过系统生成的文件和目录。
 浏览器的 Hidden 开关仍只控制显示。`AppSettings` 持久化当前平台预设、启用开关和规范化后的自定义
 模式；General 草稿的恢复操作会恢复该预设并清空自定义列表。
@@ -897,8 +899,8 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
 和活动 transfer。远端文件行右键菜单负责有界下载和删除 intent；远端工具栏保留重命名、UTF-8 编辑和
-Save As。全部选中的本地文件和目录、内部拖动根及系统拖入根会进入单条批次命令。本地递归发现在线程池中保留相对路径、跳过链接和过滤项；每批最多扫描 4,096 项，接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总大小，单文件最多 512 MiB。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 最多同时运行两个传输，其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
-每次只流式读取一个 64 KiB chunk；进程级最多同时运行 8 个上传，进一步把此边界的常驻 chunk
+Save As。全部选中的本地文件和目录、内部拖动根及系统拖入根会进入单条批次命令。本地递归发现在线程池中保留相对路径、跳过链接和过滤项；每批最多扫描 4,096 项，接受 512 个文件、256 个目录、16 层、512 KiB 路径文本、1 GiB 总大小，单文件最多 512 MiB。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 的上传和下载并发数可设置为 1-16（默认 2），其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
+每次只流式读取一个 64 KiB chunk；所有 Tab 共享的同时上传数可设置为 1-32（默认 8），进一步把此边界的常驻 chunk
 内存限制在约 512 KiB，因此 512 MiB 上传不会变成常驻内存缓冲。
 同名远端普通文件进入 Rust 所有的冲突队列，并由共享 `ModalFrame` 弹窗询问跳过、覆盖或两者都保留。
 可选的“应用到本批次”只作用于本次上传/拖入意图中的文件及当前 SFTP worker 生命周期；新上传仍默认询问。
@@ -1164,6 +1166,10 @@ clone 或色彩转换整个 framebuffer。首帧、resize、Retina scale、surfa
 bridge 在窗口 occluded 时使 surface 失效，即使新 buffer 没有 dirty rectangle 也会提交首帧。该路径只使用 CPU，不增加
 应用 FPS 上限；大面积 damage 仍可能刷新全部 layer。Slint API、终端所有权和 SSH 边界不变。GPU/Metal 仍只把 Skia
 绘制裁剪到脏区域，但 drawable 仍按普通完整 drawable 提交，应单独采样评估。
+
+Windows 窗口重新获得键盘焦点时也会使 winit renderer 失效并请求重绘，因为被其它窗口遮挡的 Win32
+窗口可能丢失可见像素却没有收到 occluded 事件。Win32 softbuffer surface 在失效时重置 buffer age，
+使 software renderer 先整窗重绘并呈现，再恢复局部脏区更新；其它 renderer 保持原有重绘行为。
 
 补丁后的 `softbuffer::Surface::damage_support()` 暴露原生呈现契约，但不改变
 `present_with_damage` 调用方式。Windows、支持 `wl_surface.damage_buffer` 的 Wayland
