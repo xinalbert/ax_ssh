@@ -230,7 +230,11 @@ actions share the page bar instead of reserving a separate row. Pause/resume
 preserves the downloaded prefix through the live
 worker and continues from that offset; it is available only while this
 application and SFTP worker remain running. Each SFTP Tab runs at most two
-active transfers at once; additional files wait in the queue. Cancel removes the task's partial content,
+active transfers at once by default; **Transfers per SFTP tab** in
+**Settings > General** changes this limit from 1 to 16. **Global simultaneous
+uploads** changes the process-wide upload limit from 1 to 32 (the default is
+8); additional files wait in the queue or are subject to the existing transfer
+state. Cancel removes the task's partial content,
 including a file published just before cancellation wins; failures remove the
 `.part` file, while completed local downloads remain in the chosen directory.
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and

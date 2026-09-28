@@ -463,6 +463,9 @@ msgstr "过滤系统文件"
 msgid "Flow control"
 msgstr "流控制"
 
+msgid "Global simultaneous uploads"
+msgstr "全局同时上传数"
+
 msgid "Focus rings, selection, and active indicators"
 msgstr "焦点环、选择和活动状态指示"
 
@@ -792,6 +795,12 @@ msgstr "暂停 {0}"
 
 msgid "Platform defaults"
 msgstr "平台默认值"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "所有 SFTP 标签页共享的同时上传数"
 
 msgid "Platform home directory"
 msgstr "平台主目录"
@@ -1236,6 +1245,9 @@ msgstr "终端错误高亮颜色"
 
 msgid "Terminal font family"
 msgstr "终端字体系列"
+
+msgid "Transfers per SFTP tab"
+msgstr "每个 SFTP 标签页的传输数"
 
 msgid "Terminal font size"
 msgstr "终端字体大小"

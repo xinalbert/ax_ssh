@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 52] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 54] = [
     (
         "General",
         "Language",
@@ -31,6 +31,16 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 52] = [
         "General",
         "Custom filename patterns",
         "One pattern per line; * matches any characters",
+    ),
+    (
+        "General",
+        "Transfers per SFTP tab",
+        "Maximum simultaneous uploads and downloads in one SFTP tab",
+    ),
+    (
+        "General",
+        "Global simultaneous uploads",
+        "Maximum uploads shared by all SFTP tabs",
     ),
     (
         "General",
@@ -299,7 +309,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 52] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 54] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -335,6 +345,18 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 52] = [
         "One pattern per line; * matches any characters",
         "自定义文件名过滤模式",
         "每行一个模式；* 匹配任意字符",
+    ),
+    (
+        "Transfers per SFTP tab",
+        "Maximum simultaneous uploads and downloads in one SFTP tab",
+        "每个 SFTP 标签页的传输数",
+        "单个 SFTP 标签页允许同时进行的上传和下载数",
+    ),
+    (
+        "Global simultaneous uploads",
+        "Maximum uploads shared by all SFTP tabs",
+        "全局同时上传数",
+        "所有 SFTP 标签页共享的同时上传数",
     ),
     (
         "Platform defaults",
@@ -749,6 +771,8 @@ pub(super) fn wire_settings(
               sftp_filter_enabled,
               sftp_filter_use_platform_defaults,
               sftp_filter_custom_patterns,
+              sftp_per_tab_transfers,
+              sftp_global_uploads,
               settings_tab_id,
               close_after_save| {
             let is_preview = !close_after_save && settings_tab_id.is_empty();
@@ -847,6 +871,8 @@ pub(super) fn wire_settings(
                 shortcuts,
                 credential_storage: credential_storage.as_str(),
                 ui_language: ui_language.as_setting(),
+                sftp_per_tab_transfers,
+                sftp_global_uploads,
             });
             let mut settings = settings;
             settings.sftp_transfer_filters = SftpTransferFilterSettings::normalized(
@@ -1032,6 +1058,9 @@ fn save_workspace_settings(
     app.config.save(&candidate)?;
     app.sessions = candidate;
     app.apply_scrollback_setting();
+    ax_ssh::sftp::configure_global_upload_limit(usize::from(
+        settings.sftp_transfers.global_uploads,
+    ));
     Ok(settings)
 }
 
@@ -1065,6 +1094,9 @@ fn apply_preview_settings(
     let font_families = changed_font_families(&app.sessions.settings, &settings);
     app.sessions.settings = settings;
     app.apply_scrollback_setting();
+    ax_ssh::sftp::configure_global_upload_limit(usize::from(
+        app.sessions.settings.sftp_transfers.global_uploads,
+    ));
     Ok(font_families)
 }
 

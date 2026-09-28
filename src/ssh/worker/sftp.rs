@@ -103,6 +103,7 @@ pub(super) async fn run_sftp_session(
     initial_path: String,
     mut command_rx: mpsc::Receiver<SshCommand>,
     event_tx: mpsc::Sender<SshSessionEvent>,
+    per_tab_limit: usize,
 ) {
     let (browser_event_tx, mut browser_events) = mpsc::channel(SFTP_EVENT_CAPACITY);
     let (transfer_event_tx, mut transfer_events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
@@ -249,6 +250,7 @@ pub(super) async fn run_sftp_session(
                     &mut pending_by_transfer,
                     &connection,
                     transfers.len(),
+                    per_tab_limit,
                 );
             }
             opening = pending_openings.join_next_with_id(), if !pending_openings.is_empty() => {
@@ -312,10 +314,11 @@ pub(super) async fn run_sftp_session(
                     &mut pending_by_transfer,
                     &connection,
                     transfers.len(),
+                    per_tab_limit,
                 );
                 start_queued_uploads(
                     &mut queued_uploads, &mut active_upload_requests, &mut transfers,
-                    &pending_by_transfer, &upload_start_context,
+                    &pending_by_transfer, &upload_start_context, per_tab_limit,
                 ).await;
             }
             command = command_rx.recv() => {
@@ -400,8 +403,9 @@ pub(super) async fn run_sftp_session(
                                     &mut queued_requests,
                                     &mut pending_openings,
                                     &mut pending_by_transfer,
-                                    &connection,
+                                &connection,
                                     transfers.len(),
+                                    per_tab_limit,
                                 );
                             }
                         }
@@ -438,7 +442,7 @@ pub(super) async fn run_sftp_session(
                         }
                         start_queued_uploads(
                             &mut queued_uploads, &mut active_upload_requests, &mut transfers,
-                            &pending_by_transfer, &upload_start_context,
+                            &pending_by_transfer, &upload_start_context, per_tab_limit,
                         ).await;
                         Ok(())
                     }
@@ -476,7 +480,7 @@ pub(super) async fn run_sftp_session(
                             }
                             start_queued_uploads(
                                 &mut queued_uploads, &mut active_upload_requests, &mut transfers,
-                                &pending_by_transfer, &upload_start_context,
+                                &pending_by_transfer, &upload_start_context, per_tab_limit,
                             ).await;
                         }
                         Ok(())
@@ -717,11 +721,11 @@ pub(super) async fn run_sftp_session(
                 }
                 start_queued_sftp_transfers(
                     &mut queued_requests, &mut pending_openings, &mut pending_by_transfer,
-                    &connection, transfers.len(),
+                    &connection, transfers.len(), per_tab_limit,
                 );
                 start_queued_uploads(
                     &mut queued_uploads, &mut active_upload_requests, &mut transfers,
-                    &pending_by_transfer, &upload_start_context,
+                    &pending_by_transfer, &upload_start_context, per_tab_limit,
                 ).await;
             }
             event = browser_events.recv() => {
@@ -898,8 +902,9 @@ fn start_queued_sftp_transfers(
     pending_by_transfer: &mut HashMap<Uuid, PendingSftpOpen>,
     connection: &SshConnection,
     active_downloads: usize,
+    limit: usize,
 ) {
-    while !sftp_transfer_limit_reached(active_downloads, pending_by_transfer.len()) {
+    while !sftp_transfer_limit_reached(active_downloads, pending_by_transfer.len(), limit) {
         let Some(request) = queued_requests.pop_front() else {
             break;
         };
@@ -922,8 +927,9 @@ async fn start_queued_uploads(
     transfers: &mut Vec<ActiveSftpTransfer>,
     pending_downloads: &HashMap<Uuid, PendingSftpOpen>,
     context: &SftpUploadStartContext<'_>,
+    per_tab_limit: usize,
 ) {
-    while !sftp_transfer_limit_reached(transfers.len(), pending_downloads.len()) {
+    while !sftp_transfer_limit_reached(transfers.len(), pending_downloads.len(), per_tab_limit) {
         let Some(request) = queued_uploads.pop_front() else {
             break;
         };
@@ -1027,8 +1033,12 @@ fn cancel_pending_sftp_open(
     PendingSftpCancellation::Requested
 }
 
-fn sftp_transfer_limit_reached(active_downloads: usize, pending_openings: usize) -> bool {
-    active_downloads.saturating_add(pending_openings) >= MAX_SFTP_TRANSFERS
+fn sftp_transfer_limit_reached(
+    active_downloads: usize,
+    pending_openings: usize,
+    limit: usize,
+) -> bool {
+    active_downloads.saturating_add(pending_openings) >= limit.max(1)
 }
 
 fn available_sftp_transfer_slots(
@@ -1164,10 +1174,10 @@ mod tests {
 
     #[test]
     fn sftp_transfer_limit_counts_pending_subsystem_openings() {
-        assert!(!sftp_transfer_limit_reached(0, 0));
-        assert!(!sftp_transfer_limit_reached(1, 0));
-        assert!(sftp_transfer_limit_reached(1, 1));
-        assert!(sftp_transfer_limit_reached(0, MAX_SFTP_TRANSFERS));
+        assert!(!sftp_transfer_limit_reached(0, 0, 2));
+        assert!(!sftp_transfer_limit_reached(1, 0, 2));
+        assert!(sftp_transfer_limit_reached(1, 1, 2));
+        assert!(sftp_transfer_limit_reached(0, 2, 2));
     }
 
     #[tokio::test]

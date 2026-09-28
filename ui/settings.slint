@@ -97,6 +97,8 @@ export struct SettingsViewState {
     sftp_filter_use_platform_defaults: bool,
     sftp_filter_custom_patterns: string,
     sftp_filter_platform_defaults: string,
+    sftp_per_tab_transfers: int,
+    sftp_global_uploads: int,
     sidebar_width: int,
     tab_width: int,
     session_mask_character: string,
@@ -213,6 +215,8 @@ export component SettingsPane inherits Rectangle {
         root.source.sftp_filter_custom_patterns;
     private property <string> sftp-filter-platform-defaults:
         root.source.sftp_filter_platform_defaults;
+    private property <int> sftp-per-tab-transfers: root.source.sftp_per_tab_transfers;
+    private property <int> sftp-global-uploads: root.source.sftp_global_uploads;
     private property <int> sidebar-width: root.source.sidebar_width;
     private property <int> tab-width: root.source.tab_width;
     private property <string> session-mask-character: root.source.session_mask_character;
@@ -240,7 +244,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, string, bool,
+        string, bool, bool, string, int, int, string, bool,
     );
     callback save-ui-language(int);
     callback format-shortcut(KeyboardEvent) -> string;
@@ -331,6 +335,8 @@ export component SettingsPane inherits Rectangle {
         root.sftp-filter-use-platform-defaults;
     private property <string> draft-sftp-filter-custom-patterns:
         root.sftp-filter-custom-patterns;
+    private property <int> draft-sftp-per-tab-transfers: root.sftp-per-tab-transfers;
+    private property <int> draft-sftp-global-uploads: root.sftp-global-uploads;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
     private property <string> draft-session-mask-character: root.session-mask-character;
@@ -459,6 +465,8 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-filter-enabled,
             root.draft-sftp-filter-use-platform-defaults,
             root.draft-sftp-filter-custom-patterns,
+            root.draft-sftp-per-tab-transfers,
+            root.draft-sftp-global-uploads,
             "",
             false,
         );
@@ -545,6 +553,8 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-filter-enabled,
             root.draft-sftp-filter-use-platform-defaults,
             root.draft-sftp-filter-custom-patterns,
+            root.draft-sftp-per-tab-transfers,
+            root.draft-sftp-global-uploads,
             root.tab-id,
             close-after-save,
         );
@@ -616,6 +626,8 @@ export component SettingsPane inherits Rectangle {
     changed draft-sftp-filter-enabled => { root.schedule-preview(); }
     changed draft-sftp-filter-use-platform-defaults => { root.schedule-preview(); }
     changed draft-sftp-filter-custom-patterns => { root.schedule-preview(); }
+    changed draft-sftp-per-tab-transfers => { root.schedule-preview(); }
+    changed draft-sftp-global-uploads => { root.schedule-preview(); }
     changed draft-sidebar-width => { root.schedule-preview(); }
     changed draft-tab-width => { root.schedule-preview(); }
     changed draft-session-mask-character => { root.schedule-preview(); }
@@ -805,6 +817,8 @@ export component SettingsPane inherits Rectangle {
                         draft-sftp-filter-enabled <=> root.draft-sftp-filter-enabled;
                         draft-sftp-filter-use-platform-defaults <=> root.draft-sftp-filter-use-platform-defaults;
                         draft-sftp-filter-custom-patterns <=> root.draft-sftp-filter-custom-patterns;
+                        draft-sftp-per-tab-transfers <=> root.draft-sftp-per-tab-transfers;
+                        draft-sftp-global-uploads <=> root.draft-sftp-global-uploads;
                         sftp-filter-platform-defaults: root.sftp-filter-platform-defaults;
                         restore-sftp-filter-defaults => {
                             root.draft-sftp-filter-enabled = true;

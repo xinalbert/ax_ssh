@@ -502,6 +502,8 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
         shortcuts: ShortcutSettings::default(),
         credential_storage: "system-keyring",
         ui_language: "english",
+        sftp_per_tab_transfers: 2,
+        sftp_global_uploads: 8,
     });
 
     assert_eq!(
@@ -1050,6 +1052,8 @@ fn app_settings_clamp_all_persisted_dimensions() {
         },
         credential_storage: "encrypted-vault",
         ui_language: "simplified-chinese",
+        sftp_per_tab_transfers: 2,
+        sftp_global_uploads: 8,
     });
 
     assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
@@ -1106,6 +1110,13 @@ fn app_settings_clamp_all_persisted_dimensions() {
         MAX_COLLAPSED_GROUP_LABEL_CHARS
     );
     assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
+}
+
+#[test]
+fn sftp_transfer_limits_are_clamped() {
+    let settings = SftpTransferSettings::normalized(-5, 999);
+    assert_eq!(settings.per_tab_transfers, MIN_SFTP_PER_TAB_TRANSFERS);
+    assert_eq!(settings.global_uploads, MAX_SFTP_GLOBAL_UPLOADS);
 }
 
 #[test]

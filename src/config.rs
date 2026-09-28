@@ -30,7 +30,7 @@ pub use self::session::{
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
     AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
-    SftpTransferFilterSettings, ShortcutSettings, SoftwarePresentationMode,
+    SftpTransferFilterSettings, SftpTransferSettings, ShortcutSettings, SoftwarePresentationMode,
     TerminalDrawingPreference, TerminalSemanticColors, TerminalSemanticColorsInput,
     TerminalSettings, TerminalSettingsInput, UiLanguage, WorkspaceSettings, WorkspaceSettingsInput,
     X11ServerProvider, X11Settings,
@@ -69,6 +69,12 @@ pub const MIN_TAB_WIDTH: u16 = 120;
 pub const MAX_TAB_WIDTH: u16 = 260;
 pub const MIN_COLLAPSED_GROUP_LABEL_CHARS: u8 = 0;
 pub const MAX_COLLAPSED_GROUP_LABEL_CHARS: u8 = 4;
+pub const MIN_SFTP_PER_TAB_TRANSFERS: u8 = 1;
+pub const MAX_SFTP_PER_TAB_TRANSFERS: u8 = 16;
+pub const DEFAULT_SFTP_PER_TAB_TRANSFERS: u8 = 2;
+pub const MIN_SFTP_GLOBAL_UPLOADS: u8 = 1;
+pub const MAX_SFTP_GLOBAL_UPLOADS: u8 = 32;
+pub const DEFAULT_SFTP_GLOBAL_UPLOADS: u8 = 8;
 pub const SYSTEM_DEFAULT_SHELL: &str = "System default";
 pub const DEFAULT_SESSION_MASK_CHARACTER: &str = "*";
 pub(crate) const MAX_CONFIG_FILE_BYTES: usize = 8 * 1024 * 1024;

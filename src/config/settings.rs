@@ -4,19 +4,20 @@ use serde::{Deserialize, Serialize};
 use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
     DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
-    DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS,
-    DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT,
-    DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS,
-    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS,
-    MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES,
+    DEFAULT_SFTP_GLOBAL_UPLOADS, DEFAULT_SFTP_PER_TAB_TRANSFERS, DEFAULT_SIDEBAR_WIDTH,
+    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY,
+    DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS,
+    DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS, DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
+    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SFTP_GLOBAL_UPLOADS, MAX_SFTP_PER_TAB_TRANSFERS,
     MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH,
     MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT,
     MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS, MAX_TERMINAL_SOFTWARE_BLOCK_ROWS,
     MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES,
-    MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE,
-    MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS,
-    MIN_TERMINAL_SOFTWARE_BLOCK_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL,
-    TerminalColorScheme, ThemeSettings,
+    MIN_SFTP_GLOBAL_UPLOADS, MIN_SFTP_PER_TAB_TRANSFERS, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH,
+    MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE, MIN_TERMINAL_LINE_HEIGHT,
+    MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS, MIN_TERMINAL_SOFTWARE_BLOCK_ROWS,
+    MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
 };
 
 /// The language-selection policy for AxSSH's fully translated UI locales.
@@ -955,6 +956,48 @@ pub struct AppSettingsInput<'a> {
     pub shortcuts: ShortcutSettings,
     pub credential_storage: &'a str,
     pub ui_language: &'a str,
+    pub sftp_per_tab_transfers: i32,
+    pub sftp_global_uploads: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct SftpTransferSettings {
+    #[serde(default = "default_sftp_per_tab_transfers")]
+    pub per_tab_transfers: u8,
+    #[serde(default = "default_sftp_global_uploads")]
+    pub global_uploads: u8,
+}
+
+impl SftpTransferSettings {
+    pub fn normalized(per_tab_transfers: i32, global_uploads: i32) -> Self {
+        Self {
+            per_tab_transfers: per_tab_transfers.clamp(
+                i32::from(MIN_SFTP_PER_TAB_TRANSFERS),
+                i32::from(MAX_SFTP_PER_TAB_TRANSFERS),
+            ) as u8,
+            global_uploads: global_uploads.clamp(
+                i32::from(MIN_SFTP_GLOBAL_UPLOADS),
+                i32::from(MAX_SFTP_GLOBAL_UPLOADS),
+            ) as u8,
+        }
+    }
+}
+
+impl Default for SftpTransferSettings {
+    fn default() -> Self {
+        Self {
+            per_tab_transfers: default_sftp_per_tab_transfers(),
+            global_uploads: default_sftp_global_uploads(),
+        }
+    }
+}
+
+fn default_sftp_per_tab_transfers() -> u8 {
+    DEFAULT_SFTP_PER_TAB_TRANSFERS
+}
+
+fn default_sftp_global_uploads() -> u8 {
+    DEFAULT_SFTP_GLOBAL_UPLOADS
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -976,6 +1019,8 @@ pub struct AppSettings {
     pub credential_storage: CredentialStorage,
     #[serde(default)]
     pub sftp_transfer_filters: SftpTransferFilterSettings,
+    #[serde(default)]
+    pub sftp_transfers: SftpTransferSettings,
 }
 
 impl AppSettings {
@@ -989,6 +1034,10 @@ impl AppSettings {
             x11: X11Settings::default(),
             credential_storage: CredentialStorage::from_setting(input.credential_storage),
             sftp_transfer_filters: SftpTransferFilterSettings::default(),
+            sftp_transfers: SftpTransferSettings::normalized(
+                input.sftp_per_tab_transfers,
+                input.sftp_global_uploads,
+            ),
         }
     }
 
@@ -1013,6 +1062,10 @@ impl AppSettings {
         self.credential_storage =
             CredentialStorage::from_setting(self.credential_storage.as_setting());
         self.sftp_transfer_filters.normalize_in_place();
+        self.sftp_transfers = SftpTransferSettings::normalized(
+            i32::from(self.sftp_transfers.per_tab_transfers),
+            i32::from(self.sftp_transfers.global_uploads),
+        );
     }
 }
 

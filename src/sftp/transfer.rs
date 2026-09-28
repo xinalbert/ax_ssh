@@ -12,7 +12,7 @@ use std::fs::{self, File as LocalFile, OpenOptions};
 use std::future::Future;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
@@ -22,7 +22,7 @@ use russh_sftp::client::{Config, RawSftpSession};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, Packet, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
-use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc};
+use tokio::sync::{Notify, mpsc};
 use tokio::task::{JoinError, JoinHandle};
 use tokio::time::{Duration, Instant, timeout, timeout_at};
 use tracing::{debug, warn};
@@ -36,7 +36,6 @@ use super::{
 pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
 
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
-const MAX_CONCURRENT_UPLOADS: usize = 8;
 const WRITER_QUEUE_CAPACITY: usize = 2;
 const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
@@ -57,7 +56,7 @@ const MAX_CACHE_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_CACHE_FILES: usize = 128;
 
 static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-static GLOBAL_UPLOAD_SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+static GLOBAL_UPLOAD_LIMITER: OnceLock<Arc<UploadLimiter>> = OnceLock::new();
 
 const POSIX_RENAME_EXTENSION: &str = "posix-rename@openssh.com";
 const MAX_KEEP_BOTH_CANDIDATES: usize = 100;
@@ -391,15 +390,8 @@ pub(crate) struct SftpUploadHandle {
 }
 
 impl SftpUploadHandle {
-    pub(crate) fn reserve_global_slot() -> Result<OwnedSemaphorePermit> {
-        global_upload_slots()
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "the global SFTP upload limit of {MAX_CONCURRENT_UPLOADS} transfers has been reached"
-                )
-            })
+    pub(crate) fn reserve_global_slot() -> Result<UploadPermit> {
+        global_upload_limiter().try_acquire()
     }
 
     pub(crate) fn spawn<S>(
@@ -407,7 +399,7 @@ impl SftpUploadHandle {
         stream: S,
         request: SftpUploadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
-        global_slot: OwnedSemaphorePermit,
+        global_slot: UploadPermit,
     ) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -688,7 +680,7 @@ async fn run_upload<S>(
     request: SftpUploadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
-    _global_slot: OwnedSemaphorePermit,
+    _global_slot: UploadPermit,
 ) where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -735,8 +727,67 @@ async fn run_upload<S>(
     let _ = send_transfer_state(&event_tx, terminal).await;
 }
 
-fn global_upload_slots() -> &'static Arc<Semaphore> {
-    GLOBAL_UPLOAD_SLOTS.get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_UPLOADS)))
+/// Update the process-wide cap for concurrently active SFTP uploads.
+///
+/// The new limit applies to uploads started after the update. Uploads that
+/// are already active keep their permits until they finish.
+pub fn configure_global_upload_limit(limit: usize) {
+    global_upload_limiter().set_limit(limit);
+}
+
+fn global_upload_limiter() -> &'static Arc<UploadLimiter> {
+    GLOBAL_UPLOAD_LIMITER.get_or_init(|| {
+        Arc::new(UploadLimiter::new(usize::from(
+            crate::config::DEFAULT_SFTP_GLOBAL_UPLOADS,
+        )))
+    })
+}
+
+struct UploadLimiter {
+    active: AtomicUsize,
+    limit: AtomicUsize,
+}
+
+impl UploadLimiter {
+    fn new(limit: usize) -> Self {
+        Self {
+            active: AtomicUsize::new(0),
+            limit: AtomicUsize::new(limit.max(1)),
+        }
+    }
+
+    fn set_limit(&self, limit: usize) {
+        self.limit.store(limit.max(1), Ordering::Release);
+    }
+
+    fn try_acquire(self: &Arc<Self>) -> Result<UploadPermit> {
+        loop {
+            let active = self.active.load(Ordering::Acquire);
+            let limit = self.limit.load(Ordering::Acquire);
+            if active >= limit {
+                anyhow::bail!("the global SFTP upload limit has been reached");
+            }
+            if self
+                .active
+                .compare_exchange(active, active + 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return Ok(UploadPermit {
+                    limiter: Arc::clone(self),
+                });
+            }
+        }
+    }
+}
+
+pub(crate) struct UploadPermit {
+    limiter: Arc<UploadLimiter>,
+}
+
+impl Drop for UploadPermit {
+    fn drop(&mut self) {
+        self.limiter.active.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 enum UploadOutcome {

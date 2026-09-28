@@ -143,7 +143,9 @@ SFTP 传输可以过滤系统生成的文件。在 **Settings > General** 中开
 Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。可用勾选框选择活动行并批量暂停、
 继续或取消，操作位于 **Transferring** 页签栏右侧，不再单独占用一行。暂停/继续会由仍存活的 worker
 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
-仍运行期间可用。每个 SFTP Tab 最多同时运行两个传输，其余文件在队列中等待。取消会删除该任务的部分内容，包括刚发布但
+仍运行期间可用。每个 SFTP Tab 默认最多同时运行两个传输，可在 **Settings > General** 的
+**Transfers per SFTP tab** 中设置为 1-16；**Global simultaneous uploads** 设置所有 SFTP Tab
+共享的上传上限，可设置为 1-32，默认值为 8。其余文件在队列中等待或按现有传输状态处理。取消会删除该任务的部分内容，包括刚发布但
 取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
 待发现、待打开 subsystem 和活动下载，再关闭浏览器和 SSH transport。
 

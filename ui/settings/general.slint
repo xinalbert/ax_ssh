@@ -16,6 +16,8 @@ export component GeneralSettingsPage inherits SettingsPage {
     in-out property <bool> draft-sftp-filter-enabled;
     in-out property <bool> draft-sftp-filter-use-platform-defaults;
     in-out property <string> draft-sftp-filter-custom-patterns;
+    in-out property <int> draft-sftp-per-tab-transfers;
+    in-out property <int> draft-sftp-global-uploads;
     in property <string> sftp-filter-platform-defaults;
     callback save-ui-language(int);
     callback restore-sftp-filter-defaults();
@@ -92,6 +94,34 @@ export component GeneralSettingsPage inherits SettingsPage {
                 text <=> root.draft-sftp-filter-custom-patterns;
                 enabled: root.draft-sftp-filter-enabled;
                 accessible-label: @tr("Custom SFTP filename patterns");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Transfers per SFTP tab");
+        description: @tr("Maximum simultaneous uploads and downloads in one SFTP tab");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 1;
+                maximum: 16;
+                value <=> root.draft-sftp-per-tab-transfers;
+                accessible-label: @tr("Transfers per SFTP tab");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Global simultaneous uploads");
+        description: @tr("Maximum uploads shared by all SFTP tabs");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 1;
+                maximum: 32;
+                value <=> root.draft-sftp-global-uploads;
+                accessible-label: @tr("Global simultaneous uploads");
             }
         }
     }

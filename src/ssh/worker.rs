@@ -40,7 +40,6 @@ const COMMAND_CAPACITY: usize = 32;
 const EVENT_CAPACITY: usize = 32;
 const SFTP_EVENT_CAPACITY: usize = 16;
 const MAX_X11_RELAYS: usize = 8;
-const MAX_SFTP_TRANSFERS: usize = 2;
 const SFTP_OPEN_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const X11_RELAY_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_INPUT_BYTES: usize = 16 * 1024;
@@ -137,6 +136,7 @@ struct SshSessionLaunch {
     initial_size: TerminalSize,
     mode: SshSessionMode,
     x11_settings: X11Settings,
+    sftp_per_tab_transfers: usize,
 }
 
 struct SshSessionTask {
@@ -145,6 +145,7 @@ struct SshSessionTask {
     secret: Zeroizing<String>,
     mode: SshSessionMode,
     x11_settings: X11Settings,
+    sftp_per_tab_transfers: usize,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
     event_tx: mpsc::Sender<SshSessionEvent>,
@@ -201,6 +202,7 @@ impl SshSessionHandle {
                 initial_size: TerminalSize::backend(columns, rows),
                 mode: SshSessionMode::Terminal,
                 x11_settings,
+                sftp_per_tab_transfers: usize::from(crate::config::DEFAULT_SFTP_PER_TAB_TRANSFERS),
             },
         )
     }
@@ -210,6 +212,7 @@ impl SshSessionHandle {
         session_id: Uuid,
         profile: SessionProfile,
         secret: Zeroizing<String>,
+        sftp_per_tab_transfers: usize,
     ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
         Self::spawn_with_mode(
             runtime,
@@ -220,6 +223,7 @@ impl SshSessionHandle {
                 initial_size: TerminalSize::backend(1, 1),
                 mode: SshSessionMode::Sftp,
                 x11_settings: X11Settings::default(),
+                sftp_per_tab_transfers,
             },
         )
     }
@@ -235,6 +239,7 @@ impl SshSessionHandle {
             initial_size,
             mode,
             x11_settings,
+            sftp_per_tab_transfers,
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (resize_tx, resize_rx) = watch::channel(initial_size);
@@ -245,6 +250,7 @@ impl SshSessionHandle {
             secret,
             mode,
             x11_settings,
+            sftp_per_tab_transfers,
             command_rx,
             resize_rx,
             event_tx,
@@ -581,6 +587,7 @@ async fn run_session(task: SshSessionTask) {
         secret,
         mode,
         x11_settings,
+        sftp_per_tab_transfers,
         mut command_rx,
         resize_rx,
         event_tx,
@@ -702,6 +709,7 @@ async fn run_session(task: SshSessionTask) {
             initial_sftp_path,
             command_rx,
             event_tx,
+            sftp_per_tab_transfers,
         )
         .await;
         return;
