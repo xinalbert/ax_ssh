@@ -2174,6 +2174,32 @@ mod tests {
         assert!(!transfer_name_matches_filter("report.txt", &patterns));
     }
 
+    #[test]
+    fn upload_limiter_tracks_active_permits_and_limit_changes() {
+        let limiter = Arc::new(UploadLimiter::new(2));
+        let first = limiter
+            .try_acquire()
+            .expect("first permit should be available");
+        let second = limiter
+            .try_acquire()
+            .expect("second permit should be available");
+        assert!(limiter.try_acquire().is_err());
+
+        limiter.set_limit(1);
+        drop(first);
+        assert!(limiter.try_acquire().is_err());
+        drop(second);
+
+        let permit = limiter
+            .try_acquire()
+            .expect("a permit should be available after active uploads finish");
+        limiter.set_limit(3);
+        let _second = limiter
+            .try_acquire()
+            .expect("raising the limit should allow another upload");
+        drop(permit);
+    }
+
     #[tokio::test]
     async fn local_upload_reads_bounded_chunks_and_rejects_size_changes() {
         let path = std::env::temp_dir().join(format!("ax-ssh-upload-{}.bin", Uuid::new_v4()));
