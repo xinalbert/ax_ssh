@@ -936,17 +936,9 @@ async fn start_queued_uploads(
         let transfer_id = request.transfer_id();
         let slot = match SftpUploadHandle::reserve_global_slot() {
             Ok(slot) => slot,
-            Err(error) => {
-                let _ = send_sftp_transfer_event(
-                    context.event_tx,
-                    SftpTransferEvent::Failed {
-                        transfer_id,
-                        message: bounded_error_message(&error),
-                    },
-                    context.session_id,
-                )
-                .await;
-                continue;
+            Err(_) => {
+                queued_uploads.push_front(request);
+                break;
             }
         };
         match context.connection.open_sftp_stream().await {
