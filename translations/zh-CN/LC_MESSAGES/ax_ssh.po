@@ -226,6 +226,9 @@ msgstr "清除设置搜索"
 msgid "Close Current Tab"
 msgstr "关闭当前标签页"
 
+msgid "Close Window"
+msgstr "关闭窗口"
+
 msgid "Close tab"
 msgstr "关闭标签页"
 
@@ -463,9 +466,6 @@ msgstr "过滤系统文件"
 msgid "Flow control"
 msgstr "流控制"
 
-msgid "Global simultaneous uploads"
-msgstr "全局同时上传数"
-
 msgid "Focus rings, selection, and active indicators"
 msgstr "焦点环、选择和活动状态指示"
 
@@ -498,6 +498,9 @@ msgstr "GPU"
 
 msgid "General"
 msgstr "通用"
+
+msgid "Global simultaneous uploads"
+msgstr "全局同时上传数"
 
 msgid "Group"
 msgstr "组"
@@ -616,14 +619,23 @@ msgstr "本地 Shell"
 msgid "Loopback only; required by MacXServer and -ac Windows servers"
 msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
 
-msgid "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
-msgstr "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
-
 msgid "MOUSE"
 msgstr "鼠标"
 
 msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
 msgstr "在会话侧栏中遮盖用户名和 IPv4 地址的中间字段"
+
+msgid "Maximize Window"
+msgstr "最大化窗口"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "所有 SFTP 标签页共享的同时上传数"
+
+msgid "Minimize Window"
+msgstr "最小化窗口"
 
 msgid "Modified"
 msgstr "修改时间"
@@ -796,12 +808,6 @@ msgstr "暂停 {0}"
 msgid "Platform defaults"
 msgstr "平台默认值"
 
-msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
-msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
-
-msgid "Maximum uploads shared by all SFTP tabs"
-msgstr "所有 SFTP 标签页共享的同时上传数"
-
 msgid "Platform home directory"
 msgstr "平台主目录"
 
@@ -909,6 +915,9 @@ msgstr "恢复默认值"
 
 msgid "Reset filters"
 msgstr "重置过滤规则"
+
+msgid "Restore Window"
+msgstr "还原窗口"
 
 msgid "Restore platform defaults"
 msgstr "恢复平台默认值"
@@ -1246,9 +1255,6 @@ msgstr "终端错误高亮颜色"
 msgid "Terminal font family"
 msgstr "终端字体系列"
 
-msgid "Transfers per SFTP tab"
-msgstr "每个 SFTP 标签页的传输数"
-
 msgid "Terminal font size"
 msgstr "终端字体大小"
 
@@ -1302,6 +1308,9 @@ msgstr "切换会话侧栏快捷键"
 
 msgid "Transferring ({0})"
 msgstr "传输中 ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "每个 SFTP 标签页的传输数"
 
 msgid "Trust and continue"
 msgstr "信任并继续"

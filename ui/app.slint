@@ -3,6 +3,7 @@ import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
 import { SessionGroupRow } from "components/session-navigation.slint";
 import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-titlebar.slint";
+import { DesktopMenuTitlebar } from "components/desktop-menu-titlebar.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import {
@@ -29,6 +30,8 @@ import {
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
+    no-frame: !root.apple-platform;
+    resize-border-width: root.apple-platform ? 0px : 6px;
     title: root.detached-window && !root.active-tab-title.is-empty
         ? root.active-tab-title
         : "AxSSH";
@@ -273,6 +276,7 @@ export component AppWindow inherits Window {
     in property <string> default-open-sftp-shortcut;
     in property <bool> apple-platform: false;
     in property <bool> detached-window: false;
+    private property <length> desktop-header-height: root.apple-platform ? 0px : 32px;
     // Runtime-only native activation state. It restores terminal input after
     // returning from another application or AxSSH window.
     in property <bool> window-active: true;
@@ -577,16 +581,73 @@ export component AppWindow inherits Window {
     }
 
     public function native-sftp-drop-target-at(x: length, y: length) -> string {
-        return workspace-shell.native-sftp-drop-target-at(x, y);
+        return workspace-shell.native-sftp-drop-target-at(x, y - root.desktop-header-height);
     }
 
     public function native-sftp-local-drop-region() -> SftpNativeDropRegion {
-        return workspace-shell.native-sftp-local-drop-region();
+        let region = workspace-shell.native-sftp-local-drop-region();
+        return {
+            x: region.x,
+            y: region.y + root.desktop-header-height,
+            width: region.width,
+            height: region.height,
+            accepts: region.accepts,
+        };
     }
 
     init => { Palette.color-scheme = root.standard-widget-color-scheme; }
     function schedule-terminal-appearance-refresh() {
         root.terminal-appearance-refresh-pending = true;
+    }
+
+    function execute-menu-command(action: string, path: string) {
+        root.menu-action(action);
+        if action == "new-session" {
+            root.new-session();
+        } else if action == "open-workspace" {
+            overlay-host.show-workspace-file-dialog("open", root.workspace-default-path);
+        } else if action == "open-recent-workspace" {
+            root.workspace-file-action("open-recent", path);
+        } else if action == "clear-recent-workspaces" {
+            root.workspace-file-action("clear-recent", "");
+        } else if action == "save-workspace" {
+            overlay-host.show-workspace-file-dialog("save", root.workspace-default-path);
+        } else if action == "import-sessions" {
+            workspace-shell.import-session-config();
+        } else if action == "export-selected" {
+            workspace-shell.export-selected-session-config();
+        } else if action == "copy-terminal" {
+            workspace-shell.terminal-edit-action("copy");
+        } else if action == "paste-terminal" {
+            workspace-shell.terminal-edit-action("paste");
+        } else if action == "select-all-terminal" {
+            workspace-shell.terminal-edit-action("select-all");
+        } else if action == "open-settings" {
+            root.request-settings-section("General");
+            root.open-settings();
+        } else if action == "toggle-sidebar" {
+            workspace-shell.toggle-sidebar();
+        } else if action == "new-local-shell" {
+            root.open-local-shell();
+        } else if action == "switch-ssh-sftp" {
+            root.open-sftp();
+        } else if action == "previous-tab" {
+            root.cycle-tab(false);
+        } else if action == "next-tab" {
+            root.cycle-tab(true);
+        } else if action == "detach-workspace" {
+            root.detach-workspace(root.active-tab-id);
+        } else if action == "return-workspace" {
+            root.return-workspace(root.active-tab-id);
+        } else if action == "close-tab" {
+            workspace-shell.request-close-tab(root.active-tab-id);
+        } else if action == "open-shortcuts" {
+            root.request-settings-section("Shortcuts");
+            root.open-settings();
+        } else if action == "open-about" {
+            root.request-settings-section("About");
+            root.open-settings();
+        }
     }
     changed standard-widget-color-scheme => {
         Palette.color-scheme = root.standard-widget-color-scheme;
@@ -621,22 +682,20 @@ export component AppWindow inherits Window {
         }
     }
     if !root.detached-window : MenuBar {
+        visible: root.apple-platform;
         Menu {
             title: @tr("File");
             MenuItem {
                 title: @tr("New Server");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.new-session-menu-shortcut;
-                activated => { root.menu-action("new-session"); root.new-session(); }
+                activated => { root.execute-menu-command("new-session", ""); }
             }
             MenuSeparator { }
             MenuItem {
                 title: @tr("Open Workspace");
                 enabled: root.menu-shortcuts-enabled;
-                activated => {
-                    root.menu-action("open-workspace");
-                    overlay-host.show-workspace-file-dialog("open", root.workspace-default-path);
-                }
+                activated => { root.execute-menu-command("open-workspace", ""); }
             }
             Menu {
                 title: @tr("Open Recent");
@@ -644,47 +703,32 @@ export component AppWindow inherits Window {
                 for path in root.recent-workspace-paths : MenuItem {
                     title: path;
                     enabled: root.menu-shortcuts-enabled;
-                    activated => {
-                        root.menu-action("open-recent-workspace");
-                        root.workspace-file-action("open-recent", path);
-                    }
+                    activated => { root.execute-menu-command("open-recent-workspace", path); }
                 }
                 MenuSeparator { }
                 MenuItem {
                     title: @tr("Clear Recent");
                     enabled: root.menu-shortcuts-enabled;
-                    activated => {
-                        root.menu-action("clear-recent-workspaces");
-                        root.workspace-file-action("clear-recent", "");
-                    }
+                    activated => { root.execute-menu-command("clear-recent-workspaces", ""); }
                 }
             }
             MenuItem {
                 title: @tr("Save Workspace");
                 enabled: root.menu-shortcuts-enabled;
-                activated => {
-                    root.menu-action("save-workspace");
-                    overlay-host.show-workspace-file-dialog("save", root.workspace-default-path);
-                }
+                activated => { root.execute-menu-command("save-workspace", ""); }
             }
             MenuSeparator { }
             MenuItem {
                 title: @tr("Import from Clipboard");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.import-sessions-menu-shortcut;
-                activated => {
-                    root.menu-action("import-sessions");
-                    workspace-shell.import-session-config();
-                }
+                activated => { root.execute-menu-command("import-sessions", ""); }
             }
             MenuItem {
                 title: @tr("Export Selected to Clipboard");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.export-selected-menu-shortcut;
-                activated => {
-                    root.menu-action("export-selected");
-                    workspace-shell.export-selected-session-config();
-                }
+                activated => { root.execute-menu-command("export-selected", ""); }
             }
         }
         Menu {
@@ -693,40 +737,27 @@ export component AppWindow inherits Window {
                 title: @tr("Copy");
                 enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.copy-selection-menu-shortcut;
-                activated => {
-                    root.menu-action("copy-terminal");
-                    workspace-shell.terminal-edit-action("copy");
-                }
+                activated => { root.execute-menu-command("copy-terminal", ""); }
             }
             MenuItem {
                 title: @tr("Paste");
                 enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.paste-menu-shortcut;
-                activated => {
-                    root.menu-action("paste-terminal");
-                    workspace-shell.terminal-edit-action("paste");
-                }
+                activated => { root.execute-menu-command("paste-terminal", ""); }
             }
             MenuSeparator { }
             MenuItem {
                 title: @tr("Select All");
                 enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
                 shortcut: root.select-all-menu-shortcut;
-                activated => {
-                    root.menu-action("select-all-terminal");
-                    workspace-shell.terminal-edit-action("select-all");
-                }
+                activated => { root.execute-menu-command("select-all-terminal", ""); }
             }
             if !root.apple-platform : MenuSeparator { }
             if !root.apple-platform : MenuItem {
                 title: @tr("Settings...");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-settings-menu-shortcut;
-                activated => {
-                    root.menu-action("open-settings");
-                    root.request-settings-section("General");
-                    root.open-settings();
-                }
+                activated => { root.execute-menu-command("open-settings", ""); }
             }
         }
         Menu {
@@ -735,10 +766,7 @@ export component AppWindow inherits Window {
                 title: @tr("Toggle Session Sidebar");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.toggle-sidebar-menu-shortcut;
-                activated => {
-                    root.menu-action("toggle-sidebar");
-                    workspace-shell.toggle-sidebar();
-                }
+                activated => { root.execute-menu-command("toggle-sidebar", ""); }
             }
         }
         Menu {
@@ -746,16 +774,13 @@ export component AppWindow inherits Window {
             MenuItem {
                 title: @tr("New Local Shell");
                 enabled: root.menu-shortcuts-enabled;
-                activated => { root.menu-action("new-local-shell"); root.open-local-shell(); }
+                activated => { root.execute-menu-command("new-local-shell", ""); }
             }
             MenuItem {
                 title: @tr("Switch SSH/SFTP Tab");
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-sftp-menu-shortcut;
-                activated => {
-                    root.menu-action("switch-ssh-sftp");
-                    root.open-sftp();
-                }
+                activated => { root.execute-menu-command("switch-ssh-sftp", ""); }
             }
         }
         Menu {
@@ -764,13 +789,13 @@ export component AppWindow inherits Window {
                 title: @tr("Previous Tab");
                 enabled: root.menu-shortcuts-enabled && root.menu-has-multiple-tabs;
                 shortcut: root.previous-tab-menu-shortcut;
-                activated => { root.menu-action("previous-tab"); root.cycle-tab(false); }
+                activated => { root.execute-menu-command("previous-tab", ""); }
             }
             MenuItem {
                 title: @tr("Next Tab");
                 enabled: root.menu-shortcuts-enabled && root.menu-has-multiple-tabs;
                 shortcut: root.next-tab-menu-shortcut;
-                activated => { root.menu-action("next-tab"); root.cycle-tab(true); }
+                activated => { root.execute-menu-command("next-tab", ""); }
             }
             MenuSeparator { }
             MenuItem {
@@ -778,35 +803,23 @@ export component AppWindow inherits Window {
                 enabled: root.menu-shortcuts-enabled
                     && !root.detached-window
                     && root.menu-has-active-tab;
-                activated => {
-                    root.menu-action("detach-workspace");
-                    root.detach-workspace(root.active-tab-id);
-                }
+                activated => { root.execute-menu-command("detach-workspace", ""); }
             }
             MenuItem {
                 title: @tr("Return Workspace to Main Window");
                 enabled: root.menu-shortcuts-enabled && root.detached-window;
-                activated => {
-                    root.menu-action("return-workspace");
-                    root.return-workspace(root.active-tab-id);
-                }
+                activated => { root.execute-menu-command("return-workspace", ""); }
             }
             MenuSeparator { }
             if root.apple-platform : MenuItem {
                 title: @tr("Close Current Tab");
                 enabled: root.menu-shortcuts-enabled && root.menu-has-active-tab;
-                activated => {
-                    root.menu-action("close-tab");
-                    workspace-shell.request-close-tab(root.active-tab-id);
-                }
+                activated => { root.execute-menu-command("close-tab", ""); }
             }
             if !root.apple-platform : MenuItem {
                 title: @tr("Close Current Tab");
                 enabled: root.menu-shortcuts-enabled && root.menu-has-active-tab;
-                activated => {
-                    root.menu-action("close-tab");
-                    workspace-shell.request-close-tab(root.active-tab-id);
-                }
+                activated => { root.execute-menu-command("close-tab", ""); }
             }
         }
         Menu {
@@ -814,27 +827,38 @@ export component AppWindow inherits Window {
             MenuItem {
                 title: @tr("Keyboard Shortcuts");
                 enabled: root.menu-shortcuts-enabled;
-                activated => {
-                    root.menu-action("open-shortcuts");
-                    root.request-settings-section("Shortcuts");
-                    root.open-settings();
-                }
+                activated => { root.execute-menu-command("open-shortcuts", ""); }
             }
             if !root.apple-platform : MenuItem {
                 title: @tr("About AxSSH");
                 enabled: root.menu-shortcuts-enabled;
-                activated => {
-                    root.menu-action("open-about");
-                    root.request-settings-section("About");
-                    root.open-settings();
-                }
+                activated => { root.execute-menu-command("open-about", ""); }
             }
         }
     }
 
-    shortcut-scope := FocusScope {
+    if !root.apple-platform : desktop-titlebar := DesktopMenuTitlebar {
+        x: 0px;
+        y: 0px;
         width: parent.width;
-        height: parent.height;
+        main-window: !root.detached-window;
+        actions-enabled: root.menu-shortcuts-enabled;
+        terminal-active: root.menu-terminal-active;
+        multiple-tabs: root.menu-has-multiple-tabs;
+        has-active-tab: root.menu-has-active-tab;
+        recent-paths: root.recent-workspace-paths;
+        maximized: root.maximized;
+        command(action, path) => { root.execute-menu-command(action, path); }
+        minimize => { root.minimized = true; }
+        toggle-maximize => { root.maximized = !root.maximized; }
+        close => { root.close(); }
+        return-workspace => { root.execute-menu-command("return-workspace", ""); }
+    }
+
+    shortcut-scope := FocusScope {
+        y: root.desktop-header-height;
+        width: parent.width;
+        height: parent.height - self.y;
 
         capture-key-pressed(event) => {
             if workspace-shell.shortcut-recording || root.modal-open {
@@ -1016,11 +1040,11 @@ export component AppWindow inherits Window {
             root.terminal-geometry(
                 id,
                 pane-x,
-                pane-y,
+                pane-y + root.desktop-header-height,
                 pane-width,
                 pane-height,
                 grid-x,
-                grid-y,
+                grid-y + root.desktop-header-height,
                 grid-width,
                 grid-height,
                 cell-width,
@@ -1030,7 +1054,7 @@ export component AppWindow inherits Window {
             );
         }
         terminal-presentation-layout(id, x, y, width, height, cell-height) => {
-            root.terminal-presentation-layout(id, x, y, width, height, cell-height);
+            root.terminal-presentation-layout(id, x, y + root.desktop-header-height, width, height, cell-height);
         }
         terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
         scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }

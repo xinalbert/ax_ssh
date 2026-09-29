@@ -1,0 +1,306 @@
+import { Theme } from "../theme.slint";
+
+component MenuTitleButton inherits FocusScope {
+    in property <string> label;
+    callback activated();
+
+    width: 52px;
+    height: 32px;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    Rectangle {
+        background: touch.has-hover || root.has-focus ? Theme.panel-alt : Theme.panel;
+    }
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Text {
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-body;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        clicked => { root.activated(); }
+    }
+}
+
+component WindowControl inherits FocusScope {
+    in property <string> symbol;
+    in property <string> label;
+    in property <bool> destructive: false;
+    callback activated();
+
+    width: 44px;
+    height: 32px;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    Rectangle {
+        background: touch.has-hover || root.has-focus
+            ? (root.destructive ? Theme.danger : Theme.panel-alt)
+            : Theme.panel;
+    }
+
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Text {
+        text: root.symbol;
+        color: Theme.text;
+        font-size: Theme.font-body;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        clicked => { root.activated(); }
+    }
+}
+
+export component DesktopMenuTitlebar inherits Rectangle {
+    in property <bool> main-window;
+    in property <bool> actions-enabled;
+    in property <bool> terminal-active;
+    in property <bool> multiple-tabs;
+    in property <bool> has-active-tab;
+    in property <bool> maximized;
+    in property <[string]> recent-paths;
+    callback command(string, string);
+    callback minimize();
+    callback toggle-maximize();
+    callback close();
+    callback return-workspace();
+
+    height: 32px;
+    background: Theme.panel;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        if root.main-window : Rectangle {
+            width: 52px;
+            background: Theme.panel;
+            trigger := MenuTitleButton {
+                label: @tr("File");
+                activated => { file-menu.show({ x: 0px, y: root.height }); }
+            }
+            file-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("New Server");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("new-session", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Open Workspace");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("open-workspace", ""); }
+                    }
+                    Menu {
+                        title: @tr("Open Recent");
+                        enabled: root.actions-enabled && root.recent-paths.length > 0;
+                        for path in root.recent-paths : MenuItem {
+                            title: path;
+                            enabled: root.actions-enabled;
+                            activated => { root.command("open-recent-workspace", path); }
+                        }
+                        MenuSeparator { }
+                        MenuItem {
+                            title: @tr("Clear Recent");
+                            enabled: root.actions-enabled;
+                            activated => { root.command("clear-recent-workspaces", ""); }
+                        }
+                    }
+                    MenuItem {
+                        title: @tr("Save Workspace");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("save-workspace", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Import from Clipboard");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("import-sessions", ""); }
+                    }
+                    MenuItem {
+                        title: @tr("Export Selected to Clipboard");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("export-selected", ""); }
+                    }
+                }
+            }
+        }
+        if root.main-window : Rectangle {
+            width: 52px;
+            MenuTitleButton {
+                label: @tr("Edit");
+                activated => { edit-menu.show({ x: 0px, y: root.height }); }
+            }
+            edit-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("Copy");
+                        enabled: root.actions-enabled && root.terminal-active;
+                        activated => { root.command("copy-terminal", ""); }
+                    }
+                    MenuItem {
+                        title: @tr("Paste");
+                        enabled: root.actions-enabled && root.terminal-active;
+                        activated => { root.command("paste-terminal", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Select All");
+                        enabled: root.actions-enabled && root.terminal-active;
+                        activated => { root.command("select-all-terminal", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Settings...");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("open-settings", ""); }
+                    }
+                }
+            }
+        }
+        if root.main-window : Rectangle {
+            width: 52px;
+            MenuTitleButton {
+                label: @tr("View");
+                activated => { view-menu.show({ x: 0px, y: root.height }); }
+            }
+            view-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("Toggle Session Sidebar");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("toggle-sidebar", ""); }
+                    }
+                }
+            }
+        }
+        if root.main-window : Rectangle {
+            width: 52px;
+            MenuTitleButton {
+                label: @tr("Pane");
+                activated => { pane-menu.show({ x: 0px, y: root.height }); }
+            }
+            pane-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("New Local Shell");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("new-local-shell", ""); }
+                    }
+                    MenuItem {
+                        title: @tr("Switch SSH/SFTP Tab");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("switch-ssh-sftp", ""); }
+                    }
+                }
+            }
+        }
+        if root.main-window : Rectangle {
+            width: 52px;
+            MenuTitleButton {
+                label: @tr("Window");
+                activated => { window-menu.show({ x: 0px, y: root.height }); }
+            }
+            window-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("Previous Tab");
+                        enabled: root.actions-enabled && root.multiple-tabs;
+                        activated => { root.command("previous-tab", ""); }
+                    }
+                    MenuItem {
+                        title: @tr("Next Tab");
+                        enabled: root.actions-enabled && root.multiple-tabs;
+                        activated => { root.command("next-tab", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Move Current Workspace to New Window");
+                        enabled: root.actions-enabled && root.has-active-tab;
+                        activated => { root.command("detach-workspace", ""); }
+                    }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Close Current Tab");
+                        enabled: root.actions-enabled && root.has-active-tab;
+                        activated => { root.command("close-tab", ""); }
+                    }
+                }
+            }
+        }
+        if root.main-window : Rectangle {
+            width: 52px;
+            MenuTitleButton {
+                label: @tr("Help");
+                activated => { help-menu.show({ x: 0px, y: root.height }); }
+            }
+            help-menu := ContextMenuArea {
+                Menu {
+                    MenuItem {
+                        title: @tr("Keyboard Shortcuts");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("open-shortcuts", ""); }
+                    }
+                    MenuItem {
+                        title: @tr("About AxSSH");
+                        enabled: root.actions-enabled;
+                        activated => { root.command("open-about", ""); }
+                    }
+                }
+            }
+        }
+        if !root.main-window : WindowControl {
+            symbol: "←";
+            label: @tr("Return Workspace to Main Window");
+            activated => { root.return-workspace(); }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.panel;
+            WindowMoveArea {
+                TouchArea {
+                    double-clicked => { root.toggle-maximize(); }
+                }
+            }
+        }
+        WindowControl {
+            symbol: "─";
+            label: @tr("Minimize Window");
+            activated => { root.minimize(); }
+        }
+        WindowControl {
+            symbol: root.maximized ? "❐" : "□";
+            label: root.maximized ? @tr("Restore Window") : @tr("Maximize Window");
+            activated => { root.toggle-maximize(); }
+        }
+        WindowControl {
+            symbol: "×";
+            label: @tr("Close Window");
+            destructive: true;
+            activated => { root.close(); }
+        }
+    }
+}
