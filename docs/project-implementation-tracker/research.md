@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-09-29 Windows/Linux 无边框菜单顶栏
+
+- 时间：2026-09-29 17:42 +0800
+- 检索问题：锁定的 Slint 1.18.1 能否让 Windows/Linux 以应用菜单替代可见原生标题栏，同时保留快捷键、拖动和缩放？
+- 检索原因：用户要求菜单直接占据窗口顶部，去掉单独的标题行，并保持现有多窗口交互。
+- 来源列表：[Slint Window 属性与隐藏 MenuBar](https://docs.slint.dev/latest/docs/slint/reference/window/window/)；[Slint WindowMoveArea](https://docs.slint.dev/latest/docs/slint/reference/window/windowmovearea/)；[Slint ContextMenuArea](https://docs.slint.dev/latest/docs/slint/reference/window/contextmenuarea/)；[winit 0.30 Window 接口](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html)；[Windows 自定义标题栏交互](https://learn.microsoft.com/en-us/windows/apps/design/basics/titlebar-design)；本仓库锁定的 `i-slint-compiler 1.18.1` 和 `vendor/i-slint-backend-winit` 源码。
+- 关键结论：`no-frame` 与 winit 专用的 `resize-border-width` 可去掉原生框线并保留边缘缩放；`WindowMoveArea` 可让应用绘制的空白区域触发系统拖动；`ContextMenuArea.show()` 可由顶栏按钮主动展开菜单。不可见的 `MenuBar` 不占布局空间，仍保留快捷键；ContextMenuArea 菜单项本身不能声明 `shortcut`。
+- 对实施计划的影响：macOS 继续保留屏幕菜单和 AppKit 标题栏。Windows/Linux 使用应用内菜单顶栏，现有 MenuBar 只保留快捷键，两个菜单表面共享根组件命令分发。新顶栏高度必须在终端几何和 SFTP 原生拖放坐标边界补偿。
+- 未解决问题：Windows 11 最大化按钮悬停的 Snap Layout、Linux X11/Wayland 窗口管理器行为和真实菜单视觉需在原生平台由用户验收。
+
 ## 2026-09-19 终端显示、滚动与查询应答标准化
 
 - 时间：2026-09-19 14:47 +0800

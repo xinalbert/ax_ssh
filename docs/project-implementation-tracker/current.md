@@ -2,53 +2,53 @@
 
 ## 当前目标
 
-- 目标 ID：20260929-terminal-grid-alignment
-- 目标：修复长盒线与独立竖线的终端字符格错位，并核对当前构建的工作区退出/启动恢复路径。
-- 交付物：精确的终端单格度量、双语架构说明、恢复路径核查、验证记录及本机应用更新。
+- 目标 ID：20260929-desktop-menu-titlebar
+- 目标：在 Windows/Linux 以应用菜单顶栏替代可见原生标题栏，保留快捷键、窗口动作和工作区几何。
+- 交付物：无边框窗口顶栏、主/独立窗口控制、菜单动作接线、双语说明及验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/terminal-pane.slint`、工作区恢复只读核查、双语架构与跟踪文件、macOS 本机应用包。
-- 不在本轮范围内：`third_package/axshell`、SSH host-key/认证、终端 transport、用户 GUI 视觉验收。
+- 当前范围：`ui/app.slint`、`ui/components/`、`src/app/window_bridge.rs`、窗口坐标接线、双语架构/使用说明与跟踪文件。
+- 不在本轮范围内：`third_package/axshell`、macOS 原生标题栏行为、SSH host-key/认证、transport、持久化 schema 与用户 GUI 视觉验收。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| GRID1 | completed | 消除 50-cell probe 取整导致的长盒线累计偏移 | Slint 重编译、字号定向回归 | 保留盒线合并绘制 |
-| GRID2 | completed | 核对退出快照和启动恢复；仅修可证实缺陷 | 工作区快照结构和保存/恢复源码审查 | 当前运行包已含窗口保持提交；无可证实的新恢复缺陷 |
-| GRID3 | completed | 双语架构、完整门禁、应用包替换 | fmt/check/Clippy/test/diff/tracker/Markdown、签名验证 | GUI 由用户验收 |
+| CHROME1 | completed | Windows/Linux 无边框顶栏、菜单与窗口控制 | Slint 编译、菜单/窗口静态核查 | macOS 仍使用原生标题栏 |
+| CHROME2 | completed | 主/独立窗口几何、拖放和关闭生命周期接线 | Slint 编译及窗口代码核查 | 不改变 SSH/worker 边界 |
+| CHROME3 | completed | 双语文档、完整门禁与目标平台验收项 | fmt/check/Clippy/test/diff/tracker | GUI 由用户验收 |
 
 ## 已完成
 
-- 源码确认 Slint 1.18.1 对 `Text.preferred-width` 向上取整；50 个 Latin cell 平均值相对真实字距最多偏高 0.02 逻辑像素/列，长盒线和独立竖线因此可在右端出现数物理像素的错位。
-- 当前运行包已包含 2026-09-26 的窗口保持实现；退出前会捕获窗口几何并 flush 最终工作区快照，启动时从私有快照恢复。当前私有快照只有一扇主窗口，无法证明曾有的独立窗口为何缺失。
-- 把隐藏 Latin 测量样本扩展到 1000 格；保留现有连续盒线 shaping。定向 UI 数值回归用 17.11px 自带等宽字体验证 10.266px 单格 advance，旧 50 格 probe 会给出 10.28px。
-- 构建本机 arm64 发布版，备份旧应用可执行文件后原子替换 `AxSSH.app` 的核心并重新 ad hoc 签名；运行中的用户进程保持不变，新核心在下次启动生效。
+- 已核对当前 Slint/winit 后端、原生/客户区菜单差异，以及现有主窗口与独立窗口布局和关闭路由。
+- 已确认 `no-frame`、`resize-border-width`、`WindowMoveArea`、`ContextMenuArea.show()` 与隐藏 `MenuBar` 保留快捷键均存在于锁定的 Slint 1.18.1。
+- Windows/Linux 主窗口现由应用菜单和窗口控件共用顶栏；独立窗口提供 Return 与窗口控件。两个可见/隐藏菜单入口共用根组件动作函数，终端呈现及 SFTP 原生拖放坐标补偿 32px 顶栏。
+- 中文译文目录与构建映射同步，双语架构、用法和项目地图已更新。
 
 ## 验证
 
-- 已完成：Slint 1.18.1 本地源码与工作区恢复路径核查；定向 UI 数值回归、fmt、locked/offline check、严格 Clippy、完整测试（库 288、应用 288、Doc tests 0）、release build、Markdown 相对链接及 diff 检查通过；包内与构建二进制 UUID 一致，签名严格验证通过。tracker validator 已执行，本轮条目无报错。
-- 未完成：用户重启后的边框视觉与真实窗口/工作区恢复验收；tracker validator 仍被既有 8/9 月历史及 research 时间字段错误阻断。
+- 已完成：Slint 重编译、fmt、locked/offline check、严格 Clippy、翻译目录更新后的完整测试（库 288、应用 290）、中文目录生成/校验、`msgfmt --check`、相对 Markdown 链接及 `git diff --check`。tracker validator 已执行，本轮新增记录无报错。
+- 未完成：Windows/Linux 原生 GUI 验收。Windows target check 因本机缺 Windows SDK 头文件，在 `aws-lc-sys` 停止；Linux target 未安装。tracker validator 仍由既有 8/9 月历史与 research 字段错误阻断。
 
 ## 风险与阻塞
 
-- 原先未恢复的独立窗口不在当前私有快照中，缺少发生当时的快照；不能据此臆断恢复器缺陷。
+- 自绘标题栏须处理主/独立窗口的关闭、最大化、拖动、缩放，以及顶栏引入后的终端和 SFTP 坐标偏移。
+- Windows 11 最大化按钮悬停的 Snap Layout、Linux X11/Wayland 的窗口管理行为须在原生平台验收。
 - GUI 视觉由用户验收；代理不采集自身应用截图作为证据。
-- 应用包更新前的可执行文件备份位于 `/private/tmp/axssh-update.mQRfl9/AxSSH.before`，为临时目录内容。
 
 ## 下一步
 
-- 请用户正常退出并重启安装包，确认 tmux 边框和工作区恢复；如仍未恢复，保留退出前后 `workspace.json` 的窗口/Tab 数量以定位持久化还是展示环节。
+- 请用户在 Windows/Linux 确认菜单、拖动、缩放、最大化、关闭及独立窗口返回的视觉与行为。
 
 ## 最后更新时间
 
-- 2026-09-29 10:49 +0800
+- 2026-09-29 18:01 +0800

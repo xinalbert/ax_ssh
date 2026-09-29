@@ -393,6 +393,12 @@ the icon shows **Return workspace to main
 window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
+On Windows and Linux, the main window's menu shares the top row with the
+window controls; there is no separate visible system title bar. Drag the empty
+part of that row to move the window, or double-click it to maximize or restore.
+The detached window uses the same frameless controls and places Return at the
+left of its top row. Closing it still merges its workspace into the main
+window. Window titles remain available to the taskbar and window switcher.
 
 The terminal Tab toolbar has two controls beside the saved-connection button.
 On macOS, a detached Terminal window places the same pair in its native title
@@ -566,9 +572,10 @@ When enabled, completed pointer selections and **Select All** copy immediately,
 and a direct right-click always pastes.
 The default **New Server** shortcut is `Cmd+N` on macOS and `Ctrl+N` elsewhere.
 The default File-menu transfer shortcuts are `Cmd/Ctrl+Shift+I` for import and
-`Cmd/Ctrl+Shift+E` for export of the selected group or server. Menu commands
-show these configured shortcuts as native accelerators. They are temporarily
-disabled while recording a shortcut or answering a security prompt.
+`Cmd/Ctrl+Shift+E` for export of the selected group or server. macOS displays
+these shortcuts as native menu accelerators; Windows/Linux retain the same
+shortcuts with the custom menu titlebar. They are temporarily disabled while
+recording a shortcut or answering a security prompt.
 
 On macOS, Option continues to enter native characters, dead keys, and IME text
 by default. In **Settings > Terminal**, enable **Option acts as Meta** only when

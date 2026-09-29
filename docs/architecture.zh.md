@@ -524,7 +524,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    都会通过 Slint 命中区显式调用 Winit 系统拖窗；Tab 与标题栏按钮仍独占各自的点击和重排手势。
    Windows 和 Linux 的主窗口标题栏从侧栏右缘开始，Tab 条未被覆盖的空白区域也通过
    同一个 Winit 拖窗回调移动主窗口。
-   独立窗口保留原有的原生标题栏布局。
+   macOS 独立窗口保留原有的原生标题栏布局；Windows/Linux 独立窗口使用紧凑的无边框返回/窗口控件行。
 10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
     General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
     中，因此激活 Settings 不会移除返回活动终端的路径。Settings Tab 已存在时再次按其快捷键，
@@ -535,16 +535,21 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     AppWindow callback：Report a bug 打开 AxSSH issue tracker，Open log folder 打开进程持有的
     滚动日志目录，Copy diagnostics 只把版本、revision、系统、架构和构建类型写入剪贴板。
     不上传数据，也不把配置、主机、路径或凭据字段暴露给 Slint。会话侧边栏不再重复 Settings/About，
-   并从原生标题栏下方贯穿整个客户端高度；
-   macOS 标题栏内的 Tab 条不随侧栏展开或收起移动；其他平台仍从侧栏右缘开始。
+   并从平台窗口顶栏下方贯穿工作区高度；
+   macOS 标题栏内的 Tab 条不随侧栏展开或收起移动；Windows/Linux 的 Tab 条在应用菜单顶栏下方从侧栏右缘开始。
    `+` 固定在最右边缘，打开由 Slint 本地持有的
     选择器，显示全部已保存连接 profile 的遮蔽只读快照，选择后只将 profile UUID 传入
     现有连接 callback。File > New Server、可配置的 `Cmd+N`/`Ctrl+N` 快捷键与侧栏列表
     空白区域的右键菜单仍是独立的新建会话编辑器动作。File 还统一持有剪贴板导入和所选对象
     导出，默认快捷键分别为可配置的 `Cmd/Ctrl+Shift+I` 与 `Cmd/Ctrl+Shift+E`。
-11. 单一声明式 Slint `MenuBar` 持有跨平台业务菜单树。锁定的 winit/muda 后端把它安装
-    到 macOS 屏幕顶部和 Windows 原生窗口菜单；没有 native menu 支持的 Linux 后端在
-    客户区顶部渲染同一棵树。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
+11. 声明式 Slint `MenuBar` 保留菜单快捷键。它在 macOS 屏幕菜单栏可见，在 Windows/Linux
+    隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
+    每个菜单按钮用 Slint `ContextMenuArea` 展开，两个菜单表面共同调用
+    `execute-menu-command`，使动态启用状态和动作保持同一应用路由。六像素 winit 缩放边缘、
+    空白 `WindowMoveArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。Windows/Linux 的
+    独立窗口显示 Return 按钮而非主窗口业务菜单；其关闭按钮仍走 Slint 常规
+    close-requested 路由并合并工作区。AppWindow 边界为终端呈现坐标和导出的 SFTP 拖放区域加上
+    顶栏高度，并在原生拖放命中检测中减去该高度。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
     应用菜单；现有 About 项存在时把它接到内部页面，同时不依赖 About 是否存在而安装
     `Settings...`。其 key equivalent 跟随实时可配置的 Settings 快捷键，不再写死显示值。AppKit
     target 只在主线程运行且只捕获 `Weak<AppWindow>`；由于 target 为弱引用，菜单项用
@@ -622,7 +627,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 主窗口和独立窗口还可保存普通状态下的逻辑客户区尺寸、可取得的物理外框坐标及最大化标志。
 缺少可选 placement 的旧版 v1 快照仍可加载。全屏、最小化和零尺寸事件不覆盖普通几何，
 重启时不自动进入全屏或最小化。UI bridge 根据旧坐标选择当前显示器；副屏拔出时回退到主屏/
-当前屏，并按屏幕范围限制尺寸和位置，给原生标题栏和桌面栏留出空间。逻辑尺寸适配显示器缩放，
+当前屏，并按屏幕范围限制尺寸和位置，给平台窗口顶栏和桌面栏留出空间。逻辑尺寸适配显示器缩放，
 应用最小尺寸仍为 520x360。Wayland 的绝对定位交给 compositor；macOS 主窗口在设置
 FullSizeContentView 标题栏后再恢复尺寸，保证采集与恢复的客户区尺寸口径一致。快照不保存
 显示器身份或原生句柄。
@@ -652,9 +657,9 @@ File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只�
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
-Slint 窗口。detached 窗口把活动连接名显示为原生窗口标题；macOS 将原生标题栏设为透明并使用当前
-客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。其同一行的仅图标返回按钮使用系统重叠窗口符号，系统符号不可用时
-回退到对应的 AppKit 多文档模板图标。按钮通过 Tooltip 和无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
+Slint 窗口。detached 窗口保留活动连接名作为系统窗口元数据；macOS 还将其显示在原生标题栏，并将该栏设为透明、使用当前
+客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。macOS 同一行的仅图标返回按钮使用系统重叠窗口符号，系统符号不可用时
+回退到对应的 AppKit 多文档模板图标；Windows/Linux 则在无边框控件行提供 Return。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
 或 `SftpPane`，不包含 Tab 条、
 会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、

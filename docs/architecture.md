@@ -875,7 +875,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    only within the title-bar row. Slint hit areas behind the Tabs and in the
    gap before the terminal split controls explicitly start Winit's native
    window drag on a left press. Tabs and title-bar buttons keep their own click
-   and reorder gestures. Detached windows retain their native title bar.
+   and reorder gestures. macOS detached windows retain their native title bar;
+   Windows/Linux detached windows use the compact frameless Return/control row.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so
@@ -897,10 +898,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
     None of these actions uploads data or exposes configuration, host, path, or
     credential fields to Slint.
    The session sidebar does not duplicate Settings
-   or About. It spans the full client height directly below the native title
-   bar. On macOS, the title-bar Tab strip keeps its fixed leading clearance as
-   the sidebar expands or collapses; on other platforms it starts at the
-   sidebar's right edge.
+   or About. It spans the workspace height below the platform window chrome.
+   On macOS, the title-bar Tab strip keeps its fixed leading clearance as
+   the sidebar expands or collapses; on Windows/Linux it begins at the
+   sidebar's right edge below the application menu titlebar.
    Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
    masked, read-only snapshot of every saved connection profile; selection routes only
    the profile UUID through the existing connection callback. File > New
@@ -908,10 +909,19 @@ tab-local terminal connection notice deliberately remains non-blocking.
    blank-area context menu remain distinct session-editor actions. File also
    owns clipboard import and selected-object export, with configurable
    `Cmd/Ctrl+Shift+I` and `Cmd/Ctrl+Shift+E` defaults respectively.
-11. One declarative Slint `MenuBar` owns the cross-platform business-menu tree.
-    The locked winit/muda backend installs it in the macOS screen menu bar and
-    the Windows native window menu; Linux backends without native menu support
-    render the same tree at the top of the client window. On macOS,
+11. The declarative Slint `MenuBar` retains the menu accelerators. It is visible
+    in the macOS screen menu and hidden on Windows/Linux, where
+    `DesktopMenuTitlebar` renders File/Edit/View/Pane/Window/Help across the
+    top of the frameless client window. Each top-level button opens a Slint
+    `ContextMenuArea`; both menu surfaces call the same `execute-menu-command`
+    function, so dynamic enabled states and actions keep one application
+    route. The six-pixel winit resize border, blank `WindowMoveArea`, and
+    minimize/maximize/close controls replace native frame interactions.
+    Detached Windows/Linux windows show a Return control instead of the main
+    business menus; their close control still invokes Slint's normal
+    close-requested route and merges the workspace. The AppWindow boundary adds
+    the header height to terminal presentation coordinates and exported SFTP
+    drop regions, and removes it from native drop hit testing. On macOS,
     `src/app/macos_window.rs` reuses the backend-created standard application
     menu, binds its existing About item to the internal page when that item is
     present, and installs `Settings...` independently of About. Its key
@@ -1020,12 +1030,13 @@ tab-local terminal connection notice deliberately remains non-blocking.
 ## Multi-window workspace transfer
 
 The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
-that workspace into a second native Slint window. A detached window uses the
-active connection title as its native title and, on macOS, makes the native
-title bar transparent over the active client surface: Terminal background for a
-Terminal view and application background for SFTP. Its icon-only return button uses the system overlapping-window
-symbol, with the matching AppKit multiple-documents template fallback, and
-exposes its purpose through a tooltip and accessibility description. Its client content contains only the active
+that workspace into a second native Slint window. A detached window retains the
+active connection title as system window metadata. On macOS, it displays that
+title in a transparent native title bar over the active client surface:
+Terminal background for a Terminal view and application background for SFTP.
+Its macOS icon-only return button uses the system overlapping-window symbol,
+with the matching AppKit multiple-documents template fallback. Windows/Linux
+instead provide Return in the frameless control row. The client content contains only the active
 `TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
 connection picker, Settings, session editor, or client menu. `AppState` remains
 the sole owner of the Tab
@@ -1621,7 +1632,7 @@ files without this optional placement still load. Fullscreen, minimized and
 zero-size observations never replace normal bounds; fullscreen and minimized
 states are not restored. The UI bridge selects a current monitor from the saved
 position, falls back to the primary/current monitor when needed, and fits size
-and position within its bounds with room for native decorations and desktop
+and position within its bounds with room for platform window chrome and desktop
 bars. Logical sizes account for the target display scale; the application's
 520x360 minimum still applies. Wayland absolute placement remains compositor
 owned. On macOS the main window restores after its FullSizeContentView titlebar

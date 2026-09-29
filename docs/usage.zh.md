@@ -235,6 +235,9 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏匹配当前
 返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
+Windows/Linux 主窗口的菜单和窗口按钮共用顶部一行，不再显示单独的系统标题栏。拖动该行空白处可移动窗口，
+双击空白处可最大化或还原。独立窗口也使用无边框控件，并在顶栏左侧提供 Return；关闭独立窗口仍会把工作区合并回主窗口。
+窗口名称仍供任务栏和窗口切换器识别。
 
 终端 Tab 顶部管理栏、保存连接按钮左侧有两个分屏图标；macOS 的独立 Terminal 窗口会将同一组图标
 放在原生标题栏、紧邻返回图标左侧，客户区保持全高 pane：左侧为纵向分屏，在右侧新建 pane；右侧为横向
@@ -320,8 +323,8 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 **Select All** 会立即复制，直接右击始终粘贴。
 默认 **New Server** 快捷键在 macOS 上为 `Cmd+N`，其它平台为 `Ctrl+N`。
 File 菜单导入默认使用 `Cmd/Ctrl+Shift+I`，导出所选 Group 或服务器默认使用
-`Cmd/Ctrl+Shift+E`。菜单命令会把当前配置显示为原生 accelerator；录制快捷键或处理安全
-提示时会暂时禁用这些 accelerator。
+`Cmd/Ctrl+Shift+E`。macOS 菜单会把当前配置显示为原生 accelerator；Windows/Linux 的自绘菜单顶栏
+仍保留相同快捷键。录制快捷键或处理安全提示时会暂时禁用这些快捷键。
 
 macOS 默认让 Option 输入原生字符、死键和 IME 文本。只有需要将 Option 组合键作为带
 Escape 前缀的终端 Meta 输入时，才在 **Settings > Terminal** 开启 **Option acts as Meta**。
