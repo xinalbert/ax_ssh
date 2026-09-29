@@ -344,11 +344,16 @@ export component TerminalPane inherits Rectangle {
     callback pane-command(string, string) -> bool;
 
     // The terminal model defines columns from the selected monospace font's
-    // Latin advance. Wide and fallback glyphs draw from the left edge of their
-    // one- or two-cell spans; letting a fallback enlarge every cell makes text
-    // runs drift away from cursor, selection, pointer, and IME coordinates.
+    // Latin advance. Slint rounds Text.preferred-width up to a whole logical
+    // pixel, so average a long sample: with only 50 cells the rounding error
+    // can accumulate into several physical pixels over a long box-drawing run.
+    // Wide and fallback glyphs still draw from their allocated cell spans.
+    private property <string> cell-probe-sample: "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+    private property <string> cell-probe-block:
+        root.cell-probe-sample + root.cell-probe-sample
+        + root.cell-probe-sample + root.cell-probe-sample;
     private property <length> font-cell-width:
-        max(1px, cell-probe.preferred-width / 50);
+        max(1px, cell-probe.preferred-width / 1000);
     private property <length> font-cell-height: max(1px, cell-probe.preferred-height);
     private property <length> cell-width: root.font-cell-width;
     private property <length> cell-height:
@@ -836,7 +841,9 @@ export component TerminalPane inherits Rectangle {
         y: -1000px;
         width: 0px;
         height: 0px;
-        text: @tr("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM");
+        text: root.cell-probe-block + root.cell-probe-block
+            + root.cell-probe-block + root.cell-probe-block
+            + root.cell-probe-block;
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         font-weight: 400;

@@ -70,14 +70,20 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
         pane.focused = false;
         pane.terminal.connected = true;
         pane.terminal.font_family = "JetBrains Mono".into();
-        pane.terminal.font_size = 16.0;
+        // 17.11px gives a 10.266px Latin advance in the bundled 600/1000
+        // monospace face. A 50-cell preferred-width probe rounds 513.3px to
+        // 514px and would report 10.28px, drifting across long box lines.
+        pane.terminal.font_size = 17.11;
         pane.terminal.line_height_percent = 100;
         ui.set_terminal_panes(ModelRc::new(VecModel::from(vec![pane])));
 
         let requests = Rc::new(RefCell::new(Vec::new()));
         let requests_for_callback = requests.clone();
-        ui.on_resize_terminal(move |_, columns, rows, _, _| {
+        let cell_widths = Rc::new(RefCell::new(Vec::new()));
+        let widths_for_callback = cell_widths.clone();
+        ui.on_resize_terminal(move |_, columns, rows, cell_width, _| {
             requests_for_callback.borrow_mut().push((columns, rows));
+            widths_for_callback.borrow_mut().push(cell_width);
         });
         ui.show().expect("headless window should show");
         window.set_size(slint::PhysicalSize::new(1180, 740));
@@ -99,6 +105,14 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
             }
         };
         settle_layout();
+        assert!(
+            cell_widths
+                .borrow()
+                .iter()
+                .any(|width| (width - 10.266).abs() < 0.002),
+            "terminal cell width should follow the font advance, not a rounded short probe: {:?}",
+            cell_widths.borrow()
+        );
         let sizes: BTreeSet<_> = requests.borrow_mut().drain(..).collect();
         assert_eq!(
             sizes.len(),

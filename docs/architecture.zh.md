@@ -982,8 +982,10 @@ Tokio blocking task 中发现、按大小写无关去重并按字母排序且有
 回退只补齐该字体缺少的字形。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 是确定性显示汉字所必需的，
-Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 分别测量配置主字体的
-50 个 Latin cell；终端网格使用该主字体的 Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
+Iosevka Term 和 Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。Slint 测量配置主字体的
+1000 个 Latin cell；其 `Text.preferred-width` 会向上取整到整数逻辑像素，用长样本取平均将单格
+取整误差限制在 0.001 逻辑像素以内，避免长盒线字形与独立竖线逐列累积错位。终端网格使用该主字体的
+Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
 和盒线字形从其分配的一格或两格 span 左边缘绘制，不扩大所有列。Rust 保留终端逻辑列，
 继续批量绘制 ASCII 文本；普通 fallback cell 发布为独立 render run，但同样式相邻盒线字形保持在同一个
 shaping run 中。grid 不再对每个 run 使用对齐启发式，因此所有 run 都从协议定义的 cell 列开始，

@@ -1693,7 +1693,10 @@ release packages must retain `assets/fonts/` by the executable or platform
 resource path. Maple Mono NF CN is required there for deterministic Han glyph
 rendering; Iosevka Term and Monaspace Neon remain optional primary families,
 and all font notices remain required.
-Slint measures the configured primary font with 50 Latin cells. The terminal
+Slint measures the configured primary font with 1,000 Latin cells. Its
+`Text.preferred-width` is rounded up to a whole logical pixel, so averaging a
+long probe bounds that rounding error below 0.001 logical pixel per cell;
+short probes can visibly diverge from a long box-drawing glyph run. The terminal
 grid uses that Latin monospace advance as its logical cell width; registered
 Han fallback and box-drawing glyphs draw from the left edge of their allocated
 one- or two-cell spans instead of enlarging every column. Rust preserves the
