@@ -230,6 +230,7 @@ pub(super) enum SftpNavigation {
     Direct,
     Back,
     Forward,
+    Up,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -353,6 +354,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) status: String,
     pub(super) can_go_back: bool,
     pub(super) can_go_forward: bool,
+    pub(super) can_go_up: bool,
     pub(super) selected_count: usize,
     pub(super) all_selected: bool,
     pub(super) selected: HashSet<String>,
@@ -383,6 +385,7 @@ pub(super) struct LocalDirectorySnapshot {
     pub(super) status: String,
     pub(super) can_go_back: bool,
     pub(super) can_go_forward: bool,
+    pub(super) can_go_up: bool,
     pub(super) selected_count: usize,
     pub(super) all_selected: bool,
     pub(super) selected: HashSet<String>,

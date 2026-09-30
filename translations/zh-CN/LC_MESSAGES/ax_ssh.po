@@ -802,6 +802,9 @@ msgstr "面板"
 msgid "Panel alternative"
 msgstr "次级面板"
 
+msgid "Parent directory"
+msgstr "上一层目录"
+
 msgid "Parity"
 msgstr "校验位"
 

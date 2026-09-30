@@ -1669,6 +1669,43 @@ fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
 }
 
 #[test]
+fn sftp_parent_navigation_uses_current_directory_and_commits_on_success() {
+    let mut sftp = SftpBrowserState {
+        path: "/srv/app/current".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    assert!(sftp.snapshot(true).can_go_up);
+    let (_, parent) = sftp
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("parent navigation should start");
+    assert_eq!(parent, "/srv/app");
+    assert!(!sftp.snapshot(true).can_go_up);
+    sftp.cancel_navigation();
+    assert!(!sftp.snapshot(true).can_go_back);
+
+    let (_, parent) = sftp
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("failed parent navigation remains available");
+    sftp.complete_navigation(parent);
+    assert!(sftp.snapshot(true).can_go_back);
+    let (_, previous) = sftp
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("back should return to the child directory");
+    assert_eq!(previous, "/srv/app/current");
+    sftp.complete_navigation(previous);
+    assert!(sftp.snapshot(true).can_go_forward);
+    let (_, parent) = sftp
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("parent navigation starts a new history branch");
+    sftp.complete_navigation(parent);
+    assert!(!sftp.snapshot(true).can_go_forward);
+
+    sftp.path = "/".to_owned();
+    assert!(!sftp.snapshot(true).can_go_up);
+    assert!(sftp.begin_navigation(SftpNavigation::Up, None).is_err());
+}
+
+#[test]
 fn local_navigation_history_survives_failures_and_resets_forward_branch() {
     let mut local = LocalDirectoryState {
         path: "/Users/alice".to_owned(),
@@ -1701,6 +1738,93 @@ fn local_navigation_history_survives_failures_and_resets_forward_branch() {
             .begin_navigation(SftpNavigation::Forward, None)
             .is_err()
     );
+}
+
+#[test]
+fn local_refresh_preserves_back_and_forward_history() {
+    let first = std::env::temp_dir()
+        .join("axssh-history-first")
+        .to_string_lossy()
+        .into_owned();
+    let second = std::env::temp_dir()
+        .join("axssh-history-second")
+        .to_string_lossy()
+        .into_owned();
+    let mut local = LocalDirectoryState {
+        path: first.clone(),
+        ..LocalDirectoryState::default()
+    };
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some(second.clone()))
+        .expect("new directory should start loading");
+    local.complete(second.clone(), Vec::new(), false, 0);
+    let (_, back) = local
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("back should return to the first directory");
+    assert_eq!(back, first);
+    local.complete(back, Vec::new(), false, 0);
+    assert!(!local.snapshot().can_go_back);
+    assert!(local.snapshot().can_go_forward);
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some(first.clone()))
+        .expect("refresh should start loading");
+    local.complete(first.clone(), Vec::new(), false, 0);
+    assert!(!local.snapshot().can_go_back);
+    assert!(local.snapshot().can_go_forward);
+
+    let (_, forward) = local
+        .begin_navigation(SftpNavigation::Forward, None)
+        .expect("forward should remain available after refresh");
+    assert_eq!(forward, second);
+    local.complete(forward, Vec::new(), false, 0);
+    assert!(local.snapshot().can_go_back);
+    assert!(!local.snapshot().can_go_forward);
+}
+
+#[test]
+fn local_parent_navigation_uses_displayed_directory_and_commits_on_success() {
+    let root = std::env::temp_dir()
+        .ancestors()
+        .last()
+        .expect("temporary directory has a root")
+        .to_path_buf();
+    let child = root.join("axssh-parent").join("child");
+    let parent = child.parent().expect("child has a parent");
+    let mut local = LocalDirectoryState {
+        path: child.to_string_lossy().into_owned(),
+        ..LocalDirectoryState::default()
+    };
+    assert!(local.snapshot().can_go_up);
+    let (_, requested) = local
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("parent navigation should start");
+    assert_eq!(requested, parent.to_string_lossy());
+    assert!(!local.snapshot().can_go_up);
+    local.fail("permission denied".to_owned());
+    assert!(!local.snapshot().can_go_back);
+
+    let (_, requested) = local
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("failed parent navigation remains available");
+    local.complete(requested, Vec::new(), false, 0);
+    assert!(local.snapshot().can_go_back);
+    let (_, previous) = local
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("back should return to the child directory");
+    assert_eq!(previous, child.to_string_lossy());
+    local.complete(previous, Vec::new(), false, 0);
+    assert!(local.snapshot().can_go_forward);
+    let (_, requested) = local
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("parent navigation starts a new history branch");
+    local.complete(requested, Vec::new(), false, 0);
+    assert!(!local.snapshot().can_go_forward);
+
+    local.path = root.to_string_lossy().into_owned();
+    assert!(!local.snapshot().can_go_up);
+    assert!(local.begin_navigation(SftpNavigation::Up, None).is_err());
 }
 
 #[test]

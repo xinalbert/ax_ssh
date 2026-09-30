@@ -125,6 +125,7 @@ export component AppWindow inherits Window {
     in property <string> sftp-upload-conflict-modified: "";
     in property <bool> sftp-can-go-back: false;
     in property <bool> sftp-can-go-forward: false;
+    in property <bool> sftp-can-go-up: false;
     in property <int> sftp-selected-count: 0;
     in property <bool> sftp-all-selected: false;
     in property <bool> local-sftp-loading: false;
@@ -139,6 +140,7 @@ export component AppWindow inherits Window {
     in property <string> local-sftp-status: "";
     in property <bool> local-sftp-can-go-back: false;
     in property <bool> local-sftp-can-go-forward: false;
+    in property <bool> local-sftp-can-go-up: false;
     in property <int> local-sftp-selected-count: 0;
     in property <bool> local-sftp-all-selected: false;
     in property <[SftpTransferRow]> sftp-active-transfers;
@@ -320,6 +322,7 @@ export component AppWindow inherits Window {
             remote_sort_column: root.sftp-sort-column, remote_sort_descending: root.sftp-sort-descending,
             has_more: root.sftp-has-more, truncated: root.sftp-truncated, status: root.sftp-status,
             can_go_back: root.sftp-can-go-back, can_go_forward: root.sftp-can-go-forward,
+            can_go_up: root.sftp-can-go-up,
             selected_count: root.sftp-selected-count, all_selected: root.sftp-all-selected,
             local_loading: root.local-sftp-loading, local_loaded: root.local-sftp-loaded,
             local_upload_selection_ready: root.local-sftp-upload-selection-ready,
@@ -328,6 +331,7 @@ export component AppWindow inherits Window {
             local_sort_descending: root.local-sftp-sort-descending, local_has_more: root.local-sftp-has-more,
             local_truncated: root.local-sftp-truncated,
             local_can_go_back: root.local-sftp-can-go-back, local_can_go_forward: root.local-sftp-can-go-forward,
+            local_can_go_up: root.local-sftp-can-go-up,
             local_status: root.local-sftp-status, local_selected_count: root.local-sftp-selected-count,
             local_all_selected: root.local-sftp-all-selected,
             active_transfers: root.sftp-active-transfers,
@@ -519,8 +523,10 @@ export component AppWindow inherits Window {
     callback list-local-sftp-directory(string);
     callback navigate-sftp-back();
     callback navigate-sftp-forward();
+    callback navigate-sftp-up();
     callback navigate-local-sftp-back();
     callback navigate-local-sftp-forward();
+    callback navigate-local-sftp-up();
     callback toggle-remote-sftp-selection(string, bool);
     callback select-all-remote-sftp(bool);
     callback toggle-local-sftp-selection(string, bool);
@@ -997,8 +1003,10 @@ export component AppWindow inherits Window {
             list-local-sftp-directory(path) => { root.list-local-sftp-directory(path); }
             navigate-sftp-back => { root.navigate-sftp-back(); }
             navigate-sftp-forward => { root.navigate-sftp-forward(); }
+            navigate-sftp-up => { root.navigate-sftp-up(); }
             navigate-local-sftp-back => { root.navigate-local-sftp-back(); }
             navigate-local-sftp-forward => { root.navigate-local-sftp-forward(); }
+            navigate-local-sftp-up => { root.navigate-local-sftp-up(); }
             toggle-remote-sftp-selection(path, selected) => {
                 root.toggle-remote-sftp-selection(path, selected);
             }

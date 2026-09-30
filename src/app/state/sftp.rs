@@ -54,6 +54,7 @@ impl SftpBrowserState {
             status: self.status.clone(),
             can_go_back: !self.loading && !self.back_history.is_empty(),
             can_go_forward: !self.loading && !self.forward_history.is_empty(),
+            can_go_up: !self.loading && remote_directory_parent(&self.path).is_some(),
             selected_count: self.selected_count(),
             all_selected: self.all_selected(),
             selected: self.selected.clone(),
@@ -636,6 +637,9 @@ impl SftpBrowserState {
                 .back()
                 .cloned()
                 .context("no next SFTP directory")?,
+            SftpNavigation::Up => {
+                remote_directory_parent(&self.path).context("SFTP directory has no parent")?
+            }
         };
         if requested.is_empty() {
             anyhow::bail!("SFTP directory path is empty");
@@ -699,7 +703,7 @@ impl SftpBrowserState {
     pub(in crate::app) fn complete_navigation(&mut self, path: String) {
         if let Some(pending) = self.pending_navigation.take() {
             match pending.kind {
-                SftpNavigation::Direct if pending.from != path => {
+                SftpNavigation::Direct | SftpNavigation::Up if pending.from != path => {
                     push_sftp_history(&mut self.back_history, pending.from);
                     self.forward_history.clear();
                 }
@@ -723,7 +727,7 @@ impl SftpBrowserState {
                         push_sftp_history(&mut self.back_history, pending.from);
                     }
                 }
-                SftpNavigation::Direct => {}
+                SftpNavigation::Direct | SftpNavigation::Up => {}
             }
         }
         self.loading = false;
@@ -829,6 +833,20 @@ fn push_sftp_history(history: &mut VecDeque<String>, path: String) {
     history.push_back(path);
 }
 
+fn remote_directory_parent(path: &str) -> Option<String> {
+    if !path.starts_with('/') {
+        return None;
+    }
+    remote_parent(path.trim_end_matches('/')).map(str::to_owned)
+}
+
+fn local_directory_parent(path: &str) -> Option<String> {
+    std::path::Path::new(path)
+        .parent()
+        .filter(|parent| parent.is_absolute())
+        .map(|parent| parent.to_string_lossy().into_owned())
+}
+
 impl LocalDirectoryState {
     pub(in crate::app) fn begin_navigation(
         &mut self,
@@ -853,6 +871,9 @@ impl LocalDirectoryState {
                 .back()
                 .cloned()
                 .context("no next local directory")?,
+            SftpNavigation::Up => {
+                local_directory_parent(&self.path).context("local directory has no parent")?
+            }
         };
         if requested.is_empty() {
             anyhow::bail!("local directory path is empty");
@@ -877,7 +898,7 @@ impl LocalDirectoryState {
     ) {
         if let Some(pending) = self.pending_navigation.take() {
             match pending.kind {
-                SftpNavigation::Direct if pending.from != path => {
+                SftpNavigation::Direct | SftpNavigation::Up if pending.from != path => {
                     push_sftp_history(&mut self.back_history, pending.from);
                     self.forward_history.clear();
                 }
@@ -901,7 +922,7 @@ impl LocalDirectoryState {
                         push_sftp_history(&mut self.back_history, pending.from);
                     }
                 }
-                SftpNavigation::Direct => {}
+                SftpNavigation::Direct | SftpNavigation::Up => {}
             }
         }
         if self.path != path {
@@ -1031,6 +1052,7 @@ impl LocalDirectoryState {
             status: self.status.clone(),
             can_go_back: !self.loading && !self.back_history.is_empty(),
             can_go_forward: !self.loading && !self.forward_history.is_empty(),
+            can_go_up: !self.loading && local_directory_parent(&self.path).is_some(),
             selected_count: self.selected_count(),
             all_selected: self.all_selected(),
             selected: self.selected.clone(),

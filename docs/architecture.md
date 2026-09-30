@@ -1365,12 +1365,14 @@ characters per accepted name, a 2 MiB aggregate name/path text budget, and
 4 KiB paths before reaching Slint; unavailable entries are counted separately
 from budget truncation. The former fixed 250-entry read cap is removed, and
 application state releases the local snapshot in 250-entry pages while keeping
-the complete bounded snapshot available for sorting. The
-remote browser keeps a bounded per-Tab back/forward path history in application
-state. History entries are committed only after a directory page succeeds, so a
-failed request cannot consume a navigation step; navigation controls are disabled
-while a request is in flight. Remote and local rows expose real per-Tab selection
-state, with header controls for select-all and clear-all; selection is retained
+the complete bounded snapshot available for sorting. The remote and local
+browsers each keep bounded per-Tab back/forward path history in
+application state. Parent navigation resolves against the currently displayed
+directory, is unavailable at the root, and enters that history only after the
+directory page succeeds. A failed request cannot consume a navigation step;
+navigation controls are disabled while a request is in flight. Remote and local
+rows expose real per-Tab selection state, with header controls for select-all
+and clear-all; selection is retained
 only for entries still present in the current directory snapshot and does not
 start a transfer. Commands and events use bounded channels, requests are
 serialized and timed out, inbound SFTP frames are rejected above 256 KiB before

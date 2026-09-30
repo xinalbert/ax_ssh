@@ -178,6 +178,16 @@ The individual file-table columns are not resizable in this phase.
 Use the copy icon in either directory header to place that pane's current
 remote or local path on the system clipboard.
 
+Each file browser has **Back**, **Forward**, and **Parent directory** controls.
+Back and Forward follow that browser's visited directories; Parent directory
+opens the parent of its currently displayed path, even if the previous visit
+was elsewhere. A successful parent navigation can be reversed with Back. The
+parent control is disabled at the filesystem root and while a directory is
+loading.
+The local browser keeps its Refresh control in the directory header even when
+the pane is narrow. Refresh reloads the displayed directory without changing
+Back or Forward history; Forward becomes available after going Back.
+
 Enter an absolute path, a path relative to the
 current directory, or `~` in the remote browser, then use **Open**; double-click
 a folder to enter it. The remote browser starts at the SSH profile's configured

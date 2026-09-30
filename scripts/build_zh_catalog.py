@@ -308,6 +308,7 @@ TRANSLATIONS = {
     "Pane": "窗格",
     "Panel": "面板",
     "Panel alternative": "次级面板",
+    "Parent directory": "上一层目录",
     "Parity": "校验位",
     "Password": "密码",
     "Password authentication": "密码验证",

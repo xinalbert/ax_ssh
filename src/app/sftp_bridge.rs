@@ -878,6 +878,28 @@ pub(super) fn wire_sftp(
         }
     });
 
+    let ui_for_up = ui.as_weak();
+    let state_for_up = state.clone();
+    let router_for_up = window_router.clone();
+    ui.on_navigate_sftp_up(move || {
+        log_ui_action("sftp.navigate-up");
+        sync_window_active(&router_for_up, window_id, &state_for_up);
+        let result = queue_remote_navigation(
+            &state_for_up,
+            &router_for_up,
+            window_id,
+            SftpNavigation::Up,
+            None,
+        );
+        match result {
+            Ok(()) => dispatch_active_snapshot(&ui_for_up, &state_for_up),
+            Err(error) => {
+                set_status(&ui_for_up, &format!("Cannot go up in SFTP: {error}"));
+                dispatch_active_snapshot(&ui_for_up, &state_for_up);
+            }
+        }
+    });
+
     let ui_for_local_back = ui.as_weak();
     let state_for_local_back = state.clone();
     let router_for_local_back = window_router.clone();
@@ -948,6 +970,41 @@ pub(super) fn wire_sftp(
                     &format!("Cannot go forward in local files: {error}"),
                 );
                 dispatch_active_snapshot(&ui_for_local_forward, &state_for_local_forward);
+            }
+        }
+    });
+
+    let ui_for_local_up = ui.as_weak();
+    let state_for_local_up = state.clone();
+    let router_for_local_up = window_router.clone();
+    let runtime_for_local_up = runtime.clone();
+    ui.on_navigate_local_sftp_up(move || {
+        log_ui_action("sftp.navigate-local-up");
+        sync_window_active(&router_for_local_up, window_id, &state_for_local_up);
+        match queue_local_navigation(
+            &state_for_local_up,
+            &router_for_local_up,
+            window_id,
+            SftpNavigation::Up,
+            None,
+        ) {
+            Ok((tab_id, request_id, path)) => {
+                dispatch_active_snapshot(&ui_for_local_up, &state_for_local_up);
+                load_local_directory(
+                    &runtime_for_local_up,
+                    state_for_local_up.clone(),
+                    ui_for_local_up.clone(),
+                    tab_id,
+                    request_id,
+                    path,
+                );
+            }
+            Err(error) => {
+                set_status(
+                    &ui_for_local_up,
+                    &format!("Cannot go up in local files: {error}"),
+                );
+                dispatch_active_snapshot(&ui_for_local_up, &state_for_local_up);
             }
         }
     });
