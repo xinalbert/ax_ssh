@@ -287,6 +287,16 @@ async fn run_telnet_session(
             return;
         }
     };
+    // Telnet carries interactive, often single-character writes. Disable
+    // Nagle aggregation so the local transport does not add an avoidable
+    // delay before the remote endpoint receives a key.
+    if let Err(error) = stream.set_nodelay(true) {
+        debug!(
+            session_id = %session_id,
+            error = %error,
+            "failed to enable TCP_NODELAY for Telnet socket"
+        );
+    }
     let (mut reader, mut writer) = stream.into_split();
     let mut parser = terminal_parser();
     for event in [

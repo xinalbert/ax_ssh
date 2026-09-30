@@ -675,10 +675,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    explicit `Disconnect` or a dropped controller cancels that connection
    attempt; operational commands become valid only after `Connected`.
    The shared russh client config explicitly enables `TCP_NODELAY`, so small
-   interactive channel-data writes are not held for Nagle aggregation. The
-   bounded input queue adds no batching timer: the worker sends dequeued input
-   immediately. This removes client-side waiting but cannot remove the network
-   round trip required for a remote PTY to echo input. Interactive SSH PTY
+   interactive channel-data writes are not held for Nagle aggregation. Telnet
+   applies the same socket setting immediately after its TCP connect. The
+   bounded input queues add no batching timer: workers send dequeued input
+   immediately. These transport settings remove client-side waiting but cannot
+   remove the network round trip required for a remote PTY or Telnet server to
+   echo input. Interactive SSH PTY
    requests also enable `OPOST` and `ONLCR`, so ordinary remote line feeds
    return to column zero instead of accumulating a column offset in the local
    terminal model.
@@ -1572,7 +1574,10 @@ NAWS is sent only after peer acceptance. Telnet input is an escaped byte
 stream, not a remote PTY line discipline: AxSSH sends the terminal model's
 already-encoded bytes, does not rewrite bare `LF` to `CRLF`, and does not strip
 or append a Telnet `NUL` after `CR`. TCP connect, protocol frames, input/output
-batches, errors, queues, and shutdown waits are bounded. Telnet ENVIRON,
+batches, errors, queues, and shutdown waits are bounded. After connect, the
+Telnet socket enables `TCP_NODELAY` so interactive key writes do not incur
+client-side Nagle delay. This does not provide local echo and cannot remove
+remote processing or network RTT. Telnet ENVIRON,
 LINEMODE, compression/MCCP, CHARSET, GMCP/MSDP, and other optional extensions
 remain explicitly disabled.
 

@@ -423,8 +423,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    SSH 信任与认证仍在进行时，worker 会继续等待并丢弃已经排队的 shell/SFTP 操作；只有明确的
    `Disconnect` 或 controller 被释放才会取消该连接尝试，普通操作必须等到 `Connected` 后生效。
    共享 russh client config 明确启用 `TCP_NODELAY`，避免少量交互 channel data 等待 Nagle
-   聚合。有界输入队列不设置 batching timer；worker 取出输入后立即发送。这能消除客户端附加
-   等待，但不能消除远端 PTY 回显必需的网络往返。交互 SSH PTY 请求同时启用 `OPOST` 和
+   聚合。Telnet 在 TCP connect 后也立即为 socket 设置相同选项。有界输入队列不设置 batching
+   timer；worker 取出输入后立即发送。这些传输设置能消除客户端附加等待，但不能消除远端 PTY
+   或 Telnet 服务端回显必需的网络往返。交互 SSH PTY 请求同时启用 `OPOST` 和
    `ONLCR`，使远端普通换行回到第 0 列，避免裸 line feed 在本地终端模型中逐行累积列偏移。
 7. 本地终端 Tab 持有一个 `portable-pty` worker 线程；它在 Tab 生命周期内独占 child、reader、
    writer、resize 状态、有界命令/事件队列、取消标记、child-killer handle 和所有线程 join。
@@ -945,7 +946,8 @@ AxSSH 回报 `xterm-256color`，收到 `IAC SB TTYPE SEND IAC SE` 时发送
 `IAC SB TTYPE IS xterm-256color IAC SE`；未知选项被拒绝，且只有对端接受后才发送 NAWS。
 Telnet 输入是经过 IAC 转义的字节流，不是远端 PTY 行规程：使用终端模型已经编码的字节，不把裸
 `LF` 自动改为 `CRLF`，也不在 `CR` 后自动删除或追加 Telnet `NUL`。TCP connect、协议帧、输入输出批次、错误、
-队列和 shutdown 等待都有上限。Telnet ENVIRON、LINEMODE、压缩/MCCP、CHARSET、GMCP/MSDP
+队列和 shutdown 等待都有上限。连接建立后 Telnet socket 启用 `TCP_NODELAY`，避免交互按键写入
+额外等待客户端的 Nagle 聚合；它不提供本地回显，也不能消除远端处理和网络 RTT。Telnet ENVIRON、LINEMODE、压缩/MCCP、CHARSET、GMCP/MSDP
 和其它可选扩展仍明确关闭。
 
 Serial 是原始字节流传输，不是远端终端协议：没有 `TERM` 协商、PTY、NAWS、window-change 或远端终端尺寸上报契约。其本地 `TerminalModel` 仍会跟随界面 resize，但不会伪造远端能力。Serial 发现通过 Tokio blocking 边界调用操作系统枚举 API，只返回 descriptor；不会打开
