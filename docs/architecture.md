@@ -1681,10 +1681,11 @@ resource paths. The Slint UI thread registers embedded bytes with its shared
 collection and registers external families through Fontique's path source, so
 the complete TTF is not retained in an application-owned `Vec<u8>`. The
 first Terminal or local shell Tab uses one application-owned loading path to
-ensure that its selected bundled primary family, when applicable, and Maple Mono
-NF CN are registered. `FontRegistry::register_loaded_font` is the sole
-registration boundary; when Maple is registered, it replaces the shared
-Fontique `Hani` fallback list with that one family. There is no renderer-side
+ensure that its selected bundled primary family, when applicable, Maple Mono
+NF CN, and Iosevka Term are registered. `FontRegistry::register_loaded_font`
+is the sole registration boundary: it keeps Maple first in the shared Fontique
+`Hani` fallback list, then Iosevka for missing symbols, and registers Iosevka
+for Common-script fallback. There is no renderer-side
 font substitution path. Later bundled selections are loaded through the same
 registry when a live Settings preview first selects them. All external reads
 remain on Tokio blocking tasks. The UI applies the candidate immediately, then
@@ -1697,13 +1698,12 @@ alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
 and explicit non-terminal monospace labels, while `TerminalViewState.font_family`
 remains the only primary family source for terminal cell measurement and
-rendering; the single `Hani` fallback only supplies glyphs absent from that
-family. No font is
+rendering; fallback fonts only supply glyphs absent from that family. No font is
 loaded from `third_package/axshell` during build or runtime;
 release packages must retain `assets/fonts/` by the executable or platform
-resource path. Maple Mono NF CN is required there for deterministic Han glyph
-rendering; Iosevka Term and Monaspace Neon remain optional primary families,
-and all font notices remain required.
+resource path. Maple Mono NF CN and Iosevka Term are required there for
+deterministic Han and symbol fallback, respectively; Monaspace Neon remains an
+optional primary family, and all font notices remain required.
 Slint measures the configured primary font with 1,000 Latin cells. Its
 `Text.preferred-width` is rounded up to a whole logical pixel, so averaging a
 long probe bounds that rounding error below 0.001 logical pixel per cell;

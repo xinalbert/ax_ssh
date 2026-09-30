@@ -19,7 +19,7 @@
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
 | `translations/` | 构建时内嵌的 Slint 界面翻译目录 | 增加或修改静态用户可见文案、locale 或语言选择时 | 当前完整目录为 `zh-CN`；远端内容、用户值、日志与运行时技术错误详情不进入翻译键 |
-| `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
+| `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `vendor/vt100/` | 历史终端网格补丁的 MIT 保留副本 | 审计旧差异、许可证或移除遗留文件时 | 不在 Cargo 依赖图中；当前迁移不修改其源码，也不得再作为新的终端功能实现点 |
 | `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 转发 `PhysicalRegion::iter()` 的多矩形 damage，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；Windows 窗口重新聚焦时使 renderer 失效并请求整窗重绘；不得承载 AxSSH UI、终端或 SSH 逻辑 |
@@ -54,7 +54,7 @@
 | `src/app/workspace_autosave.rs` | 防抖工作区快照与串行后台写盘 | `WorkspaceAutosave`、`CheckpointSchedule`、`write_snapshots` | 单槽最新快照、元数据比对、文本定期采样及退出 flush |
 | `src/app/window_router.rs` | 私有多窗口 workspace 路由与阻塞式输入闸门 | `WindowRouter`、`WindowView`、`WindowTerminalUpdates`、`workspace_actions_locked`、`terminal_presentation_mode`、`terminal_updates`、`GLOBAL_WINDOW_ROUTER` | 多 `AppWindow` 生命周期、可见 Tab/focused pane、每窗口 PaneTree、detached/main route 与 Return/close；模态状态与 active Tab 的 pending security phase 共同锁定 Tab/Pane/workspace 动作；按活动 tree 动态分类 Focused/Unfocused/Hidden 并发布轻量 route revision，按脏 UUID 只为当前活动 pane tree 构造 terminal snapshot；macOS 激活事件为快速路径，500ms AppKit 状态读取只作遗漏兜底；不持有 transport、Slint 强引用或秘密 |
 | `src/app/panes.rs` | 有界 Terminal Tab 内 pane 布局 | `PaneTree`、`PaneLayout`、`PaneDividerPlacement`、`PaneDirection`、`MAX_TERMINAL_PANES` | 稳定 workspace Tab UUID、0.1-0.9 split ratio、前序 divider、终端分行/分列、相邻方向焦点和最多 8 pane 限制；只保存 UUID、volatile 布局和焦点，不保存 Slint、worker、buffer 或秘密 |
-| `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts`、`load_terminal_font_on_demand` | UI 线程注册应用字体；JetBrains Mono 保留嵌入 source，Maple/Iosevka/Monaspace 以经过大小校验的路径 source 交给 Fontique 按需加载；字体注册代次驱动终端布局缓存失效并刷新主/分离窗口；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
+| `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts`、`load_terminal_font_on_demand`、`configure_terminal_fallbacks` | UI 线程注册应用字体；JetBrains Mono 保留嵌入 source，Maple/Iosevka/Monaspace 以经过大小校验的路径 source 交给 Fontique 按需加载；Terminal 首次加载 Maple 与 Iosevka，Han 回退保持 Maple 在先、Common 缺失符号使用 Iosevka；字体注册代次驱动终端布局缓存失效并刷新主/分离窗口；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
 | `src/app/workspace.rs` | 工作区 application bridge 私有 facade | `SessionEditorContext`、profile mutation/credential commit helpers、`wire_workspace_tabs`、`wire_workspace_file_actions`、`wire_session_editor`、`wire_session_management`、`close_workspace_tab`、`close_terminal_child_pane` 的窄 re-export | 只声明现代子模块和维持 `src/app.rs` 既有调用面；不承载 callback 实现；coordinator 所有权归 `AppState` |
 | `src/app/workspace/files.rs` | workspace 文件菜单动作与替换编排 | 路径校验、异步读写、最近路径 MRU 记录/清理、旧 worker/probe 停止、UI 线程快照应用与连接恢复 | 不拥有 schema、凭据、transport 实现或 Slint 组件声明；文件内容由 `src/config/workspace.rs` 校验，历史持久化委托 `PersistenceCoordinator` |
 | `src/app/workspace/tabs.rs` | 工作区 Tab 与子 pane 生命周期 bridge | `wire_workspace_tabs`、`close_workspace_tab`、`close_terminal_child_pane` | 可见 Tab 激活/循环/内存排序、Terminal pane group/子 pane 关闭、pending probe 取消、worker shutdown 和 settings/editor/icon 资源回收；创建、排序和关闭动作先经过窗口模态闸门 |
@@ -165,6 +165,7 @@
 ## 刷新规则
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
+- 最近依据：2026-09-29 Terminal 首次加载并注册自带 Maple 与 Iosevka；Fontique 回退按主字体、Maple Han、Iosevka 缺失符号选字形，不改变 Slint cell 几何或终端模型，字体仍只在 UI 线程注册并通过既有代次刷新。
 - 最近依据：2026-09-18 移除终端 renderer/Slint DTO 的非 ASCII 居中状态；所有文本 run 和一格/两格光标文字均从协议定义的 cell span 左边缘绘制。宽字符仍占两格，逻辑列、选区、pointer、preedit、IME、PTY resize、worker、SSH trust 和凭据边界不变。
 - 最近依据：2026-09-19 鼠标协议按终端程序选择的格式生成默认 X10、UTF-8 1005、URXVT 1015、SGR 1006 或像素坐标 1016；Slint 将内容区物理指针坐标与字符格坐标一并传到模型，1016 按实测文本区边界夹位。DEC 1004 焦点链路仍只传 UUID+布尔值并经可靠 worker 发送固定 `CSI I`/`CSI O`；不引入 worker handle、终端文本、SSH 状态或秘密到 UI。
 - 最近依据：2026-09-19 `TerminalPane` 的字符网格、cell 度量和物理指针坐标通过 `resize-terminal`/pointer DTO 进入 `AppState`；`resize_terminal_with_metrics` 将字符与物理 PTY 尺寸同时交给 Local/SSH，Telnet 仍只走 RFC 1073 NAWS，Serial 只调整本地模型。

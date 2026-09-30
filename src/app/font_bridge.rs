@@ -14,6 +14,7 @@ const MAX_BUNDLED_FONT_FILE_BYTES: u64 = 24 * 1024 * 1024;
 
 const BUNDLED_UI_FONT_FAMILY: &str = "JetBrains Mono";
 const TERMINAL_CJK_FALLBACK_FONT_FAMILY: &str = "Maple Mono NF CN";
+const TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY: &str = "Iosevka Term";
 const EMBEDDED_UI_FONT_FILES: &[&[u8]] = &[
     include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf"),
     include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
@@ -32,7 +33,7 @@ const BUNDLED_FONTS: &[BundledFont] = &[
         files: &["MapleMono-NF-CN-Regular.ttf", "MapleMono-NF-CN-Bold.ttf"],
     },
     BundledFont {
-        family: "Iosevka Term",
+        family: TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
         files: &[
             "IosevkaTerm-Regular.ttf",
             "IosevkaTerm-Bold.ttf",
@@ -260,11 +261,13 @@ fn terminal_bundled_font_families(primary_family: &str) -> Vec<String> {
     let mut families = bundled_font(primary_family)
         .map(|font| vec![font.family.to_owned()])
         .unwrap_or_default();
-    if !families
-        .iter()
-        .any(|family| family == TERMINAL_CJK_FALLBACK_FONT_FAMILY)
-    {
-        families.push(TERMINAL_CJK_FALLBACK_FONT_FAMILY.to_owned());
+    for fallback in [
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+    ] {
+        if !families.iter().any(|family| family == fallback) {
+            families.push(fallback.to_owned());
+        }
     }
     families
 }
@@ -288,16 +291,44 @@ fn register_loaded_font_in_collection(
         }
     }
 
-    let family_id = collection
+    collection
         .family_id(font.family)
         .ok_or_else(|| anyhow::anyhow!("bundled font family was not registered"))?;
-    if font.family == TERMINAL_CJK_FALLBACK_FONT_FAMILY
+    if matches!(
+        font.family,
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY | TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY
+    ) {
+        configure_terminal_fallbacks(collection)?;
+    }
+    Ok(())
+}
+
+fn configure_terminal_fallbacks(collection: &mut fontique::Collection) -> Result<()> {
+    // Preserve Maple's Han priority while allowing a terminal-safe symbol
+    // face to cover missing glyphs such as U+21B4. Fontique also appends its
+    // Han list when shaping neutral characters adjacent to another script.
+    let han_families = [
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+    ]
+    .into_iter()
+    .filter_map(|family| collection.family_id(family))
+    .collect::<Vec<_>>();
+    if !han_families.is_empty()
         && !collection.set_fallbacks(
             fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Hani"), None),
-            std::iter::once(family_id),
+            han_families.into_iter(),
         )
     {
         anyhow::bail!("bundled CJK fallback could not be configured");
+    }
+    if let Some(symbol_family) = collection.family_id(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY)
+        && !collection.set_fallbacks(
+            fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Zyyy"), None),
+            std::iter::once(symbol_family),
+        )
+    {
+        anyhow::bail!("bundled symbol fallback could not be configured");
     }
     Ok(())
 }
@@ -573,18 +604,174 @@ mod tests {
     }
 
     #[test]
-    fn terminal_font_loading_uses_one_cjk_fallback_path() {
+    fn terminal_font_loading_includes_cjk_and_symbol_fallbacks() {
         assert_eq!(
             terminal_bundled_font_families("JetBrains Mono"),
-            ["JetBrains Mono", TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+            [
+                "JetBrains Mono",
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            ]
         );
         assert_eq!(
             terminal_bundled_font_families(TERMINAL_CJK_FALLBACK_FONT_FAMILY),
-            [TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+            [
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            ]
+        );
+        assert_eq!(
+            terminal_bundled_font_families(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY),
+            [
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+            ]
         );
         assert_eq!(
             terminal_bundled_font_families("System Monospace"),
-            [TERMINAL_CJK_FALLBACK_FONT_FAMILY]
+            [
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            ]
+        );
+    }
+
+    fn first_family_with_glyph(
+        collection: &mut fontique::Collection,
+        primary: &str,
+        script: [u8; 4],
+        character: char,
+    ) -> Option<String> {
+        let mut cache = fontique::SourceCache::default();
+        let mut selected = None;
+        {
+            let mut query = collection.query(&mut cache);
+            query.set_families([primary]);
+            query.set_fallbacks(fontique::FallbackKey::new(
+                fontique::Script::from_bytes(script),
+                None,
+            ));
+            query.matches_with(|font| {
+                if font
+                    .charmap()
+                    .and_then(|map| map.map(character as u32))
+                    .is_some_and(|glyph| glyph != 0)
+                {
+                    selected = Some(font.family.0);
+                    fontique::QueryStatus::Stop
+                } else {
+                    fontique::QueryStatus::Continue
+                }
+            });
+        }
+        selected.and_then(|family| collection.family_name(family).map(str::to_owned))
+    }
+
+    #[test]
+    fn symbol_fallback_covers_return_arrow_without_replacing_han_or_box_glyphs() {
+        let resources = FontResources {
+            directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+        };
+        let mut collection = fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        });
+        for family in [BUNDLED_UI_FONT_FAMILY, TERMINAL_CJK_FALLBACK_FONT_FAMILY] {
+            let font = resources
+                .load_bundled_font(family)
+                .expect("bundled font should load")
+                .expect("font should be bundled");
+            register_loaded_font_in_collection(&mut collection, font)
+                .expect("font should register");
+        }
+        assert_eq!(
+            first_family_with_glyph(
+                &mut collection,
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                *b"Zyyy",
+                '↴',
+            ),
+            None,
+        );
+
+        let symbol_font = resources
+            .load_bundled_font(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY)
+            .expect("symbol font should load")
+            .expect("symbol font should be bundled");
+        register_loaded_font_in_collection(&mut collection, symbol_font)
+            .expect("symbol font should register");
+
+        let han_names = collection
+            .fallback_families(fontique::FallbackKey::new(
+                fontique::Script::from_bytes(*b"Hani"),
+                None,
+            ))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter_map(|id| collection.family_name(id).map(str::to_owned))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            han_names,
+            [
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            ]
+        );
+        assert_eq!(
+            first_family_with_glyph(
+                &mut collection,
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                *b"Zyyy",
+                '↴',
+            ),
+            Some(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY.to_owned())
+        );
+        assert_eq!(
+            first_family_with_glyph(&mut collection, BUNDLED_UI_FONT_FAMILY, *b"Latn", '↴'),
+            Some(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY.to_owned())
+        );
+        assert_eq!(
+            first_family_with_glyph(&mut collection, BUNDLED_UI_FONT_FAMILY, *b"Hani", '中'),
+            Some(TERMINAL_CJK_FALLBACK_FONT_FAMILY.to_owned())
+        );
+        assert_eq!(
+            first_family_with_glyph(
+                &mut collection,
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                *b"Zyyy",
+                '─',
+            ),
+            Some(TERMINAL_CJK_FALLBACK_FONT_FAMILY.to_owned())
+        );
+    }
+
+    #[test]
+    fn maple_retains_han_priority_when_symbol_font_registers_first() {
+        let resources = FontResources {
+            directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+        };
+        let mut collection = fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        });
+        for family in [
+            TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+        ] {
+            let font = resources
+                .load_bundled_font(family)
+                .expect("bundled font should load")
+                .expect("font should be bundled");
+            register_loaded_font_in_collection(&mut collection, font)
+                .expect("font should register");
+        }
+        assert_eq!(
+            first_family_with_glyph(&mut collection, "Unregistered primary", *b"Hani", '中'),
+            Some(TERMINAL_CJK_FALLBACK_FONT_FAMILY.to_owned())
+        );
+        assert_eq!(
+            first_family_with_glyph(&mut collection, "Unregistered primary", *b"Zyyy", '↴'),
+            Some(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY.to_owned())
         );
     }
 

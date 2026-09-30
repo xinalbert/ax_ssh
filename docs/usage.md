@@ -684,9 +684,9 @@ for Success, Information, Warning, or Error; leave a field empty to follow the
 active terminal palette. URL/path target colors are not configurable because the
 target indication is an interaction-only underline. Bundled fonts appear before
 discovered system monospace fonts in both font lists. The selected Terminal font remains the
-primary family. When it does not contain a Han glyph, AxSSH uses bundled Maple
-Mono NF CN as the single Han fallback; choosing another Terminal font does not
-replace the saved selection or add another fallback route.
+primary family. When it lacks a Han glyph, AxSSH tries bundled Maple Mono NF CN
+first; Iosevka Term then supplies missing symbols such as `↴`. Choosing another
+Terminal font does not replace the saved selection or change this fallback order.
 
 **Settings > X11** controls the platform-local X server provider, first-X11-
 application startup behavior, and the explicit loopback-only no-auth
