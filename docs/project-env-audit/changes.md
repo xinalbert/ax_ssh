@@ -1,5 +1,45 @@
 # 项目环境变化记录
 
+## 2026-10-01 SFTP 本地导航控件环境验证
+
+- 日期：2026-10-01
+- 目的：确认窄本地栏刷新入口与历史回归在当前锁定环境中可编译、可测试。
+- 改动范围：`ui/sftp-pane.slint`、`src/app/state/tests.rs` 和双语用法；Cargo、锁文件、CI 与 SSH 安全边界未变。
+- 执行内容：运行 fmt、locked/offline check、严格 all-target Clippy、完整测试、中文目录和 `msgfmt --check`、tracker validator、Markdown 相对链接与差异检查。
+- 验证结果：定向测试 1 项、完整测试库 297/应用 295/Doc tests 0 和全部静态/文档门禁通过；本机 Rust 1.97.1、MSRV 1.92.0 与 Slint 1.18.1 不变。
+- 风险/待办：窄栏图标视觉、键盘焦点和真实本地目录操作由用户在目标平台确认。
+- 开工判定：施工及本机静态验证完成。
+
+## 2026-10-01 SFTP 本地导航控件施工预检
+
+- 日期：2026-10-01
+- 目的：确认本地栏刷新、前进和后退可沿用现有 Rust/Slint 与测试环境修复。
+- 改动范围：`ui/sftp-pane.slint`、本地导航状态回归和双语用法；不改 Cargo、锁文件、CI 或 SSH 安全边界。
+- 执行内容：沿用上轮已核对的 Rust 2024、MSRV 1.92.0、本机 Rust 1.97.1、Slint 1.18.1 和 locked/offline 命令；确认本地刷新可见性条件与主/独立窗口回调现状。
+- 验证结果：上一轮完整门禁通过；本轮 Slint Cargo check、中文目录 508 条和刷新历史定向测试 1 项通过，完整门禁待执行。
+- 风险/待办：窄栏刷新实际视觉和键盘焦点由用户验收，非原生目标以 CI 为准。
+- 开工判定：允许开工。
+
+## 2026-10-01 SFTP 双栏上一层导航环境验证
+
+- 日期：2026-10-01
+- 目的：确认新增双栏导航在既有 Rust/Slint、翻译和测试环境中正常构建。
+- 改动范围：`ui/` SFTP 页面、`src/app/` 状态与 bridge、中文目录及双语文档；不改 Cargo、锁文件、CI 或 SSH 安全边界。
+- 执行内容：运行 `cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 `cargo clippy --all-targets --locked --offline -- -D warnings`、完整 `cargo test --locked --offline`、翻译和文档校验。
+- 验证结果：定向父目录测试 2 项、完整测试库 297/应用 294/Doc tests 0、中文目录 508 条、`msgfmt --check`、tracker validator、Markdown 相对链接和 `git diff --check` 通过；本机工具链仍为 Rust 1.97.1，项目 MSRV 1.92.0。
+- 风险/待办：GUI 视觉/焦点和真实 SSH 服务端导航需用户在目标平台确认；Windows/Linux 仍由原生 CI 验证。
+- 开工判定：施工及本机静态验证完成。
+
+## 2026-09-30 SFTP 双栏上一层导航施工预检
+
+- 日期：2026-09-30
+- 目的：核实双栏导航功能在现有项目环境中可实现和验证。
+- 改动范围：`ui/` 的 SFTP 页面与 `src/app/` 的状态/bridge；不改 Cargo、锁文件、CI 或 SSH 安全边界。
+- 执行内容：核对 `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、现有环境记忆及本机 Rust 1.97.1；确认 Rust 2024、MSRV 1.92.0、Slint 1.18.1 和 locked/offline 测试命令保持不变。
+- 验证结果：既有本地/远端历史测试 2 项和远端路径测试 1 项通过；新功能及完整门禁待执行。
+- 风险/待办：GUI 视觉与真实 SSH 服务器导航由用户在目标平台验收；施工后记录完整门禁结果。
+- 开工判定：允许开工。
+
 ## 2026-09-25 子窗口终端列宽同步施工预检
 
 - 日期：2026-09-25
