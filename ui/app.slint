@@ -61,6 +61,10 @@ export component AppWindow inherits Window {
     in property <string> editor-private-key-path;
     in property <string> editor-sftp-remote-path: "~";
     in property <string> editor-sftp-local-path;
+    in property <bool> editor-sftp-override-limits: false;
+    in property <int> editor-sftp-per-tab-transfers: 2;
+    in property <int> editor-sftp-max-file-gib: 20;
+    in property <int> editor-sftp-rate-limit-mib-per-second: 0;
     in property <string> editor-credential-storage;
     in property <string> editor-default-credential-storage: "encrypted-vault";
     in property <string> editor-x11-forwarding-mode: "trusted";
@@ -241,6 +245,9 @@ export component AppWindow inherits Window {
     in property <string> sftp-filter-platform-defaults: "";
     in property <int> sftp-per-tab-transfers: 2;
     in property <int> sftp-global-uploads: 8;
+    in property <int> sftp-max-file-gib: 20;
+    in property <int> sftp-rate-limit-mib-per-second: 0;
+    in property <int> sftp-local-open-max-file-mib: 512;
     in property <string> ui-language: "english";
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
@@ -402,6 +409,9 @@ export component AppWindow inherits Window {
             sftp_filter_platform_defaults: root.sftp-filter-platform-defaults,
             sftp_per_tab_transfers: root.sftp-per-tab-transfers,
             sftp_global_uploads: root.sftp-global-uploads,
+            sftp_max_file_gib: root.sftp-max-file-gib,
+            sftp_rate_limit_mib_per_second: root.sftp-rate-limit-mib-per-second,
+            sftp_local_open_max_file_mib: root.sftp-local-open-max-file-mib,
             sidebar_width: root.sidebar-width,
             tab_width: root.tab-width, session_mask_character: root.session-mask-character,
             collapsed_group_label_chars: root.collapsed-group-label-chars,
@@ -429,6 +439,10 @@ export component AppWindow inherits Window {
             username: root.editor-username, auth_method: root.editor-auth-method,
             private_key_path: root.editor-private-key-path,
             sftp_remote_path: root.editor-sftp-remote-path, sftp_local_path: root.editor-sftp-local-path,
+            sftp_override_limits: root.editor-sftp-override-limits,
+            sftp_per_tab_transfers: root.editor-sftp-per-tab-transfers,
+            sftp_max_file_gib: root.editor-sftp-max-file-gib,
+            sftp_rate_limit_mib_per_second: root.editor-sftp-rate-limit-mib-per-second,
             x11_forwarding_mode: root.editor-x11-forwarding-mode,
             credential_storage: root.editor-credential-storage,
             default_credential_storage: root.editor-default-credential-storage,
@@ -478,14 +492,14 @@ export component AppWindow inherits Window {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-ui-language(int);
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, string, bool, string, string, string, string, string, string, string, string, string, bool,
+        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -939,7 +953,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
-                          sftp-per-tab-transfers, sftp-global-uploads,
+                          sftp-per-tab-transfers, sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib,
                           settings-tab-id, close-after-save) => {
                 root.save-settings(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
@@ -956,16 +970,16 @@ export component AppWindow inherits Window {
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
                     sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
-                    sftp-global-uploads, settings-tab-id, close-after-save);
+                    sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
             }
             save-ui-language(index) => { root.save-ui-language(index); }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
-            save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+            save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                          serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                          connect-after-save) => {
                 root.save-session(
-                    name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, password, remember-password, credential-storage, vault-password, x11-forwarding,
+                    name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
                     connect-after-save,
                 );

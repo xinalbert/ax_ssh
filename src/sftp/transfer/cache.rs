@@ -14,7 +14,12 @@ pub(super) async fn prepare_cache_file(
             .get_or_init(|| Mutex::new(()))
             .lock()
             .map_err(|_| anyhow::anyhow!("SFTP cache quota lock is poisoned"))?;
-        enforce_cache_quota(&cache_dir, expected_bytes, SystemTime::now())?;
+        enforce_cache_quota(
+            &cache_dir,
+            expected_bytes,
+            MAX_CACHE_BYTES,
+            SystemTime::now(),
+        )?;
         PendingCacheFile::create(
             CacheTarget::new(&cache_dir, cache_id, &name),
             expected_bytes,
@@ -301,11 +306,12 @@ struct ManagedCacheEntry {
 pub(super) fn enforce_cache_quota(
     cache_dir: &Path,
     incoming_bytes: u64,
+    max_bytes: u64,
     now: SystemTime,
 ) -> Result<()> {
-    if incoming_bytes > MAX_CACHE_BYTES {
+    if incoming_bytes > max_bytes {
         anyhow::bail!(
-            "SFTP cache reservation is {incoming_bytes} bytes, exceeding the {MAX_CACHE_BYTES}-byte quota"
+            "SFTP cache reservation is {incoming_bytes} bytes, exceeding the {max_bytes}-byte quota"
         );
     }
 
@@ -319,7 +325,7 @@ pub(super) fn enforce_cache_quota(
     entries.retain(|entry| !entry.is_part);
     entries.sort_by_key(|entry| entry.modified);
     for entry in entries {
-        let within_bytes = total_bytes.saturating_add(incoming_bytes) <= MAX_CACHE_BYTES;
+        let within_bytes = total_bytes.saturating_add(incoming_bytes) <= max_bytes;
         let within_files = file_count.saturating_add(1) <= MAX_CACHE_FILES;
         if within_bytes && within_files {
             break;
@@ -330,9 +336,9 @@ pub(super) fn enforce_cache_quota(
         }
     }
 
-    if total_bytes.saturating_add(incoming_bytes) > MAX_CACHE_BYTES {
+    if total_bytes.saturating_add(incoming_bytes) > max_bytes {
         anyhow::bail!(
-            "SFTP cache quota would exceed {MAX_CACHE_BYTES} bytes; close an existing opened file and retry"
+            "SFTP cache quota would exceed {max_bytes} bytes; close an existing opened file and retry"
         );
     }
     if file_count.saturating_add(1) > MAX_CACHE_FILES {

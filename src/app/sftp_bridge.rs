@@ -5,6 +5,7 @@ use super::local_files::{
 use super::*;
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -16,10 +17,17 @@ const MAX_UPLOAD_SCAN_ENTRIES: usize = 4096;
 const MAX_UPLOAD_DIRECTORIES: usize = 256;
 const MAX_UPLOAD_DEPTH: usize = 16;
 const MAX_UPLOAD_TEXT_BYTES: usize = 512 * 1024;
-const MAX_UPLOAD_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 const LOCAL_DRAG_PREFIX: &str = "axssh-local-path:";
 const REMOTE_DRAG_PREFIX: &str = "axssh-remote-path:";
 const SFTP_DRAG_TARGET: &str = "ax_ssh::sftp_drag";
+
+struct LocalSnapshotCancelGuard(Arc<AtomicBool>);
+
+impl Drop for LocalSnapshotCancelGuard {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
 
 type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
 
@@ -260,6 +268,18 @@ fn active_sftp_transfer_filter_patterns(state: &Arc<Mutex<AppState>>) -> Result<
         .effective_patterns())
 }
 
+fn sftp_max_file_bytes_for_tab(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> Result<u64> {
+    let app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    app.terminal(tab_id)
+        .context("SFTP tab is no longer available")?
+        .worker
+        .as_ref()
+        .context("SFTP tab has no worker")?
+        .sftp_max_file_bytes()
+}
+
 fn prepare_selected_local_upload(
     state: &Arc<Mutex<AppState>>,
     router: &WindowRouter,
@@ -311,6 +331,7 @@ fn discover_local_uploads(
     paths: Vec<PathBuf>,
     remote_directory: &str,
     filters: &[String],
+    max_file_bytes: u64,
 ) -> Result<Vec<PreparedLocalUpload>> {
     let mut pending = VecDeque::new();
     let mut root_names = HashSet::new();
@@ -318,7 +339,6 @@ fn discover_local_uploads(
     let mut scanned = 0_usize;
     let mut directories = 0_usize;
     let mut text_bytes = 0_usize;
-    let mut total_bytes = 0_u64;
     for path in paths {
         let name = upload_local_name(&path)?;
         if !root_names.insert(name.clone()) {
@@ -381,16 +401,8 @@ fn discover_local_uploads(
                 pending.push_back((child, child_parents.clone(), depth + 1));
             }
         } else if metadata.is_file() {
-            if metadata.len() > ax_ssh::sftp::MAX_UPLOAD_BYTES
-                || files.len() >= MAX_DROPPED_LOCAL_PATHS
-            {
+            if metadata.len() > max_file_bytes || files.len() >= MAX_DROPPED_LOCAL_PATHS {
                 anyhow::bail!("local upload tree exceeds the file size or count limit");
-            }
-            total_bytes = total_bytes.saturating_add(metadata.len());
-            if total_bytes > MAX_UPLOAD_TOTAL_BYTES {
-                anyhow::bail!(
-                    "local upload tree exceeds the {MAX_UPLOAD_TOTAL_BYTES}-byte total limit"
-                );
             }
             let mut remote_directories = Vec::new();
             let mut directory = remote_directory.to_owned();
@@ -495,6 +507,13 @@ fn queue_local_upload_paths(
 ) {
     let state_for_task = state.clone();
     runtime.spawn(async move {
+        let max_file_bytes = match sftp_max_file_bytes_for_tab(&state_for_task, tab_id) {
+            Ok(limit) => limit,
+            Err(error) => {
+                set_status(&ui, &format!("Cannot read SFTP transfer limits: {error}"));
+                return;
+            }
+        };
         let filters = match active_sftp_transfer_filter_patterns(&state_for_task) {
             Ok(filters) => filters,
             Err(error) => {
@@ -503,7 +522,7 @@ fn queue_local_upload_paths(
             }
         };
         let read = tokio::task::spawn_blocking(move || {
-            discover_local_uploads(paths, &remote_directory, &filters)
+            discover_local_uploads(paths, &remote_directory, &filters, max_file_bytes)
         })
         .await;
         let files = match read {
@@ -2292,6 +2311,7 @@ struct LocalOpenRequest {
     request_id: u64,
     directory: String,
     entry: LocalDirectoryEntry,
+    max_file_bytes: u64,
 }
 
 fn prepare_local_entry_reveal(
@@ -2377,6 +2397,11 @@ fn prepare_local_file_open(
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let max_file_bytes = app
+        .sessions
+        .settings
+        .sftp_transfers
+        .local_open_max_file_bytes();
     let terminal = app.terminal_mut(tab_id).context("no active SFTP tab")?;
     if !terminal.is_sftp() {
         anyhow::bail!("local files are available only in an SFTP tab");
@@ -2401,6 +2426,7 @@ fn prepare_local_file_open(
         request_id: terminal.sftp.local.request_id,
         directory: terminal.sftp.local.path.clone(),
         entry,
+        max_file_bytes,
     })
 }
 
@@ -2448,10 +2474,18 @@ fn open_local_file(
         if !local_open_snapshot_is_current(&state, &request) {
             return;
         }
+        let max_file_bytes = request.max_file_bytes;
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let _cancel_guard = LocalSnapshotCancelGuard(cancellation.clone());
         let snapshot = tokio::time::timeout(
             LOCAL_SNAPSHOT_TIMEOUT,
             tokio::task::spawn_blocking(move || {
-                ax_ssh::sftp::snapshot_local_file_for_open(validated.file, &validated.name)
+                ax_ssh::sftp::snapshot_local_file_for_open(
+                    validated.file,
+                    &validated.name,
+                    max_file_bytes,
+                    &cancellation,
+                )
             }),
         )
         .await;
@@ -2891,6 +2925,7 @@ mod tests {
             vec![folder, root.join("third.txt")],
             "/srv",
             &[".DS_Store".to_owned()],
+            20 * 1024 * 1024 * 1024,
         )
         .expect("all eligible nested files should be discovered");
         let targets = files
@@ -2914,6 +2949,27 @@ mod tests {
             ["/srv/folder", "/srv/folder/nested"]
         );
         std::fs::remove_dir_all(root).expect("fixture should be removed");
+    }
+
+    #[test]
+    fn local_upload_discovery_uses_per_file_limit_without_batch_byte_cap() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-sparse-upload-{}", Uuid::new_v4()));
+        let file = std::fs::File::create(&path).expect("create sparse fixture");
+        file.set_len(19 * 1024 * 1024 * 1024)
+            .expect("size sparse fixture");
+        drop(file);
+        let accepted =
+            discover_local_uploads(vec![path.clone()], "/srv", &[], 20 * 1024 * 1024 * 1024)
+                .expect("single file below the configured limit");
+        assert_eq!(accepted.len(), 1);
+        let unlimited = discover_local_uploads(vec![path.clone()], "/srv", &[], u64::MAX)
+            .expect("zero-sized policy limit should allow this file");
+        assert_eq!(unlimited.len(), 1);
+        assert!(
+            discover_local_uploads(vec![path.clone()], "/srv", &[], 10 * 1024 * 1024 * 1024)
+                .is_err()
+        );
+        std::fs::remove_file(path).expect("remove sparse fixture");
     }
 
     #[test]

@@ -506,6 +506,15 @@ impl TerminalBackend {
 }
 
 impl TerminalWorker {
+    pub(in crate::app) fn sftp_max_file_bytes(&self) -> Result<u64> {
+        match self {
+            Self::Ssh(worker) => Ok(worker.sftp_max_file_bytes()),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
     pub(in crate::app) fn request_disconnect(&self) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_disconnect(),

@@ -1,4 +1,4 @@
-import { CheckBox, ScrollView } from "std-widgets.slint";
+import { CheckBox, ScrollView, SpinBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
 import { ElidedButton } from "components/elided-controls.slint";
@@ -22,6 +22,10 @@ export struct SessionEditorViewState {
     private_key_path: string,
     sftp_remote_path: string,
     sftp_local_path: string,
+    sftp_override_limits: bool,
+    sftp_per_tab_transfers: int,
+    sftp_max_file_gib: int,
+    sftp_rate_limit_mib_per_second: int,
     credential_storage: string,
     default_credential_storage: string,
     x11_forwarding_mode: string,
@@ -41,7 +45,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, string, bool, string, string, string, string, string, string, string, string, string, bool,
+        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -63,6 +67,10 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> private-key-draft;
     private property <string> sftp-remote-path-draft: "~";
     private property <string> sftp-local-path-draft;
+    private property <bool> sftp-override-limits-draft: false;
+    private property <int> sftp-per-tab-transfers-draft: 2;
+    private property <int> sftp-max-file-gib-draft: 20;
+    private property <int> sftp-rate-limit-mib-per-second-draft: 0;
     private property <string> password-draft;
     private property <bool> remember-password-draft: false;
     private property <string> credential-storage-draft: "encrypted-vault";
@@ -97,6 +105,10 @@ export component SessionEditorPane inherits Rectangle {
             root.private-key-draft,
             root.sftp-remote-path-draft,
             root.sftp-local-path-draft,
+            root.sftp-override-limits-draft,
+            root.sftp-per-tab-transfers-draft,
+            root.sftp-max-file-gib-draft,
+            root.sftp-rate-limit-mib-per-second-draft,
             root.password-draft,
             root.remember-password-draft,
             root.credential-storage-draft,
@@ -125,6 +137,10 @@ export component SessionEditorPane inherits Rectangle {
         root.private-key-draft = root.source.private_key_path;
         root.sftp-remote-path-draft = root.source.sftp_remote_path;
         root.sftp-local-path-draft = root.source.sftp_local_path;
+        root.sftp-override-limits-draft = root.source.sftp_override_limits;
+        root.sftp-per-tab-transfers-draft = root.source.sftp_per_tab_transfers;
+        root.sftp-max-file-gib-draft = root.source.sftp_max_file_gib;
+        root.sftp-rate-limit-mib-per-second-draft = root.source.sftp_rate_limit_mib_per_second;
         // Passwords are intentionally never part of the source snapshot.
         root.password-draft = "";
         root.remember-password-draft = false;
@@ -492,6 +508,64 @@ export component SessionEditorPane inherits Rectangle {
                                 text <=> root.sftp-local-path-draft;
                                 placeholder-text: @tr("Platform home directory");
                                 accessible-label: @tr("SFTP local default directory");
+                            }
+                        }
+                    }
+                }
+
+                if root.protocol == "SSH" : VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
+                        label: @tr("SFTP transfer limits");
+                        description: @tr("Override the global SFTP settings for this server; 0 GiB means unlimited.");
+                    }
+                    CheckBox {
+                        text: @tr("Use server-specific limits");
+                        checked <=> root.sftp-override-limits-draft;
+                        accessible-label: @tr("Use server-specific SFTP transfer limits");
+                    }
+                    HorizontalLayout {
+                        height: self.preferred-height;
+                        vertical-stretch: 0;
+                        spacing: Theme.space-xl;
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: @tr("Maximum file size (GiB)");
+                            SpinBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                minimum: 0;
+                                maximum: 1024;
+                                enabled: root.sftp-override-limits-draft;
+                                value <=> root.sftp-max-file-gib-draft;
+                                accessible-label: @tr("Server SFTP maximum file size in GiB");
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: @tr("Bandwidth limit (MiB/s; 0 unlimited)");
+                            SpinBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                minimum: 0;
+                                maximum: 1024;
+                                enabled: root.sftp-override-limits-draft;
+                                value <=> root.sftp-rate-limit-mib-per-second-draft;
+                                accessible-label: @tr("Server SFTP bandwidth limit in MiB per second");
+                            }
+                        }
+                        SessionEditorField {
+                            horizontal-stretch: 1;
+                            label: @tr("Simultaneous transfers");
+                            SpinBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                minimum: 1;
+                                maximum: 16;
+                                enabled: root.sftp-override-limits-draft;
+                                value <=> root.sftp-per-tab-transfers-draft;
+                                accessible-label: @tr("Server SFTP simultaneous transfers");
                             }
                         }
                     }

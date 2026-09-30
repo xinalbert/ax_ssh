@@ -7,6 +7,7 @@ import {
     SettingsSearchResult,
 } from "components/settings-controls.slint";
 import { GeneralSettingsPage } from "settings/general.slint";
+import { SftpSettingsPage } from "settings/sftp.slint";
 import { AppearanceSettingsPage } from "settings/appearance.slint";
 import { TerminalSettingsPage } from "settings/terminal.slint";
 import { X11SettingsPage } from "settings/x11.slint";
@@ -99,6 +100,9 @@ export struct SettingsViewState {
     sftp_filter_platform_defaults: string,
     sftp_per_tab_transfers: int,
     sftp_global_uploads: int,
+    sftp_max_file_gib: int,
+    sftp_rate_limit_mib_per_second: int,
+    sftp_local_open_max_file_mib: int,
     sidebar_width: int,
     tab_width: int,
     session_mask_character: string,
@@ -217,6 +221,9 @@ export component SettingsPane inherits Rectangle {
         root.source.sftp_filter_platform_defaults;
     private property <int> sftp-per-tab-transfers: root.source.sftp_per_tab_transfers;
     private property <int> sftp-global-uploads: root.source.sftp_global_uploads;
+    private property <int> sftp-max-file-gib: root.source.sftp_max_file_gib;
+    private property <int> sftp-rate-limit-mib-per-second: root.source.sftp_rate_limit_mib_per_second;
+    private property <int> sftp-local-open-max-file-mib: root.source.sftp_local_open_max_file_mib;
     private property <int> sidebar-width: root.source.sidebar_width;
     private property <int> tab-width: root.source.tab_width;
     private property <string> session-mask-character: root.source.session_mask_character;
@@ -244,7 +251,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-ui-language(int);
     callback format-shortcut(KeyboardEvent) -> string;
@@ -337,6 +344,9 @@ export component SettingsPane inherits Rectangle {
         root.sftp-filter-custom-patterns;
     private property <int> draft-sftp-per-tab-transfers: root.sftp-per-tab-transfers;
     private property <int> draft-sftp-global-uploads: root.sftp-global-uploads;
+    private property <int> draft-sftp-max-file-gib: root.sftp-max-file-gib;
+    private property <int> draft-sftp-rate-limit-mib-per-second: root.sftp-rate-limit-mib-per-second;
+    private property <int> draft-sftp-local-open-max-file-mib: root.sftp-local-open-max-file-mib;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
     private property <string> draft-session-mask-character: root.session-mask-character;
@@ -355,6 +365,7 @@ export component SettingsPane inherits Rectangle {
         if section == "Appearance" { return @tr("Appearance"); }
         if section == "Terminal" { return @tr("Terminal"); }
         if section == "X11" { return @tr("X11"); }
+        if section == "SFTP" { return @tr("SFTP"); }
         if section == "Workspace" { return @tr("Workspace"); }
         if section == "Shortcuts" { return @tr("Shortcuts"); }
         if section == "About" { return @tr("About"); }
@@ -467,6 +478,9 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-filter-custom-patterns,
             root.draft-sftp-per-tab-transfers,
             root.draft-sftp-global-uploads,
+            root.draft-sftp-max-file-gib,
+            root.draft-sftp-rate-limit-mib-per-second,
+            root.draft-sftp-local-open-max-file-mib,
             "",
             false,
         );
@@ -555,6 +569,9 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-filter-custom-patterns,
             root.draft-sftp-per-tab-transfers,
             root.draft-sftp-global-uploads,
+            root.draft-sftp-max-file-gib,
+            root.draft-sftp-rate-limit-mib-per-second,
+            root.draft-sftp-local-open-max-file-mib,
             root.tab-id,
             close-after-save,
         );
@@ -628,6 +645,9 @@ export component SettingsPane inherits Rectangle {
     changed draft-sftp-filter-custom-patterns => { root.schedule-preview(); }
     changed draft-sftp-per-tab-transfers => { root.schedule-preview(); }
     changed draft-sftp-global-uploads => { root.schedule-preview(); }
+    changed draft-sftp-max-file-gib => { root.schedule-preview(); }
+    changed draft-sftp-rate-limit-mib-per-second => { root.schedule-preview(); }
+    changed draft-sftp-local-open-max-file-mib => { root.schedule-preview(); }
     changed draft-sidebar-width => { root.schedule-preview(); }
     changed draft-tab-width => { root.schedule-preview(); }
     changed draft-session-mask-character => { root.schedule-preview(); }
@@ -705,6 +725,12 @@ export component SettingsPane inherits Rectangle {
                     label: @tr("X11");
                     selected: root.selected-section == "X11";
                     activated => { root.select-section("X11"); }
+                }
+                SettingsNavItem {
+                    icon: SettingsNavIcon.Sftp;
+                    label: @tr("SFTP");
+                    selected: root.selected-section == "SFTP";
+                    activated => { root.select-section("SFTP"); }
                 }
                 SettingsNavItem {
                     icon: SettingsNavIcon.Workspace;
@@ -814,19 +840,28 @@ export component SettingsPane inherits Rectangle {
                         draft-columns <=> root.draft-columns;
                         draft-rows <=> root.draft-rows;
                         draft-credential-storage <=> root.draft-credential-storage;
+                        ui-language: root.ui-language;
+                        save-ui-language(index) => { root.save-ui-language(index); }
+                    }
+
+                    if root.settings-search-query.is-empty && root.selected-section == "SFTP" : SftpSettingsPage {
+                        width: parent.width;
+                        height: parent.height;
+                        scroll-revision: root.section-scroll-revision;
                         draft-sftp-filter-enabled <=> root.draft-sftp-filter-enabled;
                         draft-sftp-filter-use-platform-defaults <=> root.draft-sftp-filter-use-platform-defaults;
                         draft-sftp-filter-custom-patterns <=> root.draft-sftp-filter-custom-patterns;
                         draft-sftp-per-tab-transfers <=> root.draft-sftp-per-tab-transfers;
                         draft-sftp-global-uploads <=> root.draft-sftp-global-uploads;
+                        draft-sftp-max-file-gib <=> root.draft-sftp-max-file-gib;
+                        draft-sftp-rate-limit-mib-per-second <=> root.draft-sftp-rate-limit-mib-per-second;
+                        draft-sftp-local-open-max-file-mib <=> root.draft-sftp-local-open-max-file-mib;
                         sftp-filter-platform-defaults: root.sftp-filter-platform-defaults;
                         restore-sftp-filter-defaults => {
                             root.draft-sftp-filter-enabled = true;
                             root.draft-sftp-filter-use-platform-defaults = true;
                             root.draft-sftp-filter-custom-patterns = "";
                         }
-                        ui-language: root.ui-language;
-                        save-ui-language(index) => { root.save-ui-language(index); }
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "Appearance" : AppearanceSettingsPage {

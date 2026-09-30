@@ -197,6 +197,11 @@ symbolic links are not opened. AxSSH verifies the opened file's platform identit
 outside the UI thread, copies that exact handle into its private bounded cache,
 and opens the completed read-only snapshot. Replacing the original path after
 validation cannot redirect the open request.
+Set the maximum size of this local-open snapshot under **Settings > SFTP**
+(default 512 MiB; 1 MiB to 20 GiB for a finite limit). Set 0 to remove both
+the per-file limit and the private cache byte quota. The cache quota grows to
+fit any finite per-file limit. Opening large files still requires enough local
+disk space and copying time; 0 may use substantial disk space.
 
 Right-click a local row to open a file or folder, reveal a non-link entry in its
 local folder, or upload the selected files and folders. The local and remote list checkboxes,
@@ -209,12 +214,12 @@ row keeps the current multi-selection, so the menu action applies to that
 selection. Each file is written into
 the current **Local files** directory; directory downloads recursively preserve
 their selected directory tree. Remote symbolic links and non-regular entries
-are skipped or rejected, existing local files are never overwritten, and a file
-may be at most 512 MiB. Recursive discovery is bounded to 4,096 scanned
-entries, 512 files, 256 directories, 16 levels, 512 KiB of path text, and 1
-GiB in total.
+are skipped or rejected, existing local files are never overwritten, and each
+file is subject to the configured SFTP file-size limit (20 GiB by default).
+Recursive discovery is bounded to 4,096 scanned entries, 512 files, 256
+directories, 16 levels, and 512 KiB of path text; there is no separate batch-byte cap.
 
-SFTP transfers can omit generated system files. In **Settings > General**, enable
+SFTP transfers can omit generated system files. In **Settings > SFTP**, enable
 **Filter system files** to use the current platform preset (macOS includes
 `.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd`; Windows and
 Linux have their corresponding common metadata names). Add one custom filename
@@ -231,7 +236,7 @@ preserves the downloaded prefix through the live
 worker and continues from that offset; it is available only while this
 application and SFTP worker remain running. Each SFTP Tab runs at most two
 active transfers at once by default; **Transfers per SFTP tab** in
-**Settings > General** changes this limit from 1 to 16. **Global simultaneous
+**Settings > SFTP** changes this limit from 1 to 16. **Global simultaneous
 uploads** changes the process-wide upload limit from 1 to 32 (the default is
 8); additional files wait in the queue or are subject to the existing transfer
 state. Cancel removes the task's partial content,
@@ -277,8 +282,9 @@ dropped onto Remote files upload to the current remote directory. Folder uploads
 files, preserve relative paths, and create needed remote directories. Empty folders
 without eligible files do not create a remote directory. Symbolic links and filtered
 names are skipped. A batch is bounded to 512 files, 256 directories,
-16 levels, 4,096 scanned entries, 512 KiB of path text, 1 GiB total, and 512 MiB
-per file; exceeding a limit rejects the batch before upload.
+16 levels, 4,096 scanned entries, and 512 KiB of path text. Each file is
+limited by the configured maximum (20 GiB by default); there is no separate
+batch-byte cap. Exceeding a limit rejects the batch before upload.
 Dragging a remote file or folder onto Local files queues a download
 into the current local directory. Completed downloads remain there and never
 open automatically. On macOS, dragging a remote regular file can
@@ -612,7 +618,19 @@ keeps the previous selection. **Follow system** uses Simplified Chinese for a
 Chinese system locale and English for every other locale. AxSSH translates its
 application-owned Slint interface; remote terminal content, user-provided
 names/paths, logs, and runtime technical error details remain unchanged.
-The General page also owns the SFTP transfer filter described above.
+The SFTP page owns the transfer filter described above, the single-file maximum
+(0 for no client-side file-size cap, or 1-1024 GiB; default 20 GiB), and a
+per-connection upload-plus-download bandwidth cap (0-1024 MiB/s; 0 means
+unlimited). In an SSH server's editor,
+**Use server-specific limits** overrides the global file-size, bandwidth, and
+per-tab concurrency values for new SFTP connections to that server. The
+process-wide simultaneous-upload limit remains global. A changed policy takes
+effect for a connection when its SFTP worker starts or reconnects; it does not
+interrupt transfers already running.
+The unlimited transfer-size setting applies to normal streaming uploads and
+downloads, including a remote file dragged to Finder. The separately
+configurable local-open snapshot limit affects only the cache copy used to
+open a local file from the SFTP pane, not those transfers.
 
 In **Settings > Appearance**, Font family changes the application interface
 without changing terminal cell metrics. Renderer selects **Automatic**, **GPU**,

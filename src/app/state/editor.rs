@@ -16,9 +16,25 @@ impl SessionEditorState {
                     .credential_storage
                     .as_setting()
                     .to_owned(),
+                sftp_per_tab_transfers: i32::from(
+                    sessions.settings.sftp_transfers.per_tab_transfers,
+                ),
+                sftp_max_file_gib: sessions.settings.sftp_transfers.max_file_gib as i32,
+                sftp_rate_limit_mib_per_second: sessions
+                    .settings
+                    .sftp_transfers
+                    .rate_limit_mib_per_second
+                    as i32,
                 ..SessionEditorSnapshot::default()
             };
         };
+        let sftp_override_limits = profile
+            .ssh()
+            .is_some_and(|ssh| ssh.sftp_transfer_policy.is_some());
+        let sftp_policy = sessions
+            .settings
+            .sftp_transfers
+            .policy(profile.ssh().and_then(|ssh| ssh.sftp_transfer_policy));
         let credential_storage = profile
             .ssh()
             .and_then(|ssh| ssh.credential_storage)
@@ -125,6 +141,10 @@ impl SessionEditorState {
             private_key_path,
             sftp_remote_path,
             sftp_local_path,
+            sftp_override_limits,
+            sftp_per_tab_transfers: i32::from(sftp_policy.per_tab_transfers),
+            sftp_max_file_gib: sftp_policy.max_file_gib as i32,
+            sftp_rate_limit_mib_per_second: sftp_policy.rate_limit_mib_per_second as i32,
             credential_storage,
             default_credential_storage,
             x11_forwarding_mode,

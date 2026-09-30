@@ -73,18 +73,15 @@ pub(super) fn start_session_worker(
                 x11_settings,
             ),
             ConnectionTarget::Sftp => {
-                let per_tab_transfers =
-                    usize::from(app.sessions.settings.sftp_transfers.per_tab_transfers);
+                let policy = app
+                    .sessions
+                    .settings
+                    .sftp_transfers
+                    .policy(profile.ssh().and_then(|ssh| ssh.sftp_transfer_policy));
                 ax_ssh::sftp::configure_global_upload_limit(usize::from(
                     app.sessions.settings.sftp_transfers.global_uploads,
                 ));
-                SshSessionHandle::spawn_sftp(
-                    runtime,
-                    tab_id,
-                    profile.clone(),
-                    secret,
-                    per_tab_transfers,
-                )
+                SshSessionHandle::spawn_sftp(runtime, tab_id, profile.clone(), secret, policy)
             }
         };
         let terminal = app

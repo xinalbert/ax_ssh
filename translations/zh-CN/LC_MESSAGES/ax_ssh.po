@@ -151,6 +151,12 @@ msgstr "后退"
 msgid "Background"
 msgstr "背景"
 
+msgid "Bandwidth limit (MiB/s)"
+msgstr "带宽上限（MiB/s）"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "带宽上限（MiB/s；0 不限速）"
+
 msgid "Baud rate"
 msgstr "波特率"
 
@@ -595,6 +601,9 @@ msgstr "正在加载"
 msgid "Loading..."
 msgstr "正在加载..."
 
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "SFTP 本地文件打开快照上限（MiB）"
+
 msgid "Local Shell"
 msgstr "本地 Shell"
 
@@ -606,6 +615,12 @@ msgstr "本地 X server 提供程序"
 
 msgid "Local default directory"
 msgstr "本地默认目录"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "本地文件打开快照（MiB）"
 
 msgid "Local files"
 msgstr "本地文件"
@@ -628,8 +643,17 @@ msgstr "在会话侧栏中遮盖用户名和 IPv4 地址的中间字段"
 msgid "Maximize Window"
 msgstr "最大化窗口"
 
+msgid "Maximum SFTP file size in GiB"
+msgstr "SFTP 单文件大小上限（GiB）"
+
+msgid "Maximum file size (GiB)"
+msgstr "单文件大小上限（GiB）"
+
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "单个上传或下载文件的大小上限；0 表示不限大小，默认 20 GiB"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "所有 SFTP 标签页共享的同时上传数"
@@ -762,6 +786,9 @@ msgstr "可选；仅在连接或保存时输入"
 
 msgid "Overlay"
 msgstr "遮罩"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "为此服务器覆盖全局 SFTP 设置；0 GiB 表示不限大小。"
 
 msgid "Overwrite"
 msgstr "覆盖"
@@ -958,8 +985,14 @@ msgstr "运行日志"
 msgid "SEMANTIC HIGHLIGHTING"
 msgstr "语义高亮"
 
+msgid "SFTP"
+msgstr "SFTP"
+
 msgid "SFTP TRANSFERS"
 msgstr "SFTP 传输"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "SFTP 带宽上限（MiB/秒）"
 
 msgid "SFTP directories"
 msgstr "SFTP 目录"
@@ -972,6 +1005,9 @@ msgstr "SFTP 本地默认目录"
 
 msgid "SFTP remote default directory"
 msgstr "SFTP 远端默认目录"
+
+msgid "SFTP transfer limits"
+msgstr "SFTP 传输限制"
 
 msgid "SHA-256 fingerprint"
 msgstr "SHA-256 指纹"
@@ -1102,6 +1138,15 @@ msgstr "串口停止位"
 msgid "Serial transport"
 msgstr "串口传输"
 
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "服务器 SFTP 带宽上限（MiB/秒）"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "服务器 SFTP 单文件大小上限（GiB）"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "服务器 SFTP 同时传输数"
+
 msgid "Session group"
 msgstr "会话组"
 
@@ -1126,6 +1171,9 @@ msgstr "设置"
 msgid "Settings..."
 msgstr "设置..."
 
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "每个 SFTP 标签页的上传与下载共享；0 表示不限速"
+
 msgid "Shortcuts"
 msgstr "快捷键"
 
@@ -1137,6 +1185,9 @@ msgstr "在文件夹中显示"
 
 msgid "Simplified Chinese"
 msgstr "Simplified Chinese"
+
+msgid "Simultaneous transfers"
+msgstr "同时传输数"
 
 msgid "Size"
 msgstr "大小"
@@ -1221,6 +1272,9 @@ msgstr "终端"
 
 msgid "TERMINAL DEFAULTS"
 msgstr "终端默认设置"
+
+msgid "TRANSFER FILTERS"
+msgstr "传输过滤规则"
 
 msgid "TYPOGRAPHY"
 msgstr "字体"
@@ -1347,6 +1401,12 @@ msgstr "上传选中的本地文件"
 
 msgid "Use platform default filters"
 msgstr "使用平台默认过滤规则"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "使用服务器专属 SFTP 传输限制"
+
+msgid "Use server-specific limits"
+msgstr "使用服务器专属限制"
 
 msgid "Use the bright ANSI palette for bold text"
 msgstr "为粗体文字使用明亮 ANSI 调色板"

@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 54] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 57] = [
     (
         "General",
         "Language",
@@ -23,29 +23,44 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 54] = [
         "10-300 columns, 3-100 rows",
     ),
     (
-        "General",
+        "SFTP",
         "Filter system files",
         "Skip matching names during SFTP uploads and downloads",
     ),
     (
-        "General",
+        "SFTP",
         "Custom filename patterns",
         "One pattern per line; * matches any characters",
     ),
     (
-        "General",
+        "SFTP",
         "Transfers per SFTP tab",
         "Maximum simultaneous uploads and downloads in one SFTP tab",
     ),
     (
-        "General",
+        "SFTP",
         "Global simultaneous uploads",
         "Maximum uploads shared by all SFTP tabs",
     ),
     (
-        "General",
+        "SFTP",
         "Platform defaults",
         "Restore the default filters for this platform",
+    ),
+    (
+        "SFTP",
+        "Maximum file size (GiB)",
+        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
+    ),
+    (
+        "SFTP",
+        "Local file open snapshot (MiB)",
+        "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
+    ),
+    (
+        "SFTP",
+        "Bandwidth limit (MiB/s)",
+        "Shared by uploads and downloads in each SFTP tab; 0 means unlimited",
     ),
     ("Appearance", "Font family", "Application interface font"),
     (
@@ -309,7 +324,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 54] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 57] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -363,6 +378,24 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 54] = [
         "Restore the default filters for this platform",
         "平台默认值",
         "恢复此平台的默认过滤规则",
+    ),
+    (
+        "Maximum file size (GiB)",
+        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
+        "单文件大小上限（GiB）",
+        "单个上传或下载文件的大小上限；0 表示不限大小，默认 20 GiB",
+    ),
+    (
+        "Local file open snapshot (MiB)",
+        "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
+        "本地文件打开快照（MiB）",
+        "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间",
+    ),
+    (
+        "Bandwidth limit (MiB/s)",
+        "Shared by uploads and downloads in each SFTP tab; 0 means unlimited",
+        "带宽上限（MiB/s）",
+        "每个 SFTP 标签页的上传与下载共享；0 表示不限速",
     ),
     (
         "Font family",
@@ -773,6 +806,9 @@ pub(super) fn wire_settings(
               sftp_filter_custom_patterns,
               sftp_per_tab_transfers,
               sftp_global_uploads,
+              sftp_max_file_gib,
+              sftp_rate_limit_mib_per_second,
+              sftp_local_open_max_file_mib,
               settings_tab_id,
               close_after_save| {
             let is_preview = !close_after_save && settings_tab_id.is_empty();
@@ -873,6 +909,9 @@ pub(super) fn wire_settings(
                 ui_language: ui_language.as_setting(),
                 sftp_per_tab_transfers,
                 sftp_global_uploads,
+                sftp_max_file_gib,
+                sftp_rate_limit_mib_per_second,
+                sftp_local_open_max_file_mib,
             });
             let mut settings = settings;
             settings.sftp_transfer_filters = SftpTransferFilterSettings::normalized(
@@ -1396,6 +1435,10 @@ mod tests {
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "Blink terminal cursor");
 
+        let sftp_matches = settings_search_results("bandwidth limit", "english");
+        assert_eq!(sftp_matches.len(), 1);
+        assert_eq!(sftp_matches[0].section, "SFTP");
+
         for (query, title) in [
             ("select all", "Select All"),
             ("previous tab", "Previous Tab"),
@@ -1451,6 +1494,11 @@ mod tests {
         assert_eq!(blink_matches.len(), 1);
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "终端光标闪烁");
+
+        let sftp_matches = settings_search_results("单文件大小上限", "simplified-chinese");
+        assert!(sftp_matches.iter().any(|entry| {
+            entry.section == "SFTP" && entry.title == "单文件大小上限（GiB）"
+        }));
 
         for (query, title) in [
             ("全选", "全选"),

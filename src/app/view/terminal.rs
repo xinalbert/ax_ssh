@@ -174,6 +174,10 @@ pub(in crate::app) fn apply_active_snapshot(
             ui.set_editor_private_key_path(editor.private_key_path.into());
             ui.set_editor_sftp_remote_path(editor.sftp_remote_path.into());
             ui.set_editor_sftp_local_path(editor.sftp_local_path.into());
+            ui.set_editor_sftp_override_limits(editor.sftp_override_limits);
+            ui.set_editor_sftp_per_tab_transfers(editor.sftp_per_tab_transfers);
+            ui.set_editor_sftp_max_file_gib(editor.sftp_max_file_gib);
+            ui.set_editor_sftp_rate_limit_mib_per_second(editor.sftp_rate_limit_mib_per_second);
             ui.set_editor_x11_forwarding_mode(editor.x11_forwarding_mode.into());
             ui.set_editor_serial_port(editor.serial_port.into());
             ui.set_editor_serial_baud_rate(editor.serial_baud_rate.into());

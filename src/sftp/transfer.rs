@@ -22,7 +22,7 @@ use russh_sftp::client::{Config, RawSftpSession};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, Packet, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Mutex as AsyncMutex, Notify, mpsc};
 use tokio::task::{JoinError, JoinHandle};
 use tokio::time::{Duration, Instant, timeout, timeout_at};
 use tracing::{debug, warn};
@@ -38,14 +38,14 @@ pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
 const WRITER_QUEUE_CAPACITY: usize = 2;
 const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
-const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_CACHE_OPEN_BYTES: u64 = 512 * 1024 * 1024;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_FILES: usize = 512;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_DIRECTORIES: usize = 256;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_DEPTH: usize = 16;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES: usize = 512 * 1024;
-pub(crate) const MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_RECURSIVE_DOWNLOAD_ENTRIES: usize = 4_096;
-const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITER_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const CACHE_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -57,6 +57,38 @@ const MAX_CACHE_FILES: usize = 128;
 
 static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static GLOBAL_UPLOAD_LIMITER: OnceLock<Arc<UploadLimiter>> = OnceLock::new();
+
+/// Shared by all transfers in one SFTP connection. Zero rate is represented by None.
+pub(crate) struct TransferRateLimiter {
+    bytes_per_second: Option<u64>,
+    next_slot: AsyncMutex<Instant>,
+}
+
+impl TransferRateLimiter {
+    pub(crate) fn new(bytes_per_second: Option<u64>) -> Self {
+        Self {
+            bytes_per_second,
+            next_slot: AsyncMutex::new(Instant::now()),
+        }
+    }
+
+    async fn reserve(&self, bytes: u64, cancellation: &TransferCancellation) -> Result<()> {
+        let Some(rate) = self.bytes_per_second else {
+            return Ok(());
+        };
+        let delay = Duration::from_secs_f64(bytes as f64 / rate as f64);
+        let ready_at = {
+            let mut next_slot = self.next_slot.lock().await;
+            let ready_at = (*next_slot).max(Instant::now());
+            *next_slot = ready_at + delay;
+            ready_at
+        };
+        tokio::select! {
+            _ = cancellation.cancelled() => Err(cancelled_error()),
+            _ = tokio::time::sleep_until(ready_at) => Ok(()),
+        }
+    }
+}
 
 const POSIX_RENAME_EXTENSION: &str = "posix-rename@openssh.com";
 const MAX_KEEP_BOTH_CANDIDATES: usize = 100;
@@ -182,12 +214,6 @@ impl SftpUploadRequest {
             {
                 anyhow::bail!("remote upload directory is invalid");
             }
-        }
-        if total_bytes > super::MAX_UPLOAD_BYTES {
-            anyhow::bail!(
-                "upload content exceeds the {}-byte limit",
-                super::MAX_UPLOAD_BYTES
-            );
         }
         let name = remote_path
             .rsplit('/')
@@ -342,6 +368,7 @@ pub(crate) struct SftpDownloadRoot {
     local_directory: PathBuf,
     name: String,
     filter_patterns: Vec<String>,
+    max_file_bytes: u64,
 }
 
 impl SftpDownloadRoot {
@@ -350,6 +377,7 @@ impl SftpDownloadRoot {
         remote_path: String,
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
+        max_file_bytes: u64,
     ) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         if local_directory.as_os_str().is_empty() {
@@ -361,6 +389,7 @@ impl SftpDownloadRoot {
             local_directory,
             name,
             filter_patterns,
+            max_file_bytes,
         })
     }
 
@@ -400,12 +429,13 @@ impl SftpUploadHandle {
         request: SftpUploadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
         global_slot: UploadPermit,
+        rate_limiter: Arc<TransferRateLimiter>,
     ) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
-        let cancellation = TransferCancellation::new();
+        let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task = runtime.spawn(run_upload(
             stream,
             request,
@@ -473,12 +503,13 @@ impl SftpDownloadHandle {
         stream: S,
         request: SftpDownloadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
+        rate_limiter: Arc<TransferRateLimiter>,
     ) -> Self
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
-        let cancellation = TransferCancellation::new();
+        let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task_cancellation = cancellation.clone();
         let task = runtime.spawn(run_download(stream, request, task_cancellation, event_tx));
         Self {
@@ -557,15 +588,31 @@ pub async fn cleanup_stale_sftp_open_cache() -> Result<usize> {
 /// before passing ownership here. Copying from the handle, rather than
 /// reopening its path, fixes the file identity across the validation/open
 /// boundary and prevents a later path replacement from changing the target.
-pub fn snapshot_local_file_for_open(mut source: LocalFile, name: &str) -> Result<PathBuf> {
-    snapshot_local_file_for_open_at(&mut source, name, &cache_namespace()?)
+pub fn snapshot_local_file_for_open(
+    mut source: LocalFile,
+    name: &str,
+    max_file_bytes: u64,
+    cancellation: &AtomicBool,
+) -> Result<PathBuf> {
+    snapshot_local_file_for_open_at(
+        &mut source,
+        name,
+        &cache_namespace()?,
+        max_file_bytes,
+        cancellation,
+    )
 }
 
 fn snapshot_local_file_for_open_at(
     source: &mut LocalFile,
     name: &str,
     cache_dir: &Path,
+    max_file_bytes: u64,
+    cancellation: &AtomicBool,
 ) -> Result<PathBuf> {
+    if max_file_bytes == 0 {
+        anyhow::bail!("local file open cache limit must be positive");
+    }
     let metadata = source
         .metadata()
         .context("cannot inspect validated local file")?;
@@ -573,9 +620,9 @@ fn snapshot_local_file_for_open_at(
         anyhow::bail!("validated local file is no longer a regular file");
     }
     let expected_bytes = metadata.len();
-    if expected_bytes > MAX_DOWNLOAD_BYTES {
+    if expected_bytes > max_file_bytes {
         anyhow::bail!(
-            "local file is {expected_bytes} bytes, exceeding the {MAX_DOWNLOAD_BYTES}-byte open limit"
+            "local file is {expected_bytes} bytes, exceeding the {max_file_bytes}-byte open limit"
         );
     }
 
@@ -584,20 +631,43 @@ fn snapshot_local_file_for_open_at(
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| anyhow::anyhow!("SFTP cache quota lock is poisoned"))?;
-    enforce_cache_quota(cache_dir, expected_bytes, SystemTime::now())?;
+    let cache_quota_bytes = MAX_CACHE_BYTES.max(max_file_bytes);
+    enforce_cache_quota(
+        cache_dir,
+        expected_bytes,
+        cache_quota_bytes,
+        SystemTime::now(),
+    )?;
     let mut pending = PendingCacheFile::create(
         CacheTarget::new(cache_dir, Uuid::new_v4(), name),
         expected_bytes,
     )?;
-    let copied = io::copy(
-        &mut Read::by_ref(source).take(expected_bytes.saturating_add(1)),
-        pending.file_mut()?,
-    )
-    .context("cannot copy validated local file into the private open cache")?;
+    let mut reader = Read::by_ref(source).take(expected_bytes.saturating_add(1));
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut copied = 0_u64;
+    loop {
+        if cancellation.load(Ordering::Acquire) {
+            anyhow::bail!("local file open snapshot was cancelled");
+        }
+        let count = reader
+            .read(&mut buffer)
+            .context("cannot read validated local file into the private open cache")?;
+        if count == 0 {
+            break;
+        }
+        pending
+            .file_mut()?
+            .write_all(&buffer[..count])
+            .context("cannot write validated local file into the private open cache")?;
+        copied = copied.saturating_add(count as u64);
+    }
     if copied != expected_bytes {
         anyhow::bail!(
             "local file changed while creating its open snapshot: expected {expected_bytes} bytes, copied {copied}"
         );
+    }
+    if cancellation.load(Ordering::Acquire) {
+        anyhow::bail!("local file open snapshot was cancelled");
     }
     pending.finish()
 }
@@ -936,6 +1006,7 @@ where
             )
             .await??;
             let chunk_bytes = chunk.len() as u64;
+            cancellation.limit(chunk_bytes).await?;
             await_step(
                 cancellation,
                 deadline,
@@ -1206,6 +1277,9 @@ async fn download_initialized_local(
     deadline: Instant,
 ) -> Result<(PathBuf, u64)> {
     let initial = lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
+    if initial.size != request.total_bytes {
+        anyhow::bail!("remote file size changed since the download was queued");
+    }
     let handle = await_step(
         cancellation,
         deadline,
@@ -1372,6 +1446,11 @@ async fn download_initialized(
     deadline: Instant,
 ) -> Result<(PathBuf, u64)> {
     let initial = lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
+    if initial.size > MAX_CACHE_OPEN_BYTES {
+        anyhow::bail!(
+            "remote file exceeds the private-cache open limit of {MAX_CACHE_OPEN_BYTES} bytes"
+        );
+    }
     let handle = await_step(
         cancellation,
         deadline,
@@ -1533,6 +1612,7 @@ async fn stream_remote_file(
         }
         let remaining = expected.size - downloaded_bytes;
         let requested = remaining.min(u64::from(DOWNLOAD_CHUNK_BYTES)) as u32;
+        cancellation.limit(u64::from(requested)).await?;
         let response = await_step(
             cancellation,
             deadline,
@@ -1714,17 +1794,28 @@ struct TransferCancellationInner {
     cancelled: AtomicBool,
     paused: AtomicBool,
     notify: Notify,
+    rate_limiter: Arc<TransferRateLimiter>,
 }
 
 impl TransferCancellation {
+    #[cfg(test)]
     fn new() -> Self {
+        Self::with_limiter(Arc::new(TransferRateLimiter::new(None)))
+    }
+
+    fn with_limiter(rate_limiter: Arc<TransferRateLimiter>) -> Self {
         Self {
             inner: Arc::new(TransferCancellationInner {
                 cancelled: AtomicBool::new(false),
                 paused: AtomicBool::new(false),
                 notify: Notify::new(),
+                rate_limiter,
             }),
         }
+    }
+
+    async fn limit(&self, bytes: u64) -> Result<()> {
+        self.inner.rate_limiter.reserve(bytes, self).await
     }
 
     fn cancel(&self) {
@@ -1824,11 +1915,6 @@ fn validate_regular_metadata(attrs: &FileAttributes) -> Result<RemoteFileMetadat
     let size = attrs
         .size
         .context("remote regular file did not report its size")?;
-    if size > MAX_DOWNLOAD_BYTES {
-        anyhow::bail!(
-            "remote file is {size} bytes, exceeding the {MAX_DOWNLOAD_BYTES}-byte download limit"
-        );
-    }
     Ok(RemoteFileMetadata {
         size,
         modified: attrs.mtime,
@@ -1881,7 +1967,7 @@ where
         .context("SFTP recursive-download handshake timed out")?
         .context("SFTP recursive-download handshake failed")?;
     let result = match timeout(
-        DOWNLOAD_TIMEOUT,
+        DISCOVERY_TIMEOUT,
         discover_initialized_download_requests(&session, &root),
     )
     .await
@@ -1953,6 +2039,9 @@ async fn discover_initialized_download_requests(
             anyhow::bail!("remote path is excluded by SFTP transfer filters");
         }
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
+        if total_bytes > root.max_file_bytes {
+            anyhow::bail!("remote file exceeds the configured SFTP file size limit");
+        }
         return Ok(vec![SftpDownloadRequest::for_local_download(
             root.transfer_id,
             root.remote_path.clone(),
@@ -1974,7 +2063,6 @@ async fn discover_initialized_download_requests(
     let mut directories = 1_usize;
     let mut scanned_entries = 0_usize;
     let mut total_text_bytes = root.remote_path.len().saturating_add(root.name.len());
-    let mut total_bytes = 0_u64;
     while let Some((remote_directory, local_components, depth)) = pending.pop_front() {
         let handle = timeout(REQUEST_TIMEOUT, session.opendir(remote_directory.clone()))
             .await
@@ -1992,7 +2080,6 @@ async fn discover_initialized_download_requests(
             &mut scanned_entries,
             &mut directories,
             &mut total_text_bytes,
-            &mut total_bytes,
             root,
         )
         .await;
@@ -2017,7 +2104,6 @@ async fn discover_directory_entries(
     scanned_entries: &mut usize,
     directories: &mut usize,
     total_text_bytes: &mut usize,
-    total_bytes: &mut u64,
     root: &SftpDownloadRoot,
 ) -> Result<()> {
     loop {
@@ -2069,11 +2155,8 @@ async fn discover_directory_entries(
                             "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_FILES}-file limit"
                         );
                     }
-                    *total_bytes = total_bytes.saturating_add(size);
-                    if *total_bytes > MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES {
-                        anyhow::bail!(
-                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_TOTAL_BYTES}-byte limit"
-                        );
+                    if size > root.max_file_bytes {
+                        anyhow::bail!("remote file exceeds the configured SFTP file size limit");
                     }
                     requests.push(SftpDownloadRequest::for_local_download(
                         if requests.is_empty() {
@@ -2143,9 +2226,6 @@ fn bounded_discovery_entry(
         return None;
     }
     let size = file.attrs.size?;
-    if size > MAX_DOWNLOAD_BYTES {
-        return None;
-    }
     Some((name, path, DiscoveryEntryKind::RegularFile, size))
 }
 
@@ -2165,6 +2245,34 @@ mod tests {
 
     use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status, Version};
 
+    #[tokio::test(start_paused = true)]
+    async fn connection_rate_limiter_spaces_upload_and_download_chunks() {
+        let limiter = Arc::new(TransferRateLimiter::new(Some(1024 * 1024)));
+        let cancellation = TransferCancellation::new();
+        limiter
+            .reserve(64 * 1024, &cancellation)
+            .await
+            .expect("first chunk");
+        let limiter_for_next = limiter.clone();
+        let cancellation_for_next = cancellation.clone();
+        let next = tokio::spawn(async move {
+            limiter_for_next
+                .reserve(64 * 1024, &cancellation_for_next)
+                .await
+        });
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(50)).await;
+        assert!(
+            !next.is_finished(),
+            "shared limiter should delay the next chunk"
+        );
+        tokio::time::advance(Duration::from_millis(20)).await;
+        next.await.expect("rate task").expect("second chunk");
+
+        let cancelled = TransferCancellation::new();
+        cancelled.cancel();
+        assert!(limiter.reserve(64 * 1024, &cancelled).await.is_err());
+    }
     #[test]
     fn transfer_filter_patterns_match_exact_names_and_wildcards() {
         let patterns = vec![".DS_Store".to_owned(), "._*".to_owned(), "*.tmp".to_owned()];
@@ -2722,15 +2830,15 @@ mod tests {
     }
 
     #[test]
-    fn metadata_rejects_links_directories_unknown_types_and_oversized_files() {
+    fn metadata_rejects_links_directories_and_unknown_types_without_fixed_size_cap() {
         let mut regular = FileAttributes::empty();
         regular.set_regular(true);
-        regular.size = Some(MAX_DOWNLOAD_BYTES);
+        regular.size = Some(2 * 1024 * 1024 * 1024 * 1024);
         assert_eq!(
             validate_regular_metadata(&regular)
-                .expect("bounded regular file should pass")
+                .expect("regular file above 1 TiB should pass")
                 .size,
-            MAX_DOWNLOAD_BYTES
+            2 * 1024 * 1024 * 1024 * 1024
         );
 
         let mut symlink = FileAttributes::empty();
@@ -2747,7 +2855,7 @@ mod tests {
         unknown.size = Some(1);
         assert!(validate_regular_metadata(&unknown).is_err());
 
-        regular.size = Some(MAX_DOWNLOAD_BYTES + 1);
+        regular.size = None;
         assert!(validate_regular_metadata(&regular).is_err());
     }
 
@@ -2761,6 +2869,14 @@ mod tests {
             bounded_discovery_entry("/srv", regular),
             Some((name, path, DiscoveryEntryKind::RegularFile, 7))
                 if name == "report.txt" && path == "/srv/report.txt"
+        ));
+
+        let mut large = FileAttributes::empty();
+        large.set_regular(true);
+        large.size = Some(2 * 1024 * 1024 * 1024 * 1024);
+        assert!(matches!(
+            bounded_discovery_entry("/srv", File::new("large.bin", large)),
+            Some((_, _, DiscoveryEntryKind::RegularFile, 2_199_023_255_552))
         ));
 
         let mut directory = FileAttributes::empty();
@@ -3152,7 +3268,7 @@ mod tests {
         file.set_len(MAX_CACHE_BYTES)
             .expect("completed fixture should reserve quota");
 
-        enforce_cache_quota(test_root.path(), 1, SystemTime::now())
+        enforce_cache_quota(test_root.path(), 1, MAX_CACHE_BYTES, SystemTime::now())
             .expect("old completed file should be evicted");
 
         assert!(!target.final_path.exists());
@@ -3167,7 +3283,7 @@ mod tests {
         file.set_len(MAX_CACHE_BYTES)
             .expect("partial fixture should reserve quota");
 
-        let error = enforce_cache_quota(test_root.path(), 1, SystemTime::now())
+        let error = enforce_cache_quota(test_root.path(), 1, MAX_CACHE_BYTES, SystemTime::now())
             .expect_err("active partial file should block an over-quota reservation");
 
         assert!(error.to_string().contains("quota"));
@@ -3175,14 +3291,54 @@ mod tests {
     }
 
     #[test]
+    fn larger_local_open_limit_can_reserve_above_the_default_cache_quota() {
+        let test_root = TestCacheDir::new();
+        ensure_cache_namespace(test_root.path()).expect("private namespace should be created");
+        let incoming = MAX_CACHE_BYTES + 1;
+        assert!(
+            enforce_cache_quota(
+                test_root.path(),
+                incoming,
+                MAX_CACHE_BYTES,
+                SystemTime::now()
+            )
+            .is_err()
+        );
+        enforce_cache_quota(test_root.path(), incoming, incoming, SystemTime::now())
+            .expect("configured local open limit should raise the cache quota");
+    }
+
+    #[test]
+    fn unlimited_local_open_cache_does_not_evict_for_byte_quota() {
+        let test_root = TestCacheDir::new();
+        ensure_cache_namespace(test_root.path()).expect("private namespace should be created");
+        let target = CacheTarget::new(test_root.path(), Uuid::new_v4(), "old.bin");
+        let file = LocalFile::create(&target.final_path).expect("completed fixture should create");
+        file.set_len(MAX_CACHE_BYTES)
+            .expect("completed fixture should reserve the default quota");
+
+        enforce_cache_quota(test_root.path(), 1, u64::MAX, SystemTime::now())
+            .expect("unlimited local-open quota should permit another byte");
+
+        assert!(target.final_path.exists());
+    }
+
+    #[test]
     fn local_open_snapshot_copies_from_the_validated_handle() {
         let test_root = TestCacheDir::new();
+        let cancellation = AtomicBool::new(false);
         let source_path = test_root.path().with_extension("source");
         fs::write(&source_path, b"validated contents").expect("source fixture should write");
         let mut source = LocalFile::open(&source_path).expect("source fixture should open");
 
-        let snapshot = snapshot_local_file_for_open_at(&mut source, "notes.txt", test_root.path())
-            .expect("validated handle should publish a private snapshot");
+        let snapshot = snapshot_local_file_for_open_at(
+            &mut source,
+            "notes.txt",
+            test_root.path(),
+            MAX_CACHE_OPEN_BYTES,
+            &cancellation,
+        )
+        .expect("validated handle should publish a private snapshot");
 
         assert_eq!(
             fs::read(&snapshot).expect("snapshot should remain readable"),
@@ -3192,6 +3348,74 @@ mod tests {
             snapshot.parent(),
             Some(test_root.path()),
             "snapshot must stay directly inside the private namespace"
+        );
+        fs::remove_file(source_path).expect("source fixture should be removed");
+    }
+
+    #[test]
+    fn local_open_snapshot_rejects_files_over_its_configured_limit() {
+        let test_root = TestCacheDir::new();
+        let cancellation = AtomicBool::new(false);
+        ensure_cache_namespace(test_root.path()).expect("private namespace should be created");
+        let source_path = test_root.path().with_extension("source");
+        fs::write(&source_path, b"12345").expect("source fixture should write");
+        let mut source = LocalFile::open(&source_path).expect("source fixture should open");
+
+        assert!(
+            snapshot_local_file_for_open_at(
+                &mut source,
+                "notes.txt",
+                test_root.path(),
+                4,
+                &cancellation,
+            )
+            .is_err()
+        );
+        assert!(
+            snapshot_local_file_for_open_at(
+                &mut source,
+                "notes.txt",
+                test_root.path(),
+                0,
+                &cancellation,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_dir(test_root.path())
+                .expect("cache directory should read")
+                .count(),
+            0
+        );
+        let unlimited_snapshot = snapshot_local_file_for_open_at(
+            &mut source,
+            "notes.txt",
+            test_root.path(),
+            u64::MAX,
+            &cancellation,
+        )
+        .expect("unlimited local-open limit should allow the validated file");
+        assert_eq!(
+            fs::read(unlimited_snapshot).expect("unlimited snapshot should be readable"),
+            b"12345"
+        );
+        cancellation.store(true, Ordering::Release);
+        assert!(
+            snapshot_local_file_for_open_at(
+                &mut source,
+                "notes.txt",
+                test_root.path(),
+                u64::MAX,
+                &cancellation,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_dir(test_root.path())
+                .expect("cancelled cache directory should read")
+                .count(),
+            1,
+            "cancelled copy should remove its partial file"
         );
         fs::remove_file(source_path).expect("source fixture should be removed");
     }

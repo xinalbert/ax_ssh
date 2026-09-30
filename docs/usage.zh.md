@@ -123,16 +123,20 @@ Tab 不会丢失布局，应用重启后恢复默认。本阶段不支持单独�
 双击本地栏中的 regular file 会使用平台默认程序打开当前快照条目的只读副本。目录仍用于导航，符号
 链接不会打开。AxSSH 会在 UI 线程外核对已打开文件的平台 identity，从该精确 handle 复制到私有有界
 缓存，完整发布后再请求操作系统打开；验证后替换原路径不能重定向这次打开请求。
+可在 **Settings > SFTP** 设置这份本地打开快照的单文件上限（默认 512 MiB，有限值范围 1 MiB 至 20 GiB）。
+设为 0 会同时取消单文件上限和私有缓存总字节配额，可能占用大量本地磁盘空间。有限值下私有缓存配额
+会随单文件上限提高；打开大文件仍需足够的本地磁盘空间，也需要时间完成复制。
 
 右击本地文件行可打开文件或目录、在本地文件夹中显示非链接条目，或上传当前选中的文件与目录。本地和远端
 列表的行勾选框及表头勾选框都会先更新活动 SFTP Tab 的选中状态，再执行菜单动作。
 
 右击远端文件或目录后选择 **Download**。右击未选中的行会先把它设为唯一选中项；右击已选中的行会保留
 当前多选集合，因此菜单动作作用于这组选择。每个文件会写入当前 **Local files** 目录；下载目录时会
-递归保留所选目录树。远端符号链接和非 regular 条目会被跳过或拒绝，绝不覆盖已有本地文件；单个文件最多
-512 MiB。递归发现限制为最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层、512 KiB 路径文本和 1 GiB 总大小。
+递归保留所选目录树。远端符号链接和非 regular 条目会被跳过或拒绝，绝不覆盖已有本地文件；
+单文件大小由 SFTP 设置约束（默认 20 GiB）。递归发现限制为最多扫描 4,096 个条目，并最多接受
+512 个文件、256 个目录、16 层和 512 KiB 路径文本；不再设置单独的批次总字节上限。
 
-SFTP 传输可以过滤系统生成的文件。在 **Settings > General** 中开启
+SFTP 传输可以过滤系统生成的文件。在 **Settings > SFTP** 中开启
 **Filter system files** 后，会使用当前平台的默认规则（macOS 包含 `.DS_Store`、
 `._*`、`.Spotlight-V100`、`.Trashes` 和 `.fseventsd`；Windows、Linux 使用各自常见的
 系统元数据名称）。自定义过滤规则每行填写一个文件名模式，`*` 匹配任意字符。同一规则
@@ -143,7 +147,7 @@ SFTP 传输可以过滤系统生成的文件。在 **Settings > General** 中开
 Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。可用勾选框选择活动行并批量暂停、
 继续或取消，操作位于 **Transferring** 页签栏右侧，不再单独占用一行。暂停/继续会由仍存活的 worker
 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
-仍运行期间可用。每个 SFTP Tab 默认最多同时运行两个传输，可在 **Settings > General** 的
+仍运行期间可用。每个 SFTP Tab 默认最多同时运行两个传输，可在 **Settings > SFTP** 的
 **Transfers per SFTP tab** 中设置为 1-16；**Global simultaneous uploads** 设置所有 SFTP Tab
 共享的上传上限，可设置为 1-32，默认值为 8。其余文件在队列中等待或按现有传输状态处理。取消会删除该任务的部分内容，包括刚发布但
 取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
@@ -163,7 +167,7 @@ Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。�
 重新打开 SFTP Tab 或 SFTP 断线重连后，会保留已加载的 Local files 列表和选择；需要读取应用外的变化时，可点击本地栏的 **Refresh**。
 
 远端文件行右键菜单支持删除选中条目（目录不递归）；**Download** 和 **Delete** 不再占用目录顶部工具栏。
-其余远端控件保留重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地上传按钮会上传全部选中项。拖动已选中的本地行会带上当前选择，拖动未选中行仅带上该行；本地文件和目录，以及从 Finder、Windows Explorer 或 Linux 文件管理器拖入的文件和目录，放到 Remote files 区会上传到当前远端目录。目录递归发现普通文件并保留相对路径，按需创建远端目录；符号链接和被过滤名称跳过。每批最多 512 个文件、256 个目录、16 层、扫描 4,096 项、512 KiB 路径文本、1 GiB 总大小，单文件最多 512 MiB；超限时整批拒绝。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。成功下载保留在该目录，不会自动打开。在 macOS 上，远端普通文件还可作为原生文件拖到 Finder；只有目标接受拖放后 AxSSH 才会下载。将同一次拖动返回发起它的 AxSSH SFTP 窗口时，文件会下载到开始拖动时可见的 Local files 目录。链接和被过滤条目仍采用应用内拖动；打开编辑器期间会按远端 size/mtime fingerprint 轮询；
+其余远端控件保留重命名单个条目、有界 UTF-8 在线编辑和 Save As；本地上传按钮会上传全部选中项。拖动已选中的本地行会带上当前选择，拖动未选中行仅带上该行；本地文件和目录，以及从 Finder、Windows Explorer 或 Linux 文件管理器拖入的文件和目录，放到 Remote files 区会上传到当前远端目录。目录递归发现普通文件并保留相对路径，按需创建远端目录；符号链接和被过滤名称跳过。每批最多 512 个文件、256 个目录、16 层、扫描 4,096 项和 512 KiB 路径文本；单文件由配置上限约束（默认 20 GiB），没有单独的批次总字节上限；超限时整批拒绝。将远端文件或目录拖到 Local files 区会下载到当前本地目录，并进入同一个 Transfers 队列。成功下载保留在该目录，不会自动打开。在 macOS 上，远端普通文件还可作为原生文件拖到 Finder；只有目标接受拖放后 AxSSH 才会下载。将同一次拖动返回发起它的 AxSSH SFTP 窗口时，文件会下载到开始拖动时可见的 Local files 目录。链接和被过滤条目仍采用应用内拖动；打开编辑器期间会按远端 size/mtime fingerprint 轮询；
 发现变化会禁用保存并提示冲突。自动上传需要勾选 **Auto upload**，默认关闭，且会经过 500ms 防抖与 fingerprint
 校验。跨进程恢复和更复杂的冲突合并仍未提供。
 
@@ -333,7 +337,7 @@ Windows/Linux 继续保持 Alt 作为终端 Meta 输入；本地键盘布局的 
 
 macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会跟随其配置快捷键；
 Windows 和 Linux 分别在 Edit
-和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、
+和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、SFTP、
 Workspace、Shortcuts 和 About 页面。Shortcuts 页面同时列出可配置快捷键和 Select All、Previous Tab、
 Next Tab 等固定的平台快捷键。详情区顶部的搜索框可跨所有页面查找分类名、设置标题和说明，
 选择结果会打开对应分类；每个分类的详情内容超过窗口时都可独立滚动。除 renderer 外，修改会立即作用于
@@ -348,7 +352,15 @@ issue tracker，中者打开本机滚动日志目录，后者只复制版本、�
 再即时同步到主窗口和独立窗口；保存失败时保持原选择。**Follow system** 在中文系统 locale 下
 使用简体中文，其它 locale 使用英文。AxSSH 会翻译应用自有的 Slint 界面；远端终端内容、用户提供的
 名称/路径、日志和运行时技术错误详情保持原文。
-SFTP 传输过滤规则也在此页面配置。
+SFTP 传输过滤规则在独立的 **Settings > SFTP** 页面配置。这里还可设置单文件上限
+（0 表示不施加客户端文件大小上限，有限上限为 1-1024 GiB，默认 20 GiB）、
+每个 SFTP 连接上传与下载共享的带宽上限
+（0-1024 MiB/s，0 为不限速）以及每 Tab 同时传输数。在 SSH 服务器编辑页勾选
+**Use server-specific limits** 后，该服务器的单文件大小、带宽和每 Tab 并发覆盖全局值；
+全局同时上传数始终由应用统一控制。策略在新建或重连该服务器的 SFTP worker 时生效，
+不会中断已在运行的传输。
+传输文件大小不限适用于常规流式上传与下载，包括把远端文件拖到 Finder。
+独立可配置的本地打开快照上限只影响从 SFTP 本地栏打开文件时的缓存复制，不限制这些传输。
 
 在 **Settings > Appearance** 中，Font family 只修改应用界面字体，不改变 Terminal 字符格度量；Renderer 可为
 下一次应用启动选择 **Automatic**、**GPU** 或 **Software**：Automatic 在 macOS 使用 GPU/Skia，在

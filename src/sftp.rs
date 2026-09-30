@@ -5,7 +5,7 @@ mod transfer;
 pub(crate) use transfer::{
     MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpDownloadHandle,
     SftpDownloadRequest, SftpDownloadRoot, SftpUploadHandle, SftpUploadRequest,
-    discover_download_requests,
+    TransferRateLimiter, discover_download_requests,
 };
 pub use transfer::{
     SftpTransferEvent, SftpUploadConflictChoice, cleanup_stale_sftp_open_cache,
@@ -37,7 +37,7 @@ const MAX_PAGE_ENTRIES: usize = 250;
 const MAX_DIRECTORY_TEXT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PACKET_BYTES: u32 = 256 * 1024;
 pub(crate) const MAX_EDIT_BYTES: u64 = 4 * 1024 * 1024;
-pub const MAX_UPLOAD_BYTES: u64 = 512 * 1024 * 1024;
+pub const MAX_UPLOAD_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SftpEntry {

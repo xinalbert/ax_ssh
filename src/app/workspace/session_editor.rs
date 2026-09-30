@@ -76,6 +76,10 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
               private_key_path,
               sftp_remote_path,
               sftp_local_path,
+              sftp_override_limits,
+              sftp_per_tab_transfers,
+              sftp_max_file_gib,
+              sftp_rate_limit_mib_per_second,
               password,
               remember_password,
               credential_storage,
@@ -123,7 +127,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                     return;
                 }
                 };
-            let (profile, credential_change, connection_password) =
+            let (mut profile, credential_change, connection_password) =
                 match profile_from_editor_with_password(
                 existing_profile.as_ref(),
                 name.as_str(),
@@ -155,6 +159,15 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                     return;
                 }
             };
+            if let Some(ssh) = profile.ssh_mut() {
+                ssh.sftp_transfer_policy = sftp_override_limits.then(|| {
+                    ax_ssh::config::SftpTransferPolicy::normalized(
+                        sftp_per_tab_transfers,
+                        sftp_max_file_gib,
+                        sftp_rate_limit_mib_per_second,
+                    )
+                });
+            }
             let profile_id = profile.id;
             let has_connection_password = connection_password.is_some();
             if let Err(error) = profile.validate() {

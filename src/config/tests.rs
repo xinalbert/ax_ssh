@@ -504,6 +504,9 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
         ui_language: "english",
         sftp_per_tab_transfers: 2,
         sftp_global_uploads: 8,
+        sftp_max_file_gib: 20,
+        sftp_rate_limit_mib_per_second: 0,
+        sftp_local_open_max_file_mib: 512,
     });
 
     assert_eq!(
@@ -1054,6 +1057,9 @@ fn app_settings_clamp_all_persisted_dimensions() {
         ui_language: "simplified-chinese",
         sftp_per_tab_transfers: 2,
         sftp_global_uploads: 8,
+        sftp_max_file_gib: 20,
+        sftp_rate_limit_mib_per_second: 0,
+        sftp_local_open_max_file_mib: 999_999,
     });
 
     assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
@@ -1110,13 +1116,114 @@ fn app_settings_clamp_all_persisted_dimensions() {
         MAX_COLLAPSED_GROUP_LABEL_CHARS
     );
     assert_eq!(settings.shortcuts.open_settings, "Ctrl+,");
+    assert_eq!(
+        settings.sftp_transfers.local_open_max_file_mib,
+        MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB
+    );
 }
 
 #[test]
 fn sftp_transfer_limits_are_clamped() {
-    let settings = SftpTransferSettings::normalized(-5, 999);
+    let settings = SftpTransferSettings::normalized(-5, 999, 20, 0, -1);
     assert_eq!(settings.per_tab_transfers, MIN_SFTP_PER_TAB_TRANSFERS);
     assert_eq!(settings.global_uploads, MAX_SFTP_GLOBAL_UPLOADS);
+    assert_eq!(settings.max_file_gib, DEFAULT_SFTP_MAX_FILE_GIB);
+    assert_eq!(settings.policy(None).rate_bytes_per_second(), None);
+    assert_eq!(settings.local_open_max_file_mib, 1);
+
+    let unlimited = SftpTransferSettings::normalized(2, 8, 0, 0, 2048);
+    assert_eq!(unlimited.max_file_gib, 0);
+    assert_eq!(unlimited.policy(None).max_file_bytes(), u64::MAX);
+    let persisted_settings = AppSettings {
+        sftp_transfers: unlimited,
+        ..AppSettings::default()
+    };
+    let persisted = serde_json::to_string(&persisted_settings).expect("serialize SFTP settings");
+    let mut restored: AppSettings =
+        serde_json::from_str(&persisted).expect("deserialize SFTP settings");
+    restored.normalize_in_place();
+    assert_eq!(restored.sftp_transfers.max_file_gib, 0);
+    assert_eq!(restored.sftp_transfers.local_open_max_file_mib, 2048);
+    assert_eq!(
+        restored.sftp_transfers.local_open_max_file_bytes(),
+        2048 * 1024 * 1024
+    );
+    let no_cache_byte_limit = SftpTransferSettings::normalized(2, 8, 20, 0, 0);
+    assert_eq!(no_cache_byte_limit.local_open_max_file_mib, 0);
+    assert_eq!(no_cache_byte_limit.local_open_max_file_bytes(), u64::MAX);
+    let persisted_unlimited = AppSettings {
+        sftp_transfers: no_cache_byte_limit,
+        ..AppSettings::default()
+    };
+    let serialized = serde_json::to_string(&persisted_unlimited).expect("serialize 0 cache limit");
+    let mut restored_unlimited: AppSettings =
+        serde_json::from_str(&serialized).expect("deserialize 0 cache limit");
+    restored_unlimited.normalize_in_place();
+    assert_eq!(restored_unlimited.sftp_transfers.local_open_max_file_mib, 0);
+    assert_eq!(
+        restored_unlimited
+            .sftp_transfers
+            .local_open_max_file_bytes(),
+        u64::MAX
+    );
+    assert_eq!(
+        SftpTransferSettings::normalized(2, 8, -1, 0, 512).max_file_gib,
+        1
+    );
+    assert_eq!(
+        SftpTransferPolicy::normalized(2, 1025, 0).max_file_gib,
+        MAX_SFTP_MAX_FILE_GIB
+    );
+}
+
+#[test]
+fn sftp_transfer_defaults_and_server_override_round_trip() {
+    let legacy: AppSettings =
+        serde_json::from_str(r#"{"sftp_transfers":{"per_tab_transfers":3,"global_uploads":7}}"#)
+            .expect("legacy SFTP settings should deserialize");
+    assert_eq!(legacy.sftp_transfers.max_file_gib, 20);
+    assert_eq!(legacy.sftp_transfers.rate_limit_mib_per_second, 0);
+    assert_eq!(
+        legacy.sftp_transfers.local_open_max_file_mib,
+        DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB
+    );
+
+    let mut profile = SessionProfile::new("demo", "host.example", "alice");
+    let override_policy = SftpTransferPolicy::normalized(4, 30, 12);
+    ssh_mut(&mut profile).sftp_transfer_policy = Some(override_policy);
+    profile.validate().expect("valid SFTP override");
+    let persisted = serde_json::to_string(&profile).expect("serialize profile");
+    let restored: SessionProfile = serde_json::from_str(&persisted).expect("deserialize profile");
+    assert_eq!(ssh(&restored).sftp_transfer_policy, Some(override_policy));
+    assert_eq!(
+        legacy
+            .sftp_transfers
+            .policy(ssh(&restored).sftp_transfer_policy),
+        override_policy
+    );
+    assert_eq!(
+        legacy.sftp_transfers.policy(None).max_file_bytes(),
+        20 * 1024 * 1024 * 1024
+    );
+    assert_eq!(
+        override_policy.rate_bytes_per_second(),
+        Some(12 * 1024 * 1024)
+    );
+
+    let unlimited_policy = SftpTransferPolicy::normalized(4, 0, 12);
+    ssh_mut(&mut profile).sftp_transfer_policy = Some(unlimited_policy);
+    profile.validate().expect("unlimited SFTP override");
+    let persisted = serde_json::to_string(&profile).expect("serialize unlimited profile");
+    let restored: SessionProfile =
+        serde_json::from_str(&persisted).expect("deserialize unlimited profile");
+    assert_eq!(ssh(&restored).sftp_transfer_policy, Some(unlimited_policy));
+    assert_eq!(unlimited_policy.max_file_bytes(), u64::MAX);
+
+    ssh_mut(&mut profile).sftp_transfer_policy = Some(SftpTransferPolicy {
+        per_tab_transfers: 0,
+        ..override_policy
+    });
+    assert!(profile.validate().is_err());
 }
 
 #[test]

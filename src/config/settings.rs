@@ -4,20 +4,22 @@ use serde::{Deserialize, Serialize};
 use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
     DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
-    DEFAULT_SFTP_GLOBAL_UPLOADS, DEFAULT_SFTP_PER_TAB_TRANSFERS, DEFAULT_SIDEBAR_WIDTH,
-    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY,
-    DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS,
-    DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS, DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
-    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
-    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SFTP_GLOBAL_UPLOADS, MAX_SFTP_PER_TAB_TRANSFERS,
-    MAX_SHELL_NAME_CHARS, MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH,
-    MAX_TERMINAL_COLUMNS, MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT,
-    MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS, MAX_TERMINAL_SOFTWARE_BLOCK_ROWS,
-    MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT, MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES,
-    MIN_SFTP_GLOBAL_UPLOADS, MIN_SFTP_PER_TAB_TRANSFERS, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH,
-    MIN_TERMINAL_COLUMNS, MIN_TERMINAL_FONT_SIZE, MIN_TERMINAL_LINE_HEIGHT,
-    MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS, MIN_TERMINAL_SOFTWARE_BLOCK_ROWS,
-    MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL, TerminalColorScheme, ThemeSettings,
+    DEFAULT_SFTP_GLOBAL_UPLOADS, DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB, DEFAULT_SFTP_MAX_FILE_GIB,
+    DEFAULT_SFTP_PER_TAB_TRANSFERS, DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH,
+    DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE,
+    DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS,
+    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS,
+    MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES,
+    MAX_SFTP_GLOBAL_UPLOADS, MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB, MAX_SFTP_MAX_FILE_GIB,
+    MAX_SFTP_PER_TAB_TRANSFERS, MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND, MAX_SHELL_NAME_CHARS,
+    MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS,
+    MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS,
+    MAX_TERMINAL_SOFTWARE_BLOCK_ROWS, MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+    MIN_COLLAPSED_GROUP_LABEL_CHARS, MIN_SCROLLBACK_LINES, MIN_SFTP_GLOBAL_UPLOADS,
+    MIN_SFTP_PER_TAB_TRANSFERS, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS,
+    MIN_TERMINAL_FONT_SIZE, MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS,
+    MIN_TERMINAL_SOFTWARE_BLOCK_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL,
+    TerminalColorScheme, ThemeSettings,
 };
 
 /// The language-selection policy for AxSSH's fully translated UI locales.
@@ -958,6 +960,9 @@ pub struct AppSettingsInput<'a> {
     pub ui_language: &'a str,
     pub sftp_per_tab_transfers: i32,
     pub sftp_global_uploads: i32,
+    pub sftp_max_file_gib: i32,
+    pub sftp_rate_limit_mib_per_second: i32,
+    pub sftp_local_open_max_file_mib: i32,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -966,10 +971,26 @@ pub struct SftpTransferSettings {
     pub per_tab_transfers: u8,
     #[serde(default = "default_sftp_global_uploads")]
     pub global_uploads: u8,
+    /// Zero means no client-side limit on one uploaded or downloaded file.
+    #[serde(default = "default_sftp_max_file_gib")]
+    pub max_file_gib: u32,
+    /// Zero means no client-side bandwidth cap.
+    #[serde(default)]
+    pub rate_limit_mib_per_second: u32,
+    /// Maximum size copied when opening a local file from an SFTP tab.
+    /// Zero disables both the per-file cap and the private cache byte quota.
+    #[serde(default = "default_sftp_local_open_max_file_mib")]
+    pub local_open_max_file_mib: u32,
 }
 
 impl SftpTransferSettings {
-    pub fn normalized(per_tab_transfers: i32, global_uploads: i32) -> Self {
+    pub fn normalized(
+        per_tab_transfers: i32,
+        global_uploads: i32,
+        max_file_gib: i32,
+        rate_limit_mib_per_second: i32,
+        local_open_max_file_mib: i32,
+    ) -> Self {
         Self {
             per_tab_transfers: per_tab_transfers.clamp(
                 i32::from(MIN_SFTP_PER_TAB_TRANSFERS),
@@ -979,7 +1000,78 @@ impl SftpTransferSettings {
                 i32::from(MIN_SFTP_GLOBAL_UPLOADS),
                 i32::from(MAX_SFTP_GLOBAL_UPLOADS),
             ) as u8,
+            max_file_gib: normalize_sftp_max_file_gib(max_file_gib),
+            rate_limit_mib_per_second: rate_limit_mib_per_second
+                .clamp(0, MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND as i32)
+                as u32,
+            local_open_max_file_mib: normalize_sftp_local_open_max_file_mib(
+                local_open_max_file_mib,
+            ),
         }
+    }
+
+    pub fn local_open_max_file_bytes(&self) -> u64 {
+        if self.local_open_max_file_mib == 0 {
+            u64::MAX
+        } else {
+            u64::from(self.local_open_max_file_mib) * 1024 * 1024
+        }
+    }
+
+    pub fn policy(&self, override_policy: Option<SftpTransferPolicy>) -> SftpTransferPolicy {
+        override_policy.unwrap_or(SftpTransferPolicy {
+            per_tab_transfers: self.per_tab_transfers,
+            max_file_gib: self.max_file_gib,
+            rate_limit_mib_per_second: self.rate_limit_mib_per_second,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct SftpTransferPolicy {
+    pub per_tab_transfers: u8,
+    /// Zero means no client-side limit on one uploaded or downloaded file.
+    pub max_file_gib: u32,
+    /// Zero means no client-side bandwidth cap for this SFTP connection.
+    pub rate_limit_mib_per_second: u32,
+}
+
+impl SftpTransferPolicy {
+    pub fn normalized(per_tab_transfers: i32, max_file_gib: i32, rate_mib_per_second: i32) -> Self {
+        Self {
+            per_tab_transfers: per_tab_transfers.clamp(
+                i32::from(MIN_SFTP_PER_TAB_TRANSFERS),
+                i32::from(MAX_SFTP_PER_TAB_TRANSFERS),
+            ) as u8,
+            max_file_gib: normalize_sftp_max_file_gib(max_file_gib),
+            rate_limit_mib_per_second: rate_mib_per_second
+                .clamp(0, MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND as i32)
+                as u32,
+        }
+    }
+
+    pub fn validate(self) -> Result<()> {
+        if !(MIN_SFTP_PER_TAB_TRANSFERS..=MAX_SFTP_PER_TAB_TRANSFERS)
+            .contains(&self.per_tab_transfers)
+            || self.max_file_gib > MAX_SFTP_MAX_FILE_GIB
+            || self.rate_limit_mib_per_second > MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND
+        {
+            anyhow::bail!("SFTP transfer policy is outside supported limits");
+        }
+        Ok(())
+    }
+
+    pub fn max_file_bytes(self) -> u64 {
+        if self.max_file_gib == 0 {
+            u64::MAX
+        } else {
+            u64::from(self.max_file_gib) * 1024 * 1024 * 1024
+        }
+    }
+
+    pub fn rate_bytes_per_second(self) -> Option<u64> {
+        (self.rate_limit_mib_per_second != 0)
+            .then_some(u64::from(self.rate_limit_mib_per_second) * 1024 * 1024)
     }
 }
 
@@ -988,6 +1080,9 @@ impl Default for SftpTransferSettings {
         Self {
             per_tab_transfers: default_sftp_per_tab_transfers(),
             global_uploads: default_sftp_global_uploads(),
+            max_file_gib: default_sftp_max_file_gib(),
+            rate_limit_mib_per_second: 0,
+            local_open_max_file_mib: default_sftp_local_open_max_file_mib(),
         }
     }
 }
@@ -998,6 +1093,30 @@ fn default_sftp_per_tab_transfers() -> u8 {
 
 fn default_sftp_global_uploads() -> u8 {
     DEFAULT_SFTP_GLOBAL_UPLOADS
+}
+
+fn default_sftp_max_file_gib() -> u32 {
+    DEFAULT_SFTP_MAX_FILE_GIB
+}
+
+fn default_sftp_local_open_max_file_mib() -> u32 {
+    DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB
+}
+
+fn normalize_sftp_max_file_gib(value: i32) -> u32 {
+    if value == 0 {
+        0
+    } else {
+        value.clamp(1, MAX_SFTP_MAX_FILE_GIB as i32) as u32
+    }
+}
+
+fn normalize_sftp_local_open_max_file_mib(value: i32) -> u32 {
+    if value == 0 {
+        0
+    } else {
+        value.clamp(1, MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB as i32) as u32
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -1037,6 +1156,9 @@ impl AppSettings {
             sftp_transfers: SftpTransferSettings::normalized(
                 input.sftp_per_tab_transfers,
                 input.sftp_global_uploads,
+                input.sftp_max_file_gib,
+                input.sftp_rate_limit_mib_per_second,
+                input.sftp_local_open_max_file_mib,
             ),
         }
     }
@@ -1065,6 +1187,9 @@ impl AppSettings {
         self.sftp_transfers = SftpTransferSettings::normalized(
             i32::from(self.sftp_transfers.per_tab_transfers),
             i32::from(self.sftp_transfers.global_uploads),
+            i32::try_from(self.sftp_transfers.max_file_gib).unwrap_or(i32::MAX),
+            i32::try_from(self.sftp_transfers.rate_limit_mib_per_second).unwrap_or(i32::MAX),
+            i32::try_from(self.sftp_transfers.local_open_max_file_mib).unwrap_or(i32::MAX),
         );
     }
 }

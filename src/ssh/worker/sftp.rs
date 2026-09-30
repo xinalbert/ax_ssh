@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 
 use russh::{ChannelStream, client};
 use tokio::sync::oneshot;
@@ -8,8 +9,8 @@ use tokio::time::timeout;
 use crate::sftp::{
     MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpBrowserHandle,
     SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot, SftpUploadConflictChoice,
-    SftpUploadHandle, SftpUploadRequest, SftpWriteEvent, discover_download_requests,
-    execute_sftp_write,
+    SftpUploadHandle, SftpUploadRequest, SftpWriteEvent, TransferRateLimiter,
+    discover_download_requests, execute_sftp_write,
 };
 
 use super::*;
@@ -36,6 +37,7 @@ struct SftpUploadStartContext<'a> {
     transfer_event_tx: &'a mpsc::Sender<SftpTransferEvent>,
     event_tx: &'a mpsc::Sender<SshSessionEvent>,
     session_id: Uuid,
+    rate_limiter: Arc<TransferRateLimiter>,
 }
 enum ActiveSftpTransfer {
     Download(SftpDownloadHandle),
@@ -103,8 +105,10 @@ pub(super) async fn run_sftp_session(
     initial_path: String,
     mut command_rx: mpsc::Receiver<SshCommand>,
     event_tx: mpsc::Sender<SshSessionEvent>,
-    per_tab_limit: usize,
+    policy: crate::config::SftpTransferPolicy,
 ) {
+    let per_tab_limit = usize::from(policy.per_tab_transfers);
+    let rate_limiter = Arc::new(TransferRateLimiter::new(policy.rate_bytes_per_second()));
     let (browser_event_tx, mut browser_events) = mpsc::channel(SFTP_EVENT_CAPACITY);
     let (transfer_event_tx, mut transfer_events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
     let stream = match open_initial_sftp_stream(&connection, &mut command_rx, session_id).await {
@@ -167,6 +171,7 @@ pub(super) async fn run_sftp_session(
         transfer_event_tx: &transfer_event_tx,
         event_tx: &event_tx,
         session_id,
+        rate_limiter: rate_limiter.clone(),
     };
     let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
@@ -282,6 +287,7 @@ pub(super) async fn run_sftp_session(
                             stream,
                             pending.request,
                             transfer_event_tx.clone(),
+                            rate_limiter.clone(),
                         )));
                     }
                     Ok((_, Err(error))) => {
@@ -950,6 +956,7 @@ async fn start_queued_uploads(
                     request,
                     context.transfer_event_tx.clone(),
                     slot,
+                    context.rate_limiter.clone(),
                 )));
             }
             Err(error) => {

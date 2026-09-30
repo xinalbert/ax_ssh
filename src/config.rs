@@ -30,10 +30,10 @@ pub use self::session::{
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
     AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
-    SftpTransferFilterSettings, SftpTransferSettings, ShortcutSettings, SoftwarePresentationMode,
-    TerminalDrawingPreference, TerminalSemanticColors, TerminalSemanticColorsInput,
-    TerminalSettings, TerminalSettingsInput, UiLanguage, WorkspaceSettings, WorkspaceSettingsInput,
-    X11ServerProvider, X11Settings,
+    SftpTransferFilterSettings, SftpTransferPolicy, SftpTransferSettings, ShortcutSettings,
+    SoftwarePresentationMode, TerminalDrawingPreference, TerminalSemanticColors,
+    TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, UiLanguage,
+    WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
 };
 pub use self::theme::{
     TerminalColorScheme, ThemeMode, ThemePalette, ThemePaletteKind, ThemeSettings,
@@ -75,6 +75,11 @@ pub const DEFAULT_SFTP_PER_TAB_TRANSFERS: u8 = 2;
 pub const MIN_SFTP_GLOBAL_UPLOADS: u8 = 1;
 pub const MAX_SFTP_GLOBAL_UPLOADS: u8 = 32;
 pub const DEFAULT_SFTP_GLOBAL_UPLOADS: u8 = 8;
+pub const DEFAULT_SFTP_MAX_FILE_GIB: u32 = 20;
+pub const MAX_SFTP_MAX_FILE_GIB: u32 = 1024;
+pub const DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB: u32 = 512;
+pub const MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB: u32 = 20 * 1024;
+pub const MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND: u32 = 1024;
 pub const SYSTEM_DEFAULT_SHELL: &str = "System default";
 pub const DEFAULT_SESSION_MASK_CHARACTER: &str = "*";
 pub(crate) const MAX_CONFIG_FILE_BYTES: usize = 8 * 1024 * 1024;
@@ -91,7 +96,7 @@ const DEFAULT_SIDEBAR_WIDTH: u16 = 220;
 const PREVIOUS_DEFAULT_SIDEBAR_WIDTH: u16 = 260;
 const DEFAULT_TAB_WIDTH: u16 = 172;
 const DEFAULT_COLLAPSED_GROUP_LABEL_CHARS: u8 = 2;
-const CURRENT_SCHEMA_VERSION: u32 = 32;
+const CURRENT_SCHEMA_VERSION: u32 = 33;
 const TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION: u32 = 22;
 const PLATFORM_SHORTCUT_SCHEMA_VERSION: u32 = 6;
 const WORKSPACE_DENSITY_SCHEMA_VERSION: u32 = 7;

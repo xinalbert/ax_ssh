@@ -9,7 +9,7 @@ use super::settings::{default_toggle_sidebar_shortcut, previous_toggle_sidebar_s
 use super::{
     AppSettings, AppearanceSettings, CURRENT_SCHEMA_VERSION, DEFAULT_SIDEBAR_WIDTH,
     DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, PLATFORM_SHORTCUT_SCHEMA_VERSION,
-    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION,
+    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, SftpTransferPolicy, TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION,
     THEME_SETTINGS_SCHEMA_VERSION, ThemeSettings, WORKSPACE_DENSITY_SCHEMA_VERSION,
 };
 
@@ -197,6 +197,9 @@ pub struct SshConfig {
     /// the current platform user's home directory.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub sftp_local_path: String,
+    /// Optional per-server transfer limits. Missing means use application defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sftp_transfer_policy: Option<SftpTransferPolicy>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -441,6 +444,7 @@ impl<'de> Deserialize<'de> for SessionProfile {
                     .unwrap_or_else(default_x11_forwarding_mode),
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
+                sftp_transfer_policy: None,
             })
         };
         let profile = Self {
@@ -475,6 +479,7 @@ impl SessionProfile {
                 x11_forwarding: X11ForwardingMode::default(),
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
+                sftp_transfer_policy: None,
             }),
         }
     }
@@ -596,6 +601,9 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
                 anyhow::bail!(
                     "SFTP local path cannot exceed {MAX_SFTP_LOCAL_PATH_BYTES} bytes or contain control characters"
                 );
+            }
+            if let Some(policy) = config.sftp_transfer_policy {
+                policy.validate()?;
             }
         }
         ConnectionProfile::Telnet(config) => validate_host_and_port(&config.host, config.port)?,

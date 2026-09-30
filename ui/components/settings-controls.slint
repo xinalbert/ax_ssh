@@ -9,6 +9,7 @@ export enum SettingsNavIcon {
     Appearance,
     Terminal,
     X11,
+    Sftp,
     Workspace,
     Shortcuts,
     About,
@@ -114,6 +115,18 @@ export component SettingsNavGlyph inherits Rectangle {
             stroke: root.glyph-color;
             stroke-width: Theme.settings-icon-stroke;
             stroke-line-cap: round;
+            stroke-line-join: round;
+        }
+    }
+
+    if root.icon == SettingsNavIcon.Sftp : Rectangle {
+        Path {
+            width: parent.width;
+            height: parent.height;
+            commands: "M 1 5 L 6 5 L 8 7 L 17 7 L 17 16 L 1 16 Z M 1 7 L 1 3 L 6 3 L 8 5";
+            fill: transparent;
+            stroke: root.glyph-color;
+            stroke-width: Theme.settings-icon-stroke;
             stroke-line-join: round;
         }
     }

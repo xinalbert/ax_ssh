@@ -136,7 +136,7 @@ struct SshSessionLaunch {
     initial_size: TerminalSize,
     mode: SshSessionMode,
     x11_settings: X11Settings,
-    sftp_per_tab_transfers: usize,
+    sftp_policy: crate::config::SftpTransferPolicy,
 }
 
 struct SshSessionTask {
@@ -145,7 +145,7 @@ struct SshSessionTask {
     secret: Zeroizing<String>,
     mode: SshSessionMode,
     x11_settings: X11Settings,
-    sftp_per_tab_transfers: usize,
+    sftp_policy: crate::config::SftpTransferPolicy,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
     event_tx: mpsc::Sender<SshSessionEvent>,
@@ -158,6 +158,7 @@ pub struct SshSessionHandle {
     resize_tx: watch::Sender<TerminalSize>,
     next_input_sequence: AtomicU64,
     task: JoinHandle<()>,
+    sftp_max_file_bytes: u64,
 }
 
 impl SshSessionHandle {
@@ -202,7 +203,7 @@ impl SshSessionHandle {
                 initial_size: TerminalSize::backend(columns, rows),
                 mode: SshSessionMode::Terminal,
                 x11_settings,
-                sftp_per_tab_transfers: usize::from(crate::config::DEFAULT_SFTP_PER_TAB_TRANSFERS),
+                sftp_policy: crate::config::SftpTransferSettings::default().policy(None),
             },
         )
     }
@@ -212,7 +213,7 @@ impl SshSessionHandle {
         session_id: Uuid,
         profile: SessionProfile,
         secret: Zeroizing<String>,
-        sftp_per_tab_transfers: usize,
+        sftp_policy: crate::config::SftpTransferPolicy,
     ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
         Self::spawn_with_mode(
             runtime,
@@ -223,7 +224,7 @@ impl SshSessionHandle {
                 initial_size: TerminalSize::backend(1, 1),
                 mode: SshSessionMode::Sftp,
                 x11_settings: X11Settings::default(),
-                sftp_per_tab_transfers,
+                sftp_policy,
             },
         )
     }
@@ -239,7 +240,7 @@ impl SshSessionHandle {
             initial_size,
             mode,
             x11_settings,
-            sftp_per_tab_transfers,
+            sftp_policy,
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (resize_tx, resize_rx) = watch::channel(initial_size);
@@ -250,7 +251,7 @@ impl SshSessionHandle {
             secret,
             mode,
             x11_settings,
-            sftp_per_tab_transfers,
+            sftp_policy,
             command_rx,
             resize_rx,
             event_tx,
@@ -262,6 +263,7 @@ impl SshSessionHandle {
                 resize_tx,
                 next_input_sequence: AtomicU64::new(1),
                 task,
+                sftp_max_file_bytes: sftp_policy.max_file_bytes(),
             },
             event_rx,
         )
@@ -269,6 +271,11 @@ impl SshSessionHandle {
 
     pub fn is_finished(&self) -> bool {
         self.task.is_finished()
+    }
+
+    /// Limit captured when this SFTP connection started.
+    pub fn sftp_max_file_bytes(&self) -> u64 {
+        self.sftp_max_file_bytes
     }
 
     pub fn request_disconnect(&self) -> Result<()> {
@@ -423,7 +430,13 @@ impl SshSessionHandle {
         local_directory: std::path::PathBuf,
         filter_patterns: Vec<String>,
     ) -> Result<()> {
-        let root = SftpDownloadRoot::new(transfer_id, path, local_directory, filter_patterns)?;
+        let root = SftpDownloadRoot::new(
+            transfer_id,
+            path,
+            local_directory,
+            filter_patterns,
+            self.sftp_max_file_bytes,
+        )?;
         self.command_tx
             .try_send(SshCommand::OpenSftpFile { root })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
@@ -436,6 +449,9 @@ impl SshSessionHandle {
         local_path: std::path::PathBuf,
         total_bytes: u64,
     ) -> Result<()> {
+        if total_bytes > self.sftp_max_file_bytes {
+            anyhow::bail!("SFTP download exceeds the configured file size limit");
+        }
         let request = SftpDownloadRequest::for_explicit_local_path(
             transfer_id,
             path,
@@ -461,6 +477,9 @@ impl SshSessionHandle {
         local_path: std::path::PathBuf,
         total_bytes: u64,
     ) -> Result<()> {
+        if total_bytes > self.sftp_max_file_bytes {
+            anyhow::bail!("SFTP upload exceeds the configured file size limit");
+        }
         let request = SftpUploadRequest::from_local_file(
             transfer_id,
             batch_id,
@@ -481,6 +500,12 @@ impl SshSessionHandle {
         batch_id: Uuid,
         files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
     ) -> Result<()> {
+        if files
+            .iter()
+            .any(|(_, _, _, size, _)| *size > self.sftp_max_file_bytes)
+        {
+            anyhow::bail!("SFTP upload exceeds the configured file size limit");
+        }
         let requests = files
             .into_iter()
             .map(|(id, path, local, size, directories)| {
@@ -587,7 +612,7 @@ async fn run_session(task: SshSessionTask) {
         secret,
         mode,
         x11_settings,
-        sftp_per_tab_transfers,
+        sftp_policy,
         mut command_rx,
         resize_rx,
         event_tx,
@@ -709,7 +734,7 @@ async fn run_session(task: SshSessionTask) {
             initial_sftp_path,
             command_rx,
             event_tx,
-            sftp_per_tab_transfers,
+            sftp_policy,
         )
         .await;
         return;
@@ -852,6 +877,9 @@ mod tests {
             resize_tx,
             next_input_sequence: AtomicU64::new(0),
             task,
+            sftp_max_file_bytes: crate::config::SftpTransferSettings::default()
+                .policy(None)
+                .max_file_bytes(),
         };
         let shutdown = tokio::spawn(handle.shutdown());
         tokio::task::yield_now().await;

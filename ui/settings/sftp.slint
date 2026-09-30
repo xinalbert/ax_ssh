@@ -1,0 +1,136 @@
+import { CheckBox, SpinBox, TextEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
+import { SftpActionButton } from "../components/sftp-controls.slint";
+
+export component SftpSettingsPage inherits SettingsPage {
+    in-out property <bool> draft-sftp-filter-enabled;
+    in-out property <bool> draft-sftp-filter-use-platform-defaults;
+    in-out property <string> draft-sftp-filter-custom-patterns;
+    in-out property <int> draft-sftp-per-tab-transfers;
+    in-out property <int> draft-sftp-global-uploads;
+    in-out property <int> draft-sftp-max-file-gib;
+    in-out property <int> draft-sftp-rate-limit-mib-per-second;
+    in-out property <int> draft-sftp-local-open-max-file-mib;
+    in property <string> sftp-filter-platform-defaults;
+    callback restore-sftp-filter-defaults();
+
+    SettingsSectionHeading { label: @tr("SFTP TRANSFERS"); }
+    SettingsRow {
+        label: @tr("Maximum file size (GiB)");
+        description: @tr("Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 0;
+                maximum: 1024;
+                value <=> root.draft-sftp-max-file-gib;
+                accessible-label: @tr("Maximum SFTP file size in GiB");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Bandwidth limit (MiB/s)");
+        description: @tr("Shared by uploads and downloads in each SFTP tab; 0 means unlimited");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 0;
+                maximum: 1024;
+                value <=> root.draft-sftp-rate-limit-mib-per-second;
+                accessible-label: @tr("SFTP bandwidth limit in MiB per second");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Local file open snapshot (MiB)");
+        description: @tr("Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 0;
+                maximum: 20480;
+                value <=> root.draft-sftp-local-open-max-file-mib;
+                accessible-label: @tr("Local SFTP file open snapshot limit in MiB");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Transfers per SFTP tab");
+        description: @tr("Maximum simultaneous uploads and downloads in one SFTP tab");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 1;
+                maximum: 16;
+                value <=> root.draft-sftp-per-tab-transfers;
+                accessible-label: @tr("Transfers per SFTP tab");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Global simultaneous uploads");
+        description: @tr("Maximum uploads shared by all SFTP tabs");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 1;
+                maximum: 32;
+                value <=> root.draft-sftp-global-uploads;
+                accessible-label: @tr("Global simultaneous uploads");
+            }
+        }
+    }
+    SettingsSectionHeading { label: @tr("TRANSFER FILTERS"); }
+    SettingsRow {
+        label: @tr("Filter system files");
+        description: @tr("Skip matching names during SFTP uploads and downloads");
+        SettingsField {
+            CheckBox {
+                checked <=> root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Filter system files");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Platform defaults");
+        description: root.sftp-filter-platform-defaults;
+        SettingsField {
+            CheckBox {
+                checked <=> root.draft-sftp-filter-use-platform-defaults;
+                enabled: root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Use platform default filters");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Custom filename patterns");
+        description: @tr("One pattern per line; * matches any characters");
+        SettingsField {
+            TextEdit {
+                width: Theme.settings-field-width;
+                height: 88px;
+                text <=> root.draft-sftp-filter-custom-patterns;
+                enabled: root.draft-sftp-filter-enabled;
+                accessible-label: @tr("Custom SFTP filename patterns");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Reset filters");
+        description: @tr("Restore the default filters for this platform");
+        show-divider: false;
+        SettingsField {
+            SftpActionButton {
+                text: @tr("Restore platform defaults");
+                clicked => { root.restore-sftp-filter-defaults(); }
+            }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

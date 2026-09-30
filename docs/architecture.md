@@ -1391,6 +1391,18 @@ publishes the snapshot before calling the platform default application through
 `open::that_detached`; it never reopens the validated source path. A stale Tab,
 directory request, path, or identity/fingerprint mismatch is rejected before dispatch,
 and a later path replacement cannot redirect the opener to a different file identity.
+Settings > SFTP stores the application-wide local-open snapshot limit (default
+512 MiB, 1 MiB to 20 GiB for a finite limit). The exact value 0 removes both
+the single-file limit and the private cache byte quota; it can consume substantial
+local disk space. The owned limit is captured with the open intent and applied on
+a blocking worker. For finite values, the private cache byte quota is the larger
+of 1 GiB and that limit. Completed snapshots may be evicted to make room, while
+active partial files, the 128-file count, bounded scans, and stale cleanup
+retain their existing protection. The 30-minute wait timeout now signals the
+blocking copy to stop at its next bounded read and discard its partial file.
+This setting does not affect streamed SFTP
+transfers or a remote file dragged to Finder: that file is downloaded directly
+to its explicit destination through the normal local writer.
 
 Each remote file row owns a Slint-only context menu backed by the shared
 `FlatActionMenu`. Activating Download or Delete on an unselected row first
@@ -1403,12 +1415,16 @@ recursive discovery opens its own SFTP subsystem, rejects
 links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
 Discovery scans at most 4,096 entries and is bounded to 512 files, 256
-directories, depth 16, 512 KiB of path text, 1 GiB aggregate bytes, and 512
-MiB per file. Each SFTP Tab permits a configurable number of active transfers
+directories, depth 16, and 512 KiB of path text. A configurable per-file cap
+(default 20 GiB, 1-1024 GiB for a finite limit) applies; 0 disables the
+client-side file-size cap for streamed transfers, and no separate aggregate-byte
+cap remains.
+Recursive discovery, queue, and private open-cache bounds remain.
+Each SFTP Tab permits a configurable number of active transfers
 (1-16, default 2), and each transfer owns a separate SFTP
 subsystem stream.
 
-The process-wide upload limiter is also configurable from Settings > General
+The process-wide upload limiter is also configurable from Settings > SFTP
 (1-32 simultaneous uploads, default 8). Lowering the setting does not cancel
 uploads that already hold a permit; it limits subsequent uploads. The transfer
 root also carries the effective bounded filename-filter patterns.
@@ -1416,12 +1432,20 @@ The application bridge rejects matching direct upload/download intents, while
 the worker applies the same basename-only `*` matcher during recursive discovery
 to skip generated files and directories. The browser's Hidden toggle remains a
 display-only concern. `AppSettings` persists the current-platform preset, the
-enable flag, and normalized custom patterns; resetting the General-page draft
+enable flag, and normalized custom patterns; resetting the SFTP-page draft
 restores that preset and clears the custom list.
+`AppSettings::sftp_transfers` also stores global defaults for per-Tab concurrency,
+single-file size, and per-connection bandwidth. `SshConfig::sftp_transfer_policy`
+optionally overrides those three values for a server; the process-wide upload
+cap remains global. The effective policy is copied into a new SFTP worker, so
+editing settings does not mutate an in-flight connection. A shared async rate
+limiter meters 64 KiB upload/write and download/read chunks across all transfers
+within that connection; zero means unlimited. No secret or russh handle enters Slint.
 
 Each request revalidates remote path and handle metadata, reads at most 64 KiB
 per request, uses a two-chunk writer queue, applies 15-second operation
-timeouts and a 30-minute overall timeout, and reports owned queue, state,
+timeouts and a 30-day transfer deadline (recursive discovery remains 30 minutes),
+and reports owned queue, state,
 progress, and terminal events. The application state owns bounded rows split
 into active, failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
@@ -1459,14 +1483,14 @@ rename, UTF-8 edit, and Save As operations. All selected local files and folders
 internal drag roots, and native dropped roots enter one batch command. Blocking
 local discovery preserves relative paths, skips links and filtered names, and
 caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,
-512 KiB of path text, 1 GiB aggregate bytes, and 512 MiB per file. The worker
+and 512 KiB of path text; each file uses the configured size cap, with no batch-byte cap. The worker
 creates missing remote directories through its SFTP session, rejecting links or
 unexpected target types. The configured per-Tab transfer limit (1-16, default
 2) applies to uploads and downloads; remaining accepted files wait in the
 bounded worker queue. The application passes only a validated path and size;
 the worker revalidates the source and streams one 64 KiB chunk at a time. The
 configured process-wide upload limit (1-32, default 8) bounds the
-resident upload chunks (about 512 KiB at this boundary), so a 512 MiB upload
+resident upload chunks (about 512 KiB at this boundary), so a 20 GiB upload
 does not become a resident buffer. Editor monitoring polls a remote size/mtime
 fingerprint while the editor is open. A regular remote upload target triggers
 a Rust-owned conflict queue and a shared `ModalFrame` prompt.
