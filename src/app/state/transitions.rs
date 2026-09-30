@@ -129,6 +129,9 @@ pub(in crate::app) fn retire_session_attempt(
                 terminal.set_ssh_attempt(None);
                 terminal.connected = false;
                 terminal.worker_running = false;
+                if terminal.is_sftp() && !terminal.sftp.path.is_empty() {
+                    terminal.sftp_initial_path = Some(terminal.sftp.path.clone());
+                }
                 terminal.sftp.reset();
             }
             true

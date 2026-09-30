@@ -1279,6 +1279,11 @@ Authenticated connections follow this lifecycle:
 - a 20-second keepalive with three missed-reply limit and the 90-second
   transport inactivity boundary decide connection liveness; a quiet shell data
   channel is valid and never has its own output timeout;
+- the SFTP-only worker observes a closed SSH transport, while the browser
+  observes SFTP subsystem channel closure, even without UI commands; either
+  enters the existing bounded reconnect path. Transport/protocol failure in a
+  directory request also ends the browser, while a path or permission status
+  remains a request-local error;
 - tab close invalidates the tab/attempt route before requesting worker shutdown;
 - window shutdown requests disconnect for every remaining worker, joins them
   concurrently under a five-second application deadline (aborting any
@@ -1306,9 +1311,13 @@ and transport; the surviving Tab remains open and may create a new companion
 later.
 
 Remote navigation and selection controls are interactive only after that SFTP
-Tab reports connected. `AppState` publishes no available remote snapshot before
-then, and the application bridge independently rejects operations from a
-disconnected or non-SFTP Tab.
+Tab reports connected. The SFTP-only worker reports connected only after the
+subsystem handshake and initial directory page succeed, not merely when its SSH
+channel opens. A separate post-authentication event preserves the existing
+credential-save flow without marking the SFTP browser ready. `AppState`
+publishes no available remote snapshot before then,
+and the application bridge independently rejects operations from a disconnected
+or non-SFTP Tab.
 
 Every SFTP UI intent is resolved against the `WindowRouter` route for the
 originating window at callback time. The route's active Tab UUID is then passed
@@ -1320,8 +1329,12 @@ or a focus change in another window cannot retarget an SFTP operation.
 When a new SFTP Tab is created, its SSH profile supplies the initial remote
 directory to the worker-owned browser and the initial local directory to the
 application-owned local snapshot. Missing legacy remote values use `~`; an
-empty local value resolves to the platform home directory. These defaults are
-used only at Tab initialization, while later navigation remains Tab-local.
+empty local value resolves to the platform home directory. On an in-process
+reconnect, the SFTP Tab retains the last successfully displayed remote directory
+as its next initial path; before the first page succeeds, it retains any
+Tab-specific target path. Neither path is written to the profile by reconnect.
+Local navigation remains Tab-local, and pending transfers are cancelled rather
+than automatically replayed after reconnection.
 
 The first phase provides a dual-pane directory browser. Slint owns two bounded
 splitters: one changes the remote/local widths and one changes the files/transfer

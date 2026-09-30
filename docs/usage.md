@@ -267,6 +267,11 @@ is refreshing. Navigation to another remote directory pauses new uploads until
 its destination is known. Returning to an SFTP Tab keeps the loaded Local files
 selection, including after an SFTP reconnect; use **Refresh** in Local files to
 read changes made outside AxSSH.
+An unexpected SSH or SFTP subsystem disconnect is detected even while the
+browser is idle. Reconnection restores the last displayed remote directory (or the Tab's
+initial target if no page loaded yet); unfinished transfers are not replayed.
+Directory permission errors stay on the current connection. A password prompt
+or host-key confirmation may still be required by the normal SSH security flow.
 
 The remote row context menu also supports deleting its selected files and
 directories (directories are non-recursive). Download and Delete no longer

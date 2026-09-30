@@ -55,6 +55,7 @@ enum SshSessionMode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SshSessionEvent {
+    Authenticated,
     Connected,
     Resized {
         columns: u32,

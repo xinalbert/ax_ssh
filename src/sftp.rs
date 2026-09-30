@@ -19,11 +19,11 @@ use std::task::{Context as TaskContext, Poll};
 use uuid::Uuid;
 
 use anyhow::{Context, Result};
-use russh_sftp::client::{Config, RawSftpSession};
+use russh_sftp::client::{Config, RawSftpSession, error::Error as SftpClientError};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::runtime::Handle;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, timeout};
 use tracing::{debug, warn};
@@ -533,6 +533,73 @@ struct DirectoryCursor {
     truncated: bool,
 }
 
+/// Notify the browser when the SFTP reader loses its channel while no UI
+/// command is pending. `russh_sftp` owns the stream after initialization.
+struct BrowserObservedStream<S> {
+    inner: S,
+    closed: Option<oneshot::Sender<()>>,
+}
+
+impl<S> BrowserObservedStream<S> {
+    fn new(inner: S, closed: oneshot::Sender<()>) -> Self {
+        Self {
+            inner,
+            closed: Some(closed),
+        }
+    }
+
+    fn notify_closed(&mut self) {
+        if let Some(closed) = self.closed.take() {
+            let _ = closed.send(());
+        }
+    }
+}
+
+impl<S> Drop for BrowserObservedStream<S> {
+    fn drop(&mut self) {
+        self.notify_closed();
+    }
+}
+
+impl<S: AsyncRead + Unpin> AsyncRead for BrowserObservedStream<S> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let filled = output.filled().len();
+        let had_space = output.remaining() > 0;
+        let result = Pin::new(&mut self.inner).poll_read(cx, output);
+        let closed = match &result {
+            Poll::Ready(Ok(())) => had_space && output.filled().len() == filled,
+            Poll::Ready(Err(_)) => true,
+            Poll::Pending => false,
+        };
+        if closed {
+            self.notify_closed();
+        }
+        result
+    }
+}
+
+impl<S: AsyncWrite + Unpin> AsyncWrite for BrowserObservedStream<S> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buffer)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
 struct PacketLimitedStream<S> {
     inner: S,
     packet: Vec<u8>,
@@ -696,8 +763,9 @@ async fn run_browser_inner<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let (channel_closed_tx, mut channel_closed_rx) = oneshot::channel();
     let session = RawSftpSession::new_with_config(
-        PacketLimitedStream::new(stream),
+        BrowserObservedStream::new(PacketLimitedStream::new(stream), channel_closed_tx),
         Config {
             max_packet_len: MAX_PACKET_BYTES,
             max_concurrent_reads: 16,
@@ -722,7 +790,17 @@ where
     emit_page(&session, &mut initial_cursor, None, false, event_tx).await?;
     let mut cursor = Some(initial_cursor);
 
-    while let Some(command) = command_rx.recv().await {
+    loop {
+        let command = tokio::select! {
+            biased;
+            _ = &mut channel_closed_rx => {
+                anyhow::bail!("SFTP subsystem channel closed unexpectedly");
+            }
+            command = command_rx.recv() => command,
+        };
+        let Some(command) = command else {
+            break;
+        };
         match command {
             SftpBrowserCommand::List { request_id, path } => {
                 let current = cursor_path(cursor.as_ref()).unwrap_or(&home).to_owned();
@@ -741,6 +819,9 @@ where
                         }
                     }
                     Err(error) => {
+                        if browser_transport_failed(&error) {
+                            return Err(error.context("SFTP browser connection failed"));
+                        }
                         send_request_error(event_tx, request_id, &error).await;
                     }
                 }
@@ -750,6 +831,9 @@ where
                     if let Err(error) =
                         emit_page(&session, cursor, Some(request_id), true, event_tx).await
                     {
+                        if browser_transport_failed(&error) {
+                            return Err(error.context("SFTP browser connection failed"));
+                        }
                         send_request_error(event_tx, Some(request_id), &error).await;
                     }
                 }
@@ -773,6 +857,22 @@ where
         .close_session()
         .context("failed to close SFTP session")?;
     Ok(())
+}
+
+fn browser_transport_failed(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause.is::<tokio::time::error::Elapsed>()
+            || cause
+                .downcast_ref::<SftpClientError>()
+                .is_some_and(|error| match error {
+                    SftpClientError::Status(status) => matches!(
+                        status.status_code,
+                        StatusCode::NoConnection | StatusCode::ConnectionLost
+                    ),
+                    SftpClientError::Limited(_) => false,
+                    _ => true,
+                })
+    })
 }
 
 async fn send_request_error(
@@ -1009,7 +1109,136 @@ fn bounded_error(error: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+
+    async fn read_test_packet(stream: &mut DuplexStream) -> Vec<u8> {
+        let mut length = [0_u8; 4];
+        stream
+            .read_exact(&mut length)
+            .await
+            .expect("SFTP request length should arrive");
+        let mut packet = vec![0_u8; u32::from_be_bytes(length) as usize];
+        stream
+            .read_exact(&mut packet)
+            .await
+            .expect("SFTP request body should arrive");
+        packet
+    }
+
+    async fn write_test_packet(stream: &mut DuplexStream, packet: &[u8]) {
+        stream
+            .write_all(&(packet.len() as u32).to_be_bytes())
+            .await
+            .expect("SFTP response length should write");
+        stream
+            .write_all(packet)
+            .await
+            .expect("SFTP response body should write");
+    }
+
+    fn push_test_string(packet: &mut Vec<u8>, value: &str) {
+        packet.extend_from_slice(&(value.len() as u32).to_be_bytes());
+        packet.extend_from_slice(value.as_bytes());
+    }
+
+    #[test]
+    fn browser_reconnects_only_after_transport_or_protocol_failure() {
+        use russh_sftp::protocol::{Status, StatusCode};
+
+        let permission_denied = anyhow::Error::from(SftpClientError::Status(Status {
+            id: 1,
+            status_code: StatusCode::PermissionDenied,
+            error_message: "denied".to_owned(),
+            language_tag: String::new(),
+        }));
+        assert!(!browser_transport_failed(&permission_denied));
+        let connection_lost = anyhow::Error::from(SftpClientError::Status(Status {
+            id: 2,
+            status_code: StatusCode::ConnectionLost,
+            error_message: "lost".to_owned(),
+            language_tag: String::new(),
+        }));
+        assert!(browser_transport_failed(&connection_lost));
+        assert!(!browser_transport_failed(&anyhow::anyhow!("invalid path")));
+        assert!(browser_transport_failed(&anyhow::Error::from(
+            SftpClientError::Timeout
+        )));
+        assert!(browser_transport_failed(&anyhow::Error::from(
+            SftpClientError::UnexpectedBehavior("session closed".to_owned())
+        )));
+    }
+
+    #[tokio::test]
+    async fn idle_browser_reports_a_closed_sftp_channel() {
+        let (stream, mut server) = tokio::io::duplex(1024);
+        let (_command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
+        let (event_tx, mut events) = mpsc::channel(8);
+        let browser = tokio::spawn(run_browser(stream, ".".to_owned(), command_rx, event_tx));
+        let server_task = tokio::spawn(async move {
+            assert_eq!(read_test_packet(&mut server).await[0], 1); // SSH_FXP_INIT
+            write_test_packet(&mut server, &[2, 0, 0, 0, 3]).await; // VERSION 3
+
+            let realpath = read_test_packet(&mut server).await;
+            assert_eq!(realpath[0], 16);
+            let mut name = vec![104]; // SSH_FXP_NAME
+            name.extend_from_slice(&realpath[1..5]);
+            name.extend_from_slice(&1_u32.to_be_bytes());
+            push_test_string(&mut name, "/home/alice");
+            push_test_string(&mut name, "/home/alice");
+            name.extend_from_slice(&0_u32.to_be_bytes()); // empty attributes
+            write_test_packet(&mut server, &name).await;
+
+            let opendir = read_test_packet(&mut server).await;
+            assert_eq!(opendir[0], 11);
+            let mut handle = vec![102]; // SSH_FXP_HANDLE
+            handle.extend_from_slice(&opendir[1..5]);
+            push_test_string(&mut handle, "directory");
+            write_test_packet(&mut server, &handle).await;
+
+            let readdir = read_test_packet(&mut server).await;
+            assert_eq!(readdir[0], 12);
+            let mut eof = vec![101]; // SSH_FXP_STATUS
+            eof.extend_from_slice(&readdir[1..5]);
+            eof.extend_from_slice(&1_u32.to_be_bytes()); // EOF
+            push_test_string(&mut eof, "");
+            push_test_string(&mut eof, "");
+            write_test_packet(&mut server, &eof).await;
+
+            let close = read_test_packet(&mut server).await;
+            assert_eq!(close[0], 4);
+            let mut ok = vec![101];
+            ok.extend_from_slice(&close[1..5]);
+            ok.extend_from_slice(&0_u32.to_be_bytes());
+            push_test_string(&mut ok, "");
+            push_test_string(&mut ok, "");
+            write_test_packet(&mut server, &ok).await;
+            // Dropping this peer simulates a closed SFTP channel with no command pending.
+        });
+
+        let opened = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("SFTP home should arrive")
+            .expect("browser should still run");
+        assert!(matches!(opened, SftpBrowserEvent::Opened { .. }));
+        let page = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("initial page should arrive")
+            .expect("browser should still run");
+        assert!(matches!(page, SftpBrowserEvent::DirectoryPage { .. }));
+        server_task.await.expect("test SFTP peer should finish");
+
+        let failed = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("connection failure should arrive")
+            .expect("browser should report failure");
+        assert!(matches!(failed, SftpBrowserEvent::Failed { .. }));
+        let closed = timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("closed event should arrive")
+            .expect("browser should report closure");
+        assert!(matches!(closed, SftpBrowserEvent::Closed));
+        browser.await.expect("browser task should exit");
+    }
 
     #[tokio::test]
     async fn packet_limiter_preserves_fragmented_valid_frames() {

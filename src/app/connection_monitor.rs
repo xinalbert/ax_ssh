@@ -42,6 +42,21 @@ pub(super) fn spawn_session_monitor(
                 }
             };
             match event {
+                SshSessionEvent::Authenticated => {
+                    if session_attempt_is_active(&state, tab_id, profile.id, attempt_id)
+                        && let Some(credential) = credential_to_store.take()
+                    {
+                        persist_authenticated_credential(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            profile.id,
+                            attempt_id,
+                            credential,
+                        );
+                    }
+                }
                 SshSessionEvent::Connected => {
                     let Some(active) = mutate_terminal_attempt(
                         &state,
@@ -486,13 +501,6 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::Disconnected => {
                     terminal_event = true;
-                    let _ = mutate_terminal_attempt(
-                        &state,
-                        tab_id,
-                        profile.id,
-                        attempt_id,
-                        |terminal| terminal.sftp.reset(),
-                    );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
                         schedule_reconnect(
                             &runtime_for_monitor,
@@ -698,13 +706,6 @@ pub(super) fn spawn_session_monitor(
                 }
                 SshSessionEvent::Failed(message) => {
                     terminal_event = true;
-                    let _ = mutate_terminal_attempt(
-                        &state,
-                        tab_id,
-                        profile.id,
-                        attempt_id,
-                        |terminal| terminal.sftp.reset(),
-                    );
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
                         schedule_reconnect(
                             &runtime_for_monitor,

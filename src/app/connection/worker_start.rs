@@ -46,8 +46,8 @@ pub(super) fn start_session_worker(
         }
         if target == ConnectionTarget::Sftp {
             let initial_path = app
-                .terminal_mut(tab_id)
-                .and_then(|terminal| terminal.sftp_initial_path.take());
+                .terminal(tab_id)
+                .and_then(|terminal| terminal.sftp_initial_path.clone());
             if let Some(initial_path) = initial_path
                 && let Some(ssh) = profile.ssh_mut()
             {

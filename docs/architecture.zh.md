@@ -802,6 +802,9 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 取消既能中断连接/认证，也能断开已建立会话；
 - 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
   存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
+- SFTP-only worker 观察 SSH transport，浏览器观察 SFTP subsystem channel；即使没有界面命令，
+  任一连接关闭也会进入既有有界重连流程。目录请求遇到传输或协议故障时也会结束浏览器，路径或权限
+  状态错误则只影响该次请求；
 - 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
 - 窗口退出对所有剩余 worker 请求断开，在五秒应用总时限内并发等待 join，超时后中止剩余任务，显式
   释放所有 detached/主窗口 Slint model 和窗口强引用，最后再关闭 Tokio。
@@ -820,8 +823,10 @@ russh handle 或 worker。
 配对建立后，命令只激活对应 Tab，不会再次连接或认证。关闭任一端只解除配对，并只关闭该 Tab
 自己的浏览器、subsystem、worker 和 transport；另一端继续保留，之后可重新创建配对 Tab。
 
-只有 SFTP Tab 报告 connected 后，远端导航和选择控件才可交互。此前 `AppState` 不发布
-available 的远端 snapshot，application bridge 也会独立拒绝来自未连接或非 SFTP Tab 的操作。
+只有 SFTP Tab 报告 connected 后，远端导航和选择控件才可交互。SFTP-only worker 仅在 subsystem
+握手和首个目录页成功后报告 connected，不会仅凭 SSH channel 打开就报告成功。独立的认证成功事件
+保留原有凭据保存流程，但不会提前标记浏览器就绪。此前 `AppState`
+不发布 available 的远端 snapshot，application bridge 也会独立拒绝来自未连接或非 SFTP Tab 的操作。
 
 所有 SFTP 界面意图都会在 callback 执行时，按其来源窗口从 `WindowRouter` 解析活动 Tab。
 随后 bridge 始终把该路由 Tab UUID 传入状态变更或 worker 请求；进程级 `AppState` 的活动 Tab
@@ -830,7 +835,9 @@ available 的远端 snapshot，application bridge 也会独立拒绝来自未连
 
 创建新的 SFTP Tab 时，SSH profile 会把初始远端目录交给 worker 所有的浏览器，把初始本地目录
 交给 application-owned 的本地 snapshot。旧 profile 缺少远端值时使用 `~`，本地值为空时解析为
-平台 home 目录。这些默认值只在 Tab 初始化时使用，之后的导航仍属于各自 Tab。
+平台 home 目录。进程内重连时，SFTP Tab 会保留上一次成功显示的远端目录作为下一次初始路径；首个
+目录页尚未成功时，则保留该 Tab 指定的目标路径。重连不会将路径写回 profile；本地目录导航仍属于
+各自 Tab，未完成的传输会取消而不会自动重放。
 
 第一阶段提供双栏目录浏览。Slint 拥有两个受约束的 splitter：一个调整远端/本地宽度，另一个调整
 文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，

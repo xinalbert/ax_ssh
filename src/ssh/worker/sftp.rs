@@ -4,7 +4,7 @@ use std::sync::Arc;
 use russh::{ChannelStream, client};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
-use tokio::time::timeout;
+use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::sftp::{
     MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpBrowserHandle,
@@ -109,6 +109,10 @@ pub(super) async fn run_sftp_session(
 ) {
     let per_tab_limit = usize::from(policy.per_tab_transfers);
     let rate_limiter = Arc::new(TransferRateLimiter::new(policy.rate_bytes_per_second()));
+    if !send_event(&event_tx, SshSessionEvent::Authenticated, session_id).await {
+        disconnect_sftp_connection(&connection, session_id).await;
+        return;
+    }
     let (browser_event_tx, mut browser_events) = mpsc::channel(SFTP_EVENT_CAPACITY);
     let (transfer_event_tx, mut transfer_events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
     let stream = match open_initial_sftp_stream(&connection, &mut command_rx, session_id).await {
@@ -149,12 +153,7 @@ pub(super) async fn run_sftp_session(
             return;
         }
     };
-    if !send_event(&event_tx, SshSessionEvent::Connected, session_id).await {
-        let _ = browser.shutdown().await;
-        disconnect_sftp_connection(&connection, session_id).await;
-        return;
-    }
-
+    let mut connected = false;
     let mut failed = false;
     let mut browser_error: Option<String> = None;
     let mut transfers = Vec::<ActiveSftpTransfer>::new();
@@ -175,8 +174,15 @@ pub(super) async fn run_sftp_session(
     };
     let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
+    let liveness_connection = connection.clone();
+    let transport_closed = wait_for_transport_close(move || liveness_connection.is_closed());
+    tokio::pin!(transport_closed);
     loop {
         tokio::select! {
+            _ = &mut transport_closed => {
+                info!(%session_id, "SSH transport closed during SFTP session");
+                break;
+            }
             discovery = discoveries.join_next_with_id(), if !discoveries.is_empty() => {
                 let Some(discovery) = discovery else {
                     continue;
@@ -745,11 +751,18 @@ pub(super) async fn run_sftp_session(
                     break;
                 };
                 let closed = matches!(event, SftpBrowserEvent::Closed);
+                let initial_page_ready = !connected && initial_sftp_directory_ready(&event);
                 if let SftpBrowserEvent::Failed { message, .. } = &event {
                     browser_error = Some(message.clone());
                 }
                 if !send_sftp_event(&event_tx, event, session_id).await {
                     break;
+                }
+                if initial_page_ready {
+                    if !send_event(&event_tx, SshSessionEvent::Connected, session_id).await {
+                        break;
+                    }
+                    connected = true;
                 }
                 if closed {
                     if let Some(message) = browser_error.take() {
@@ -774,11 +787,31 @@ pub(super) async fn run_sftp_session(
     if let Err(error) = browser.shutdown().await {
         warn!(session_id = %session_id, %error, "failed to shut down SFTP-only browser");
     }
-    if let Err(error) = connection.disconnect().await {
-        warn!(session_id = %session_id, %error, "SFTP-only transport disconnect failed");
-    }
+    disconnect_sftp_connection(&connection, session_id).await;
     if !failed {
         send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
+    }
+}
+
+fn initial_sftp_directory_ready(event: &SftpBrowserEvent) -> bool {
+    matches!(
+        event,
+        SftpBrowserEvent::DirectoryPage {
+            request_id: None,
+            append: false,
+            ..
+        }
+    )
+}
+
+async fn wait_for_transport_close(is_closed: impl Fn() -> bool) {
+    let mut interval = interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    loop {
+        interval.tick().await;
+        if is_closed() {
+            return;
+        }
     }
 }
 
@@ -1170,6 +1203,48 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_sftp_transport_closure_wakes_the_worker() {
+        let closed = Arc::new(AtomicBool::new(false));
+        let observed = closed.clone();
+        let watcher = tokio::spawn(wait_for_transport_close(move || {
+            observed.load(Ordering::Acquire)
+        }));
+        tokio::task::yield_now().await;
+        assert!(!watcher.is_finished());
+
+        closed.store(true, Ordering::Release);
+        tokio::time::advance(Duration::from_secs(1)).await;
+        watcher
+            .await
+            .expect("closed transport watcher should finish");
+    }
+
+    #[test]
+    fn sftp_reports_connected_only_after_initial_directory_page() {
+        assert!(!initial_sftp_directory_ready(&SftpBrowserEvent::Opened {
+            home: "/home/alice".to_owned(),
+        }));
+        let initial = SftpBrowserEvent::DirectoryPage {
+            request_id: None,
+            path: "/home/alice".to_owned(),
+            entries: Vec::new(),
+            append: false,
+            has_more: false,
+            truncated: false,
+        };
+        assert!(initial_sftp_directory_ready(&initial));
+        let later = SftpBrowserEvent::DirectoryPage {
+            request_id: Some(1),
+            path: "/home/alice".to_owned(),
+            entries: Vec::new(),
+            append: false,
+            has_more: false,
+            truncated: false,
+        };
+        assert!(!initial_sftp_directory_ready(&later));
+    }
 
     #[test]
     fn sftp_transfer_limit_counts_pending_subsystem_openings() {

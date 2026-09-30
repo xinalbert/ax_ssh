@@ -868,6 +868,54 @@ fn retiring_one_duplicate_profile_attempt_does_not_touch_the_other() {
 }
 
 #[test]
+fn sftp_reconnect_keeps_the_last_remote_directory_and_one_time_target() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("files", "files.example", "alice");
+    let tab_id =
+        state.open_sftp_tab_with_companion_at_path(&profile, None, Some("/srv/target".to_owned()));
+    let first_attempt = Uuid::new_v4();
+    state
+        .terminal_mut(tab_id)
+        .expect("SFTP tab should exist")
+        .set_ssh_attempt(Some(first_attempt));
+    let state = Arc::new(Mutex::new(state));
+
+    assert!(retire_session_attempt(
+        &state,
+        tab_id,
+        profile.id,
+        first_attempt
+    ));
+    {
+        let state = state.lock().expect("state should remain readable");
+        let terminal = state.terminal(tab_id).expect("SFTP tab should remain");
+        assert_eq!(terminal.sftp_initial_path.as_deref(), Some("/srv/target"));
+    }
+
+    let second_attempt = Uuid::new_v4();
+    {
+        let mut state = state.lock().expect("state should remain readable");
+        let terminal = state.terminal_mut(tab_id).expect("SFTP tab should remain");
+        terminal.set_ssh_attempt(Some(second_attempt));
+        terminal.sftp.open = true;
+        terminal.sftp.path = "/srv/target/deeper".to_owned();
+    }
+    assert!(retire_session_attempt(
+        &state,
+        tab_id,
+        profile.id,
+        second_attempt
+    ));
+    let state = state.lock().expect("state should remain readable");
+    let terminal = state.terminal(tab_id).expect("SFTP tab should remain");
+    assert_eq!(
+        terminal.sftp_initial_path.as_deref(),
+        Some("/srv/target/deeper")
+    );
+    assert!(terminal.sftp.path.is_empty());
+}
+
+#[test]
 fn local_shell_tabs_have_unique_ids_and_independent_numbers() {
     let mut state = test_state();
 
