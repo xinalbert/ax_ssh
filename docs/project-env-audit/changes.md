@@ -1,5 +1,55 @@
 # 项目环境变化记录
 
+## 2026-10-01 SFTP 本地目录监听环境验证
+
+- 日期：2026-10-01
+- 目的：确认跨平台目录通知依赖与本地栏自动刷新在锁定 Rust/Slint 环境中可编译、可测试。
+- 改动范围：增加 `notify 8.2.0` 与 lockfile 包，修改 application bridge/状态、双语说明和项目地图；不改 SSH trust、凭据、远端 worker 或 CI matrix。
+- 执行内容：运行定向测试、fmt、locked/offline check、严格 all-target Clippy、完整测试、两个 macOS target 的 CI 同款 check/Clippy/build、文档相对链接、tracker validator 和差异检查。
+- 验证结果：定向 1 项、完整测试库 297/应用 298/Doc tests 0、macOS ARM64/Intel 编译和链接及所有静态/文档门禁通过；本机 Rust/Cargo 1.97.1、项目 MSRV 1.92.0，notify 声明 MSRV 1.77。
+- 风险/待办：真实 GUI 和文件系统事件由用户验收；网络挂载可能不投递事件，手动 Refresh 保留；Windows/Linux target 交原生 CI。
+- 开工判定：施工与本机验证完成。
+
+## 2026-10-01 SFTP 本地目录监听施工预检
+
+- 日期：2026-10-01
+- 目的：确认当前本地目录可使用跨平台事件监听并保留既有 Rust/Slint/Tokio 构建环境。
+- 改动范围：Cargo 依赖与 lockfile、application bridge、目录状态、双语文档；不改 SSH trust、凭据或远端 worker。
+- 执行内容：读取现有环境记忆并核对 `Cargo.toml`、`Cargo.lock`、`build.rs`、CI 与本机 Rust/Cargo；检索 notify 8.2.0 的官方 API 和 MSRV。
+- 验证结果：本机 Rust/Cargo 1.97.1、项目 MSRV 1.92.0；notify 8.2.0 声明 MSRV 1.77，适配当前目标。锁文件更新及平台构建待实施。
+- 风险/待办：原生 watcher 对网络挂载目录可能不发事件；Windows/Linux 需原生 CI 和用户验收。
+- 开工判定：允许开工。
+
+## 2026-10-01 SFTP 成功事件自动刷新施工预检
+
+- 日期：2026-10-01
+- 目的：确认本地下载与远端写操作完成后可沿用现有 SFTP 浏览和测试环境更新对应文件栏。
+- 改动范围：application state/bridge、状态测试及双语 SFTP 文档；不改 Cargo、锁文件、CI 或 SSH 安全边界。
+- 执行内容：读取现有环境记忆，复核 `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml` 和本机 Rust/Cargo；沿用 Rust 2024、MSRV 1.92.0、Slint 1.18.1 与 locked/offline 命令。
+- 验证结果：上一轮完整门禁通过；本轮定向与完整验证待实施后运行。
+- 风险/待办：成功事件与目录请求竞态需状态回归；真实 GUI/SSH 交互及非原生 target 由目标平台和 CI 验收。
+- 开工判定：允许开工。
+
+## 2026-10-01 SFTP 成功事件自动刷新环境验证
+
+- 日期：2026-10-01
+- 目的：确认成功下载和远端写操作自动刷新在现有 Rust/Slint/Tokio 环境中可编译、可测试。
+- 改动范围：application state/bridge、状态回归、双语 SFTP 文档和项目地图；Cargo、锁文件、CI 与 SSH 安全边界未变。
+- 执行内容：运行定向测试、fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试、Markdown 相对链接、tracker validator 与差异检查。
+- 验证结果：定向 2 项、完整测试库 297/应用 297/Doc tests 0 和全部静态/文档门禁通过；本机 Rust/Cargo 1.97.1、MSRV 1.92.0 与 Slint 1.18.1 不变。
+- 风险/待办：真实 GUI/SSH 操作由用户在目标平台验收，非原生 target 由原生 CI 验证。
+- 开工判定：施工和本机验证完成。
+
+## 2026-10-01 X11 Custom 程序路径输入环境验证
+
+- 日期：2026-10-01
+- 目的：确认 X11 Custom 程序路径输入修复能在现有 Rust/Slint 环境中编译并通过回归。
+- 改动范围：`ui/settings/x11.slint`、`src/x_server.rs` 和项目记录；不改 Cargo、锁文件、CI、X11 relay 或 SSH 安全边界。
+- 执行内容：核对 Rust 2024、MSRV 1.92.0、本机 Rust/Cargo 1.97.1、Slint 1.18.1 与 CI matrix；运行 X11 provider 定向测试、fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试、中文目录和 tracker validator。
+- 验证结果：定向测试 1 项、完整测试库 297/应用 295/Doc tests 0、Slint 重新编译、中文目录 508 条、fmt/check/Clippy 和 tracker validator 通过。
+- 风险/待办：Custom 路径行实际显示、点击与键盘焦点由用户在目标平台确认；非原生目标依照 CI 验证。
+- 开工判定：施工及本机静态验证完成。
+
 ## 2026-10-01 SFTP 本地导航控件环境验证
 
 - 日期：2026-10-01

@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-10-01 SFTP 本地目录事件监听
+
+- 时间：2026-10-01 11:34 +0800
+- 检索问题：如何在 Rust 2024、MSRV 1.92.0 的跨平台桌面应用中监听当前本地目录变化？
+- 检索原因：本地栏需要在 Finder、资源管理器或其他本机程序改动目录后自动更新，并避免 UI 线程轮询和高频重复扫描。
+- 来源列表：[notify 8.2.0 官方 API](https://docs.rs/notify/8.2.0/notify/)；[Watcher::watch 契约](https://docs.rs/notify/8.2.0/notify/trait.Watcher.html)；`cargo info notify@8.2.0` 的 rust-version 1.77 声明。
+- 关键结论：`recommended_watcher` 提供平台推荐后端，`NonRecursive` 监听目录和直接子项；默认 macOS FSEvents。事件可能合并或漏报，网络文件系统可能不发事件，不能把监听当作唯一正确性来源。
+- 对实施计划的影响：锁定 notify 8.2.0；每个已加载 SFTP Tab 只监听当前本地目录，通过容量为 1 的通道合并事件，再复用现有后台目录读取，Tab 关闭时释放 watcher。保留手动 Refresh。
+- 未解决问题：Windows/Linux 原生 GUI 与网络挂载目录需目标平台验收；网络目录事件缺失时仍须手动刷新。
+
 ## 2026-09-29 Windows/Linux 无边框菜单顶栏
 
 - 时间：2026-09-29 17:42 +0800

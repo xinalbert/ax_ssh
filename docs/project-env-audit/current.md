@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：SFTP 本地栏刷新、前进和后退控件；不改变 SSH trust、凭据生命周期、UI/worker 所有权或依赖锁定。
+- 本轮环境范围：SFTP 本地栏的外部目录变化监听；不改变 SSH trust、凭据生命周期或远端 worker 所有权。
 
 ## 运行环境
 
@@ -13,14 +13,14 @@
 
 ## 测试环境
 
-- 依赖通过 `Cargo.lock` 锁定；本轮使用 `--locked --offline`，未修改 manifest 或 lockfile。
-- 本机已通过本地刷新历史定向测试、fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试、翻译和差异检查。
-- 本机未进行 GUI 按钮视觉、焦点和真实 SSH 服务端验收；非原生目标仍以对应 CI runner 为最终证据。
+- 依赖通过 `Cargo.lock` 锁定；本轮已增加 `notify 8.2.0` 和对应 lockfile 包，继续使用 `--locked --offline` 验证。
+- 本轮定向测试 1 项、fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试（库 297、应用 298、Doc tests 0）、Markdown 链接、tracker 和差异检查通过；macOS ARM64/Intel target 的 CI 同款 check/Clippy/build 通过。
+- 真实 GUI 和文件系统事件投递需目标平台验收；Windows/Linux target 本机未安装，以对应 CI runner 为最终证据。
 
 ## 关键命令
 
 ```text
-cargo test --locked --offline local_refresh_preserves_back_and_forward_history
+cargo test --locked --offline sftp_local_watch_refresh
 cargo fmt --all -- --check
 cargo check --locked --offline
 cargo clippy --all-targets --locked --offline -- -D warnings
@@ -31,15 +31,15 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮使用现有标准库路径能力和 Slint 回调，没有新增运行时依赖。
+- 本轮新增 `notify 8.2.0`，其声明 MSRV 1.77；其余依赖版本保持 Cargo 锁定状态。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/sftp-pane.slint`、`ui/workspace-shell.slint`、`src/app/state/tests.rs`、`src/app/sftp_bridge.rs`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app/{state.rs,state/sftp.rs,sftp_bridge.rs,local_directory_watch.rs,local_files.rs}`、`src/app.rs`。
 
 ## 最后确认时间
 
-- 2026-10-01 00:35 +0800
+- 2026-10-01 12:19 +0800
 
 # 2026-09-26 窗口保持环境验证
 
