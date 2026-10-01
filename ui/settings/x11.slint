@@ -49,12 +49,15 @@ export component X11SettingsPage inherits SettingsPage {
         label: index == 0 ? @tr("Detected locations") : "";
         value: location;
     }
-    SettingsRow {
-        visible: root.draft-provider == "custom";
+    // Custom is the final provider option on every platform. Use the index
+    // shown by the combo box so this row appears as soon as Custom is selected.
+    if root.provider-options.length > 0
+            && root.draft-provider-index == root.provider-options.length - 1 : SettingsRow {
         label: @tr("Custom executable");
         description: @tr("Choose Custom to launch this path without a command shell");
         SettingsField {
             FlatTextInput {
+                width: parent.width;
                 height: Theme.settings-control-height;
                 text <=> root.draft-app-path;
                 placeholder-text: @tr("Executable path");

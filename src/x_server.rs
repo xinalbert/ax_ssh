@@ -573,6 +573,11 @@ mod tests {
     fn provider_options_and_indices_follow_the_current_platform() {
         let options = provider_options();
         assert!(!options.is_empty());
+        assert_eq!(options.last().map(String::as_str), Some("Custom"));
+        assert_eq!(
+            provider_index(X11ServerProvider::Custom),
+            options.len() as i32 - 1
+        );
         assert!(provider_index(X11ServerProvider::Auto) >= 0);
         if cfg!(target_os = "macos") {
             assert!(options.contains(&"XQuartz".to_owned()));
