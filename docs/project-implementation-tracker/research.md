@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-10-01 标准终端的输入回底与刷新视口链路
+
+- 时间：2026-10-01
+- 检索问题：标准 terminal 如何在用户查看 scrollback 时处理持续输出、键盘输入和粘贴，避免视口跳动？
+- 检索原因：用户要求按标准 terminal 行为修复历史视口中的输入、回车和粘贴交互，并区分输出刷新与用户输入的滚动责任。
+- 来源列表：[xterm.js CoreService](https://github.com/xtermjs/xterm.js/blob/master/src/common/services/CoreService.ts)；[xterm.js Viewport](https://github.com/xtermjs/xterm.js/blob/master/src/browser/Viewport.ts)；[Alacritty event.rs](https://github.com/alacritty/alacritty/blob/master/alacritty/src/event.rs)；[WezTerm scroll_to_bottom_on_input](https://github.com/wezterm/wezterm/blob/main/docs/config/lua/config/scroll_to_bottom_on_input.md)。
+- 关键结论：xterm.js 默认 `scrollOnUserInput`，仅在 buffer `ydisp` 不在底部且发生用户输入时回底；Alacritty 在输入开始和 paste 路径调用 `on_terminal_input_start`，检测 `display_offset != 0` 后滚到底部；WezTerm 默认 `scroll_to_bottom_on_input = true`，键盘和 paste 共用该检查。输出到达不强制回底；xterm.js 的同步输出还会延后 viewport sync，降低刷新期间闪动。
+- 对实施计划的影响：AxSSH 保留输出到达时的 Detached 位置；在有效键或 paste 已成功编码后调用生产 `scroll_terminal_to_bottom`，视口确实改变时立即发布一次 terminal snapshot。未知键、未连接 tab 和编码失败不触发回底；不改 cursor renderer，因为 detached 位置隐藏 live cursor 是标准语义。
+- 未解决问题：Slint/winit 目标平台的真实光标闪烁和连续输出视觉仍需用户验收；本轮不引入 renderer 级同步输出改造。
+
 ## 2026-10-01 SFTP 本地目录事件监听
 
 - 时间：2026-10-01 11:34 +0800

@@ -145,9 +145,10 @@ until release and forwarded to a reporting TUI; pointer movement cancels that
 candidate and keeps the gesture as local selection.
 `TerminalModel` keeps the viewport policy explicit alongside the upstream
 `display_offset`: `Follow` is the live bottom, `Detached` is user scrollback,
-and `AlternateScreen` is the remote full-screen buffer. Output and keyboard
-input/paste preserve a detached offset, entering or leaving alternate screen
-clears local scrollback follow state, and mouse
+and `AlternateScreen` is the remote full-screen buffer. Output preserves a
+detached offset, while valid keyboard input and paste return the viewport to
+the live bottom. Entering or leaving alternate screen clears local scrollback
+follow state, and mouse
 reporting does not change the local viewport. The snapshot exposes bounded
 offset and mode metadata so the UI can add return-to-bottom or unread-output
 affordances without inferring user intent from geometry alone.
@@ -157,6 +158,10 @@ when a main-screen detached viewport is resized, it restores the bounded
 live bottom or the oldest available row. A new `TerminalPane` delays its
 initial resize report for two frames so a transient minimum grid cannot
 rewrite the terminal model during layout settlement.
+Workspace text restoration stages the bounded text at the minimum terminal
+grid before the first real pane resize. This lets a restored logical line
+reflow while the pane grows, instead of shrinking a mostly empty default
+screen and moving its leading rows into scrollback.
 For an identity-preserving visible terminal, `TerminalModel` uses upstream
 `TermDamage` and stable `Arc<TerminalStyledLine>` identities to rebuild only
 damaged visible rows. Resize, scrollback-offset changes, and full upstream

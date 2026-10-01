@@ -121,12 +121,14 @@ Rust
 在 Local selection priority 模式下，没有发生移动的单次左键点击会延迟到释放时转发给已启用
 mouse reporting 的 TUI；指针一旦移动就取消该候选并保持本地选区。
 `TerminalModel` 在上游 `display_offset` 旁维护显式的 `Follow`、`Detached` 和
-`AlternateScreen` 视口策略。输出、键盘输入和粘贴都会保持 Detached 时用户查看的历史位置，进入或
-退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
+`AlternateScreen` 视口策略。输出到达时保持 Detached 的历史位置；有效键盘输入和粘贴会回到底部的
+Follow 视口。进入或退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset
 和 mode，UI 不需要从几何值猜测用户意图，也可以据此提供返回底部或未读输出提示。
 Rust 模型在 Tab 激活和 pane 重建之间仍是视口状态的 owner；主屏 Detached 视口发生 resize 后会在
 `Term::resize` 完成后恢复有界 `display_offset`，不会把用户重置到实时底部或最旧可用行。新建
 `TerminalPane` 会等待两个 frame 再首次上报 resize，避免布局稳定前的最小网格先改写终端模型。
+工作区文本恢复会先在最小终端网格中重放，再等待真实 pane 尺寸进行首次 resize。这样恢复的逻辑行会随 pane
+增大正常 reflow，不会先创建大段空白默认屏幕、缩小时把开头内容送进 scrollback。
 对于 identity 不变的可见终端，`TerminalModel` 使用上游 `TermDamage` 和稳定的
 `Arc<TerminalStyledLine>` identity，只重建受损的可见行。resize、scrollback offset 变化和上游 full
 damage 仍检查完整的有界 viewport，并且只在 styled run 相等时复用旧行。UI renderer 按 64-bit 行
