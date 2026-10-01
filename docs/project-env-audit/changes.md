@@ -90,6 +90,14 @@
 - 风险/待办：GUI 视觉与真实 SSH 服务器导航由用户在目标平台验收；施工后记录完整门禁结果。
 - 开工判定：允许开工。
 
+## 2026-09-30 交互终端高延迟输入环境收口
+
+- 日期：2026-09-30
+- 变化摘要：复核远端交互终端输入优化所需的 Rust/Cargo、Slint build 入口、CI target 和 locked/offline 测试环境；环境事实未发生版本变化，仅刷新当前态记录。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/telnet.rs`、`src/ssh.rs`、`src/ssh/worker/shell.rs`、`docs/project-env-audit/current.md`。
+- 更新后的命令或环境：继续使用 Rust 1.97.1 本机工具链、本项目 MSRV 1.92.0、Cargo locked/offline；完成 Telnet 定向测试、fmt、check、严格 Clippy、完整 Cargo 测试和 `git diff --check`。
+- 验证结果：定向 Telnet 测试 5 项通过；完整测试库 297、应用 292、Doc tests 0；真实高 RTT Telnet/SSH 和 GUI 输入手感未在本轮执行，目标平台原生 CI 仍为跨平台证据。
+
 ## 2026-09-25 子窗口终端列宽同步施工预检
 
 - 日期：2026-09-25

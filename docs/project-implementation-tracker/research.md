@@ -10,6 +10,15 @@
 - 对实施计划的影响：锁定 notify 8.2.0；每个已加载 SFTP Tab 只监听当前本地目录，通过容量为 1 的通道合并事件，再复用现有后台目录读取，Tab 关闭时释放 watcher。保留手动 Refresh。
 - 未解决问题：Windows/Linux 原生 GUI 与网络挂载目录需目标平台验收；网络目录事件缺失时仍须手动刷新。
 
+## 2026-09-30 交互终端高延迟输入标准
+
+- 检索问题：标准 SSH/TCP 和主流终端如何处理高 RTT 下的按键延迟，AxSSH 应采用哪些低风险调整？
+- 检索原因：用户要求按相关建议调整项目的远端输入体验；需要区分协议标准、TCP 小包优化和预测回显架构。
+- 来源列表：[RFC 4254 SSH Connection Protocol](https://www.rfc-editor.org/rfc/rfc4254)；[RFC 896 Congestion Control in IP/TCP Internetworks](https://www.rfc-editor.org/rfc/rfc896)；[RFC 9293 TCP](https://www.rfc-editor.org/rfc/rfc9293)；[OpenSSH ssh_config](https://man.openbsd.org/ssh_config)；[Mosh 官方说明](https://mosh.org/)；[Mosh 论文](https://mosh.org/mosh-paper.pdf)。
+- 关键结论：RFC 4254 的交互终端仍是远端 PTY 的 SSH channel byte stream，通道窗口和最大包大小负责流控；RFC 9293 要求 TCP 提供关闭 Nagle 的方式，RFC 896 解释单字符输入的小包问题。OpenSSH 提供交互 QoS 与按键时序扰动选项，但普通 SSH 不提供本地预测回显。Mosh 通过屏幕状态同步和预测模型改善高延迟输入，属于独立传输/协议架构。
+- 对实施计划的影响：AxSSH SSH 已有 `TCP_NODELAY`、无输入 batching timer 和首个远端输出立即刷新，保留现状；Telnet 使用同样的交互 TCP 小包模型，因此在连接后补 `TcpStream::set_nodelay(true)`。不在本轮引入本地预测回显或 Mosh 后端，避免破坏密码、readline、vim 和 ANSI 控制序列语义。
+- 未解决问题：真实高 RTT 环境的 P50/P95 仍需同一主机上与系统 `ssh`/Telnet 客户端对比；`TCP_NODELAY` 的收益取决于链路和远端实现，不能消除远端回显 RTT。
+
 ## 2026-09-29 Windows/Linux 无边框菜单顶栏
 
 - 时间：2026-09-29 17:42 +0800
