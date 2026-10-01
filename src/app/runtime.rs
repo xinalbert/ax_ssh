@@ -225,11 +225,19 @@ pub(super) fn renderer_window_created(kind: &'static str) {
 }
 
 pub(super) fn renderer_window_destroyed(kind: &'static str) {
-    let previous = RENDERER_WINDOW_COUNT
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
-            count.checked_sub(1)
-        })
-        .unwrap_or(0);
+    // `try_update` is newer than our MSRV; keep a zero count from wrapping.
+    let mut previous = RENDERER_WINDOW_COUNT.load(Ordering::Acquire);
+    while previous != 0 {
+        match RENDERER_WINDOW_COUNT.compare_exchange_weak(
+            previous,
+            previous - 1,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => break,
+            Err(actual) => previous = actual,
+        }
+    }
     let window_count = previous.saturating_sub(1);
     tracing::info!(
         target: "ax_ssh::diagnostics",

@@ -993,7 +993,7 @@ impl WindowRouter {
                     .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     .or_else(|| {
                         transfer_active_tab_id
-                            .map(&workspace_tab_for)
+                            .map(workspace_tab_for)
                             .filter(|id| tabs.iter().any(|tab| tab.id == *id))
                     })
                     .or_else(|| {
