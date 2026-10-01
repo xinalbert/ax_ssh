@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：SFTP 本地栏的外部目录变化监听；不改变 SSH trust、凭据生命周期或远端 worker 所有权。
+- 本轮环境范围：Windows/Linux 终端持续输出的 native redraw 唤醒；不改变 SSH trust、凭据生命周期、终端 parser 或 worker 所有权。
 
 ## 运行环境
 
@@ -13,9 +13,9 @@
 
 ## 测试环境
 
-- 依赖通过 `Cargo.lock` 锁定；本轮已增加 `notify 8.2.0` 和对应 lockfile 包，继续使用 `--locked --offline` 验证。
-- 本轮定向测试 1 项、fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试（库 297、应用 298、Doc tests 0）、Markdown 链接、tracker 和差异检查通过；macOS ARM64/Intel target 的 CI 同款 check/Clippy/build 通过。
-- 真实 GUI 和文件系统事件投递需目标平台验收；Windows/Linux target 本机未安装，以对应 CI runner 为最终证据。
+- 依赖通过 `Cargo.lock` 锁定；本轮不新增依赖，继续使用 `--locked --offline` 验证。
+- 本轮 fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试（库 297、应用 298、Doc tests 0）、tracker 和差异检查通过。
+- 真实 GUI 和 native redraw 需目标平台验收；Windows/Linux target 本机未安装，以对应 CI runner 和用户新构建为最终证据。
 
 ## 关键命令
 
@@ -31,15 +31,15 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮新增 `notify 8.2.0`，其声明 MSRV 1.77；其余依赖版本保持 Cargo 锁定状态。
+- 本轮不新增外部依赖；Slint 1.18.1、winit 0.30.13 和 patched software backend 继续由 Cargo.lock/vendor 约束。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app/{state.rs,state/sftp.rs,sftp_bridge.rs,local_directory_watch.rs,local_files.rs}`、`src/app.rs`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app/view/workspace.rs`、`src/app/view/terminal.rs`、`src/app/terminal_presentation.rs`、`vendor/i-slint-backend-winit/`、`vendor/softbuffer/`。
 
 ## 最后确认时间
 
-- 2026-10-01 12:19 +0800
+- 2026-10-01 12:36 +0800
 
 # 2026-09-26 窗口保持环境验证
 

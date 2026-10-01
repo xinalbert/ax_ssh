@@ -219,6 +219,10 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 属性。因此可见 `TerminalGrid` 会直接收到输出 model 通知，不需要等待下一次焦点变化。
 光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
 行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
+终端专用批次应用 pane model 更新后，application bridge 还会调用 native winit 窗口的
+`request_redraw()`。这只负责呈现唤醒，不改变 `TerminalSnapshot`、脏行选择、parser 行为、传输时序或有界刷新闸门。
+它覆盖 Windows 和 Linux software surface 可能出现的情况：Slint model 已收到通知，但下一次 native frame 没有被排入，
+持续输出因此不再需要点击窗口或重新获得焦点才能显示。其它平台也使用同一个小型请求，以保持 application-side contract 一致。
 进程同时编译 Slint 的 Skia 和 software renderer。`AppearanceSettings` 拥有持久化的
 `RendererPreference` DTO：Automatic 在 macOS 选择 `winit-skia`、在 Windows/Linux 选择
 `winit-software`；GPU 选择 `winit-skia`，Software 选择 `winit-software`。配置读取与 renderer

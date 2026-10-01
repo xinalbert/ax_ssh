@@ -329,6 +329,14 @@ The cursor uses a retained, bounded one-row model for the same reason. Each
 snapshot updates its row, column, visibility, and displayed cell through that
 model before publishing terminal rows, so cursor movement does not depend on a
 focus-triggered outer DTO refresh.
+After a terminal-only batch applies its pane model updates, the application
+bridge also calls the native winit window's `request_redraw()`. This is a
+presentation wake-up only: it does not alter `TerminalSnapshot`, dirty-row
+selection, parser behavior, transport timing, or the bounded refresh gate. It
+covers Windows and Linux software surfaces where a Slint model notification can
+arrive without scheduling the next native frame, so continuous output remains
+visible without requiring a click or focus change. Other platforms use the same
+small request to keep the application-side contract consistent.
 The process enables both Slint's Skia and software renderers. `AppearanceSettings`
 owns the persisted `RendererPreference` DTO: Automatic selects `winit-skia` on
 macOS and `winit-software` on Windows/Linux, GPU selects `winit-skia`, and

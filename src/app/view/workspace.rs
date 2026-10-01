@@ -131,8 +131,11 @@ fn schedule_pending_ui_refresh(
             let Some(ui) = update.ui.upgrade() else {
                 continue;
             };
-            applied_pane_count =
-                applied_pane_count.saturating_add(apply_terminal_pane_updates(&ui, update.panes));
+            let applied = apply_terminal_pane_updates(&ui, update.panes);
+            if applied > 0 {
+                request_terminal_native_redraw(&ui);
+            }
+            applied_pane_count = applied_pane_count.saturating_add(applied);
         }
         let follow_up = state_for_ui
             .lock()
@@ -173,6 +176,15 @@ fn schedule_pending_ui_refresh(
             "multi-window workspace refresh could not enter the UI event loop"
         );
     }
+}
+
+fn request_terminal_native_redraw(ui: &AppWindow) {
+    // A model notification may not wake the native surface on every desktop backend.
+    use slint::winit_030::WinitWindowAccessor;
+
+    let _ = ui
+        .window()
+        .with_winit_window(|window| window.request_redraw());
 }
 
 pub(in crate::app) fn visible_workspace_tab_rows(
