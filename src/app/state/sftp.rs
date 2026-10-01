@@ -367,27 +367,50 @@ impl SftpBrowserState {
                     )
             })
             .and_then(|transfer| transfer.remote_path.as_deref())
-            .and_then(remote_parent)
-            .filter(|directory| {
-                !self.loading
-                    && (self.path == *directory
-                        || (self.path == "/" && directory.starts_with('/'))
-                        || directory.starts_with(&format!("{}/", self.path.trim_end_matches('/'))))
-            })
-            .map(|_| self.path.clone());
+            .and_then(|path| self.visible_remote_directory_for_file(path));
         self.finish_transfer(id, SftpTransferPhase::Completed, "Uploaded".to_owned());
         refresh_path
     }
 
-    pub(in crate::app) fn begin_refresh_after_upload(
+    pub(in crate::app) fn visible_remote_directory_for_file(&self, path: &str) -> Option<String> {
+        if !self.open {
+            return None;
+        }
+        let directory = remote_parent(path)?;
+        (self.path == directory
+            || (self.path == "/" && directory.starts_with('/'))
+            || (!self.path.is_empty()
+                && directory.starts_with(&format!("{}/", self.path.trim_end_matches('/')))))
+        .then(|| self.path.clone())
+    }
+
+    pub(in crate::app) fn begin_refresh_after_remote_change(
         &mut self,
         directory: &str,
     ) -> Result<Option<(u64, String)>> {
-        if self.loading || self.path != directory {
+        if !self.open || self.path != directory {
+            return Ok(None);
+        }
+        if self.loading {
+            self.pending_auto_refresh = Some(directory.to_owned());
             return Ok(None);
         }
         self.begin_navigation(SftpNavigation::Direct, Some(directory.to_owned()))
             .map(Some)
+    }
+
+    pub(in crate::app) fn begin_pending_auto_refresh(&mut self) -> Result<Option<(u64, String)>> {
+        if self.loading {
+            return Ok(None);
+        }
+        if !self.open {
+            self.pending_auto_refresh = None;
+            return Ok(None);
+        }
+        let Some(directory) = self.pending_auto_refresh.take() else {
+            return Ok(None);
+        };
+        self.begin_refresh_after_remote_change(&directory)
     }
 
     pub(in crate::app) fn upload_directory(&self) -> Option<&str> {
@@ -698,6 +721,7 @@ impl SftpBrowserState {
         self.back_history.clear();
         self.forward_history.clear();
         self.pending_navigation = None;
+        self.pending_auto_refresh = None;
     }
 
     pub(in crate::app) fn complete_navigation(&mut self, path: String) {
@@ -791,6 +815,7 @@ impl SftpBrowserState {
         let mut local = std::mem::take(&mut self.local);
         local.request_id = local.request_id.wrapping_add(1).max(1);
         local.pending_navigation = None;
+        local.pending_auto_refresh = None;
         if local.loading {
             local.loading = false;
             if local.loaded {
@@ -848,6 +873,61 @@ fn local_directory_parent(path: &str) -> Option<String> {
 }
 
 impl LocalDirectoryState {
+    pub(in crate::app) fn mark_watcher_running(&mut self) -> bool {
+        if self.watcher_running || !self.loaded {
+            return false;
+        }
+        self.watcher_running = true;
+        true
+    }
+
+    pub(in crate::app) fn mark_watcher_stopped(&mut self) {
+        self.watcher_running = false;
+    }
+
+    pub(in crate::app) fn begin_refresh_after_download(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Result<Option<(u64, String)>> {
+        if (!self.loaded && !self.loading)
+            || self.path.is_empty()
+            || !path.starts_with(std::path::Path::new(&self.path))
+        {
+            return Ok(None);
+        }
+        let directory = self.path.clone();
+        self.begin_refresh_after_local_change(&directory)
+    }
+
+    pub(in crate::app) fn begin_refresh_after_local_change(
+        &mut self,
+        directory: &str,
+    ) -> Result<Option<(u64, String)>> {
+        if (!self.loaded && !self.loading) || self.path != directory {
+            return Ok(None);
+        }
+        if self.loading {
+            self.pending_auto_refresh = Some(directory.to_owned());
+            return Ok(None);
+        }
+        self.begin_navigation(SftpNavigation::Direct, Some(directory.to_owned()))
+            .map(Some)
+    }
+
+    pub(in crate::app) fn begin_pending_auto_refresh(&mut self) -> Result<Option<(u64, String)>> {
+        if self.loading {
+            return Ok(None);
+        }
+        let Some(directory) = self.pending_auto_refresh.take() else {
+            return Ok(None);
+        };
+        if self.path != directory {
+            return Ok(None);
+        }
+        self.begin_navigation(SftpNavigation::Direct, Some(directory))
+            .map(Some)
+    }
+
     pub(in crate::app) fn begin_navigation(
         &mut self,
         kind: SftpNavigation,

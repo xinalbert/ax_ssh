@@ -1424,6 +1424,7 @@ fn empty_sftp_upload_keeps_upload_status() {
 #[test]
 fn completed_upload_refreshes_only_its_visible_remote_directory() {
     let mut sftp = SftpBrowserState {
+        open: true,
         path: "/home/alice".to_owned(),
         ..SftpBrowserState::default()
     };
@@ -1448,7 +1449,7 @@ fn completed_upload_refreshes_only_its_visible_remote_directory() {
         Some("/home/alice".to_owned())
     );
     assert_eq!(
-        sftp.begin_refresh_after_upload("/home/alice")
+        sftp.begin_refresh_after_remote_change("/home/alice")
             .expect("refresh intent should be valid"),
         Some((1, "/home/alice".to_owned()))
     );
@@ -1462,8 +1463,55 @@ fn completed_upload_refreshes_only_its_visible_remote_directory() {
 }
 
 #[test]
+fn sftp_refresh_coalesces_remote_changes_and_discards_stale_directory() {
+    let mut sftp = SftpBrowserState {
+        open: true,
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    assert_eq!(
+        sftp.visible_remote_directory_for_file("/home/alice/nested/file.txt"),
+        Some("/home/alice".to_owned())
+    );
+    assert_eq!(
+        sftp.visible_remote_directory_for_file("/home/alice-other/file.txt"),
+        None
+    );
+
+    let first = sftp
+        .begin_refresh_after_remote_change("/home/alice")
+        .expect("first refresh should be accepted")
+        .expect("first refresh should start");
+    assert_eq!(first.1, "/home/alice");
+    assert_eq!(
+        sftp.begin_refresh_after_remote_change("/home/alice")
+            .expect("second change should be queued"),
+        None
+    );
+    sftp.complete_navigation("/home/alice".to_owned());
+    let follow_up = sftp
+        .begin_pending_auto_refresh()
+        .expect("pending refresh should be accepted")
+        .expect("pending refresh should start");
+    assert!(follow_up.0 > first.0);
+    sftp.complete_navigation("/home/alice".to_owned());
+    assert_eq!(sftp.begin_pending_auto_refresh().unwrap(), None);
+
+    sftp.begin_navigation(SftpNavigation::Direct, Some("/home/other".to_owned()))
+        .expect("navigation should start");
+    assert_eq!(
+        sftp.begin_refresh_after_remote_change("/home/alice")
+            .expect("change during navigation should be queued"),
+        None
+    );
+    sftp.complete_navigation("/home/other".to_owned());
+    assert_eq!(sftp.begin_pending_auto_refresh().unwrap(), None);
+}
+
+#[test]
 fn nested_upload_refreshes_visible_ancestor() {
     let mut sftp = SftpBrowserState {
+        open: true,
         path: "/home/alice".to_owned(),
         ..SftpBrowserState::default()
     };
@@ -1491,6 +1539,7 @@ fn nested_upload_refreshes_visible_ancestor() {
 #[test]
 fn completed_upload_does_not_refresh_a_different_remote_directory() {
     let mut sftp = SftpBrowserState {
+        open: true,
         path: "/home/other".to_owned(),
         ..SftpBrowserState::default()
     };
@@ -1781,6 +1830,117 @@ fn local_refresh_preserves_back_and_forward_history() {
     local.complete(forward, Vec::new(), false, 0);
     assert!(local.snapshot().can_go_back);
     assert!(!local.snapshot().can_go_forward);
+}
+
+#[test]
+fn sftp_refresh_after_download_targets_visible_local_directory() {
+    let directory = std::env::temp_dir().join("axssh-refresh-local");
+    let directory_text = directory.display().to_string();
+    let mut first_load = LocalDirectoryState {
+        loading: true,
+        path: directory_text.clone(),
+        ..LocalDirectoryState::default()
+    };
+    assert_eq!(
+        first_load
+            .begin_refresh_after_download(&directory.join("early.txt"))
+            .expect("download during first listing should be queued"),
+        None
+    );
+    first_load.complete(directory_text.clone(), Vec::new(), false, 0);
+    assert!(first_load.begin_pending_auto_refresh().unwrap().is_some());
+
+    let mut local = LocalDirectoryState {
+        loaded: true,
+        path: directory_text.clone(),
+        ..LocalDirectoryState::default()
+    };
+
+    let first = local
+        .begin_refresh_after_download(&directory.join("nested").join("file.txt"))
+        .expect("download refresh should be valid")
+        .expect("visible download should refresh");
+    assert_eq!(first.1, directory_text);
+    assert_eq!(
+        local
+            .begin_refresh_after_download(&directory.join("other.txt"))
+            .expect("second download should be valid"),
+        None
+    );
+    local.complete(directory_text.clone(), Vec::new(), false, 0);
+    let follow_up = local
+        .begin_pending_auto_refresh()
+        .expect("pending local refresh should be valid")
+        .expect("second download should trigger a final listing");
+    assert!(follow_up.0 > first.0);
+    local.complete(directory_text.clone(), Vec::new(), false, 0);
+    assert_eq!(local.begin_pending_auto_refresh().unwrap(), None);
+    assert!(!local.snapshot().can_go_back);
+
+    let other = directory.with_file_name("axssh-refresh-other");
+    assert_eq!(
+        local
+            .begin_refresh_after_download(&other.join("file.txt"))
+            .expect("different directory should be valid"),
+        None
+    );
+    local
+        .begin_navigation(SftpNavigation::Direct, Some(other.display().to_string()))
+        .expect("local navigation should start");
+    assert_eq!(
+        local
+            .begin_refresh_after_download(&directory.join("late.txt"))
+            .expect("late download should be valid"),
+        None
+    );
+    local.complete(other.display().to_string(), Vec::new(), false, 0);
+    assert_eq!(local.begin_pending_auto_refresh().unwrap(), None);
+}
+
+#[test]
+fn sftp_local_watch_refresh_follows_displayed_directory() {
+    let mut local = LocalDirectoryState {
+        loaded: true,
+        path: "/tmp/current".to_owned(),
+        ..LocalDirectoryState::default()
+    };
+    assert!(local.mark_watcher_running());
+    assert!(!local.mark_watcher_running());
+    assert_eq!(
+        local
+            .begin_refresh_after_local_change("/tmp/other")
+            .expect("unrelated watch event should be harmless"),
+        None
+    );
+
+    let first = local
+        .begin_refresh_after_local_change("/tmp/current")
+        .expect("watched change should be valid")
+        .expect("watched change should refresh the directory");
+    assert_eq!(first.1, "/tmp/current");
+    assert_eq!(
+        local
+            .begin_refresh_after_local_change("/tmp/current")
+            .expect("busy watch change should be coalesced"),
+        None
+    );
+    local.complete("/tmp/current".to_owned(), Vec::new(), false, 0);
+    assert!(local.begin_pending_auto_refresh().unwrap().is_some());
+    local.complete("/tmp/current".to_owned(), Vec::new(), false, 0);
+
+    local
+        .begin_navigation(SftpNavigation::Direct, Some("/tmp/other".to_owned()))
+        .expect("navigation should start");
+    assert_eq!(
+        local
+            .begin_refresh_after_local_change("/tmp/current")
+            .expect("change during navigation should be queued"),
+        None
+    );
+    local.complete("/tmp/other".to_owned(), Vec::new(), false, 0);
+    assert_eq!(local.begin_pending_auto_refresh().unwrap(), None);
+    local.mark_watcher_stopped();
+    assert!(local.mark_watcher_running());
 }
 
 #[test]

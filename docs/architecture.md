@@ -1474,10 +1474,13 @@ and the stream resumes at its current offset only while that worker lives.
 Each bounded transfer row retains its optional local path and remote target only
 inside application state. Terminal records can reveal a non-symlink local path
 from a blocking platform opener; Slint receives only a boolean capability and
-the opaque transfer ID. A completed upload may start one fresh listing request
-only when the active remote path is its destination parent or a visible ancestor and no
-navigation is loading. The refresh uses the ordinary SFTP navigation request,
-does not add history, and is skipped for cancelled or stale completions.
+the opaque transfer ID. A successful upload, remote write, or download starts a
+fresh listing request only when its affected directory or an ancestor is still
+visible in the corresponding remote or local pane. Changes completed while a
+listing is loading coalesce into one follow-up request for that same directory;
+navigating elsewhere discards it. The refresh uses ordinary directory navigation
+without adding history. Cancelled, failed, skipped, and stale completions do
+not request a refresh.
 Upload target readiness is derived from the last opened remote path and its
 pending navigation, independently of directory listing progress. Refreshing or
 paging that same path keeps it usable; a pending move to another path blocks
@@ -1486,6 +1489,13 @@ succeeds, and the SFTP pane initializes it only before its first successful load
 Later activations reuse that state; a local Refresh action requests a new listing.
 SFTP session reset also retains the local directory and selection while invalidating
 any pending local listing result; remote browser and transfer state still reset.
+One application-owned native filesystem watcher per loaded SFTP Tab observes only
+the current local directory. A bounded one-slot signal and short debounce merge
+event bursts before requesting the existing background listing. The watcher
+changes its registration after successful local navigation and exits shortly
+after the Tab closes; it holds only a weak Slint UI reference and no SSH handle
+or credentials.
+Manual Refresh remains available when a filesystem does not deliver events.
 
 The local writer validates every path component, rejects symlink traversal and
 existing targets, creates a task-specific `0600` `.part` file on Unix, then

@@ -2701,7 +2701,7 @@ fn queue_remote_navigation_for_terminal(
     Ok(())
 }
 
-fn load_local_directory(
+pub(super) fn load_local_directory(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
@@ -2711,17 +2711,20 @@ fn load_local_directory(
 ) {
     let runtime = runtime.clone();
     let runtime_for_icons = runtime.clone();
-    runtime.spawn(async move {
+    runtime.clone().spawn(async move {
         let listed = tokio::time::timeout(
             LOCAL_DIRECTORY_TIMEOUT,
             tokio::task::spawn_blocking(move || read_local_directory(&path)),
         )
         .await;
         let mut icon_keys = Vec::new();
+        let mut watch_loaded_directory = false;
         let message = match listed {
             Ok(Ok(Ok(listing))) => {
                 icon_keys = local_icon_keys(&listing.entries);
-                apply_local_directory_listing(&state, tab_id, request_id, listing)
+                let applied = apply_local_directory_listing(&state, tab_id, request_id, listing);
+                watch_loaded_directory = applied;
+                applied
             }
             Ok(Ok(Err(error))) => apply_local_directory_failure(
                 &state,
@@ -2743,8 +2746,32 @@ fn load_local_directory(
             ),
         };
         if message {
+            if watch_loaded_directory {
+                super::local_directory_watch::ensure_local_directory_watch(
+                    &runtime,
+                    state.clone(),
+                    ui.clone(),
+                    tab_id,
+                );
+            }
+            let pending = state.lock().ok().and_then(|mut app| {
+                let terminal = app.terminal_mut(tab_id)?;
+                if !terminal.is_sftp() {
+                    return None;
+                }
+                match terminal.sftp.local.begin_pending_auto_refresh() {
+                    Ok(request) => request,
+                    Err(error) => {
+                        warn!(tab_id = %tab_id, %error, "could not finish pending local directory refresh");
+                        None
+                    }
+                }
+            });
             dispatch_active_snapshot(&ui, &state);
             prewarm_file_icons(&runtime_for_icons, icon_keys, &ui, &state);
+            if let Some((request_id, path)) = pending {
+                load_local_directory(&runtime, state, ui, tab_id, request_id, path);
+            }
         }
     });
 }

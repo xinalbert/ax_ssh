@@ -269,14 +269,20 @@ the existing file intact.
 Right-click an active transfer for its applicable Pause, Resume, or Cancel
 action. Right-click a failed, cancelled, or successful record to remove it, or
 to reveal its local source or downloaded file when that path is available.
-After an upload completes, AxSSH refreshes **Remote files** automatically only
-when that pane is still showing the upload's destination directory or an ancestor and no other
-directory request is in progress; it does not interrupt later navigation.
+After an upload, remote deletion, rename, or inline edit save succeeds, AxSSH
+refreshes **Remote files** when that pane still shows the affected directory or
+an ancestor. After a download succeeds, it likewise refreshes **Local files**
+when that pane still shows the destination directory or an ancestor. Changes
+completed while a listing is loading are coalesced into one follow-up refresh;
+navigation to another directory is not interrupted. Failed, cancelled, and
+skipped operations do not trigger an automatic refresh.
 Uploads can still target the current remote directory while that same directory
 is refreshing. Navigation to another remote directory pauses new uploads until
 its destination is known. Returning to an SFTP Tab keeps the loaded Local files
-selection, including after an SFTP reconnect; use **Refresh** in Local files to
-read changes made outside AxSSH.
+selection, including after an SFTP reconnect. Changes made to the displayed
+local directory by Finder, Explorer, or another local program trigger a fresh
+listing. Use **Refresh** when a filesystem, such as a network mount, does not
+deliver change notifications.
 An unexpected SSH or SFTP subsystem disconnect is detected even while the
 browser is idle. Reconnection restores the last displayed remote directory (or the Tab's
 initial target if no page loaded yet); unfinished transfers are not replayed.

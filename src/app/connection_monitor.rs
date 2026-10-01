@@ -135,6 +135,7 @@ pub(super) fn spawn_session_monitor(
                         SftpBrowserEvent::DirectoryPage { entries, .. } => sftp_icon_keys(entries),
                         _ => Vec::new(),
                     };
+                    let mut refresh_error = None;
                     let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -150,12 +151,24 @@ pub(super) fn spawn_session_monitor(
                                     format!("Connected to {}", profile_endpoint(&profile));
                             }
                             apply_sftp_event(&mut terminal.sftp, event);
+                            match terminal.sftp.begin_pending_auto_refresh() {
+                                Ok(Some(request)) => {
+                                    if let Err(error) = send_remote_directory_request(terminal, request) {
+                                        refresh_error = Some(error);
+                                    }
+                                }
+                                Ok(None) => {}
+                                Err(error) => refresh_error = Some(error),
+                            }
                         },
                     ) else {
                         continue;
                     };
                     if active {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(error) = refresh_error {
+                        warn!(tab_id = %tab_id, session_id = %profile.id, %error, "could not finish pending SFTP directory refresh");
                     }
                     prewarm_file_icons(&runtime_for_monitor, icon_keys, &ui, &state);
                 }
@@ -178,6 +191,8 @@ pub(super) fn spawn_session_monitor(
                         _ => {}
                     }
                     let mut refresh_after_upload = None;
+                    let mut refresh_after_download = None;
+                    let mut local_refresh_error = None;
                     let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
@@ -271,11 +286,16 @@ pub(super) fn spawn_session_monitor(
                                     refresh_after_upload =
                                         terminal.sftp.finish_uploaded_transfer(transfer_id);
                                 } else {
-                                    let _ = terminal.sftp.finish_downloaded_transfer(
+                                    if terminal.sftp.finish_downloaded_transfer(
                                         transfer_id,
                                         total_bytes,
-                                        local_path,
-                                    );
+                                        local_path.clone(),
+                                    ) {
+                                        match terminal.sftp.local.begin_refresh_after_download(&local_path) {
+                                            Ok(request) => refresh_after_download = request,
+                                            Err(error) => local_refresh_error = Some(error),
+                                        }
+                                    }
                                 }
                             }
                             SftpTransferEvent::Cancelled { transfer_id } => {
@@ -302,6 +322,19 @@ pub(super) fn spawn_session_monitor(
                     if active {
                         dispatch_active_snapshot(&ui, &state);
                     }
+                    if let Some(error) = local_refresh_error {
+                        warn!(tab_id = %tab_id, session_id = %profile.id, %error, "could not refresh local directory after download");
+                    }
+                    if let Some((request_id, path)) = refresh_after_download {
+                        super::sftp_bridge::load_local_directory(
+                            &runtime_for_monitor,
+                            state.clone(),
+                            ui.clone(),
+                            tab_id,
+                            request_id,
+                            path,
+                        );
+                    }
                     if let Some(directory) = refresh_after_upload {
                         let mut refresh_error = None;
                         let refreshed = mutate_terminal_attempt(
@@ -312,7 +345,7 @@ pub(super) fn spawn_session_monitor(
                             |terminal| {
                                 let (request_id, request_path) = match terminal
                                     .sftp
-                                    .begin_refresh_after_upload(directory.as_str())
+                                    .begin_refresh_after_remote_change(directory.as_str())
                                 {
                                     Ok(Some(request)) => request,
                                     Ok(None) => return,
@@ -321,15 +354,10 @@ pub(super) fn spawn_session_monitor(
                                         return;
                                     }
                                 };
-                                let result = terminal
-                                    .worker
-                                    .as_ref()
-                                    .context("SFTP tab has no worker")
-                                    .and_then(|worker| {
-                                        worker.request_list_sftp(request_id, request_path)
-                                    });
-                                if let Err(error) = result {
-                                    terminal.sftp.cancel_navigation();
+                                if let Err(error) = send_remote_directory_request(
+                                    terminal,
+                                    (request_id, request_path),
+                                ) {
                                     refresh_error = Some(error);
                                 }
                             },
@@ -348,17 +376,24 @@ pub(super) fn spawn_session_monitor(
                     }
                 }
                 SshSessionEvent::SftpWrite(event) => {
+                    let changed_path = match &event {
+                        ax_ssh::sftp::SftpWriteEvent::Completed { path, .. }
+                        | ax_ssh::sftp::SftpWriteEvent::Updated { path, .. } => Some(path.clone()),
+                        _ => None,
+                    };
                     let monitor_path = match &event {
                         ax_ssh::sftp::SftpWriteEvent::Text { path, .. } => Some(path.clone()),
                         ax_ssh::sftp::SftpWriteEvent::Updated { path, .. } => Some(path.clone()),
                         _ => None,
                     };
+                    let mut refresh_error = None;
                     let Some(active) = mutate_terminal_attempt(
                         &state,
                         tab_id,
                         profile.id,
                         attempt_id,
-                        |terminal| match event {
+                        |terminal| {
+                            match event {
                             ax_ssh::sftp::SftpWriteEvent::Completed { path, .. } => {
                                 terminal.sftp.status = format!("Updated {path}");
                             }
@@ -415,12 +450,29 @@ pub(super) fn spawn_session_monitor(
                             ax_ssh::sftp::SftpWriteEvent::Failed { message, .. } => {
                                 terminal.sftp.status = format!("SFTP write failed: {message}");
                             }
+                            }
+                            if let Some(directory) = changed_path.as_deref().and_then(|path| {
+                                terminal.sftp.visible_remote_directory_for_file(path)
+                            }) {
+                                match terminal.sftp.begin_refresh_after_remote_change(&directory) {
+                                    Ok(Some(request)) => {
+                                        if let Err(error) = send_remote_directory_request(terminal, request) {
+                                            refresh_error = Some(error);
+                                        }
+                                    }
+                                    Ok(None) => {}
+                                    Err(error) => refresh_error = Some(error),
+                                }
+                            }
                         },
                     ) else {
                         continue;
                     };
                     if active {
                         dispatch_active_snapshot(&ui, &state);
+                    }
+                    if let Some(error) = refresh_error {
+                        warn!(tab_id = %tab_id, session_id = %profile.id, %error, "could not refresh remote directory after SFTP write");
                     }
                     if let Some(path) = monitor_path {
                         spawn_remote_editor_monitor(
@@ -803,6 +855,21 @@ fn spawn_remote_editor_monitor(
             dispatch_active_snapshot(&ui, &state);
         }
     });
+}
+
+fn send_remote_directory_request(
+    terminal: &mut TerminalTabState,
+    (request_id, path): (u64, String),
+) -> Result<()> {
+    let result = terminal
+        .worker
+        .as_ref()
+        .context("SFTP tab has no worker")
+        .and_then(|worker| worker.request_list_sftp(request_id, path));
+    if result.is_err() {
+        terminal.sftp.cancel_navigation();
+    }
+    result
 }
 
 fn apply_sftp_event(state: &mut super::state::SftpBrowserState, event: SftpBrowserEvent) {

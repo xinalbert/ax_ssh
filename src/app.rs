@@ -79,6 +79,7 @@ mod diagnostics;
 mod file_icons;
 mod font_bridge;
 mod input;
+mod local_directory_watch;
 mod local_files;
 #[cfg(target_os = "macos")]
 mod macos_file_drag;

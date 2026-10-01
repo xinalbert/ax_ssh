@@ -305,6 +305,7 @@ pub(super) struct SftpBrowserState {
     back_history: VecDeque<String>,
     forward_history: VecDeque<String>,
     pending_navigation: Option<PendingSftpNavigation>,
+    pending_auto_refresh: Option<String>,
     pub(super) local: LocalDirectoryState,
     pub(super) transfers: VecDeque<SftpTransferState>,
     pub(super) upload_conflicts: VecDeque<PendingUploadConflict>,
@@ -324,6 +325,7 @@ pub(super) struct SftpBrowserState {
 pub(super) struct LocalDirectoryState {
     pub(super) loaded: bool,
     pub(super) loading: bool,
+    watcher_running: bool,
     pub(super) path: String,
     pub(super) entries: Vec<LocalDirectoryEntry>,
     pub(super) has_more: bool,
@@ -336,6 +338,7 @@ pub(super) struct LocalDirectoryState {
     back_history: VecDeque<String>,
     forward_history: VecDeque<String>,
     pending_navigation: Option<PendingSftpNavigation>,
+    pending_auto_refresh: Option<String>,
     pending_entries: VecDeque<LocalDirectoryEntry>,
 }
 
