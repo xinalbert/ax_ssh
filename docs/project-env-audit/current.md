@@ -3,24 +3,25 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：Windows/Linux 终端持续输出的 native redraw 唤醒；不改变 SSH trust、凭据生命周期、终端 parser 或 worker 所有权。
+- 本轮环境范围：Rust 1.99 stable CI 的两处严格 Clippy 兼容修复；不改变 SSH trust、凭据生命周期、UI/worker 所有权或依赖版本。
 
 ## 运行环境
 
-- 仓库声明 MSRV：Rust 1.92.0；本机 rustc/Cargo：1.97.1。
+- 仓库声明 MSRV：Rust 1.92.0；本机默认 rustc/Cargo 为 1.97.1，另已安装 1.99.0 和 1.92.0。
 - UI 构建入口：`build.rs` 编译 `ui/app.slint`；Cargo edition 为 Rust 2024。
 - CI target 矩阵：`x86_64-pc-windows-msvc`、`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`、`aarch64-apple-darwin`、`x86_64-apple-darwin`。
 
 ## 测试环境
 
 - 依赖通过 `Cargo.lock` 锁定；本轮不新增依赖，继续使用 `--locked --offline` 验证。
-- 本轮 fmt、locked/offline check、严格 all-target Clippy、完整 Cargo 测试（库 297、应用 298、Doc tests 0）、tracker 和差异检查通过。
-- 真实 GUI 和 native redraw 需目标平台验收；Windows/Linux target 本机未安装，以对应 CI runner 和用户新构建为最终证据。
+- 本轮 Rust 1.99 Intel macOS target 的 check/严格 Clippy/build、Rust 1.92 MSRV check、本机默认工具链的 fmt/check/严格 Clippy/完整测试（库 299、应用 299、Doc tests 0）、tracker/链接/diff 检查均通过。
+- Windows/Linux 原生 target 未在本机验证，待 CI runner 返回结果。
 
 ## 关键命令
 
 ```text
-cargo test --locked --offline sftp_local_watch_refresh
+cargo +1.99.0 clippy --all-targets --locked --target x86_64-apple-darwin -- -D warnings
+cargo +1.92.0 check --locked --offline
 cargo fmt --all -- --check
 cargo check --locked --offline
 cargo clippy --all-targets --locked --offline -- -D warnings
@@ -31,15 +32,15 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮不新增外部依赖；Slint 1.18.1、winit 0.30.13 和 patched software backend 继续由 Cargo.lock/vendor 约束。
+- 本轮不新增外部依赖；`try_update` 自 Rust 1.95 稳定，修复须继续兼容 MSRV 1.92。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app/view/workspace.rs`、`src/app/view/terminal.rs`、`src/app/terminal_presentation.rs`、`vendor/i-slint-backend-winit/`、`vendor/softbuffer/`。
+- `Cargo.toml`、`Cargo.lock`、`.github/workflows/ci.yml`、`src/app/runtime.rs`、`src/app/window_router.rs`。
 
 ## 最后确认时间
 
-- 2026-10-01 12:36 +0800
+- 2026-10-02 00:58 +0800
 
 # 2026-09-26 窗口保持环境验证
 

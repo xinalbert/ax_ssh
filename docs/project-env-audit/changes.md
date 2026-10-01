@@ -1,5 +1,25 @@
 # 项目环境变化记录
 
+## 2026-10-02 Rust 1.99 CI 严格 Clippy 环境验证
+
+- 日期：2026-10-02
+- 目的：在 CI 失败的稳定工具链及目标上验证修复，并独立确认 Rust 1.92 MSRV。
+- 改动范围：`src/app/runtime.rs` 和 `src/app/window_router.rs` 的 warning 兼容实现；依赖、lockfile、CI matrix 与安全边界不变。
+- 执行内容：安装 Rust 1.99/1.92 与 Intel macOS target，运行 Rust 1.99 CI 同款 check/严格 Clippy/build、Rust 1.92 locked/offline check、Rust 1.97 fmt/check/严格 Clippy/完整测试及 tracker/链接/diff 门禁。
+- 验证结果：上述 Rust 与文档门禁通过；Rust 1.97 完整测试库 299、应用 299、Doc tests 0；用户失败的 Rust 1.99 Intel target 严格 Clippy 命令已通过。
+- 风险/待办：本机未验证 Windows/Linux 原生 target，继续由 CI runner 证明；本轮无需 GUI 视觉验收。
+- 开工判定：施工与本机验证完成。
+
+## 2026-10-01 Rust 1.99 CI 严格 Clippy 施工预检
+
+- 日期：2026-10-01
+- 目的：在修复 CI warning 时保留仓库 Rust 1.92.0 MSRV。
+- 改动范围：renderer 窗口计数和多窗口路由两处 Rust 实现；不改依赖、lockfile、CI matrix 或安全边界。
+- 执行内容：读取 `Cargo.toml`、CI target 命令与本机 rustc，核对用户 CI 日志及 Rust 官方 `AtomicUsize` API 稳定版本。
+- 验证结果：本机 1.97.1，仓库 MSRV 1.92.0；`try_update` 自 1.95 稳定，不适合作为直接替换。两处错误来自 CI 使用较新的 stable Rust 和严格 warning 门禁。
+- 风险/待办：需验证 MSRV 可编译、Rust 1.99 严格 Clippy 及原生 target；本机目前只安装默认 stable 工具链。
+- 开工判定：允许开工。
+
 ## 2026-10-01 SFTP 本地目录监听环境验证
 
 - 日期：2026-10-01

@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-10-01 Rust 1.99 原子 API 弃用与 MSRV
+
+- 时间：2026-10-01 23:56 +0800
+- 检索问题：Rust 1.99 对 `AtomicUsize::fetch_update` 的弃用和 `try_update` 稳定版本是否允许项目直接替换？
+- 检索原因：macOS Intel CI 的 `-D warnings` 报弃用，项目仍声明 Rust 1.92.0 MSRV。
+- 来源列表：[Rust 官方 Atomic 文档](https://doc.rust-lang.org/std/sync/atomic/struct.Atomic.html)；[Rust 官方 AtomicUsize 文档](https://doc.rust-lang.org/std/sync/atomic/type.AtomicUsize.html)。
+- 关键结论：`fetch_update` 自 Rust 1.99 弃用，`try_update` 自 Rust 1.95 稳定；直接替换会让 MSRV 1.92 编译失败。`compare_exchange_weak` 可保留原有成功/失败内存序和零值行为。
+- 对实施计划的影响：使用 compare-exchange 循环，不使用 `allow(deprecated)`、不提高 MSRV；另外移除 Clippy 指出的闭包多余借用。
+- 未解决问题：Windows/Linux 原生 CI 的最终结果；本机已安装并验证 Rust 1.99 和 1.92。
+
 ## 2026-10-01 标准终端的输入回底与刷新视口链路
 
 - 时间：2026-10-01

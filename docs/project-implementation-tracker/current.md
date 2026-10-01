@@ -2,53 +2,56 @@
 
 ## 当前目标
 
-- 目标 ID：20261001-terminal-restore-reflow
-- 目标：修复工作区恢复后首次 pane resize 丢失软换行开头内容、硬换行边界失真的问题，同时保留已完成的输入回底语义。
-- 交付物：安全的恢复网格初始化、软/硬换行恢复回归测试、双语架构说明、实施记录，以及 Rust 静态门禁。
+- 目标 ID：20261001-rust-199-clippy-compat
+- 目标：修复 stable Rust 1.99 的 macOS Intel CI 严格 Clippy 失败，同时保持 Rust 1.92.0 MSRV。
+- 交付物：两处最小 Rust 修复、目标编译和严格 Clippy 验证、实施与环境记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal/model.rs`、`src/app/state/tabs.rs`、终端/状态恢复测试、终端视口双语架构说明，以及 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：终端 parser、输出刷新策略、renderer cursor 绘制、transport worker、SSH trust/凭据策略、Slint UI contract、配置 schema、vendor 参考项目和 `third_package/axshell`。
+- 当前范围：`src/app/runtime.rs`、`src/app/window_router.rs`、`docs/project-implementation-tracker/`、`docs/project-env-audit/`。
+- 不在本轮范围内：CI target 矩阵、依赖版本、窗口计数语义、多窗口路由结果、SSH trust/凭据、Slint UI 和 `third_package/axshell`。
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| INPUT1 | completed | 核对输入、viewport owner 与标准终端回底语义 | 源码、xterm.js/Alacritty/WezTerm 公开实现 | 输出继续保持 detached；只对有效用户输入回底 |
-| INPUT2 | completed | 恢复生产输入/粘贴回底路径并发布视口变化快照 | 聚焦状态测试与输入路径检查 | 不改变 worker、parser 或 cursor renderer |
-| RESTORE1 | completed | 定位恢复文本在首次 resize 中丢失前导软换行内容的原因 | 状态级复现、`TerminalModel` 源码 | 默认大网格缩小会把恢复内容送入 scrollback |
-| RESTORE2 | completed | 使用最小网格暂存恢复文本并覆盖混合换行边界 | 终端/状态回归测试 | live resize 语义保持不变 |
-| RESTORE3 | completed | 完成完整 Rust 门禁和 tracker 收口 | fmt/check/Clippy/test、tracker、diff | 目标平台 GUI 仍需用户验收 |
+| CI1991 | completed | 核对 CI 报错、MSRV 和 Rust 官方 API 稳定版本 | 用户 CI 日志、Cargo/CI、Rust 文档 | `try_update` 从 1.95 才可用 |
+| CI1992 | completed | 保留原子计数语义并去掉闭包多余借用 | 定向源码检查、Cargo check | 不用弃用抑制或升级 MSRV |
+| CI1993 | completed | 在可用工具链和 macOS target 上完成门禁并提交 | fmt/check/Clippy/test/build、tracker/diff | Rust 1.99 Intel 与 Rust 1.92 MSRV 均已验证 |
 
 ## 已完成
 
-- 已核对 `TerminalInputContext::dispatch`、`AppState::scroll_terminal_to_bottom` 和 `TerminalModel::scroll_to_bottom` 的 ownership 链路；当前生产 wrapper 被错误地限制在测试 cfg，输入路径没有回底。
-- 已检索 xterm.js、Alacritty 和 WezTerm 的公开实现：输出允许 detached scrollback，默认有效键盘输入和粘贴回到底部；不让历史视口显示 live cursor。
+- CI 使用 stable 工具链并在两个 macOS target 上执行 `cargo clippy --all-targets --locked --target ... -- -D warnings`；用户提供的 Intel 日志包含两处 warning 升级为错误。
+- 本机默认 Rust/Cargo 1.97.1，仓库 MSRV 1.92.0；Rust 官方 API 文档说明 `fetch_update` 自 1.99 弃用、`try_update` 自 1.95 稳定，因此不能直接按 CI 提示替换。
+- `src/app/runtime.rs` 属于 renderer 窗口计数与诊断；`src/app/window_router.rs` 属于多窗口路由。仅调整计数的原子实现和闭包传参，不改变跨模块契约或安全边界。
+- 已用 `compare_exchange_weak` 循环保留零值不递减和原有内存序；`workspace_tab_for` 在第一处 `.map()` 直接按值传入。Rustfmt 检查通过。
+- 已安装 Rust 1.99 和两个 macOS target；原始失败命令在 Rust 1.99 的 `x86_64-apple-darwin` 上通过，同 target 的 check 与 build 也通过。本机 Rust 1.97 完整测试库/应用各 299 项通过。
+- Rust 1.92 的 `cargo check --locked --offline` 已通过；源码修复已提交为 `02eae17`。
 
 ## 验证
 
-- 已完成：前置源码核对、标准终端公开实现检索、生产输入路径、聚焦状态回归、fmt、tracker validator 和 `git diff --check`。
-- 已完成：输入回底完整门禁、状态级恢复复现与修复、混合软/硬换行聚焦测试、本轮完整 `cargo check`、严格 all-target Clippy、完整 Cargo 测试、tracker validator 和 `git diff --check`。
-- 未完成：目标平台实际 GUI 交互验收。
+- 已完成：项目/环境预检、错误定位和 Rust 官方 API 核对。
+- 已完成：Rust 1.97 的 fmt/check/严格 Clippy/完整测试、Rust 1.99 的 fmt 和 Intel macOS target 的 check/严格 Clippy/build、tracker、相对链接和 diff 检查。
+- 已完成：Rust 1.92 的 MSRV check；源码提交 `02eae17`。本记录和环境记录通过校验后单独提交。
+- 未完成：Windows/Linux 原生 CI target 与 GitHub 新一轮工作流结果。
 
 ## 风险与阻塞
 
-- 输入回底会清除 detached 视口的本地 selection revision，并要求 UI 立即消费一次完整视口快照；输出到达路径仍不自动回底。
-- 当前光标在 detached 视口隐藏是既有标准终端语义，本轮不改 renderer；目标平台仍需用户验收输入、回车、粘贴和持续刷新时的视觉稳定性。
+- Rust 1.99 与 1.92 工具链已安装；本机缺 Windows/Linux 原生 SDK，平台验证依赖 CI。
+- 原子递减在计数为零时必须保持零，且保留原有 `AcqRel` 成功、`Acquire` 失败内存序。
 
 ## 下一步
 
-- 用户重新打开含有长软换行和明确硬换行的 workspace，确认首次布局、窗口缩放和重连后内容边界正确；输入回底和持续输出视口语义继续按上一轮验收。
+- 重新运行 CI，确认 Windows/Linux 原生 target 的严格 Clippy 与构建结果。
 
 ## 最后更新时间
 
-- 2026-10-01 13:42 +0800
+- 2026-10-02 00:58 +0800
