@@ -175,8 +175,7 @@ impl TerminalModel {
 
     /// Rebuild a bounded text-only view from a workspace snapshot.
     /// Process state, alternate-screen mode, and ANSI cursor state are not persisted.
-    pub fn from_text(text: &str, columns: usize, rows: usize, scrollback_lines: usize) -> Self {
-        let mut terminal = Self::new(columns, rows, scrollback_lines);
+    pub fn from_text(text: &str, columns: usize, _rows: usize, scrollback_lines: usize) -> Self {
         // `contents()` stores hard breaks as LF because that is the portable
         // workspace representation. A terminal parser treats a bare LF as a
         // line feed that keeps the current column, while PTY output normally
@@ -193,6 +192,20 @@ impl TerminalModel {
             replay.push(character);
             previous_was_cr = character == '\r';
         }
+        // Probe at the smallest supported width so a later resize to a narrow
+        // pane has enough rows to reflow the restored logical lines in place.
+        // The probe is bounded by the same maximum row count as a real model.
+        let mut probe = Self::new(
+            usize::from(crate::terminal_dimensions::MIN_TERMINAL_COLUMNS),
+            usize::from(crate::terminal_dimensions::MAX_TERMINAL_ROWS),
+            scrollback_lines,
+        );
+        probe.process(replay.as_bytes());
+        let restored_rows = probe.snapshot().cursor_row.saturating_add(1).clamp(
+            usize::from(crate::terminal_dimensions::MIN_TERMINAL_ROWS),
+            usize::from(crate::terminal_dimensions::MAX_TERMINAL_ROWS),
+        );
+        let mut terminal = Self::new(columns, restored_rows, scrollback_lines);
         terminal.process(replay.as_bytes());
         terminal
     }

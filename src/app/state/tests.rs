@@ -1075,6 +1075,13 @@ fn terminal_scroll_invalidates_selection_only_when_the_viewport_changes() {
     let before = state.snapshot_for(Some(tab_id)).selection_revision;
 
     assert!(state.scroll_terminal(tab_id, 1));
+    assert_eq!(
+        state
+            .terminal(tab_id)
+            .and_then(|terminal| terminal.terminal.as_ref())
+            .map(TerminalModel::viewport_mode),
+        Some(ax_ssh::terminal::TerminalViewportMode::Detached)
+    );
     let after = state.snapshot_for(Some(tab_id)).selection_revision;
     assert_eq!(after, before + 1);
 
@@ -1082,11 +1089,44 @@ fn terminal_scroll_invalidates_selection_only_when_the_viewport_changes() {
     assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, after);
 
     assert!(state.scroll_terminal_to_bottom(tab_id));
+    assert_eq!(
+        state
+            .terminal(tab_id)
+            .and_then(|terminal| terminal.terminal.as_ref())
+            .map(TerminalModel::viewport_mode),
+        Some(ax_ssh::terminal::TerminalViewportMode::Follow)
+    );
     let bottom = state.snapshot_for(Some(tab_id)).selection_revision;
     assert_eq!(bottom, after + 1);
 
     assert!(!state.scroll_terminal_to_bottom(tab_id));
     assert_eq!(state.snapshot_for(Some(tab_id)).selection_revision, bottom);
+}
+
+#[test]
+fn restored_workspace_terminal_keeps_soft_wrap_and_hard_break_boundaries() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+    let terminal = state
+        .terminal_mut(tab_id)
+        .and_then(|terminal| terminal.terminal.as_mut())
+        .expect("local terminal should have a model");
+    terminal.resize(20, 5);
+    terminal.process(b"0123456789abcdefghijXYZ\r\nsecond");
+
+    let workspace = state.workspace_snapshot();
+    let mut restored = test_state();
+    restored.restore_workspace_tabs(&workspace.tabs);
+    let restored_terminal = restored
+        .terminal_mut(tab_id)
+        .and_then(|terminal| terminal.terminal.as_mut())
+        .expect("restored local terminal should have a model");
+    restored_terminal.resize(10, 5);
+    let narrow = restored_terminal.snapshot();
+    assert_eq!(narrow.lines[0].runs[0].text, "0123456789");
+    assert_eq!(narrow.lines[1].runs[0].text, "abcdefghij");
+    assert_eq!(narrow.lines[2].runs[0].text.trim_end(), "XYZ");
+    assert_eq!(narrow.lines[3].runs[0].text.trim_end(), "second");
 }
 
 #[test]

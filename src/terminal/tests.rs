@@ -681,6 +681,40 @@ fn workspace_text_roundtrip_restores_hard_break_columns() {
 }
 
 #[test]
+fn workspace_text_roundtrip_preserves_a_hard_break_after_a_full_row() {
+    let mut terminal = TerminalModel::new(20, 5, 20);
+    terminal.process(b"0123456789abcdefghij\r\nsecond");
+
+    let text = terminal.contents();
+    assert_eq!(text, "0123456789abcdefghij\nsecond");
+
+    let mut restored = TerminalModel::from_text(&text, 20, 5, 20);
+    let snapshot = restored.snapshot();
+    assert_eq!(snapshot_line_text(&snapshot, 0), "0123456789abcdefghij");
+    assert_eq!(snapshot_line_text(&snapshot, 1), "second");
+}
+
+#[test]
+fn workspace_restore_reflows_soft_wraps_without_losing_hard_breaks() {
+    let mut terminal = TerminalModel::new(20, 5, 20);
+    terminal.process(b"0123456789abcdefghijXYZ\r\nsecond");
+
+    let text = terminal.contents();
+    let mut restored = TerminalModel::from_text(&text, 10, 5, 20);
+    let narrow = restored.snapshot();
+    assert_eq!(snapshot_line_text(&narrow, 0), "0123456789");
+    assert_eq!(snapshot_line_text(&narrow, 1), "abcdefghij");
+    assert_eq!(snapshot_line_text(&narrow, 2), "XYZ");
+    assert_eq!(snapshot_line_text(&narrow, 3), "second");
+
+    restored.resize(20, 5);
+    let wide = restored.snapshot();
+    assert_eq!(snapshot_line_text(&wide, 0), "0123456789abcdefghij");
+    assert_eq!(snapshot_line_text(&wide, 1), "XYZ");
+    assert_eq!(snapshot_line_text(&wide, 2), "second");
+}
+
+#[test]
 fn alternate_screen_resize_does_not_reflow_existing_rows() {
     let mut terminal = TerminalModel::new(20, 5, 20);
     terminal.process(b"\x1b[?1049h0123456789abcdefghij");

@@ -849,10 +849,13 @@ impl AppState {
                         let terminal = if snapshot.kind == "sftp" {
                             None
                         } else {
+                            // Start restored text at the minimum grid. The first
+                            // real pane resize can then grow columns and rows
+                            // without shrinking a mostly empty default screen.
                             Some(TerminalModel::from_text(
                                 &snapshot.terminal_text,
-                                usize::from(self.sessions.settings.terminal.default_columns),
-                                usize::from(self.sessions.settings.terminal.default_rows),
+                                usize::from(ax_ssh::terminal_dimensions::MIN_TERMINAL_COLUMNS),
+                                usize::from(ax_ssh::terminal_dimensions::MIN_TERMINAL_ROWS),
                                 self.sessions.settings.terminal.scrollback_lines as usize,
                             ))
                             .map(|mut terminal| {
@@ -906,8 +909,8 @@ impl AppState {
                     } else {
                         let terminal = TerminalModel::from_text(
                             &snapshot.terminal_text,
-                            usize::from(self.sessions.settings.terminal.default_columns),
-                            usize::from(self.sessions.settings.terminal.default_rows),
+                            usize::from(ax_ssh::terminal_dimensions::MIN_TERMINAL_COLUMNS),
+                            usize::from(ax_ssh::terminal_dimensions::MIN_TERMINAL_ROWS),
                             self.sessions.settings.terminal.scrollback_lines as usize,
                         );
                         let mut terminal = terminal;
@@ -1139,7 +1142,6 @@ impl AppState {
         changed
     }
 
-    #[cfg(test)]
     pub(in crate::app) fn scroll_terminal_to_bottom(&mut self, tab_id: Uuid) -> bool {
         let Some(terminal) = self.terminal_mut(tab_id) else {
             return false;

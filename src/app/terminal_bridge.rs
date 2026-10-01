@@ -604,7 +604,7 @@ impl TerminalInputContext<'_> {
             .state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))
-            .and_then(|app| {
+            .and_then(|mut app| {
                 state_lock_elapsed = Some(state_lock_started_at.elapsed());
                 if self
                     .window_router
@@ -666,7 +666,8 @@ impl TerminalInputContext<'_> {
                     worker_request_elapsed = Some(worker_request_started_at.elapsed());
                     request_result?;
                 }
-                Ok((true, false))
+                let viewport_changed = app.scroll_terminal_to_bottom(tab_id);
+                Ok((true, viewport_changed))
             });
         match result {
             Ok((handled, true)) => {
