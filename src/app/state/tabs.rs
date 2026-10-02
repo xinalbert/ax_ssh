@@ -223,6 +223,7 @@ impl AppState {
                 pending_terminal_snapshot: None,
                 published_terminal_snapshot: None,
                 published_terminal_state: None,
+                cursor_hide_deadline: None,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -287,6 +288,7 @@ impl AppState {
                 pending_terminal_snapshot: None,
                 published_terminal_snapshot: None,
                 published_terminal_state: None,
+                cursor_hide_deadline: None,
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
                 worker_running: false,
@@ -328,6 +330,7 @@ impl AppState {
                 pending_terminal_snapshot: None,
                 published_terminal_snapshot: None,
                 published_terminal_state: None,
+                cursor_hide_deadline: None,
                 status: "Starting local shell...".to_owned(),
                 connected: false,
                 worker_running: true,
@@ -886,6 +889,7 @@ impl AppState {
                             pending_terminal_snapshot: None,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
+                            cursor_hide_deadline: None,
                             status: if snapshot.status.is_empty() {
                                 "Restored; reconnecting...".to_owned()
                             } else {
@@ -924,6 +928,7 @@ impl AppState {
                             pending_terminal_snapshot: None,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
+                            cursor_hide_deadline: None,
                             status: snapshot.status.clone(),
                             connected: false,
                             worker_running: false,

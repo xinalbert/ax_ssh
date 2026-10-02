@@ -1,4 +1,6 @@
 use super::*;
+use crate::app::terminal_bridge::process_terminal_output;
+use crate::app::terminal_presentation::TerminalPresentation;
 use ax_ssh::config::{AuthMethod, CredentialStorage};
 
 fn test_state() -> AppState {
@@ -2536,6 +2538,224 @@ fn synchronized_output_keeps_the_last_published_terminal_frame() {
         .terminal_snapshot_for_ui()
         .expect("completed redraw should be available");
     assert_ne!(after.lines, before.lines);
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_coalesces_split_redraw_and_preserves_pending_damage() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.connected = true;
+    process_terminal_output(terminal, b"before\x1b[2 q").expect("steady cursor");
+    let before = terminal.terminal_snapshot_for_ui().expect("initial frame");
+    assert!(before.cursor_visible);
+    assert!(!before.cursor_blinking);
+
+    process_terminal_output(terminal, b"\x1b[2;1Hpending").expect("pending row");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let effects =
+        process_terminal_output(terminal, b"\x1b[?25l\x1b[1;1Hafter").expect("first redraw batch");
+    assert_eq!(
+        effects.presentation_hold,
+        Some(std::time::Duration::from_millis(24))
+    );
+    assert!(!terminal.prepare_terminal_output_snapshot());
+    let held = terminal
+        .terminal_snapshot_for_ui()
+        .expect("full refresh while held");
+    assert!(held.cursor_visible);
+    assert_eq!(held.lines, before.lines);
+
+    tokio::time::advance(std::time::Duration::from_millis(16)).await;
+    let effects =
+        process_terminal_output(terminal, b"\x1b[3;1Hlast\x1b[?25h").expect("last redraw batch");
+    assert!(effects.presentation_hold.is_none());
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let after = terminal.terminal_snapshot_for_ui().expect("complete frame");
+    assert!(after.cursor_visible);
+    assert!(!after.cursor_blinking);
+    assert_ne!(after.lines, before.lines);
+    for row in 0..3 {
+        assert!(after.dirty_rows.contains(&row), "row {row} damage lost");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_timeout_publishes_without_another_output_event() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.connected = true;
+    terminal.terminal_snapshot_for_ui().expect("initial frame");
+    let effects = process_terminal_output(terminal, b"\x1b[?25lhidden").expect("hide");
+    let mut presentation = TerminalPresentation::new();
+    presentation.record_output(None, effects.presentation_hold);
+    let started_at = tokio::time::Instant::now();
+    assert!(!terminal.prepare_terminal_output_snapshot());
+
+    presentation.wait_until_ready(tab_id).await;
+
+    assert!(tokio::time::Instant::now() - started_at >= std::time::Duration::from_millis(24));
+    assert!(!presentation.has_pending_output());
+    assert!(terminal.prepare_terminal_output_snapshot());
+    assert!(
+        !terminal
+            .terminal_snapshot_for_ui()
+            .expect("hidden frame")
+            .cursor_visible
+    );
+    assert!(
+        process_terminal_output(terminal, b"still hidden")
+            .expect("output")
+            .presentation_hold
+            .is_none()
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_repeated_output_and_unpublished_show_do_not_extend_deadline() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.connected = true;
+    terminal.terminal_snapshot_for_ui().expect("initial frame");
+    process_terminal_output(terminal, b"\x1b[?25l").expect("hide");
+    tokio::time::advance(std::time::Duration::from_millis(20)).await;
+    let effects = process_terminal_output(terminal, b"more").expect("hidden output");
+    assert_eq!(
+        effects.presentation_hold,
+        Some(std::time::Duration::from_millis(4))
+    );
+    assert!(
+        process_terminal_output(terminal, b"\x1b[?25h")
+            .expect("show")
+            .presentation_hold
+            .is_none()
+    );
+    let effects = process_terminal_output(terminal, b"\x1b[?25l").expect("hide again");
+    assert_eq!(
+        effects.presentation_hold,
+        Some(std::time::Duration::from_millis(4))
+    );
+    tokio::time::advance(std::time::Duration::from_millis(4)).await;
+    assert!(
+        process_terminal_output(terminal, b"more")
+            .expect("expired output")
+            .presentation_hold
+            .is_none()
+    );
+    assert!(terminal.prepare_terminal_output_snapshot());
+    assert!(
+        !terminal
+            .terminal_snapshot_for_ui()
+            .expect("hidden frame")
+            .cursor_visible
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_does_not_delay_an_initial_hidden_frame_or_scrollback() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.connected = true;
+    assert!(
+        process_terminal_output(terminal, b"\x1b[?25lhidden")
+            .expect("hide")
+            .presentation_hold
+            .is_none()
+    );
+    assert!(
+        !terminal
+            .terminal_snapshot_for_ui()
+            .expect("first frame")
+            .cursor_visible
+    );
+    process_terminal_output(terminal, b"\x1b[?25h").expect("show");
+    let model = terminal.terminal.as_mut().expect("model");
+    model.resize(20, 3);
+    model.process(b"\r\n1\r\n2\r\n3\r\n4\r\n5");
+    assert!(model.scroll(1));
+    assert!(
+        !terminal
+            .terminal_snapshot_for_ui()
+            .expect("scrollback")
+            .cursor_visible
+    );
+    assert!(
+        process_terminal_output(terminal, b"\x1b[?25lmore")
+            .expect("hide in scrollback")
+            .presentation_hold
+            .is_none()
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_yields_to_synchronized_output_and_resumes_on_show() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.connected = true;
+    let before = terminal.terminal_snapshot_for_ui().expect("initial frame");
+    process_terminal_output(terminal, b"\x1b[?25l").expect("hide");
+    let effects = process_terminal_output(terminal, b"\x1b[?2026hpartial").expect("sync begin");
+    assert!(effects.presentation_hold.expect("sync hold") > std::time::Duration::from_millis(24));
+    tokio::time::advance(std::time::Duration::from_millis(24)).await;
+    assert!(!terminal.prepare_terminal_output_snapshot());
+    assert_eq!(
+        terminal
+            .terminal_snapshot_for_ui()
+            .expect("held frame")
+            .lines,
+        before.lines
+    );
+    let effects =
+        process_terminal_output(terminal, b"complete\x1b[?25h\x1b[?2026l").expect("sync end");
+    assert!(effects.presentation_hold.is_none());
+    assert!(terminal.prepare_terminal_output_snapshot());
+    assert!(
+        terminal
+            .terminal_snapshot_for_ui()
+            .expect("complete frame")
+            .cursor_visible
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn cursor_hide_is_cancelled_by_resize_and_disconnect() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    {
+        let terminal = state.terminal_mut(tab_id).expect("terminal");
+        terminal.connected = true;
+        terminal.terminal_snapshot_for_ui().expect("initial frame");
+        process_terminal_output(terminal, b"\x1b[?25l").expect("hide");
+        assert!(!terminal.prepare_terminal_output_snapshot());
+    }
+    assert!(state.resize_terminal(tab_id, 96, 30).expect("resize"));
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let resized = terminal.terminal_snapshot_for_ui().expect("resized frame");
+    assert!(!resized.cursor_visible);
+    assert_eq!(resized.max_columns, 96);
+    process_terminal_output(terminal, b"\x1b[?25h").expect("show");
+    terminal.terminal_snapshot_for_ui().expect("visible frame");
+    process_terminal_output(terminal, b"\x1b[?25l").expect("hide again");
+    assert!(!terminal.prepare_terminal_output_snapshot());
+    terminal.connected = false;
+    assert!(terminal.prepare_terminal_output_snapshot());
+    assert!(
+        !terminal
+            .terminal_snapshot_for_ui()
+            .expect("disconnected frame")
+            .cursor_visible
+    );
 }
 
 #[test]

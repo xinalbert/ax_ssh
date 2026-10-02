@@ -100,6 +100,12 @@ impl TerminalModel {
         self.pending_clipboard_load.take()
     }
 
+    /// Returns the protocol's cursor visibility request, independent of blink
+    /// phase and viewport position, without consuming snapshot damage.
+    pub fn cursor_visibility_requested(&self) -> bool {
+        self.term.mode().contains(TermMode::SHOW_CURSOR)
+    }
+
     /// Returns the remaining standard synchronized-output interval, if any.
     pub fn synchronized_output_remaining(&self) -> Option<std::time::Duration> {
         self.processor
@@ -109,7 +115,7 @@ impl TerminalModel {
     }
 
     /// Flushes an expired `CSI ?2026h` synchronized update. Cursor visibility
-    /// remains a pure display state and never controls frame batching.
+    /// remains independent of the parser's synchronized-output buffering.
     pub fn flush_synchronized_output_if_due(&mut self) -> bool {
         let Some(deadline) = self.processor.sync_timeout().sync_timeout() else {
             return false;

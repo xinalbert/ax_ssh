@@ -2014,20 +2014,20 @@ pub(super) fn process_terminal_output(
     terminal: &mut TerminalTabState,
     data: &[u8],
 ) -> Result<TerminalOutputEffects> {
-    let (responses, presentation_hold, title_update, bell, clipboard_store, clipboard_formatter) = {
+    let (responses, title_update, bell, clipboard_store, clipboard_formatter) = {
         let model = terminal
             .terminal
             .as_mut()
             .context("terminal tab has no terminal model")?;
         (
             model.process_with_responses(data),
-            model.synchronized_output_remaining(),
             model.take_title_update(),
             model.take_bell(),
             model.take_clipboard_store(),
             model.take_clipboard_load(),
         )
     };
+    let presentation_hold = terminal.terminal_output_presentation_hold();
     let clipboard_read_requested = clipboard_formatter
         .and_then(|formatter| terminal.offer_clipboard_read(formatter))
         .is_some();

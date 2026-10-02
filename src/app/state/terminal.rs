@@ -1,5 +1,10 @@
 use super::*;
 
+// Briefly retain the last complete frame while an application redraws with
+// DECTCEM off. This is a fixed presentation grace period, not a protocol
+// transaction: a persistent hide must still become visible to the UI.
+const CURSOR_HIDE_COALESCE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(24);
+
 #[derive(Clone, Copy, Debug)]
 pub(in crate::app) enum TerminalInputKind {
     Key,
@@ -108,7 +113,7 @@ impl TerminalTabState {
     /// UI sees the newest frame without losing rows that changed earlier in the
     /// burst. Control-only terminal writes still do not enter the Slint queue.
     pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
-        if self.synchronized_output_pending() {
+        if self.terminal_presentation_pending() {
             return false;
         }
         if self.pending_terminal_snapshot.is_some() {
@@ -131,7 +136,7 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn terminal_snapshot_for_ui(&mut self) -> Option<TerminalSnapshot> {
-        if self.synchronized_output_pending() {
+        if self.terminal_presentation_pending() {
             return self
                 .published_terminal_snapshot
                 .clone()
@@ -146,7 +151,47 @@ impl TerminalTabState {
         };
         self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
         self.published_terminal_snapshot = Some(snapshot.clone());
+        self.cursor_hide_deadline = None;
         Some(snapshot)
+    }
+
+    /// Called after parsing each transport batch. The monitor uses this delay
+    /// to wake even if no further output arrives. Keep the original deadline
+    /// until a frame is published, including hide/show/hide before publication.
+    pub(in crate::app) fn terminal_output_presentation_hold(
+        &mut self,
+    ) -> Option<std::time::Duration> {
+        let model = self.terminal.as_ref()?;
+        if !self.connected {
+            self.cursor_hide_deadline = None;
+        } else if !model.cursor_visibility_requested()
+            && self
+                .published_terminal_state
+                .as_ref()
+                .is_some_and(|state| state.cursor_visible)
+        {
+            self.cursor_hide_deadline
+                .get_or_insert_with(|| tokio::time::Instant::now() + CURSOR_HIDE_COALESCE_INTERVAL);
+        }
+        model
+            .synchronized_output_remaining()
+            .max(self.cursor_hide_remaining())
+    }
+
+    fn cursor_hide_remaining(&self) -> Option<std::time::Duration> {
+        if !self.connected || self.terminal.as_ref()?.cursor_visibility_requested() {
+            return None;
+        }
+        self.cursor_hide_deadline?
+            .checked_duration_since(tokio::time::Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+    }
+
+    fn terminal_presentation_pending(&mut self) -> bool {
+        if !self.connected {
+            self.cursor_hide_deadline = None;
+        }
+        self.synchronized_output_pending() || self.cursor_hide_remaining().is_some()
     }
 
     fn synchronized_output_pending(&mut self) -> bool {
@@ -158,6 +203,7 @@ impl TerminalTabState {
 
     pub(in crate::app) fn discard_pending_terminal_snapshot(&mut self) {
         self.pending_terminal_snapshot = None;
+        self.cursor_hide_deadline = None;
     }
 
     pub(in crate::app) fn invalidate_selection(&mut self) {

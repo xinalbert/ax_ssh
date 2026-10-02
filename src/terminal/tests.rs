@@ -101,12 +101,16 @@ fn captures_bounded_osc8_web_hyperlink_spans() {
 #[test]
 fn cursor_visibility_does_not_hold_output_frames() {
     let mut terminal = TerminalModel::new(20, 3, 10);
+    assert!(terminal.cursor_visibility_requested());
     terminal.process(b"before");
     terminal.process(b"\x1b[?25l\rafter");
 
     assert!(terminal.synchronized_output_remaining().is_none());
+    assert!(!terminal.cursor_visibility_requested());
     assert!(!terminal.snapshot().cursor_visible);
     assert!(terminal.contents().starts_with("after"));
+    terminal.process(b"\x1b[?25h");
+    assert!(terminal.cursor_visibility_requested());
 }
 
 #[test]
