@@ -17,9 +17,18 @@ fn terminal_pane_view(tab_id: Uuid, x: f32, width: f32) -> TerminalPaneView {
 }
 
 #[test]
-fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
+fn main_window_alternate_screen_wheel_reaches_terminal_pointer_callback() {
+    alternate_screen_wheel_reaches_terminal_pointer_callback(false);
+}
+
+#[test]
+fn detached_window_alternate_screen_wheel_reaches_terminal_pointer_callback() {
+    alternate_screen_wheel_reaches_terminal_pointer_callback(true);
+}
+
+fn alternate_screen_wheel_reaches_terminal_pointer_callback(detached: bool) {
     // Isolate Slint's thread-local platform from other component tests.
-    std::thread::spawn(|| {
+    std::thread::spawn(move || {
         use std::cell::RefCell;
         use std::rc::Rc;
 
@@ -44,7 +53,7 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
         let terminal_snapshot = model.snapshot();
         assert!(terminal_snapshot.mouse_wheel_reporting_active);
         assert!(!terminal_snapshot.mouse_button_reporting_active);
-        ui.set_detached_window(true);
+        ui.set_detached_window(detached);
         ui.set_active_tab_kind("terminal".into());
         let mut pane = terminal_pane_view(Uuid::from_u128(1), 0.0, 1.0);
         pane.terminal = TerminalViewState {
@@ -65,10 +74,8 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
         ui.set_terminal_panes(ModelRc::new(VecModel::from(vec![pane])));
         let remote_wheel = Rc::new(RefCell::new(Vec::new()));
         let received = remote_wheel.clone();
-        ui.on_terminal_pointer_input(move |_, event| {
-            received
-                .borrow_mut()
-                .push((event.button, event.repeat_count));
+        ui.on_terminal_pointer_input(move |id, event| {
+            received.borrow_mut().push((id, event));
         });
         let local_scroll = Rc::new(RefCell::new(Vec::new()));
         let scrolled = local_scroll.clone();
@@ -76,7 +83,9 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
 
         ui.show().expect("headless application window should show");
         window.set_size(slint::PhysicalSize::new(800, 600));
-        let point = slint::LogicalPosition::new(100.0, 100.0);
+        // Stay inside the terminal in both layouts, including the main
+        // window's sidebar and title bar.
+        let point = slint::LogicalPosition::new(600.0, 300.0);
         window
             .window()
             .dispatch_event(WindowEvent::PointerMoved { position: point });
@@ -88,7 +97,14 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
                 delta_y: 60.0,
             });
 
-        assert!(matches!(remote_wheel.borrow().as_slice(), [(3, count)] if *count > 0));
+        let received = remote_wheel.borrow();
+        let [(id, event)] = received.as_slice() else {
+            panic!("expected one remote wheel callback, got {}", received.len());
+        };
+        assert_eq!(id.as_str(), Uuid::from_u128(1).to_string());
+        assert_eq!(event.button, 3);
+        assert_eq!(event.kind, 0);
+        assert!(event.repeat_count > 0);
         assert!(local_scroll.borrow().is_empty());
     })
     .join()

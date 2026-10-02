@@ -1098,6 +1098,9 @@ export component WorkspaceShell inherits Rectangle {
                         }
                         terminal-presentation-layout-reset => { root.terminal-presentation-layout-reset(); }
                         scroll-terminal(id, lines) => { root.scroll-terminal(id, lines); }
+                        terminal-pointer-input(id, input) => {
+                            root.terminal-pointer-input(id, input);
+                        }
                         terminal-focus-state(id, active) => {
                             root.terminal-focus-state(id, active);
                         }
