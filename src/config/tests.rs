@@ -491,6 +491,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
             local_shell: SYSTEM_DEFAULT_SHELL,
             known_shells: &known_shells,
             option_as_meta: false,
+            alternate_scroll_to_home: false,
             osc52_clipboard: false,
         },
         workspace: WorkspaceSettingsInput {
@@ -1035,6 +1036,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             local_shell: "zsh",
             known_shells: &known_shells,
             option_as_meta: true,
+            alternate_scroll_to_home: true,
             osc52_clipboard: false,
         },
         workspace: WorkspaceSettingsInput {
@@ -1104,6 +1106,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
     assert_eq!(settings.terminal.default_rows, MAX_TERMINAL_ROWS);
     assert_eq!(settings.terminal.local_shell, "zsh");
     assert!(settings.terminal.option_as_meta);
+    assert!(settings.terminal.alternate_scroll_to_home);
     assert_eq!(
         settings.terminal.known_shells,
         [SYSTEM_DEFAULT_SHELL, "zsh"]
@@ -1412,6 +1415,22 @@ fn ui_language_resolves_only_bundled_system_locales() {
 }
 
 #[test]
+fn alternate_scroll_to_home_defaults_disabled_and_round_trips() {
+    assert!(!TerminalSettings::default().alternate_scroll_to_home);
+    let mut store: SessionStore =
+        serde_json::from_str(r#"{"version":12,"settings":{"terminal":{"scrollback_lines":4000}}}"#)
+            .expect("old settings should deserialize");
+    assert!(!store.settings.terminal.alternate_scroll_to_home);
+    for enabled in [true, false] {
+        store.settings.terminal.alternate_scroll_to_home = enabled;
+        let json = serde_json::to_string(&store).expect("settings should serialize");
+        let restored: SessionStore =
+            serde_json::from_str(&json).expect("settings should deserialize and normalize");
+        assert_eq!(restored.settings.terminal.alternate_scroll_to_home, enabled);
+    }
+}
+
+#[test]
 fn legacy_terminal_option_meta_defaults_disabled_and_round_trips() {
     let json = r#"{
             "version": 12,
@@ -1610,6 +1629,7 @@ fn terminal_shell_cache_is_normalized_and_only_adds_discoveries() {
         local_shell: " zsh ",
         known_shells: &known_shells,
         option_as_meta: true,
+        alternate_scroll_to_home: true,
         osc52_clipboard: false,
     });
     assert_eq!(settings.local_shell, "zsh");

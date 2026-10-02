@@ -562,6 +562,9 @@ msgstr "键盘"
 msgid "Keep both"
 msgstr "两者都保留"
 
+msgid "Keep cursor at line start while scrolling"
+msgstr "滚轮时保持光标在行首"
+
 msgid "Keyboard Shortcuts"
 msgstr "键盘快捷键"
 
@@ -672,6 +675,9 @@ msgstr "更多"
 
 msgid "Move Current Workspace to New Window"
 msgstr "将当前工作区移至新窗口"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "在备用屏幕程序中，每次滚轮上下移动后回到行首"
 
 msgid "Move workspace to new window"
 msgstr "将工作区移至新窗口"

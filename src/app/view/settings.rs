@@ -98,6 +98,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         settings.appearance.terminal_mouse_local_selection_priority,
     );
     ui.set_option_as_meta(settings.terminal.option_as_meta);
+    ui.set_alternate_scroll_to_home(settings.terminal.alternate_scroll_to_home);
     ui.set_osc52_clipboard(settings.terminal.osc52_clipboard);
     ui.set_x11_server_provider(
         ax_ssh::x_server::provider_for_current_platform(settings.x11.provider)

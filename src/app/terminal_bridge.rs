@@ -14,7 +14,7 @@ use super::*;
 use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{TerminalTarget, terminal_target_match_at_context};
 use ax_ssh::terminal::{
-    TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
+    TerminalKey, TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
     TerminalMouseEventKind, TerminalMouseModifiers, TerminalSelectionRange, TerminalTargetContext,
     encode_key,
 };
@@ -27,6 +27,55 @@ use slint::winit_030::{
 
 const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
 const OSC52_CLIPBOARD_READ_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Encode a bounded source event, then apply the optional alternate-scroll
+/// policy to each wheel step. The model remains authoritative about whether
+/// the current terminal modes accept this pointer event.
+fn encode_terminal_mouse_input(
+    model: &TerminalModel,
+    event: TerminalMouseEvent,
+    pixel_x: usize,
+    pixel_y: usize,
+    repeat_count: i32,
+    alternate_scroll_to_home: bool,
+) -> Option<Vec<u8>> {
+    let repeat_count = repeat_count.clamp(1, MAX_MOUSE_WHEEL_REPORTS) as usize;
+    let wheel = matches!(
+        event.button,
+        TerminalMouseButton::WheelUp
+            | TerminalMouseButton::WheelDown
+            | TerminalMouseButton::WheelLeft
+            | TerminalMouseButton::WheelRight
+    );
+    if repeat_count > 1 && (event.kind != TerminalMouseEventKind::Press || !wheel) {
+        return None;
+    }
+    let data = model.encode_mouse_event_with_pixels(event, pixel_x, pixel_y)?;
+    // A wheel event accepted without reporting can only be alternate-scroll.
+    // End every Up/Down step with an unmodified Home to act on the destination
+    // line. The receiving application owns the resulting cursor position.
+    if alternate_scroll_to_home
+        && !model.mouse_reporting().enabled()
+        && event.kind == TerminalMouseEventKind::Press
+        && matches!(
+            event.button,
+            TerminalMouseButton::WheelUp | TerminalMouseButton::WheelDown
+        )
+    {
+        let home = encode_key(
+            &TerminalKey::Home,
+            TerminalModifiers::default(),
+            model.application_cursor(),
+        )?;
+        let mut repeated = Vec::with_capacity((home.len() + data.len()) * repeat_count);
+        for _ in 0..repeat_count {
+            repeated.extend_from_slice(&data);
+            repeated.extend_from_slice(&home);
+        }
+        return Some(repeated);
+    }
+    Some(data.repeat(repeat_count))
+}
 
 fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
     let palette = super::view::terminal::terminal_query_palette(ui);
@@ -974,18 +1023,6 @@ pub(super) fn wire_terminal(
             2 => TerminalMouseEventKind::Motion,
             _ => return,
         };
-        let repeat_count = input.repeat_count.clamp(1, MAX_MOUSE_WHEEL_REPORTS) as usize;
-        let wheel = matches!(
-            button,
-            TerminalMouseButton::WheelUp
-                | TerminalMouseButton::WheelDown
-                | TerminalMouseButton::WheelLeft
-                | TerminalMouseButton::WheelRight
-        );
-        if repeat_count > 1 && (kind != TerminalMouseEventKind::Press || !wheel) {
-            debug!(%tab_id, "discarded invalid repeated terminal mouse event");
-            return;
-        }
         let scale_factor = ui_for_mouse
             .upgrade()
             .map(|ui| f64::from(ui.window().scale_factor()).max(0.01))
@@ -1005,6 +1042,8 @@ pub(super) fn wire_terminal(
                 if !router_for_mouse.owns_terminal_pane(window_id, tab_id, &app) {
                     anyhow::bail!("terminal pane is no longer visible in this window");
                 }
+                let alternate_scroll_to_home =
+                    app.sessions.settings.terminal.alternate_scroll_to_home;
                 let terminal = app.terminal_mut(tab_id).context("terminal tab not found")?;
                 if !terminal.connected {
                     return Ok(true);
@@ -1013,7 +1052,8 @@ pub(super) fn wire_terminal(
                     .terminal
                     .as_ref()
                     .context("active tab has no terminal model")?;
-                let Some(data) = model.encode_mouse_event_with_pixels(
+                let Some(data) = encode_terminal_mouse_input(
+                    model,
                     TerminalMouseEvent {
                         kind,
                         button,
@@ -1027,17 +1067,10 @@ pub(super) fn wire_terminal(
                     },
                     pixel_x,
                     pixel_y,
+                    input.repeat_count,
+                    alternate_scroll_to_home,
                 ) else {
                     return Ok(true);
-                };
-                let data = if repeat_count == 1 {
-                    data
-                } else {
-                    let mut repeated = Vec::with_capacity(data.len() * repeat_count);
-                    for _ in 0..repeat_count {
-                        repeated.extend_from_slice(&data);
-                    }
-                    repeated
                 };
                 let worker = terminal
                     .worker
@@ -2208,6 +2241,101 @@ fn finish_local_terminal(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wheel_event(button: TerminalMouseButton) -> TerminalMouseEvent {
+        TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Press,
+            button,
+            column: 0,
+            row: 0,
+            modifiers: TerminalMouseModifiers::default(),
+        }
+    }
+
+    #[test]
+    fn alternate_scroll_to_home_appends_home_after_each_bounded_wheel_step() {
+        let mut model = TerminalModel::new(80, 24, 10);
+        model.process(b"\x1b[?1049h");
+        for (mode, up, down, home) in [
+            (b"\x1b[?1l", b"\x1b[A", b"\x1b[B", b"\x1b[H"),
+            (b"\x1b[?1h", b"\x1bOA", b"\x1bOB", b"\x1bOH"),
+        ] {
+            model.process(mode);
+            for (button, direction) in [
+                (TerminalMouseButton::WheelUp, up),
+                (TerminalMouseButton::WheelDown, down),
+            ] {
+                let event = wheel_event(button);
+                for (count, expected_count) in [(0, 1), (1, 1), (3, 3), (i32::MAX, 256)] {
+                    let arrows = direction.repeat(expected_count);
+                    assert_eq!(
+                        encode_terminal_mouse_input(&model, event, 1, 1, count, false),
+                        Some(arrows.clone())
+                    );
+                    let mut expected = Vec::new();
+                    for _ in 0..expected_count {
+                        expected.extend(direction);
+                        expected.extend(home);
+                    }
+                    assert_eq!(
+                        encode_terminal_mouse_input(&model, event, 1, 1, count, true),
+                        Some(expected)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn alternate_scroll_to_home_preserves_mouse_reporting_and_other_events() {
+        let mut model = TerminalModel::new(80, 24, 10);
+        model.process(b"\x1b[?1049h\x1b[?1h\x1b[?1000h\x1b[?1006h");
+        let event = wheel_event(TerminalMouseButton::WheelUp);
+        assert_eq!(
+            encode_terminal_mouse_input(&model, event, 1, 1, 3, true),
+            Some(b"\x1b[<64;1;1M".repeat(3))
+        );
+        for button in [
+            TerminalMouseButton::WheelDown,
+            TerminalMouseButton::WheelLeft,
+            TerminalMouseButton::WheelRight,
+            TerminalMouseButton::Left,
+        ] {
+            let event = wheel_event(button);
+            assert_eq!(
+                encode_terminal_mouse_input(&model, event, 1, 1, 1, true),
+                model.encode_mouse_event(event)
+            );
+        }
+        assert_eq!(
+            encode_terminal_mouse_input(
+                &model,
+                wheel_event(TerminalMouseButton::Left),
+                1,
+                1,
+                2,
+                true
+            ),
+            None
+        );
+        model.process(b"\x1b[?1000l");
+        for button in [TerminalMouseButton::WheelLeft, TerminalMouseButton::Left] {
+            assert_eq!(
+                encode_terminal_mouse_input(&model, wheel_event(button), 1, 1, 1, true),
+                None
+            );
+        }
+        model.process(b"\x1b[?1007l");
+        assert_eq!(
+            encode_terminal_mouse_input(&model, event, 1, 1, 1, true),
+            None
+        );
+        model.process(b"\x1b[?1007h\x1b[?1049l");
+        assert_eq!(
+            encode_terminal_mouse_input(&model, event, 1, 1, 1, true),
+            None
+        );
+    }
 
     #[test]
     fn terminal_target_uses_slint_primary_shortcut_modifier() {

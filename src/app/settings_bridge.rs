@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 57] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 58] = [
     (
         "General",
         "Language",
@@ -155,6 +155,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 57] = [
         "Terminal",
         "Local selection priority",
         "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
+    ),
+    (
+        "Terminal",
+        "Keep cursor at line start while scrolling",
+        "Move to line start after each wheel step in alternate-screen apps",
     ),
     (
         "Terminal",
@@ -324,7 +329,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 57] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 58] = [
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -518,6 +523,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 57] = [
         "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
         "本地选区优先",
         "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择",
+    ),
+    (
+        "Keep cursor at line start while scrolling",
+        "Move to line start after each wheel step in alternate-screen apps",
+        "滚轮时保持光标在行首",
+        "在备用屏幕程序中，每次滚轮上下移动后回到行首",
     ),
     (
         "Option acts as Meta",
@@ -779,6 +790,7 @@ pub(super) fn wire_settings(
               copy_selection_on_select,
               terminal_mouse_local_selection_priority,
               option_as_meta,
+              alternate_scroll_to_home,
               osc52_clipboard,
               x11_server_provider,
               x11_server_app_path,
@@ -896,6 +908,7 @@ pub(super) fn wire_settings(
                     local_shell: local_shell.as_str(),
                     known_shells: &known_shells,
                     option_as_meta,
+                    alternate_scroll_to_home,
                     osc52_clipboard,
                 },
                 workspace: WorkspaceSettingsInput {
@@ -1275,6 +1288,7 @@ mod tests {
         )));
         let mut settings = AppSettings::default();
         settings.terminal.scrollback_lines = 321;
+        settings.terminal.alternate_scroll_to_home = true;
         settings.ui_language = UiLanguage::SimplifiedChinese;
 
         let expected_language = state.lock().unwrap().sessions.settings.ui_language;
@@ -1435,6 +1449,14 @@ mod tests {
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "Blink terminal cursor");
 
+        let home_matches = settings_search_results("line start", "english");
+        assert_eq!(home_matches.len(), 1);
+        assert_eq!(home_matches[0].section, "Terminal");
+        assert_eq!(
+            home_matches[0].title,
+            "Keep cursor at line start while scrolling"
+        );
+
         let sftp_matches = settings_search_results("bandwidth limit", "english");
         assert_eq!(sftp_matches.len(), 1);
         assert_eq!(sftp_matches[0].section, "SFTP");
@@ -1489,6 +1511,11 @@ mod tests {
         assert_eq!(compact_matches.len(), 1);
         assert_eq!(compact_matches[0].section, "Appearance");
         assert_eq!(compact_matches[0].title, "紧凑终端渲染");
+
+        let home_matches = settings_search_results("行首", "simplified-chinese");
+        assert_eq!(home_matches.len(), 1);
+        assert_eq!(home_matches[0].section, "Terminal");
+        assert_eq!(home_matches[0].title, "滚轮时保持光标在行首");
 
         let blink_matches = settings_search_results("终端光标", "simplified-chinese");
         assert_eq!(blink_matches.len(), 1);

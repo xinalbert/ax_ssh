@@ -553,6 +553,9 @@ pub struct TerminalSettings {
     /// Whether macOS Option-modified keys should be encoded as terminal Meta.
     #[serde(default)]
     pub option_as_meta: bool,
+    /// Request line start by sending Home after each alternate-scroll Up/Down key.
+    #[serde(default)]
+    pub alternate_scroll_to_home: bool,
     /// Whether remote OSC 52 access to the default clipboard is enabled.
     #[serde(default)]
     pub osc52_clipboard: bool,
@@ -567,6 +570,7 @@ pub struct TerminalSettingsInput<'a> {
     pub local_shell: &'a str,
     pub known_shells: &'a [String],
     pub option_as_meta: bool,
+    pub alternate_scroll_to_home: bool,
     pub osc52_clipboard: bool,
 }
 
@@ -590,6 +594,7 @@ impl TerminalSettings {
             local_shell,
             known_shells,
             option_as_meta: input.option_as_meta,
+            alternate_scroll_to_home: input.alternate_scroll_to_home,
             osc52_clipboard: input.osc52_clipboard,
         }
     }
@@ -602,6 +607,7 @@ impl TerminalSettings {
             local_shell: &self.local_shell,
             known_shells: &self.known_shells,
             option_as_meta: self.option_as_meta,
+            alternate_scroll_to_home: self.alternate_scroll_to_home,
             osc52_clipboard: self.osc52_clipboard,
         });
     }
@@ -626,6 +632,7 @@ impl Default for TerminalSettings {
             local_shell: default_local_shell(),
             known_shells: default_known_shells(),
             option_as_meta: false,
+            alternate_scroll_to_home: false,
             osc52_clipboard: false,
         }
     }
