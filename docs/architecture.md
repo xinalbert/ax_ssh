@@ -256,7 +256,21 @@ and enables only the wheel capability while on its alternate screen; it never
 enables button reporting. With mouse reporting off, wheel steps become Up/Down
 key sequences selected by the active application-cursor mode. This lets tmux
 copy mode accept the wheel with `mouse off`; neither the model nor the bridge
-recognizes tmux by name.
+recognizes tmux by name. `TerminalSettings::alternate_scroll_to_home` is an
+opt-in application input policy, defaulting to false for both new and older
+configurations. The bridge reads the current setting for each pointer event
+and repeats at most 256 complete `Up/Down + Home` pairs for alternate-scroll input.
+Each unmodified Home follows its direction key to request the destination
+line's start; the receiving application's key bindings determine the result.
+Home uses the existing application-cursor-aware encoder, and all bytes enter
+the same worker command. Mouse reporting retains priority; normal-screen, horizontal, rejected,
+and non-wheel input gain no Home. No program-name detection or cursor-rendering
+override is involved, and keyboard input is unchanged.
+Both main-window and detached-window `TerminalPaneGroup` instances forward
+`terminal-pointer-input` through `WorkspaceShell` to the application bridge,
+preserving the terminal UUID and pointer DTO. Headless Slint regressions dispatch
+the same wheel event through both layouts; testing a detached window alone does
+not cover the main window's callback wiring.
 Focus tracking is separate from pointer reporting. When the terminal requests
 DEC private mode 1004, only its visible, connected, focused pane in an active
 non-modal window reports xterm `CSI I` on focus-in and `CSI O` on focus-out.

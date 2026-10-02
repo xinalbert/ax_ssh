@@ -456,3 +456,23 @@
 - 关键结论：标准流程由实际 drop target 在拖入/悬停时协商 copy 或拒绝，并在释放位置生成意图；Winit 的 `DroppedFile(PathBuf)` 没有坐标，必须使用同一外部文件悬停期间最新的 `CursorMoved` 坐标，缺失时不能猜测。Slint `DropArea` 已对进程内拖放提供目标局部位置和 action 协商。AppKit destination 应只覆盖可接受区域并在 enter/update/perform 都拒绝区域外的操作。
 - 对实施计划的影响：UI 声明 Remote/Local files 的纯命中与几何契约。Winit bridge 只在有效外部 hover 坐标命中 Remote files 时调用现有上传 queue；macOS promise destination 的原生子视图仅附着到启动时的 Local files 矩形，区域外的回拖由 AppKit 拒绝。既有有界 intent、worker 和同名文件拒绝策略不变。
 - 未解决问题：Winit 无法向所有平台原生文件拖入提供 Slint `DropArea` 同等的 hover 光标反馈；需要用户在目标平台手工确认 Remote/Local 区域、分离窗口、窗口缩放和 Finder 回拖的视觉与交互反馈。
+
+## 2026-10-02 备用屏幕滚轮与复制光标行首
+
+- 时间：2026-10-02 +0800
+- 检索问题：保持通用终端行为时，能否在滚轮移动复制光标后固定行首？
+- 检索原因：用户确认滚轮修复可用，进一步要求避免光标在不同行尾左右跳动。
+- 来源列表：[xterm alternateScroll](https://www.invisible-island.net/xterm/manpage/xterm.html)；[tmux start-of-line](https://man.openbsd.org/tmux#start-of-line)；本机 tmux 3.6a 隔离 socket 默认配置实验。
+- 关键结论：alternate-scroll 发送上下方向键，未规定额外 Home；光标列由远端程序决定。本机复制模式在 Home 前坐标为 49,5，Home 后为 0,5，之后 Up/Up/Down 分别为 0,4 / 0,3 / 0,4。AxSSH 已支持普通/application-cursor Home 序列。
+- 对实施计划的影响：保持既有标准输入可先按一次 Home；用户进一步澄清为“滚轮时一直在行首”，因此启用策略必须对每个方向键发送 `Home + Up/Down`，不能在整批方向键结束后才发送 Home。不识别 tmux 名称，也不改绘制层光标。
+- 未解决问题：实际远端自定义 key binding 可能不同；用户已于 2026-10-02 选择默认关闭的通用逐步行首选项，实施见当前计划。
+
+## 2026-10-02 滚轮移动后的目标行首复核
+
+- 时间：2026-10-02 +0800
+- 检索问题：怎样让每一步行首动作作用于上下移动后的目标行？
+- 检索原因：用户要求修正滚轮行首行为；前置 Home 作用于原行，不能仅凭发送字节断言目标行位置。
+- 来源列表：沿用前轮核查的 [xterm Wheel mice](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Wheel-mice)；本机 tmux 隔离 socket、空配置和 emacs copy-mode 的坐标实验；`src/app/terminal_bridge.rs`。
+- 关键结论：每步使用 `Up/Down + Home` 请求目标行首。不同长度行和空行的本机 copy-mode 实验从 14,4 开始，上移三步为 0,3 / 0,2 / 0,1，下移三步为 0,2 / 0,3 / 0,4；每一步均为第 0 列。测试 server 已清理，无用户 tmux 配置修改。
+- 对实施计划的影响：本条替代此前前置 Home 的实施结论；输入策略按完整组合逐步重复，不保留旧顺序分支，不覆盖本地绘制光标。设置保留默认关闭，本轮无新增联网检索。
+- 未解决问题：实际远端自定义按键绑定或应用模式可能改变 Home 含义；GUI 和目标程序行为仍需用户验收，不能承诺所有程序效果相同。

@@ -176,7 +176,14 @@ reporting 开启时只为本地 owner 显式打开该菜单：标准模式使用
 后者的 `Alt`/`Option` + 右键仍属于远端。
 alternate-scroll 是终端默认模式，只在确实处于备用屏时启用 wheel 能力，绝不会启用 button reporting。没有 mouse reporting 时，
 每个滚轮单位按当前 application-cursor 模式转换为上/下方向键序列；tmux 在 `mouse off` 的 copy mode 中由此接收滚轮，
-模型与 bridge 都不按 tmux 程序名识别。
+模型与 bridge 都不按 tmux 程序名识别。`TerminalSettings::alternate_scroll_to_home` 为用户选择加入的 application 输入策略，
+新配置和旧配置缺省均为 false。bridge 每次 pointer 事件读取当前设置，alternate-scroll 输入最多重复 256 组完整的 `Up/Down + Home`，
+每个上下键之后发送一次无修饰 Home，请求目标行的行首；实际结果由接收程序的按键绑定决定。Home 复用支持 application-cursor 模式的编码器，
+全部字节通过同一条 worker command 发送。鼠标上报保持优先；主屏、横向、被拒绝的事件及非滚轮输入不追加 Home。
+此策略不识别程序名，不改绘制层光标坐标，也不改变键盘输入。
+主窗口和独立窗口的 `TerminalPaneGroup` 都通过 `WorkspaceShell` 将 `terminal-pointer-input`
+转发给 application bridge，原样保留终端 UUID 和 pointer DTO。无窗口 Slint 回归将同一个滚轮事件
+分别投递两种布局；仅测试独立窗口不能覆盖主窗口的 callback 连接。
 焦点跟踪与 pointer reporting 分离。终端请求 DEC 私有 mode 1004 时，只有活动且非 modal 窗口中可见、
 已连接且 focused 的 pane 才会在 focus-in 上报 xterm `CSI I`、在 focus-out 上报 `CSI O`。`TerminalPane`
 只发布 terminal UUID 和布尔值；application bridge 重验窗口/pane 所有权后，才经可靠 worker 路径发送固定字节。

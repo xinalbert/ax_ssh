@@ -537,8 +537,20 @@ wheel scrolls local history. Without mouse reporting, an alternate-screen
 program can still receive wheel movement as Up/Down keys through alternate
 scroll. For example, tmux with `mouse off` lets `Ctrl+B`, `Page Up` enter copy
 mode, then the wheel moves its copy-mode cursor without any tmux-specific AxSSH
-setting. On the normal screen, direct left-drag selection and wheel scrolling
-remain local. A pointer gesture keeps
+setting. **Settings > Terminal > Mouse > Keep cursor at line start while scrolling**
+is off by default. Enable it to send one unmodified Home after each Up/Down
+key produced by a wheel step, requesting line start on the destination line.
+Multiple steps repeat the complete `Up/Down + Home` pair. This applies to all
+alternate-screen programs, including editors, and Home follows the current
+application-cursor mode. The program's key bindings determine the final cursor
+position; this setting does not change keyboard input or locally reposition
+the displayed cursor.
+Programs with mouse reporting enabled continue to receive mouse events without
+the extra Home.
+The setting takes effect immediately and is saved when Settings closes.
+These mouse and wheel rules apply in both the main window and detached
+Terminal windows, including split panes. On the normal screen, direct left-drag
+selection and wheel scrolling remain local. A pointer gesture keeps
 the owner chosen at button press through release or cancellation, including
 motion outside the grid, so one drag is never handled by both AxSSH and the
 remote program. Release reports the current modifier state; cancellation uses

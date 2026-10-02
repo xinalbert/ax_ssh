@@ -110,7 +110,7 @@
 | `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`SftpNativeDropRegion`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar`、`execute-menu-command` | Rust property/callback 接口、共享 event loop 的多窗口标记、Windows/Linux 无边框顶栏与隐藏快捷键菜单、macOS 原生标题栏、统一菜单动作、Rust 发布的稳定 menu-state 布尔值、Terminal Edit accelerator、平台修饰键的 terminal target hover/activate、直接 Tab UUID 的 Move/Return/terminal/divider callbacks，以及顶栏偏移后的终端呈现和 SFTP 原生拖放几何；不在此保存选区或局部草稿 |
 | `ui/components/sftp-controls.slint` | 可复用 SFTP 操作与路径复制按钮 | `SftpActionButton`、`SftpCopyPathButton` | 有界高度、键盘/无障碍 button 语义、Tooltip 与 SFTP 视觉 token；不保存 SFTP 状态或执行 I/O |
 | `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 显式接收显示文本、tooltip 覆盖、无障碍名称和 enabled，转发标准 Button 的 focus/pressed/click；仅真实溢出时显示有界全文 Tooltip，不保存业务状态 |
-| `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`native-sftp-drop-target-at`、`native-sftp-local-drop-region`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；Terminal surface 使用集中式顶部/底部外间距，detached 分屏入口归 macOS 原生标题栏；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、UUID 定向 terminal callback 转发、SFTP 运行时分栏比例/Transfers 折叠，以及将条件 SFTP 组件的 Remote/Local 接收几何绑定为窗口坐标 DTO、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
+| `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`native-sftp-drop-target-at`、`native-sftp-local-drop-region`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；Terminal surface 使用集中式顶部/底部外间距，detached 分屏入口归 macOS 原生标题栏；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、主/独立窗口均按 UUID 转发 `terminal-pointer-input` 等 terminal callback、SFTP 运行时分栏比例/Transfers 折叠，以及将条件 SFTP 组件的 Remote/Local 接收几何绑定为窗口坐标 DTO、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/components/workspace-titlebar.slint` | 工作区标题栏与统一窗口/分屏 glyph | `WorkspaceTitlebar`、`WorkspaceTabContent`、`WindowFrameGlyph`、`WorkspaceTransferGlyph`、`TerminalSplitButton`、`WorkspaceTabRow`、`ConnectableSessionRow`、`ConnectionPicker` | 左起 Tab strip、跟随指针的拖拽副本/源槽/目标槽、位置序号、SSH/SFTP inline Move/Return 动作、主窗口保存连接选择器、统一窗口轮廓与 split 图标、滚动和关闭 |
 | `ui/components/desktop-menu-titlebar.slint` | Windows/Linux 应用菜单与窗口控件顶栏 | `DesktopMenuTitlebar`、`MenuTitleButton`、`WindowControl` | 主窗口六组业务菜单以 ContextMenuArea 展开；独立窗口显示 Return；空白 WindowMoveArea 负责拖动，右侧控件负责最小化/最大化/关闭；只传菜单 action ID 和路径到 AppWindow，不持有窗口 route 或 worker 状态 |
 | `ui/components/flat-action-menu.slint` | 通用扁平动作菜单 | `ActionMenuItem`、`FlatActionMenu`、`show-at` | 用同一 action model 承载原生右键菜单与按钮主动触发的下拉菜单 |
@@ -136,6 +136,9 @@
 
 ## 常用定位
 
+- 终端滚轮/鼠标失效：检查 `ui/workspace-shell.slint` 主/独立窗口两条 `terminal-pointer-input` 转发链；`src/app/view/tests.rs` 用相同 Slint 滚轮事件覆盖两种布局。
+
+- 滚轮时保持行首选项：`TerminalSettings::alternate_scroll_to_home` 默认关闭，经设置 callback 即时预览/保存；`src/app/terminal_bridge.rs::encode_terminal_mouse_input` 对有界 alternate-scroll 每步发送 `Up/Down + Home`，请求目标行首，reporting 优先；最终位置取决于程序按键绑定，双语 UI、搜索与目录生成脚本须一起维护。
 - 修改会话或设置字段：先从 `src/config.rs` 定位至 `src/config/{session,settings,theme,persistence}.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射；Session Editor 的 SSH SFTP 默认目录及服务器传输覆盖还需同步 `src/app/state/editor.rs`、`src/app/state/tabs.rs`、`src/app/workspace/session_editor.rs`、`src/ssh/worker.rs` 与 `ui/session-editor.slint`；传输大小/速率/并发从全局或 profile 解析后复制到新 SFTP worker；收起组名字符数由 `WorkspaceSettings` 校验并通过 `SessionNavigation` 消费；默认凭据后端位于 Settings > General，既有 profile 使用自身的非敏感后端引用。
 - 修改连接或认证：先从 `src/app/connection.rs` 定位至 `src/app/connection/{request,direct,host_key,authentication,worker_start}.rs`；保存并连接必须在 profile 持久化成功后复用 request 路由，认证弹窗的后端选择只在成功且勾选记住后进入 `PendingCredentialStore`；SSH 再检查 `src/ssh.rs`、`src/ssh/known_hosts.rs`、`src/ssh/worker.rs`、`src/ssh/x11.rs` 和 `src/x_server.rs`，保持系统 known_hosts 只能增加有效共享信任、profile 冲突/changed/revoked 仍拒绝，X11 profile 的 Off/`-X`/`-Y` 不改变全局 provider；普通 SSH 建连不读 DISPLAY/xauth/启动 provider，`-X` 也必须在 host key 与认证完成后创建受限授权、无安全授权即不请求 X11，`-Y` 首个远端 X11 channel 准备失败不阻断 shell，以及本机 cookie/relay/启动上限；Telnet/Serial 分别检查 `src/{telnet,serial}.rs`，保持明文提示、只发现不自动打开，以及在启动前比较当前完整 profile（Serial 在异步发现后再次比较）。
 - 修改 SFTP 浏览、下载、分栏或 SSH/SFTP Tab 切换：先检查 `src/sftp.rs` 的 packet/path/page/directory/递归上限、`src/sftp/transfer/local.rs` 的路径发布契约和 `src/app/local_files.rs` 的本地目录预算，再检查 `src/ssh/worker.rs` 的 SFTP-only worker 生命周期、`src/app/state.rs` 的运行时 companion UUID 与 transfer phase、`src/app/{connection,sftp_bridge,connection_monitor,view}.rs` 的逐 Tab 路由/snapshot，最后修改 `ui/{app,workspace-shell,sftp-pane,components/{session-navigation,sftp-controls}}.slint`；分栏比例和 Transfers 折叠只属于 `WorkspaceShell` 运行时 UI 状态，不进入配置或 Rust；暂停/继续不能跨 worker 或进程恢复，取消必须由 worker 清理其任务创建的数据；配对不能共享 russh handle，未来上传/另存为/修改必须另建确认、进度、取消和冲突契约。
@@ -217,6 +220,10 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-02：行首选项改为每步 `Up/Down + Home`，明确目标行首与远端按键绑定的边界。
+
+- 2026-10-02：补充主/独立窗口标准 pointer callback 与 Slint 事件回归定位。
 
 - 2026-10-01 11:49 +0800：SFTP 本地栏对当前目录增加每 Tab 原生文件系统事件监听；单槽信号合并事件并复用后台读取，目录切换时重绑、关闭 Tab 时释放；网络文件系统仍可手动刷新。
 - 2026-10-01 11:08 +0800：SFTP 成功下载、上传和远端写操作按受影响目录刷新对应可见栏；目录加载期间合并一次后续刷新，切换目录时丢弃旧请求。

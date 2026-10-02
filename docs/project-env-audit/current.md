@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：终端备用屏幕滚轮与 tmux copy mode 的 UI-to-model-to-worker 输入链路；不改变 SSH trust、凭据生命周期、依赖版本或 CI target 矩阵。
+- 本轮环境范围：将行首选项修正为每个纵向滚轮步 `Up/Down + Home`，同步 Slint 设置说明与翻译；不改变 SSH trust、凭据生命周期、依赖版本或 CI target 矩阵。
 
 ## 运行环境
 
@@ -14,7 +14,7 @@
 ## 测试环境
 
 - 依赖通过 `Cargo.lock` 锁定；本轮不新增依赖，继续使用 `--locked --offline` 验证。
-- 上轮 Rust 1.99 Intel macOS target 的 check/严格 Clippy/build、Rust 1.92 MSRV check 均通过。本轮默认 Rust 1.97.1 的专项测试、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 300、应用 300、Doc tests 0）、tracker/链接/diff 检查均通过。
+- 本轮逐步 `Up/Down + Home` 已在 Rust 1.97.1 通过 3 项定向回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 303、Doc tests 0）、debug build、510 条翻译和 tracker/skill/链接/diff 检查；Slint 入口已重新编译。隔离 tmux 复制模式上下六步跨不同长度行和空行，每步列为 0。
 - Windows/Linux 原生 target 未在本机验证，待 CI runner 返回结果。
 
 ## 关键命令
@@ -32,15 +32,15 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮不新增外部依赖；Slint UI 输入、锁定的 Alacritty 终端模型与既有 worker 命令通道继续承担滚轮链路。
+- 本轮不新增外部依赖；Slint UI 设置、锁定的 Alacritty 模式/按键编码与既有 worker 命令通道继续承担滚轮链路。环境记忆与 manifest/build/CI 核对一致，本机 Rust/Cargo 1.97.1；开工判定：允许开工。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/components/terminal-grid.slint`、`ui/terminal-pane.slint`、`src/terminal/model.rs`、`src/app/terminal_bridge.rs`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/workspace-shell.slint`、`ui/components/terminal-grid.slint`、`ui/terminal-pane.slint`、`src/app/view/tests.rs`、`src/terminal/model.rs`、`src/app/terminal_bridge.rs`、`src/config/settings.rs`、`src/app/settings_bridge.rs`、`src/app/view/settings.rs`、`ui/settings/terminal.slint`、`scripts/build_zh_catalog.py`。
 
 ## 最后确认时间
 
-- 2026-10-02 10:08 +0800
+- 2026-10-02 +0800
 
 # 2026-09-26 窗口保持环境验证
 

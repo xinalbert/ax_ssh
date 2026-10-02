@@ -884,3 +884,36 @@
 - 门禁：聚焦回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 300、应用 300、Doc tests 0）、Markdown 相对链接、tracker validator 与 diff 检查均通过。
 - 风险与缺口：真实 GUI 的滚轮和持续刷新光标观感由用户验收；Windows/Linux 原生平台由 CI 验证，未用本机交叉编译结果替代。
 - 开工判定：施工与本机验证完成。
+
+## 2026-10-02 主窗口标准终端 pointer 转发环境验证
+
+- 日期：2026-10-02
+- 目的：验证主窗口漏转发滚轮事件的最小 Slint 修复，补齐只测独立窗口的覆盖缺口。
+- 改动范围：`ui/workspace-shell.slint`、`src/app/view/tests.rs`、双语说明和项目记录；工具链、依赖、lockfile 与 CI 矩阵不变。
+- 执行内容：本机 Rust/Cargo 1.97.1、Slint 1.18.1；修复前/后各运行主/独立窗口事件回归，再运行 fmt、locked/offline check、严格 all-target Clippy、完整 test、debug build 与文档门禁。
+- 验证结果：主窗口由 0 次 pointer callback 变为正确转发，独立窗口继续通过；库 300、应用 301、Doc tests 0，所有本机门禁和构建通过。
+- 风险/待办：真实 GUI 交用户在新构建中验收；Windows/Linux 原生环境由 CI 验证；未自行截图或启动应用。
+- 开工判定：施工和本机验证完成。
+
+## 2026-10-02 通用滚轮后 Home 设置预检
+
+- 范围：Rust 配置和 application 输入策略、Slint 设置页/callback、翻译生成源与回归。
+- 本机环境：Rust/Cargo 1.97.1，aarch64/x86_64 macOS targets 已安装；项目 MSRV 1.92.0、Rust 2024、Slint 1.18.1。
+- 环境变化：无工具链/依赖/CI 变更；使用现有 locked/offline Cargo 与 Python 标准库翻译检查。
+- 开工判定：允许开工；先计划后实施，保留上一轮未提交修改。
+- 验证安排：先定向输入/旧配置回归，再 fmt/check/严格 Clippy/完整测试/build；GUI 由用户验收，Windows/Linux 原生验证交 CI。
+
+## 2026-10-02 通用滚轮后 Home 设置验证
+
+- 范围：默认关闭设置的持久化/预览/保存与一次 Home 输入策略；未改工具链、依赖、transport 或 SSH 安全契约。
+- 验证：3 项定向回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 303、Doc tests 0）、debug build、510 条翻译、8 条 Markdown 相对链接、skill/tracker validators 与 diff 均通过。
+- 环境结果：macOS ARM64 原生 Rust/Cargo 1.97.1 验证完成；Slint 入口已重编译。
+- 缺口：GUI/真实备用屏幕交互由用户确认；Windows/Linux 原生 CI 未执行。
+
+## 2026-10-02 滚轮目标行首输入顺序验证
+
+- 目的：每个纵向滚轮步先移动，再请求目标行首。
+- 改动范围：application 输入 helper、设置说明/翻译、配置字段注释和双语文档；依赖、toolchain、CI、SSH trust 与凭据不变。
+- 执行内容：按完整 `Up/Down + Home` 组合逐步发送并更新回归；重编译 Slint，执行 locked/offline Cargo 门禁和 debug build；通过隔离 tmux socket 检查不同长度行及空行。
+- 验证结果：Rust/Cargo 1.97.1 的 3 项定向回归、fmt/check/严格 Clippy、完整测试（库 301、应用 303、Doc tests 0）、build、510 条翻译、8 条相对链接、skill/tracker/diff 通过；tmux 上下六步完成后均为第 0 列，实验 server 已清理。
+- 风险/待办：目标程序的自定义按键绑定决定实际 Home 行为；Windows/Linux 原生 CI 和 GUI 由对应平台验收，不自行捕获应用截图。
