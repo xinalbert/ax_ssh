@@ -533,8 +533,12 @@ left-dragging should select local text while `Alt` (`Option` on macOS) sends a
 button gesture to the TUI. A stationary single left click is still forwarded to
 a reporting TUI; once the pointer moves, the gesture remains a local selection.
 Wheel events go to the TUI while reporting is active in both modes; `Shift` +
-wheel scrolls local history. Outside reporting mode, direct left-drag selection
-and wheel scrolling remain local. A pointer gesture keeps
+wheel scrolls local history. Without mouse reporting, an alternate-screen
+program can still receive wheel movement as Up/Down keys through alternate
+scroll. For example, tmux with `mouse off` lets `Ctrl+B`, `Page Up` enter copy
+mode, then the wheel moves its copy-mode cursor without any tmux-specific AxSSH
+setting. On the normal screen, direct left-drag selection and wheel scrolling
+remain local. A pointer gesture keeps
 the owner chosen at button press through release or cancellation, including
 motion outside the grid, so one drag is never handled by both AxSSH and the
 remote program. Release reports the current modifier state; cancellation uses
@@ -552,8 +556,9 @@ selection. A third left click in the same short click sequence selects the
 complete logical terminal line, including soft-wrapped cells; the terminal core
 provides the line boundaries. The line selection remains local and uses the same
 reporting, modifier, focus, refresh, and copy rules as the semantic selection.
-Mode 1007 enables only alternate-screen wheel translation and never takes
-ownership of button gestures. Moving focus to another pane, a divider, or another window
+Alternate scroll is enabled by the terminal's default mode; DEC mode 1007 can
+explicitly toggle it, and it never takes ownership of button gestures. Moving
+focus to another pane, a divider, or another window
 control clears a terminal selection; an actual grid resize or an effective local
 scroll clears it when the coordinates no longer describe the same viewport.
 Screen output refreshes update the grid without cancelling the selection, and

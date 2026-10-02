@@ -174,7 +174,9 @@ press、release、worker 关闭和路由失败仍保持可观察。Tokio command
 焦点移到另一 pane、分隔条或其他窗口控件时会清除该局部选区；终端上下文菜单的 Copy 会将选区保留至动作完成。
 reporting 开启时只为本地 owner 显式打开该菜单：标准模式使用 `Shift` + 右键，本地选区优先模式使用普通右键；
 后者的 `Alt`/`Option` + 右键仍属于远端。
-alternate-scroll 只在终端确实处于备用屏时启用 wheel 能力，绝不会启用 button reporting。
+alternate-scroll 是终端默认模式，只在确实处于备用屏时启用 wheel 能力，绝不会启用 button reporting。没有 mouse reporting 时，
+每个滚轮单位按当前 application-cursor 模式转换为上/下方向键序列；tmux 在 `mouse off` 的 copy mode 中由此接收滚轮，
+模型与 bridge 都不按 tmux 程序名识别。
 焦点跟踪与 pointer reporting 分离。终端请求 DEC 私有 mode 1004 时，只有活动且非 modal 窗口中可见、
 已连接且 focused 的 pane 才会在 focus-in 上报 xterm `CSI I`、在 focus-out 上报 `CSI O`。`TerminalPane`
 只发布 terminal UUID 和布尔值；application bridge 重验窗口/pane 所有权后，才经可靠 worker 路径发送固定字节。

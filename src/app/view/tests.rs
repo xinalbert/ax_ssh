@@ -17,6 +17,85 @@ fn terminal_pane_view(tab_id: Uuid, x: f32, width: f32) -> TerminalPaneView {
 }
 
 #[test]
+fn alternate_screen_wheel_reaches_terminal_pointer_callback() {
+    // Isolate Slint's thread-local platform from other component tests.
+    std::thread::spawn(|| {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::platform::{Platform, WindowAdapter, WindowEvent};
+
+        struct TestPlatform(Rc<MinimalSoftwareWindow>);
+
+        impl Platform for TestPlatform {
+            fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+                Ok(self.0.clone())
+            }
+        }
+
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+        slint::platform::set_platform(Box::new(TestPlatform(window.clone())))
+            .expect("isolated platform should initialize");
+
+        let ui = AppWindow::new().expect("application window should instantiate");
+        let mut model = ax_ssh::terminal::TerminalModel::new(80, 24, 10);
+        model.process(b"\x1b[?1049h\x1b[?1h");
+        let terminal_snapshot = model.snapshot();
+        assert!(terminal_snapshot.mouse_wheel_reporting_active);
+        assert!(!terminal_snapshot.mouse_button_reporting_active);
+        ui.set_detached_window(true);
+        ui.set_active_tab_kind("terminal".into());
+        let mut pane = terminal_pane_view(Uuid::from_u128(1), 0.0, 1.0);
+        pane.terminal = TerminalViewState {
+            terminal_id: Uuid::from_u128(1).to_string().into(),
+            connected: true,
+            content_columns: 80,
+            mouse_wheel_reporting: terminal_snapshot.mouse_wheel_reporting_active,
+            render_lines: ModelRc::new(VecModel::from(
+                (0..24)
+                    .map(|_| TerminalRenderLine::default())
+                    .collect::<Vec<_>>(),
+            )),
+            font_family: "JetBrains Mono".into(),
+            font_size: 16.0,
+            line_height_percent: 100,
+            ..Default::default()
+        };
+        ui.set_terminal_panes(ModelRc::new(VecModel::from(vec![pane])));
+        let remote_wheel = Rc::new(RefCell::new(Vec::new()));
+        let received = remote_wheel.clone();
+        ui.on_terminal_pointer_input(move |_, event| {
+            received
+                .borrow_mut()
+                .push((event.button, event.repeat_count));
+        });
+        let local_scroll = Rc::new(RefCell::new(Vec::new()));
+        let scrolled = local_scroll.clone();
+        ui.on_scroll_terminal(move |_, lines| scrolled.borrow_mut().push(lines));
+
+        ui.show().expect("headless application window should show");
+        window.set_size(slint::PhysicalSize::new(800, 600));
+        let point = slint::LogicalPosition::new(100.0, 100.0);
+        window
+            .window()
+            .dispatch_event(WindowEvent::PointerMoved { position: point });
+        window
+            .window()
+            .dispatch_event(WindowEvent::PointerScrolled {
+                position: point,
+                delta_x: 0.0,
+                delta_y: 60.0,
+            });
+
+        assert!(matches!(remote_wheel.borrow().as_slice(), [(3, count)] if *count > 0));
+        assert!(local_scroll.borrow().is_empty());
+    })
+    .join()
+    .expect("terminal pane test thread should finish");
+}
+
+#[test]
 fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
     // A dedicated thread isolates Slint's thread-local platform from other tests.
     std::thread::spawn(|| {

@@ -302,14 +302,16 @@ SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**�
 **Settings > Terminal** 开启 **Local selection priority** 后，普通左键拖动使用本地文字选择，按住
 `Alt`（macOS 为 `Option`）才把 button 手势交给 TUI；如果左键没有移动，单击仍会转发给已启用 mouse reporting 的 TUI，
 一旦发生移动则保持为本地选区。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
-滚动本地历史；reporting 关闭时，直接左键拖选和滚轮仍由本地处理。手势没有交给 reporting 时，左键双击会优先选中完整、有效的 HTTP(S) URL，
+滚动本地历史。即使没有 mouse reporting，处于备用屏幕的程序也可通过 alternate-scroll 收到转换为上下方向键的滚轮输入。
+例如 tmux 保持 `mouse off`，按 `Ctrl+B`、`Page Up` 进入 copy mode 后，滚轮即可移动其光标；AxSSH 无需按 tmux 程序名做特殊设置。
+在普通屏幕且没有 reporting 时，直接左键拖选和滚轮由本地处理。手势没有交给 reporting 时，左键双击会优先选中完整、有效的 HTTP(S) URL，
 连续软换行会合并，末尾终端标点不会纳入选区。其它位置则按终端核心的标点、空白、宽字符和匹配括号边界选中一个语义词；范围只留在 pane，不会发送给远端程序。Shift 绕过该行为，Cmd/Ctrl 目标激活
 和远端 mouse reporting 保持优先；既有 copy-on-select 偏好也会对 URL 或语义选区生效。同一短点击序列内第三次左键点击会选中完整的逻辑终端行，
 包括软换行 cell；行边界仍由终端核心计算。行选区留在本地，并沿用语义选区相同的 reporting、修饰键、焦点、刷新和复制规则。
 终端会有意保持未实现上报无响应：DA3/tertiary device attributes、除状态和光标位置外的 DSR 查询，以及没有对应设备或几何数据时的窗口位置/完整屏幕查询。Kitty keyboard/CSI-u、`modifyOtherKeys`、Sixel、Kitty graphics 和 iTerm2 inline images 保持关闭。Telnet 通过 TTYPE 回报 `xterm-256color`，只在协商后发送 NAWS；Serial 是原始字节流，没有 TERM/PTY/NAWS 契约。
 一次指针手势从按下到释放或 cancel 始终沿用按下时确定的 owner，指针移出 grid 后也不会切换链路。release
 上报当时的修饰键状态，cancel 使用最近一次 pointer 状态；高频 motion 每个显示帧只保留最新 cell，并在 release
-前刷新最后一帧。1007 只启用备用屏滚轮转换，绝不会接管 button 手势。焦点移到另一 pane、
+前刷新最后一帧。alternate-scroll 是终端默认模式，DEC 1007 可显式切换它；它只转换备用屏滚轮，不接管 button 手势。焦点移到另一 pane、
 分隔条或其他窗口控件时会清除终端选区；真实字符格 resize 或实际本地滚动会在坐标不再对应同一视口时清除选区。
 屏幕输出刷新只更新网格，不取消选区；**Copy** 会按保持不变的选区坐标读取最新 cell。终端上下文菜单会保留选区至
 **Copy** 动作完成。reporting 开启时，

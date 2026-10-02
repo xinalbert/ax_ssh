@@ -1135,6 +1135,48 @@ fn alternate_screen_scroll_uses_application_cursor_sequences() {
 }
 
 #[test]
+fn tmux_copy_mode_wheel_works_without_mouse_reporting_or_alternate_scroll_request() {
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    let modifiers = TerminalModifiers::default();
+    assert_eq!(
+        encode_key(
+            &TerminalKey::Text("b".to_owned()),
+            TerminalModifiers {
+                control: true,
+                ..modifiers
+            },
+            terminal.application_cursor()
+        ),
+        Some(vec![0x02])
+    );
+    assert_eq!(
+        encode_key(
+            &TerminalKey::PageUp,
+            modifiers,
+            terminal.application_cursor()
+        ),
+        Some(b"\x1b[5~".to_vec())
+    );
+
+    // tmux with `mouse off` enters alternate screen and application-cursor
+    // mode, but does not request DEC 1000 mouse reporting or DEC 1007.
+    terminal.process(b"\x1b[?1049h\x1b[?1h");
+    let snapshot = terminal.snapshot();
+    assert!(!snapshot.mouse_button_reporting_active);
+    assert!(snapshot.mouse_wheel_reporting_active);
+    assert_eq!(
+        terminal.encode_mouse_event(TerminalMouseEvent {
+            kind: TerminalMouseEventKind::Press,
+            button: TerminalMouseButton::WheelUp,
+            column: 0,
+            row: 0,
+            modifiers: TerminalMouseModifiers::default(),
+        }),
+        Some(b"\x1bOA".to_vec())
+    );
+}
+
+#[test]
 fn selection_uses_cell_coordinates_and_ignores_wide_continuations() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     terminal.process("one\r\nt中ree".as_bytes());

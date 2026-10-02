@@ -251,8 +251,12 @@ action completes. While reporting is active, the context menu is opened explicit
 only for the local owner: `Shift` + right-click in standard mode, or ordinary
 right-click in Local selection priority mode; `Alt`/`Option` + right-click remains
 remote in the latter mode.
-Alternate-screen alternate-scroll enables only the wheel capability while the
-terminal is on its alternate screen; it never enables button reporting.
+Alternate-screen alternate-scroll is enabled by the terminal's default mode
+and enables only the wheel capability while on its alternate screen; it never
+enables button reporting. With mouse reporting off, wheel steps become Up/Down
+key sequences selected by the active application-cursor mode. This lets tmux
+copy mode accept the wheel with `mouse off`; neither the model nor the bridge
+recognizes tmux by name.
 Focus tracking is separate from pointer reporting. When the terminal requests
 DEC private mode 1004, only its visible, connected, focused pane in an active
 non-modal window reports xterm `CSI I` on focus-in and `CSI O` on focus-out.
