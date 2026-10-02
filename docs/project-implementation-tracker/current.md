@@ -2,15 +2,16 @@
 
 ## 当前目标
 
-- 目标 ID：20261002-wheel-home-option
-- 目标：让行首动作作用于每次纵向滚轮移动后的目标行：开启选项时，每一步发送 `Up/Down + Home`。
-- 交付物：逐步移动后 Home 的有界输入策略、回归、双语设置与说明；明确远端按键绑定决定最终光标位置。
+- 目标 ID：20261002-cursor-redraw-coalescing
+- 目标：减少关闭本地光标闪烁后，远端重绘分批发送隐藏/显示光标导致的短暂消失。
+- 交付物：应用层固定 24 ms 合并窗口、确定性回归、双语架构说明和可运行 debug 构建。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/config/settings.rs`、`src/app/settings_bridge.rs`、`src/app/view/settings.rs`、`src/app/terminal_bridge.rs`、设置 Slint callback 链、翻译及相关测试/文档。
-- 不在本轮范围内：依赖升级、SSH trust、凭据、发布 tag、参考项目代码、远端程序名称识别。
+- 当前范围：终端 model 的只读协议可见性查询、application 输出 effects/快照呈现调度与回归。
+- 所有权：协议状态继续由 terminal model 拥有；每个 tab 的有界呈现截止时间由 application state 拥有；Slint 保持已有闪烁开关与光标绘制。
+- 不在本轮范围内：依赖升级、SSH trust/凭据、transport 批次策略、发布 tag、参考项目代码。
 
 ## 当前状态
 
@@ -23,36 +24,32 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| WH1 | completed | 核对环境、现有输入边界并落盘计划 | manifest/build/CI/项目地图与技能规范 | 沿用上轮标准 Home 研究；用户已选默认关闭选项 |
-| WH2 | completed | 设置持久化、UI/翻译与通用输入策略 | 旧配置默认值、round trip、事件次数/模式与 reporting 回归 | 保留上一轮未提交修复 |
-| WH3 | completed | 完整门禁与双语使用/架构记录 | fmt/check/Clippy/test/build、翻译、链接、tracker/skill、diff | 上一版语义已完成 |
-| WH4 | completed | 上版逐步 Home 语义及验证 | 定向回归、fmt/check/Clippy/test/build、翻译、链接、tracker/skill、diff | 输入顺序已由 WH5 替代 |
-| WH5 | completed | 将行首动作改到每个滚轮步的目标行，同步双语文案 | 定向输入回归及翻译校验 | 保留开关；无旧输入顺序兼容分支 |
-| WH6 | completed | 完整验证与构建交付 | fmt/check/Clippy/test/build、链接、tracker/skill、diff | 本机通过；GUI 和远端按键绑定由用户验收 |
+| CR1 | completed | 环境、渲染链路、所有权核查并先落盘计划 | manifest/build/CI/技能/地图及前轮分批实验 | ?25 可见性独立于本地闪烁开关 |
+| CR2 | completed | 固定截止时间合并及确定性回归 | 短暂 hide/show、持续隐藏、重入、全量刷新、2026、首次帧与生命周期 | 单 tab 单截止时间；不拖延协议响应 |
+| CR3 | completed | 全量门禁、构建与配套文档 | fmt/check/Clippy/test/build、链接、tracker/skill、diff | GUI 由用户验收 |
 
 ## 已完成
 
-- 核对现有工作树、项目地图、Rust/Slint 技能与架构；上一轮主窗口 callback 修复保留。
-- 环境预检：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1；Slint 1.18.1、锁文件和 CI 矩阵不变。
-- 配置拥有布尔偏好，application bridge 读取当前设置并复用终端模式/按键编码；不增加 model 状态或终端公开 API，不改变 SSH 安全边界。
-- 已接通设置默认值/持久化/预览/保存、中英文 UI 与搜索；本轮已将逐步 Home 调整到方向键之后，同步配置注释、双语说明和项目地图。
-- tmux 隔离 socket 实验覆盖不同长度行和空行，从 14,4 开始，上移三次、下移三次，每步完成后列均为 0；不修改用户 tmux 配置，实验 server 已清理。
-- 已同步双语使用/架构说明与项目地图；不增加 model 状态或终端公开 API。
+- 上一轮只读检查确认关闭闪烁时本地 Timer/phase 不会隐藏光标；独立的远端 `?25l/?25h` 分批发布会改变可见性。
+- 已复现分批 hide/show 产生隐藏中间帧，同批和 2026 同步重绘不产生该中间帧。
+- 本机 Rust/Cargo 1.97.1，Rust 2024/MSRV 1.92.0、Slint 1.18.1、锁文件和 CI 矩阵未变化。
+- 已实现固定 24 ms 呈现合并：只在已有可见帧时合并；显示请求提前解除等待；持续隐藏超时生效；后续输出不得延长窗口。
 
 ## 验证
 
-- 已完成：环境预检和先计划后施工；Slint 已重编译，3 项定向回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 303、Doc tests 0）、debug build、510 条翻译、8 条 Markdown 相对链接、skill/tracker 与 diff 检查通过；tmux 坐标实验通过。
-- 未完成：GUI 实际行为与 Windows/Linux 原生 CI；本机未运行跨平台 GUI，不自行捕获应用截图。
+- 已完成：先计划后施工、环境核查、6 项新增光标合并回归（Tokio 虚拟计时）、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接、skill/tracker 与 diff 检查。双语架构/项目地图已刷新；代码与测试已提交为 `aebc44e`，文档单独提交。
+- 未完成：GUI 实际体验与 Windows/Linux 原生 CI；未推送提交。
 
 ## 风险与阻塞
 
-- Home 是发给程序的输入，远端自定义按键绑定可能改变效果，不能承诺所有程序都落到第一个字符。保留默认关闭选项和鼠标上报优先规则，不修改绘制层光标坐标。
-- Windows/Linux SDK 与原生运行环境本机不可用；GUI 视觉验收依赖用户确认，不自行截图。
+- 24 ms 窗口是有限延迟，不是远端重绘事务协议；跨更长间隔的 hide/show 仍可能可见。持续隐藏请求最多增加该合并等待，既有 FPS/2026 限制另计。
+- 用户尚未提供实际闪烁场景，修复针对已复现的链路，不承诺覆盖完全静止时的其他渲染问题。
+- Windows/Linux 原生 CI 与 GUI 验收本机不可完成；不自行捕获应用截图。
 
 ## 下一步
 
-- 用户重启最新 debug 构建，在“设置 > 终端 > 鼠标”开启“滚轮时保持光标在行首”，验收目标程序的滚轮行为；远端自定义按键绑定可能影响 Home 的效果。
+- 用户重启最新 `target/debug/ax_ssh`，在关闭光标闪烁时验收原有重绘/输入场景；若完全静止时仍闪烁，继续按实际触发场景定位。
 
 ## 最后更新时间
 
-- 2026-10-02 +0800
+- 2026-10-03 +0800

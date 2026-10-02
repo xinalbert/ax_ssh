@@ -206,10 +206,10 @@ UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 sna
 可见未聚焦；不属于任何活动 tree 的终端为 hidden。GPU 和其它 non-software renderer 的 focused 终端首个脏更新
 立即呈现，连续输出的前 500 ms 使用 16 ms，随后到 2 秒使用 33 ms，超过 2 秒使用 50 ms；安静 250 ms 后恢复
 立即首帧和 16 ms。`AppearanceSettings` 还以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
-60 FPS 和 4 FPS；设置值可以进一步降低 non-software 的节拍。可见未聚焦的 non-software split pane 按设置后的周期
+60 FPS 和 4 FPS；设置值可以进一步降低 non-software 的节拍。可见未聚焦的 split pane 按设置后的周期
 最多呈现一次，隐藏 Tab 不设置呈现 deadline。
 
-只有实际选择 `winit-software` 时，每个可见脏更新都立即 ready：不使用固定 FPS timer，也不再按物理像素面积或
+只有实际选择 `winit-software` 时，每个聚焦终端的脏更新都立即 ready：不使用固定 FPS timer，也不再按物理像素面积或
 分屏数分档。`AppState` 只允许一个已排入或执行中的 UI refresh batch；UI 取走 batch 前的输出合并到该 batch，
 snapshot 构造后的输出最多只补排一个 follow-up。终端保留一个有界 pending snapshot；UI 消费时把较新的 terminal
 damage 合并进最新 snapshot，避免遗漏 burst 前段已经变化的脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
@@ -220,10 +220,19 @@ monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane �
 原生窗口激活状态只在运行时维护：Slint
 `WindowActiveChanged` 事件钩子通过 native window handle 将事件精确匹配到对应 `AppWindow` 路由，并通过同一路由
 revision 发布变化；macOS UI 线程另以 500ms 间隔读取每个 `NSWindow.isKeyWindow()` 作为兜底，避免平台事件或句柄暂不可用
-时遗漏激活变化。窗口失去激活时，该窗口内所有可见 non-software 终端
-（包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限；Software 仍按最新帧驱动。隐藏终端仍没有呈现
+时遗漏激活变化。窗口失去激活时，该窗口内所有可见终端
+（包括最后保持 pane 焦点的终端）都使用配置的可见未聚焦 FPS 上限。隐藏终端仍没有呈现
 deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worker
 错误、断开和 shutdown 仍立即处理；SSH 会在合并呈现批次中保留最早的 worker 接收时间。
+
+`TerminalTabState` 还合并跨输出批次的短暂远端光标隐藏：已连接终端的上个发布帧有可见光标时，
+`?25l` 最多保留该帧 24 ms；`?25h` 提前解除等待，后续输出及尚未发布的 hide/show/hide 都不延长
+原截止时间。即使不再收到输出，已有 monitor timer 也会唤醒并发布持续隐藏状态。terminal-only 与完整
+路由快照都遵守该窗口，结束后合并 pending 脏行。首次隐藏帧及 scrollback 中已经不可见的光标无需等待；
+resize/scroll 使窗口失效，断开状态直接绕过等待。标准同步输出可以按自身结束序列/deadline 保持更久。
+此应用层启发式独立于本地闪烁偏好，保留协议可见性，最多在原有呈现限制前增加 24 ms 合并等待；
+超过该间隔的 hide/show 仍可能被看到。parser 和协议响应立即处理，不增加输出缓冲区。
+
 对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
 未变化的 pane/divider 行不会发送父 model 通知，terminal-only 批次也不会重建 SFTP 或无关 workspace
@@ -477,7 +486,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
    snapshot 送入 Slint event loop；更新统一使用
    `slint::invoke_from_event_loop` 和 `Weak<AppWindow>`，避免退出时保活窗口。
-   DEC 光标可见性（`CSI ?25l` 与 `CSI ?25h`）只改变光标是否可见。只有同步输出（`CSI ?2026h` 与
+   DEC 光标可见性（`CSI ?25l` 与 `CSI ?25h`）立即改变模型中的光标可见性，独立于上述应用层有界重绘合并。
+   只有同步输出（`CSI ?2026h` 与
    `CSI ?2026l`）可以控制呈现事务：parser 持续消费输出，UI 保留最后已发布的有界帧，直到标准结束序列或
    上游同步 deadline 释放；没有旧帧时不发布局部首帧。它不缓存无界输出，也不改变软换行/reflow、mouse reporting、worker 或 SSH transport
    语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定

@@ -917,3 +917,19 @@
 - 执行内容：按完整 `Up/Down + Home` 组合逐步发送并更新回归；重编译 Slint，执行 locked/offline Cargo 门禁和 debug build；通过隔离 tmux socket 检查不同长度行及空行。
 - 验证结果：Rust/Cargo 1.97.1 的 3 项定向回归、fmt/check/严格 Clippy、完整测试（库 301、应用 303、Doc tests 0）、build、510 条翻译、8 条相对链接、skill/tracker/diff 通过；tmux 上下六步完成后均为第 0 列，实验 server 已清理。
 - 风险/待办：目标程序的自定义按键绑定决定实际 Home 行为；Windows/Linux 原生 CI 和 GUI 由对应平台验收，不自行捕获应用截图。
+
+## 2026-10-02 光标呈现合并施工预检
+
+- 项目边界：terminal model 只读模式查询与 application 快照呈现；不改 Slint 绘制、transport 批次或 SSH 安全边界。
+- 环境记忆状态：已核对 Cargo、build/CI 与源码，无依赖或工具链漂移。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1，锁定 Slint 1.18.1；已存在 Tokio test-util 虚拟计时支持。
+- 测试计划：确定性光标合并/超时回归，fmt、locked/offline check/Clippy/test/build、链接、tracker/skill 与 diff。
+- 开工判定：允许开工。GUI 由用户验收；Windows/Linux 原生 CI 本机不可替代。
+
+## 2026-10-03 光标呈现合并验证完成
+
+- 项目边界：terminal model 只读协议可见性及 application 固定 24 ms 呈现合并；parser、响应发送、Slint 闪烁偏好和 SSH 安全边界保持原有所有权。
+- 环境记忆状态：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1；依赖、锁文件、Slint/build 入口和 CI 矩阵无变化。
+- 验证结果：6 项新定向回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条相对链接、skill/tracker 与 diff 检查通过。
+- 交付状态：代码与回归已提交为 `aebc44e`；配套文档单独提交，不推送远端。
+- 风险与缺口：24 ms 只合并短暂 hide/show，持续隐藏仍生效；GUI 由用户验收，Windows/Linux 原生 CI 尚未运行；不自行捕获应用截图。

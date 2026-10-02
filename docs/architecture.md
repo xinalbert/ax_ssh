@@ -312,10 +312,10 @@ until two seconds, and 50 ms afterward. A 250 ms quiet period resets the burst t
 the immediate/16 ms path. `AppearanceSettings` persists independent focused and
 visible-unfocused refresh caps as FPS, clamped to 1-120 FPS and defaulting to 60
 FPS and 4 FPS; the configured value can lower the non-software cadence further.
-A visible-unfocused non-software split pane presents at most once per configured
+A visible-unfocused split pane presents at most once per configured
 interval, while a hidden Tab has no presentation deadline.
 
-When the process actually selected `winit-software`, every visible dirty update
+When the process actually selected `winit-software`, every focused dirty update
 is ready immediately—there is no fixed FPS timer and no pixel-area or split-count
 policy. `AppState` admits only one queued or in-progress UI refresh batch: output
 before the UI takes that batch is coalesced into it, and output after snapshot
@@ -334,13 +334,29 @@ Slint `WindowActiveChanged` event hook matches each event's native window handle
 to its `AppWindow` route and publishes changes through the same route revision.
 On macOS, a UI-thread poll also reads each `NSWindow.isKeyWindow()` every 500 ms
 as a fallback when a platform activation event or native handle is unavailable.
-While a window is inactive, every visible non-software terminal in that window
+While a window is inactive, every visible terminal in that window
 uses the configured visible-unfocused FPS cap, including the pane that was last
-focused; Software remains latest-frame driven. Hidden terminals still have no
-presentation deadline. A monitor with no dirty output has no timer wakeup.
+focused. Hidden terminals still have no presentation deadline. A monitor with
+no dirty output has no timer wakeup.
 Parsing, protocol responses, worker errors, disconnect, and shutdown still run
 immediately; SSH retains the earliest worker receive timestamp across a
 coalesced presentation batch.
+
+`TerminalTabState` also coalesces a transient remote cursor hide across output
+batches. If a connected terminal's last published frame has a visible cursor,
+`?25l` retains that frame for a fixed 24 ms grace period. `?25h` releases it
+early; further output and an unpublished hide/show/hide sequence cannot extend
+the original deadline. The existing monitor timer wakes for a persistent hide
+even without another output event. Both terminal-only and full-route snapshots
+honor the hold and merge pending row damage when it ends. Initial hidden frames
+and an already hidden scrollback cursor need no grace period; resize/scroll
+invalidate it, and disconnected state bypasses it. Standard synchronized output
+can hold longer until its own end/deadline. This application-layer heuristic is
+independent of the local blink preference: it leaves protocol visibility intact,
+adds at most 24 ms of coalescing wait before existing presentation limits, and
+cannot conceal hide/show batches separated by longer intervals. Parsing and
+protocol responses continue immediately; no additional output buffer is added.
+
 For a matching pane, the bridge also retains the existing render-line and run
 `VecModel` identities. It writes new rows through those subscribed models, or
 resets the same model when its row count changes, before updating the outer pane
@@ -774,10 +790,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    state; each visible pane contributes only its bounded cell snapshot across
    the Slint event loop. UI updates use
    `slint::invoke_from_event_loop` and `Weak<AppWindow>` so shutdown does not
-   keep a window alive. DEC cursor visibility (`CSI ?25l` and `CSI ?25h`) only
-   changes the cursor's visibility. Synchronized output (`CSI ?2026h` and
-   `CSI ?2026l`) is the only terminal-controlled presentation transaction: the
-   parser keeps consuming output while the last published bounded frame remains
+   keep a window alive. DEC cursor visibility (`CSI ?25l` and `CSI ?25h`)
+   changes the model's cursor visibility immediately, separately from the
+   application's bounded redraw coalescing described above. Synchronized output
+   (`CSI ?2026h` and `CSI ?2026l`) is the only terminal-controlled presentation
+   transaction: the parser keeps consuming output while the last published bounded frame remains
    visible until the standard end sequence or the upstream synchronization
    deadline flushes it; without a prior frame, it publishes no partial frame.
    This neither buffers unbounded output nor changes
