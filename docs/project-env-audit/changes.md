@@ -867,3 +867,20 @@
 - 平台验证：ARM64/x86_64 macOS 的显式 target check、严格 Clippy 和 build 全部通过；仅运行原生 ARM64 测试。
 - 其他门禁：Markdown、skill、tracker、diff 通过。没有依赖/锁文件/工具链变化。
 - 待验收：Windows/Linux 原生 CI；真实 GUI、全屏/最大化动画和多屏恢复由用户验收。
+
+## 2026-10-02 tmux 滚轮输入施工预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用的终端 UI、应用 bridge、Alacritty 模型和现有 worker 输入链路；不改 SSH trust、凭据、依赖或 CI。
+- 环境记忆状态：核对现有 `current.md`，本轮目标已从 Rust 1.99 CI 修复转到 tmux 备用屏幕滚轮；根目录、关键证据和章节结构仍有效，已刷新当前态。
+- 仓库声明：MSRV 1.92.0，Slint 1.18.1，Alacritty Terminal 0.26.0；`Cargo.lock` 与 `.github/workflows/ci.yml` 固定构建和多 target 验证。
+- 本机环境：macOS ARM64，Rust/Cargo 1.97.1；本机 tmux 3.6a 可运行，默认 `mouse off`、`alternate-screen on`。
+- 可执行命令：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`、`git diff --check`。
+- 风险与缺口：GUI 实际滚轮、焦点和远端 tmux 仍需用户视觉验收；非原生平台由 CI target 检查。开工判定：允许开工。
+
+## 2026-10-02 tmux 滚轮输入环境验证
+
+- 项目边界：只增加终端模型/Slint 事件回归与双语说明；生产 UI、模型、worker、SSH trust 和依赖均未改变。
+- 本机验证：Rust/Cargo 1.97.1，tmux 3.6a；隔离 PTY 在 `mouse off` 下验证备用屏幕/application-cursor 模式及 `ESC OA` 让 copy cursor 上移一行。
+- 门禁：聚焦回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 300、应用 300、Doc tests 0）、Markdown 相对链接、tracker validator 与 diff 检查均通过。
+- 风险与缺口：真实 GUI 的滚轮和持续刷新光标观感由用户验收；Windows/Linux 原生平台由 CI 验证，未用本机交叉编译结果替代。
+- 开工判定：施工与本机验证完成。

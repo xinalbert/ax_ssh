@@ -2,56 +2,53 @@
 
 ## 当前目标
 
-- 目标 ID：20261001-rust-199-clippy-compat
-- 目标：修复 stable Rust 1.99 的 macOS Intel CI 严格 Clippy 失败，同时保持 Rust 1.92.0 MSRV。
-- 交付物：两处最小 Rust 修复、目标编译和严格 Clippy 验证、实施与环境记录。
+- 目标 ID：20261002-tmux-wheel-cursor
+- 目标：核实 AxSSH 在 tmux `mouse off` 的 copy mode 中的滚轮行为，补齐回归并复查先前的光标跳动边界。
+- 交付物：可重复的终端输入链路回归、双语行为说明和验证记录；有证据表明行为失效时再修复。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/runtime.rs`、`src/app/window_router.rs`、`docs/project-implementation-tracker/`、`docs/project-env-audit/`。
-- 不在本轮范围内：CI target 矩阵、依赖版本、窗口计数语义、多窗口路由结果、SSH trust/凭据、Slint UI 和 `third_package/axshell`。
+- 当前范围：`ui/components/terminal-grid.slint`、`ui/terminal-pane.slint`、`src/terminal/`、`src/app/{terminal_bridge,view/terminal}.rs` 及相关文档和测试。
+- 不在本轮范围内：Cargo 依赖版本、SSH host-key trust、凭据、持久化 schema、worker 队列容量及参考项目源码。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| CI1991 | completed | 核对 CI 报错、MSRV 和 Rust 官方 API 稳定版本 | 用户 CI 日志、Cargo/CI、Rust 文档 | `try_update` 从 1.95 才可用 |
-| CI1992 | completed | 保留原子计数语义并去掉闭包多余借用 | 定向源码检查、Cargo check | 不用弃用抑制或升级 MSRV |
-| CI1993 | completed | 在可用工具链和 macOS target 上完成门禁并提交 | fmt/check/Clippy/test/build、tracker/diff | Rust 1.99 Intel 与 Rust 1.92 MSRV 均已验证 |
+| TMW1 | completed | 对照 AxShell 与本机 tmux 复现 `mouse off` 的键盘、滚轮和备用屏幕事件 | tmux PTY 捕获、现有模型测试、Slint 无窗口事件测试 | 已确认事件没有在现有代码中丢失 |
+| TMW2 | completed | 用真实 tmux 模式序列补输入和 UI 回归；核对光标跳动旧边界 | 模型、无窗口 Slint 测试 | 无已证实代码失效，不按 tmux 名称特判 |
+| TMW3 | completed | 更新双语行为说明、环境与跟踪记录，完成仓库门禁 | fmt/check/Clippy/test、文档与 tracker 校验、diff | GUI 视觉交给用户验收 |
 
 ## 已完成
 
-- CI 使用 stable 工具链并在两个 macOS target 上执行 `cargo clippy --all-targets --locked --target ... -- -D warnings`；用户提供的 Intel 日志包含两处 warning 升级为错误。
-- 本机默认 Rust/Cargo 1.97.1，仓库 MSRV 1.92.0；Rust 官方 API 文档说明 `fetch_update` 自 1.99 弃用、`try_update` 自 1.95 稳定，因此不能直接按 CI 提示替换。
-- `src/app/runtime.rs` 属于 renderer 窗口计数与诊断；`src/app/window_router.rs` 属于多窗口路由。仅调整计数的原子实现和闭包传参，不改变跨模块契约或安全边界。
-- 已用 `compare_exchange_weak` 循环保留零值不递减和原有内存序；`workspace_tab_for` 在第一处 `.map()` 直接按值传入。Rustfmt 检查通过。
-- 已安装 Rust 1.99 和两个 macOS target；原始失败命令在 Rust 1.99 的 `x86_64-apple-darwin` 上通过，同 target 的 check 与 build 也通过。本机 Rust 1.97 完整测试库/应用各 299 项通过。
-- Rust 1.92 的 `cargo check --locked --offline` 已通过；源码修复已提交为 `02eae17`。
+- 先前 CI 兼容目标已收口；本轮项目地图已覆盖终端 UI、应用 bridge 和模型入口，无需重建索引。
+- 本机 tmux 3.6a 在 `mouse off` 时仍向外层终端发送备用屏幕和 application-cursor 模式；AxShell 在无 mouse tracking 时把备用屏幕滚轮转成方向键。
+- AxSSH 模型已有备用屏幕滚轮转方向键逻辑；真实 tmux PTY 测试确认 `mouse off` 的 copy mode 接收 `ESC OA` 后，光标由第 22 行移至第 21 行。
+- 新增模型回归覆盖 `Ctrl+B`、`Page Up`、tmux 实际备用屏幕/application-cursor 模式和滚轮字节；无窗口 Slint 回归确认滚轮到达远端输入 callback，且不进入本地 scrollback callback。应用 bridge 现有路径按 pane UUID 验证后把编码字节送入有界 worker 命令队列。
+- 先前历史 scrollback 后输入回底的光标观感问题已有实现与状态回归；未使用同步输出协议的持续刷新 TUI 仍可能显示其自身分批写出的中间光标位置，当前没有特定程序或现场复现可证明已完全消除。
 
 ## 验证
 
-- 已完成：项目/环境预检、错误定位和 Rust 官方 API 核对。
-- 已完成：Rust 1.97 的 fmt/check/严格 Clippy/完整测试、Rust 1.99 的 fmt 和 Intel macOS target 的 check/严格 Clippy/build、tracker、相对链接和 diff 检查。
-- 已完成：Rust 1.92 的 MSRV check；源码提交 `02eae17`。本记录和环境记录通过校验后单独提交。
-- 未完成：Windows/Linux 原生 CI target 与 GitHub 新一轮工作流结果。
+- 已完成：Rust/Cargo 1.97.1、Rust 2024/MSRV 1.92.0、Slint 1.18.1、`Cargo.lock` 和 CI target 矩阵核对；AxShell 参考只读；tmux PTY 模式及 copy cursor 行变化捕获；聚焦回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 300、应用 300、Doc tests 0）、Markdown 相对链接、tracker validator 和 `git diff --check` 通过。
+- 未完成：真实 GUI 手工验收；Windows/Linux 原生目标由 CI 验证。
 
 ## 风险与阻塞
 
-- Rust 1.99 与 1.92 工具链已安装；本机缺 Windows/Linux 原生 SDK，平台验证依赖 CI。
-- 原子递减在计数为零时必须保持零，且保留原有 `AcqRel` 成功、`Acquire` 失败内存序。
+- 当前模型逻辑与 AxShell 同样支持备用屏幕滚轮；未找到失效层，不修改 SSH transport 或添加 tmux 特判。
+- 真实鼠标、焦点和远端 tmux 的视觉行为需用户在目标平台确认；自动测试不代替截图验收。
 
 ## 下一步
 
-- 重新运行 CI，确认 Windows/Linux 原生 target 的严格 Clippy 与构建结果。
+- 真实 GUI 的 tmux copy mode 和持续刷新光标位置由用户在目标机器上验收；若仍有光标跳动，记录具体程序、操作和终端输出节奏后定位。
 
 ## 最后更新时间
 
-- 2026-10-02 00:58 +0800
+- 2026-10-02 10:08 +0800
