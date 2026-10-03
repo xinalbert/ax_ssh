@@ -933,3 +933,17 @@
 - 验证结果：6 项新定向回归、fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条相对链接、skill/tracker 与 diff 检查通过。
 - 交付状态：代码与回归已提交为 `aebc44e`；配套文档单独提交，不推送远端。
 - 风险与缺口：24 ms 只合并短暂 hide/show，持续隐藏仍生效；GUI 由用户验收，Windows/Linux 原生 CI 尚未运行；不自行捕获应用截图。
+
+## 2026-10-03 收起侧栏 Group 样式施工预检
+
+- 项目边界：SidebarRailItem 紧凑文字组项的背景、边框、字体和宽度；无 Rust/SSH/凭据或持久化变更。
+- 环境记忆状态：已核对 manifest、锁定 Slint、build.rs 与 CI，环境无漂移；本机 Rust/Cargo 1.97.1，Rust 2024/MSRV 1.92.0。
+- 测试计划：Slint 重新编译，fmt、locked/offline check/严格 Clippy/test/build、双语文档链接、skill/tracker/diff。
+- 开工判定：允许开工。GUI 以用户截图和确认验收；Windows/Linux 原生 CI 未在本机执行。
+
+## 2026-10-03 收起侧栏 Group 样式验证完成
+
+- 改动范围：SidebarRailItem 紧凑文字样式及双语使用说明/跟踪文档；依赖、工具链、CI、Rust 领域与 SSH 安全边界不变。
+- 验证结果：Slint 已重新编译；fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接、skill/tracker/diff 通过。
+- 交付状态：最新 debug 可执行文件已生成；样式及配套文档独立提交，不推送远端。
+- 风险与缺口：GUI 外观和真实焦点交互由用户验收；Windows/Linux 原生 CI 本机未运行。不自行生成或查看应用截图。

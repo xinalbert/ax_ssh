@@ -159,6 +159,7 @@ export component SidebarRailItem inherits FocusScope {
     in property <bool> selected: false;
     callback activated();
 
+    private property <bool> compact-group: root.group && !root.expanded-label;
     private property <length> label-line-height:
         label-probe.font-metrics.ascent - label-probe.font-metrics.descent;
     private property <length> label-content-height: root.label-line-height;
@@ -167,7 +168,7 @@ export component SidebarRailItem inherits FocusScope {
         : root.label-content-height + 2 * (root.group
             ? Theme.sidebar-rail-group-card-padding-y
             : Theme.sidebar-rail-session-card-padding-y);
-    private property <length> card-width: root.expanded-label
+    private property <length> card-width: root.expanded-label || root.compact-group
         ? root.width - 2 * Theme.space-xs
         : root.card-height;
     private property <length> row-padding-y: root.local
@@ -203,9 +204,9 @@ export component SidebarRailItem inherits FocusScope {
         font-size: root.expanded-label && root.group
             ? Theme.sidebar-group-font-size
             : Theme.sidebar-session-font-size;
-        font-weight: root.expanded-label && !root.group && !root.local
-            ? Theme.sidebar-session-font-weight
-            : Theme.sidebar-group-font-weight;
+        font-weight: root.group || root.local
+            ? Theme.sidebar-group-font-weight
+            : Theme.sidebar-session-font-weight;
     }
 
     item-card := Rectangle {
@@ -215,13 +216,11 @@ export component SidebarRailItem inherits FocusScope {
         height: root.card-height;
         background: root.selected
             ? Theme.selected
-            : ((root.group && !root.expanded-label) || item-touch.has-hover || root.has-focus
+            : (item-touch.has-hover || root.has-focus
                 ? Theme.panel
                 : transparent);
-        border-width: root.selected
-                || (root.group && !root.expanded-label)
-                || item-touch.has-hover
-                || root.has-focus
+        border-width: root.has-focus
+                || (!root.compact-group && (root.selected || item-touch.has-hover))
             ? Theme.hairline
             : 0px;
         border-color: root.has-focus
@@ -245,7 +244,9 @@ export component SidebarRailItem inherits FocusScope {
             text-color: root.selected || root.group ? Theme.accent : Theme.text;
             font-family: Theme.application-font-family;
             font-size: Theme.font-body;
-            font-weight: 700;
+            font-weight: root.group
+                ? Theme.sidebar-group-font-weight
+                : Theme.sidebar-session-font-weight;
             horizontal-alignment: TextHorizontalAlignment.center;
         }
 

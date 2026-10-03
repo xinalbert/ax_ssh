@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：应用层合并远端短暂光标隐藏/显示，核查 model、输出 effects、调度器和快照发布；不改变 SSH trust、凭据生命周期、依赖版本或 CI target 矩阵。
+- 本轮环境范围：收起侧栏 Group 缩写的 Slint 视觉样式；不改变 SSH trust、凭据生命周期、依赖版本或 CI target 矩阵。
 
 ## 运行环境
 
@@ -14,7 +14,7 @@
 ## 测试环境
 
 - 依赖通过 `Cargo.lock` 锁定；本轮不新增依赖，继续使用 `--locked --offline` 验证。
-- 本轮已通过 6 项 Tokio 虚拟计时光标合并回归、fmt、locked/offline check、严格 all-target Clippy 和完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接和 tracker/skill/diff 检查。
+- 本轮 Slint 已重新编译；fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接与 skill/tracker/diff 通过；纯样式变更不新增镜像测试。
 - Windows/Linux 原生 target 未在本机验证，待 CI runner 返回结果。
 
 ## 关键命令
@@ -32,11 +32,11 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮不新增外部依赖；复用 Alacritty 协议状态、Tokio 定时等待及应用层单槽快照。环境记忆与 manifest/build/CI 核对一致，本机 Rust/Cargo 1.97.1；开工判定：允许开工。
+- 本轮不新增外部依赖；复用 SidebarRailItem、Theme 字重/色彩和现有交互状态。环境记忆与 manifest/build/CI 核对一致，本机 Rust/Cargo 1.97.1；开工判定：允许开工。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/components/terminal-grid.slint`、`ui/terminal-pane.slint`、`src/terminal/{model,render,tests}.rs`、`src/app/state.rs`、`src/app/state/{terminal,tabs,tests}.rs`、`src/app/terminal_bridge.rs`、`src/app/terminal_presentation.rs`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/components/sidebar-controls.slint`、`ui/components/session-navigation.slint`、`ui/theme.slint`、`docs/usage.md`、`docs/usage.zh.md`。
 
 ## 最后确认时间
 

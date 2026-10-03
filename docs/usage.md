@@ -355,9 +355,12 @@ press Enter or Space, to change that state. Every visible server remains a
 single indented row: its name is on the left and its masked endpoint is on the
 right. **View > Toggle Session Sidebar** switches between this view and the
 compact activity bar. The compact bar uses the first 1-4 characters of each
-group name by default; choose **Full name** in **Settings > Workspace** to show
-the complete group name. Full-name mode widens the collapsed rail to 180px and
-uses a dense single-line list with a trailing sidebar control, labeled Local
+group name by default. These group labels use bold accent text without a
+permanent outline or background; server labels use a lighter weight, and group
+spacing keeps the hierarchy visible. Hover and selection add a background,
+while focus retains a visible outline. Choose **Full name** in
+**Settings > Workspace** to show the complete group name. Full-name mode widens
+the collapsed rail to 180px and uses a dense single-line list with a trailing sidebar control, labeled Local
 Shell action, group disclosure and counts, and indented full server names.
 Long labels are elided and available in tooltips. The same row context menus
 are available in the compact rail. The most recently selected group or server

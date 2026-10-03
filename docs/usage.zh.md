@@ -209,9 +209,10 @@ Tab 与 pane/window 布局，并通过正常的信任与认证流程启动新 wo
 居中的绘制下尖角；收起后显示对应的绘制上尖角，避免名称与文字徽标重复。点击 Group
 行，或将焦点移到该行后按 Enter/Space，可切换状态。每台可见服务器仍只占一行：左侧为
 名称，右侧为遮蔽后的 endpoint。**View > Toggle Session Sidebar** 可在此视图和紧凑
-Activity Bar 之间切换；紧凑栏默认使用 Group 名称前 1-4 个字符作为文字徽标，也可在
-**Settings > Workspace** 选择 **Full name** 显示完整组名。Full name 模式会将收起栏加宽到
-180px，并使用高密度单行列表：侧栏按钮位于标题行末端，Local Shell 显示图标和文字，Group
+Activity Bar 之间切换；紧凑栏默认使用 Group 名称前 1-4 个字符，采用强调色粗体，去掉常驻
+边框和底色；服务器名称字重略轻，并通过组间留白区分层级。悬停和选中时显示底色，焦点保留
+清晰轮廓。也可在 **Settings > Workspace** 选择 **Full name** 显示完整组名。Full name 模式
+会将收起栏加宽到 180px，并使用高密度单行列表：侧栏按钮位于标题行末端，Local Shell 显示图标和文字，Group
 显示展开尖角与数量，服务器缩进显示全名；长名称会省略并通过 tooltip 提供全文。紧凑栏行也
 提供相同的右键菜单。删除 Group 会把其中
 服务器移入 Ungrouped。最近选中的 Group 或服务器会在展开与收起侧栏中持续高亮，hover 和
