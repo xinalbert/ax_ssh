@@ -693,9 +693,7 @@ component SftpDirectoryPane inherits Rectangle {
             ? Theme.space-sm : 0px)
         + (root.allow-navigation && !root.local-actions && root.selection-count == 1
             ? 2 * Theme.space-sm : 0px);
-    private property <length> local-refresh-reserve:
-        root.local-actions && root.allow-refresh
-            ? Theme.sftp-nav-icon-button-width + Theme.space-sm : 0px;
+    private property <length> local-refresh-reserve: 0px;
     private property <length> title-actions-width: Theme.sftp-nav-icon-button-width
         + Theme.space-sm + root.local-refresh-reserve
         + root.toolbar-actions-preferred-width;
@@ -786,18 +784,6 @@ component SftpDirectoryPane inherits Rectangle {
                     clicked => { root.upload-selected(); }
                 }
             }
-            if root.local-actions && root.allow-refresh : SftpActionButton {
-                x: copy-path-button.x - self.width - Theme.space-sm;
-                y: (parent.height - self.height) / 2;
-                width: Theme.sftp-nav-icon-button-width;
-                height: root.control-height;
-                text: "↻";
-                tooltip-text: @tr("Refresh");
-                subtle: true;
-                accessible-name: @tr("Refresh");
-                enabled: root.interactive && !root.loading && !root.current-path.is-empty;
-                clicked => { root.refresh(); }
-            }
             copy-path-button := SftpCopyPathButton {
                 x: max(
                     Theme.sftp-column-padding,
@@ -873,7 +859,7 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
                 }
-                if root.allow-refresh && !root.local-actions && root.width >= 340px : SftpActionButton {
+                if root.allow-refresh && root.width >= 340px : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: root.control-height;
                     text: @tr("Refresh");
@@ -1233,6 +1219,7 @@ component SftpTransferQueue inherits Rectangle {
     in property <int> selected-active-count: 0;
     in property <int> selected-pausable-count: 0;
     in property <int> selected-resumable-count: 0;
+    callback toggle-collapse();
     callback toggle-selection(string, bool);
     callback pause-transfer(string);
     callback resume-transfer(string);
@@ -1247,6 +1234,8 @@ component SftpTransferQueue inherits Rectangle {
     private property <[SftpTransferRow]> visible-transfers: root.page == "active"
         ? root.active-transfers : (root.page == "failed" ? root.failed-transfers
         : root.completed-transfers);
+    private property <bool> show-content: !root.collapsed
+        && (root.active-count > 0 || root.failed-count > 0 || root.completed-count > 0);
 
     background: Theme.panel;
     clip: true;
@@ -1263,33 +1252,39 @@ component SftpTransferQueue inherits Rectangle {
                 spacing: Theme.space-sm;
 
                 SftpActionButton {
-                    width: 136px;
+                    width: 126px;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Transferring ({0})", root.active-count);
+                    subtle: true;
+                    active: root.page == "active";
                     enabled: true;
                     clicked => { root.page = "active"; }
                 }
                 SftpActionButton {
-                    width: 92px;
+                    width: 82px;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Failed ({0})", root.failed-count);
+                    subtle: true;
+                    active: root.page == "failed";
                     enabled: true;
                     clicked => { root.page = "failed"; }
                 }
                 SftpActionButton {
-                    width: 102px;
+                    width: 94px;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Success ({0})", root.completed-count);
+                    subtle: true;
+                    active: root.page == "completed";
                     enabled: true;
                     clicked => { root.page = "completed"; }
                 }
                 Rectangle {
                     horizontal-stretch: 1;
                 }
-                if !root.collapsed && root.page == "active" : SftpActionButton {
+                if root.show-content && root.page == "active" : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: parent.height;
                     text: @tr("Pause");
@@ -1298,7 +1293,7 @@ component SftpTransferQueue inherits Rectangle {
                     enabled: root.selected-pausable-count > 0;
                     clicked => { root.pause-selected(); }
                 }
-                if !root.collapsed && root.page == "active" : SftpActionButton {
+                if root.show-content && root.page == "active" : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: parent.height;
                     text: @tr("Resume");
@@ -1307,7 +1302,7 @@ component SftpTransferQueue inherits Rectangle {
                     enabled: root.selected-resumable-count > 0;
                     clicked => { root.resume-selected(); }
                 }
-                if !root.collapsed && root.page == "active" : SftpActionButton {
+                if root.show-content && root.page == "active" : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;
                     height: parent.height;
                     text: @tr("Cancel");
@@ -1315,6 +1310,15 @@ component SftpTransferQueue inherits Rectangle {
                     accessible-name: @tr("Cancel selected");
                     enabled: root.selected-active-count > 0;
                     clicked => { root.cancel-selected(); }
+                }
+                if root.active-count > 0 || root.failed-count > 0 || root.completed-count > 0 : SftpActionButton {
+                    width: 30px;
+                    height: parent.height;
+                    text: root.collapsed ? "⌃" : "⌄";
+                    tooltip-text: root.collapsed ? @tr("Expand transfers") : @tr("Collapse transfers");
+                    accessible-name: root.collapsed ? @tr("Expand transfers") : @tr("Collapse transfers");
+                    subtle: true;
+                    clicked => { root.toggle-collapse(); }
                 }
             }
             Rectangle {
@@ -1324,7 +1328,7 @@ component SftpTransferQueue inherits Rectangle {
                 background: Theme.divider;
             }
         }
-        if !root.collapsed : Rectangle {
+        if root.show-content : Rectangle {
             private property <length> action-slot-width:
                 2 * Theme.sftp-transfer-action-width + 2 * Theme.sftp-column-gap;
             private property <length> content-width: max(
@@ -1393,7 +1397,7 @@ component SftpTransferQueue inherits Rectangle {
                 background: Theme.divider;
             }
         }
-        if !root.collapsed && root.visible-transfers.length > 0 : ListView {
+        if root.show-content && root.visible-transfers.length > 0 : ListView {
             vertical-stretch: 1;
             min-height: 0px;
             accessible-role: list;
@@ -1416,7 +1420,7 @@ component SftpTransferQueue inherits Rectangle {
                 }
             }
         }
-        if !root.collapsed && root.visible-transfers.length == 0 : Rectangle {
+        if root.show-content && root.visible-transfers.length == 0 : Rectangle {
             vertical-stretch: 1;
             Text {
                 text: root.page == "active" ? @tr("No transfers in progress")
@@ -1555,6 +1559,16 @@ export component SftpPane inherits Rectangle {
         Theme.sftp-splitter-size,
         root.height,
     );
+    private property <bool> transfer-content-empty:
+        root.view.active_transfers.length == 0
+            && root.view.failed_transfers.length == 0
+            && root.view.completed_transfers.length == 0;
+    // Keep an empty queue compact on first render, while allowing the divider
+    // to expand it when the user drags or activates the handle.
+    private property <bool> transfer-layout-touched: false;
+    private property <bool> effective-transfers-collapsed:
+        root.transfers-collapsed
+            || (root.transfer-content-empty && !root.transfer-layout-touched);
     private property <length> editor-height: root.view.editor_path.is-empty ? 0px : 180px;
     private property <length> expanded-vertical-available-height:
         max(0px, root.height - root.transfer-splitter-size - root.editor-height);
@@ -1578,10 +1592,10 @@ export component SftpPane inherits Rectangle {
         Theme.sftp-transfer-toolbar-height,
         root.expanded-vertical-available-height,
     );
-    private property <length> files-area-height: root.transfers-collapsed
+    private property <length> files-area-height: root.effective-transfers-collapsed
         ? max(0px, root.expanded-vertical-available-height - root.collapsed-transfer-height)
         : root.expanded-vertical-available-height * root.clamped-files-split-ratio;
-    private property <length> transfer-area-height: root.transfers-collapsed
+    private property <length> transfer-area-height: root.effective-transfers-collapsed
         ? root.collapsed-transfer-height
         : max(0px, root.expanded-vertical-available-height - root.files-area-height);
 
@@ -1778,6 +1792,7 @@ export component SftpPane inherits Rectangle {
             maximum: root.files-ratio-max;
             available-length: root.expanded-vertical-available-height;
             adjust(delta) => {
+                root.transfer-layout-touched = true;
                 root.transfers-collapsed = false;
                 root.files-split-ratio = max(
                     root.files-ratio-min,
@@ -1785,19 +1800,27 @@ export component SftpPane inherits Rectangle {
                 );
             }
             set-value(candidate) => {
+                root.transfer-layout-touched = true;
                 root.transfers-collapsed = false;
                 root.files-split-ratio = max(
                     root.files-ratio-min,
                     min(root.files-ratio-max, candidate),
                 );
             }
-            activated => { root.transfers-collapsed = !root.transfers-collapsed; }
+            activated => {
+                if root.transfer-content-empty && !root.transfer-layout-touched {
+                    root.transfer-layout-touched = true;
+                    root.transfers-collapsed = false;
+                } else {
+                    root.transfers-collapsed = !root.transfers-collapsed;
+                }
+            }
         }
 
         SftpTransferQueue {
             width: parent.width;
             height: root.transfer-area-height;
-            collapsed: root.transfers-collapsed;
+            collapsed: root.effective-transfers-collapsed;
             active-transfers: root.view.active_transfers;
             failed-transfers: root.view.failed_transfers;
             completed-transfers: root.view.completed_transfers;
@@ -1816,6 +1839,9 @@ export component SftpPane inherits Rectangle {
             pause-selected => { root.pause-selected-transfers(); }
             resume-selected => { root.resume-selected-transfers(); }
             cancel-selected => { root.cancel-selected-transfers(); }
+            toggle-collapse => {
+                root.transfers-collapsed = !root.transfers-collapsed;
+            }
         }
     }
 }

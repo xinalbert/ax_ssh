@@ -175,6 +175,11 @@ performs the divider's double-click action. The layout remains while switching
 Tabs in the current application run and returns to its defaults after restart.
 The individual file-table columns are not resizable in this phase.
 
+When there are no transfer records, Transfers stays as a compact bar so the file
+browsers keep the available height. After a transfer appears, use the bar's
+chevron to expand or collapse the transfer list; the horizontal divider remains
+available for manual sizing.
+
 Use the copy icon in either directory header to place that pane's current
 remote or local path on the system clipboard.
 

@@ -244,6 +244,9 @@ msgstr "关闭终端窗格"
 msgid "Collapse session sidebar"
 msgstr "收起会话侧栏"
 
+msgid "Collapse transfers"
+msgstr "收起传输"
+
 msgid "Collapse {0} group"
 msgstr "收起 {0} 组"
 
@@ -438,6 +441,9 @@ msgstr "现有会话组"
 
 msgid "Expand session sidebar"
 msgstr "展开会话侧栏"
+
+msgid "Expand transfers"
+msgstr "展开传输"
 
 msgid "Expand {0} group"
 msgstr "展开 {0} 组"
