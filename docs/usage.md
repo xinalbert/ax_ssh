@@ -180,9 +180,6 @@ browsers keep the available height. After a transfer appears, use the bar's
 chevron to expand or collapse the transfer list; the horizontal divider remains
 available for manual sizing.
 
-Use the copy icon in either directory header to place that pane's current
-remote or local path on the system clipboard.
-
 Each file browser has **Back**, **Forward**, and **Parent directory** controls.
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit

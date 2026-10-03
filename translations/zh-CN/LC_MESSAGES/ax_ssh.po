@@ -283,9 +283,6 @@ msgstr "复制终端选区快捷键"
 msgid "Copy a selection; otherwise paste"
 msgstr "有选区时复制，否则粘贴"
 
-msgid "Copy current path"
-msgstr "复制当前路径"
-
 msgid "Copy diagnostics"
 msgstr "复制诊断信息"
 

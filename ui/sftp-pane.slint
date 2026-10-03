@@ -2,7 +2,7 @@ import { CheckBox, ListView, TextEdit } from "std-widgets.slint";
 import { ActionMenuItem, FlatActionMenu } from "components/flat-action-menu.slint";
 import { ElidedLabel } from "components/elided-controls.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
-import { SftpActionButton, SftpCopyPathButton } from "components/sftp-controls.slint";
+import { SftpActionButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
 
 export struct SftpEntryRow {
@@ -655,7 +655,6 @@ component SftpDirectoryPane inherits Rectangle {
     callback download-selected();
     callback toggle-selection(string, bool);
     callback select-all(bool);
-    callback copy-path(string);
     callback remove-selected();
     callback upload-selected();
     callback edit-selected();
@@ -693,10 +692,7 @@ component SftpDirectoryPane inherits Rectangle {
             ? Theme.space-sm : 0px)
         + (root.allow-navigation && !root.local-actions && root.selection-count == 1
             ? 2 * Theme.space-sm : 0px);
-    private property <length> local-refresh-reserve: 0px;
-    private property <length> title-actions-width: Theme.sftp-nav-icon-button-width
-        + Theme.space-sm + root.local-refresh-reserve
-        + root.toolbar-actions-preferred-width;
+    private property <length> title-actions-width: root.toolbar-actions-preferred-width;
 
     changed current-path => { root.path-draft = root.current-path; }
 
@@ -736,8 +732,7 @@ component SftpDirectoryPane inherits Rectangle {
             toolbar-actions := HorizontalLayout {
                 x: max(
                     Theme.sftp-column-padding,
-                    copy-path-button.x - root.local-refresh-reserve
-                        - self.width - Theme.space-sm,
+                    parent.width - Theme.sftp-column-padding - self.width,
                 );
                 width: min(
                     max(0px, parent.width - 2 * Theme.sftp-column-padding),
@@ -783,16 +778,6 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && root.upload-ready;
                     clicked => { root.upload-selected(); }
                 }
-            }
-            copy-path-button := SftpCopyPathButton {
-                x: max(
-                    Theme.sftp-column-padding,
-                    parent.width - self.width - Theme.sftp-column-padding,
-                );
-                y: (parent.height - self.height) / 2;
-                accessible-name: @tr("Copy current path");
-                enabled: !root.path.is-empty;
-                clicked => { root.copy-path(root.path); }
             }
             Rectangle {
                 y: parent.height - Theme.hairline;
@@ -1470,7 +1455,6 @@ export component SftpPane inherits Rectangle {
     callback reveal-transfer-local(string);
     callback remove-transfer(string);
     callback close();
-    callback write-clipboard(string);
     callback remove-selected-remote();
     callback upload-selected-local();
     callback rename-remote(string);
@@ -1681,7 +1665,6 @@ export component SftpPane inherits Rectangle {
                 }
                 select-all(selected) => { root.select-all-remote(selected); }
                 sort(column) => { root.sort-remote(column); }
-                copy-path(path) => { root.write-clipboard(path); }
                 begin-native-file-drag(path) => { root.begin-native-remote-file-drag(path); }
                 drag-data(path) => { return root.drag-remote-file(path); }
                 drag-diagnostic(stage) => { root.drag-diagnostic(stage, false); }
@@ -1754,7 +1737,6 @@ export component SftpPane inherits Rectangle {
                 }
                 select-all(selected) => { root.select-all-local(selected); }
                 sort(column) => { root.sort-local(column); }
-                copy-path(path) => { root.write-clipboard(path); }
             }
         }
 
