@@ -120,6 +120,7 @@ TRANSLATIONS = {
     "Copy Terminal Selection": "复制终端选区",
     "Copy Terminal Selection shortcut": "复制终端选区快捷键",
     "Copy a selection; otherwise paste": "有选区时复制，否则粘贴",
+    "Copy current path": "复制当前路径",
     "Copy diagnostics": "复制诊断信息",
     "Copy selection on select": "选中后复制",
     "Local selection priority": "本地选区优先",

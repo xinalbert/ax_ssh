@@ -2,7 +2,7 @@ import { CheckBox, ListView, TextEdit } from "std-widgets.slint";
 import { ActionMenuItem, FlatActionMenu } from "components/flat-action-menu.slint";
 import { ElidedLabel } from "components/elided-controls.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
-import { SftpActionButton } from "components/sftp-controls.slint";
+import { SftpActionButton, SftpPathCopyButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
 
 export struct SftpEntryRow {
@@ -655,6 +655,7 @@ component SftpDirectoryPane inherits Rectangle {
     callback download-selected();
     callback toggle-selection(string, bool);
     callback select-all(bool);
+    callback copy-path(string);
     callback remove-selected();
     callback upload-selected();
     callback edit-selected();
@@ -827,6 +828,7 @@ component SftpDirectoryPane inherits Rectangle {
                 }
 
                 FlatTextInput {
+                    horizontal-stretch: 1;
                     text <=> root.path-draft;
                     placeholder-text: @tr("Path");
                     height: root.control-height;
@@ -835,6 +837,11 @@ component SftpDirectoryPane inherits Rectangle {
                     font-weight: Theme.sftp-control-font-weight;
                     enabled: root.interactive && !root.loading;
                     accepted(path) => { root.list-directory(path); }
+                }
+                SftpPathCopyButton {
+                    accessible-name: @tr("Copy current path");
+                    enabled: root.interactive && !root.path.is-empty;
+                    clicked => { root.copy-path(root.path); }
                 }
                 SftpActionButton {
                     width: Theme.sftp-open-button-width;
@@ -1455,6 +1462,7 @@ export component SftpPane inherits Rectangle {
     callback reveal-transfer-local(string);
     callback remove-transfer(string);
     callback close();
+    callback write-clipboard(string);
     callback remove-selected-remote();
     callback upload-selected-local();
     callback rename-remote(string);
@@ -1665,6 +1673,7 @@ export component SftpPane inherits Rectangle {
                 }
                 select-all(selected) => { root.select-all-remote(selected); }
                 sort(column) => { root.sort-remote(column); }
+                copy-path(path) => { root.write-clipboard(path); }
                 begin-native-file-drag(path) => { root.begin-native-remote-file-drag(path); }
                 drag-data(path) => { return root.drag-remote-file(path); }
                 drag-diagnostic(stage) => { root.drag-diagnostic(stage, false); }
@@ -1737,6 +1746,7 @@ export component SftpPane inherits Rectangle {
                 }
                 select-all(selected) => { root.select-all-local(selected); }
                 sort(column) => { root.sort-local(column); }
+                copy-path(path) => { root.write-clipboard(path); }
             }
         }
 

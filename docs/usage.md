@@ -180,7 +180,9 @@ browsers keep the available height. After a transfer appears, use the bar's
 chevron to expand or collapse the transfer list; the horizontal divider remains
 available for manual sizing.
 
-Each file browser has **Back**, **Forward**, and **Parent directory** controls.
+The copy path button sits beside the path field in each browser, keeping the
+action with the path controls. Each file browser also has **Back**, **Forward**,
+and **Parent directory** controls.
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit
 was elsewhere. A successful parent navigation can be reversed with Back. The
