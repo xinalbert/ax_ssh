@@ -1234,8 +1234,7 @@ component SftpTransferQueue inherits Rectangle {
     private property <[SftpTransferRow]> visible-transfers: root.page == "active"
         ? root.active-transfers : (root.page == "failed" ? root.failed-transfers
         : root.completed-transfers);
-    private property <bool> show-content: !root.collapsed
-        && (root.active-count > 0 || root.failed-count > 0 || root.completed-count > 0);
+    private property <bool> show-content: !root.collapsed;
 
     background: Theme.panel;
     clip: true;
@@ -1576,10 +1575,16 @@ export component SftpPane inherits Rectangle {
         Theme.sftp-files-area-min-height,
         root.expanded-vertical-available-height / 2,
     );
-    private property <length> transfer-area-floor: min(
-        Theme.sftp-transfer-area-min-height,
-        root.expanded-vertical-available-height / 2,
+    private property <length> compact-transfer-height: min(
+        Theme.sftp-transfer-toolbar-height,
+        root.expanded-vertical-available-height,
     );
+    private property <length> transfer-area-floor: root.transfer-content-empty
+        ? root.compact-transfer-height
+        : min(
+            Theme.sftp-transfer-area-min-height,
+            root.expanded-vertical-available-height / 2,
+        );
     private property <float> files-ratio-min: root.expanded-vertical-available-height > 0px
         ? root.files-area-floor / root.expanded-vertical-available-height : 0.5;
     private property <float> files-ratio-max: root.expanded-vertical-available-height > 0px
@@ -1592,6 +1597,14 @@ export component SftpPane inherits Rectangle {
         Theme.sftp-transfer-toolbar-height,
         root.expanded-vertical-available-height,
     );
+    private property <float> compact-files-split-ratio:
+        root.expanded-vertical-available-height > 0px
+            ? (root.expanded-vertical-available-height - root.collapsed-transfer-height)
+                / root.expanded-vertical-available-height
+            : 0.5;
+    private property <float> displayed-files-split-ratio: root.effective-transfers-collapsed
+        ? root.compact-files-split-ratio
+        : root.clamped-files-split-ratio;
     private property <length> files-area-height: root.effective-transfers-collapsed
         ? max(0px, root.expanded-vertical-available-height - root.collapsed-transfer-height)
         : root.expanded-vertical-available-height * root.clamped-files-split-ratio;
@@ -1787,7 +1800,7 @@ export component SftpPane inherits Rectangle {
             height: root.transfer-splitter-size;
             orientation: Orientation.vertical;
             accessible-name: @tr("Files and transfers area sizes");
-            value: root.clamped-files-split-ratio;
+            value: root.displayed-files-split-ratio;
             minimum: root.files-ratio-min;
             maximum: root.files-ratio-max;
             available-length: root.expanded-vertical-available-height;
@@ -1796,7 +1809,7 @@ export component SftpPane inherits Rectangle {
                 root.transfers-collapsed = false;
                 root.files-split-ratio = max(
                     root.files-ratio-min,
-                    min(root.files-ratio-max, root.files-split-ratio + delta),
+                    min(root.files-ratio-max, root.displayed-files-split-ratio + delta),
                 );
             }
             set-value(candidate) => {
