@@ -93,12 +93,10 @@ jobs:
             target: x86_64-unknown-linux-gnu
             name: linux-x86_64
             binary: ax_ssh
-            deb_arch: amd64
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
             name: linux-aarch64
             binary: ax_ssh
-            deb_arch: arm64
           - os: macos-14
             target: aarch64-apple-darwin
             name: macos-aarch64
@@ -129,7 +127,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev
+          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev dpkg-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -144,6 +142,10 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Install Debian packaging tool
+        if: runner.os == 'Linux'
+        run: cargo install cargo-deb --version 3.7.0 --locked
 
       - name: Package macOS application
         if: runner.os == 'macOS'
@@ -185,34 +187,13 @@ jobs:
           cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
           tar -czf "${stage}.tar.gz" "$stage"
 
-          deb_root="${stage}-deb"
-          mkdir -p \
-            "$deb_root/DEBIAN" \
-            "$deb_root/usr/bin" \
-            "$deb_root/usr/share/applications" \
-            "$deb_root/usr/share/ax_ssh/assets/fonts" \
-            "$deb_root/usr/share/doc/axssh"
-          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "$deb_root/usr/bin/ax_ssh"
-          chmod 755 "$deb_root/usr/bin/ax_ssh"
-          cp packaging/linux/axssh.desktop "$deb_root/usr/share/applications/axssh.desktop"
-          cp -R assets/fonts/. "$deb_root/usr/share/ax_ssh/assets/fonts/"
-          cp LICENSE THIRD_PARTY_NOTICES.md "$deb_root/usr/share/doc/axssh/"
-          for size in 16 24 32 48 64 128 256 512 1024; do
-            icon_directory="$deb_root/usr/share/icons/hicolor/${size}x${size}/apps"
-            mkdir -p "$icon_directory"
-            cp "assets/ion/terminal_icon_all_formats/terminal_icon_${size}.png" "$icon_directory/axssh.png"
-          done
-          cat > "$deb_root/DEBIAN/control" <<EOF
-          Package: axssh
-          Version: ${RELEASE_DEBIAN_VERSION}
-          Architecture: ${{ matrix.deb_arch }}
-          Maintainer: AxSSH contributors
-          Section: net
-          Priority: optional
-          Description: Cross-platform terminal workspace for SSH, Telnet, and serial sessions
-          EOF
-          chmod 644 "$deb_root/DEBIAN/control"
-          dpkg-deb --build --root-owner-group "$deb_root" "${stage}.deb"
+          cargo deb --locked --no-build --no-strip \
+            --target "${{ matrix.target }}" \
+            --deb-version "$RELEASE_DEBIAN_VERSION" \
+            --output "${stage}.deb"
+          test "$(dpkg-deb --field "${stage}.deb" Package)" = axssh
+          test "$(dpkg-deb --field "${stage}.deb" Version)" = "$RELEASE_DEBIAN_VERSION"
+          test "$(dpkg-deb --field "${stage}.deb" Architecture)" = "$(dpkg --print-architecture)"
           {
             echo "ASSET_PATHS<<EOF"
             echo "${stage}.tar.gz"
