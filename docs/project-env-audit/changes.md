@@ -1,5 +1,25 @@
 # 项目环境变化记录
 
+## 2026-10-03 SFTP 标题栏控件环境验证
+
+- 日期：2026-10-03
+- 目的：确认标题栏重排和本地 Hidden 在现有 Rust/Slint 环境中通过构建与回归。
+- 改动范围：`ui/sftp-pane.slint`、双语 usage 及项目记录；Cargo、锁文件、CI 和 SSH 安全边界未变。
+- 执行内容：Slint 重编译，运行 fmt、locked/offline check、严格 all-target Clippy、完整测试、debug build、Markdown 相对链接、tracker validator 和 diff 检查。
+- 验证结果：上述本机门禁全部通过；库 301、应用 309、Doc tests 0，4 条相对 Markdown 链接有效。
+- 风险/待办：真实 GUI 视觉/焦点/点击由用户验收；Windows/Linux 原生目标交 CI。
+- 开工判定：施工与本机验证完成。
+
+## 2026-10-03 SFTP 标题栏控件施工预检
+
+- 日期：2026-10-03
+- 目的：确认双栏控件重排与本地 Hidden 可沿用锁定的 Rust/Slint 构建及测试环境。
+- 改动范围：`ui/sftp-pane.slint`、双语 usage 和项目记录；不改 Cargo、锁文件、CI、SSH trust 或 worker。
+- 执行内容：读取既有环境记忆，核对 `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml` 和本机 Rust/Cargo；确认本地与远端 DTO 都有点文件标记。
+- 验证结果：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1，Slint 1.18.1；完整门禁待实现后执行。
+- 风险/待办：240px 窄栏需保持 Hidden 可用；实际 GUI 由用户验收。
+- 开工判定：允许开工。
+
 ## 2026-10-02 Rust 1.99 CI 严格 Clippy 环境验证
 
 - 日期：2026-10-02
@@ -947,3 +967,30 @@
 - 验证结果：Slint 已重新编译；fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接、skill/tracker/diff 通过。
 - 交付状态：最新 debug 可执行文件已生成；样式及配套文档独立提交，不推送远端。
 - 风险与缺口：GUI 外观和真实焦点交互由用户验收；Windows/Linux 原生 CI 本机未运行。不自行生成或查看应用截图。
+
+## 2026-10-03 重复链路施工预检
+
+- 时间：2026-10-03 12:22 +0800
+- 目的：验证三批重复链路清理的运行、测试和打包环境。
+- 改动范围：Rust/Slint 应用、历史资源、配置写入和 Linux packaging；保留当前 SSH/凭据契约。
+- 执行内容：读取环境与地图，核对 Cargo/build/CI，确认本机 Rust/Cargo 和已安装 targets。
+- 验证结果：Rust/Cargo 1.97.1，两个 macOS target；声明 Rust 2024/MSRV 1.92.0、Slint 1.18.1，允许开工。
+- 风险/待办：本轮完整门禁待执行；Windows/Linux 原生平台及 GUI/真实 SSH 由 CI/用户验收。
+
+## 2026-10-03 重复链路清理聚焦验证与打包环境
+
+- 任务边界：闲置 UI/worker 链路、共同应用流程、原子写入和 Debian 资产清单；保持 Rust/Slint/SSH 架构与既有未提交 UI 修改。
+- 环境核对：Rust/Cargo 1.97.1，Rust 2024/MSRV 1.92.0；两个 macOS target 已安装。Rust 依赖和 lockfile 不变。
+- 环境变更：Release Linux 固定安装 cargo-deb 3.7.0 和 dpkg-dev，由 Cargo metadata 提供资产，运行库依赖交 native discovery。上游依据：https://github.com/kornelski/cargo-deb 。
+- 已通过：detached 5、probe 2、原子写入 3、发布 helper 14、512 条翻译、22 条相对链接及 skill/tracker/diff；Debian amd64/arm64 fixture 各 30 项资源内容/路径/权限/所有权和控制字段一致。
+- 环境排障：默认 Python 3.10 无 tomllib，fixture 改用已有 Python 3.13，未新增 Python 依赖。
+- 验证限制：fixture 是资源清单验证，非 Linux ELF、依赖发现或安装验证；Windows/Linux native CI 和用户 GUI/真实连接待验收。最终 native/target 门禁进行中。
+
+## 2026-10-03 重复链路清理环境验证完成
+
+- 项目边界：三批清理及共同流程已完成，Rust 依赖/lockfile、CI target 矩阵、SSH trust 和凭据策略保持原状；已有 UI 修改经基线复核保留。
+- 本机门禁：Rust/Cargo 1.97.1 的 fmt、locked/offline check、严格 all-target Clippy、完整测试（库 303、应用 312、Doc tests 0）和 debug build 全部通过。
+- 平台门禁：`CARGO_NET_OFFLINE=true` 下执行 CI 同款 `cargo check --locked --target <target>`、`cargo clippy --all-targets --locked --target <target> -- -D warnings`、`cargo build --locked --target <target>`，两个 macOS target 全部通过；不运行非原生 Intel tests。
+- 配套门禁：发布 helper 14、512 条翻译、23 条 Markdown 相对链接、Release YAML/18 段 Bash、skill/tracker/diff 检查通过；amd64/arm64 Debian fixture 每包 30 项资源与控制字段一致。
+- 环境与验收限制：未提供 Windows/Linux SDK/原生 runner；真实 GUI/拖放/连接和 Linux 真包安装/运行库依赖需 native CI/用户验证。不自行截图，不执行提交、push、tag 或发布。
+- 开工判定：代码交付和本机验证完成，限制已记录。

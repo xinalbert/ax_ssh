@@ -49,6 +49,23 @@ Slint UI（.slint）
                          滚动 writer + flush guard
 ```
 
+## 共同应用流程
+
+- `SettingsPane` 的预览和保存共用 `submit-draft`；Tab ID 和关闭标志决定是否持久化。
+  自带字体读取在 Tokio blocking task 中执行，字体注册仍留在 Slint UI 线程。
+- SFTP 本地和远端目录共用有界历史状态转换；目录读取、路径校验、分页和 request ID 仍由
+  原模块负责。每个原生窗口只创建可见的 `SftpPane`，独立窗口不创建隐藏主布局副本，
+  也不让该副本上报几何。
+- Telnet 和 Serial 保留各自 worker，事件适配后进入同一个应用监控循环，保留 attempt
+  校验、接收时间戳、协议应答、呈现 deadline 和重连规则。
+- SSH 新建与恢复共用可取消的主机密钥探测；只有匹配 Tab、profile、目标和 probing phase
+  的结果才可推进状态。未知、变更、撤销密钥仍受现有信任规则约束；transport 的
+  `check_server_key` 独立执行信任校验。
+- 窗口 router 在 callback 接线前仅安装一次，UI 更新统一经过有界刷新 gate。
+  SFTP-only worker 独占 browser/transfer 任务；终端 worker 负责 shell 和 X11。
+- 用户导出和私有配置共用临时文件写入、fsync、关闭句柄、原子替换与清理；各自包装仍
+  保留父目录权限差异：导出不改已有目录权限，私有存储收紧目录权限。
+
 ## 模块职责
 
 | 区域 | 负责 | 不得负责 |
@@ -473,8 +490,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    因此不创建该模型，只保留独立的浏览状态。`alacritty_terminal` 负责行、字符格样式、光标、
    scrollback、宽字符和 application-cursor 模式。终端生成的协议应答（包括 Windows
    ConPTY 启动依赖的光标位置报告、颜色查询和文本区尺寸查询）进入私有有界队列，并且只通过产生该输出的 Tab 当前 transport
-   worker 写回；这些应答不进入 Slint、持久化或日志。仓库内的 `vendor/vt100` 副本是历史遗留的
-   MIT 补丁，仅为审计与许可证核对保留，不在 Cargo 依赖图中，也不由 `TerminalModel` 使用。
+   worker 写回；这些应答不进入 Slint、持久化或日志。未使用的历史终端解析器副本已移除。
    `TerminalModel` 将宽度和高度变化交给锁定的
    `alacritty_terminal::Term::resize`：放大时只能把真实 scrollback 行恢复到视图顶部。主屏 Detached
    视口在 resize 后也恢复有界 display offset；Follow 和备用屏继续保留各自的底部/备用屏语义。

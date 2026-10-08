@@ -191,10 +191,8 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   across model resize. A newly mounted `TerminalPane` must settle its layout
   before its first resize callback so a transient minimum grid cannot reset a
   retained Tab's scroll position.
-- `vendor/vt100` is a historical MIT-licensed patch retained for audit and
-  license accounting. It is not a Cargo dependency and must not receive new
-  terminal behavior; active terminal model changes belong in
-  `alacritty_terminal` integration and AxSSH-owned DTO/rendering tests.
+- Terminal model changes belong in `alacritty_terminal` integration and
+  AxSSH-owned DTO/rendering tests. The unused historical vt100 copy has been removed.
 - Keep Slint key values out of `src/terminal/input.rs`; map them in `src/app.rs`
   and test normal/application-cursor byte sequences without constructing a
   window. Platform-specific printable-key fallbacks belong in the Slint bridge.
@@ -312,8 +310,12 @@ credentials, and real SSH connections.
 
 On Windows, a normal Cargo build embeds the executable resource through
 `build.rs`. On Linux, `cargo deb` uses `[package.metadata.deb]` to install the
-desktop entry, executable, hicolor icon sizes, `LICENSE`, and
-`THIRD_PARTY_NOTICES.md`. The macOS bundle keeps both notice files in
+desktop entry, executable, hicolor icon sizes, runtime fonts and their licenses,
+`LICENSE`, and `THIRD_PARTY_NOTICES.md`. Release CI uses the same metadata with
+`cargo-deb` 3.7.0 and `--no-build --no-strip --target <target>` after the release
+build. Keep the asset source prefix `target/release/ax_ssh`: cargo-deb resolves
+it to the selected target directory. Runtime package dependencies are detected
+on the native Linux runner. See the [upstream asset contract](https://github.com/kornelski/cargo-deb#packagemetadatadeb-options). The macOS bundle keeps both notice files in
 `Contents/Resources`. A Windows distribution must ship them beside the
 executable or in its installer documentation. Platform shell caches may need
 to be refreshed before a replaced icon appears.
@@ -454,7 +456,7 @@ that performs external signing only after exact host-key matching, PTY shell
 input/output, resize, worker disconnect, and worker join. Unit tests also cover ANSI parsing,
 bounded scrollback, `alacritty_terminal` cell rendering, terminal control/navigation encoding,
 legacy appearance migration into versioned settings, duplicate-profile tab isolation, local key
-discovery, encrypted-key passphrases, local PTY lifecycle, vt100 cell rendering,
+discovery, encrypted-key passphrases, local PTY lifecycle,
 application-cursor arrows, shifted printable-key fallback, raw C0 control-byte
 events, Apple modifier normalization, bracketed-paste normalization and size
 limits, detached viewport preservation across resize, Telnet negotiation/CRLF/NAWS behavior,
@@ -483,3 +485,6 @@ For SSH input latency, compare AxSSH and the system `ssh` client against the
 same host and network, preferably with P50/P95 observations. Similar delays in
 both clients indicate network/remote-PTY RTT; a larger AxSSH-only delta should
 be localized with the latency stages above.
+
+See the [2026-10-03 duplicate-flow cleanup record](duplicate-link-cleanup.md) for
+the removed entry points, shared flows and verification limits.

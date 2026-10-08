@@ -180,16 +180,17 @@ browsers keep the available height. After a transfer appears, use the bar's
 chevron to expand or collapse the transfer list; the horizontal divider remains
 available for manual sizing.
 
-The copy path button sits beside the path field in each browser, keeping the
-action with the path controls. Each file browser also has **Back**, **Forward**,
-and **Parent directory** controls.
+Each browser's title row has **Hidden**, copy path, and **Refresh**. Hidden
+includes dot files in that browser, including Local files. Copy path and
+Refresh appear when the pane has room, including for selected-file actions.
+The path row has
+**Back**, **Forward**, **Parent directory**, the path field, and **Open**.
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit
 was elsewhere. A successful parent navigation can be reversed with Back. The
 parent control is disabled at the filesystem root and while a directory is
 loading.
-The local browser keeps its Refresh control in the directory header even when
-the pane is narrow. Refresh reloads the displayed directory without changing
+Refresh reloads the displayed directory without changing
 Back or Forward history; Forward becomes available after going Back.
 
 Enter an absolute path, a path relative to the
@@ -198,7 +199,7 @@ a folder to enter it. The remote browser starts at the SSH profile's configured
 default directory. The local browser starts at its configured directory (or the
 platform home directory when that value is empty), and reads only bounded file
 metadata.
-Use **Hidden** to include dot files. Use **More** to release the next 250-item
+Use **More** to release the next 250-item
 local page or request the next bounded remote page. Click **Name**, **Size**, or
 **Modified** to sort either file list; the default is newest Modified first.
 Long names are elided to the available column width; hover an elided name to

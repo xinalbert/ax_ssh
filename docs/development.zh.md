@@ -135,8 +135,7 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
   只有用户明确连接后才能解析已保存身份并创建设备 worker。Serial resize 只改变本地终端网格。
 - 主屏 Detached 终端在模型 resize 后必须保留有界 display offset。新建 `TerminalPane` 必须先等待布局稳定再发
   首个 resize callback，避免瞬时最小网格重置已保留 Tab 的滚动位置。
-- `vendor/vt100` 是为审计和许可证核对保留的历史 MIT 补丁，不是 Cargo 依赖，也不得再承载
-  新的终端行为；当前终端模型的改动应进入 `alacritty_terminal` 集成和 AxSSH 自有 DTO/渲染测试。
+- 当前终端模型改动进入 `alacritty_terminal` 集成和 AxSSH 自有 DTO/渲染测试；未使用的历史 vt100 副本已移除。
 - `src/terminal/input.rs` 不得依赖 Slint 键值；在 `src/app.rs` 完成映射，并在不构造
   窗口的条件下测试普通/application-cursor 终端字节序列；平台可打印键后备转换归
   Slint bridge 所有。
@@ -234,8 +233,11 @@ ditto -c -k --sequesterRsrc --keepParent "$stage" "$stage.zip"
 Windows 上手工验收 ConPTY、原生窗口行为、凭据和真实 SSH 连接。
 
 Windows 的普通 Cargo 构建会经 `build.rs` 嵌入可执行文件资源。Linux 的 `cargo deb` 会读取
-`[package.metadata.deb]`，安装 desktop entry、可执行文件、各级 hicolor 图标、`LICENSE` 和
-`THIRD_PARTY_NOTICES.md`。macOS bundle 把两份声明放在 `Contents/Resources`；Windows 发行包
+`[package.metadata.deb]`，安装 desktop entry、可执行文件、各级 hicolor 图标、运行时字体及其许可证、
+`LICENSE` 和 `THIRD_PARTY_NOTICES.md`。发布 CI 在 release build 后使用固定版本 `cargo-deb` 3.7.0
+和 `--no-build --no-strip --target <target>` 读取相同清单。资产源保留
+`target/release/ax_ssh` 前缀，cargo-deb 会解析为目标构建目录；运行库依赖在原生 Linux runner
+上自动发现。规则见[上游 asset 合约](https://github.com/kornelski/cargo-deb#packagemetadatadeb-options)。macOS bundle 把两份声明放在 `Contents/Resources`；Windows 发行包
 必须把它们放在可执行文件旁或安装器文档中。替换图标后，平台 shell 可能需要刷新缓存才会显示新图标。
 
 ## GitHub 发布
@@ -355,3 +357,5 @@ Windows/Linux 默认程序调度与文件图标外观/主题变化、协议 resi
 标题栏拖动命中区域。
 SSH 输入延迟应在同一主机和网络上对比 AxSSH 与系统 `ssh`，优先观察 P50/P95；两者相近通常
 说明网络/远端 PTY RTT，占比明显更大的 AxSSH 差值再用上述 latency 阶段定位。
+
+移除入口、共同流程和验证限制见[2026-10-03 重复链路清理记录](duplicate-link-cleanup.zh.md)。

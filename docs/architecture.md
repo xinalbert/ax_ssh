@@ -55,6 +55,29 @@ Process startup (src/main.rs)
                          rolling writer + flush guard
 ```
 
+## Shared application flows
+
+- `SettingsPane` passes its draft through one `submit-draft` function for preview
+  and save. The tab ID and close flag select persistence; bundled-font reads run
+  on Tokio blocking tasks and registration stays on the Slint UI thread.
+- Local and remote SFTP directories share the bounded history transition.
+  Directory reads, path validation, pagination and request IDs keep their
+  existing owners. Each native window creates only its visible `SftpPane`;
+  detached windows do not create the hidden main-layout copy or export its geometry.
+- Telnet and Serial retain separate workers and adapt their events into one
+  application monitor, preserving attempt checks, timestamps, protocol replies,
+  presentation deadlines and reconnect policy.
+- New and restored SSH tabs share one cancellable host-key probe. Only the
+  matching tab, profile, target and probing phase may consume the result.
+  Unknown, changed and revoked observations still require the existing trust
+  policy; transport `check_server_key` independently enforces trust.
+- The window router is installed once before callbacks. UI updates use its
+  bounded refresh gate. SFTP browser/transfer tasks belong to the SFTP-only
+  worker; the terminal worker owns shell and X11 tasks.
+- User exports and private configuration share temporary-file write, fsync,
+  close, atomic replacement and cleanup. Their wrappers retain distinct parent
+  permission rules: exports preserve the directory, private storage restricts it.
+
 ## Module responsibilities
 
 | Area | Owns | Must not own |
@@ -767,9 +790,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    cursor-position reports required by Windows ConPTY startup, color queries,
    and text-area-size queries, are collected in a bounded private queue and
    written back only through that Tab's current transport worker. They do not
-   enter Slint, persistence, or logs. The checked-in `vendor/vt100` copy is a
-   historical, MIT-licensed patch retained for audit and license accounting;
-   it is not in the Cargo dependency graph and is not used by `TerminalModel`.
+   enter Slint, persistence, or logs. The unused historical terminal parser copy
+   has been removed.
    `TerminalModel` delegates height and width changes to the locked
    `alacritty_terminal::Term::resize`:
    growth restores only actual scrollback rows above the viewport. A detached

@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：收起侧栏 Group 缩写的 Slint 视觉样式；不改变 SSH trust、凭据生命周期、依赖版本或 CI target 矩阵。
+- 本轮环境范围：重复链路清理、应用流程合并、Slint 单实例与 Linux 打包；保持 SSH trust、凭据生命周期、依赖版本和 CI target 矩阵。
 
 ## 运行环境
 
@@ -13,34 +13,59 @@
 
 ## 测试环境
 
-- 依赖通过 `Cargo.lock` 锁定；本轮不新增依赖，继续使用 `--locked --offline` 验证。
-- 本轮 Slint 已重新编译；fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接与 skill/tracker/diff 通过；纯样式变更不新增镜像测试。
-- Windows/Linux 原生 target 未在本机验证，待 CI runner 返回结果。
+- 依赖通过 `Cargo.lock` 锁定；本轮不新增或升级 Rust 依赖，使用 locked/offline 验证。
+- 聚焦回归：detached 5、SSH probe 2、原子写入 3、发布脚本 14 通过；512 条翻译、skill/tracker/diff、23 条相对链接通过。
+- fmt/check/严格 all-target Clippy/完整 locked-offline test（库 303、应用 312、Doc tests 0）/debug build 全部通过；两个 macOS target 的 CI 同款 check/严格 Clippy/build 通过，未运行非原生 Intel 测试。Windows/Linux 原生 target 交 CI，GUI/真实连接由用户验收。
+- cargo-deb 3.7.0 的 amd64/arm64 fixture 各 30 项 payload 及控制字段通过；fixture 不模拟 Linux runtime dependency discovery 或安装。
 
 ## 关键命令
 
 ```text
-cargo +1.99.0 clippy --all-targets --locked --target x86_64-apple-darwin -- -D warnings
-cargo +1.92.0 check --locked --offline
 cargo fmt --all -- --check
 cargo check --locked --offline
 cargo clippy --all-targets --locked --offline -- -D warnings
 cargo test --locked --offline
+cargo build --locked --offline
+CARGO_NET_OFFLINE=true cargo check --locked --target <macos-target>
+CARGO_NET_OFFLINE=true cargo clippy --all-targets --locked --target <macos-target> -- -D warnings
+CARGO_NET_OFFLINE=true cargo build --locked --target <macos-target>
+python3 -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
 git diff --check
 ```
 
 ## 外部依赖
 
-- Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等版本由 `Cargo.toml`/`Cargo.lock` 约束。
-- 本轮不新增外部依赖；复用 SidebarRailItem、Theme 字重/色彩和现有交互状态。环境记忆与 manifest/build/CI 核对一致，本机 Rust/Cargo 1.97.1；开工判定：允许开工。
+- Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等由 `Cargo.toml`/`Cargo.lock` 约束，版本不变。
+- Linux Release runner 固定安装 cargo-deb 3.7.0 和 dpkg-dev；Cargo metadata 是 Debian 安装清单的唯一来源，保留自动运行库依赖发现。
+- 本机 cargo-deb 3.7.0 已安装；默认 Python 3.10.20 运行仓库脚本，打包 fixture 使用本机 Python 3.13 的 tomllib。
+- 已联网核对 cargo-deb 官方资产与 target 路径合约，无依赖升级。开工判定：施工及本机自动验证完成。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`ui/components/sidebar-controls.slint`、`ui/components/session-navigation.slint`、`ui/theme.slint`、`docs/usage.md`、`docs/usage.zh.md`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`.github/workflows/release.yml`、`src/app/connection/`、`src/app/view/tests.rs`、`src/config/persistence.rs`、`src/ssh/worker/`、`ui/`、`docs/duplicate-link-cleanup.md`、`docs/duplicate-link-cleanup.zh.md`。
 
 ## 最后确认时间
 
-- 2026-10-03 +0800
+- 2026-10-03 13:02 +0800。
+
+# 2026-10-03 SFTP 标题栏控件环境验证
+
+- 项目边界：`ui/sftp-pane.slint` 标题/路径栏与本地 Hidden，双语 usage 和项目记录；Rust worker、SSH trust、凭据及依赖不变。
+- 环境记忆状态：已核对 Cargo、build.rs、CI 和本机工具链，锁定版本与原记录一致。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1，Slint 1.18.1；无依赖、工具链或 CI 变化。
+- 测试环境：fmt、locked/offline check、严格 all-target Clippy、完整测试（库 301、应用 309、Doc tests 0）、debug build、4 条 Markdown 相对链接、tracker 和 diff 检查通过。
+- 风险与缺口：真实 GUI 视觉/焦点/点击由用户验收；Windows/Linux 原生 target 由 CI 验证。
+- 开工判定：施工与本机验证完成。
+
+# 2026-10-03 SFTP 标题栏控件施工预检
+
+- 项目边界：独立 Rust 2024/Slint 应用的 SFTP 双栏布局；不涉及 Rust 文件读取、SSH trust、凭据或 worker 所有权。
+- 环境记忆状态：已读取 `docs/project-env-audit/current.md` 与 `changes.md`，核对 `Cargo.toml`、`Cargo.lock`、`build.rs`、CI 和本机工具链；声明与现状一致。
+- 运行环境：MSRV 1.92.0，本机 Rust/Cargo 1.97.1，锁定 Slint 1.18.1；Cargo 管理依赖，`build.rs` 编译 `ui/app.slint`。
+- 测试环境：Slint/Cargo 编译、fmt、locked/offline check、严格 all-target Clippy、完整 locked/offline test、Markdown 链接、tracker 与 diff 检查。
+- 环境变化检查：否；无 manifest、lockfile、工具链或 CI 变更。
+- 风险与缺口：窄栏标题需保持可用；GUI 排版与焦点由用户验收，Windows/Linux 原生目标交 CI。
+- 开工判定：允许开工。
 
 # 2026-09-26 窗口保持环境验证
 
