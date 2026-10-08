@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：重复链路清理、应用流程合并、Slint 单实例与 Linux 打包；保持 SSH trust、凭据生命周期、依赖版本和 CI target 矩阵。
+- 本轮环境范围：Rust 依赖升级后的 SSH transport、Slint 单实例与 Linux 打包；保持 SSH trust、凭据生命周期和 CI target 矩阵。
 
 ## 运行环境
 
@@ -13,7 +13,7 @@
 
 ## 测试环境
 
-- 依赖通过 `Cargo.lock` 锁定；本轮不新增或升级 Rust 依赖，使用 locked/offline 验证。
+- 依赖通过 `Cargo.lock` 锁定；`russh` 已升级到 0.64.1，`russh-sftp` 已锁定到 3.0.1，其余依赖沿用此前兼容更新，使用 locked/offline 验证。
 - 聚焦回归：detached 5、SSH probe 2、原子写入 3、发布脚本 14 通过；512 条翻译、skill/tracker/diff、23 条相对链接通过。
 - fmt/check/严格 all-target Clippy/完整 locked-offline test（库 303、应用 312、Doc tests 0）/debug build 全部通过；两个 macOS target 的 CI 同款 check/严格 Clippy/build 通过，未运行非原生 Intel 测试。Windows/Linux 原生 target 交 CI，GUI/真实连接由用户验收。
 - cargo-deb 3.7.0 的 amd64/arm64 fixture 各 30 项 payload 及控制字段通过；fixture 不模拟 Linux runtime dependency discovery 或安装。
@@ -35,10 +35,10 @@ git diff --check
 
 ## 外部依赖
 
-- Slint 1.18.1、Tokio 1、russh 0.63.1、`libmudtelnet-rs` 2.0.10 等由 `Cargo.toml`/`Cargo.lock` 约束，版本不变。
+- Slint 1.18.1、Tokio 1、russh 0.64.1、russh-sftp 3.0.1、`libmudtelnet-rs` 2.0.10 等由 `Cargo.toml`/`Cargo.lock` 约束；`russh` 的 RSA feature 仍固定 `rsa 0.10.0-rc.18`。
 - Linux Release runner 固定安装 cargo-deb 3.7.0 和 dpkg-dev；Cargo metadata 是 Debian 安装清单的唯一来源，保留自动运行库依赖发现。
 - 本机 cargo-deb 3.7.0 已安装；默认 Python 3.10.20 运行仓库脚本，打包 fixture 使用本机 Python 3.13 的 tomllib。
-- 已联网核对 cargo-deb 官方资产与 target 路径合约，无依赖升级。开工判定：施工及本机自动验证完成。
+- 已联网核对 crates.io `russh 0.64.1`、cargo-deb 官方资产与 target 路径合约；`russh` MSRV 1.89，满足项目 1.92。开工判定：施工及本机自动验证完成。
 
 ## 证据文件
 
@@ -46,7 +46,7 @@ git diff --check
 
 ## 最后确认时间
 
-- 2026-10-03 13:02 +0800。
+- 2026-10-08 11:27 +0800。
 
 # 2026-10-03 SFTP 标题栏控件环境验证
 

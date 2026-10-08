@@ -1194,7 +1194,7 @@ terminal Meta input.
 ## SSH security contract
 
 `russh::client::Handler::check_server_key` is the trust boundary. The application
-pins `russh 0.63.1` with its optional RSA feature enabled for compatibility with
+pins `russh 0.64.1` with its optional RSA feature enabled for compatibility with
 existing servers. This intentionally accepts RUSTSEC-2023-0071 because the
 pinned RSA implementation has no patched release; deployments where an attacker
 can observe signing timing should prefer Ed25519 or ECDSA. The application

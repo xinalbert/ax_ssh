@@ -29,7 +29,7 @@ rand = "0.10"
 # RSA is enabled for compatibility with existing SSH servers. The pinned RSA
 # implementation remains covered by the explicitly accepted RustSec exception
 # in the CI audit workflow until an upstream patched release is available.
-russh = { version = "0.63.1", default-features = false, features = ["flate2", "aws-lc-rs", "rsa"] }
+russh = { version = "0.64.1", default-features = false, features = ["flate2", "aws-lc-rs", "rsa"] }
 russh-sftp = "3.0.0"
 sha1 = "0.11.0"
 open = "5.3.6"

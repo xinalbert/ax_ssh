@@ -96,7 +96,7 @@
 | `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation`、`configure_local_pty_output_modes`、`configure_local_shell_command`、`configure_local_shell_locale` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；Unix 在 native PTY 创建后、shell 启动前启用 `OPOST | ONLCR`，由 PTY 行规程将普通输出的 `LF` 映射为 `CRLF`；输入/resize/shutdown/reader close 通过有界命令通道唤醒，空闲 child 每秒兜底检查，reader EOF 后最多一秒使用 25ms 快速确认；相同行列不唤醒 worker，取消优先放弃未投递事件，process-group 终止成功后不等待 child-killer，shutdown 不遗留 detached blocking join；shell 启动按平台判断：macOS 缺失 `SHELL` 时回退 `/bin/zsh`，zsh 使用 `-l` 加载 login 配置并按需补 Homebrew PATH；Unix 子进程的 C/空 locale 在启动前规范化为 UTF-8，已有 UTF-8 locale 保持不变；Linux/其他 Unix 不强制 login 参数，Windows 保留 cmd/PowerShell 原生 profile 行为 |
 | `src/logging.rs` | 进程级 tracing 与 crash 诊断生命周期 | `LoggingGuard`、滚动 writer、panic hook | 日志目录、过滤、保留、退出 flush、私有 `ax_ssh-crash.log` 同步报告，以及向 About 提供已创建目录 |
 | `src/x_server.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`XServerPlan` | macOS bundle/Windows PATH 与 Program Files 系统发现、只读已知位置快照、Custom executable、display 候选和首个 X11 channel 时的有界启动；不持有 SSH channel、cookie 或 UI 状态 |
-| `src/ssh.rs` | russh 0.63.1 传输与 host-key trust 边界 | `ClientHandler`、`PublicKeyOrCertificate`、`SshConnection`、`SshSessionHandle`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、证书 deny-by-default、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；profile 的 Off/`-X`/`-Y` 只决定 X11 worker 行为，不保存 agent 端点/identity、X11 cookie 或凭据，也不把静默 shell 当作断连 |
+| `src/ssh.rs` | russh 0.64.1 传输与 host-key trust 边界 | `ClientHandler`、`PublicKeyOrCertificate`、`SshConnection`、`SshSessionHandle`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、证书 deny-by-default、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；profile 的 Off/`-X`/`-Y` 只决定 X11 worker 行为，不保存 agent 端点/identity、X11 cookie 或凭据，也不把静默 shell 当作断连 |
 | `src/ssh/known_hosts.rs` | OpenSSH known_hosts 解析与显式记录管理 | `Snapshot`、`TrustDecision`、atomic append/remove | 有界文件读取、host/port/alias/wildcard/negative/hashed 匹配、multiple keys、`@revoked` 优先拒绝、坏行只收窄信任；不接触 Slint、凭据或 live russh handles |
 | `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 `Zeroizing` passphrase |
 | `src/ssh/worker.rs` 与 `src/ssh/worker/{shell,sftp}.rs` | SSH/SFTP-only worker 与 transfer 生命周期 | `SshSessionHandle`、`SshSessionMode`、`SshSessionEvent`、`run_terminal_session`、`run_sftp_session`、`PendingSftpOpen`、`PendingDiscovery` | 根模块保留有界连接/认证、命令/resize 管道与 mode 路由；shell 不再持有旧 SFTP browser，SFTP-only worker 独占浏览/传输；SSH 输出只在缓冲区非空时启动一次性 16ms flush，16 KiB 上限和输入后首输出即时 flush 不变；Terminal 的 Off 不建立 X11 relay，`-X`/`-Y` 都在 host key 与认证完成后才进入 X11 准备；明确的 shell EOF/close 报告正常 shell 结束，无 EOF/close 消息的 stream 结束仍规范为断开，两者都退出 worker；resize watch 只在尺寸变化时通知，SFTP 子模块独占递归发现、明确 local path 的单文件下载、独立 subsystem opening、暂停/继续/取消和 shutdown join；每 Tab 最多 2 个 pending/active transfer，认证前普通命令仍被忽略 |
@@ -206,6 +206,8 @@
 
 ## 最近依据
 
+- 2026-10-08：`russh` 从 0.63.3 跨 `0.x` minor 升级到 0.64.1，`PublicKeyOrCertificate` host-key 回调、RSA compatibility feature 和 SSH worker 所有权保持不变；`Cargo.lock` 与 CI/双语架构版本说明已同步。
+
 - 2026-10-03：重复链路清理，删除未引用历史解析器及重复图标；设置、字体、目录 history、直连 monitor、SSH probe、原子写入共用实现；SFTP/终端各自 worker、统一 router 刷新和 Cargo Debian 安装清单。详见 `docs/duplicate-link-cleanup.zh.md`。
 
 - 2026-09-25：`ui/workspace-shell.slint` 主布局仅在非 detached 窗口创建 `TerminalPaneGroup`，防止不可见主终端按扣掉侧栏的宽度覆盖独立终端；`src/app/view/tests.rs` 使用无原生窗口的 Slint 数值回归验证唯一尺寸来源、独立窗口不受侧栏影响及主窗口正常随侧栏调整。
@@ -225,7 +227,7 @@
 
 ## 最后更新时间
 
-- 2026-10-03：共同流程、单实例 SFTP 与 Debian 打包清单收敛。
+- 2026-10-08：升级 `russh` 到 0.64.1 并完成本机 Rust 1.97 门禁；CI 原生 Windows/Linux 目标仍由对应 runner 验证。
 
 - 2026-10-02：行首选项改为每步 `Up/Down + Home`，明确目标行首与远端按键绑定的边界。
 

@@ -757,7 +757,7 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 
 ## SSH 安全契约
 
-`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.63.1`，为兼容
+`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.64.1`，为兼容
 现有服务器启用其可选 RSA feature。由于锁定的 RSA 实现没有针对 RUSTSEC-2023-0071 的修复版本，
 该版本有意接受此风险；如果部署环境中的攻击者能够观察签名时序，应优先使用 Ed25519 或 ECDSA。
 应用对 `PublicKeyOrCertificate` 回调只接受具体的 `PublicKey` 变体。服务端证书会被拒绝，

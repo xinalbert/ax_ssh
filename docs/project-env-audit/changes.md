@@ -1,5 +1,15 @@
 # 项目环境变化记录
 
+## 2026-10-08 russh 0.64.1 升级环境验证
+
+- 日期：2026-10-08
+- 目的：用户要求将 SSH transport 从 0.63 系列升级到当前 0.64.1，确认 MSRV、host-key 回调和 RSA 兼容边界。
+- 改动范围：`Cargo.toml`、`Cargo.lock`、`.github/workflows/{ci,release}.yml`、双语架构、项目地图；不改 host-key trust、凭据生命周期、worker 所有权或 `third_package/axshell` 边界。
+- 执行内容：将直接约束改为 `russh 0.64.1`，锁文件同步传递依赖；核对 `PublicKeyOrCertificate` callback、`rsa 0.10.0-rc.18` 固定关系及 Rust 1.89 依赖 MSRV；运行 fmt、locked check、严格 all-target Clippy、完整测试和 RustSec audit。
+- 验证结果：Rust 1.97 的 `cargo check --locked`、fmt、严格 Clippy、完整测试（库 303、应用 312、Doc tests 0）和 `git diff --check` 通过；RustSec 仅报告既有允许级别的 `bincode`/`ttf-parser` 警告，并保留项目既有 `RUSTSEC-2023-0071` 忽略项；Windows/Linux 原生目标仍交 CI。
+- 风险/待办：`russh 0.64.1` 仍使用 RSA 预发布实现及已记录的时序风险；真实 SSH 服务器、agent、SFTP 和非 macOS runner 互操作需目标环境验收。
+- 开工判定：施工与本机自动验证完成。
+
 ## 2026-10-03 SFTP 标题栏控件环境验证
 
 - 日期：2026-10-03
