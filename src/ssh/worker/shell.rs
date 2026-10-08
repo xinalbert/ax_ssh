@@ -3,11 +3,11 @@ use std::time::Instant;
 use tokio::task::JoinSet;
 use tokio::time::{Instant as TokioInstant, sleep, timeout};
 
-use crate::sftp::{SftpBrowserHandle, SftpTransferEvent};
+use crate::sftp::SftpTransferEvent;
 
 use super::super::x11::{X11ChannelRequest, X11Dispatcher, X11Forwarding, X11PreparationError};
 use super::super::{SshEvent, SshShell, X11RequestStatus};
-use super::sftp::{receive_sftp_event, send_sftp_event, send_sftp_transfer_event};
+use super::sftp::send_sftp_transfer_event;
 use super::*;
 
 pub(super) struct TerminalSessionTask {
@@ -121,8 +121,6 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut output = Vec::new();
     let mut output_received_at = None;
     let mut awaiting_output_after_input = None;
-    let mut sftp: Option<SftpBrowserHandle> = None;
-    let mut sftp_events: Option<mpsc::Receiver<SftpBrowserEvent>> = None;
     let mut x11_relays = JoinSet::new();
     let mut x11_unavailable_reported = false;
     let mut failed = false;
@@ -184,151 +182,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         awaiting_output_after_input = Some((input_sequence, Instant::now()));
                         continue;
                     }
-                    Some(SshCommand::OpenSftp { path }) => {
-                        if sftp.as_ref().is_some_and(SftpBrowserHandle::is_finished) {
-                            if let Some(browser) = sftp.take()
-                                && let Err(error) = browser.shutdown().await
-                            {
-                                warn!(session_id = %session_id, %error, "failed to join stopped SFTP browser");
-                            }
-                            sftp_events = None;
-                        }
-                        if sftp.is_some() {
-                            if let Some(browser) = sftp.as_ref()
-                                && let Err(error) = browser.request_list(None, path)
-                            {
-                                send_sftp_event(
-                                    &event_tx,
-                                    SftpBrowserEvent::Failed {
-                                        request_id: None,
-                                        message: bounded_error_message(&error),
-                                    },
-                                    session_id,
-                                ).await;
-                            }
-                        } else {
-                            let (browser_event_tx, browser_event_rx) =
-                                mpsc::channel(SFTP_EVENT_CAPACITY);
-                            match connection.open_sftp_stream().await {
-                                Ok(stream) => match SftpBrowserHandle::spawn(
-                                    &Handle::current(),
-                                    stream,
-                                    path,
-                                    browser_event_tx,
-                                ) {
-                                    Ok(browser) => {
-                                        sftp = Some(browser);
-                                        sftp_events = Some(browser_event_rx);
-                                    }
-                                    Err(error) => {
-                                        send_sftp_event(
-                                            &event_tx,
-                                            SftpBrowserEvent::Failed {
-                                                request_id: None,
-                                                message: bounded_error_message(&error),
-                                            },
-                                            session_id,
-                                        ).await;
-                                        send_sftp_event(
-                                            &event_tx,
-                                            SftpBrowserEvent::Closed,
-                                            session_id,
-                                        ).await;
-                                    }
-                                },
-                                Err(error) => {
-                                    send_sftp_event(
-                                        &event_tx,
-                                        SftpBrowserEvent::Failed {
-                                            request_id: None,
-                                            message: bounded_error_message(&error),
-                                        },
-                                        session_id,
-                                    ).await;
-                                    send_sftp_event(
-                                        &event_tx,
-                                        SftpBrowserEvent::Closed,
-                                        session_id,
-                                    ).await;
-                                }
-                            }
-                        }
-                        continue;
-                    }
-                    Some(SshCommand::ListSftp { request_id, path }) => {
-                        match sftp.as_ref() {
-                            Some(browser) => {
-                                if let Err(error) = browser.request_list(Some(request_id), path) {
-                                    send_sftp_event(
-                                        &event_tx,
-                                        SftpBrowserEvent::Failed {
-                                            request_id: Some(request_id),
-                                            message: bounded_error_message(&error),
-                                        },
-                                        session_id,
-                                    ).await;
-                                }
-                            }
-                            None => {
-                                send_sftp_event(
-                                    &event_tx,
-                                    SftpBrowserEvent::Failed {
-                                        request_id: Some(request_id),
-                                        message: "SFTP browser is not open".to_owned(),
-                                    },
-                                    session_id,
-                                ).await;
-                                send_sftp_event(
-                                    &event_tx,
-                                    SftpBrowserEvent::Closed,
-                                    session_id,
-                                ).await;
-                            }
-                        }
-                        continue;
-                    }
-                    Some(SshCommand::LoadMoreSftp { request_id }) => {
-                        match sftp.as_ref() {
-                            Some(browser) => {
-                                if let Err(error) = browser.request_load_more(request_id) {
-                                    send_sftp_event(
-                                        &event_tx,
-                                        SftpBrowserEvent::Failed {
-                                            request_id: Some(request_id),
-                                            message: bounded_error_message(&error),
-                                        },
-                                        session_id,
-                                    ).await;
-                                }
-                            }
-                            None => {
-                                send_sftp_event(
-                                    &event_tx,
-                                    SftpBrowserEvent::Failed {
-                                        request_id: Some(request_id),
-                                        message: "SFTP browser is not open".to_owned(),
-                                    },
-                                    session_id,
-                                ).await;
-                                send_sftp_event(
-                                    &event_tx,
-                                    SftpBrowserEvent::Closed,
-                                    session_id,
-                                ).await;
-                            }
-                        }
-                        continue;
-                    }
-                    Some(SshCommand::CloseSftp) => {
-                        if let Some(browser) = sftp.take()
-                            && let Err(error) = browser.shutdown().await
-                        {
-                            warn!(session_id = %session_id, %error, "failed to close SFTP browser");
-                        }
-                        sftp_events = None;
-                        send_sftp_event(&event_tx, SftpBrowserEvent::Closed, session_id).await;
-                        continue;
-                    }
+                    Some(SshCommand::ListSftp { .. } | SshCommand::LoadMoreSftp { .. }) => continue,
                     Some(SshCommand::OpenSftpFile { root }) => {
                         send_sftp_transfer_event(
                             &event_tx,
@@ -470,32 +324,6 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     }
                 }
             }
-            event = receive_sftp_event(&mut sftp_events), if sftp_events.is_some() => {
-                match event {
-                    Some(event) => {
-                        let closed = matches!(event, SftpBrowserEvent::Closed);
-                        if !send_sftp_event(&event_tx, event, session_id).await {
-                            break;
-                        }
-                        if closed {
-                            if let Some(browser) = sftp.take()
-                                && let Err(error) = browser.shutdown().await
-                            {
-                                warn!(session_id = %session_id, %error, "failed to join closed SFTP browser");
-                            }
-                            sftp_events = None;
-                        }
-                    }
-                    None => {
-                        if let Some(browser) = sftp.take()
-                            && let Err(error) = browser.shutdown().await
-                        {
-                            warn!(session_id = %session_id, %error, "failed to join SFTP browser after event channel closed");
-                        }
-                        sftp_events = None;
-                    }
-                }
-            }
             request = receive_x11_request(&mut x11_requests), if x11_requests.is_some() => {
                 match request {
                     Some(request) if x11_relays.len() >= MAX_X11_RELAYS => {
@@ -555,11 +383,6 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     }
 
     flush_output(&event_tx, &mut output, &mut output_received_at, session_id).await;
-    if let Some(browser) = sftp
-        && let Err(error) = browser.shutdown().await
-    {
-        warn!(session_id = %session_id, %error, "failed to shut down SFTP browser");
-    }
     if let Some(dispatcher) = &x11_dispatcher {
         dispatcher.disable();
     }

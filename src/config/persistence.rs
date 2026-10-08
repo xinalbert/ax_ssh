@@ -149,21 +149,7 @@ fn write_user_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-    let (mut file, mut temporary) = create_private_temporary_file(path)?;
-    let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
-    drop(file);
-    write_result.with_context(|| format!("failed to write {}", temporary.path().display()))?;
-    replace_file_atomically(temporary.path(), path).with_context(|| {
-        format!(
-            "failed to atomically replace {} with {}",
-            path.display(),
-            temporary.path().display()
-        )
-    })?;
-    temporary.disarm();
-    set_private_file_permissions(path);
-    sync_parent_directory(parent);
-    Ok(())
+    write_file_contents_atomically(path, bytes, Some(parent))
 }
 
 pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -172,6 +158,10 @@ pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result
             .with_context(|| format!("failed to create {}", parent.display()))?;
         set_private_directory_permissions(parent);
     }
+    write_file_contents_atomically(path, bytes, path.parent())
+}
+
+fn write_file_contents_atomically(path: &Path, bytes: &[u8], parent: Option<&Path>) -> Result<()> {
     let (mut file, mut temporary) = create_private_temporary_file(path)?;
     // ReplaceFileW requires the replacement file handle to be closed first.
     let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
@@ -186,7 +176,7 @@ pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result
     })?;
     temporary.disarm();
     set_private_file_permissions(path);
-    if let Some(parent) = path.parent() {
+    if let Some(parent) = parent {
         sync_parent_directory(parent);
     }
     Ok(())
@@ -355,6 +345,63 @@ fn replace_file_atomically(temporary: &Path, destination: &Path) -> io::Result<(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn user_and_private_writes_keep_distinct_parent_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("ax-ssh-permissions-{}", Uuid::new_v4()));
+        for (directory, private) in [("export", false), ("config", true)] {
+            let parent = root.join(directory);
+            fs::create_dir_all(&parent).expect("create parent");
+            fs::set_permissions(&parent, fs::Permissions::from_mode(0o755))
+                .expect("set original parent permissions");
+            let destination = parent.join("workspace.json");
+            fs::write(&destination, b"old").expect("create original destination");
+            fs::set_permissions(&destination, fs::Permissions::from_mode(0o644))
+                .expect("set original destination permissions");
+            if private {
+                write_private_file_atomically(&destination, b"new").expect("private write");
+            } else {
+                write_user_file_atomically(&destination, b"new").expect("user write");
+            }
+            assert_eq!(fs::read(&destination).expect("read destination"), b"new");
+            assert_eq!(
+                fs::metadata(&destination)
+                    .expect("file metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+            assert_eq!(
+                fs::metadata(&parent)
+                    .expect("parent metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                if private { 0o700 } else { 0o755 }
+            );
+            assert_eq!(fs::read_dir(&parent).expect("list parent").count(), 1);
+        }
+        fs::remove_dir_all(root).expect("remove fixture");
+    }
+
+    #[test]
+    fn failed_atomic_replace_keeps_destination_and_removes_temporary_files() {
+        let root = std::env::temp_dir().join(format!("ax-ssh-replace-failure-{}", Uuid::new_v4()));
+        let destination = root.join("workspace.json");
+        fs::create_dir_all(&destination).expect("create incompatible destination directory");
+        fs::write(destination.join("keep"), b"unchanged").expect("create fixture");
+        assert!(write_user_file_atomically(&destination, b"replacement").is_err());
+        assert!(write_private_file_atomically(&destination, b"replacement").is_err());
+        assert_eq!(
+            fs::read(destination.join("keep")).expect("read fixture"),
+            b"unchanged"
+        );
+        assert_eq!(fs::read_dir(&root).expect("list parent").count(), 1);
+        fs::remove_dir_all(root).expect("remove fixture");
+    }
 
     #[test]
     fn atomic_write_does_not_follow_the_legacy_tmp_symlink() {

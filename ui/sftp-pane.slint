@@ -681,18 +681,30 @@ component SftpDirectoryPane inherits Rectangle {
         root.control-height + 2 * Theme.sftp-path-row-padding-y;
     private property <length> status-height:
         root.control-height + 2 * Theme.sftp-status-row-padding-y;
+    private property <bool> show-remote-edit-actions:
+        root.allow-navigation && !root.local-actions && root.selection-count == 1;
+    private property <bool> show-local-upload-action:
+        !root.allow-navigation && root.selection-count > 0;
+    private property <bool> show-toolbar-copy:
+        root.width >= (root.show-remote-edit-actions ? 560px : 300px);
+    private property <bool> show-toolbar-refresh:
+        root.allow-refresh
+        && root.width >= (root.show-remote-edit-actions ? 600px : 340px);
+    private property <int> toolbar-action-count:
+        (root.allow-hidden ? 1 : 0)
+        + (root.show-toolbar-copy ? 1 : 0)
+        + (root.show-toolbar-refresh ? 1 : 0)
+        + (root.show-remote-edit-actions ? 3 : 0)
+        + (root.show-local-upload-action ? 1 : 0);
     private property <length> toolbar-actions-preferred-width:
         (root.allow-hidden ? Theme.sftp-hidden-control-width : 0px)
-        + (root.allow-navigation && !root.local-actions && root.selection-count == 1
-            ? 2 * Theme.sftp-toolbar-action-reserve-width + 150px
-            : (!root.allow-navigation && root.selection-count > 0
-                ? Theme.sftp-toolbar-action-reserve-width : 0px))
-        + (root.allow-hidden
-            && ((root.allow-navigation && !root.local-actions && root.selection-count == 1)
-                || (!root.allow-navigation && root.selection-count > 0))
-            ? Theme.space-sm : 0px)
-        + (root.allow-navigation && !root.local-actions && root.selection-count == 1
-            ? 2 * Theme.space-sm : 0px);
+        + (root.show-toolbar-copy ? Theme.sftp-nav-icon-button-width : 0px)
+        + (root.show-toolbar-refresh ? Theme.sftp-refresh-button-width : 0px)
+        + (root.show-remote-edit-actions
+            ? 2 * Theme.sftp-toolbar-action-reserve-width + 150px : 0px)
+        + (root.show-local-upload-action
+            ? Theme.sftp-toolbar-action-reserve-width : 0px)
+        + max(0, root.toolbar-action-count - 1) * Theme.space-sm;
     private property <length> title-actions-width: root.toolbar-actions-preferred-width;
 
     changed current-path => { root.path-draft = root.current-path; }
@@ -748,7 +760,20 @@ component SftpDirectoryPane inherits Rectangle {
                     checked <=> root.show-hidden;
                     enabled: root.interactive;
                 }
-                if root.allow-navigation && !root.local-actions && root.selection-count == 1 : SftpActionButton {
+                if root.show-toolbar-copy : SftpPathCopyButton {
+                    accessible-name: @tr("Copy current path");
+                    enabled: root.interactive && !root.path.is-empty;
+                    clicked => { root.copy-path(root.path); }
+                }
+                if root.show-toolbar-refresh : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: root.control-height;
+                    text: @tr("Refresh");
+                    subtle: true;
+                    enabled: root.interactive && !root.loading && !root.current-path.is-empty;
+                    clicked => { root.refresh(); }
+                }
+                if root.show-remote-edit-actions : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Edit");
                     subtle: true;
@@ -756,14 +781,14 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.loading;
                     clicked => { root.edit-selected(); }
                 }
-                if root.allow-navigation && !root.local-actions && root.selection-count == 1 : FlatTextInput {
+                if root.show-remote-edit-actions : FlatTextInput {
                     width: 150px;
                     height: root.control-height;
                     text <=> root.rename-name-draft;
                     placeholder-text: @tr("New name");
                     enabled: root.interactive && !root.loading;
                 }
-                if root.allow-navigation && !root.local-actions && root.selection-count == 1 : SftpActionButton {
+                if root.show-remote-edit-actions : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Rename");
                     subtle: true;
@@ -771,7 +796,7 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.loading;
                     clicked => { root.rename-selected(root.rename-name-draft); }
                 }
-                if !root.allow-navigation && root.selection-count > 0 : SftpActionButton {
+                if root.show-local-upload-action : SftpActionButton {
                     height: root.control-height;
                     text: @tr("Upload");
                     subtle: true;
@@ -838,11 +863,6 @@ component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.loading;
                     accepted(path) => { root.list-directory(path); }
                 }
-                SftpPathCopyButton {
-                    accessible-name: @tr("Copy current path");
-                    enabled: root.interactive && !root.path.is-empty;
-                    clicked => { root.copy-path(root.path); }
-                }
                 SftpActionButton {
                     width: Theme.sftp-open-button-width;
                     height: root.control-height;
@@ -850,14 +870,6 @@ component SftpDirectoryPane inherits Rectangle {
                     prominent: true;
                     enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
                     clicked => { root.list-directory(root.path-draft); }
-                }
-                if root.allow-refresh && root.width >= 340px : SftpActionButton {
-                    width: Theme.sftp-refresh-button-width;
-                    height: root.control-height;
-                    text: @tr("Refresh");
-                    subtle: true;
-                    enabled: root.interactive && !root.loading && !root.current-path.is-empty;
-                    clicked => { root.refresh(); }
                 }
             }
             Rectangle {
@@ -1427,7 +1439,6 @@ component SftpTransferQueue inherits Rectangle {
 
 export component SftpPane inherits Rectangle {
     in property <SftpViewState> view;
-    in property <bool> standalone: false;
     in property <bool> native-file-drag-enabled: false;
     in-out property <float> directory-split-ratio: 0.5;
     in-out property <float> files-split-ratio: 0.7;
@@ -1461,13 +1472,11 @@ export component SftpPane inherits Rectangle {
     callback reveal-local-file(string);
     callback reveal-transfer-local(string);
     callback remove-transfer(string);
-    callback close();
     callback write-clipboard(string);
     callback remove-selected-remote();
     callback upload-selected-local();
     callback rename-remote(string);
     callback edit-remote();
-    callback load-remote-file(string);
     callback save-remote-file(string, string);
     callback editor-text-changed(string);
     callback toggle-editor-auto-upload(bool);
@@ -1518,9 +1527,9 @@ export component SftpPane inherits Rectangle {
         root.rename-name-draft = root.view.rename_name;
     }
 
-    min-width: root.standalone ? 0px : Theme.sftp-panel-min-width;
-    preferred-width: root.standalone ? 0px : Theme.sftp-panel-width;
-    max-width: root.standalone ? 100000px : Theme.sftp-panel-max-width;
+    min-width: 0px;
+    preferred-width: 0px;
+    max-width: 100000px;
     min-height: 0px;
     background: Theme.background;
     accessible-role: list;
@@ -1714,7 +1723,6 @@ export component SftpPane inherits Rectangle {
                 allow-drop: true;
                 local-actions: true;
                 allow-navigation: true;
-                allow-hidden: false;
                 entries: root.view.local_entries;
                 loading: root.view.local_loading;
                 upload-ready: root.view.upload_ready && root.view.local_upload_selection_ready;

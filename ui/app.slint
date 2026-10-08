@@ -547,7 +547,6 @@ export component AppWindow inherits Window {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
@@ -561,7 +560,6 @@ export component AppWindow inherits Window {
     callback resolve-sftp-upload-conflict(string, string, bool);
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
-    callback close-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
     callback resize-terminal(string, int, int, length, length);
@@ -1033,7 +1031,6 @@ export component AppWindow inherits Window {
             reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
             remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
-            load-remote-sftp-file(path) => { root.load-remote-sftp-file(path); }
             save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
             editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
             toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
@@ -1050,7 +1047,6 @@ export component AppWindow inherits Window {
             upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
             rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
             edit-remote-sftp => { root.edit-remote-sftp(); }
-            close-sftp => { root.close-sftp(); }
             terminal-key(request) => {
                 return root.terminal-key(request);
             }

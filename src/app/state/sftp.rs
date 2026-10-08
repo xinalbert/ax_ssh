@@ -725,35 +725,12 @@ impl SftpBrowserState {
     }
 
     pub(in crate::app) fn complete_navigation(&mut self, path: String) {
-        if let Some(pending) = self.pending_navigation.take() {
-            match pending.kind {
-                SftpNavigation::Direct | SftpNavigation::Up if pending.from != path => {
-                    push_sftp_history(&mut self.back_history, pending.from);
-                    self.forward_history.clear();
-                }
-                SftpNavigation::Back => {
-                    if self
-                        .back_history
-                        .back()
-                        .is_some_and(|candidate| candidate == &pending.requested)
-                    {
-                        self.back_history.pop_back();
-                        push_sftp_history(&mut self.forward_history, pending.from);
-                    }
-                }
-                SftpNavigation::Forward => {
-                    if self
-                        .forward_history
-                        .back()
-                        .is_some_and(|candidate| candidate == &pending.requested)
-                    {
-                        self.forward_history.pop_back();
-                        push_sftp_history(&mut self.back_history, pending.from);
-                    }
-                }
-                SftpNavigation::Direct | SftpNavigation::Up => {}
-            }
-        }
+        complete_directory_history(
+            self.pending_navigation.take(),
+            &path,
+            &mut self.back_history,
+            &mut self.forward_history,
+        );
         self.loading = false;
         self.path = path;
     }
@@ -845,6 +822,41 @@ impl SftpBrowserState {
 
     pub(in crate::app) fn editor_is_current(&self, path: &str, revision: u64) -> bool {
         self.editor_path.as_deref() == Some(path) && self.editor_revision == revision
+    }
+}
+
+fn complete_directory_history(
+    pending: Option<PendingSftpNavigation>,
+    path: &str,
+    back_history: &mut VecDeque<String>,
+    forward_history: &mut VecDeque<String>,
+) {
+    if let Some(pending) = pending {
+        match pending.kind {
+            SftpNavigation::Direct | SftpNavigation::Up if pending.from != path => {
+                push_sftp_history(back_history, pending.from);
+                forward_history.clear();
+            }
+            SftpNavigation::Back => {
+                if back_history
+                    .back()
+                    .is_some_and(|candidate| candidate == &pending.requested)
+                {
+                    back_history.pop_back();
+                    push_sftp_history(forward_history, pending.from);
+                }
+            }
+            SftpNavigation::Forward => {
+                if forward_history
+                    .back()
+                    .is_some_and(|candidate| candidate == &pending.requested)
+                {
+                    forward_history.pop_back();
+                    push_sftp_history(back_history, pending.from);
+                }
+            }
+            SftpNavigation::Direct | SftpNavigation::Up => {}
+        }
     }
 }
 
@@ -976,35 +988,12 @@ impl LocalDirectoryState {
         truncated: bool,
         skipped_entries: usize,
     ) {
-        if let Some(pending) = self.pending_navigation.take() {
-            match pending.kind {
-                SftpNavigation::Direct | SftpNavigation::Up if pending.from != path => {
-                    push_sftp_history(&mut self.back_history, pending.from);
-                    self.forward_history.clear();
-                }
-                SftpNavigation::Back => {
-                    if self
-                        .back_history
-                        .back()
-                        .is_some_and(|candidate| candidate == &pending.requested)
-                    {
-                        self.back_history.pop_back();
-                        push_sftp_history(&mut self.forward_history, pending.from);
-                    }
-                }
-                SftpNavigation::Forward => {
-                    if self
-                        .forward_history
-                        .back()
-                        .is_some_and(|candidate| candidate == &pending.requested)
-                    {
-                        self.forward_history.pop_back();
-                        push_sftp_history(&mut self.back_history, pending.from);
-                    }
-                }
-                SftpNavigation::Direct | SftpNavigation::Up => {}
-            }
-        }
+        complete_directory_history(
+            self.pending_navigation.take(),
+            &path,
+            &mut self.back_history,
+            &mut self.forward_history,
+        );
         if self.path != path {
             self.selected.clear();
         }

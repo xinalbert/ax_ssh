@@ -335,10 +335,54 @@ where
         } => (tab_id, profile, cancelled, target),
     };
 
-    set_tab_status(state, ui, tab_id, "Checking SSH host key...");
+    spawn_host_key_probe(
+        context,
+        tab_id,
+        profile,
+        target,
+        cancelled,
+        ProbePurpose::Connect,
+    );
+    Some(tab_id)
+}
+
+#[derive(Clone, Copy)]
+enum ProbePurpose {
+    Connect,
+    Restore,
+}
+
+impl ProbePurpose {
+    fn checking_status(self) -> &'static str {
+        match self {
+            Self::Connect => "Checking SSH host key...",
+            Self::Restore => "Checking SSH host key before reconnecting...",
+        }
+    }
+
+    fn confirmation_status(self) -> &'static str {
+        match self {
+            Self::Connect => "Verify the SSH host key before connecting",
+            Self::Restore => "Verify the SSH host key before reconnecting",
+        }
+    }
+}
+
+fn spawn_host_key_probe(
+    context: &ConnectionContext,
+    tab_id: Uuid,
+    profile: SessionProfile,
+    target: ConnectionTarget,
+    cancelled: oneshot::Receiver<()>,
+    purpose: ProbePurpose,
+) {
+    let ConnectionContext {
+        ui, state, runtime, ..
+    } = context;
+    set_tab_status(state, ui, tab_id, purpose.checking_status());
     let Some(ssh) = profile.ssh() else {
         set_tab_status(state, ui, tab_id, "SSH profile is no longer available");
-        return Some(tab_id);
+        return;
     };
     let host = ssh.host.clone();
     let port = ssh.port;
@@ -362,49 +406,7 @@ where
                 let Some(terminal) = app.terminal_mut(tab_id) else {
                     return;
                 };
-                let current = terminal
-                    .ssh_route()
-                    .is_some_and(|route| route.0 == profile.id)
-                    && terminal.connection_target() == target
-                    && matches!(
-                        terminal.ssh_phase(),
-                        Some(SshConnectionPhase::Probing(probe))
-                            if probe.tab_id == tab_id && probe.profile_id == profile.id
-                    );
-                if !current {
-                    None
-                } else {
-                    match result {
-                        Some(Ok(probe))
-                            if probe.decision == ax_ssh::ssh::TrustDecision::Trusted =>
-                        {
-                            terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
-                                vault_unlock_only: false,
-                            });
-                            Some(Ok(true))
-                        }
-                        Some(Ok(probe)) => {
-                            terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(
-                                PendingHostKey {
-                                    tab_id,
-                                    profile_id: profile.id,
-                                    host: host.clone(),
-                                    port,
-                                    fingerprint: probe.fingerprint,
-                                    public_key: probe.public_key,
-                                    changed: probe.decision == ax_ssh::ssh::TrustDecision::Changed,
-                                    revoked: probe.decision == ax_ssh::ssh::TrustDecision::Revoked,
-                                },
-                            ));
-                            Some(Ok(false))
-                        }
-                        Some(Err(error)) => {
-                            terminal.set_ssh_phase(SshConnectionPhase::Idle);
-                            Some(Err(error))
-                        }
-                        None => None,
-                    }
-                }
+                finish_host_key_probe(terminal, tab_id, &profile, target, result)
             }
             Err(_) => Some(Err(anyhow::anyhow!("state lock poisoned"))),
         };
@@ -424,7 +426,7 @@ where
                     &state_for_probe,
                     &ui_for_probe,
                     tab_id,
-                    "Verify the SSH host key before connecting",
+                    purpose.confirmation_status(),
                 );
                 refresh_workspace(&ui_for_probe, &state_for_probe);
             }
@@ -445,7 +447,51 @@ where
             None => debug!(tab_id = %tab_id, "cancelled or stale host-key probe result ignored"),
         }
     });
-    Some(tab_id)
+}
+
+fn finish_host_key_probe(
+    terminal: &mut TerminalTabState,
+    tab_id: Uuid,
+    profile: &SessionProfile,
+    target: ConnectionTarget,
+    result: Option<Result<ax_ssh::ssh::HostKeyProbe>>,
+) -> Option<Result<bool>> {
+    let current = terminal
+        .ssh_route()
+        .is_some_and(|route| route.0 == profile.id)
+        && terminal.connection_target() == target
+        && matches!(terminal.ssh_phase(), Some(SshConnectionPhase::Probing(probe))
+            if probe.tab_id == tab_id && probe.profile_id == profile.id);
+    if !current {
+        return None;
+    }
+    match result {
+        Some(Ok(probe)) if probe.decision == ax_ssh::ssh::TrustDecision::Trusted => {
+            terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+                vault_unlock_only: false,
+            });
+            Some(Ok(true))
+        }
+        Some(Ok(probe)) => {
+            let ssh = profile.ssh()?;
+            terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(PendingHostKey {
+                tab_id,
+                profile_id: profile.id,
+                host: ssh.host.clone(),
+                port: ssh.port,
+                fingerprint: probe.fingerprint,
+                public_key: probe.public_key,
+                changed: probe.decision == ax_ssh::ssh::TrustDecision::Changed,
+                revoked: probe.decision == ax_ssh::ssh::TrustDecision::Revoked,
+            }));
+            Some(Ok(false))
+        }
+        Some(Err(error)) => {
+            terminal.set_ssh_phase(SshConnectionPhase::Idle);
+            Some(Err(error))
+        }
+        None => None,
+    }
 }
 
 pub(in crate::app) fn resume_existing_connection(
@@ -524,7 +570,7 @@ fn probe_existing_connection(
     profile: SessionProfile,
     target: ConnectionTarget,
 ) {
-    let Some(ssh) = profile.ssh() else {
+    if profile.ssh().is_none() {
         set_tab_status(
             &context.state,
             &context.ui,
@@ -532,10 +578,8 @@ fn probe_existing_connection(
             "Restored SSH profile is invalid",
         );
         return;
-    };
+    }
     let (cancel, cancelled) = oneshot::channel();
-    let host = ssh.host.clone();
-    let port = ssh.port;
     let Ok(mut app) = context.state.lock() else {
         set_status(&context.ui, "Cannot read restored session state");
         return;
@@ -548,90 +592,149 @@ fn probe_existing_connection(
         profile_id: profile.id,
         cancel,
     }));
-    terminal.status = "Checking SSH host key before reconnecting...".to_owned();
     drop(app);
-    let state = context.state.clone();
-    let ui = context.ui.clone();
-    let runtime_for_probe = context.runtime.clone();
-    context.runtime.spawn(async move {
-        let result = tokio::select! {
-            _ = cancelled => None,
-            result = probe_host_key(&profile) => Some(result),
-        };
-        let outcome = match state.lock() {
-            Ok(mut app) => {
-                let Some(terminal) = app.terminal_mut(tab_id) else {
-                    return;
-                };
-                let current = terminal
-                    .ssh_route()
-                    .is_some_and(|route| route.0 == profile.id)
-                    && terminal.connection_target() == target
-                    && matches!(terminal.ssh_phase(), Some(SshConnectionPhase::Probing(_)));
-                if !current {
-                    None
-                } else {
-                    match result {
-                        Some(Ok(probe))
-                            if probe.decision == ax_ssh::ssh::TrustDecision::Trusted =>
-                        {
-                            terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
-                                vault_unlock_only: false,
-                            });
-                            Some(Ok(true))
-                        }
-                        Some(Ok(probe)) => {
-                            terminal.set_ssh_phase(SshConnectionPhase::AwaitingHostKey(
-                                PendingHostKey {
-                                    tab_id,
-                                    profile_id: profile.id,
-                                    host: host.clone(),
-                                    port,
-                                    fingerprint: probe.fingerprint,
-                                    public_key: probe.public_key,
-                                    changed: probe.decision == ax_ssh::ssh::TrustDecision::Changed,
-                                    revoked: probe.decision == ax_ssh::ssh::TrustDecision::Revoked,
-                                },
-                            ));
-                            Some(Ok(false))
-                        }
-                        Some(Err(error)) => {
-                            terminal.set_ssh_phase(SshConnectionPhase::Idle);
-                            Some(Err(error))
-                        }
-                        None => None,
+    spawn_host_key_probe(
+        context,
+        tab_id,
+        profile,
+        target,
+        cancelled,
+        ProbePurpose::Restore,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ax_ssh::ssh::{HostKeyProbe, TrustDecision};
+
+    fn probe_result(decision: TrustDecision) -> Option<Result<HostKeyProbe>> {
+        Some(Ok(HostKeyProbe {
+            fingerprint: "SHA256:observed".to_owned(),
+            decision,
+            public_key: Some("observed-test-key".to_owned()),
+        }))
+    }
+
+    #[test]
+    fn host_key_probe_requires_confirmation_except_for_trusted_keys() {
+        let profile = SessionProfile::new("probe", "example.test", "alice");
+        for target in [ConnectionTarget::Terminal, ConnectionTarget::Sftp] {
+            for decision in [
+                TrustDecision::Unknown,
+                TrustDecision::Changed,
+                TrustDecision::Revoked,
+                TrustDecision::Trusted,
+            ] {
+                let mut app = AppState::new(
+                    ConfigStore::new(
+                        std::env::temp_dir().join(format!("ax-ssh-probe-{}.json", Uuid::new_v4())),
+                    ),
+                    SessionStore::default(),
+                );
+                let tab_id = match target {
+                    ConnectionTarget::Terminal => app.open_terminal_tab(&profile),
+                    ConnectionTarget::Sftp => {
+                        app.open_sftp_tab_with_companion_at_path(&profile, None, None)
                     }
+                };
+                let terminal = app.terminal_mut(tab_id).expect("SSH tab");
+                let (cancel, _cancelled) = oneshot::channel();
+                terminal.set_ssh_phase(SshConnectionPhase::Probing(PendingProbe {
+                    tab_id,
+                    profile_id: profile.id,
+                    cancel,
+                }));
+                assert_eq!(
+                    finish_host_key_probe(
+                        terminal,
+                        tab_id,
+                        &profile,
+                        target,
+                        probe_result(decision)
+                    )
+                    .expect("current probe")
+                    .expect("successful observation"),
+                    decision == TrustDecision::Trusted
+                );
+                if decision == TrustDecision::Trusted {
+                    assert!(matches!(
+                        terminal.ssh_phase(),
+                        Some(SshConnectionPhase::AwaitingAuthentication { .. })
+                    ));
+                } else {
+                    let Some(SshConnectionPhase::AwaitingHostKey(prompt)) = terminal.ssh_phase()
+                    else {
+                        panic!("confirmation required")
+                    };
+                    assert_eq!(prompt.changed, decision == TrustDecision::Changed);
+                    assert_eq!(prompt.revoked, decision == TrustDecision::Revoked);
+                    assert_eq!(prompt.host, "example.test");
+                    assert_eq!(prompt.fingerprint, "SHA256:observed");
                 }
             }
-            Err(_) => Some(Err(anyhow::anyhow!("state lock poisoned"))),
-        };
-        match outcome {
-            Some(Ok(true)) => {
-                begin_authentication(
-                    &runtime_for_probe,
-                    state.clone(),
-                    ui.clone(),
-                    tab_id,
-                    profile.clone(),
-                    target,
-                );
-            }
-            Some(Ok(false)) => {
-                set_tab_status(
-                    &state,
-                    &ui,
-                    tab_id,
-                    "Verify the SSH host key before reconnecting",
-                );
-                refresh_workspace(&ui, &state);
-            }
-            Some(Err(error)) => set_tab_status(
-                &state,
-                &ui,
-                tab_id,
-                &format!("Host-key check failed: {error:#}"),
-            ),
-            None => {}
         }
-    });
+    }
+
+    #[test]
+    fn stale_or_cancelled_host_key_probe_cannot_advance_authentication() {
+        let profile = SessionProfile::new("probe", "example.test", "alice");
+        let mut app = AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("ax-ssh-probe-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        );
+        let tab_id = app.open_terminal_tab(&profile);
+        let terminal = app.terminal_mut(tab_id).expect("SSH tab");
+        let (cancel, _cancelled) = oneshot::channel();
+        terminal.set_ssh_phase(SshConnectionPhase::Probing(PendingProbe {
+            tab_id,
+            profile_id: profile.id,
+            cancel,
+        }));
+        for (result_tab, result_profile, target) in [
+            (Uuid::new_v4(), profile.clone(), ConnectionTarget::Terminal),
+            (
+                tab_id,
+                SessionProfile::new("other", "other.test", "bob"),
+                ConnectionTarget::Terminal,
+            ),
+            (tab_id, profile.clone(), ConnectionTarget::Sftp),
+        ] {
+            assert!(
+                finish_host_key_probe(
+                    terminal,
+                    result_tab,
+                    &result_profile,
+                    target,
+                    probe_result(TrustDecision::Trusted)
+                )
+                .is_none()
+            );
+            assert!(matches!(
+                terminal.ssh_phase(),
+                Some(SshConnectionPhase::Probing(_))
+            ));
+        }
+        assert!(
+            finish_host_key_probe(terminal, tab_id, &profile, ConnectionTarget::Terminal, None)
+                .is_none()
+        );
+        terminal.set_ssh_phase(SshConnectionPhase::Idle);
+        assert!(
+            finish_host_key_probe(
+                terminal,
+                tab_id,
+                &profile,
+                ConnectionTarget::Terminal,
+                probe_result(TrustDecision::Trusted)
+            )
+            .is_none()
+        );
+        assert!(matches!(
+            terminal.ssh_phase(),
+            Some(SshConnectionPhase::Idle)
+        ));
+    }
 }

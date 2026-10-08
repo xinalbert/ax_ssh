@@ -195,22 +195,6 @@ fn percent_decode_path(value: &str) -> Result<String> {
     String::from_utf8(decoded).context("file URI is not valid UTF-8")
 }
 
-fn queue_sftp_write(
-    state: &Arc<Mutex<AppState>>,
-    router: &WindowRouter,
-    window_id: Uuid,
-    operation: ax_ssh::sftp::SftpWriteOperation,
-) -> Result<()> {
-    with_window_sftp_terminal(state, router, window_id, |terminal| {
-        let id = Uuid::new_v4();
-        terminal
-            .worker
-            .as_ref()
-            .context("active SFTP tab has no worker")?
-            .request_sftp_write(id, operation)
-    })
-}
-
 fn join_remote_upload_path(directory: &str, name: &str) -> String {
     if directory == "/" || directory.is_empty() {
         format!("/{name}")
@@ -1113,28 +1097,6 @@ pub(super) fn wire_sftp(
         }
     });
 
-    let ui_for_close = ui.as_weak();
-    let state_for_close = state.clone();
-    let router_for_close = window_router.clone();
-    ui.on_close_sftp(move || {
-        log_ui_action("sftp.close");
-        sync_window_active(&router_for_close, window_id, &state_for_close);
-        let result =
-            with_window_sftp_terminal(&state_for_close, &router_for_close, window_id, |terminal| {
-                terminal
-                    .worker
-                    .as_ref()
-                    .context("active SSH terminal has no worker")?
-                    .request_close_sftp()?;
-                terminal.sftp.reset();
-                Ok(())
-            });
-        match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_close, &state_for_close),
-            Err(error) => set_status(&ui_for_close, &format!("Cannot close SFTP: {error}")),
-        }
-    });
-
     let ui_for_remote_selection = ui.as_weak();
     let state_for_remote_selection = state.clone();
     let router_for_remote_selection = window_router.clone();
@@ -1325,26 +1287,6 @@ pub(super) fn wire_sftp(
                 &ui_for_remove,
                 &format!("Cannot delete remote entries: {error}"),
             ),
-        }
-    });
-
-    let ui_for_load = ui.as_weak();
-    let state_for_load = state.clone();
-    let router_for_load = window_router.clone();
-    ui.on_load_remote_sftp_file(move |path| {
-        log_ui_action("sftp.load-remote-file");
-        sync_window_active(&router_for_load, window_id, &state_for_load);
-        let result = queue_sftp_write(
-            &state_for_load,
-            &router_for_load,
-            window_id,
-            ax_ssh::sftp::SftpWriteOperation::ReadText {
-                path: path.to_string(),
-            },
-        );
-        match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_load, &state_for_load),
-            Err(error) => set_status(&ui_for_load, &format!("Cannot load remote file: {error}")),
         }
     });
 

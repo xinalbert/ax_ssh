@@ -5,48 +5,26 @@ pub(in crate::app) fn set_tab_status(
     tab_id: Uuid,
     message: &str,
 ) {
-    let active = match state.lock() {
+    match state.lock() {
         Ok(mut app) => {
             let Some(terminal) = app.terminal_mut(tab_id) else {
                 return;
             };
             terminal.status = message.to_owned();
-            app.active_tab_id() == Some(tab_id)
         }
         Err(_) => {
             set_status(ui, "State lock poisoned");
             return;
         }
-    };
-    if active || global_window_router().is_some() {
-        dispatch_active_snapshot(ui, state);
     }
+    dispatch_active_snapshot(ui, state);
 }
 
 pub(in crate::app) fn dispatch_active_snapshot(
     ui: &slint::Weak<AppWindow>,
     state: &Arc<Mutex<AppState>>,
 ) {
-    if let Some(router) = global_window_router() {
-        refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
-        return;
-    }
-    let state = Arc::clone(state);
-    dispatch_ui(ui, move |ui| {
-        // Worker output and resize events can queue faster than the UI event loop runs.
-        // Resolve the snapshot here so an older queued event cannot restore stale dimensions.
-        let snapshot = match state.lock() {
-            Ok(mut app) => {
-                let active_tab_id = app.active_tab_id();
-                app.snapshot_without_terminal_for(active_tab_id)
-            }
-            Err(_) => {
-                ui.set_status("State lock poisoned".into());
-                return;
-            }
-        };
-        apply_active_snapshot(ui, snapshot, None);
-    });
+    refresh_workspace(ui, state);
 }
 
 pub(in crate::app) fn dispatch_terminal_output_snapshot(
@@ -101,20 +79,7 @@ fn dispatch_terminal_snapshot_at(
         }
         return;
     }
-    let state = Arc::clone(state);
-    dispatch_ui(ui, move |ui| {
-        let snapshot = match state.lock() {
-            Ok(mut app) => {
-                let active_tab_id = app.active_tab_id();
-                app.snapshot_for(active_tab_id)
-            }
-            Err(_) => {
-                ui.set_status("State lock poisoned".into());
-                return;
-            }
-        };
-        apply_active_snapshot(ui, snapshot, None);
-    });
+    error!(%tab_id, "cannot refresh terminal before window routing is installed");
 }
 
 pub(super) fn duration_micros(duration: std::time::Duration) -> u64 {

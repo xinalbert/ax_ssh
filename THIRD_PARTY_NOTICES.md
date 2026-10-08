@@ -37,11 +37,6 @@ License 1.1. Their copyright, author, reserved-name, and license notices are in:
 - `assets/fonts/AUTHORS-JetBrainsMono.txt`
 - `assets/fonts/LICENSE-Monaspace.txt`
 
-## Vendored vt100 Source
-
-The retained source under `vendor/vt100/` is licensed under the MIT License.
-Its copyright and license notice are in `vendor/vt100/LICENSE`.
-
 ## Platform File Icons
 
 AxSSH obtains file-type icons from operating-system facilities: AppKit and

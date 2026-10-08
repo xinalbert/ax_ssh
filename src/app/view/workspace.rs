@@ -1,39 +1,11 @@
 use super::*;
 
 pub(in crate::app) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc<Mutex<AppState>>) {
-    if let Some(router) = global_window_router() {
-        refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
+    let Some(router) = global_window_router() else {
+        error!("cannot refresh workspace before window routing is installed");
         return;
-    }
-    let state = Arc::clone(state);
-    dispatch_ui(ui, move |ui| {
-        let (tabs, snapshot) = match state.lock() {
-            Ok(mut app) => {
-                let tabs = visible_workspace_tab_rows(app.tab_summaries());
-                let active_tab_id = app.active_tab_id();
-                let snapshot = app.snapshot_without_terminal_for(active_tab_id);
-                (tabs, snapshot)
-            }
-            Err(_) => {
-                ui.set_status("State lock poisoned".into());
-                return;
-            }
-        };
-        let tab_count = tabs.len();
-        apply_menu_workspace_state(ui, snapshot.kind, tab_count, snapshot.id.is_some());
-        let settings_tab_id = tabs
-            .iter()
-            .find(|tab| tab.kind.as_str() == "settings")
-            .map(|tab| tab.id.clone())
-            .unwrap_or_default();
-        apply_workspace_tab_rows(ui, tabs);
-        ui.set_settings_tab_id(settings_tab_id);
-        apply_active_snapshot(ui, snapshot, None);
-        ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));
-        ui.set_terminal_dividers(ModelRc::new(VecModel::from(
-            Vec::<TerminalPaneDividerView>::new(),
-        )));
-    });
+    };
+    refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
 }
 
 pub(super) enum WorkspaceRefreshRequest {

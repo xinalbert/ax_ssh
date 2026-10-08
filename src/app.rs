@@ -242,7 +242,9 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     ui.set_software_presentation_enabled(software_presentation::is_enabled());
     let window_router = WindowRouter::new(ui.as_weak());
     window_router.set_terminal_presentation_software_renderer(software_renderer);
-    let _ = GLOBAL_WINDOW_ROUTER.set(window_router.clone());
+    GLOBAL_WINDOW_ROUTER
+        .set(window_router.clone())
+        .map_err(|_| anyhow::anyhow!("window routing was already installed"))?;
     install_window_activation_hook(&window_router)?;
     let detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>> =
         Rc::new(RefCell::new(HashMap::new()));

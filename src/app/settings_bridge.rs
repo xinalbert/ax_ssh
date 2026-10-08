@@ -1009,42 +1009,21 @@ pub(super) fn wire_settings(
             let runtime_for_close = runtime_for_save.clone();
             set_status(&ui_for_save, "Saving workspace settings...");
             runtime.spawn(async move {
-                let resources = match font_registry.lock() {
-                    Ok(registry) => registry.resources(),
-                    Err(_) => {
-                        set_status(&ui, "Cannot access font resources");
-                        return;
-                    }
-                };
                 let families = vec![
                     settings.appearance.application_font_family.clone(),
                     settings.appearance.terminal_font_family.clone(),
                 ];
-                let font_load = match tokio::task::spawn_blocking(move || {
-                    resources.load_bundled_fonts(&families)
-                })
-                .await
-                {
-                    Ok(Ok(fonts)) => fonts,
-                    Ok(Err(error)) => {
-                        set_status(&ui, &format!("Cannot read font resources: {error}"));
-                        return;
-                    }
+                let font_load = match load_settings_fonts(&font_registry, families).await {
+                    Ok(fonts) => fonts,
                     Err(error) => {
-                        set_status(&ui, &format!("Font loading task failed: {error}"));
+                        set_status(&ui, &format!("Cannot read font resources: {error:#}"));
                         return;
                     }
                 };
                 dispatch_ui(&ui, move |ui| {
-                    for font in font_load {
-                        let registration = font_registry
-                            .lock()
-                            .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
-                            .and_then(|mut registry| registry.register_loaded_font(font));
-                        if let Err(error) = registration {
-                            ui.set_status(format!("Cannot register font: {error}").into());
-                            return;
-                        }
+                    if let Err(error) = register_settings_fonts(&font_registry, font_load) {
+                        ui.set_status(format!("Cannot register font: {error}").into());
+                        return;
                     }
 
                     let state_for_save = state.clone();
@@ -1177,6 +1156,32 @@ fn changed_font_families(previous: &AppSettings, current: &AppSettings) -> Vec<S
     changed
 }
 
+async fn load_settings_fonts(
+    font_registry: &Arc<Mutex<FontRegistry>>,
+    families: Vec<String>,
+) -> Result<Vec<LoadedBundledFont>> {
+    let resources = font_registry
+        .lock()
+        .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))?
+        .resources();
+    tokio::task::spawn_blocking(move || resources.load_bundled_fonts(&families))
+        .await
+        .context("font loading task failed")?
+}
+
+fn register_settings_fonts(
+    font_registry: &Arc<Mutex<FontRegistry>>,
+    fonts: Vec<LoadedBundledFont>,
+) -> Result<i32> {
+    let mut registry = font_registry
+        .lock()
+        .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))?;
+    for font in fonts {
+        registry.register_loaded_font(font)?;
+    }
+    Ok(registry.generation_as_slint_int())
+}
+
 fn load_preview_bundled_fonts(
     runtime: Handle,
     state: Arc<Mutex<AppState>>,
@@ -1187,44 +1192,19 @@ fn load_preview_bundled_fonts(
     if families.is_empty() {
         return;
     }
-    let resources = match font_registry.lock() {
-        Ok(registry) => registry.resources(),
-        Err(_) => {
-            set_status(&ui, "Cannot access font resources");
-            return;
-        }
-    };
     runtime.spawn(async move {
-        let font_load = match tokio::task::spawn_blocking(move || {
-            resources.load_bundled_fonts(&families)
-        })
-        .await
-        {
-            Ok(Ok(fonts)) => fonts,
-            Ok(Err(error)) => {
-                set_status(&ui, &format!("Cannot read font resources: {error}"));
-                return;
-            }
+        let font_load = match load_settings_fonts(&font_registry, families).await {
+            Ok(fonts) => fonts,
             Err(error) => {
-                set_status(&ui, &format!("Font loading task failed: {error}"));
+                set_status(&ui, &format!("Cannot read font resources: {error:#}"));
                 return;
             }
         };
         dispatch_ui(&ui, move |ui| {
-            for font in font_load {
-                let registration = font_registry
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
-                    .and_then(|mut registry| registry.register_loaded_font(font));
-                if let Err(error) = registration {
+            let generation = match register_settings_fonts(&font_registry, font_load) {
+                Ok(generation) => generation,
+                Err(error) => {
                     ui.set_status(format!("Cannot register font: {error}").into());
-                    return;
-                }
-            }
-            let generation = match font_registry.lock() {
-                Ok(registry) => registry.generation_as_slint_int(),
-                Err(_) => {
-                    ui.set_status("Cannot update font state".into());
                     return;
                 }
             };

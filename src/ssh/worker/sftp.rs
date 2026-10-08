@@ -336,7 +336,6 @@ pub(super) async fn run_sftp_session(
             command = command_rx.recv() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
                 let result = match command {
-                    Some(SshCommand::OpenSftp { path }) => browser.request_list(None, path),
                     Some(SshCommand::ListSftp { request_id, path }) => {
                         browser.request_list(Some(request_id), path)
                     }
@@ -660,7 +659,7 @@ pub(super) async fn run_sftp_session(
                         }
                         Ok(())
                     }
-                    Some(SshCommand::CloseSftp | SshCommand::Disconnect) | None => break,
+                    Some(SshCommand::Disconnect) | None => break,
                     Some(SshCommand::Send { .. }) => {
                         Err(anyhow::anyhow!("SFTP-only session cannot accept terminal input"))
                     }
@@ -826,7 +825,7 @@ async fn open_initial_sftp_stream(
         tokio::select! {
             result = &mut opening => return Some(result),
             command = command_rx.recv() => match command {
-                Some(SshCommand::CloseSftp | SshCommand::Disconnect) | None => {
+                Some(SshCommand::Disconnect) | None => {
                     debug!(%session_id, "SFTP subsystem opening cancelled by session close");
                     return None;
                 }
@@ -1169,15 +1168,6 @@ async fn shutdown_sftp_transfers(transfers: Vec<ActiveSftpTransfer>, session_id:
             Err(error) if error.is_cancelled() => {}
             Err(error) => warn!(%session_id, %error, "SFTP transfer shutdown task failed"),
         }
-    }
-}
-
-pub(super) async fn receive_sftp_event(
-    events: &mut Option<mpsc::Receiver<SftpBrowserEvent>>,
-) -> Option<SftpBrowserEvent> {
-    match events {
-        Some(events) => events.recv().await,
-        None => None,
     }
 }
 

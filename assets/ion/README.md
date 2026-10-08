@@ -7,8 +7,7 @@ source code was copied from the reference project.
 
 ## Formats
 
-- `terminal_icon.svg`: canonical vector source (also retained at the `assets/ion/` root).
-- `terminal_icon.png`: 1024 x 1024 RGBA PNG.
+- `assets/ion/terminal_icon.svg`: the sole canonical vector source.
 - `terminal_icon_<size>.png`: RGBA PNGs at 16, 24, 32, 48, 64, 128, 256,
   512, and 1024 pixels.
 - `terminal_icon.ico`: Windows icon containing 16, 24, 32, 48, 64, 128, and

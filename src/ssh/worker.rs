@@ -89,9 +89,6 @@ pub(crate) enum SshCommand {
         queued_at: Instant,
         data: Vec<u8>,
     },
-    OpenSftp {
-        path: String,
-    },
     ListSftp {
         request_id: u64,
         path: String,
@@ -99,7 +96,6 @@ pub(crate) enum SshCommand {
     LoadMoreSftp {
         request_id: u64,
     },
-    CloseSftp,
     OpenSftpFile {
         root: SftpDownloadRoot,
     },
@@ -398,13 +394,6 @@ impl SshSessionHandle {
         Ok(())
     }
 
-    pub fn request_open_sftp(&self, path: String) -> Result<()> {
-        validate_remote_path(&path)?;
-        self.command_tx
-            .try_send(SshCommand::OpenSftp { path })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP open request: {error}"))
-    }
-
     pub fn request_list_sftp(&self, request_id: u64, path: String) -> Result<()> {
         validate_remote_path(&path)?;
         self.command_tx
@@ -416,12 +405,6 @@ impl SshSessionHandle {
         self.command_tx
             .try_send(SshCommand::LoadMoreSftp { request_id })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP page request: {error}"))
-    }
-
-    pub fn request_close_sftp(&self) -> Result<()> {
-        self.command_tx
-            .try_send(SshCommand::CloseSftp)
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP close request: {error}"))
     }
 
     pub fn request_open_sftp_file(
@@ -468,32 +451,6 @@ impl SshSessionHandle {
         self.command_tx
             .try_send(SshCommand::CancelSftpTransfer { transfer_id })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer cancellation: {error}"))
-    }
-
-    pub fn request_open_sftp_upload(
-        &self,
-        transfer_id: Uuid,
-        batch_id: Uuid,
-        path: String,
-        local_path: std::path::PathBuf,
-        total_bytes: u64,
-    ) -> Result<()> {
-        if total_bytes > self.sftp_max_file_bytes {
-            anyhow::bail!("SFTP upload exceeds the configured file size limit");
-        }
-        let request = SftpUploadRequest::from_local_file(
-            transfer_id,
-            batch_id,
-            path,
-            local_path,
-            total_bytes,
-            Vec::new(),
-        )?;
-        self.command_tx
-            .try_send(SshCommand::OpenSftpUploads {
-                requests: vec![request],
-            })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))
     }
 
     pub fn request_open_sftp_upload_batch(
@@ -643,10 +600,8 @@ async fn run_session(task: SshSessionTask) {
                         break None;
                     }
                     Some(SshCommand::Send { .. })
-                    | Some(SshCommand::OpenSftp { .. })
                     | Some(SshCommand::ListSftp { .. })
                     | Some(SshCommand::LoadMoreSftp { .. })
-                    | Some(SshCommand::CloseSftp)
                     | Some(SshCommand::OpenSftpFile { .. })
                     | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
                     | Some(SshCommand::OpenSftpUploads { .. })

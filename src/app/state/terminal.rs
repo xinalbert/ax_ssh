@@ -698,15 +698,6 @@ impl TerminalWorker {
         }
     }
 
-    pub(in crate::app) fn request_close_sftp(&self) -> Result<()> {
-        match self {
-            Self::Ssh(worker) => worker.request_close_sftp(),
-            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
-                anyhow::bail!("SFTP is available only for SSH sessions")
-            }
-        }
-    }
-
     pub(in crate::app) fn request_open_sftp_file(
         &self,
         transfer_id: Uuid,

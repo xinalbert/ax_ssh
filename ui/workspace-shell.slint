@@ -406,7 +406,6 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
@@ -539,7 +538,6 @@ component DetachedWorkspaceContent inherits Rectangle {
         if root.view.active_tab_kind == "sftp" : sftp-pane := SftpPane {
             width: parent.width;
             height: parent.height;
-            standalone: true;
             native-file-drag-enabled: root.apple-platform;
             view: root.view.sftp;
             native-remote-drop-region-changed(region) => {
@@ -590,7 +588,6 @@ component DetachedWorkspaceContent inherits Rectangle {
             upload-selected-local => { root.upload-selected-local-sftp(); }
             rename-remote(name) => { root.rename-remote-sftp(name); }
             edit-remote => { root.edit-remote-sftp(); }
-            load-remote-file(path) => { root.load-remote-sftp-file(path); }
             save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
             editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
             toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
@@ -604,7 +601,6 @@ component DetachedWorkspaceContent inherits Rectangle {
             begin-native-remote-file-drag(path) => {
                 root.begin-native-remote-file-drag-sftp(path);
             }
-            close => { root.close-tab(root.view.active_tab_id); }
             write-clipboard(path) => { root.write-clipboard(path); }
         }
     }
@@ -699,7 +695,6 @@ export component WorkspaceShell inherits Rectangle {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback load-remote-sftp-file(string);
     callback save-remote-sftp-file(string, string);
     callback editor-text-changed-sftp(string);
     callback toggle-editor-auto-upload-sftp(bool);
@@ -712,7 +707,6 @@ export component WorkspaceShell inherits Rectangle {
     callback upload-selected-local-sftp();
     callback rename-remote-sftp(string);
     callback edit-remote-sftp();
-    callback close-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
     callback resize-terminal(string, int, int, length, length);
@@ -895,7 +889,6 @@ export component WorkspaceShell inherits Rectangle {
         upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
         rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
         edit-remote-sftp => { root.edit-remote-sftp(); }
-        load-remote-sftp-file(path) => { root.load-remote-sftp-file(path); }
         save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
         editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
         toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
@@ -1132,10 +1125,9 @@ export component WorkspaceShell inherits Rectangle {
                         read-clipboard() => { return root.read-clipboard(); }
                     }
 
-                    if root.view.active_tab_kind == "sftp" : sftp-pane := SftpPane {
+                    if !root.detached-window && root.view.active_tab_kind == "sftp" : sftp-pane := SftpPane {
                         width: parent.width;
                         height: parent.height;
-                        standalone: true;
                         native-file-drag-enabled: root.apple-platform;
                         view: root.view.sftp;
                         native-remote-drop-region-changed(region) => {
@@ -1186,7 +1178,6 @@ export component WorkspaceShell inherits Rectangle {
                         upload-selected-local => { root.upload-selected-local-sftp(); }
                         rename-remote(name) => { root.rename-remote-sftp(name); }
                         edit-remote => { root.edit-remote-sftp(); }
-                        load-remote-file(path) => { root.load-remote-sftp-file(path); }
                         save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
                         editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
                         toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
@@ -1200,7 +1191,6 @@ export component WorkspaceShell inherits Rectangle {
                         begin-native-remote-file-drag(path) => {
                             root.begin-native-remote-file-drag-sftp(path);
                         }
-                        close => { root.close-tab(root.view.active_tab_id); }
                         write-clipboard(path) => { root.write-clipboard(path); }
                     }
 

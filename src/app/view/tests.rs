@@ -111,19 +111,19 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback(detached: bool) {
     .expect("terminal pane test thread should finish");
 }
 
-#[test]
-fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
-    // A dedicated thread isolates Slint's thread-local platform from other tests.
-    std::thread::spawn(|| {
-        use std::cell::{Cell, RefCell};
-        use std::collections::BTreeSet;
+struct LayoutTestHarness {
+    ui: AppWindow,
+    window: std::rc::Rc<slint::platform::software_renderer::MinimalSoftwareWindow>,
+    time: std::rc::Rc<std::cell::Cell<std::time::Duration>>,
+}
+
+impl LayoutTestHarness {
+    fn new() -> Self {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::platform::{Platform, WindowAdapter};
+        use std::cell::Cell;
         use std::rc::Rc;
         use std::time::Duration;
-
-        use slint::platform::software_renderer::{
-            MinimalSoftwareWindow, RepaintBufferType, Rgb565Pixel,
-        };
-        use slint::platform::{Platform, WindowAdapter};
 
         struct LayoutPlatform {
             window: Rc<MinimalSoftwareWindow>,
@@ -157,7 +157,90 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
             .register_loaded_font(font)
             .expect("test font should register");
 
-        let ui = AppWindow::new().expect("test UI should instantiate");
+        Self {
+            ui: AppWindow::new().expect("test UI should instantiate"),
+            window,
+            time,
+        }
+    }
+
+    fn settle(&self) {
+        use slint::platform::WindowAdapter;
+        use slint::platform::software_renderer::Rgb565Pixel;
+        use std::time::Duration;
+
+        let mut pixels = Vec::new();
+        for _ in 0..16 {
+            self.time.set(self.time.get() + Duration::from_millis(20));
+            slint::platform::update_timers_and_animations();
+            let size = self.window.window().size();
+            pixels.resize(
+                size.width as usize * size.height as usize,
+                Rgb565Pixel::default(),
+            );
+            // Rendering resolves numerical layout; no image is saved or inspected.
+            self.window.draw_if_needed(|renderer| {
+                renderer.render(&mut pixels, size.width as usize);
+            });
+        }
+    }
+}
+
+#[test]
+fn detached_sftp_geometry_ignores_the_hidden_main_sidebar() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_detached_window(true);
+        ui.set_active_tab_kind("sftp".into());
+        ui.set_sftp_available(true);
+        ui.set_sftp_open(true);
+        ui.set_local_sftp_loaded(true);
+        ui.set_local_sftp_path("/test-local".into());
+        ui.set_sidebar_width(220);
+        ui.show().expect("headless window should show");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+        let initial = ui.invoke_native_sftp_local_drop_region();
+        assert!(initial.accepts && initial.width > 0.0 && initial.height > 0.0);
+
+        ui.set_sidebar_width(360);
+        harness.settle();
+        let after_sidebar = ui.invoke_native_sftp_local_drop_region();
+        assert_eq!(
+            after_sidebar, initial,
+            "hidden sidebar must not replace detached geometry"
+        );
+
+        harness.window.set_size(slint::PhysicalSize::new(1342, 805));
+        harness.settle();
+        let enlarged = ui.invoke_native_sftp_local_drop_region();
+        assert!(enlarged.width > initial.width && enlarged.height > initial.height);
+
+        ui.set_detached_window(false);
+        harness.settle();
+        let main = ui.invoke_native_sftp_local_drop_region();
+        assert!(main.accepts && main.width < enlarged.width);
+        ui.set_sidebar_width(220);
+        harness.settle();
+        assert!(ui.invoke_native_sftp_local_drop_region().width > main.width);
+        ui.hide().expect("headless window should hide");
+    })
+    .join()
+    .expect("SFTP layout assertions should pass");
+}
+
+#[test]
+fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
+    // A dedicated thread isolates Slint's thread-local platform from other tests.
+    std::thread::spawn(|| {
+        use std::cell::RefCell;
+        use std::collections::BTreeSet;
+        use std::rc::Rc;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        let window = &harness.window;
         ui.set_detached_window(true);
         ui.set_active_tab_kind("terminal".into());
         ui.set_sidebar_width(220);
@@ -183,23 +266,7 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
         ui.show().expect("headless window should show");
         window.set_size(slint::PhysicalSize::new(1180, 740));
 
-        let mut pixels = Vec::new();
-        let mut settle_layout = || {
-            for _ in 0..16 {
-                time.set(time.get() + Duration::from_millis(20));
-                slint::platform::update_timers_and_animations();
-                let size = window.window().size();
-                pixels.resize(
-                    size.width as usize * size.height as usize,
-                    Rgb565Pixel::default(),
-                );
-                // Render only to resolve layout. No image is saved or inspected.
-                window.draw_if_needed(|renderer| {
-                    renderer.render(&mut pixels, size.width as usize);
-                });
-            }
-        };
-        settle_layout();
+        harness.settle();
         assert!(
             cell_widths
                 .borrow()
@@ -217,7 +284,7 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
         let initial_columns = sizes.first().expect("pane should report its size").0;
 
         ui.set_sidebar_width(360);
-        settle_layout();
+        harness.settle();
         assert!(
             requests.borrow().is_empty(),
             "a detached terminal must not resize when the main sidebar changes: {:?}",
@@ -225,7 +292,7 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
         );
 
         window.set_size(slint::PhysicalSize::new(1342, 805));
-        settle_layout();
+        harness.settle();
         let sizes: BTreeSet<_> = requests.borrow_mut().drain(..).collect();
         assert_eq!(
             sizes.len(),
@@ -236,7 +303,7 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
         assert!(detached_columns > initial_columns);
 
         ui.set_detached_window(false);
-        settle_layout();
+        harness.settle();
         let main_columns = requests
             .borrow_mut()
             .drain(..)
@@ -245,7 +312,7 @@ fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
             .0;
         assert!(main_columns < detached_columns);
         ui.set_sidebar_width(220);
-        settle_layout();
+        harness.settle();
         assert!(
             requests
                 .borrow()
