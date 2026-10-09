@@ -1,0 +1,1106 @@
+{
+  "schema_version": 1,
+  "icons": [
+    {
+      "id": "windows",
+      "name": "Windows",
+      "family": "windows",
+      "aliases": [
+        "windows",
+        "microsoft"
+      ],
+      "icon": "windows/selfhst-microsoft-windows.svg"
+    },
+    {
+      "id": "macos",
+      "name": "macOS",
+      "family": "macos",
+      "aliases": [
+        "macos",
+        "mac os",
+        "darwin"
+      ],
+      "icon": "macos/selfhst-apple-retro.svg"
+    },
+    {
+      "id": "linux",
+      "name": "Linux",
+      "family": "linux",
+      "aliases": [
+        "linux"
+      ],
+      "icon": "linux/generic/selfhst-linux.svg"
+    },
+    {
+      "id": "absolute",
+      "name": "Absolute Linux",
+      "family": "linux",
+      "aliases": [
+        "absolute linux",
+        "absolute"
+      ],
+      "icon": "linux/absolute/papirus-absolute.svg"
+    },
+    {
+      "id": "academix",
+      "name": "AcademiX GNU/Linux",
+      "family": "linux",
+      "aliases": [
+        "academix gnu linux",
+        "academix"
+      ],
+      "icon": "linux/academix/papirus-academix.svg"
+    },
+    {
+      "id": "almalinux",
+      "name": "AlmaLinux",
+      "family": "linux",
+      "aliases": [
+        "alma linux",
+        "almalinux"
+      ],
+      "icon": "linux/almalinux/selfhst-almalinux.svg"
+    },
+    {
+      "id": "alpine-linux",
+      "name": "Alpine Linux",
+      "family": "linux",
+      "aliases": [
+        "alpine linux",
+        "alpine"
+      ],
+      "icon": "linux/alpine-linux/selfhst-alpine-linux.svg"
+    },
+    {
+      "id": "alt-linux",
+      "name": "ALT Linux",
+      "family": "linux",
+      "aliases": [
+        "alt linux",
+        "altlinux"
+      ],
+      "icon": "linux/alt-linux/papirus-alt-linux.svg"
+    },
+    {
+      "id": "anolis-os",
+      "name": "Anolis OS",
+      "family": "linux",
+      "aliases": [
+        "openanolis",
+        "anolis os",
+        "anolis"
+      ],
+      "icon": "linux/anolis-os/official-anolis-mark.png"
+    },
+    {
+      "id": "antix",
+      "name": "antiX",
+      "family": "linux",
+      "aliases": [
+        "antix"
+      ],
+      "icon": "linux/antix/papirus-antix.svg"
+    },
+    {
+      "id": "aosc",
+      "name": "AOSC OS",
+      "family": "linux",
+      "aliases": [
+        "aosc os",
+        "aosc"
+      ],
+      "icon": "linux/aosc/fontlogos-aosc.svg"
+    },
+    {
+      "id": "arch-linux",
+      "name": "Arch Linux",
+      "family": "linux",
+      "aliases": [
+        "arch linux",
+        "arch"
+      ],
+      "icon": "linux/arch-linux/selfhst-arch-linux.svg"
+    },
+    {
+      "id": "archbang",
+      "name": "ArchBang",
+      "family": "linux",
+      "aliases": [
+        "archbang"
+      ],
+      "icon": "linux/archbang/papirus-archbang.svg"
+    },
+    {
+      "id": "archcraft",
+      "name": "Archcraft",
+      "family": "linux",
+      "aliases": [
+        "archcraft"
+      ],
+      "icon": "linux/archcraft/fontlogos-archcraft.svg"
+    },
+    {
+      "id": "archlabs",
+      "name": "ArchLabs",
+      "family": "linux",
+      "aliases": [
+        "archlabs"
+      ],
+      "icon": "linux/archlabs/papirus-archlabs.svg"
+    },
+    {
+      "id": "archman",
+      "name": "Archman",
+      "family": "linux",
+      "aliases": [
+        "archman"
+      ],
+      "icon": "linux/archman/papirus-archman.svg"
+    },
+    {
+      "id": "arcolinux",
+      "name": "ArcoLinux",
+      "family": "linux",
+      "aliases": [
+        "arco linux",
+        "arcolinux"
+      ],
+      "icon": "linux/arcolinux/fontlogos-arcolinux.svg"
+    },
+    {
+      "id": "artix-linux",
+      "name": "Artix Linux",
+      "family": "linux",
+      "aliases": [
+        "artix linux",
+        "artix"
+      ],
+      "icon": "linux/artix-linux/thesvg-color-artix-linux.svg"
+    },
+    {
+      "id": "aryalinux",
+      "name": "AryaLinux",
+      "family": "linux",
+      "aliases": [
+        "aryalinux"
+      ],
+      "icon": "linux/aryalinux/papirus-aryalinux.svg"
+    },
+    {
+      "id": "asahi-linux",
+      "name": "Asahi Linux",
+      "family": "linux",
+      "aliases": [
+        "asahi linux",
+        "asahi"
+      ],
+      "icon": "linux/asahi-linux/thesvg-color-asahi-linux.svg"
+    },
+    {
+      "id": "backbox",
+      "name": "BackBox",
+      "family": "linux",
+      "aliases": [
+        "backbox"
+      ],
+      "icon": "linux/backbox/papirus-backbox.svg"
+    },
+    {
+      "id": "bazzite",
+      "name": "Bazzite",
+      "family": "linux",
+      "aliases": [
+        "bazzite"
+      ],
+      "icon": "linux/bazzite/official-bazzite-color.svg"
+    },
+    {
+      "id": "biglinux",
+      "name": "BigLinux",
+      "family": "linux",
+      "aliases": [
+        "biglinux"
+      ],
+      "icon": "linux/biglinux/fontlogos-biglinux.svg"
+    },
+    {
+      "id": "blackarch",
+      "name": "BlackArch",
+      "family": "linux",
+      "aliases": [
+        "blackarch"
+      ],
+      "icon": "linux/blackarch/official-blackarch.png"
+    },
+    {
+      "id": "bodhi-linux",
+      "name": "Bodhi Linux",
+      "family": "linux",
+      "aliases": [
+        "bodhi linux",
+        "bodhi"
+      ],
+      "icon": "linux/bodhi-linux/papirus-bodhi-linux.svg"
+    },
+    {
+      "id": "bottlerocket",
+      "name": "Bottlerocket",
+      "family": "linux",
+      "aliases": [
+        "bottlerocket"
+      ],
+      "icon": "linux/bottlerocket/official-bottlerocket.png"
+    },
+    {
+      "id": "bunsenlabs",
+      "name": "BunsenLabs",
+      "family": "linux",
+      "aliases": [
+        "bunsenlabs"
+      ],
+      "icon": "linux/bunsenlabs/papirus-bunsenlabs.svg"
+    },
+    {
+      "id": "cachyos",
+      "name": "CachyOS",
+      "family": "linux",
+      "aliases": [
+        "cachyos"
+      ],
+      "icon": "linux/cachyos/selfhst-cachyos.svg"
+    },
+    {
+      "id": "calculate-linux",
+      "name": "Calculate Linux",
+      "family": "linux",
+      "aliases": [
+        "calculate linux",
+        "calculate"
+      ],
+      "icon": "linux/calculate-linux/papirus-calculate-linux.svg"
+    },
+    {
+      "id": "centos",
+      "name": "CentOS",
+      "family": "linux",
+      "aliases": [
+        "centos"
+      ],
+      "icon": "linux/centos/selfhst-centos.svg"
+    },
+    {
+      "id": "cloudlinux",
+      "name": "CloudLinux",
+      "family": "linux",
+      "aliases": [
+        "cloudlinux"
+      ],
+      "icon": "linux/cloudlinux/logos-cloudlinux.svg"
+    },
+    {
+      "id": "condres",
+      "name": "Condres OS",
+      "family": "linux",
+      "aliases": [
+        "condres os",
+        "condres"
+      ],
+      "icon": "linux/condres/papirus-condres.svg"
+    },
+    {
+      "id": "coreos",
+      "name": "CoreOS",
+      "family": "linux",
+      "aliases": [
+        "coreos"
+      ],
+      "icon": "linux/coreos/fontlogos-coreos.svg"
+    },
+    {
+      "id": "debian",
+      "name": "Debian",
+      "family": "linux",
+      "aliases": [
+        "debian"
+      ],
+      "icon": "linux/debian/selfhst-debian.svg"
+    },
+    {
+      "id": "deepin",
+      "name": "Deepin",
+      "family": "linux",
+      "aliases": [
+        "deepin"
+      ],
+      "icon": "linux/deepin/thesvg-color-deepin.svg"
+    },
+    {
+      "id": "devuan",
+      "name": "Devuan",
+      "family": "linux",
+      "aliases": [
+        "devuan"
+      ],
+      "icon": "linux/devuan/selfhst-devuan.svg"
+    },
+    {
+      "id": "dietpi",
+      "name": "DietPi",
+      "family": "linux",
+      "aliases": [
+        "dietpi"
+      ],
+      "icon": "linux/dietpi/official-dietpi.svg"
+    },
+    {
+      "id": "edubuntu",
+      "name": "Edubuntu",
+      "family": "linux",
+      "aliases": [
+        "edubuntu"
+      ],
+      "icon": "linux/edubuntu/selfhst-edubuntu.svg"
+    },
+    {
+      "id": "elementary-os",
+      "name": "elementary OS",
+      "family": "linux",
+      "aliases": [
+        "elementary os",
+        "elementary"
+      ],
+      "icon": "linux/elementary-os/thesvg-color-elementary.svg"
+    },
+    {
+      "id": "endeavouros",
+      "name": "EndeavourOS",
+      "family": "linux",
+      "aliases": [
+        "endeavouros"
+      ],
+      "icon": "linux/endeavouros/thesvg-color-endeavouros.svg"
+    },
+    {
+      "id": "fedora",
+      "name": "Fedora",
+      "family": "linux",
+      "aliases": [
+        "fedora"
+      ],
+      "icon": "linux/fedora/selfhst-fedora.svg"
+    },
+    {
+      "id": "flatcar",
+      "name": "Flatcar Container Linux",
+      "family": "linux",
+      "aliases": [
+        "flatcar container linux",
+        "flatcar"
+      ],
+      "icon": "linux/flatcar/cncf-flatcar-color.svg"
+    },
+    {
+      "id": "funtoo",
+      "name": "Funtoo Linux",
+      "family": "linux",
+      "aliases": [
+        "funtoo linux",
+        "funtoo"
+      ],
+      "icon": "linux/funtoo/official-funtoo.png"
+    },
+    {
+      "id": "garuda-linux",
+      "name": "Garuda Linux",
+      "family": "linux",
+      "aliases": [
+        "garuda linux",
+        "garuda"
+      ],
+      "icon": "linux/garuda-linux/thesvg-color-garuda-linux.svg"
+    },
+    {
+      "id": "gentoo",
+      "name": "Gentoo",
+      "family": "linux",
+      "aliases": [
+        "gentoo"
+      ],
+      "icon": "linux/gentoo/selfhst-gentoo.svg"
+    },
+    {
+      "id": "gnu-guix",
+      "name": "GNU Guix",
+      "family": "linux",
+      "aliases": [
+        "guix system",
+        "gnu guix",
+        "guix"
+      ],
+      "icon": "linux/gnu-guix/fontlogos-gnu-guix.svg"
+    },
+    {
+      "id": "hyperbola",
+      "name": "Hyperbola GNU/Linux-libre",
+      "family": "linux",
+      "aliases": [
+        "hyperbola gnu linux libre",
+        "hyperbola"
+      ],
+      "icon": "linux/hyperbola/papirus-hyperbola.svg"
+    },
+    {
+      "id": "k3os",
+      "name": "k3OS",
+      "family": "linux",
+      "aliases": [
+        "k3os"
+      ],
+      "icon": "linux/k3os/selfhst-rancher-k3os.svg"
+    },
+    {
+      "id": "kali-linux",
+      "name": "Kali Linux",
+      "family": "linux",
+      "aliases": [
+        "kali linux",
+        "kali"
+      ],
+      "icon": "linux/kali-linux/selfhst-kali-linux.svg"
+    },
+    {
+      "id": "kaos",
+      "name": "KaOS",
+      "family": "linux",
+      "aliases": [
+        "kaos"
+      ],
+      "icon": "linux/kaos/papirus-kaos.svg"
+    },
+    {
+      "id": "kde-neon",
+      "name": "KDE neon",
+      "family": "linux",
+      "aliases": [
+        "kde neon",
+        "neon"
+      ],
+      "icon": "linux/kde-neon/thesvg-color-kde-neon.svg"
+    },
+    {
+      "id": "knoppix",
+      "name": "Knoppix",
+      "family": "linux",
+      "aliases": [
+        "knoppix"
+      ],
+      "icon": "linux/knoppix/papirus-knoppix.svg"
+    },
+    {
+      "id": "korora",
+      "name": "Korora",
+      "family": "linux",
+      "aliases": [
+        "korora"
+      ],
+      "icon": "linux/korora/papirus-korora.svg"
+    },
+    {
+      "id": "kubuntu",
+      "name": "Kubuntu",
+      "family": "linux",
+      "aliases": [
+        "kubuntu"
+      ],
+      "icon": "linux/kubuntu/selfhst-kubuntu.svg"
+    },
+    {
+      "id": "linux-lite",
+      "name": "Linux Lite",
+      "family": "linux",
+      "aliases": [
+        "linux lite"
+      ],
+      "icon": "linux/linux-lite/papirus-linux-lite.svg"
+    },
+    {
+      "id": "linux-mint",
+      "name": "Linux Mint",
+      "family": "linux",
+      "aliases": [
+        "linux mint",
+        "linuxmint"
+      ],
+      "icon": "linux/linux-mint/thesvg-color-linux-mint.svg"
+    },
+    {
+      "id": "lubuntu",
+      "name": "Lubuntu",
+      "family": "linux",
+      "aliases": [
+        "lubuntu"
+      ],
+      "icon": "linux/lubuntu/thesvg-color-lubuntu.svg"
+    },
+    {
+      "id": "lxle",
+      "name": "LXLE",
+      "family": "linux",
+      "aliases": [
+        "lxle"
+      ],
+      "icon": "linux/lxle/papirus-lxle.svg"
+    },
+    {
+      "id": "madlinux",
+      "name": "MadLinux",
+      "family": "linux",
+      "aliases": [
+        "madlinux"
+      ],
+      "icon": "linux/madlinux/papirus-madlinux.svg"
+    },
+    {
+      "id": "mageia",
+      "name": "Mageia",
+      "family": "linux",
+      "aliases": [
+        "mageia"
+      ],
+      "icon": "linux/mageia/fontlogos-mageia.svg"
+    },
+    {
+      "id": "mandriva",
+      "name": "Mandriva",
+      "family": "linux",
+      "aliases": [
+        "mandriva"
+      ],
+      "icon": "linux/mandriva/fontlogos-mandriva.svg"
+    },
+    {
+      "id": "manjaro",
+      "name": "Manjaro",
+      "family": "linux",
+      "aliases": [
+        "manjaro"
+      ],
+      "icon": "linux/manjaro/thesvg-color-manjaro.svg"
+    },
+    {
+      "id": "mx-linux",
+      "name": "MX Linux",
+      "family": "linux",
+      "aliases": [
+        "mx linux",
+        "mx"
+      ],
+      "icon": "linux/mx-linux/thesvg-color-mx-linux.svg"
+    },
+    {
+      "id": "netrunner",
+      "name": "Netrunner",
+      "family": "linux",
+      "aliases": [
+        "netrunner"
+      ],
+      "icon": "linux/netrunner/papirus-netrunner.svg"
+    },
+    {
+      "id": "nixos",
+      "name": "NixOS",
+      "family": "linux",
+      "aliases": [
+        "nixos"
+      ],
+      "icon": "linux/nixos/selfhst-nixos.svg"
+    },
+    {
+      "id": "nobara-linux",
+      "name": "Nobara Linux",
+      "family": "linux",
+      "aliases": [
+        "nobara linux",
+        "nobara"
+      ],
+      "icon": "linux/nobara-linux/thesvg-color-nobara-linux.svg"
+    },
+    {
+      "id": "omarchy",
+      "name": "Omarchy",
+      "family": "linux",
+      "aliases": [
+        "omarchy"
+      ],
+      "icon": "linux/omarchy/thesvg-color-omarchy.svg"
+    },
+    {
+      "id": "opencloudos",
+      "name": "OpenCloudOS",
+      "family": "linux",
+      "aliases": [
+        "opencloudos"
+      ],
+      "icon": "linux/opencloudos/official-opencloudos.png"
+    },
+    {
+      "id": "openeuler",
+      "name": "openEuler",
+      "family": "linux",
+      "aliases": [
+        "openeuler"
+      ],
+      "icon": "linux/openeuler/selfhst-openeuler.svg"
+    },
+    {
+      "id": "openkylin",
+      "name": "openKylin",
+      "family": "linux",
+      "aliases": [
+        "openkylin"
+      ],
+      "icon": "linux/openkylin/official-openkylin-color.svg"
+    },
+    {
+      "id": "openmandriva",
+      "name": "OpenMandriva",
+      "family": "linux",
+      "aliases": [
+        "openmandriva"
+      ],
+      "icon": "linux/openmandriva/papirus-openmandriva.svg"
+    },
+    {
+      "id": "opensuse",
+      "name": "openSUSE",
+      "family": "linux",
+      "aliases": [
+        "opensuse"
+      ],
+      "icon": "linux/opensuse/selfhst-opensuse.svg"
+    },
+    {
+      "id": "opensuse-alp",
+      "name": "openSUSE ALP",
+      "family": "linux",
+      "aliases": [
+        "opensuse alp"
+      ],
+      "icon": "linux/opensuse-alp/selfhst-opensuse-alp.svg"
+    },
+    {
+      "id": "opensuse-evergreen",
+      "name": "openSUSE Evergreen",
+      "family": "linux",
+      "aliases": [
+        "opensuse evergreen"
+      ],
+      "icon": "linux/opensuse-evergreen/selfhst-opensuse-evergreen.svg"
+    },
+    {
+      "id": "opensuse-leap",
+      "name": "openSUSE Leap",
+      "family": "linux",
+      "aliases": [
+        "opensuse leap"
+      ],
+      "icon": "linux/opensuse-leap/selfhst-opensuse-leap.svg"
+    },
+    {
+      "id": "opensuse-step",
+      "name": "openSUSE Step",
+      "family": "linux",
+      "aliases": [
+        "opensuse step"
+      ],
+      "icon": "linux/opensuse-step/selfhst-opensuse-step.svg"
+    },
+    {
+      "id": "opensuse-tumbleweed",
+      "name": "openSUSE Tumbleweed",
+      "family": "linux",
+      "aliases": [
+        "opensuse tumbleweed"
+      ],
+      "icon": "linux/opensuse-tumbleweed/selfhst-opensuse-tumbleweed.svg"
+    },
+    {
+      "id": "oracle-linux",
+      "name": "Oracle Linux",
+      "family": "linux",
+      "aliases": [
+        "oracle linux",
+        "oraclelinux",
+        "ol"
+      ],
+      "icon": "linux/oracle-linux/official-oracle-linux.png"
+    },
+    {
+      "id": "parabola",
+      "name": "Parabola GNU/Linux-libre",
+      "family": "linux",
+      "aliases": [
+        "parabola gnu linux libre",
+        "parabola"
+      ],
+      "icon": "linux/parabola/fontlogos-parabola.svg"
+    },
+    {
+      "id": "parrot-os",
+      "name": "Parrot OS",
+      "family": "linux",
+      "aliases": [
+        "parrot security",
+        "parrot os",
+        "parrot"
+      ],
+      "icon": "linux/parrot-os/thesvg-color-parrot-security.svg"
+    },
+    {
+      "id": "pclinuxos",
+      "name": "PCLinuxOS",
+      "family": "linux",
+      "aliases": [
+        "pclinuxos"
+      ],
+      "icon": "linux/pclinuxos/papirus-pclinuxos.svg"
+    },
+    {
+      "id": "peppermint",
+      "name": "Peppermint OS",
+      "family": "linux",
+      "aliases": [
+        "peppermint os",
+        "peppermint"
+      ],
+      "icon": "linux/peppermint/selfhst-peppermint.svg"
+    },
+    {
+      "id": "pisilinux",
+      "name": "Pisi Linux",
+      "family": "linux",
+      "aliases": [
+        "pisi linux",
+        "pisilinux"
+      ],
+      "icon": "linux/pisilinux/papirus-pisilinux.svg"
+    },
+    {
+      "id": "pop-os",
+      "name": "Pop!_OS",
+      "family": "linux",
+      "aliases": [
+        "pop os",
+        "pop"
+      ],
+      "icon": "linux/pop-os/thesvg-color-pop-os.svg"
+    },
+    {
+      "id": "puppy-linux",
+      "name": "Puppy Linux",
+      "family": "linux",
+      "aliases": [
+        "puppy linux",
+        "puppy"
+      ],
+      "icon": "linux/puppy-linux/logos-puppy-linux.svg"
+    },
+    {
+      "id": "pureos",
+      "name": "PureOS",
+      "family": "linux",
+      "aliases": [
+        "pureos"
+      ],
+      "icon": "linux/pureos/papirus-pureos.svg"
+    },
+    {
+      "id": "qubes-os",
+      "name": "Qubes OS",
+      "family": "linux",
+      "aliases": [
+        "qubes os"
+      ],
+      "icon": "linux/qubes-os/thesvg-color-qubes-os.svg"
+    },
+    {
+      "id": "raspberry-pi-os",
+      "name": "Raspberry Pi OS",
+      "family": "linux",
+      "aliases": [
+        "raspberry pi os",
+        "raspberry pi",
+        "raspbian"
+      ],
+      "icon": "linux/raspberry-pi-os/selfhst-raspberry-pi.svg"
+    },
+    {
+      "id": "red-hat",
+      "name": "Red Hat",
+      "family": "linux",
+      "aliases": [
+        "red hat"
+      ],
+      "icon": "linux/red-hat/selfhst-red-hat.svg"
+    },
+    {
+      "id": "rhel",
+      "name": "Red Hat Enterprise Linux",
+      "family": "linux",
+      "aliases": [
+        "red hat enterprise linux",
+        "rhel"
+      ],
+      "icon": "linux/rhel/selfhst-rhel.svg"
+    },
+    {
+      "id": "rocky-linux",
+      "name": "Rocky Linux",
+      "family": "linux",
+      "aliases": [
+        "rocky linux",
+        "rocky"
+      ],
+      "icon": "linux/rocky-linux/selfhst-rocky-linux.svg"
+    },
+    {
+      "id": "rosa",
+      "name": "ROSA Linux",
+      "family": "linux",
+      "aliases": [
+        "rosa linux",
+        "rosa"
+      ],
+      "icon": "linux/rosa/papirus-rosa.svg"
+    },
+    {
+      "id": "sabayon",
+      "name": "Sabayon",
+      "family": "linux",
+      "aliases": [
+        "sabayon"
+      ],
+      "icon": "linux/sabayon/fontlogos-sabayon.svg"
+    },
+    {
+      "id": "salentos",
+      "name": "SalentOS",
+      "family": "linux",
+      "aliases": [
+        "salentos"
+      ],
+      "icon": "linux/salentos/papirus-salentos.svg"
+    },
+    {
+      "id": "simply",
+      "name": "Simply Linux",
+      "family": "linux",
+      "aliases": [
+        "simply linux",
+        "simply"
+      ],
+      "icon": "linux/simply/papirus-simply.svg"
+    },
+    {
+      "id": "slackware",
+      "name": "Slackware",
+      "family": "linux",
+      "aliases": [
+        "slackware"
+      ],
+      "icon": "linux/slackware/thesvg-color-slackware.svg"
+    },
+    {
+      "id": "solus",
+      "name": "Solus",
+      "family": "linux",
+      "aliases": [
+        "solus"
+      ],
+      "icon": "linux/solus/thesvg-color-solus.svg"
+    },
+    {
+      "id": "steamos",
+      "name": "SteamOS",
+      "family": "linux",
+      "aliases": [
+        "steamos"
+      ],
+      "icon": "linux/steamos/papirus-steamos.svg"
+    },
+    {
+      "id": "suse",
+      "name": "SUSE",
+      "family": "linux",
+      "aliases": [
+        "sled",
+        "sles",
+        "suse"
+      ],
+      "icon": "linux/suse/thesvg-color-suse.svg"
+    },
+    {
+      "id": "tails",
+      "name": "Tails",
+      "family": "linux",
+      "aliases": [
+        "tails"
+      ],
+      "icon": "linux/tails/thesvg-color-tails.svg"
+    },
+    {
+      "id": "talos-linux",
+      "name": "Talos Linux",
+      "family": "linux",
+      "aliases": [
+        "talos linux",
+        "talos"
+      ],
+      "icon": "linux/talos-linux/selfhst-sidero-talos.svg"
+    },
+    {
+      "id": "trisquel",
+      "name": "Trisquel GNU/Linux",
+      "family": "linux",
+      "aliases": [
+        "trisquel gnu linux",
+        "trisquel"
+      ],
+      "icon": "linux/trisquel/fontlogos-trisquel.svg"
+    },
+    {
+      "id": "turnkey-linux",
+      "name": "TurnKey Linux",
+      "family": "linux",
+      "aliases": [
+        "turnkey linux",
+        "turnkey"
+      ],
+      "icon": "linux/turnkey-linux/selfhst-turnkey-linux.svg"
+    },
+    {
+      "id": "tuxedo-os",
+      "name": "TUXEDO OS",
+      "family": "linux",
+      "aliases": [
+        "tuxedo os",
+        "tuxedo"
+      ],
+      "icon": "linux/tuxedo-os/papirus-tuxedo-os.svg"
+    },
+    {
+      "id": "ubuntu",
+      "name": "Ubuntu",
+      "family": "linux",
+      "aliases": [
+        "ubuntu"
+      ],
+      "icon": "linux/ubuntu/selfhst-ubuntu.svg"
+    },
+    {
+      "id": "ubuntu-budgie",
+      "name": "Ubuntu Budgie",
+      "family": "linux",
+      "aliases": [
+        "ubuntu budgie"
+      ],
+      "icon": "linux/ubuntu-budgie/papirus-ubuntu-budgie.svg"
+    },
+    {
+      "id": "ubuntu-mate",
+      "name": "Ubuntu MATE",
+      "family": "linux",
+      "aliases": [
+        "ubuntu mate"
+      ],
+      "icon": "linux/ubuntu-mate/thesvg-color-ubuntu-mate.svg"
+    },
+    {
+      "id": "ubuntu-studio",
+      "name": "Ubuntu Studio",
+      "family": "linux",
+      "aliases": [
+        "ubuntu studio"
+      ],
+      "icon": "linux/ubuntu-studio/papirus-ubuntu-studio.svg"
+    },
+    {
+      "id": "ultimate-edition",
+      "name": "Ultimate Edition",
+      "family": "linux",
+      "aliases": [
+        "ultimate edition"
+      ],
+      "icon": "linux/ultimate-edition/papirus-ultimate-edition.svg"
+    },
+    {
+      "id": "uos",
+      "name": "UnionTech UOS",
+      "family": "linux",
+      "aliases": [
+        "uniontech uos",
+        "uniontech os",
+        "uos"
+      ],
+      "icon": "linux/uos/official-uos.png"
+    },
+    {
+      "id": "vanilla-os",
+      "name": "Vanilla OS",
+      "family": "linux",
+      "aliases": [
+        "vanilla os",
+        "vanilla"
+      ],
+      "icon": "linux/vanilla-os/papirus-vanilla-os.svg"
+    },
+    {
+      "id": "void-linux",
+      "name": "Void Linux",
+      "family": "linux",
+      "aliases": [
+        "void linux",
+        "void"
+      ],
+      "icon": "linux/void-linux/thesvg-color-void-linux.svg"
+    },
+    {
+      "id": "voyager",
+      "name": "Voyager Live",
+      "family": "linux",
+      "aliases": [
+        "voyager live",
+        "voyager"
+      ],
+      "icon": "linux/voyager/papirus-voyager.svg"
+    },
+    {
+      "id": "xerolinux",
+      "name": "XeroLinux",
+      "family": "linux",
+      "aliases": [
+        "xerolinux"
+      ],
+      "icon": "linux/xerolinux/fontlogos-xerolinux.svg"
+    },
+    {
+      "id": "xubuntu",
+      "name": "Xubuntu",
+      "family": "linux",
+      "aliases": [
+        "xubuntu"
+      ],
+      "icon": "linux/xubuntu/selfhst-xubuntu.svg"
+    },
+    {
+      "id": "zorin-os",
+      "name": "Zorin OS",
+      "family": "linux",
+      "aliases": [
+        "zorin os",
+        "zorin"
+      ],
+      "icon": "linux/zorin-os/selfhst-zorin-os.svg"
+    }
+  ]
+}

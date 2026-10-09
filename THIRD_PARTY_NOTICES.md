@@ -71,6 +71,9 @@ The Windows Server reference copy is separately attributed in
 `assets/os-icons/licenses/NOTICE-wikimedia-commons.txt`; its Commons page
 records the 2017 Microsoft artwork as public domain, while Microsoft
 trademarks remain with Microsoft Corporation.
+The connection-group folder UI icon is the Iconify `material-symbols:folder-outline-rounded`
+asset from Google's Material Design Icons repository and is separately
+attributed under `assets/os-icons/licenses/NOTICE-iconify-material-symbols.txt`.
 An unspecified asset license is explicitly recorded rather than replaced by
 MIT, CC0, or a software repository's code license.
 

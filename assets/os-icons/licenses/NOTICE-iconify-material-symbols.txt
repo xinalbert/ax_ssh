@@ -1,0 +1,11 @@
+Material Symbols folder UI icon
+
+Source: Iconify material-symbols:folder-outline-rounded
+https://api.iconify.design/material-symbols/folder-outline-rounded.svg
+Upstream: Google Material Design Icons
+https://github.com/google/material-design-icons
+License: Apache-2.0
+https://github.com/google/material-design-icons/blob/master/LICENSE
+
+The file is used as the connection-group folder icon under
+assets/os-icons/ui/folder/. The SVG body is preserved from the Iconify API.

@@ -1,6 +1,6 @@
 # 系统、发行版与平台图标资源
 
-[English](README.md) · [离线预览](preview.html) · [来源清单](manifest.json) · [检索覆盖/缺口](search-coverage.json) · [检查结果](validation.json)
+[English](README.md) · [名称索引](names.zh.md) · [离线预览](preview.html) · [来源清单](manifest.json) · [检索覆盖/缺口](search-coverage.json) · [检查结果](validation.json)
 
 共 **328 个文件**（312 SVG, 16 PNG），覆盖 **178 个系统/平台条目**。本轮补充 193 个图标、122 个条目，原先 135 个 SVG 完整保留。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
 
@@ -21,6 +21,11 @@
 | `desktop/` | 11 | 桌面环境 / 窗口管理器 |
 
 `linux/generic/` 为 Tux；Windows 子目录保留 Windows Server、Windows 8/11 和旧版旗帜。`licenses/` 保存来源集合许可、官网品牌说明和政策。目录不代表所有条目都是发行版，准确类型见清单的 `kind`。
+
+[catalog.json](catalog.json) 统一定义应用使用的 116 个图标标识、显示名称、识别别名及资源路径，
+包括三类系统家族和 113 个 Linux 条目。[名称索引](names.zh.md) 提供可检索表格和生成命令。
+Rust 识别表及侧栏/标签共用的 Slint 图标组件均由此目录生成；已识别发行版使用自己的图标，
+`linux` 使用 Tux 兜底。默认保留资源原色，既有 `system_icons_follow_theme` 配置可启用主题着色。
 
 只有上游实际存在的变体才保存；缺少 light/dark 表示检查的来源未发现该变体。
 

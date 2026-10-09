@@ -1,6 +1,6 @@
 # Operating-system, distribution and platform icon assets
 
-[中文说明](README.zh.md) · [Offline preview](preview.html) · [Source manifest](manifest.json) · [Search coverage / gaps](search-coverage.json) · [Checks](validation.json)
+[中文说明](README.zh.md) · [Name index](names.md) · [Offline preview](preview.html) · [Source manifest](manifest.json) · [Search coverage / gaps](search-coverage.json) · [Checks](validation.json)
 
 **328 files** (312 SVG, 16 PNG) cover **178 system/platform entries**. This expansion adds 193 icons and 122 entries; the original 135 SVGs are unchanged. Open `preview.html` locally to compare every file on white and dark backgrounds.
 
@@ -21,6 +21,14 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 | `desktop/` | 11 | Desktop environments / window managers |
 
 `linux/generic/` contains Tux; Windows subdirectories preserve Windows Server, Windows 8/11 and the legacy flag. `licenses/` contains collection licenses and publisher notices/policies. Entries are not all distributions; the manifest `kind` records their actual category.
+
+[catalog.json](catalog.json) defines 116 application icon IDs, display names,
+recognition aliases and asset paths: three system families and 113 Linux entries.
+The [name index](names.md) provides a searchable table and generation commands.
+Rust recognition and the shared Slint icon component are generated from this
+catalog. Known Linux distributions use their own artwork; `linux` uses Tux as
+the fallback. Default display preserves source colors, while the existing
+`system_icons_follow_theme` configuration enables theme tinting.
 
 Only native upstream variants are saved. A missing light/dark entry means no matching variant was found in the inspected source.
 
