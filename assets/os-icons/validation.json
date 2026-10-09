@@ -1,0 +1,4010 @@
+{
+  "schema_version": 2,
+  "checked_at": "2026-10-09T01:13:05+00:00",
+  "status": "passed",
+  "counts": {
+    "systems": 177,
+    "assets": 327,
+    "formats": {
+      "svg": 311,
+      "png": 16
+    },
+    "platforms": {
+      "linux": 114,
+      "macos": 1,
+      "windows": 4,
+      "appliances": 15,
+      "platforms": 14,
+      "bsd": 7,
+      "mobile": 4,
+      "other": 7,
+      "desktop": 11
+    },
+    "variants": {
+      "color": 151,
+      "light": 74,
+      "dark": 71,
+      "original": 29,
+      "black": 1,
+      "inverted": 1
+    }
+  },
+  "original_assets_unchanged": 135,
+  "checked_assets": 327,
+  "checks": [
+    {
+      "path": "linux/generic/selfhst-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/generic/selfhst-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/generic/selfhst-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/generic/skill-icons-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/generic/skill-icons-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/almalinux/selfhst-almalinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/almalinux/selfhst-almalinux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/almalinux/selfhst-almalinux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/alpine-linux/selfhst-alpine-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/alpine-linux/selfhst-alpine-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/alpine-linux/selfhst-alpine-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arch-linux/selfhst-arch-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arch-linux/selfhst-arch-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arch-linux/selfhst-arch-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arch-linux/skill-icons-arch-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arch-linux/skill-icons-arch-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/artix-linux/thesvg-color-artix-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/asahi-linux/thesvg-color-asahi-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/centos/selfhst-centos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/centos/selfhst-centos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/centos/selfhst-centos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/cloudlinux/logos-cloudlinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/debian/selfhst-debian.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/debian/selfhst-debian-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/debian/selfhst-debian-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/debian/skill-icons-debian-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/debian/skill-icons-debian-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/deepin/thesvg-color-deepin.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/devuan/selfhst-devuan.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/devuan/selfhst-devuan-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/devuan/selfhst-devuan-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/edubuntu/selfhst-edubuntu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/edubuntu/selfhst-edubuntu-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/edubuntu/selfhst-edubuntu-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/elementary-os/thesvg-color-elementary.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/endeavouros/thesvg-color-endeavouros.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/fedora/selfhst-fedora.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/fedora/selfhst-fedora-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/fedora/selfhst-fedora-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/garuda-linux/thesvg-color-garuda-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/gentoo/selfhst-gentoo.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kali-linux/selfhst-kali-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kali-linux/selfhst-kali-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kali-linux/selfhst-kali-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kali-linux/skill-icons-kali-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kali-linux/skill-icons-kali-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kde-neon/thesvg-color-kde-neon.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kubuntu/selfhst-kubuntu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kubuntu/selfhst-kubuntu-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kubuntu/selfhst-kubuntu-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/linux-mint/thesvg-color-linux-mint.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/linux-mint/skill-icons-mint-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/linux-mint/skill-icons-mint-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/lubuntu/thesvg-color-lubuntu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/mageia/logos-mageia.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/manjaro/thesvg-color-manjaro.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/mx-linux/thesvg-color-mx-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/nixos/selfhst-nixos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/nixos/selfhst-nixos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/nixos/selfhst-nixos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/nobara-linux/thesvg-color-nobara-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse/selfhst-opensuse.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse/selfhst-opensuse-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse/selfhst-opensuse-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-alp/selfhst-opensuse-alp.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-alp/selfhst-opensuse-alp-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-alp/selfhst-opensuse-alp-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-evergreen/selfhst-opensuse-evergreen.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-evergreen/selfhst-opensuse-evergreen-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-evergreen/selfhst-opensuse-evergreen-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-leap/selfhst-opensuse-leap.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-leap/selfhst-opensuse-leap-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-leap/selfhst-opensuse-leap-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-step/selfhst-opensuse-step.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-step/selfhst-opensuse-step-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-step/selfhst-opensuse-step-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-tumbleweed/selfhst-opensuse-tumbleweed.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-tumbleweed/selfhst-opensuse-tumbleweed-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/opensuse-tumbleweed/selfhst-opensuse-tumbleweed-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/parrot-os/thesvg-color-parrot-security.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/peppermint/selfhst-peppermint.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/peppermint/selfhst-peppermint-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/peppermint/selfhst-peppermint-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/pop-os/thesvg-color-pop-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/puppy-linux/logos-puppy-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/qubes-os/thesvg-color-qubes-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/raspberry-pi-os/selfhst-raspberry-pi.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/raspberry-pi-os/selfhst-raspberry-pi-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/raspberry-pi-os/selfhst-raspberry-pi-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/raspberry-pi-os/skill-icons-raspberrypi-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/raspberry-pi-os/skill-icons-raspberrypi-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/red-hat/selfhst-red-hat.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/red-hat/selfhst-red-hat-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/red-hat/selfhst-red-hat-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/red-hat/skill-icons-redhat-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/red-hat/skill-icons-redhat-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rocky-linux/selfhst-rocky-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rocky-linux/selfhst-rocky-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rocky-linux/selfhst-rocky-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/slackware/thesvg-color-slackware.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/solus/thesvg-color-solus.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/suse/thesvg-color-suse.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/tails/thesvg-color-tails.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/turnkey-linux/selfhst-turnkey-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/turnkey-linux/selfhst-turnkey-linux-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/turnkey-linux/selfhst-turnkey-linux-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu/selfhst-ubuntu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu/selfhst-ubuntu-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu/selfhst-ubuntu-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu/skill-icons-ubuntu-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu/skill-icons-ubuntu-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu-mate/thesvg-color-ubuntu-mate.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/void-linux/thesvg-color-void-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/xubuntu/selfhst-xubuntu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/xubuntu/selfhst-xubuntu-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/xubuntu/selfhst-xubuntu-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/zorin-os/selfhst-zorin-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/zorin-os/selfhst-zorin-os-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/zorin-os/selfhst-zorin-os-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/selfhst-apple.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/selfhst-apple-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/selfhst-apple-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/skill-icons-apple-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/skill-icons-apple-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "macos/selfhst-apple-retro.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/selfhst-microsoft-windows.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/selfhst-microsoft-windows-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/selfhst-microsoft-windows-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/skill-icons-windows-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/skill-icons-windows-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/windows-8/thesvg-color-windows8.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/windows-11/thesvg-color-windows11.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/retro/selfhst-windows-retro.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/retro/selfhst-windows-retro-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "windows/retro/selfhst-windows-retro-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/cachyos/selfhst-cachyos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/cachyos/selfhst-cachyos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/cachyos/selfhst-cachyos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openeuler/selfhst-openeuler.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openeuler/selfhst-openeuler-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openeuler/selfhst-openeuler-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/talos-linux/selfhst-sidero-talos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/talos-linux/selfhst-sidero-talos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/talos-linux/selfhst-sidero-talos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/k3os/selfhst-rancher-k3os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/k3os/selfhst-rancher-k3os-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/k3os/selfhst-rancher-k3os-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openwrt/selfhst-openwrt.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openwrt/selfhst-openwrt-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openwrt/selfhst-openwrt-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/proxmox/selfhst-proxmox.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/proxmox/selfhst-proxmox-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/proxmox/selfhst-proxmox-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openmediavault/selfhst-openmediavault.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openmediavault/selfhst-openmediavault-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/openmediavault/selfhst-openmediavault-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/unraid/selfhst-unraid.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/unraid/selfhst-unraid-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/unraid/selfhst-unraid-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-scale/selfhst-truenas-scale.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-scale/selfhst-truenas-scale-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-scale/selfhst-truenas-scale-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/yunohost/selfhst-yunohost.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/yunohost/selfhst-yunohost-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/yunohost/selfhst-yunohost-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/umbrelos/selfhst-umbrelos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/umbrelos/selfhst-umbrelos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/umbrelos/selfhst-umbrelos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/casaos/selfhst-casaos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/casaos/selfhst-casaos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/casaos/selfhst-casaos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/zimaos/selfhst-zimaos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/zimaos/selfhst-zimaos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/zimaos/selfhst-zimaos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/homedock-os/selfhst-homedock-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/homedock-os/selfhst-homedock-os-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/homedock-os/selfhst-homedock-os-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/livinity/selfhst-livinity.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/livinity/selfhst-livinity-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/livinity/selfhst-livinity-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rhel/selfhst-rhel.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rhel/selfhst-rhel-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rhel/selfhst-rhel-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/freebsd/selfhst-freebsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/freebsd/selfhst-freebsd-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/freebsd/selfhst-freebsd-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/pfsense/selfhst-pfsense.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/pfsense/selfhst-pfsense-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/pfsense/selfhst-pfsense-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/opnsense/selfhst-opnsense.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/opnsense/selfhst-opnsense-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/opnsense/selfhst-opnsense-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-core/selfhst-truenas-core.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-core/selfhst-truenas-core-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/truenas-core/selfhst-truenas-core-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/android/selfhst-android-robot.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/android/selfhst-android-robot-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/android/selfhst-android-robot-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/grapheneos/selfhst-grapheneos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/grapheneos/selfhst-grapheneos-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/grapheneos/selfhst-grapheneos-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/docker/selfhst-docker.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/docker/selfhst-docker-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/docker/selfhst-docker-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/kubernetes/selfhst-kubernetes.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/kubernetes/selfhst-kubernetes-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/kubernetes/selfhst-kubernetes-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/vmware-esx/selfhst-vmware-esx.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/vmware-esx/selfhst-vmware-esx-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/vmware-esx/selfhst-vmware-esx-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/xen-orchestra/selfhst-xen-orchestra.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/omarchy/thesvg-color-omarchy.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/osmc/thesvg-color-osmc.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/sailfish-os/thesvg-color-sailfish-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/retropie/thesvg-color-retropie.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/openbsd/thesvg-color-openbsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/reactos/thesvg-color-reactos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/openstack/thesvg-color-openstack.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/qemu/thesvg-color-qemu.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/gnome/thesvg-color-gnome.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/kde/thesvg-color-kde.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/xfce/thesvg-color-xfce.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/cinnamon/thesvg-color-cinnamon.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/hyprland/thesvg-color-hyprland.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/sway/thesvg-color-sway.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/i3/thesvg-color-i3.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/haiku/logos-haiku-icon.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/absolute/papirus-absolute.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/archbang/papirus-archbang.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/bunsenlabs/papirus-bunsenlabs.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/aix/papirus-aix.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/archman/papirus-archman.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/backbox/papirus-backbox.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/antix/papirus-antix.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/academix/papirus-academix.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/aryalinux/papirus-aryalinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/archlabs/papirus-archlabs.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/bodhi-linux/papirus-bodhi-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/alt-linux/papirus-alt-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/hyperbola/papirus-hyperbola.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/ghostbsd/papirus-ghostbsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/kaos/papirus-kaos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/freedos/papirus-freedos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/korora/papirus-korora.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/calculate-linux/papirus-calculate-linux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/dragonflybsd/papirus-dragonflybsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/knoppix/papirus-knoppix.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/linux-lite/papirus-linux-lite.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/lxle/papirus-lxle.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/madlinux/papirus-madlinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/midnightbsd/papirus-midnightbsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/netrunner/papirus-netrunner.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/ms-dos/papirus-ms-dos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/pisilinux/papirus-pisilinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/rosa/papirus-rosa.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/salentos/papirus-salentos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/simply/papirus-simply.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/pclinuxos/papirus-pclinuxos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/smartos/papirus-smartos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openmandriva/papirus-openmandriva.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/pureos/papirus-pureos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu-budgie/papirus-ubuntu-budgie.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ubuntu-studio/papirus-ubuntu-studio.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/trueos/papirus-trueos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/ultimate-edition/papirus-ultimate-edition.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/steamos/papirus-steamos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/condres/papirus-condres.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/tuxedo-os/papirus-tuxedo-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/vanilla-os/papirus-vanilla-os.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/voyager/papirus-voyager.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/aosc/fontlogos-aosc.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/archcraft/fontlogos-archcraft.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/arcolinux/fontlogos-arcolinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/biglinux/fontlogos-biglinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/gnu-guix/fontlogos-gnu-guix.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "other/illumos/fontlogos-illumos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/parabola/fontlogos-parabola.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/sabayon/fontlogos-sabayon.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/trisquel/fontlogos-trisquel.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/xerolinux/fontlogos-xerolinux.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/mandriva/fontlogos-mandriva.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/coreos/fontlogos-coreos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "mobile/postmarketos/fontlogos-postmarketos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/lxde/fontlogos-lxde.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/lxqt/fontlogos-lxqt.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/mate/fontlogos-mate.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "desktop/budgie/fontlogos-budgie.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "bsd/netbsd/papirus-netbsd.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/mageia/fontlogos-mageia.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/rancher/selfhst-rancher.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/rancher/selfhst-rancher-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/rancher/selfhst-rancher-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/synology/selfhst-synology.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/synology/selfhst-synology-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/synology/selfhst-synology-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/aws/selfhst-amazon-web-services.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/aws/selfhst-amazon-web-services-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "platforms/aws/selfhst-amazon-web-services-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/blackarch/official-blackarch.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/oracle-linux/official-oracle-linux.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/bazzite/official-bazzite-color.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/bazzite/official-bazzite-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/bazzite/official-bazzite-le.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openkylin/official-openkylin-color.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/openkylin/official-openkylin-light.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/openkylin/official-openkylin-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/anolis-os/official-anolis-mark.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/opencloudos/official-opencloudos.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/uos/official-uos.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/dietpi/official-dietpi.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/dietpi/official-dietpi-dark.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/dietpi/official-dietpi-light.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/flatcar/cncf-flatcar-color.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/flatcar/cncf-flatcar-white.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/flatcar/cncf-flatcar-black.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "linux/bottlerocket/official-bottlerocket.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/ubuntu-budgie/official-ubuntu-budgie.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/ubuntu-studio/official-studio-icon-2022_RGB.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "appliances/ipfire/official-ipfire.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/ipfire/official-ipfire-light.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/ipfire/official-ipfire-dark.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/vyos/official-vyos.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
+    },
+    {
+      "path": "appliances/libreelec/official-libreelec.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "appliances/volumio/official-volumio-pack-volumio-icon.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "appliances/volumio/official-volumio-pack-logo-circle-white-transparent.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "appliances/volumio/official-volumio-pack-logo-circle-grey-transparent.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    },
+    {
+      "path": "linux/funtoo/official-funtoo.png",
+      "format": "png",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "png-signature",
+        "positive-dimensions",
+        "chunk-crcs-and-complete-file"
+      ]
+    }
+  ],
+  "rendering": {
+    "sizes_px": [
+      16,
+      64
+    ],
+    "successful_renders": 654,
+    "nonempty_renders": 654,
+    "tool": "ImageMagick",
+    "source_artwork_unmodified": true
+  },
+  "visual_review": {
+    "new_asset_count": 192,
+    "new_contact_sheets": 8,
+    "backgrounds": [
+      "#ffffff",
+      "#18202b"
+    ],
+    "status": "passed",
+    "previous_135_assets_reviewed": true,
+    "application_screenshots_used": false,
+    "reviewed_new_assets": 192,
+    "observations": [
+      "Flatcar CNCF icon files contain the project wordmark and are classified accordingly.",
+      "Original opaque backgrounds and native palette differences are retained and documented.",
+      "White/light ink can vanish on white and black/dark ink can vanish on dark backgrounds; choose the matching background.",
+      "Wordmarks and fine-detail marks remain legible only at larger sizes; nonempty rendering does not guarantee small-size readability."
+    ]
+  },
+  "licenses": {
+    "collection_notices": 8,
+    "official_assets_have_explicit_publisher_status": true
+  },
+  "observed_svg_tags": {
+    "svg": 311,
+    "path": 1107,
+    "g": 74,
+    "rect": 39,
+    "defs": 36,
+    "clipPath": 27,
+    "linearGradient": 66,
+    "stop": 326,
+    "circle": 72,
+    "radialGradient": 91,
+    "filter": 13,
+    "feGaussianBlur": 13,
+    "ellipse": 7,
+    "title": 9,
+    "metadata": 6,
+    "RDF": 6,
+    "Work": 6,
+    "format": 6,
+    "type": 6,
+    "creator": 1,
+    "Agent": 3,
+    "license": 1,
+    "date": 1,
+    "contributor": 1,
+    "publisher": 1,
+    "description": 1,
+    "License": 1,
+    "permits": 3,
+    "namedview": 1,
+    "style": 4,
+    "polygon": 4,
+    "use": 2
+  }
+}

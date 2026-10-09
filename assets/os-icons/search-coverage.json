@@ -1,0 +1,3367 @@
+{
+  "schema_version": 1,
+  "retrieved_at": "2026-10-09T01:00:59+00:00",
+  "scope": "Follow-up missing-icon audit plus BSD, appliances, platforms and desktop environments; not an exhaustive list of every operating system.",
+  "original_asset_count": 135,
+  "new_asset_count": 192,
+  "new_system_count": 121,
+  "counts": {
+    "systems": 177,
+    "assets": 327,
+    "formats": {
+      "svg": 311,
+      "png": 16
+    },
+    "platforms": {
+      "linux": 114,
+      "macos": 1,
+      "windows": 4,
+      "appliances": 15,
+      "platforms": 14,
+      "bsd": 7,
+      "mobile": 4,
+      "other": 7,
+      "desktop": 11
+    },
+    "variants": {
+      "color": 151,
+      "light": 74,
+      "dark": 71,
+      "original": 29,
+      "black": 1,
+      "inverted": 1
+    }
+  },
+  "checks": [
+    {
+      "id": "absolute",
+      "name": "Absolute Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Absolute Linux logo SVG",
+        "Absolute Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-absolute.svg"
+      ],
+      "assets": [
+        "linux/absolute/papirus-absolute.svg"
+      ],
+      "preferred_asset": "linux/absolute/papirus-absolute.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "academix",
+      "name": "AcademiX GNU/Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "AcademiX GNU/Linux logo SVG",
+        "AcademiX GNU/Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-academix.svg"
+      ],
+      "assets": [
+        "linux/academix/papirus-academix.svg"
+      ],
+      "preferred_asset": "linux/academix/papirus-academix.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "aix",
+      "name": "IBM AIX",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "IBM AIX logo SVG",
+        "IBM AIX light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-aix.svg"
+      ],
+      "assets": [
+        "other/aix/papirus-aix.svg"
+      ],
+      "preferred_asset": "other/aix/papirus-aix.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "alt-linux",
+      "name": "ALT Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "ALT Linux logo SVG",
+        "ALT Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-alt-linux.svg"
+      ],
+      "assets": [
+        "linux/alt-linux/papirus-alt-linux.svg"
+      ],
+      "preferred_asset": "linux/alt-linux/papirus-alt-linux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "android",
+      "name": "Android",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "Android logo SVG",
+        "Android light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/android-robot/",
+        "https://icon-sets.iconify.design/selfhst/android-robot-light/",
+        "https://icon-sets.iconify.design/selfhst/android-robot-dark/"
+      ],
+      "assets": [
+        "mobile/android/selfhst-android-robot.svg",
+        "mobile/android/selfhst-android-robot-light.svg",
+        "mobile/android/selfhst-android-robot-dark.svg"
+      ],
+      "preferred_asset": "mobile/android/selfhst-android-robot.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "anolis-os",
+      "name": "Anolis OS (OpenAnolis mark)",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Anolis OS (OpenAnolis mark) logo SVG",
+        "Anolis OS (OpenAnolis mark) light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://openanolis.cn/anolisos"
+      ],
+      "assets": [
+        "linux/anolis-os/official-anolis-mark.png"
+      ],
+      "preferred_asset": "linux/anolis-os/official-anolis-mark.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "OpenAnolis community symbol used as a brand proxy for Anolis OS.",
+      "notes_zh": "采用 OpenAnolis 社区符号作为 Anolis OS 品牌标识。"
+    },
+    {
+      "id": "antix",
+      "name": "antiX",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "antiX logo SVG",
+        "antiX light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-antix.svg"
+      ],
+      "assets": [
+        "linux/antix/papirus-antix.svg"
+      ],
+      "preferred_asset": "linux/antix/papirus-antix.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "aosc",
+      "name": "AOSC OS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "AOSC OS logo SVG",
+        "AOSC OS light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/aosc.svg"
+      ],
+      "assets": [
+        "linux/aosc/fontlogos-aosc.svg"
+      ],
+      "preferred_asset": "linux/aosc/fontlogos-aosc.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "archbang",
+      "name": "ArchBang",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "ArchBang logo SVG",
+        "ArchBang light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-archbang.svg"
+      ],
+      "assets": [
+        "linux/archbang/papirus-archbang.svg"
+      ],
+      "preferred_asset": "linux/archbang/papirus-archbang.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "archcraft",
+      "name": "Archcraft",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Archcraft logo SVG",
+        "Archcraft light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/archcraft.svg"
+      ],
+      "assets": [
+        "linux/archcraft/fontlogos-archcraft.svg"
+      ],
+      "preferred_asset": "linux/archcraft/fontlogos-archcraft.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "archlabs",
+      "name": "ArchLabs",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "ArchLabs logo SVG",
+        "ArchLabs light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-archlabs.svg"
+      ],
+      "assets": [
+        "linux/archlabs/papirus-archlabs.svg"
+      ],
+      "preferred_asset": "linux/archlabs/papirus-archlabs.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "archman",
+      "name": "Archman",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Archman logo SVG",
+        "Archman light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-archman.svg"
+      ],
+      "assets": [
+        "linux/archman/papirus-archman.svg"
+      ],
+      "preferred_asset": "linux/archman/papirus-archman.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "arcolinux",
+      "name": "ArcoLinux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "ArcoLinux logo SVG",
+        "ArcoLinux light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/arcolinux.svg"
+      ],
+      "assets": [
+        "linux/arcolinux/fontlogos-arcolinux.svg"
+      ],
+      "preferred_asset": "linux/arcolinux/fontlogos-arcolinux.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "aryalinux",
+      "name": "AryaLinux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "AryaLinux logo SVG",
+        "AryaLinux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-aryalinux.svg"
+      ],
+      "assets": [
+        "linux/aryalinux/papirus-aryalinux.svg"
+      ],
+      "preferred_asset": "linux/aryalinux/papirus-aryalinux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "aws",
+      "name": "Amazon Web Services",
+      "kind": "cloud-platform",
+      "status": "collected",
+      "queries": [
+        "Amazon Web Services logo SVG",
+        "Amazon Web Services light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/amazon-web-services/",
+        "https://icon-sets.iconify.design/selfhst/amazon-web-services-light/",
+        "https://icon-sets.iconify.design/selfhst/amazon-web-services-dark/"
+      ],
+      "assets": [
+        "platforms/aws/selfhst-amazon-web-services.svg",
+        "platforms/aws/selfhst-amazon-web-services-light.svg",
+        "platforms/aws/selfhst-amazon-web-services-dark.svg"
+      ],
+      "preferred_asset": "platforms/aws/selfhst-amazon-web-services.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "AWS brand only; not a dedicated Amazon Linux logo.",
+      "notes_zh": "仅为 AWS 品牌，不是 Amazon Linux 专用图标。"
+    },
+    {
+      "id": "backbox",
+      "name": "BackBox",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "BackBox logo SVG",
+        "BackBox light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-backbox.svg"
+      ],
+      "assets": [
+        "linux/backbox/papirus-backbox.svg"
+      ],
+      "preferred_asset": "linux/backbox/papirus-backbox.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "bazzite",
+      "name": "Bazzite",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Bazzite logo SVG",
+        "Bazzite light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://github.com/ublue-os/bazzite/tree/083ec19961ce85eae4c16841ea3fc8a964964d9a/system_files/overrides/usr/share/icons/hicolor/scalable/places"
+      ],
+      "assets": [
+        "linux/bazzite/official-bazzite-color.svg",
+        "linux/bazzite/official-bazzite-light.svg",
+        "linux/bazzite/official-bazzite-le.svg"
+      ],
+      "preferred_asset": "linux/bazzite/official-bazzite-color.svg",
+      "native_variants": [
+        "color",
+        "light"
+      ],
+      "notes_en": "Official B controller emblem; white ink and the native LE color alternative are preserved. No native black-ink file was identified.",
+      "notes_zh": "官方 B/手柄徽记；保留白色图形和 LE 原生彩色替代版本，未发现纯黑图形文件。"
+    },
+    {
+      "id": "biglinux",
+      "name": "BigLinux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "BigLinux logo SVG",
+        "BigLinux light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/biglinux.svg"
+      ],
+      "assets": [
+        "linux/biglinux/fontlogos-biglinux.svg"
+      ],
+      "preferred_asset": "linux/biglinux/fontlogos-biglinux.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "blackarch",
+      "name": "BlackArch",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "BlackArch logo SVG",
+        "BlackArch light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://blackarch.org/"
+      ],
+      "assets": [
+        "linux/blackarch/official-blackarch.png"
+      ],
+      "preferred_asset": "linux/blackarch/official-blackarch.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Original wordless PNG from the project website.",
+      "notes_zh": "项目官网原始无文字 PNG。"
+    },
+    {
+      "id": "bodhi-linux",
+      "name": "Bodhi Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Bodhi Linux logo SVG",
+        "Bodhi Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-bodhi-linux.svg"
+      ],
+      "assets": [
+        "linux/bodhi-linux/papirus-bodhi-linux.svg"
+      ],
+      "preferred_asset": "linux/bodhi-linux/papirus-bodhi-linux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "bottlerocket",
+      "name": "Bottlerocket",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Bottlerocket logo SVG",
+        "Bottlerocket light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://github.com/bottlerocket-os/bottlerocket/blob/develop/TRADEMARKS.md"
+      ],
+      "assets": [
+        "linux/bottlerocket/official-bottlerocket.png"
+      ],
+      "preferred_asset": "linux/bottlerocket/official-bottlerocket.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official organization avatar explicitly linked by the project trademark policy; opaque background preserved.",
+      "notes_zh": "项目商标政策明确链接的官方组织头像；保留原图背景。"
+    },
+    {
+      "id": "budgie",
+      "name": "Budgie",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "Budgie logo SVG",
+        "Budgie light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/budgie.svg"
+      ],
+      "assets": [
+        "desktop/budgie/fontlogos-budgie.svg"
+      ],
+      "preferred_asset": "desktop/budgie/fontlogos-budgie.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "bunsenlabs",
+      "name": "BunsenLabs",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "BunsenLabs logo SVG",
+        "BunsenLabs light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-bunsenlabs.svg"
+      ],
+      "assets": [
+        "linux/bunsenlabs/papirus-bunsenlabs.svg"
+      ],
+      "preferred_asset": "linux/bunsenlabs/papirus-bunsenlabs.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "cachyos",
+      "name": "CachyOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "CachyOS logo SVG",
+        "CachyOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/cachyos/",
+        "https://icon-sets.iconify.design/selfhst/cachyos-light/",
+        "https://icon-sets.iconify.design/selfhst/cachyos-dark/"
+      ],
+      "assets": [
+        "linux/cachyos/selfhst-cachyos.svg",
+        "linux/cachyos/selfhst-cachyos-light.svg",
+        "linux/cachyos/selfhst-cachyos-dark.svg"
+      ],
+      "preferred_asset": "linux/cachyos/selfhst-cachyos.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "calculate-linux",
+      "name": "Calculate Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Calculate Linux logo SVG",
+        "Calculate Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-calculate-linux.svg"
+      ],
+      "assets": [
+        "linux/calculate-linux/papirus-calculate-linux.svg"
+      ],
+      "preferred_asset": "linux/calculate-linux/papirus-calculate-linux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "casaos",
+      "name": "CasaOS",
+      "kind": "server-management",
+      "status": "collected",
+      "queries": [
+        "CasaOS logo SVG",
+        "CasaOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/casaos/",
+        "https://icon-sets.iconify.design/selfhst/casaos-light/",
+        "https://icon-sets.iconify.design/selfhst/casaos-dark/"
+      ],
+      "assets": [
+        "platforms/casaos/selfhst-casaos.svg",
+        "platforms/casaos/selfhst-casaos-light.svg",
+        "platforms/casaos/selfhst-casaos-dark.svg"
+      ],
+      "preferred_asset": "platforms/casaos/selfhst-casaos.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "cinnamon",
+      "name": "Cinnamon",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "Cinnamon logo SVG",
+        "Cinnamon light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/cinnamon/"
+      ],
+      "assets": [
+        "desktop/cinnamon/thesvg-color-cinnamon.svg"
+      ],
+      "preferred_asset": "desktop/cinnamon/thesvg-color-cinnamon.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "condres",
+      "name": "Condres OS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Condres OS logo SVG",
+        "Condres OS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-condres.svg"
+      ],
+      "assets": [
+        "linux/condres/papirus-condres.svg"
+      ],
+      "preferred_asset": "linux/condres/papirus-condres.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "coreos",
+      "name": "CoreOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "CoreOS logo SVG",
+        "CoreOS light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/coreos.svg"
+      ],
+      "assets": [
+        "linux/coreos/fontlogos-coreos.svg"
+      ],
+      "preferred_asset": "linux/coreos/fontlogos-coreos.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "dietpi",
+      "name": "DietPi",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "DietPi logo SVG",
+        "DietPi light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://dietpi.com/images/"
+      ],
+      "assets": [
+        "linux/dietpi/official-dietpi.svg",
+        "linux/dietpi/official-dietpi-dark.png",
+        "linux/dietpi/official-dietpi-light.png"
+      ],
+      "preferred_asset": "linux/dietpi/official-dietpi.svg",
+      "native_variants": [
+        "color",
+        "black",
+        "inverted"
+      ],
+      "notes_en": "Official default, black and inverted artwork. Native files contain text; black/inverted are publisher names, not selfh.st ink semantics.",
+      "notes_zh": "官方默认、black 和 inverted 原图均含名称；这两个名称沿用上游，不等同 selfh.st 的图形明暗命名。"
+    },
+    {
+      "id": "docker",
+      "name": "Docker",
+      "kind": "container-platform",
+      "status": "collected",
+      "queries": [
+        "Docker logo SVG",
+        "Docker light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/docker/",
+        "https://icon-sets.iconify.design/selfhst/docker-light/",
+        "https://icon-sets.iconify.design/selfhst/docker-dark/"
+      ],
+      "assets": [
+        "platforms/docker/selfhst-docker.svg",
+        "platforms/docker/selfhst-docker-light.svg",
+        "platforms/docker/selfhst-docker-dark.svg"
+      ],
+      "preferred_asset": "platforms/docker/selfhst-docker.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "dragonflybsd",
+      "name": "DragonFly BSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "DragonFly BSD logo SVG",
+        "DragonFly BSD light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-dragonflybsd.svg"
+      ],
+      "assets": [
+        "bsd/dragonflybsd/papirus-dragonflybsd.svg"
+      ],
+      "preferred_asset": "bsd/dragonflybsd/papirus-dragonflybsd.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "flatcar",
+      "name": "Flatcar Container Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Flatcar Container Linux logo SVG",
+        "Flatcar Container Linux light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://github.com/cncf/artwork/tree/002662490acb2303c7301acc0256c00790e03e9f/projects/flatcar/icon"
+      ],
+      "assets": [
+        "linux/flatcar/cncf-flatcar-color.svg",
+        "linux/flatcar/cncf-flatcar-white.svg",
+        "linux/flatcar/cncf-flatcar-black.svg"
+      ],
+      "preferred_asset": "linux/flatcar/cncf-flatcar-color.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Official CNCF icon contains the full Flatcar name; native color/white/black artwork is preserved without cropping.",
+      "notes_zh": "CNCF 官方 icon 仍含完整 Flatcar 名称；保留原生彩色/白色/黑色图形，未裁字。"
+    },
+    {
+      "id": "freebsd",
+      "name": "FreeBSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "FreeBSD logo SVG",
+        "FreeBSD light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/freebsd/",
+        "https://icon-sets.iconify.design/selfhst/freebsd-light/",
+        "https://icon-sets.iconify.design/selfhst/freebsd-dark/"
+      ],
+      "assets": [
+        "bsd/freebsd/selfhst-freebsd.svg",
+        "bsd/freebsd/selfhst-freebsd-light.svg",
+        "bsd/freebsd/selfhst-freebsd-dark.svg"
+      ],
+      "preferred_asset": "bsd/freebsd/selfhst-freebsd.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "freedos",
+      "name": "FreeDOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "FreeDOS logo SVG",
+        "FreeDOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-freedos.svg"
+      ],
+      "assets": [
+        "other/freedos/papirus-freedos.svg"
+      ],
+      "preferred_asset": "other/freedos/papirus-freedos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "funtoo",
+      "name": "Funtoo Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Funtoo Linux logo SVG",
+        "Funtoo Linux light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://www.funtoo.org/Artwork"
+      ],
+      "assets": [
+        "linux/funtoo/official-funtoo.png"
+      ],
+      "preferred_asset": "linux/funtoo/official-funtoo.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Historical preliminary logo; the official site states the Funtoo project has ended.",
+      "notes_zh": "历史临时标志；官方网站明确说明 Funtoo 项目已结束。"
+    },
+    {
+      "id": "ghostbsd",
+      "name": "GhostBSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "GhostBSD logo SVG",
+        "GhostBSD light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-ghostbsd.svg"
+      ],
+      "assets": [
+        "bsd/ghostbsd/papirus-ghostbsd.svg"
+      ],
+      "preferred_asset": "bsd/ghostbsd/papirus-ghostbsd.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "gnome",
+      "name": "GNOME",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "GNOME logo SVG",
+        "GNOME light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/gnome/"
+      ],
+      "assets": [
+        "desktop/gnome/thesvg-color-gnome.svg"
+      ],
+      "preferred_asset": "desktop/gnome/thesvg-color-gnome.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "gnu-guix",
+      "name": "GNU Guix",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "GNU Guix logo SVG",
+        "GNU Guix light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/gnu-guix.svg"
+      ],
+      "assets": [
+        "linux/gnu-guix/fontlogos-gnu-guix.svg"
+      ],
+      "preferred_asset": "linux/gnu-guix/fontlogos-gnu-guix.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "grapheneos",
+      "name": "GrapheneOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "GrapheneOS logo SVG",
+        "GrapheneOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/grapheneos/",
+        "https://icon-sets.iconify.design/selfhst/grapheneos-light/",
+        "https://icon-sets.iconify.design/selfhst/grapheneos-dark/"
+      ],
+      "assets": [
+        "mobile/grapheneos/selfhst-grapheneos.svg",
+        "mobile/grapheneos/selfhst-grapheneos-light.svg",
+        "mobile/grapheneos/selfhst-grapheneos-dark.svg"
+      ],
+      "preferred_asset": "mobile/grapheneos/selfhst-grapheneos.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "haiku",
+      "name": "Haiku",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "Haiku logo SVG",
+        "Haiku light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/logos/haiku-icon/"
+      ],
+      "assets": [
+        "other/haiku/logos-haiku-icon.svg"
+      ],
+      "preferred_asset": "other/haiku/logos-haiku-icon.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "homedock-os",
+      "name": "HomeDock OS",
+      "kind": "server-management",
+      "status": "collected",
+      "queries": [
+        "HomeDock OS logo SVG",
+        "HomeDock OS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/homedock-os/",
+        "https://icon-sets.iconify.design/selfhst/homedock-os-light/",
+        "https://icon-sets.iconify.design/selfhst/homedock-os-dark/"
+      ],
+      "assets": [
+        "platforms/homedock-os/selfhst-homedock-os.svg",
+        "platforms/homedock-os/selfhst-homedock-os-light.svg",
+        "platforms/homedock-os/selfhst-homedock-os-dark.svg"
+      ],
+      "preferred_asset": "platforms/homedock-os/selfhst-homedock-os.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "hyperbola",
+      "name": "Hyperbola GNU/Linux-libre",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Hyperbola GNU/Linux-libre logo SVG",
+        "Hyperbola GNU/Linux-libre light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-hyperbola.svg"
+      ],
+      "assets": [
+        "linux/hyperbola/papirus-hyperbola.svg"
+      ],
+      "preferred_asset": "linux/hyperbola/papirus-hyperbola.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "hyprland",
+      "name": "Hyprland",
+      "kind": "window-manager",
+      "status": "collected",
+      "queries": [
+        "Hyprland logo SVG",
+        "Hyprland light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/hyprland/"
+      ],
+      "assets": [
+        "desktop/hyprland/thesvg-color-hyprland.svg"
+      ],
+      "preferred_asset": "desktop/hyprland/thesvg-color-hyprland.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "i3",
+      "name": "i3",
+      "kind": "window-manager",
+      "status": "collected",
+      "queries": [
+        "i3 logo SVG",
+        "i3 light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/i3/"
+      ],
+      "assets": [
+        "desktop/i3/thesvg-color-i3.svg"
+      ],
+      "preferred_asset": "desktop/i3/thesvg-color-i3.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "illumos",
+      "name": "illumos",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "illumos logo SVG",
+        "illumos light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/illumos.svg"
+      ],
+      "assets": [
+        "other/illumos/fontlogos-illumos.svg"
+      ],
+      "preferred_asset": "other/illumos/fontlogos-illumos.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "ipfire",
+      "name": "IPFire",
+      "kind": "router-os",
+      "status": "collected",
+      "queries": [
+        "IPFire logo SVG",
+        "IPFire light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://www.ipfire.org/docs/press/branding"
+      ],
+      "assets": [
+        "appliances/ipfire/official-ipfire.svg",
+        "appliances/ipfire/official-ipfire-light.svg",
+        "appliances/ipfire/official-ipfire-dark.svg"
+      ],
+      "preferred_asset": "appliances/ipfire/official-ipfire.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Current official full-name logo; publisher requires the full logo, so the name is preserved.",
+      "notes_zh": "当前官方名称标志；品牌页要求使用完整标志，因此保留文字。"
+    },
+    {
+      "id": "k3os",
+      "name": "k3OS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "k3OS logo SVG",
+        "k3OS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/rancher-k3os/",
+        "https://icon-sets.iconify.design/selfhst/rancher-k3os-light/",
+        "https://icon-sets.iconify.design/selfhst/rancher-k3os-dark/"
+      ],
+      "assets": [
+        "linux/k3os/selfhst-rancher-k3os.svg",
+        "linux/k3os/selfhst-rancher-k3os-light.svg",
+        "linux/k3os/selfhst-rancher-k3os-dark.svg"
+      ],
+      "preferred_asset": "linux/k3os/selfhst-rancher-k3os.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "kaos",
+      "name": "KaOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "KaOS logo SVG",
+        "KaOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-kaos.svg"
+      ],
+      "assets": [
+        "linux/kaos/papirus-kaos.svg"
+      ],
+      "preferred_asset": "linux/kaos/papirus-kaos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "kde",
+      "name": "KDE",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "KDE logo SVG",
+        "KDE light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/kde/"
+      ],
+      "assets": [
+        "desktop/kde/thesvg-color-kde.svg"
+      ],
+      "preferred_asset": "desktop/kde/thesvg-color-kde.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "knoppix",
+      "name": "Knoppix",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Knoppix logo SVG",
+        "Knoppix light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-knoppix.svg"
+      ],
+      "assets": [
+        "linux/knoppix/papirus-knoppix.svg"
+      ],
+      "preferred_asset": "linux/knoppix/papirus-knoppix.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "korora",
+      "name": "Korora",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Korora logo SVG",
+        "Korora light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-korora.svg"
+      ],
+      "assets": [
+        "linux/korora/papirus-korora.svg"
+      ],
+      "preferred_asset": "linux/korora/papirus-korora.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "kind": "container-platform",
+      "status": "collected",
+      "queries": [
+        "Kubernetes logo SVG",
+        "Kubernetes light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/kubernetes/",
+        "https://icon-sets.iconify.design/selfhst/kubernetes-light/",
+        "https://icon-sets.iconify.design/selfhst/kubernetes-dark/"
+      ],
+      "assets": [
+        "platforms/kubernetes/selfhst-kubernetes.svg",
+        "platforms/kubernetes/selfhst-kubernetes-light.svg",
+        "platforms/kubernetes/selfhst-kubernetes-dark.svg"
+      ],
+      "preferred_asset": "platforms/kubernetes/selfhst-kubernetes.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "libreelec",
+      "name": "LibreELEC",
+      "kind": "media-os",
+      "status": "collected",
+      "queries": [
+        "LibreELEC logo SVG",
+        "LibreELEC light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://forum.libreelec.tv/"
+      ],
+      "assets": [
+        "appliances/libreelec/official-libreelec.png"
+      ],
+      "preferred_asset": "appliances/libreelec/official-libreelec.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official forum logo contains the project name.",
+      "notes_zh": "官方论坛标志含项目名称。"
+    },
+    {
+      "id": "linux-lite",
+      "name": "Linux Lite",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Linux Lite logo SVG",
+        "Linux Lite light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-linux-lite.svg"
+      ],
+      "assets": [
+        "linux/linux-lite/papirus-linux-lite.svg"
+      ],
+      "preferred_asset": "linux/linux-lite/papirus-linux-lite.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "livinity",
+      "name": "Livinity",
+      "kind": "server-management",
+      "status": "collected",
+      "queries": [
+        "Livinity logo SVG",
+        "Livinity light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/livinity/",
+        "https://icon-sets.iconify.design/selfhst/livinity-light/",
+        "https://icon-sets.iconify.design/selfhst/livinity-dark/"
+      ],
+      "assets": [
+        "platforms/livinity/selfhst-livinity.svg",
+        "platforms/livinity/selfhst-livinity-light.svg",
+        "platforms/livinity/selfhst-livinity-dark.svg"
+      ],
+      "preferred_asset": "platforms/livinity/selfhst-livinity.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "lxde",
+      "name": "LXDE",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "LXDE logo SVG",
+        "LXDE light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/lxde.svg"
+      ],
+      "assets": [
+        "desktop/lxde/fontlogos-lxde.svg"
+      ],
+      "preferred_asset": "desktop/lxde/fontlogos-lxde.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "lxle",
+      "name": "LXLE",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "LXLE logo SVG",
+        "LXLE light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-lxle.svg"
+      ],
+      "assets": [
+        "linux/lxle/papirus-lxle.svg"
+      ],
+      "preferred_asset": "linux/lxle/papirus-lxle.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "lxqt",
+      "name": "LXQt",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "LXQt logo SVG",
+        "LXQt light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/lxqt.svg"
+      ],
+      "assets": [
+        "desktop/lxqt/fontlogos-lxqt.svg"
+      ],
+      "preferred_asset": "desktop/lxqt/fontlogos-lxqt.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "madlinux",
+      "name": "MadLinux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "MadLinux logo SVG",
+        "MadLinux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-madlinux.svg"
+      ],
+      "assets": [
+        "linux/madlinux/papirus-madlinux.svg"
+      ],
+      "preferred_asset": "linux/madlinux/papirus-madlinux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "mageia",
+      "name": "Mageia",
+      "kind": "distribution-brand",
+      "status": "collected",
+      "queries": [
+        "Mageia logo SVG",
+        "Mageia light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol",
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/logos/mageia/",
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/mageia.svg"
+      ],
+      "assets": [
+        "linux/mageia/logos-mageia.svg",
+        "linux/mageia/fontlogos-mageia.svg"
+      ],
+      "preferred_asset": "linux/mageia/fontlogos-mageia.svg",
+      "native_variants": [
+        "color",
+        "original"
+      ],
+      "notes_en": "Wordless Font Logos symbol preferred; original Iconify full-name logo retained.",
+      "notes_zh": "优先无文字 Font Logos 符号，保留原始 Iconify 名称标志。"
+    },
+    {
+      "id": "mandriva",
+      "name": "Mandriva",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Mandriva logo SVG",
+        "Mandriva light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/mandriva.svg"
+      ],
+      "assets": [
+        "linux/mandriva/fontlogos-mandriva.svg"
+      ],
+      "preferred_asset": "linux/mandriva/fontlogos-mandriva.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "mate",
+      "name": "MATE",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "MATE logo SVG",
+        "MATE light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/mate.svg"
+      ],
+      "assets": [
+        "desktop/mate/fontlogos-mate.svg"
+      ],
+      "preferred_asset": "desktop/mate/fontlogos-mate.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "midnightbsd",
+      "name": "MidnightBSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "MidnightBSD logo SVG",
+        "MidnightBSD light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-midnightbsd.svg"
+      ],
+      "assets": [
+        "bsd/midnightbsd/papirus-midnightbsd.svg"
+      ],
+      "preferred_asset": "bsd/midnightbsd/papirus-midnightbsd.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "ms-dos",
+      "name": "MS-DOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "MS-DOS logo SVG",
+        "MS-DOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-ms-dos.svg"
+      ],
+      "assets": [
+        "other/ms-dos/papirus-ms-dos.svg"
+      ],
+      "preferred_asset": "other/ms-dos/papirus-ms-dos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "netbsd",
+      "name": "NetBSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "NetBSD logo SVG",
+        "NetBSD light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-netbsd.svg"
+      ],
+      "assets": [
+        "bsd/netbsd/papirus-netbsd.svg"
+      ],
+      "preferred_asset": "bsd/netbsd/papirus-netbsd.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Wordless flag from the Papirus community theme.",
+      "notes_zh": "优先采用 Papirus 社区主题的无文字旗帜图标。"
+    },
+    {
+      "id": "netrunner",
+      "name": "Netrunner",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Netrunner logo SVG",
+        "Netrunner light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-netrunner.svg"
+      ],
+      "assets": [
+        "linux/netrunner/papirus-netrunner.svg"
+      ],
+      "preferred_asset": "linux/netrunner/papirus-netrunner.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "omarchy",
+      "name": "Omarchy",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Omarchy logo SVG",
+        "Omarchy light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/omarchy/"
+      ],
+      "assets": [
+        "linux/omarchy/thesvg-color-omarchy.svg"
+      ],
+      "preferred_asset": "linux/omarchy/thesvg-color-omarchy.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "openbsd",
+      "name": "OpenBSD",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "OpenBSD logo SVG",
+        "OpenBSD light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/openbsd/"
+      ],
+      "assets": [
+        "bsd/openbsd/thesvg-color-openbsd.svg"
+      ],
+      "preferred_asset": "bsd/openbsd/thesvg-color-openbsd.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "opencloudos",
+      "name": "OpenCloudOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "OpenCloudOS logo SVG",
+        "OpenCloudOS light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://www.opencloudos.org/"
+      ],
+      "assets": [
+        "linux/opencloudos/official-opencloudos.png"
+      ],
+      "preferred_asset": "linux/opencloudos/official-opencloudos.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official website name logo; no confirmed standalone symbol was found in this source.",
+      "notes_zh": "官网名称标志，此来源未确认独立无文字符号。"
+    },
+    {
+      "id": "openeuler",
+      "name": "openEuler",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "openEuler logo SVG",
+        "openEuler light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/openeuler/",
+        "https://icon-sets.iconify.design/selfhst/openeuler-light/",
+        "https://icon-sets.iconify.design/selfhst/openeuler-dark/"
+      ],
+      "assets": [
+        "linux/openeuler/selfhst-openeuler.svg",
+        "linux/openeuler/selfhst-openeuler-light.svg",
+        "linux/openeuler/selfhst-openeuler-dark.svg"
+      ],
+      "preferred_asset": "linux/openeuler/selfhst-openeuler.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "openkylin",
+      "name": "openKylin",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "openKylin logo SVG",
+        "openKylin light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://www.openkylin.top/about/brand-cn.html"
+      ],
+      "assets": [
+        "linux/openkylin/official-openkylin-color.svg",
+        "linux/openkylin/official-openkylin-light.png",
+        "linux/openkylin/official-openkylin-dark.svg"
+      ],
+      "preferred_asset": "linux/openkylin/official-openkylin-color.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Official full-name logo; the native white PNG includes its black background. No cropping or recoloring.",
+      "notes_zh": "官方完整名称标志；白色 PNG 自带黑色背景，原图保留，未裁字或配色。"
+    },
+    {
+      "id": "openmandriva",
+      "name": "OpenMandriva",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "OpenMandriva logo SVG",
+        "OpenMandriva light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-openmandriva.svg"
+      ],
+      "assets": [
+        "linux/openmandriva/papirus-openmandriva.svg"
+      ],
+      "preferred_asset": "linux/openmandriva/papirus-openmandriva.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "openmediavault",
+      "name": "OpenMediaVault",
+      "kind": "nas-os",
+      "status": "collected",
+      "queries": [
+        "OpenMediaVault logo SVG",
+        "OpenMediaVault light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/openmediavault/",
+        "https://icon-sets.iconify.design/selfhst/openmediavault-light/",
+        "https://icon-sets.iconify.design/selfhst/openmediavault-dark/"
+      ],
+      "assets": [
+        "appliances/openmediavault/selfhst-openmediavault.svg",
+        "appliances/openmediavault/selfhst-openmediavault-light.svg",
+        "appliances/openmediavault/selfhst-openmediavault-dark.svg"
+      ],
+      "preferred_asset": "appliances/openmediavault/selfhst-openmediavault.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "openstack",
+      "name": "OpenStack",
+      "kind": "cloud-platform",
+      "status": "collected",
+      "queries": [
+        "OpenStack logo SVG",
+        "OpenStack light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/openstack/"
+      ],
+      "assets": [
+        "platforms/openstack/thesvg-color-openstack.svg"
+      ],
+      "preferred_asset": "platforms/openstack/thesvg-color-openstack.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "openwrt",
+      "name": "OpenWrt",
+      "kind": "router-os",
+      "status": "collected",
+      "queries": [
+        "OpenWrt logo SVG",
+        "OpenWrt light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/openwrt/",
+        "https://icon-sets.iconify.design/selfhst/openwrt-light/",
+        "https://icon-sets.iconify.design/selfhst/openwrt-dark/"
+      ],
+      "assets": [
+        "appliances/openwrt/selfhst-openwrt.svg",
+        "appliances/openwrt/selfhst-openwrt-light.svg",
+        "appliances/openwrt/selfhst-openwrt-dark.svg"
+      ],
+      "preferred_asset": "appliances/openwrt/selfhst-openwrt.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "opnsense",
+      "name": "OPNsense",
+      "kind": "router-os",
+      "status": "collected",
+      "queries": [
+        "OPNsense logo SVG",
+        "OPNsense light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/opnsense/",
+        "https://icon-sets.iconify.design/selfhst/opnsense-light/",
+        "https://icon-sets.iconify.design/selfhst/opnsense-dark/"
+      ],
+      "assets": [
+        "appliances/opnsense/selfhst-opnsense.svg",
+        "appliances/opnsense/selfhst-opnsense-light.svg",
+        "appliances/opnsense/selfhst-opnsense-dark.svg"
+      ],
+      "preferred_asset": "appliances/opnsense/selfhst-opnsense.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "oracle-linux",
+      "name": "Oracle Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Oracle Linux logo SVG",
+        "Oracle Linux light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://yum.oracle.com/"
+      ],
+      "assets": [
+        "linux/oracle-linux/official-oracle-linux.png"
+      ],
+      "preferred_asset": "linux/oracle-linux/official-oracle-linux.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official Tux robot with an Oracle wordmark; no confirmed wordless system-specific variant.",
+      "notes_zh": "官网 Tux 机器人含 Oracle 名称，未确认无文字专用版本。"
+    },
+    {
+      "id": "osmc",
+      "name": "OSMC",
+      "kind": "media-os",
+      "status": "collected",
+      "queries": [
+        "OSMC logo SVG",
+        "OSMC light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/osmc/"
+      ],
+      "assets": [
+        "appliances/osmc/thesvg-color-osmc.svg"
+      ],
+      "preferred_asset": "appliances/osmc/thesvg-color-osmc.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "parabola",
+      "name": "Parabola GNU/Linux-libre",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Parabola GNU/Linux-libre logo SVG",
+        "Parabola GNU/Linux-libre light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/parabola.svg"
+      ],
+      "assets": [
+        "linux/parabola/fontlogos-parabola.svg"
+      ],
+      "preferred_asset": "linux/parabola/fontlogos-parabola.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "pclinuxos",
+      "name": "PCLinuxOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "PCLinuxOS logo SVG",
+        "PCLinuxOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-pclinuxos.svg"
+      ],
+      "assets": [
+        "linux/pclinuxos/papirus-pclinuxos.svg"
+      ],
+      "preferred_asset": "linux/pclinuxos/papirus-pclinuxos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "pfsense",
+      "name": "pfSense",
+      "kind": "router-os",
+      "status": "collected",
+      "queries": [
+        "pfSense logo SVG",
+        "pfSense light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/pfsense/",
+        "https://icon-sets.iconify.design/selfhst/pfsense-light/",
+        "https://icon-sets.iconify.design/selfhst/pfsense-dark/"
+      ],
+      "assets": [
+        "appliances/pfsense/selfhst-pfsense.svg",
+        "appliances/pfsense/selfhst-pfsense-light.svg",
+        "appliances/pfsense/selfhst-pfsense-dark.svg"
+      ],
+      "preferred_asset": "appliances/pfsense/selfhst-pfsense.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "pisilinux",
+      "name": "Pisi Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Pisi Linux logo SVG",
+        "Pisi Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-pisilinux.svg"
+      ],
+      "assets": [
+        "linux/pisilinux/papirus-pisilinux.svg"
+      ],
+      "preferred_asset": "linux/pisilinux/papirus-pisilinux.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "postmarketos",
+      "name": "postmarketOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "postmarketOS logo SVG",
+        "postmarketOS light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/postmarketos.svg"
+      ],
+      "assets": [
+        "mobile/postmarketos/fontlogos-postmarketos.svg"
+      ],
+      "preferred_asset": "mobile/postmarketos/fontlogos-postmarketos.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "proxmox",
+      "name": "Proxmox VE",
+      "kind": "virtualization-platform",
+      "status": "collected",
+      "queries": [
+        "Proxmox VE logo SVG",
+        "Proxmox VE light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/proxmox/",
+        "https://icon-sets.iconify.design/selfhst/proxmox-light/",
+        "https://icon-sets.iconify.design/selfhst/proxmox-dark/"
+      ],
+      "assets": [
+        "platforms/proxmox/selfhst-proxmox.svg",
+        "platforms/proxmox/selfhst-proxmox-light.svg",
+        "platforms/proxmox/selfhst-proxmox-dark.svg"
+      ],
+      "preferred_asset": "platforms/proxmox/selfhst-proxmox.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "pureos",
+      "name": "PureOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "PureOS logo SVG",
+        "PureOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-pureos.svg"
+      ],
+      "assets": [
+        "linux/pureos/papirus-pureos.svg"
+      ],
+      "preferred_asset": "linux/pureos/papirus-pureos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "qemu",
+      "name": "QEMU",
+      "kind": "virtualization-platform",
+      "status": "collected",
+      "queries": [
+        "QEMU logo SVG",
+        "QEMU light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/qemu/"
+      ],
+      "assets": [
+        "platforms/qemu/thesvg-color-qemu.svg"
+      ],
+      "preferred_asset": "platforms/qemu/thesvg-color-qemu.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "rancher",
+      "name": "Rancher",
+      "kind": "container-management",
+      "status": "collected",
+      "queries": [
+        "Rancher logo SVG",
+        "Rancher light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/rancher/",
+        "https://icon-sets.iconify.design/selfhst/rancher-light/",
+        "https://icon-sets.iconify.design/selfhst/rancher-dark/"
+      ],
+      "assets": [
+        "platforms/rancher/selfhst-rancher.svg",
+        "platforms/rancher/selfhst-rancher-light.svg",
+        "platforms/rancher/selfhst-rancher-dark.svg"
+      ],
+      "preferred_asset": "platforms/rancher/selfhst-rancher.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Rancher platform brand, not a dedicated RancherOS logo.",
+      "notes_zh": "Rancher 平台标志，不是 RancherOS 专用图标。"
+    },
+    {
+      "id": "reactos",
+      "name": "ReactOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "ReactOS logo SVG",
+        "ReactOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/reactos/"
+      ],
+      "assets": [
+        "other/reactos/thesvg-color-reactos.svg"
+      ],
+      "preferred_asset": "other/reactos/thesvg-color-reactos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "retropie",
+      "name": "RetroPie",
+      "kind": "gaming-platform",
+      "status": "collected",
+      "queries": [
+        "RetroPie logo SVG",
+        "RetroPie light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/retropie/"
+      ],
+      "assets": [
+        "platforms/retropie/thesvg-color-retropie.svg"
+      ],
+      "preferred_asset": "platforms/retropie/thesvg-color-retropie.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "rhel",
+      "name": "Red Hat Enterprise Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Red Hat Enterprise Linux logo SVG",
+        "Red Hat Enterprise Linux light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/rhel/",
+        "https://icon-sets.iconify.design/selfhst/rhel-light/",
+        "https://icon-sets.iconify.design/selfhst/rhel-dark/"
+      ],
+      "assets": [
+        "linux/rhel/selfhst-rhel.svg",
+        "linux/rhel/selfhst-rhel-light.svg",
+        "linux/rhel/selfhst-rhel-dark.svg"
+      ],
+      "preferred_asset": "linux/rhel/selfhst-rhel.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "rosa",
+      "name": "ROSA Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "ROSA Linux logo SVG",
+        "ROSA Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-rosa.svg"
+      ],
+      "assets": [
+        "linux/rosa/papirus-rosa.svg"
+      ],
+      "preferred_asset": "linux/rosa/papirus-rosa.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "sabayon",
+      "name": "Sabayon",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Sabayon logo SVG",
+        "Sabayon light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/sabayon.svg"
+      ],
+      "assets": [
+        "linux/sabayon/fontlogos-sabayon.svg"
+      ],
+      "preferred_asset": "linux/sabayon/fontlogos-sabayon.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "sailfish-os",
+      "name": "Sailfish OS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "Sailfish OS logo SVG",
+        "Sailfish OS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/sailfish-os/"
+      ],
+      "assets": [
+        "mobile/sailfish-os/thesvg-color-sailfish-os.svg"
+      ],
+      "preferred_asset": "mobile/sailfish-os/thesvg-color-sailfish-os.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "salentos",
+      "name": "SalentOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "SalentOS logo SVG",
+        "SalentOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-salentos.svg"
+      ],
+      "assets": [
+        "linux/salentos/papirus-salentos.svg"
+      ],
+      "preferred_asset": "linux/salentos/papirus-salentos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "simply",
+      "name": "Simply Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Simply Linux logo SVG",
+        "Simply Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-simply.svg"
+      ],
+      "assets": [
+        "linux/simply/papirus-simply.svg"
+      ],
+      "preferred_asset": "linux/simply/papirus-simply.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "smartos",
+      "name": "SmartOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "SmartOS logo SVG",
+        "SmartOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-smartos.svg"
+      ],
+      "assets": [
+        "other/smartos/papirus-smartos.svg"
+      ],
+      "preferred_asset": "other/smartos/papirus-smartos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "steamos",
+      "name": "SteamOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "SteamOS logo SVG",
+        "SteamOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-steamos.svg"
+      ],
+      "assets": [
+        "linux/steamos/papirus-steamos.svg"
+      ],
+      "preferred_asset": "linux/steamos/papirus-steamos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "sway",
+      "name": "Sway",
+      "kind": "window-manager",
+      "status": "collected",
+      "queries": [
+        "Sway logo SVG",
+        "Sway light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/sway/"
+      ],
+      "assets": [
+        "desktop/sway/thesvg-color-sway.svg"
+      ],
+      "preferred_asset": "desktop/sway/thesvg-color-sway.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "synology",
+      "name": "Synology (DSM vendor brand)",
+      "kind": "vendor-brand",
+      "status": "collected",
+      "queries": [
+        "Synology (DSM vendor brand) logo SVG",
+        "Synology (DSM vendor brand) light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/synology/",
+        "https://icon-sets.iconify.design/selfhst/synology-light/",
+        "https://icon-sets.iconify.design/selfhst/synology-dark/"
+      ],
+      "assets": [
+        "platforms/synology/selfhst-synology.svg",
+        "platforms/synology/selfhst-synology-light.svg",
+        "platforms/synology/selfhst-synology-dark.svg"
+      ],
+      "preferred_asset": "platforms/synology/selfhst-synology.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Vendor brand only; not a dedicated DSM operating-system logo.",
+      "notes_zh": "仅为 DSM 厂商品牌，不是 DSM 专用系统图标。"
+    },
+    {
+      "id": "talos-linux",
+      "name": "Talos Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Talos Linux logo SVG",
+        "Talos Linux light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/sidero-talos/",
+        "https://icon-sets.iconify.design/selfhst/sidero-talos-light/",
+        "https://icon-sets.iconify.design/selfhst/sidero-talos-dark/"
+      ],
+      "assets": [
+        "linux/talos-linux/selfhst-sidero-talos.svg",
+        "linux/talos-linux/selfhst-sidero-talos-light.svg",
+        "linux/talos-linux/selfhst-sidero-talos-dark.svg"
+      ],
+      "preferred_asset": "linux/talos-linux/selfhst-sidero-talos.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "trisquel",
+      "name": "Trisquel GNU/Linux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Trisquel GNU/Linux logo SVG",
+        "Trisquel GNU/Linux light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/trisquel.svg"
+      ],
+      "assets": [
+        "linux/trisquel/fontlogos-trisquel.svg"
+      ],
+      "preferred_asset": "linux/trisquel/fontlogos-trisquel.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "truenas-core",
+      "name": "TrueNAS CORE",
+      "kind": "nas-os",
+      "status": "collected",
+      "queries": [
+        "TrueNAS CORE logo SVG",
+        "TrueNAS CORE light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/truenas-core/",
+        "https://icon-sets.iconify.design/selfhst/truenas-core-light/",
+        "https://icon-sets.iconify.design/selfhst/truenas-core-dark/"
+      ],
+      "assets": [
+        "appliances/truenas-core/selfhst-truenas-core.svg",
+        "appliances/truenas-core/selfhst-truenas-core-light.svg",
+        "appliances/truenas-core/selfhst-truenas-core-dark.svg"
+      ],
+      "preferred_asset": "appliances/truenas-core/selfhst-truenas-core.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "truenas-scale",
+      "name": "TrueNAS SCALE",
+      "kind": "nas-os",
+      "status": "collected",
+      "queries": [
+        "TrueNAS SCALE logo SVG",
+        "TrueNAS SCALE light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/truenas-scale/",
+        "https://icon-sets.iconify.design/selfhst/truenas-scale-light/",
+        "https://icon-sets.iconify.design/selfhst/truenas-scale-dark/"
+      ],
+      "assets": [
+        "appliances/truenas-scale/selfhst-truenas-scale.svg",
+        "appliances/truenas-scale/selfhst-truenas-scale-light.svg",
+        "appliances/truenas-scale/selfhst-truenas-scale-dark.svg"
+      ],
+      "preferred_asset": "appliances/truenas-scale/selfhst-truenas-scale.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "trueos",
+      "name": "TrueOS",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "TrueOS logo SVG",
+        "TrueOS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-trueos.svg"
+      ],
+      "assets": [
+        "bsd/trueos/papirus-trueos.svg"
+      ],
+      "preferred_asset": "bsd/trueos/papirus-trueos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "tuxedo-os",
+      "name": "TUXEDO OS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "TUXEDO OS logo SVG",
+        "TUXEDO OS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-tuxedo-os.svg"
+      ],
+      "assets": [
+        "linux/tuxedo-os/papirus-tuxedo-os.svg"
+      ],
+      "preferred_asset": "linux/tuxedo-os/papirus-tuxedo-os.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "ubuntu-budgie",
+      "name": "Ubuntu Budgie",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Ubuntu Budgie logo SVG",
+        "Ubuntu Budgie light dark icon"
+      ],
+      "source_classes": [
+        "community-theme",
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-ubuntu-budgie.svg",
+        "https://github.com/UbuntuBudgie/budgie-artwork"
+      ],
+      "assets": [
+        "linux/ubuntu-budgie/papirus-ubuntu-budgie.svg",
+        "linux/ubuntu-budgie/official-ubuntu-budgie.png"
+      ],
+      "preferred_asset": "linux/ubuntu-budgie/papirus-ubuntu-budgie.svg",
+      "native_variants": [
+        "color",
+        "light"
+      ],
+      "notes_en": "Wordless Papirus mark preferred; official white boot wordmark also retained.",
+      "notes_zh": "优先 Papirus 无文字徽记，同时保留官方白色启动名称标志。"
+    },
+    {
+      "id": "ubuntu-studio",
+      "name": "Ubuntu Studio",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Ubuntu Studio logo SVG",
+        "Ubuntu Studio light dark icon"
+      ],
+      "source_classes": [
+        "community-theme",
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-ubuntu-studio.svg",
+        "https://ubuntustudio.org/wiki/content/ubuntu-studio/UbuntuStudio/Artwork/"
+      ],
+      "assets": [
+        "linux/ubuntu-studio/papirus-ubuntu-studio.svg",
+        "linux/ubuntu-studio/official-studio-icon-2022_RGB.png"
+      ],
+      "preferred_asset": "linux/ubuntu-studio/papirus-ubuntu-studio.svg",
+      "native_variants": [
+        "color",
+        "light"
+      ],
+      "notes_en": "Colored Papirus mark and official 2022 white standalone symbol.",
+      "notes_zh": "保留 Papirus 彩色徽记和官方 2022 白色独立符号。"
+    },
+    {
+      "id": "ultimate-edition",
+      "name": "Ultimate Edition",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Ultimate Edition logo SVG",
+        "Ultimate Edition light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-ultimate-edition.svg"
+      ],
+      "assets": [
+        "linux/ultimate-edition/papirus-ultimate-edition.svg"
+      ],
+      "preferred_asset": "linux/ultimate-edition/papirus-ultimate-edition.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "umbrelos",
+      "name": "umbrelOS",
+      "kind": "server-os",
+      "status": "collected",
+      "queries": [
+        "umbrelOS logo SVG",
+        "umbrelOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/umbrelos/",
+        "https://icon-sets.iconify.design/selfhst/umbrelos-light/",
+        "https://icon-sets.iconify.design/selfhst/umbrelos-dark/"
+      ],
+      "assets": [
+        "appliances/umbrelos/selfhst-umbrelos.svg",
+        "appliances/umbrelos/selfhst-umbrelos-light.svg",
+        "appliances/umbrelos/selfhst-umbrelos-dark.svg"
+      ],
+      "preferred_asset": "appliances/umbrelos/selfhst-umbrelos.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "unraid",
+      "name": "Unraid",
+      "kind": "nas-os",
+      "status": "collected",
+      "queries": [
+        "Unraid logo SVG",
+        "Unraid light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/unraid/",
+        "https://icon-sets.iconify.design/selfhst/unraid-light/",
+        "https://icon-sets.iconify.design/selfhst/unraid-dark/"
+      ],
+      "assets": [
+        "appliances/unraid/selfhst-unraid.svg",
+        "appliances/unraid/selfhst-unraid-light.svg",
+        "appliances/unraid/selfhst-unraid-dark.svg"
+      ],
+      "preferred_asset": "appliances/unraid/selfhst-unraid.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "uos",
+      "name": "UnionTech UOS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "UnionTech UOS logo SVG",
+        "UnionTech UOS light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://home.uniontech.com/"
+      ],
+      "assets": [
+        "linux/uos/official-uos.png"
+      ],
+      "preferred_asset": "linux/uos/official-uos.png",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official UOS Home website logo; contains the product name.",
+      "notes_zh": "UOS 家庭版官网标志，含产品名称。"
+    },
+    {
+      "id": "vanilla-os",
+      "name": "Vanilla OS",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Vanilla OS logo SVG",
+        "Vanilla OS light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-vanilla-os.svg"
+      ],
+      "assets": [
+        "linux/vanilla-os/papirus-vanilla-os.svg"
+      ],
+      "preferred_asset": "linux/vanilla-os/papirus-vanilla-os.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "vmware-esx",
+      "name": "VMware ESX",
+      "kind": "virtualization-platform",
+      "status": "collected",
+      "queries": [
+        "VMware ESX logo SVG",
+        "VMware ESX light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/vmware-esx/",
+        "https://icon-sets.iconify.design/selfhst/vmware-esx-light/",
+        "https://icon-sets.iconify.design/selfhst/vmware-esx-dark/"
+      ],
+      "assets": [
+        "platforms/vmware-esx/selfhst-vmware-esx.svg",
+        "platforms/vmware-esx/selfhst-vmware-esx-light.svg",
+        "platforms/vmware-esx/selfhst-vmware-esx-dark.svg"
+      ],
+      "preferred_asset": "platforms/vmware-esx/selfhst-vmware-esx.svg",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "volumio",
+      "name": "Volumio",
+      "kind": "media-os",
+      "status": "collected",
+      "queries": [
+        "Volumio logo SVG",
+        "Volumio light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://volumio.com/media-kit/"
+      ],
+      "assets": [
+        "appliances/volumio/official-volumio-pack-volumio-icon.png",
+        "appliances/volumio/official-volumio-pack-logo-circle-white-transparent.png",
+        "appliances/volumio/official-volumio-pack-logo-circle-grey-transparent.png"
+      ],
+      "preferred_asset": "appliances/volumio/official-volumio-pack-volumio-icon.png",
+      "native_variants": [
+        "color",
+        "light",
+        "dark"
+      ],
+      "notes_en": "Wordless symbols from the official media ZIP; the dark variant is the publisher grey symbol.",
+      "notes_zh": "官方媒体 ZIP 内的无文字符号；dark 条目采用上游 grey 符号。"
+    },
+    {
+      "id": "voyager",
+      "name": "Voyager Live",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "Voyager Live logo SVG",
+        "Voyager Live light dark icon"
+      ],
+      "source_classes": [
+        "community-theme"
+      ],
+      "source_urls": [
+        "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/blob/bf539287ef5dc18529424a02cccee76175920a6f/Papirus/64x64/apps/distributor-logo-voyager.svg"
+      ],
+      "assets": [
+        "linux/voyager/papirus-voyager.svg"
+      ],
+      "preferred_asset": "linux/voyager/papirus-voyager.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Community Papirus artwork; inclusion does not establish current release/support status.",
+      "notes_zh": "Papirus 社区图标；收集不代表该系统仍在发布或维护。"
+    },
+    {
+      "id": "vyos",
+      "name": "VyOS",
+      "kind": "router-os",
+      "status": "collected",
+      "queries": [
+        "VyOS logo SVG",
+        "VyOS light dark icon"
+      ],
+      "source_classes": [
+        "official-brand"
+      ],
+      "source_urls": [
+        "https://vyos.io/"
+      ],
+      "assets": [
+        "appliances/vyos/official-vyos.svg"
+      ],
+      "preferred_asset": "appliances/vyos/official-vyos.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "Official website V favicon, preserved as a vector.",
+      "notes_zh": "官网 V 形 favicon，保留原始矢量。"
+    },
+    {
+      "id": "xen-orchestra",
+      "name": "Xen Orchestra",
+      "kind": "virtualization-management",
+      "status": "collected",
+      "queries": [
+        "Xen Orchestra logo SVG",
+        "Xen Orchestra light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/xen-orchestra/"
+      ],
+      "assets": [
+        "platforms/xen-orchestra/selfhst-xen-orchestra.svg"
+      ],
+      "preferred_asset": "platforms/xen-orchestra/selfhst-xen-orchestra.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "xerolinux",
+      "name": "XeroLinux",
+      "kind": "distribution",
+      "status": "collected",
+      "queries": [
+        "XeroLinux logo SVG",
+        "XeroLinux light dark icon"
+      ],
+      "source_classes": [
+        "community-symbol"
+      ],
+      "source_urls": [
+        "https://github.com/lukas-w/font-logos/blob/d3bf5d299e54595db1b19681a0cc57ab10454857/vectors/xerolinux.svg"
+      ],
+      "assets": [
+        "linux/xerolinux/fontlogos-xerolinux.svg"
+      ],
+      "preferred_asset": "linux/xerolinux/fontlogos-xerolinux.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Original monochrome community symbol; no native light/dark pair in this source. Inclusion does not establish current release/support status.",
+      "notes_zh": "原始社区单色符号，此来源没有独立 light/dark 变体；收集不代表仍在发布或维护。"
+    },
+    {
+      "id": "xfce",
+      "name": "Xfce",
+      "kind": "desktop-environment",
+      "status": "collected",
+      "queries": [
+        "Xfce logo SVG",
+        "Xfce light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/thesvg-color/xfce/"
+      ],
+      "assets": [
+        "desktop/xfce/thesvg-color-xfce.svg"
+      ],
+      "preferred_asset": "desktop/xfce/thesvg-color-xfce.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "yunohost",
+      "name": "YunoHost",
+      "kind": "server-os",
+      "status": "collected",
+      "queries": [
+        "YunoHost logo SVG",
+        "YunoHost light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/yunohost/",
+        "https://icon-sets.iconify.design/selfhst/yunohost-light/",
+        "https://icon-sets.iconify.design/selfhst/yunohost-dark/"
+      ],
+      "assets": [
+        "appliances/yunohost/selfhst-yunohost.svg",
+        "appliances/yunohost/selfhst-yunohost-light.svg",
+        "appliances/yunohost/selfhst-yunohost-dark.svg"
+      ],
+      "preferred_asset": "appliances/yunohost/selfhst-yunohost.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "zimaos",
+      "name": "ZimaOS",
+      "kind": "nas-os",
+      "status": "collected",
+      "queries": [
+        "ZimaOS logo SVG",
+        "ZimaOS light dark icon"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-sets.iconify.design/selfhst/zimaos/",
+        "https://icon-sets.iconify.design/selfhst/zimaos-light/",
+        "https://icon-sets.iconify.design/selfhst/zimaos-dark/"
+      ],
+      "assets": [
+        "appliances/zimaos/selfhst-zimaos.svg",
+        "appliances/zimaos/selfhst-zimaos-light.svg",
+        "appliances/zimaos/selfhst-zimaos-dark.svg"
+      ],
+      "preferred_asset": "appliances/zimaos/selfhst-zimaos.svg",
+      "native_variants": [
+        "original",
+        "light",
+        "dark"
+      ],
+      "notes_en": "",
+      "notes_zh": ""
+    },
+    {
+      "id": "amazon-linux",
+      "name": "Amazon Linux",
+      "status": "no-confirmed-dedicated-mark",
+      "queries": [
+        "Amazon Linux logo SVG",
+        "Amazon Linux AMI logo PNG",
+        "Amazon Linux official logo"
+      ],
+      "source_urls": [
+        "https://gallery.ecr.aws/amazonlinux/",
+        "https://github.com/fastfetch-cli/fastfetch/issues/566",
+        "https://aws.amazon.com/linux/"
+      ],
+      "related_brand_assets": [
+        "platforms/aws/selfhst-amazon-web-services.svg",
+        "platforms/aws/selfhst-amazon-web-services-light.svg",
+        "platforms/aws/selfhst-amazon-web-services-dark.svg"
+      ],
+      "notes_en": "The inspected sources identify AWS branding or terminal ASCII artwork; no confirmed dedicated SVG/PNG symbol was selected. AWS assets are stored as a cloud-platform brand.",
+      "notes_zh": "检查到 AWS 通用品牌或终端 ASCII 图形，未确认独立 SVG/PNG 系统符号；AWS 图标单列云平台品牌。"
+    },
+    {
+      "id": "rancheros",
+      "name": "RancherOS",
+      "status": "no-confirmed-dedicated-mark",
+      "queries": [
+        "RancherOS logo SVG",
+        "RancherOS official branding"
+      ],
+      "source_urls": [
+        "https://github.com/rancher/os",
+        "https://rancher.com/"
+      ],
+      "related_brand_assets": [
+        "platforms/rancher/selfhst-rancher.svg",
+        "platforms/rancher/selfhst-rancher-light.svg",
+        "platforms/rancher/selfhst-rancher-dark.svg"
+      ],
+      "notes_en": "No dedicated system artwork was identified in the inspected project tree; Rancher platform branding is separately collected.",
+      "notes_zh": "检查的项目树中未确认专用系统图形；另行收集 Rancher 平台品牌，未冒充专用系统图标。"
+    },
+    {
+      "id": "synology-dsm",
+      "name": "Synology DSM",
+      "status": "vendor-brand-only",
+      "queries": [
+        "Synology DSM logo",
+        "Synology DSM icon SVG"
+      ],
+      "source_urls": [
+        "https://www.synology.com/dsm",
+        "https://icon-sets.iconify.design/?query=Synology"
+      ],
+      "related_brand_assets": [
+        "platforms/synology/selfhst-synology.svg",
+        "platforms/synology/selfhst-synology-light.svg",
+        "platforms/synology/selfhst-synology-dark.svg"
+      ],
+      "notes_en": "Only the vendor brand was selected, explicitly labelled as such.",
+      "notes_zh": "本轮选取厂商品牌并明确标注，未将其称为 DSM 专用图标。"
+    }
+  ],
+  "exclusions": [
+    {
+      "name": "Endless (selfhst:endless)",
+      "reason": "Self-hosted application; not a verified Endless OS identity."
+    },
+    {
+      "name": "Apache Kylin",
+      "reason": "Analytics project; not openKylin."
+    },
+    {
+      "name": "token:uos",
+      "reason": "Cryptocurrency token; not UnionTech UOS."
+    }
+  ],
+  "variant_policy": "Save available native artwork; absence means no matching native variant was identified in the inspected source. Do not manufacture recolored copies."
+}

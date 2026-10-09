@@ -1,0 +1,27 @@
+Official publisher artwork sources
+
+Copyright and trademarks remain with their respective publishers. These original files were downloaded for identification and selection in AxSSH.
+This source group has no common copyright license. A source link or a software repository license is not, by itself, an explicit license for every brand asset.
+Where the inspected source does not specify an asset copyright license, the manifest records asset_license_status as not-explicitly-stated rather than assigning MIT, CC0 or the repository code license.
+Per-publisher branding policies and source pages:
+
+blackarch: https://blackarch.org/
+oracle-linux: https://www.oracle.com/legal/logos/
+bazzite: https://github.com/ublue-os/bazzite
+openkylin: https://www.openkylin.top/about/brand_specifications-cn.html
+anolis-os: https://openanolis.cn/anolisos
+opencloudos: https://www.opencloudos.org/
+uos: https://home.uniontech.com/
+dietpi: https://dietpi.com/images/
+bottlerocket: https://github.com/bottlerocket-os/bottlerocket/blob/develop/TRADEMARKS.md
+ubuntu-budgie: https://github.com/UbuntuBudgie/budgie-artwork
+ubuntu-studio: https://ubuntustudio.org/wiki/content/ubuntu-studio/UbuntuStudio/Artwork/
+ipfire: https://www.ipfire.org/docs/press/branding
+vyos: https://vyos.io/
+libreelec: https://forum.libreelec.tv/
+volumio: https://volumio.com/media-kit/
+funtoo: https://www.funtoo.org/Artwork
+
+Bottlerocket explicitly links the downloaded avatar from its TRADEMARKS.md policy. The original policy is preserved in POLICY-bottlerocket.md.
+Bazzite repository license is preserved in LICENSE-bazzite-repository.txt as repository context; this does not assert that it grants trademark rights.
+Official logo files are byte-for-byte originals. File naming changes do not alter the artwork. Original source filenames/URLs and archive membership are retained in manifest.json.

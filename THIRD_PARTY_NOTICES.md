@@ -49,6 +49,40 @@ The Rust implementation uses the locked `image`, `freedesktop-icons`,
 targets. They remain under the license terms declared by their respective
 copyright holders and recorded in the Cargo dependency metadata.
 
+## Operating-System And Distribution Icon Assets
+
+The SVG/PNG files under `assets/os-icons/` were obtained through Iconify,
+publisher websites and official repositories, and community icon projects.
+The collection authors and licenses are:
+
+- selfh.st/icons by selfh.st: CC BY 4.0.
+- theSVG by thesvg.org: MIT.
+- SVG Logos by Gil Barbara: CC0 1.0 Universal.
+- Skill Icons by tandpfun: MIT.
+- Papirus icon theme by the Papirus Development Team: GNU GPL version 3.
+- Font Logos by Lukas W. and contributors: The Unlicense.
+
+CNCF artwork follows the Linux Foundation trademark usage guidelines, preserved
+in `assets/os-icons/licenses/NOTICE-cncf-artwork.txt`. Publisher originals have
+individual branding terms and no common asset copyright license. Their source
+pages and policy links are recorded in
+`assets/os-icons/licenses/NOTICE-official-branding.txt` and per-asset metadata.
+An unspecified asset license is explicitly recorded rather than replaced by
+MIT, CC0, or a software repository's code license.
+
+Original publisher/community files are unmodified; Iconify bodies only receive
+an SVG wrapper. Collection attribution,
+original license notices, per-icon source links, source revisions/package
+integrity, and hashes are preserved in the
+[resource catalog](assets/os-icons/README.md),
+[Chinese catalog](assets/os-icons/README.zh.md), and
+[manifest](assets/os-icons/manifest.json). The
+[search coverage](assets/os-icons/search-coverage.json) distinguishes dedicated
+system marks from generic vendor/platform branding and unconfirmed results.
+Preserve the corresponding notices
+and attribution when distributing these assets. Brand trademarks remain with
+their respective owners.
+
 ## Cargo Dependencies
 
 Other Rust dependencies resolved by `Cargo.lock` remain under the license terms

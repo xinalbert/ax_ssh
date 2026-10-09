@@ -476,3 +476,13 @@
 - 关键结论：每步使用 `Up/Down + Home` 请求目标行首。不同长度行和空行的本机 copy-mode 实验从 14,4 开始，上移三步为 0,3 / 0,2 / 0,1，下移三步为 0,2 / 0,3 / 0,4；每一步均为第 0 列。测试 server 已清理，无用户 tmux 配置修改。
 - 对实施计划的影响：本条替代此前前置 Home 的实施结论；输入策略按完整组合逐步重复，不保留旧顺序分支，不覆盖本地绘制光标。设置保留默认关闭，本轮无新增联网检索。
 - 未解决问题：实际远端自定义按键绑定或应用模式可能改变 Home 含义；GUI 和目标程序行为仍需用户验收，不能承诺所有程序效果相同。
+
+## 2026-10-09 系统图标官网与社区来源补查
+
+- 时间：2026-10-09 08:56 +0800
+- 检索问题：Iconify 未覆盖的发行版和非发行版系统，能否取得无文字图标及上游原生配色变体？
+- 检索原因：用户允许全网搜索并扩展到 BSD、NAS、路由、虚拟化等系统/平台。
+- 来源列表：[openKylin 品牌资源](https://www.openkylin.top/about/brand-cn.html)、[Bazzite 官方仓库](https://github.com/ublue-os/bazzite)、[Ubuntu Studio 品牌资源](https://ubuntustudio.org/wiki/content/ubuntu-studio/UbuntuStudio/Artwork/)、[DietPi 原始图片目录](https://dietpi.com/images/)、[IPFire 品牌页](https://www.ipfire.org/docs/press/branding)、[Volumio 媒体包](https://volumio.com/media-kit/)、[CNCF artwork](https://github.com/cncf/artwork)、[Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme)、[Font Logos](https://github.com/lukas-w/font-logos)。逐项原始链接和版本将保存在 `assets/os-icons/manifest.json`。
+- 关键结论：可补齐此前多项遗漏；官网部分只提供 PNG 或带完整名称的标志。Papirus/Font Logos 可提供更多社区系统符号，但不代表官方或系统仍维护。品牌资源不能沿用 Iconify 集合许可证；原生配色名称和主题含义也必须分别记录。
+- 对实施计划的影响：扩展到 SVG/PNG，保留原文件及哈希，按系统/平台/桌面环境分类；单列官方品牌条款与社区许可；新增检索覆盖和缺口资料，不裁字或自行配色。
+- 未解决问题：Amazon Linux 与 RancherOS 暂未确认专用系统图形，通用 AWS/Rancher 品牌不得标成专用系统标志；最终选择和检查见资源清单。
