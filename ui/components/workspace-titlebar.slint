@@ -550,7 +550,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                 );
                 content-height: self.height;
 
-                TouchArea {
+                if root.apple-platform : TouchArea {
                     width: parent.width;
                     height: parent.height;
                     pointer-event(event) => {

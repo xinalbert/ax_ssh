@@ -418,17 +418,14 @@ pub(super) fn wire_window_actions(
 ) {
     let ui_for_drag = ui.as_weak();
     ui.on_start_native_window_drag(move || {
-        if window_id != MAIN_WINDOW_ID {
-            return;
-        }
         let Some(ui) = ui_for_drag.upgrade() else {
             return;
         };
         use slint::winit_030::WinitWindowAccessor;
         match ui.window().with_winit_window(|window| window.drag_window()) {
             Some(Ok(())) => {}
-            Some(Err(error)) => warn!(%error, "failed to drag the main window"),
-            None => warn!("main window is unavailable for native dragging"),
+            Some(Err(error)) => warn!(%window_id, %error, "failed to drag the window"),
+            None => warn!(%window_id, "window is unavailable for native dragging"),
         }
     });
 

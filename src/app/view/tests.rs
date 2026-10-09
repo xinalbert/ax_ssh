@@ -187,6 +187,88 @@ impl LayoutTestHarness {
 }
 
 #[test]
+fn desktop_main_window_drags_from_menu_titlebar_only() {
+    window_drag_gestures(false);
+}
+
+#[test]
+fn desktop_detached_window_drags_from_its_titlebar() {
+    window_drag_gestures(true);
+}
+
+fn window_drag_gestures(detached: bool) {
+    std::thread::spawn(move || {
+        use slint::platform::{PointerEventButton, WindowAdapter, WindowEvent};
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_detached_window(detached);
+        ui.set_sidebar_width(220);
+        ui.set_workspace_tabs(ModelRc::new(VecModel::from(vec![WorkspaceTabRow {
+            id: "test-tab".into(),
+            title: "Test tab".into(),
+            kind: "settings".into(),
+            connected: false,
+        }])));
+        let drags = Rc::new(Cell::new(0));
+        let received_drags = drags.clone();
+        ui.on_start_native_window_drag(move || received_drags.set(received_drags.get() + 1));
+        let activated = Rc::new(RefCell::new(Vec::new()));
+        let received_tabs = activated.clone();
+        ui.on_activate_tab(move |id| received_tabs.borrow_mut().push(id));
+
+        ui.show().expect("headless window should show");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+        let click = |x, y, button| {
+            let position = slint::LogicalPosition::new(x, y);
+            harness
+                .window
+                .window()
+                .dispatch_event(WindowEvent::PointerMoved { position });
+            harness
+                .window
+                .window()
+                .dispatch_event(WindowEvent::PointerPressed { position, button });
+            harness
+                .window
+                .window()
+                .dispatch_event(WindowEvent::PointerReleased { position, button });
+        };
+
+        click(600.0, 16.0, PointerEventButton::Left);
+        assert_eq!(
+            drags.get(),
+            1,
+            "titlebar blank must request native dragging"
+        );
+        click(600.0, 16.0, PointerEventButton::Right);
+        assert_eq!(drags.get(), 1, "right press must not start window dragging");
+
+        click(1114.0, 16.0, PointerEventButton::Left);
+        assert_eq!(drags.get(), 1, "window controls must not start dragging");
+        if !detached {
+            click(270.0, 48.0, PointerEventButton::Left);
+            assert_eq!(
+                activated.borrow().as_slice(),
+                &[SharedString::from("test-tab")]
+            );
+            assert_eq!(drags.get(), 1, "Tab click must only activate the Tab");
+            click(700.0, 48.0, PointerEventButton::Left);
+            assert_eq!(
+                drags.get(),
+                1,
+                "Windows/Linux Tab-row blank must not drag the window"
+            );
+        }
+    })
+    .join()
+    .expect("window gesture test thread should finish");
+}
+
+#[test]
 fn detached_sftp_geometry_ignores_the_hidden_main_sidebar() {
     std::thread::spawn(|| {
         let harness = LayoutTestHarness::new();

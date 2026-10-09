@@ -31,7 +31,7 @@ import {
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
     no-frame: !root.apple-platform;
-    resize-border-width: root.apple-platform ? 0px : 6px;
+    resize-border-width: root.apple-platform ? 0px : Theme.desktop-resize-border-width;
     title: root.detached-window && !root.active-tab-title.is-empty
         ? root.active-tab-title
         : "AxSSH";
@@ -286,7 +286,8 @@ export component AppWindow inherits Window {
     in property <string> default-open-sftp-shortcut;
     in property <bool> apple-platform: false;
     in property <bool> detached-window: false;
-    private property <length> desktop-header-height: root.apple-platform ? 0px : 32px;
+    private property <length> desktop-header-height:
+        root.apple-platform ? 0px : Theme.desktop-titlebar-height;
     // Runtime-only native activation state. It restores terminal input after
     // returning from another application or AxSSH window.
     in property <bool> window-active: true;
@@ -873,6 +874,7 @@ export component AppWindow inherits Window {
         toggle-maximize => { root.maximized = !root.maximized; }
         close => { root.close(); }
         return-workspace => { root.execute-menu-command("return-workspace", ""); }
+        start-native-window-drag => { root.start-native-window-drag(); }
     }
 
     shortcut-scope := FocusScope {

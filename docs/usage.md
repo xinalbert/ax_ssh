@@ -431,9 +431,15 @@ window.
 On Windows and Linux, the main window's menu shares the top row with the
 window controls; there is no separate visible system title bar. Drag the empty
 part of that row to move the window, or double-click it to maximize or restore.
+The right-hand controls show a minimize line, a maximize window (overlapping
+windows when maximized, to restore), and a close cross. These vector icons
+remain visible when the application font changes. Hover for the action name,
+or focus a control with Tab and activate it with Enter or Space.
 The detached window uses the same frameless controls and places Return at the
 left of its top row. Closing it still merges its workspace into the main
-window. Window titles remain available to the taskbar and window switcher.
+window. Its top-row blank area also moves that detached window. The Tab-row
+blank area never moves a Windows or Linux window. Window titles remain
+available to the taskbar and window switcher.
 
 The terminal Tab toolbar has two controls beside the saved-connection button.
 On macOS, a detached Terminal window places the same pair in its native title

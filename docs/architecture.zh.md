@@ -564,8 +564,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    仍会把未覆盖的客户区当成窗口拖动区域；因此主窗口 Winit 内容视图只允许标题栏
    高度内的红绿灯留空执行原生拖窗。Tab 下层空白区和分栏按钮前的间距在按下左键时
    都会通过 Slint 命中区显式调用 Winit 系统拖窗；Tab 与标题栏按钮仍独占各自的点击和重排手势。
-   Windows 和 Linux 的主窗口标题栏从侧栏右缘开始，Tab 条未被覆盖的空白区域也通过
-   同一个 Winit 拖窗回调移动主窗口。
+   Windows 和 Linux 的主窗口 Tab 条位于应用菜单顶栏下方并从侧栏右缘开始；其未覆盖空白区
+   只处理 Tab 选择和重排，不会移动窗口。
    macOS 独立窗口保留原有的原生标题栏布局；Windows/Linux 独立窗口使用紧凑的无边框返回/窗口控件行。
 10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
     General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
@@ -588,7 +588,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
     每个菜单按钮用 Slint `ContextMenuArea` 展开，两个菜单表面共同调用
     `execute-menu-command`，使动态启用状态和动作保持同一应用路由。六像素 winit 缩放边缘、
-    空白 `WindowMoveArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。Windows/Linux 的
+    菜单顶栏空白区的 `TouchArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。
+    该空白区的左键按下经 AppWindow 路由到当前主窗口或独立窗口的 Winit `drag_window()`；菜单、
+    Return 与窗口按钮保留各自动作。
+    窗口控件使用固定且居中的矢量路径，不依赖字体字形；最大化后显示双窗口还原图标。
+    共用 Theme token 为每个控件保留完整点击区域，Tooltip、键盘焦点、Enter/Space 和
+    无障碍默认动作都触发同一个命令。Windows/Linux 的
     独立窗口显示 Return 按钮而非主窗口业务菜单；其关闭按钮仍走 Slint 常规
     close-requested 路由并合并工作区。AppWindow 边界为终端呈现坐标和导出的 SFTP 拖放区域加上
     顶栏高度，并在原生拖放命中检测中减去该高度。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准

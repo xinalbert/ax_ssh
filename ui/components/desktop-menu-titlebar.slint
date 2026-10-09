@@ -1,11 +1,12 @@
 import { Theme } from "../theme.slint";
+import { ElidedTooltipContent } from "elided-controls.slint";
 
 component MenuTitleButton inherits FocusScope {
     in property <string> label;
     callback activated();
 
-    width: 52px;
-    height: 32px;
+    width: Theme.desktop-menu-button-width;
+    height: Theme.desktop-titlebar-height;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
@@ -35,18 +36,50 @@ component MenuTitleButton inherits FocusScope {
     }
 }
 
+enum WindowControlIcon {
+    Minimize,
+    Maximize,
+    Restore,
+    Close,
+    Return,
+}
+
+// Fixed path coordinates keep every action independent of the application font.
+component WindowControlGlyph inherits Path {
+    in property <WindowControlIcon> icon;
+    in property <color> glyph-color: Theme.text;
+
+    width: Theme.desktop-window-glyph-size;
+    height: Theme.desktop-window-glyph-size;
+    viewbox-width: 16;
+    viewbox-height: 16;
+    commands: root.icon == WindowControlIcon.Minimize ? "M 2 8.5 L 14 8.5"
+        : root.icon == WindowControlIcon.Maximize ? "M 2.5 2.5 H 13.5 V 13.5 H 2.5 Z"
+        : root.icon == WindowControlIcon.Restore
+            ? "M 5.5 5.5 V 2.5 H 13.5 V 10.5 H 10.5 M 2.5 5.5 H 10.5 V 13.5 H 2.5 Z"
+        : root.icon == WindowControlIcon.Close ? "M 3 3 L 13 13 M 13 3 L 3 13"
+        : "M 13 8 H 3 M 3 8 L 8 3 M 3 8 L 8 13";
+    fill: transparent;
+    stroke: root.glyph-color;
+    stroke-width: Theme.hairline;
+    accessible-role: none;
+}
+
 component WindowControl inherits FocusScope {
-    in property <string> symbol;
+    in property <WindowControlIcon> icon;
     in property <string> label;
     in property <bool> destructive: false;
     callback activated();
 
-    width: 44px;
-    height: 32px;
+    // Reserve the whole hit area even when the titlebar has little free space.
+    width: Theme.desktop-window-control-width;
+    height: Theme.desktop-titlebar-height;
+    horizontal-stretch: 0;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
     accessible-label: root.label;
+    accessible-action-default => { root.activated(); }
 
     Rectangle {
         background: touch.has-hover || root.has-focus
@@ -62,15 +95,27 @@ component WindowControl inherits FocusScope {
         return EventResult.reject;
     }
 
-    Text {
-        text: root.symbol;
-        color: Theme.text;
-        font-size: Theme.font-body;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    WindowControlGlyph {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        icon: root.icon;
+        glyph-color: root.destructive && (touch.has-hover || root.has-focus)
+            ? Theme.background : Theme.text;
+    }
+    if root.has-focus : Rectangle {
+        x: Theme.space-xxs;
+        y: Theme.space-xxs;
+        width: parent.width - 2 * Theme.space-xxs;
+        height: parent.height - 2 * Theme.space-xxs;
+        background: transparent;
+        border-width: Theme.hairline;
+        border-color: Theme.focus;
     }
     touch := TouchArea {
         clicked => { root.activated(); }
+    }
+    Tooltip {
+        ElidedTooltipContent { text: root.label; }
     }
 }
 
@@ -87,15 +132,16 @@ export component DesktopMenuTitlebar inherits Rectangle {
     callback toggle-maximize();
     callback close();
     callback return-workspace();
+    callback start-native-window-drag();
 
-    height: 32px;
+    height: Theme.desktop-titlebar-height;
     background: Theme.panel;
 
     HorizontalLayout {
         spacing: 0px;
 
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             background: Theme.panel;
             trigger := MenuTitleButton {
                 label: @tr("File");
@@ -149,7 +195,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Edit");
                 activated => { edit-menu.show({ x: 0px, y: root.height }); }
@@ -182,7 +228,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("View");
                 activated => { view-menu.show({ x: 0px, y: root.height }); }
@@ -198,7 +244,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Pane");
                 activated => { pane-menu.show({ x: 0px, y: root.height }); }
@@ -219,7 +265,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Window");
                 activated => { window-menu.show({ x: 0px, y: root.height }); }
@@ -252,7 +298,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if root.main-window : Rectangle {
-            width: 52px;
+            width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Help");
                 activated => { help-menu.show({ x: 0px, y: root.height }); }
@@ -273,31 +319,37 @@ export component DesktopMenuTitlebar inherits Rectangle {
             }
         }
         if !root.main-window : WindowControl {
-            symbol: "←";
+            icon: WindowControlIcon.Return;
             label: @tr("Return Workspace to Main Window");
             activated => { root.return-workspace(); }
         }
         Rectangle {
             horizontal-stretch: 1;
             background: Theme.panel;
-            WindowMoveArea {
-                TouchArea {
-                    double-clicked => { root.toggle-maximize(); }
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down
+                            && event.button == PointerEventButton.left {
+                        root.start-native-window-drag();
+                    }
                 }
+                double-clicked => { root.toggle-maximize(); }
             }
         }
         WindowControl {
-            symbol: "─";
+            icon: WindowControlIcon.Minimize;
             label: @tr("Minimize Window");
             activated => { root.minimize(); }
         }
         WindowControl {
-            symbol: root.maximized ? "❐" : "□";
+            icon: root.maximized ? WindowControlIcon.Restore : WindowControlIcon.Maximize;
             label: root.maximized ? @tr("Restore Window") : @tr("Maximize Window");
             activated => { root.toggle-maximize(); }
         }
         WindowControl {
-            symbol: "×";
+            icon: WindowControlIcon.Close;
             label: @tr("Close Window");
             destructive: true;
             activated => { root.close(); }

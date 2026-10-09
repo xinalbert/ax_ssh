@@ -938,9 +938,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
    the traffic-light clearance; other platforms keep the separator to the
    right of the sidebar.
    On Windows and Linux, the main-window title-bar row begins at the sidebar's
-   right edge. Its Slint hit area behind uncovered Tab-row space uses the same
-   Winit window-drag callback, so empty space outside Tabs can move the main
-   window there as well.
+   right edge, below the application menu titlebar. The Tab row owns only Tab
+   selection and reorder gestures; its uncovered space never starts a window
+   move.
    AppKit still treats uncovered title-bar content as a window drag region even
    when movable-window-background is disabled. The main Winit content view
    therefore permits native dragging only in the traffic-light clearance and
@@ -987,8 +987,15 @@ tab-local terminal connection notice deliberately remains non-blocking.
     top of the frameless client window. Each top-level button opens a Slint
     `ContextMenuArea`; both menu surfaces call the same `execute-menu-command`
     function, so dynamic enabled states and actions keep one application
-    route. The six-pixel winit resize border, blank `WindowMoveArea`, and
-    minimize/maximize/close controls replace native frame interactions.
+    route. The six-pixel winit resize border, a menu-titlebar blank-area
+    `TouchArea`, and minimize/maximize/close controls replace native frame
+    interactions. A left press in that blank area routes through AppWindow to
+    `drag_window()` for the current main or detached Winit window; menus,
+    Return, and window controls keep their own actions.
+    Window controls use fixed, centered vector paths rather than font glyphs;
+    maximized state selects the overlapping-window restore icon. Shared Theme
+    tokens reserve each control's full hit area. Tooltips, keyboard focus,
+    Enter/Space, and the accessibility default action expose the same command.
     Detached Windows/Linux windows show a Return control instead of the main
     business menus; their close control still invokes Slint's normal
     close-requested route and merges the workspace. The AppWindow boundary adds
