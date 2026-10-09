@@ -344,6 +344,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
             terminal_cursor_blink: false,
+            system_icons_follow_theme: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -379,6 +380,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
             terminal_cursor_blink: false,
+            system_icons_follow_theme: false,
+            local_shell_icon_override: None,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors {
@@ -410,6 +413,7 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
             terminal_cursor_blink: true,
+            system_icons_follow_theme: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -440,6 +444,8 @@ fn appearance_settings_normalize_application_and_terminal_fonts() {
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
             terminal_cursor_blink: true,
+            system_icons_follow_theme: false,
+            local_shell_icon_override: None,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColors::default(),
@@ -470,6 +476,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
             terminal_cursor_blink: true,
+            system_icons_follow_theme: false,
             focused_terminal_refresh_fps: -10,
             unfocused_terminal_refresh_fps: 999,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -1015,6 +1022,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             terminal_compact_rendering: false,
             terminal_row_render_cache: true,
             terminal_cursor_blink: false,
+            system_icons_follow_theme: false,
             focused_terminal_refresh_fps: 60,
             unfocused_terminal_refresh_fps: 4,
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -1336,6 +1344,7 @@ fn terminal_drawing_preference_defaults_and_serializes_stable_values() {
         terminal_compact_rendering: false,
         terminal_row_render_cache: false,
         terminal_cursor_blink: true,
+        system_icons_follow_theme: false,
         focused_terminal_refresh_fps: 60,
         unfocused_terminal_refresh_fps: 4,
         terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -1401,6 +1410,102 @@ fn retired_terminal_partition_strategy_is_ignored_when_loading_appearance() {
     assert!(appearance.terminal_compact_rendering);
     let serialized = serde_json::to_value(appearance).expect("appearance should serialize");
     assert!(serialized.get("terminal_partition_strategy").is_none());
+}
+
+#[test]
+fn system_icons_default_to_source_colors_in_new_and_legacy_settings() {
+    assert!(!AppearanceSettings::default().system_icons_follow_theme);
+    let legacy: SessionStore = serde_json::from_str(
+        r#"{"version":33,"settings":{"appearance":{"theme":{"mode":"dark"}}}}"#,
+    )
+    .expect("legacy settings should migrate");
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert!(!legacy.settings.appearance.system_icons_follow_theme);
+}
+
+#[test]
+fn system_icon_selection_and_detection_survive_private_store_round_trip() {
+    let directory = std::env::temp_dir().join(format!("axssh-system-icons-{}", Uuid::new_v4()));
+    let config = ConfigStore::new(directory.join("sessions.json"));
+    let mut sessions = SessionStore::default();
+    let mut profile = SessionProfile::new("Server", "server.example", "alice");
+    profile.system_icon_override = Some("ubuntu".into());
+    profile.detected_system = SystemDetection::new(&profile, "Debian 12", "debian").map(Box::new);
+    sessions.upsert(profile.clone());
+    sessions.settings.appearance.local_shell_icon_override = Some("Mac OS".into());
+    sessions.settings.appearance.normalize_in_place();
+    assert_eq!(
+        sessions
+            .settings
+            .appearance
+            .local_shell_icon_override
+            .as_deref(),
+        Some("macos")
+    );
+    config.save(&sessions).unwrap();
+    let loaded = config.load().unwrap();
+    assert_eq!(loaded.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(loaded.sessions[0], profile);
+    assert_eq!(
+        loaded
+            .settings
+            .appearance
+            .local_shell_icon_override
+            .as_deref(),
+        Some("macos")
+    );
+    let legacy: SessionStore = serde_json::from_str(r#"{"version":34,"sessions":[]}"#).unwrap();
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert!(
+        legacy
+            .settings
+            .appearance
+            .local_shell_icon_override
+            .is_none()
+    );
+    for invalid in [
+        serde_json::json!("unknown"),
+        serde_json::json!({"path":"x"}),
+    ] {
+        let mut encoded = serde_json::to_value(&sessions).unwrap();
+        encoded["settings"]["appearance"]["local_shell_icon_override"] = invalid;
+        let loaded: SessionStore = serde_json::from_value(encoded).unwrap();
+        assert!(
+            loaded
+                .settings
+                .appearance
+                .local_shell_icon_override
+                .is_none()
+        );
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn system_icons_theme_preference_survives_normalization_and_private_store_round_trip() {
+    let root = std::env::temp_dir().join(format!("axssh-icon-theme-{}", Uuid::new_v4()));
+    let config = ConfigStore::new(root.join("sessions.json"));
+    for enabled in [false, true] {
+        let mut sessions = SessionStore::default();
+        sessions.settings.appearance.system_icons_follow_theme = enabled;
+        sessions.settings.normalize_in_place();
+        assert_eq!(
+            sessions.settings.appearance.system_icons_follow_theme,
+            enabled
+        );
+        config.save(&sessions).expect("icon preference should save");
+        let loaded = config.load().expect("icon preference should load");
+        assert_eq!(
+            loaded.settings.appearance.system_icons_follow_theme,
+            enabled
+        );
+        let encoded = serde_json::to_value(&loaded).expect("settings should serialize");
+        assert_eq!(
+            encoded["settings"]["appearance"]["system_icons_follow_theme"],
+            enabled
+        );
+    }
+    fs::remove_dir_all(root).expect("icon settings fixture should be removed");
 }
 
 #[test]

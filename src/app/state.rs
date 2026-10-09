@@ -26,6 +26,7 @@ use super::local_files::{LocalDirectoryEntry, default_local_directory};
 
 mod editor;
 mod sftp;
+mod system_detection;
 mod tabs;
 pub(super) mod terminal;
 
@@ -36,8 +37,11 @@ pub(super) struct AppState {
     active_tab_id: Option<Uuid>,
     terminal_numbers: HashMap<Uuid, u32>,
     profile_mutations: HashMap<Uuid, Uuid>,
+    system_detections: HashMap<Uuid, ax_ssh::config::SystemDetection>,
+    system_release_probes: HashMap<Uuid, (Uuid, Uuid)>,
     pub(super) persistence_coordinator: Arc<PersistenceCoordinator>,
     local_terminal_number: u32,
+    pub(super) session_filter: String,
     serial_ports: Vec<SerialPortDescriptor>,
     terminal_query_palette: TerminalQueryPalette,
     ui_refresh: UiRefreshState,
@@ -150,6 +154,7 @@ pub(super) struct TerminalTabState {
     cursor_hide_deadline: Option<tokio::time::Instant>,
     pub(super) status: String,
     pub(super) connected: bool,
+    pub(super) system_release: Option<String>,
     pub(super) worker_running: bool,
     pub(super) selection_revision: i32,
     pub(super) sftp: SftpBrowserState,
@@ -494,6 +499,9 @@ pub(super) struct WorkspaceTabSummary {
     pub(super) title: String,
     pub(super) kind: &'static str,
     pub(super) connected: bool,
+    pub(super) local: bool,
+    pub(super) system_icon: Option<String>,
+    pub(super) system_release: Option<String>,
 }
 
 pub(super) struct ActiveTabSnapshot {
@@ -604,6 +612,9 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) profile_id: Option<Uuid>,
     pub(super) name: String,
     pub(super) group_name: String,
+    pub(super) system_icon_override: String,
+    pub(super) detected_system_release: String,
+    pub(super) automatic_system_icon: String,
     pub(super) protocol: &'static str,
     pub(super) host: String,
     pub(super) port: String,
@@ -634,6 +645,9 @@ impl Default for SessionEditorSnapshot {
             profile_id: None,
             name: String::new(),
             group_name: String::new(),
+            system_icon_override: String::new(),
+            detected_system_release: String::new(),
+            automatic_system_icon: "server".into(),
             protocol: "SSH",
             host: String::new(),
             port: "22".to_owned(),

@@ -1,5 +1,50 @@
 use super::*;
 
+fn persist_system_detection(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    profile_id: Uuid,
+    system: ax_ssh::config::SystemDetection,
+) {
+    let persistence = match state.lock() {
+        Ok(app) => app.persistence_coordinator.clone(),
+        Err(_) => return,
+    };
+    runtime.spawn(async move {
+        for _ in 0..300 {
+            let guard = persistence.gate.lock().await;
+            let state_for_save = state.clone();
+            let system_for_save = system.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                state_for_save
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("state lock poisoned"))?
+                    .save_system_detection(profile_id, &system_for_save)
+            })
+            .await;
+            drop(guard);
+            match result {
+                Ok(Ok(true)) => {
+                    refresh_session_models(&ui, &state);
+                    return;
+                }
+                Ok(Ok(false)) => tokio::time::sleep(Duration::from_millis(100)).await,
+                Ok(Err(error)) => {
+                    warn!(%error, %profile_id, "could not persist system icon discovery");
+                    set_status(&ui, &format!("Cannot save system icon: {error}"));
+                    return;
+                }
+                Err(error) => {
+                    warn!(%error, "system icon persistence task failed");
+                    return;
+                }
+            }
+        }
+        warn!(%profile_id, "system icon persistence deferred beyond 30 seconds");
+    });
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_session_monitor(
     runtime: &Handle,
@@ -73,6 +118,9 @@ pub(super) fn spawn_session_monitor(
                     ) else {
                         continue;
                     };
+                    if let Ok(mut app) = state.lock() {
+                        app.request_system_detection(&profile, tab_id, attempt_id);
+                    }
                     info!(tab_id = %tab_id, session_id = %profile.id, "SSH worker reported connected");
                     if active {
                         dispatch_active_snapshot(&ui, &state);
@@ -89,6 +137,35 @@ pub(super) fn spawn_session_monitor(
                             credential,
                         );
                     }
+                }
+                SshSessionEvent::SystemRelease(release) => {
+                    let system = state.lock().ok().and_then(|mut app| {
+                        app.accept_system_detection(&profile, tab_id, attempt_id, release.as_deref())
+                    });
+                    let Some(system) = system else { continue; };
+                    persist_system_detection(&runtime_for_monitor, state.clone(), ui.clone(), profile.id, system);
+                    let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            terminal.system_release = release.clone();
+                            if let Some(release) = release.as_deref() {
+                                terminal.status = format!(
+                                    "Connected to {} · {release}",
+                                    profile_endpoint(&profile)
+                                );
+                            }
+                        },
+                    ) else {
+                        continue;
+                    };
+                    if active {
+                        dispatch_active_snapshot(&ui, &state);
+                    }
+                    refresh_session_models(&ui, &state);
+                    refresh_workspace(&ui, &state);
                 }
                 SshSessionEvent::Output(output) => {
                     let data = &output.data;

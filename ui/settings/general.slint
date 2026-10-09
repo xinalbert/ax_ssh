@@ -1,10 +1,14 @@
+import { SystemIconChoiceRow, SystemIconPicker } from "../components/system-icon-picker.slint";
 import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component GeneralSettingsPage inherits SettingsPage {
+    pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     in property <string> ui-language;
+    in property <string> local-shell-icon-override;
+    in property <string> local-shell-automatic-platform;
     private property <int> selected-ui-language-index: 0;
     in property <[string]> local-shell-options;
     in-out property <string> draft-local-shell;
@@ -13,6 +17,7 @@ export component GeneralSettingsPage inherits SettingsPage {
     in-out property <int> draft-rows;
     in-out property <string> draft-credential-storage;
     callback save-ui-language(int);
+    callback save-local-shell-icon(string);
     init => { root.restore-ui-language-selection(); }
     changed ui-language => { root.restore-ui-language-selection(); }
     function restore-ui-language-selection() {
@@ -51,6 +56,18 @@ export component GeneralSettingsPage inherits SettingsPage {
                 current-index <=> root.draft-local-shell-index;
                 accessible-label: @tr("Local shell");
                 selected(value, _index) => { root.draft-local-shell = value; }
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Local shell icon");
+        description: @tr("Uses the host system by default. Changes are saved immediately.");
+        SettingsField {
+            SystemIconPicker {
+                icon-id: root.local-shell-icon-override;
+                automatic-platform: root.local-shell-automatic-platform.is-empty ? "terminal" : root.local-shell-automatic-platform;
+                choices(query) => { return root.system-icon-choices(query); }
+                selected(id) => { root.save-local-shell-icon(id); }
             }
         }
     }

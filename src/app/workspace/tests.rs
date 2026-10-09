@@ -838,7 +838,8 @@ fn overlapping_profile_mutations_are_rejected() {
         ..original.clone()
     };
 
-    commit_profile_save(&state, &saved, Some(&original), first).expect("first save should commit");
+    commit_profile_save(&state, &saved, Some(&original), first, false)
+        .expect("first save should commit");
     assert_eq!(
         state
             .lock()
@@ -862,7 +863,8 @@ fn profile_delete_waits_for_an_in_progress_mutation_to_finish() {
     let save =
         begin_profile_mutation(&state, original.id, Some(&original)).expect("save should start");
     assert!(begin_profile_mutation(&state, original.id, Some(&original)).is_err());
-    commit_profile_save(&state, &original, Some(&original), save).expect("save should commit");
+    commit_profile_save(&state, &original, Some(&original), save, false)
+        .expect("save should commit");
     let delete = begin_profile_mutation(&state, original.id, Some(&original))
         .expect("delete should start after the save finishes");
     commit_profile_delete(&state, &original, delete).expect("delete should commit");

@@ -19,9 +19,6 @@ msgstr "+"
 msgid "/dev/cu.usbserial or COM3"
 msgstr "/dev/cu.usbserial or COM3"
 
-msgid "1 character"
-msgstr "1 个字符"
-
 msgid "1-16 terminal rows per software presentation block"
 msgstr "每个软件呈现块包含 1-16 个终端行"
 
@@ -43,17 +40,8 @@ msgstr "120-260 像素"
 msgid "180-420 px when sessions are available"
 msgstr "存在会话时为 180-420 像素"
 
-msgid "2 characters"
-msgstr "2 个字符"
-
 msgid "22"
 msgstr "22"
-
-msgid "3 characters"
-msgstr "3 个字符"
-
-msgid "4 characters"
-msgstr "4 个字符"
 
 msgid "60-120 percent; 100 percent preserves terminal colors"
 msgstr "60%-120%；100% 保留终端原色"
@@ -205,9 +193,6 @@ msgstr "Canvas（尚不可用）"
 msgid "Changes take effect after restarting AxSSH"
 msgstr "重启 AxSSH 后生效"
 
-msgid "Choose 1-4 characters or show the full group name"
-msgstr "选择 1-4 个字符或显示完整组名"
-
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "选择“自定义”以直接启动此路径，不经过命令 Shell"
 
@@ -249,12 +234,6 @@ msgstr "收起传输"
 
 msgid "Collapse {0} group"
 msgstr "收起 {0} 组"
-
-msgid "Collapsed group label"
-msgstr "折叠组标签"
-
-msgid "Collapsed group label length"
-msgstr "折叠组标签长度"
 
 msgid "Color palette"
 msgstr "配色方案"
@@ -367,6 +346,9 @@ msgstr "删除 {0} 及其已保存的凭据？"
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "删除 {0}？该组中的服务器将移至“未分组”。"
 
+msgid "Detect again on next connection"
+msgstr "下次连接时重新识别"
+
 msgid "Detected key"
 msgstr "检测到的密钥"
 
@@ -378,6 +360,9 @@ msgstr "检测到的私钥"
 
 msgid "Detected serial ports"
 msgstr "检测到的串口"
+
+msgid "Detected system: {}"
+msgstr "已识别系统：{}"
 
 msgid "Diagnostics"
 msgstr "诊断信息"
@@ -501,9 +486,6 @@ msgstr "前景"
 
 msgid "Forward"
 msgstr "前进"
-
-msgid "Full name"
-msgstr "完整名称"
 
 msgid "GPU"
 msgstr "GPU"
@@ -640,11 +622,17 @@ msgstr "本地选区优先"
 msgid "Local shell"
 msgstr "本地 Shell"
 
+msgid "Local shell icon"
+msgstr "本地终端图标"
+
 msgid "Loopback only; required by MacXServer and -ac Windows servers"
 msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
 
 msgid "MOUSE"
 msgstr "鼠标"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "手动选择优先于自动识别。"
 
 msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
 msgstr "在会话侧栏中遮盖用户名和 IPv4 地址的中间字段"
@@ -723,6 +711,9 @@ msgstr "没有文件"
 
 msgid "No known local X server was found"
 msgstr "未找到已知的本地 X server"
+
+msgid "No matching system icons"
+msgstr "没有匹配的系统图标"
 
 msgid "No saved connections"
 msgstr "没有已保存的连接"
@@ -1096,11 +1087,20 @@ msgstr "回滚行数"
 msgid "Search all settings"
 msgstr "搜索所有设置"
 
+msgid "Search connections"
+msgstr "搜索连接"
+
+msgid "Search connections..."
+msgstr "搜索连接…"
+
 msgid "Search results"
 msgstr "搜索结果"
 
 msgid "Search settings"
 msgstr "搜索设置"
+
+msgid "Search system icons"
+msgstr "搜索系统图标"
 
 msgid "Secondary labels and metadata"
 msgstr "次级标签和元数据"
@@ -1282,6 +1282,9 @@ msgstr "切换 SSH/SFTP 标签页快捷键"
 msgid "System credential store"
 msgstr "系统凭据存储"
 
+msgid "System icon"
+msgstr "系统图标"
+
 msgid "TERMINAL"
 msgstr "终端"
 
@@ -1431,6 +1434,9 @@ msgstr "用于已记住的密码和在会话编辑器中新输入的密码"
 
 msgid "Username"
 msgstr "用户名"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "默认使用本机系统图标，更改后立即保存。"
 
 msgid "Vault password"
 msgstr "保险库密码"

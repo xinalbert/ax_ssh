@@ -1,3 +1,4 @@
+import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
@@ -30,6 +31,7 @@ import {
 // AppWindow is the Slint/Rust boundary. It maps the flat generated Rust API to
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
+    pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     no-frame: !root.apple-platform;
     resize-border-width: root.apple-platform ? 0px : Theme.desktop-resize-border-width;
     title: root.detached-window && !root.active-tab-title.is-empty
@@ -45,6 +47,7 @@ export component AppWindow inherits Window {
     private property <ColorScheme> standard-widget-color-scheme: Theme.widget-color-scheme;
 
     in property <[SessionGroupRow]> sessions;
+    in property <string> session-filter;
     in property <[WorkspaceTabRow]> workspace-tabs;
     in property <[ConnectableSessionRow]> connection-options;
     in property <[string]> group-options;
@@ -53,6 +56,9 @@ export component AppWindow inherits Window {
     in property <string> editor-profile-id;
     in property <string> editor-name;
     in property <string> editor-group-name;
+    in property <string> editor-system-icon-override;
+    in property <string> editor-automatic-system-icon: "server";
+    in property <string> editor-detected-system-release;
     in property <string> editor-protocol: "SSH";
     in property <string> editor-host;
     in property <string> editor-port: "22";
@@ -76,6 +82,9 @@ export component AppWindow inherits Window {
     in property <string> editor-serial-flow-control: "none";
     in property <[string]> serial-port-options;
     in property <[string]> local-shell-options;
+    in property <string> local-shell-platform;
+    in property <string> local-shell-icon-override;
+    in property <string> local-shell-automatic-platform;
     in property <string> status: "";
     in property <string> workspace-default-path: "";
     in property <[string]> recent-workspace-paths;
@@ -304,6 +313,8 @@ export component AppWindow inherits Window {
         && !root.modal-open;
     private property <WorkspaceViewState> workspace-view: {
         sessions: root.sessions,
+        session_filter: root.session-filter,
+        local_shell_platform: root.local-shell-platform,
         workspace_tabs: root.workspace-tabs,
         connection_options: root.connection-options,
         active_tab_id: root.active-tab-id,
@@ -314,7 +325,6 @@ export component AppWindow inherits Window {
         status: root.status,
         sidebar_width: root.sidebar-width,
         tab_width: root.tab-width,
-        collapsed_group_label_chars: root.collapsed-group-label-chars,
         terminal_panes: root.terminal-panes,
         terminal_dividers: root.terminal-dividers,
         sftp: {
@@ -354,6 +364,8 @@ export component AppWindow inherits Window {
         },
         settings: {
             ui_language: root.ui-language,
+            local_shell_icon_override: root.local-shell-icon-override,
+            local_shell_automatic_platform: root.local-shell-automatic-platform,
             local_shell_options: root.local-shell-options,
             application_font_family: root.application-font-family,
             application_font_options: root.application-font-options,
@@ -441,7 +453,11 @@ export component AppWindow inherits Window {
         },
         session_editor: {
             draft_id: root.editor-draft-id, profile_id: root.editor-profile-id, name: root.editor-name,
-            group_name: root.editor-group-name, protocol: root.editor-protocol,
+            group_name: root.editor-group-name,
+            system_icon_override: root.editor-system-icon-override,
+            automatic_system_icon: root.editor-automatic-system-icon,
+            detected_system_release: root.editor-detected-system-release,
+            protocol: root.editor-protocol,
             host: root.editor-host, port: root.editor-port,
             username: root.editor-username, auth_method: root.editor-auth-method,
             private_key_path: root.editor-private-key-path,
@@ -482,6 +498,7 @@ export component AppWindow inherits Window {
     };
 
     callback new-session();
+    callback session-filter-changed(string);
     callback new-session-in-group(string);
     callback edit-session(string);
     callback copy-session(string);
@@ -502,11 +519,12 @@ export component AppWindow inherits Window {
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-ui-language(int);
+    callback save-local-shell-icon(string);
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, bool,
+        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -925,6 +943,7 @@ export component AppWindow inherits Window {
             requested-settings-section: root.settings-section;
             settings-section-request-revision: root.settings-section-request-revision;
             new-session => { root.new-session(); }
+            session-filter-changed(value) => { root.session-filter-changed(value); }
             new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
             edit-session(id) => { root.edit-session(id); }
             copy-session(id) => { root.copy-session(id); }
@@ -981,15 +1000,17 @@ export component AppWindow inherits Window {
                     sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
             }
             save-ui-language(index) => { root.save-ui-language(index); }
+            save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
+            system-icon-choices(query) => { return root.system-icon-choices(query); }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
             save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                          serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                         connect-after-save) => {
+                         icon-id, reset-system, connect-after-save) => {
                 root.save-session(
                     name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                    connect-after-save,
+                    icon-id, reset-system, connect-after-save,
                 );
             }
             refresh-serial-ports => { root.refresh-serial-ports(); }

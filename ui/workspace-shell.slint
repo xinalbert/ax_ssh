@@ -1,3 +1,4 @@
+import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
 import { Theme } from "theme.slint";
 import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
 import { SettingsPane, SettingsSearchEntry, SettingsViewState } from "settings.slint";
@@ -46,6 +47,8 @@ export struct TerminalPaneDividerView {
 // arrive as immutable data; all sidebar, picker, and page-local state stays here.
 export struct WorkspaceViewState {
     sessions: [SessionGroupRow],
+    session_filter: string,
+    local_shell_platform: string,
     workspace_tabs: [WorkspaceTabRow],
     connection_options: [ConnectableSessionRow],
     active_tab_id: string,
@@ -56,7 +59,6 @@ export struct WorkspaceViewState {
     status: string,
     sidebar_width: int,
     tab_width: int,
-    collapsed_group_label_chars: int,
     terminal_panes: [TerminalPaneView],
     terminal_dividers: [TerminalPaneDividerView],
     sftp: SftpViewState,
@@ -607,6 +609,7 @@ component DetachedWorkspaceContent inherits Rectangle {
 }
 
 export component WorkspaceShell inherits Rectangle {
+    pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     in property <WorkspaceViewState> view;
     in property <string> requested-settings-section: "General";
     in property <int> settings-section-request-revision: 0;
@@ -633,6 +636,7 @@ export component WorkspaceShell inherits Rectangle {
     private property <SftpNativeDropRegion> native-sftp-remote-region: { accepts: false };
     private property <SftpNativeDropRegion> native-sftp-local-region: { accepts: false };
     callback new-session();
+    callback session-filter-changed(string);
     callback new-session-in-group(string);
     callback edit-session(string);
     callback copy-session(string);
@@ -654,11 +658,12 @@ export component WorkspaceShell inherits Rectangle {
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-ui-language(int);
+    callback save-local-shell-icon(string);
     callback connect-session(string);
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, bool,
+        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -986,11 +991,13 @@ export component WorkspaceShell inherits Rectangle {
                 y: root.apple-platform ? Theme.tab-height : 0px;
                 height: parent.height - self.y;
                 sessions: root.view.sessions;
+                search-query: root.view.session_filter;
+                local-shell-platform: root.view.local_shell_platform;
                 sidebar-width: root.view.sidebar_width;
-                collapsed-group-label-chars: root.view.collapsed_group_label_chars;
                 active-profile-id: root.view.active_profile_id;
                 divider-top-offset: root.apple-platform ? 0px : workspace-titlebar.height;
                 collapsed <=> root.sidebar-collapsed;
+                search-changed(value) => { root.session-filter-changed(value); }
                 open-local-shell => { root.open-local-shell(); }
                 new-session => { root.new-session(); }
                 connect-session(id) => { root.connect-session(id); }
@@ -1237,6 +1244,8 @@ export component WorkspaceShell inherits Rectangle {
                                 sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
                         }
                         save-ui-language(index) => { root.save-ui-language(index); }
+                        save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
+                        system-icon-choices(query) => { return root.system-icon-choices(query); }
                         format-shortcut(event) => {
                 return root.format-shortcut(event);
             }
@@ -1253,13 +1262,14 @@ export component WorkspaceShell inherits Rectangle {
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
+                        system-icon-choices(query) => { return root.system-icon-choices(query); }
                         save(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                              serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                             connect-after-save) => {
+                             icon-id, reset-system, connect-after-save) => {
                             root.save-session(
                                 name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                                 serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                                connect-after-save,
+                                icon-id, reset-system, connect-after-save,
                             );
                         }
                         refresh-serial-ports => { root.refresh-serial-ports(); }

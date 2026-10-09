@@ -174,6 +174,8 @@ pub(super) async fn run_sftp_session(
     };
     let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
+    let mut release_probes = JoinSet::<Option<String>>::new();
+    let mut release_probe_started = false;
     let liveness_connection = connection.clone();
     let transport_closed = wait_for_transport_close(move || liveness_connection.is_closed());
     tokio::pin!(transport_closed);
@@ -264,6 +266,16 @@ pub(super) async fn run_sftp_session(
                     per_tab_limit,
                 );
             }
+            probe = release_probes.join_next(), if !release_probes.is_empty() => {
+                if let Some(Ok(release)) = probe {
+                    let _ = send_event(
+                        &event_tx,
+                        SshSessionEvent::SystemRelease(release),
+                        session_id,
+                    )
+                    .await;
+                }
+            }
             opening = pending_openings.join_next_with_id(), if !pending_openings.is_empty() => {
                 let Some(opening) = opening else {
                     continue;
@@ -336,6 +348,15 @@ pub(super) async fn run_sftp_session(
             command = command_rx.recv() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
                 let result = match command {
+                    Some(SshCommand::ReadSystemRelease) => {
+                        if release_probe_started {
+                            continue;
+                        }
+                        release_probe_started = true;
+                        let connection = connection.clone();
+                        release_probes.spawn(async move { connection.read_system_release().await });
+                        Ok(())
+                    }
                     Some(SshCommand::ListSftp { request_id, path }) => {
                         browser.request_list(Some(request_id), path)
                     }
@@ -781,6 +802,8 @@ pub(super) async fn run_sftp_session(
 
     shutdown_pending_sftp_discoveries(&mut discoveries, &mut discovery_by_transfer, session_id)
         .await;
+    release_probes.abort_all();
+    while release_probes.join_next().await.is_some() {}
     shutdown_pending_sftp_opens(&mut pending_openings, &mut pending_by_transfer, session_id).await;
     shutdown_sftp_transfers(transfers, session_id).await;
     if let Err(error) = browser.shutdown().await {

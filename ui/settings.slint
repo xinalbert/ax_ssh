@@ -1,3 +1,4 @@
+import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
 import { Theme } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 import {
@@ -21,6 +22,8 @@ import { KeyboardEvent } from "components/keyboard-input.slint";
 // same candidate when its Settings tab is closed.
 export struct SettingsViewState {
     ui_language: string,
+    local_shell_icon_override: string,
+    local_shell_automatic_platform: string,
     local_shell_options: [string],
     application_font_family: string,
     application_font_options: [string],
@@ -135,6 +138,7 @@ export struct SettingsSearchEntry {
 }
 
 export component SettingsPane inherits Rectangle {
+    pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     in property <SettingsViewState> source;
     in property <string> tab-id;
     in property <string> requested-section: "General";
@@ -255,6 +259,7 @@ export component SettingsPane inherits Rectangle {
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-ui-language(int);
+    callback save-local-shell-icon(string);
     callback format-shortcut(KeyboardEvent) -> string;
     callback shortcut-recording-changed(bool);
     callback report-bug();
@@ -763,7 +768,11 @@ export component SettingsPane inherits Rectangle {
                         draft-rows <=> root.draft-rows;
                         draft-credential-storage <=> root.draft-credential-storage;
                         ui-language: root.ui-language;
+                        local-shell-icon-override: root.source.local_shell_icon_override;
+                        local-shell-automatic-platform: root.source.local_shell_automatic_platform;
                         save-ui-language(index) => { root.save-ui-language(index); }
+                        save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
+                        system-icon-choices(query) => { return root.system-icon-choices(query); }
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "SFTP" : SftpSettingsPage {
@@ -880,7 +889,6 @@ export component SettingsPane inherits Rectangle {
                         draft-sidebar-width <=> root.draft-sidebar-width;
                         draft-tab-width <=> root.draft-tab-width;
                         draft-session-mask-character <=> root.draft-session-mask-character;
-                        draft-collapsed-group-label-chars <=> root.draft-collapsed-group-label-chars;
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "Shortcuts" : ShortcutsSettingsPage {

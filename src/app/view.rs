@@ -28,6 +28,8 @@ use self::sidebar::*;
 use self::terminal::*;
 use self::workspace::*;
 
+#[cfg(target_os = "linux")]
+pub(super) use self::options::load_local_system_platform;
 pub(super) use self::options::{
     clear_private_key_option_model, clear_session_editor_option_models,
     clear_settings_option_models, dispatch_ui, dispatch_ui_result, load_font_options,
@@ -44,7 +46,7 @@ pub(super) use self::sftp::{
 };
 pub(super) use self::sidebar::{
     connection_option_rows, font_option_rows, group_option_rows, refresh_session_models,
-    session_group_rows, shell_option_rows,
+    session_filter_changed, session_group_rows, shell_option_rows,
 };
 pub(super) use self::terminal::{
     apply_active_snapshot, apply_terminal_pane_layout, dispatch_active_snapshot,

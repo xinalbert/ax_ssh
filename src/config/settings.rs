@@ -214,6 +214,7 @@ pub struct AppearanceSettingsInput<'a> {
     pub terminal_compact_rendering: bool,
     pub terminal_row_render_cache: bool,
     pub terminal_cursor_blink: bool,
+    pub system_icons_follow_theme: bool,
     pub focused_terminal_refresh_fps: i32,
     pub unfocused_terminal_refresh_fps: i32,
     pub terminal_semantic_colors: TerminalSemanticColorsInput<'a>,
@@ -296,6 +297,14 @@ pub struct AppearanceSettings {
     pub terminal_row_render_cache: bool,
     #[serde(default = "default_true")]
     pub terminal_cursor_blink: bool,
+    /// Tint system icons with the UI theme. Disabled to preserve source colors.
+    #[serde(default)]
+    pub system_icons_follow_theme: bool,
+    #[serde(
+        default,
+        deserialize_with = "super::system_icons::deserialize_optional_icon"
+    )]
+    pub local_shell_icon_override: Option<String>,
     #[serde(default = "default_focused_terminal_refresh_fps")]
     pub focused_terminal_refresh_fps: u16,
     #[serde(default = "default_unfocused_terminal_refresh_fps")]
@@ -364,6 +373,8 @@ impl AppearanceSettings {
             terminal_compact_rendering: input.terminal_compact_rendering,
             terminal_row_render_cache: input.terminal_row_render_cache,
             terminal_cursor_blink: input.terminal_cursor_blink,
+            system_icons_follow_theme: input.system_icons_follow_theme,
+            local_shell_icon_override: None,
             focused_terminal_refresh_fps: normalize_terminal_refresh_fps(
                 input.focused_terminal_refresh_fps,
                 default_focused_terminal_refresh_fps,
@@ -404,6 +415,7 @@ impl AppearanceSettings {
             terminal_compact_rendering: self.terminal_compact_rendering,
             terminal_row_render_cache: self.terminal_row_render_cache,
             terminal_cursor_blink: self.terminal_cursor_blink,
+            system_icons_follow_theme: self.system_icons_follow_theme,
             focused_terminal_refresh_fps: i32::from(self.focused_terminal_refresh_fps),
             unfocused_terminal_refresh_fps: i32::from(self.unfocused_terminal_refresh_fps),
             terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -418,7 +430,13 @@ impl AppearanceSettings {
             copy_selection_on_select: self.copy_selection_on_select,
             terminal_mouse_local_selection_priority: self.terminal_mouse_local_selection_priority,
         };
+        let icon = self
+            .local_shell_icon_override
+            .as_deref()
+            .and_then(super::system_icon_id)
+            .map(str::to_owned);
         *self = Self::normalized_with_theme(input, theme);
+        self.local_shell_icon_override = icon;
     }
 }
 
@@ -440,6 +458,8 @@ impl Default for AppearanceSettings {
             terminal_compact_rendering: true,
             terminal_row_render_cache: false,
             terminal_cursor_blink: true,
+            system_icons_follow_theme: false,
+            local_shell_icon_override: None,
             focused_terminal_refresh_fps: default_focused_terminal_refresh_fps(),
             unfocused_terminal_refresh_fps: default_unfocused_terminal_refresh_fps(),
             terminal_semantic_colors: TerminalSemanticColors::default(),

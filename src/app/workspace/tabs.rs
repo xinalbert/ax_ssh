@@ -275,6 +275,7 @@ pub(in crate::app) fn close_workspace_tab(
         return;
     }
     release_closed_tabs(closed_tabs, state, ui, runtime);
+    refresh_session_models(ui, state);
     refresh_workspace(ui, state);
 }
 
@@ -297,6 +298,7 @@ pub(in crate::app) fn close_terminal_child_pane(
         return false;
     };
     release_closed_tabs(vec![(tab_id, closed)], state, ui, runtime);
+    refresh_session_models(ui, state);
     refresh_workspace(ui, state);
     true
 }

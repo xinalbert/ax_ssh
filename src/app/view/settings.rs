@@ -4,6 +4,24 @@ use slint::Color;
 use super::*;
 
 pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &AppSettings) {
+    ui.set_local_shell_platform(
+        settings
+            .appearance
+            .local_shell_icon_override
+            .as_deref()
+            .and_then(ax_ssh::config::system_icon_id)
+            .unwrap_or_else(local_system_platform)
+            .into(),
+    );
+    ui.set_local_shell_automatic_platform(local_system_platform().into());
+    ui.set_local_shell_icon_override(
+        settings
+            .appearance
+            .local_shell_icon_override
+            .clone()
+            .unwrap_or_default()
+            .into(),
+    );
     ui.set_ui_language(settings.ui_language.as_setting().into());
     apply_theme_to_component(ui, settings);
     ui.set_application_font_family(settings.appearance.application_font_family.clone().into());
@@ -292,6 +310,7 @@ pub(super) fn apply_theme_to_component(ui: &AppWindow, settings: &AppSettings) {
     let light = settings.appearance.theme.light_palette();
     let dark = settings.appearance.theme.dark_palette();
     let theme = ui.global::<Theme>();
+    theme.set_system_icons_follow_theme(settings.appearance.system_icons_follow_theme);
     theme.set_application_font_family(settings.appearance.application_font_family.clone().into());
     theme.set_mode(settings.appearance.theme.mode.as_setting().into());
     theme.set_palette(settings.appearance.theme.palette.as_setting().into());

@@ -1,3 +1,4 @@
+import { SystemIconChoiceRow, SystemIconPicker } from "components/system-icon-picker.slint";
 import { CheckBox, ScrollView, SpinBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AuthenticationMethodSelector } from "components/authentication-method-selector.slint";
@@ -14,6 +15,9 @@ export struct SessionEditorViewState {
     profile_id: string,
     name: string,
     group_name: string,
+    system_icon_override: string,
+    detected_system_release: string,
+    automatic_system_icon: string,
     protocol: string,
     host: string,
     port: string,
@@ -42,10 +46,11 @@ export struct SessionEditorViewState {
 }
 
 export component SessionEditorPane inherits Rectangle {
+    pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, bool,
+        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -59,6 +64,8 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> status: root.source.status;
     private property <string> name-draft;
     private property <string> group-draft;
+    private property <string> icon-draft;
+    private property <bool> reset-system-draft;
     private property <string> protocol: "SSH";
     private property <string> host-draft;
     private property <string> port-draft: "22";
@@ -120,6 +127,8 @@ export component SessionEditorPane inherits Rectangle {
             root.serial-stop-bits,
             root.serial-parity,
             root.serial-flow-control,
+            root.icon-draft,
+            root.reset-system-draft,
             connect-after-save,
         );
         root.password-draft = "";
@@ -129,6 +138,8 @@ export component SessionEditorPane inherits Rectangle {
     function reset-draft() {
         root.name-draft = root.source.name;
         root.group-draft = root.source.group_name;
+        root.icon-draft = root.source.system_icon_override;
+        root.reset-system-draft = false;
         root.protocol = root.source.protocol;
         root.host-draft = root.source.host;
         root.port-draft = root.source.port;
@@ -245,6 +256,32 @@ export component SessionEditorPane inherits Rectangle {
                 );
                 height: self.preferred-height;
                 spacing: Theme.editor-section-gap;
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-sm;
+                    SessionEditorSectionHeading {
+                        label: @tr("System icon");
+                        description: @tr("Manual selection takes priority over automatic detection.");
+                    }
+                    SystemIconPicker {
+                        icon-id: root.icon-draft;
+                        automatic-platform: root.reset-system-draft ? "server" : root.source.automatic_system_icon;
+                        choices(query) => { return root.system-icon-choices(query); }
+                        selected(id) => { root.icon-draft = id; }
+                    }
+                    if !root.source.detected_system_release.is-empty : Text {
+                        text: @tr("Detected system: {}", root.source.detected_system_release);
+                        color: Theme.muted;
+                        font-size: Theme.font-small;
+                        wrap: word-wrap;
+                    }
+                    if root.protocol == "SSH" && root.editing : CheckBox {
+                        text: @tr("Detect again on next connection");
+                        checked <=> root.reset-system-draft;
+                        enabled: root.icon-draft.is-empty;
+                    }
+                }
 
                 VerticalLayout {
                     vertical-stretch: 0;

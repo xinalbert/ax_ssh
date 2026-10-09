@@ -133,6 +133,16 @@ impl SessionEditorState {
             profile_id: Some(profile.id),
             name: profile.name.clone(),
             group_name: profile.group_name.clone(),
+            system_icon_override: profile.system_icon_override.clone().unwrap_or_default(),
+            automatic_system_icon: profile
+                .cached_system()
+                .and_then(|system| system.icon_id())
+                .unwrap_or("server")
+                .to_owned(),
+            detected_system_release: profile
+                .cached_system()
+                .map(|system| system.release().to_owned())
+                .unwrap_or_default(),
             protocol,
             host,
             port,

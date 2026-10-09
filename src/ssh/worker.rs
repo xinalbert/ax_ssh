@@ -57,6 +57,7 @@ enum SshSessionMode {
 pub enum SshSessionEvent {
     Authenticated,
     Connected,
+    SystemRelease(Option<String>),
     Resized {
         columns: u32,
         rows: u32,
@@ -84,6 +85,7 @@ pub enum SshSessionEvent {
 }
 
 pub(crate) enum SshCommand {
+    ReadSystemRelease,
     Send {
         input_sequence: u64,
         queued_at: Instant,
@@ -279,6 +281,13 @@ impl SshSessionHandle {
         self.command_tx
             .try_send(SshCommand::Disconnect)
             .map_err(|error| anyhow::anyhow!("cannot request SSH disconnect: {error}"))
+    }
+
+    /// Queue the best-effort system label probe, at most once per worker.
+    pub fn request_system_release(&self) -> Result<()> {
+        self.command_tx
+            .try_send(SshCommand::ReadSystemRelease)
+            .map_err(|error| anyhow::anyhow!("cannot queue remote system release probe: {error}"))
     }
 
     pub fn request_send(&self, data: Vec<u8>) -> Result<()> {
@@ -600,6 +609,7 @@ async fn run_session(task: SshSessionTask) {
                         break None;
                     }
                     Some(SshCommand::Send { .. })
+                    | Some(SshCommand::ReadSystemRelease)
                     | Some(SshCommand::ListSftp { .. })
                     | Some(SshCommand::LoadMoreSftp { .. })
                     | Some(SshCommand::OpenSftpFile { .. })

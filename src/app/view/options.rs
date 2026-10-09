@@ -1,5 +1,40 @@
 use super::*;
 
+#[cfg(target_os = "linux")]
+pub(in crate::app) fn load_local_system_platform(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+) {
+    runtime.spawn(async move {
+        let platform =
+            match tokio::task::spawn_blocking(system_icons::discover_local_platform).await {
+                Ok(platform) => platform,
+                Err(error) => {
+                    warn!(%error, "local system icon discovery task failed");
+                    return;
+                }
+            };
+        dispatch_ui(&ui, move |ui| {
+            let icon = state.lock().ok().and_then(|app| {
+                app.sessions
+                    .settings
+                    .appearance
+                    .local_shell_icon_override
+                    .clone()
+            });
+            ui.set_local_shell_automatic_platform(platform.into());
+            ui.set_local_shell_platform(
+                icon.as_deref()
+                    .and_then(ax_ssh::config::system_icon_id)
+                    .unwrap_or(platform)
+                    .into(),
+            );
+            refresh_workspace(&ui.as_weak(), &state);
+        });
+    });
+}
+
 pub(in crate::app) fn load_private_key_options(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,

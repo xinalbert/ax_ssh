@@ -131,6 +131,9 @@ pub(in crate::app) fn apply_active_snapshot(
             );
             ui.set_editor_name(editor.name.into());
             ui.set_editor_group_name(editor.group_name.into());
+            ui.set_editor_system_icon_override(editor.system_icon_override.into());
+            ui.set_editor_automatic_system_icon(editor.automatic_system_icon.into());
+            ui.set_editor_detected_system_release(editor.detected_system_release.into());
             ui.set_editor_protocol(editor.protocol.into());
             ui.set_editor_host(editor.host.into());
             ui.set_editor_port(editor.port.into());

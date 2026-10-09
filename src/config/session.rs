@@ -367,6 +367,10 @@ pub struct SessionProfile {
     pub name: String,
     #[serde(default)]
     pub group_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_icon_override: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detected_system: Option<Box<super::SystemDetection>>,
     pub connection: ConnectionProfile,
 }
 
@@ -376,6 +380,16 @@ struct SessionProfileWire {
     name: String,
     #[serde(default)]
     group_name: String,
+    #[serde(
+        default,
+        deserialize_with = "super::system_icons::deserialize_optional_icon"
+    )]
+    system_icon_override: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "super::system_icons::deserialize_detection"
+    )]
+    detected_system: Option<Box<super::SystemDetection>>,
     #[serde(default)]
     connection: Option<ConnectionProfile>,
     #[serde(default)]
@@ -447,18 +461,29 @@ impl<'de> Deserialize<'de> for SessionProfile {
                 sftp_transfer_policy: None,
             })
         };
-        let profile = Self {
+        let mut profile = Self {
             id: wire.id,
             name: wire.name,
             group_name: wire.group_name,
+            system_icon_override: wire.system_icon_override,
+            detected_system: wire.detected_system,
             connection,
         };
+        if profile.cached_system().is_none() {
+            profile.detected_system = None;
+        }
         profile.validate().map_err(serde::de::Error::custom)?;
         Ok(profile)
     }
 }
 
 impl SessionProfile {
+    pub fn cached_system(&self) -> Option<&super::SystemDetection> {
+        self.detected_system
+            .as_deref()
+            .filter(|system| system.matches_profile(self))
+    }
+
     pub fn new(
         name: impl Into<String>,
         host: impl Into<String>,
@@ -468,6 +493,8 @@ impl SessionProfile {
             id: Uuid::new_v4(),
             name: name.into(),
             group_name: String::new(),
+            system_icon_override: None,
+            detected_system: None,
             connection: ConnectionProfile::Ssh(SshConfig {
                 host: host.into(),
                 port: 22,
@@ -489,6 +516,8 @@ impl SessionProfile {
             id: Uuid::new_v4(),
             name: name.into(),
             group_name: String::new(),
+            system_icon_override: None,
+            detected_system: None,
             connection: ConnectionProfile::Telnet(TelnetConfig {
                 host: host.into(),
                 port: 23,
@@ -501,6 +530,8 @@ impl SessionProfile {
             id: Uuid::new_v4(),
             name: name.into(),
             group_name: String::new(),
+            system_icon_override: None,
+            detected_system: None,
             connection: ConnectionProfile::Serial(SerialConfig {
                 port_name: port_name.into(),
                 ..SerialConfig::default()

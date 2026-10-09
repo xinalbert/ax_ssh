@@ -122,6 +122,8 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut output_received_at = None;
     let mut awaiting_output_after_input = None;
     let mut x11_relays = JoinSet::new();
+    let mut release_probes = JoinSet::new();
+    let mut release_probe_started = false;
     let mut x11_unavailable_reported = false;
     let mut failed = false;
     let mut shell_exited = false;
@@ -180,6 +182,24 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             "russh terminal data call completed"
                         );
                         awaiting_output_after_input = Some((input_sequence, Instant::now()));
+                        continue;
+                    }
+                    Some(SshCommand::ReadSystemRelease) => {
+                        if release_probe_started {
+                            continue;
+                        }
+                        release_probe_started = true;
+                        let connection = connection.clone();
+                        let event_tx = event_tx.clone();
+                        release_probes.spawn(async move {
+                            let release = connection.read_system_release().await;
+                            let _ = send_event(
+                                &event_tx,
+                                SshSessionEvent::SystemRelease(release),
+                                session_id,
+                            )
+                            .await;
+                        });
                         continue;
                     }
                     Some(SshCommand::ListSftp { .. } | SshCommand::LoadMoreSftp { .. }) => continue,
@@ -369,6 +389,13 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     }
                 }
             }
+            probe = release_probes.join_next(), if !release_probes.is_empty() => {
+                if let Some(Err(error)) = probe
+                    && !error.is_cancelled()
+                {
+                    warn!(session_id = %session_id, %error, "SSH system release probe task failed");
+                }
+            }
             _ = &mut output_flush, if !output.is_empty() => {
                 if !flush_output(
                     &event_tx,
@@ -388,6 +415,8 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     }
     drop(x11_requests.take());
     shutdown_x11_relays(&mut x11_relays, session_id).await;
+    release_probes.abort_all();
+    while release_probes.join_next().await.is_some() {}
     close_shell(&shell, session_id).await;
     if let Err(error) = connection.disconnect().await {
         warn!(session_id = %session_id, %error, "SSH transport disconnect failed");

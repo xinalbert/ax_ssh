@@ -55,8 +55,8 @@ use self::panes::{
     PanePlacement, PaneTree,
 };
 use self::session_groups::{
-    compact_label, group_options, profile_endpoint, profile_sidebar_details,
-    profile_sidebar_endpoint, session_groups,
+    group_options, profile_endpoint, profile_sidebar_details, profile_sidebar_endpoint,
+    session_groups,
 };
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ClosedTab, ClosedTabKind, ConnectionStart,
@@ -96,6 +96,7 @@ mod settings_bridge;
 mod sftp_bridge;
 mod software_presentation;
 mod state;
+mod system_icons;
 mod terminal_bridge;
 mod terminal_presentation;
 mod terminal_render;
@@ -254,7 +255,11 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
         (
-            session_group_rows(&app.sessions),
+            session_group_rows(
+                &app.sessions,
+                &app.session_filter,
+                &app.profile_system_releases(),
+            ),
             group_option_rows(&app.sessions),
             connection_option_rows(&app.sessions),
             app.sessions.settings.clone(),
@@ -262,6 +267,12 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         )
     };
     ui.set_sessions(ModelRc::new(VecModel::from(rows)));
+    ui.set_session_filter(
+        state
+            .lock()
+            .map(|app| app.session_filter.clone().into())
+            .unwrap_or_default(),
+    );
     ui.set_group_options(ModelRc::new(VecModel::from(groups)));
     ui.set_connection_options(ModelRc::new(VecModel::from(connection_options)));
     ui.set_private_key_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
@@ -343,6 +354,8 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             detached_windows: detached_windows.clone(),
         },
     );
+    #[cfg(target_os = "linux")]
+    load_local_system_platform(runtime.handle(), state.clone(), ui.as_weak());
     if let Some(ref snapshot) = workspace_snapshot {
         match snapshot.validate() {
             Ok(()) => {
@@ -657,6 +670,12 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
             set_platform_clipboard_text(&ui, &endpoint);
             set_status(&ui_for_copy_session, "Address copied");
         }
+    });
+    let ui_for_session_filter = ui.as_weak();
+    let state_for_session_filter = state.clone();
+    ui.on_session_filter_changed(move |filter| {
+        session_filter_changed(filter.as_str(), &state_for_session_filter);
+        refresh_session_models(&ui_for_session_filter, &state_for_session_filter);
     });
     let terminal_font_started = Arc::new(AtomicBool::new(false));
     let state_for_window_actions = state.clone();

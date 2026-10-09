@@ -82,6 +82,28 @@ fn same_profile_opens_independent_terminal_tabs() {
 }
 
 #[test]
+fn profile_system_release_uses_latest_available_ssh_tab() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("Remote", "remote.example", "alice");
+    let first = state.open_terminal_tab(&profile);
+    let second = state.open_sftp_tab(&profile);
+    state.terminal_mut(first).unwrap().system_release = Some("Ubuntu 22.04 LTS".into());
+    state.terminal_mut(second).unwrap().system_release = Some("Ubuntu 24.04 LTS".into());
+    assert_eq!(
+        state.profile_system_releases()[&profile.id],
+        "Ubuntu 24.04 LTS"
+    );
+
+    state.terminal_mut(second).unwrap().system_release = None;
+    assert_eq!(
+        state.profile_system_releases()[&profile.id],
+        "Ubuntu 22.04 LTS"
+    );
+    state.terminal_mut(first).unwrap().system_release = None;
+    assert!(state.profile_system_releases().is_empty());
+}
+
+#[test]
 fn active_snapshot_exposes_only_profile_backed_tab_identity() {
     let mut state = test_state();
     let profile = SessionProfile::new("Remote", "remote.example", "alice");
@@ -937,6 +959,24 @@ fn local_shell_tabs_have_unique_ids_and_independent_numbers() {
             .terminal(second)
             .is_some_and(TerminalTabState::is_local)
     );
+}
+
+#[test]
+fn tab_summaries_preserve_local_source_for_main_and_detached_windows() {
+    let mut state = test_state();
+    let local = state.open_local_shell_tab();
+    assert!(state.apply_terminal_title(local, Some("build".to_owned())));
+    let profile = SessionProfile::new("Local Shell #1", "remote.example", "alice");
+    let remote = state.open_terminal_tab(&profile);
+
+    for summaries in [
+        state.tab_summaries(),
+        state.tab_summaries_for(&[local, remote]),
+    ] {
+        assert_eq!(summaries.len(), 2);
+        assert!(summaries.iter().any(|tab| tab.id == local && tab.local));
+        assert!(summaries.iter().any(|tab| tab.id == remote && !tab.local));
+    }
 }
 
 #[test]

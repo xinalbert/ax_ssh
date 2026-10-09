@@ -178,6 +178,7 @@ pub(in crate::app) fn wire_workspace_file_actions(
         if let Some(paths) = recent_workspace_paths {
             set_recent_workspace_paths(&ui, &paths);
         }
+        refresh_session_models(&ui.as_weak(), &state_for_apply);
         refresh_workspace(&ui.as_weak(), &state_for_apply);
         ui.set_status(format!("Workspace opened ({} tabs)", snapshot.tabs.len()).into());
     });

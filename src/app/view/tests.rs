@@ -211,6 +211,8 @@ fn window_drag_gestures(detached: bool) {
             title: "Test tab".into(),
             kind: "settings".into(),
             connected: false,
+            system_release: String::new().into(),
+            system_platform: String::new().into(),
         }])));
         let drags = Rc::new(Cell::new(0));
         let received_drags = drags.clone();
@@ -964,18 +966,128 @@ fn settings_workbench_is_exposed_as_a_workspace_tab() {
             title: "Settings".to_owned(),
             kind: "settings",
             connected: false,
+            local: false,
+            system_icon: None,
+            system_release: None,
         },
         WorkspaceTabSummary {
             id: Uuid::new_v4(),
             title: "New session".to_owned(),
             kind: "session-editor",
             connected: false,
+            local: false,
+            system_icon: None,
+            system_release: None,
         },
     ]);
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].kind.as_str(), "settings");
     assert_eq!(rows[1].kind.as_str(), "session-editor");
+}
+
+#[test]
+fn workspace_tabs_expose_release_and_platform_with_safe_fallbacks() {
+    let rows = visible_workspace_tab_rows(vec![
+        WorkspaceTabSummary {
+            id: Uuid::new_v4(),
+            title: "Windows host".to_owned(),
+            kind: "terminal",
+            connected: true,
+            local: false,
+            system_icon: None,
+            system_release: Some("Microsoft Windows Server 2022".to_owned()),
+        },
+        WorkspaceTabSummary {
+            id: Uuid::new_v4(),
+            title: "Unknown host".to_owned(),
+            kind: "terminal",
+            connected: true,
+            local: false,
+            system_icon: None,
+            system_release: None,
+        },
+    ]);
+
+    assert_eq!(
+        rows[0].system_release.as_str(),
+        "Microsoft Windows Server 2022"
+    );
+    assert_eq!(rows[0].system_platform.as_str(), "windows");
+    assert!(rows[1].system_release.is_empty());
+    assert!(rows[1].system_platform.is_empty());
+}
+
+#[test]
+fn local_shell_icons_use_host_platform_without_guessing_from_the_title() {
+    let rows = visible_workspace_tab_rows(vec![
+        WorkspaceTabSummary {
+            id: Uuid::new_v4(),
+            title: "build".to_owned(),
+            kind: "terminal",
+            connected: false,
+            local: true,
+            system_icon: None,
+            system_release: None,
+        },
+        WorkspaceTabSummary {
+            id: Uuid::new_v4(),
+            title: "Local Shell #1".to_owned(),
+            kind: "terminal",
+            connected: true,
+            local: false,
+            system_icon: None,
+            system_release: None,
+        },
+    ]);
+
+    let expected = match std::env::consts::OS {
+        "windows" => "windows",
+        "macos" => "macos",
+        "linux" => "linux",
+        _ => "",
+    };
+    assert_eq!(rows[0].system_platform.as_str(), expected);
+    assert!(rows[0].system_release.is_empty());
+    assert!(rows[1].system_platform.is_empty());
+}
+
+#[test]
+fn workspace_tab_release_changes_update_existing_rows_and_local_sidebar_platform() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        apply_settings_to_component(&harness.ui, &AppSettings::default());
+        assert_eq!(
+            harness.ui.get_local_shell_platform().as_str(),
+            local_system_platform()
+        );
+
+        let mut row = WorkspaceTabRow {
+            id: Uuid::new_v4().to_string().into(),
+            title: "remote".into(),
+            kind: "terminal".into(),
+            connected: true,
+            ..Default::default()
+        };
+        let model = ModelRc::new(VecModel::from(vec![row.clone()]));
+        harness.ui.set_workspace_tabs(model.clone());
+
+        // Release arrives after Connected, and each field must trigger a row update.
+        for (release, platform) in [
+            ("Microsoft Windows Server 2022", ""),
+            ("Microsoft Windows Server 2022", "windows"),
+            ("", "windows"),
+            ("", ""),
+        ] {
+            row.system_release = release.into();
+            row.system_platform = platform.into();
+            workspace::apply_workspace_tab_rows(&harness.ui, vec![row.clone()]);
+            assert!(harness.ui.get_workspace_tabs() == model);
+            assert_eq!(model.row_data(0), Some(row.clone()));
+        }
+    })
+    .join()
+    .expect("isolated tab model test should finish");
 }
 
 #[test]
@@ -989,11 +1101,10 @@ fn session_group_rows_keep_profiles_nested_under_their_group() {
         sessions: vec![production_a, production_b, ungrouped],
         ..SessionStore::default()
     };
-    let rows = session_group_rows(&sessions);
+    let rows = session_group_rows(&sessions, "", &HashMap::new());
 
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].name.as_str(), "Production");
-    assert_eq!(rows[0].icon.as_str(), "Pr");
     assert_eq!(rows[0].profiles.row_count(), 2);
     let production_a = rows[0].profiles.row_data(0).unwrap();
     assert_eq!(production_a.name.as_str(), "prod-a");
@@ -1007,25 +1118,118 @@ fn session_group_rows_keep_profiles_nested_under_their_group() {
     );
 
     assert_eq!(rows[1].name.as_str(), "Ungrouped");
-    assert_eq!(rows[1].icon.as_str(), "Un");
     assert_eq!(rows[1].profiles.row_count(), 1);
     assert_eq!(rows[1].profiles.row_data(0).unwrap().name.as_str(), "local");
 }
 
 #[test]
-fn full_group_labels_leave_server_badges_compact() {
-    let mut server = SessionProfile::new("production-server", "prod.example", "alice");
-    server.group_name = "Production systems".into();
+fn session_group_search_matches_profiles_and_groups() {
+    let mut production = SessionProfile::new("GPU node", "gpu01.example", "alice");
+    production.group_name = "Research Cluster".into();
+    let local = SessionProfile::new("Mac mini", "mac.local", "albert");
+    let sessions = SessionStore {
+        sessions: vec![production, local],
+        ..SessionStore::default()
+    };
+
+    let profile_match = session_group_rows(&sessions, "gpu01", &HashMap::new());
+    assert_eq!(profile_match.len(), 1);
+    assert_eq!(profile_match[0].profiles.row_count(), 1);
+
+    let group_match = session_group_rows(&sessions, "research", &HashMap::new());
+    assert_eq!(group_match.len(), 1);
+    assert_eq!(group_match[0].profiles.row_count(), 1);
+}
+
+#[test]
+fn session_rows_derive_system_icons_from_each_profiles_release() {
+    let windows = SessionProfile::new("Windows", "win.example", "alice");
+    let linux = SessionProfile::new("Linux", "linux.example", "alice");
+    let macos = SessionProfile::new("Mac", "mac.example", "alice");
+    let unknown = SessionProfile::new("Unknown", "unknown.example", "alice");
+    let undetected = SessionProfile::new("Undetected", "new.example", "alice");
+    let releases = HashMap::from([
+        (windows.id, "Microsoft Windows Server 2022".to_owned()),
+        (linux.id, "Ubuntu 24.04 LTS".to_owned()),
+        (macos.id, "macOS 15.5".to_owned()),
+        (unknown.id, "FreeBSD 14.3".to_owned()),
+    ]);
+    let sessions = SessionStore {
+        sessions: vec![windows, linux, macos, unknown, undetected],
+        ..SessionStore::default()
+    };
+    let rows = session_group_rows(&sessions, "", &releases);
+    let platforms = rows[0]
+        .profiles
+        .iter()
+        .map(|profile| profile.system_platform.to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(platforms, ["windows", "ubuntu", "macos", "", ""]);
+}
+
+#[test]
+fn manual_icon_precedes_cached_detection_in_sidebar_and_tab_rows() {
+    let mut profile = SessionProfile::new("Server", "server.example", "alice");
+    profile.detected_system =
+        ax_ssh::config::SystemDetection::new(&profile, "Debian 12", "debian").map(Box::new);
+    profile.system_icon_override = Some("ubuntu".into());
+    let mut sessions = SessionStore::default();
+    sessions.upsert(profile.clone());
+    let rows = session_group_rows(&sessions, "", &HashMap::new());
+    assert_eq!(
+        rows[0].profiles.row_data(0).unwrap().system_platform,
+        "ubuntu"
+    );
+    let mut state = AppState::new(ConfigStore::new("/unused/icon-test.json"), sessions);
+    state.open_terminal_tab(&profile);
+    assert_eq!(
+        visible_workspace_tab_rows(state.tab_summaries())[0].system_platform,
+        "ubuntu"
+    );
+    state.sessions.sessions[0].system_icon_override = None;
+    let rows = session_group_rows(&state.sessions, "", &state.profile_system_releases());
+    assert_eq!(
+        rows[0].profiles.row_data(0).unwrap().system_platform,
+        "debian"
+    );
+    assert_eq!(
+        visible_workspace_tab_rows(state.tab_summaries())[0].system_platform,
+        "debian"
+    );
+}
+
+#[test]
+fn release_updates_reuse_group_model_and_reject_changed_group_identity() {
+    let mut server = SessionProfile::new("server", "server.example", "alice");
+    server.group_name = "Production".into();
+    let releases = HashMap::from([(server.id, "Ubuntu 24.04 LTS".to_owned())]);
     let mut sessions = SessionStore {
         sessions: vec![server],
         ..SessionStore::default()
     };
-    sessions.settings.workspace.collapsed_group_label_chars = 0;
+    let model = ModelRc::new(VecModel::from(session_group_rows(
+        &sessions,
+        "",
+        &HashMap::new(),
+    )));
+    let rows = session_group_rows(&sessions, "", &releases);
+    assert!(update_session_group_model(&model, &rows));
+    assert_eq!(
+        model
+            .row_data(0)
+            .unwrap()
+            .profiles
+            .row_data(0)
+            .unwrap()
+            .system_platform,
+        "ubuntu"
+    );
 
-    let rows = session_group_rows(&sessions);
-
-    assert_eq!(rows[0].icon.as_str(), "Production systems");
-    assert_eq!(rows[0].profiles.row_data(0).unwrap().icon.as_str(), "pr");
+    sessions.sessions[0].group_name = "Staging".into();
+    let moved_rows = session_group_rows(&sessions, "", &releases);
+    assert!(!update_session_group_model(&model, &moved_rows));
+    assert_eq!(model.row_data(0).unwrap().group_name, "Production");
+    assert!(!update_session_group_model(&model, &[]));
 }
 
 #[test]
@@ -1035,7 +1239,7 @@ fn empty_persistent_groups_remain_visible() {
         ..SessionStore::default()
     };
 
-    let rows = session_group_rows(&sessions);
+    let rows = session_group_rows(&sessions, "", &HashMap::new());
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].name.as_str(), "Empty");

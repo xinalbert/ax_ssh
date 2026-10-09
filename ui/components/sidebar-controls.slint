@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
-import { ElidedLabel } from "elided-controls.slint";
+import { SystemPlatformIcon } from "system-platform-icon.slint";
+import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 
 export component SidebarTerminalGlyph inherits Rectangle {
     in property <brush> glyph-color: Theme.text;
@@ -28,6 +29,51 @@ export component SidebarTerminalGlyph inherits Rectangle {
             font-weight: 700;
             horizontal-alignment: center;
             vertical-alignment: center;
+        }
+    }
+}
+
+export component SidebarPlatformGlyph inherits Rectangle {
+    in property <string> platform;
+    in property <color> glyph-color: Theme.text;
+
+    width: Theme.sidebar-glyph-size;
+    height: Theme.sidebar-glyph-size;
+    background: transparent;
+
+    if root.platform == "terminal" : SidebarTerminalGlyph {
+        glyph-color: root.glyph-color;
+    }
+    if root.platform == "folder" : Image {
+        width: parent.width;
+        height: parent.height;
+        source: @image-url("../../assets/os-icons/ui/folder/material-symbols-folder.svg");
+        colorize: root.glyph-color;
+        image-fit: contain;
+    }
+    if !root.platform.is-empty && root.platform != "folder"
+            && root.platform != "server" && root.platform != "terminal" : SystemPlatformIcon {
+        width: parent.width;
+        height: parent.height;
+        platform: root.platform;
+        glyph-color: root.glyph-color;
+    }
+    if root.platform == "server" : Rectangle {
+        x: Theme.sidebar-glyph-inset + 3px;
+        y: Theme.sidebar-glyph-inset + 1px;
+        width: parent.width - 2 * (Theme.sidebar-glyph-inset + 3px);
+        height: parent.height - 2 * Theme.sidebar-glyph-inset;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+        background: transparent;
+
+        for row in 3 : Rectangle {
+            x: Theme.space-xs;
+            y: Theme.space-xs + row * 5px;
+            width: parent.width - 2 * Theme.space-xs;
+            height: Theme.hairline;
+            background: root.glyph-color;
         }
     }
 }
@@ -145,30 +191,23 @@ export component SidebarRailToggle inherits FocusScope {
 
 export component SidebarRailItem inherits FocusScope {
     in property <string> label;
+    in property <string> icon-kind;
     in property <string> tooltip-text;
     in property <bool> tooltip-enabled: true;
-    in property <string> trailing-label;
-    in property <string> trailing-tooltip-text;
     in property <string> accessible-name;
     in property <bool> group: false;
     in property <bool> local: false;
-    in property <bool> nested: false;
     in property <bool> expandable: false;
     in property <bool> expanded: false;
-    in property <bool> expanded-label: false;
     in property <bool> selected: false;
     callback activated();
 
-    private property <bool> compact-group: root.group && !root.expanded-label;
-    private property <length> label-line-height:
-        label-probe.font-metrics.ascent - label-probe.font-metrics.descent;
-    private property <length> label-content-height: root.label-line-height;
     private property <length> card-height: root.local
         ? Theme.sidebar-rail-local-card-size
-        : root.label-content-height + 2 * (root.group
+        : Theme.sidebar-glyph-size + 2 * (root.group
             ? Theme.sidebar-rail-group-card-padding-y
             : Theme.sidebar-rail-session-card-padding-y);
-    private property <length> card-width: root.expanded-label || root.compact-group
+    private property <length> card-width: root.group
         ? root.width - 2 * Theme.space-xs
         : root.card-height;
     private property <length> row-padding-y: root.local
@@ -196,19 +235,6 @@ export component SidebarRailItem inherits FocusScope {
         return EventResult.reject;
     }
 
-    label-probe := Text {
-        visible: false;
-        text: root.label;
-        color: transparent;
-        font-family: Theme.application-font-family;
-        font-size: root.expanded-label && root.group
-            ? Theme.sidebar-group-font-size
-            : Theme.sidebar-session-font-size;
-        font-weight: root.group || root.local
-            ? Theme.sidebar-group-font-weight
-            : Theme.sidebar-session-font-weight;
-    }
-
     item-card := Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -220,7 +246,7 @@ export component SidebarRailItem inherits FocusScope {
                 ? Theme.panel
                 : transparent);
         border-width: root.has-focus
-                || (!root.compact-group && (root.selected || item-touch.has-hover))
+                || (!root.group && (root.selected || item-touch.has-hover))
             ? Theme.hairline
             : 0px;
         border-color: root.has-focus
@@ -228,82 +254,42 @@ export component SidebarRailItem inherits FocusScope {
             : (root.selected || root.group ? Theme.accent : Theme.control-border);
         border-radius: Theme.radius;
 
-        if root.local && !root.expanded-label : SidebarTerminalGlyph {
+        SidebarPlatformGlyph {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            glyph-color: Theme.text;
+            platform: root.icon-kind.is-empty
+                ? (root.local ? "terminal" : "server")
+                : root.icon-kind;
+            glyph-color: root.selected || item-touch.has-hover ? Theme.accent : Theme.text;
         }
 
-        label-text := ElidedLabel {
-            visible: !root.expanded-label && !root.local;
-            width: parent.width;
-            height: parent.height;
-            text: root.label;
-            tooltip-text: root.tooltip-text;
-            tooltip-enabled: root.tooltip-enabled;
-            text-color: root.selected || root.group ? Theme.accent : Theme.text;
-            font-family: Theme.application-font-family;
-            font-size: Theme.font-body;
-            font-weight: root.group
-                ? Theme.sidebar-group-font-weight
-                : Theme.sidebar-session-font-weight;
-            horizontal-alignment: TextHorizontalAlignment.center;
+        if root.expandable : Path {
+            x: parent.width - self.width - Theme.space-xxs;
+            y: (parent.height - self.height) / 2;
+            width: Theme.sidebar-group-chevron-size / 2;
+            height: Theme.sidebar-group-chevron-size / 2;
+            commands: root.expanded
+                ? "M 1 2 L 4 5 L 7 2"
+                : "M 2 1 L 5 4 L 2 7";
+            fill: transparent;
+            stroke: Theme.muted;
+            stroke-width: Theme.sidebar-group-chevron-stroke;
+            stroke-line-cap: round;
+            stroke-line-join: round;
         }
 
-        if root.expanded-label : HorizontalLayout {
-            padding-left: root.nested
-                ? Theme.sidebar-rail-full-session-indent
-                : Theme.sidebar-card-padding;
-            padding-right: Theme.sidebar-card-padding;
-            spacing: Theme.space-sm;
-
-            if root.local : SidebarTerminalGlyph {
-                glyph-color: item-touch.has-hover ? Theme.accent : Theme.text;
-            }
-
-            if root.expandable : Path {
-                width: Theme.sidebar-group-chevron-size;
-                height: Theme.sidebar-group-chevron-size;
-                commands: root.expanded
-                    ? "M 2 4 L 8 10 L 14 4"
-                    : "M 2 10 L 8 4 L 14 10";
-                fill: transparent;
-                stroke: Theme.muted;
-                stroke-width: Theme.sidebar-group-chevron-stroke;
-                stroke-line-cap: round;
-                stroke-line-join: round;
-            }
-
-            ElidedLabel {
-                horizontal-stretch: 1;
-                text: root.label;
-                tooltip-text: root.tooltip-text;
-                tooltip-enabled: root.tooltip-enabled;
-                text-color: root.selected ? Theme.accent : Theme.text;
-                font-family: Theme.application-font-family;
-                font-size: root.group
-                    ? Theme.sidebar-group-font-size
-                    : Theme.sidebar-session-font-size;
-                font-weight: root.group || root.local
-                    ? Theme.sidebar-group-font-weight
-                    : Theme.sidebar-session-font-weight;
-            }
-
-            if !root.trailing-label.is-empty : ElidedLabel {
-                width: Theme.sidebar-group-count-width;
-                text: root.trailing-label;
-                tooltip-text: root.trailing-tooltip-text;
-                tooltip-enabled: root.tooltip-enabled;
-                text-color: Theme.muted;
-                font-family: Theme.application-font-family;
-                font-size: Theme.font-caption;
-                horizontal-alignment: TextHorizontalAlignment.right;
+        if root.tooltip-enabled : Tooltip {
+            ElidedTooltipContent {
+                text: root.tooltip-text.is-empty ? root.label : root.tooltip-text;
             }
         }
 
         item-touch := TouchArea {
             mouse-cursor: pointer;
-            clicked => { root.activated(); }
+            clicked => {
+                root.focus();
+                root.activated();
+            }
         }
     }
 }

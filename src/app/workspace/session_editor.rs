@@ -91,6 +91,8 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
               serial_stop_bits,
               serial_parity,
               serial_flow_control,
+              icon_id,
+              reset_system,
               connect_after_save| {
             log_ui_action("session-editor.save");
             let (editor_tab_id, editor_draft_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
@@ -168,6 +170,8 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                     )
                 });
             }
+            profile.system_icon_override = ax_ssh::config::system_icon_id(icon_id.as_str()).map(str::to_owned);
+            if reset_system { profile.detected_system = None; }
             let profile_id = profile.id;
             let has_connection_password = connection_password.is_some();
             if let Err(error) = profile.validate() {
@@ -233,6 +237,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                     &profile,
                     existing_profile.as_ref(),
                     mutation_token,
+                    reset_system,
                 );
 
                 if let Err(error) = save_result {
@@ -408,6 +413,7 @@ pub(super) fn commit_profile_save(
     profile: &SessionProfile,
     expected: Option<&SessionProfile>,
     token: Uuid,
+    reset_system: bool,
 ) -> Result<()> {
     let mut app = state
         .lock()
@@ -428,6 +434,27 @@ pub(super) fn commit_profile_save(
         candidate.upsert(profile.clone());
         app.config.save(&candidate)?;
         app.sessions = candidate;
+        if reset_system
+            || expected.is_some_and(|old| {
+                old.ssh().map(|ssh| {
+                    (
+                        &ssh.host,
+                        ssh.port,
+                        &ssh.username,
+                        &ssh.host_key_fingerprint,
+                    )
+                }) != profile.ssh().map(|ssh| {
+                    (
+                        &ssh.host,
+                        ssh.port,
+                        &ssh.username,
+                        &ssh.host_key_fingerprint,
+                    )
+                })
+            })
+        {
+            app.clear_system_detection(profile.id);
+        }
         Ok(())
     })();
     app.finish_profile_mutation(profile.id, token);
@@ -509,6 +536,7 @@ pub(super) fn commit_profile_delete(
         }
         app.config.save(&candidate)?;
         app.sessions = candidate;
+        app.forget_system_detection(expected.id);
         if app.active_editor_profile_id() == Some(Some(expected.id))
             && let Some(tab_id) = app.active_tab_id()
         {
@@ -777,6 +805,14 @@ pub(super) fn profile_from_editor_with_password(
     };
     if let Some(existing) = existing {
         profile.id = existing.id;
+        profile
+            .system_icon_override
+            .clone_from(&existing.system_icon_override);
+        profile.detected_system = existing
+            .cached_system()
+            .filter(|system| system.matches_profile(&profile))
+            .cloned()
+            .map(Box::new);
     }
     profile.group_name = normalize_group_name(group_name);
     profile.validate()?;

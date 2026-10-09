@@ -43,6 +43,7 @@ pub fn remove_known_host(host: &str, port: u16, fingerprint: &str) -> Result<boo
 
 mod known_hosts;
 mod private_keys;
+mod system_release;
 mod worker;
 mod x11;
 
@@ -692,6 +693,62 @@ impl SshConnection {
             .disconnect(russh::Disconnect::ByApplication, "AxSSH session closed", "")
             .await
             .context("failed to send SSH disconnect")
+    }
+
+    /// Read a short, best-effort release label without writing a probe command
+    /// into the interactive terminal. The worker owns the call and bounds both
+    /// the remote output and its lifetime; an unavailable file or shell simply
+    /// produces `None`.
+    pub(crate) async fn read_system_release(&self) -> Option<String> {
+        const POSIX_COMMAND: &str = "if [ -r /etc/os-release ]; then cat /etc/os-release; elif command -v sw_vers >/dev/null 2>&1; then printf 'macOS '; sw_vers -productVersion; elif command -v uname >/dev/null 2>&1; then uname -sr; fi";
+        const WINDOWS_COMMAND: &str = "powershell.exe -NoProfile -NonInteractive -Command \"$os = Get-CimInstance Win32_OperatingSystem; Write-Output $os.Caption; Write-Output $os.Version\"";
+        const WINDOWS_CORE_COMMAND: &str = "pwsh.exe -NoProfile -NonInteractive -Command \"$os = Get-CimInstance Win32_OperatingSystem; Write-Output $os.Caption; Write-Output $os.Version\"";
+        const MAX_BYTES: usize = 2048;
+        const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+
+        let result = timeout(PROBE_TIMEOUT, async {
+            for command in [POSIX_COMMAND, WINDOWS_COMMAND, WINDOWS_CORE_COMMAND] {
+                let mut channel = self.handle.channel_open_session().await?;
+                channel.exec(true, command.as_bytes()).await?;
+                let mut output = Vec::new();
+                while let Some(message) = channel.wait().await {
+                    match message {
+                        ChannelMsg::Data { data } => {
+                            let remaining = MAX_BYTES.saturating_sub(output.len());
+                            output.extend_from_slice(&data[..data.len().min(remaining)]);
+                            if output.len() >= MAX_BYTES {
+                                break;
+                            }
+                        }
+                        ChannelMsg::Eof | ChannelMsg::Close => break,
+                        _ => {}
+                    }
+                }
+                if let Err(error) = channel.eof().await {
+                    debug!(%error, "could not send EOF to system release channel");
+                }
+                if let Err(error) = channel.close().await {
+                    debug!(%error, "could not close system release channel");
+                }
+                if let Some(release) = system_release::parse(&output) {
+                    return Ok::<_, anyhow::Error>(Some(release));
+                }
+            }
+            Ok(None)
+        })
+        .await;
+
+        match result {
+            Ok(Ok(release)) => release,
+            Ok(Err(error)) => {
+                debug!(%error, "remote system release probe failed");
+                None
+            }
+            Err(_) => {
+                debug!("remote system release probe timed out");
+                None
+            }
+        }
     }
 
     async fn open_shell(

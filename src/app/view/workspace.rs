@@ -168,20 +168,41 @@ pub(in crate::app) fn visible_workspace_tab_rows(
             title: tab.title.into(),
             kind: tab.kind.into(),
             connected: tab.connected,
+            system_release: tab.system_release.clone().unwrap_or_default().into(),
+            system_platform: if let Some(icon) = tab
+                .system_icon
+                .as_deref()
+                .and_then(ax_ssh::config::system_icon_id)
+            {
+                icon
+            } else if tab.local {
+                local_system_platform()
+            } else {
+                tab.system_release
+                    .as_deref()
+                    .map(system_platform)
+                    .unwrap_or("")
+            }
+            .into(),
         })
         .collect()
 }
 
-fn apply_workspace_tab_rows(ui: &AppWindow, tabs: Vec<WorkspaceTabRow>) {
+pub(super) fn local_system_platform() -> &'static str {
+    system_icons::local_platform()
+}
+
+pub(super) fn system_platform(release: &str) -> &'static str {
+    system_icons::platform_for_release(release)
+}
+
+pub(super) fn apply_workspace_tab_rows(ui: &AppWindow, tabs: Vec<WorkspaceTabRow>) {
     let current = ui.get_workspace_tabs();
     if current.row_count() == tabs.len()
         && tabs.iter().enumerate().all(|(index, tab)| {
-            current.row_data(index).is_some_and(|existing| {
-                existing.id == tab.id
-                    && existing.title == tab.title
-                    && existing.kind == tab.kind
-                    && existing.connected == tab.connected
-            })
+            current
+                .row_data(index)
+                .is_some_and(|existing| existing == *tab)
         })
     {
         return;
@@ -195,11 +216,9 @@ fn apply_workspace_tab_rows(ui: &AppWindow, tabs: Vec<WorkspaceTabRow>) {
         })
     {
         for (index, tab) in tabs.into_iter().enumerate() {
-            let changed = current.row_data(index).is_none_or(|existing| {
-                existing.title != tab.title
-                    || existing.kind != tab.kind
-                    || existing.connected != tab.connected
-            });
+            let changed = current
+                .row_data(index)
+                .is_none_or(|existing| existing != tab);
             if changed {
                 current.set_row_data(index, tab);
             }

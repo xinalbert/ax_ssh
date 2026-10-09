@@ -3,6 +3,28 @@ use ax_ssh::config::{WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot};
 use ax_ssh::terminal_dimensions::TerminalSize;
 
 impl AppState {
+    pub(in crate::app) fn profile_system_releases(&self) -> HashMap<Uuid, String> {
+        let mut releases = self
+            .sessions
+            .sessions
+            .iter()
+            .filter_map(|profile| {
+                self.system_detection(profile.id)
+                    .map(|system| (profile.id, system.release().to_owned()))
+            })
+            .collect::<HashMap<_, _>>();
+        for (profile_id, release) in self.tabs.iter().rev().filter_map(|tab| {
+            let WorkspaceTabKind::Terminal(terminal) = &tab.kind else {
+                return None;
+            };
+            let (profile_id, _) = terminal.ssh_route()?;
+            Some((profile_id, terminal.system_release.clone()?))
+        }) {
+            releases.entry(profile_id).or_insert(release);
+        }
+        releases
+    }
+
     pub(in crate::app) fn new(config: ConfigStore, sessions: SessionStore) -> Self {
         Self {
             config,
@@ -11,8 +33,11 @@ impl AppState {
             active_tab_id: None,
             terminal_numbers: HashMap::new(),
             profile_mutations: HashMap::new(),
+            system_detections: HashMap::new(),
+            system_release_probes: HashMap::new(),
             persistence_coordinator: Arc::new(PersistenceCoordinator::default()),
             local_terminal_number: 0,
+            session_filter: String::new(),
             serial_ports: Vec::new(),
             terminal_query_palette: TerminalQueryPalette::default(),
             ui_refresh: UiRefreshState::default(),
@@ -226,6 +251,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
+                system_release: None,
                 worker_running: false,
                 selection_revision: 0,
                 sftp: SftpBrowserState::default(),
@@ -291,6 +317,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
+                system_release: None,
                 worker_running: false,
                 selection_revision: 0,
                 sftp: SftpBrowserState::for_standalone_tab(local_path),
@@ -333,6 +360,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Starting local shell...".to_owned(),
                 connected: false,
+                system_release: None,
                 worker_running: true,
                 selection_revision: 0,
                 sftp: SftpBrowserState::default(),
@@ -599,6 +627,41 @@ impl AppState {
                     &tab.kind,
                     WorkspaceTabKind::Terminal(terminal) if terminal.connected
                 ),
+                local: matches!(
+                    &tab.kind,
+                    WorkspaceTabKind::Terminal(terminal) if terminal.is_local()
+                ),
+                system_icon: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) if terminal.is_local() => self
+                        .sessions
+                        .settings
+                        .appearance
+                        .local_shell_icon_override
+                        .clone(),
+                    WorkspaceTabKind::Terminal(terminal) => terminal
+                        .profile_id()
+                        .and_then(|id| {
+                            self.sessions
+                                .sessions
+                                .iter()
+                                .find(|profile| profile.id == id)
+                        })
+                        .and_then(|profile| {
+                            profile.system_icon_override.clone().or_else(|| {
+                                self.system_detection(profile.id)
+                                    .and_then(|system| system.icon_id().map(str::to_owned))
+                            })
+                        }),
+                    _ => None,
+                },
+                system_release: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) => terminal
+                        .profile_id()
+                        .and_then(|id| self.system_detection(id))
+                        .map(|system| system.release().to_owned())
+                        .or_else(|| terminal.system_release.clone()),
+                    _ => None,
+                },
             })
             .collect()
     }
@@ -896,6 +959,7 @@ impl AppState {
                                 snapshot.status.clone()
                             },
                             connected: false,
+                            system_release: None,
                             worker_running: false,
                             selection_revision: 0,
                             sftp,
@@ -931,6 +995,7 @@ impl AppState {
                             cursor_hide_deadline: None,
                             status: snapshot.status.clone(),
                             connected: false,
+                            system_release: None,
                             worker_running: false,
                             selection_revision: 0,
                             sftp: SftpBrowserState::default(),
@@ -1392,6 +1457,41 @@ impl AppState {
                     &tab.kind,
                     WorkspaceTabKind::Terminal(terminal) if terminal.connected
                 ),
+                local: matches!(
+                    &tab.kind,
+                    WorkspaceTabKind::Terminal(terminal) if terminal.is_local()
+                ),
+                system_icon: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) if terminal.is_local() => self
+                        .sessions
+                        .settings
+                        .appearance
+                        .local_shell_icon_override
+                        .clone(),
+                    WorkspaceTabKind::Terminal(terminal) => terminal
+                        .profile_id()
+                        .and_then(|id| {
+                            self.sessions
+                                .sessions
+                                .iter()
+                                .find(|profile| profile.id == id)
+                        })
+                        .and_then(|profile| {
+                            profile.system_icon_override.clone().or_else(|| {
+                                self.system_detection(profile.id)
+                                    .and_then(|system| system.icon_id().map(str::to_owned))
+                            })
+                        }),
+                    _ => None,
+                },
+                system_release: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) => terminal
+                        .profile_id()
+                        .and_then(|id| self.system_detection(id))
+                        .map(|system| system.release().to_owned())
+                        .or_else(|| terminal.system_release.clone()),
+                    _ => None,
+                },
             })
             .collect()
     }

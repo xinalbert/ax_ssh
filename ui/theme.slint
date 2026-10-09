@@ -7,6 +7,7 @@ export global Theme {
     in-out property <string> mode: "dark";
     in-out property <string> palette: "axssh";
     in-out property <string> application-font-family: "JetBrains Mono";
+    in property <bool> system-icons-follow-theme: false;
     in-out property <color> light-background: #f7f8f7;
     in-out property <color> light-panel: #ffffff;
     in-out property <color> light-panel-alt: #edf1ee;
@@ -114,6 +115,7 @@ export global Theme {
     out property <length> sidebar-session-font-size: font-body;
     out property <int> sidebar-session-font-weight: 600;
     out property <length> tab-order-font-size: font-caption;
+    out property <length> tab-platform-icon-size: 16px;
     out property <int> tab-order-font-weight: 700;
     out property <length> tab-title-font-size: font-small;
     out property <int> tab-title-active-font-weight: 700;
@@ -187,8 +189,6 @@ export global Theme {
     // Keep the sidebar mode toggle aligned with the workspace Tab track.
     out property <length> sidebar-rail-toggle-row-height: tab-height;
     out property <length> sidebar-rail-toggle-size: 26px;
-    out property <length> sidebar-rail-full-width: 180px;
-    out property <length> sidebar-rail-local-row-height: 46px;
     out property <length> sidebar-rail-local-card-size: 36px;
     out property <length> sidebar-rail-group-card-padding-y: 4px;
     out property <length> sidebar-rail-session-card-padding-y: 3px;
@@ -198,7 +198,6 @@ export global Theme {
     out property <length> sidebar-rail-group-to-session-spacing: 1px;
     out property <length> sidebar-rail-session-spacing: 1px;
     out property <length> sidebar-rail-group-spacing: 8px;
-    out property <length> sidebar-rail-full-session-indent: 32px;
     out property <length> sidebar-glyph-size: 20px;
     out property <length> sidebar-glyph-inset: 1px;
     out property <length> sidebar-local-card-height: 46px;
@@ -210,11 +209,12 @@ export global Theme {
     out property <length> sidebar-session-row-spacing: 1px;
     out property <length> sidebar-group-spacing: 8px;
     out property <length> sidebar-card-padding: 10px;
-    out property <length> sidebar-leading-icon-slot-width: 20px;
+    out property <length> sidebar-leading-icon-slot-width: sidebar-glyph-size;
     out property <length> sidebar-group-chevron-width: 20px;
     out property <length> sidebar-group-count-width: 20px;
     out property <length> sidebar-group-chevron-size: 14px;
     out property <length> sidebar-group-chevron-stroke: 1.5px;
+    out property <length> sidebar-group-icon-size: sidebar-glyph-size;
     out property <length> sidebar-session-indent: 42px;
     out property <length> sidebar-session-endpoint-width: 70px;
     out property <length> sidebar-session-tooltip-min-width: 168px;

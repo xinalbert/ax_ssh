@@ -2,13 +2,11 @@ import { SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
-import { ThemedComboBox } from "../components/themed-combo-box.slint";
 
 export component WorkspaceSettingsPage inherits SettingsPage {
     in-out property <int> draft-sidebar-width;
     in-out property <int> draft-tab-width;
     in-out property <string> draft-session-mask-character;
-    in-out property <int> draft-collapsed-group-label-chars;
     SettingsSectionHeading { label: @tr("LAYOUT"); }
     SettingsRow {
         label: @tr("Session sidebar width");
@@ -53,30 +51,13 @@ export component WorkspaceSettingsPage inherits SettingsPage {
     SettingsRow {
         label: @tr("Session mask character");
         description: @tr("Masks usernames and the middle IPv4 octets in the session sidebar");
+        show-divider: false;
         SettingsField {
             FlatTextInput {
                 width: Theme.settings-number-width;
                 height: Theme.settings-control-height;
                 text <=> root.draft-session-mask-character;
                 accessible-label: @tr("Session mask character");
-            }
-        }
-    }
-    SettingsRow {
-        label: @tr("Collapsed group label");
-        description: @tr("Choose 1-4 characters or show the full group name");
-        show-divider: false;
-        SettingsField {
-            collapsed-label-picker := ThemedComboBox {
-                width: parent.width;
-                height: Theme.settings-control-height;
-                model: [@tr("1 character"), @tr("2 characters"), @tr("3 characters"), @tr("4 characters"), @tr("Full name")];
-                current-index: root.draft-collapsed-group-label-chars == 0
-                    ? 4 : root.draft-collapsed-group-label-chars - 1;
-                accessible-label: @tr("Collapsed group label length");
-                selected(_value, index) => {
-                    root.draft-collapsed-group-label-chars = index == 4 ? 0 : index + 1;
-                }
             }
         }
     }

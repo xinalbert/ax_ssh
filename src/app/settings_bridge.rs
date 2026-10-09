@@ -4,6 +4,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 58] = [
     (
         "General",
+        "Local shell icon",
+        "Uses the host system by default. Changes are saved immediately.",
+    ),
+    (
+        "General",
         "Language",
         "Language used by the AxSSH interface",
     ),
@@ -202,11 +207,6 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 58] = [
         "Session mask character",
         "Masks usernames and IPv4 addresses in the session sidebar",
     ),
-    (
-        "Workspace",
-        "Collapsed group label",
-        "Choose 1-4 characters or show the full group name",
-    ),
     ("Shortcuts", "Open Settings", "Application command shortcut"),
     ("Shortcuts", "New Server", "Workspace command shortcut"),
     (
@@ -330,6 +330,12 @@ fn localized_settings_section(section: &str) -> &str {
 }
 
 const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 58] = [
+    (
+        "Local shell icon",
+        "Uses the host system by default. Changes are saved immediately.",
+        "本地终端图标",
+        "默认使用本机系统图标，更改后立即保存。",
+    ),
     (
         "Language",
         "Language used by the AxSSH interface",
@@ -585,12 +591,6 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 58] = [
         "遮盖侧栏中的用户名和 IPv4 地址",
     ),
     (
-        "Collapsed group label",
-        "Choose 1-4 characters or show the full group name",
-        "折叠组标签",
-        "显示 1-4 个字符或完整组名",
-    ),
-    (
         "Open Settings",
         "Application command shortcut",
         "打开设置",
@@ -678,6 +678,50 @@ pub(super) fn wire_settings(
     window_router: WindowRouter,
     persistence: Arc<PersistenceCoordinator>,
 ) {
+    ui.on_system_icon_choices(|query| {
+        ModelRc::new(VecModel::from(system_icon_choices(query.as_str())))
+    });
+    let state_for_icon = state.clone();
+    let ui_for_icon = ui.as_weak();
+    let runtime_for_icon = runtime.clone();
+    let persistence_for_icon = persistence.clone();
+    let icon_revision = Arc::new(AtomicU64::new(0));
+    ui.on_save_local_shell_icon(move |id| {
+        let icon = ax_ssh::config::system_icon_id(id.as_str()).map(str::to_owned);
+        let revision = icon_revision.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
+        let latest = icon_revision.clone();
+        let state = state_for_icon.clone();
+        let state_for_result = state.clone();
+        let ui = ui_for_icon.clone();
+        let persistence = persistence_for_icon.clone();
+        runtime_for_icon.spawn(async move {
+            let guard = persistence.gate.lock().await;
+            let latest_for_save = latest.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                save_local_shell_icon(&state, icon, revision, &latest_for_save)
+            })
+            .await;
+            drop(guard);
+            dispatch_ui(&ui, move |ui| {
+                if latest.load(Ordering::Acquire) != revision {
+                    return;
+                }
+                match result {
+                    Ok(Ok(Some(settings))) => {
+                        apply_settings_to_open_windows(ui, &settings);
+                        refresh_workspace(&ui.as_weak(), &state_for_result);
+                    }
+                    Ok(Ok(None)) => {}
+                    Ok(Err(error)) => {
+                        ui.set_status(format!("Cannot save local shell icon: {error}").into())
+                    }
+                    Err(error) => {
+                        ui.set_status(format!("Local shell icon task failed: {error}").into())
+                    }
+                }
+            });
+        });
+    });
     ui.on_settings_search_results(|query, language| {
         ModelRc::new(VecModel::from(settings_search_results(
             query.as_str(),
@@ -858,10 +902,11 @@ pub(super) fn wire_settings(
                 }
                 return;
             }
-            let (known_shells, ui_language) = match state.lock() {
+            let (known_shells, ui_language, system_icons_follow_theme) = match state.lock() {
                 Ok(app) => (
                     app.sessions.settings.terminal.known_shells.clone(),
                     app.sessions.settings.ui_language,
+                    app.sessions.settings.appearance.system_icons_follow_theme,
                 ),
                 Err(_) => {
                     set_status(&ui_for_save, "Cannot read local shell settings");
@@ -887,6 +932,7 @@ pub(super) fn wire_settings(
                     terminal_compact_rendering,
                     terminal_row_render_cache,
                     terminal_cursor_blink,
+                    system_icons_follow_theme,
                     focused_terminal_refresh_fps,
                     unfocused_terminal_refresh_fps,
                     terminal_semantic_colors: TerminalSemanticColorsInput {
@@ -1084,6 +1130,10 @@ fn save_workspace_settings(
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
     settings.ui_language = app.sessions.settings.ui_language;
+    settings
+        .appearance
+        .local_shell_icon_override
+        .clone_from(&app.sessions.settings.appearance.local_shell_icon_override);
     let mut candidate = app.sessions.clone();
     candidate.settings = settings.clone();
     app.config.save(&candidate)?;
@@ -1093,6 +1143,45 @@ fn save_workspace_settings(
         settings.sftp_transfers.global_uploads,
     ));
     Ok(settings)
+}
+
+fn system_icon_choices(query: &str) -> Vec<SystemIconChoiceRow> {
+    let query = query.chars().take(128).collect::<String>().to_lowercase();
+    ax_ssh::config::system_icon_choices()
+        .iter()
+        .filter(|icon| {
+            query.split_whitespace().all(|word| {
+                icon.name.to_lowercase().contains(word)
+                    || icon.id.contains(word)
+                    || icon.family.contains(word)
+                    || icon.aliases.iter().any(|alias| alias.contains(word))
+            })
+        })
+        .map(|icon| SystemIconChoiceRow {
+            id: icon.id.into(),
+            name: icon.name.into(),
+            family: icon.family.into(),
+        })
+        .collect()
+}
+
+fn save_local_shell_icon(
+    state: &Arc<Mutex<AppState>>,
+    icon: Option<String>,
+    revision: u64,
+    latest_revision: &AtomicU64,
+) -> Result<Option<AppSettings>> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if latest_revision.load(Ordering::Acquire) != revision {
+        return Ok(None);
+    }
+    let mut candidate = app.config.load()?;
+    candidate.settings.appearance.local_shell_icon_override = icon.clone();
+    app.config.save(&candidate)?;
+    app.sessions.settings.appearance.local_shell_icon_override = icon;
+    Ok(Some(app.sessions.settings.clone()))
 }
 
 fn save_ui_language(
@@ -1122,6 +1211,10 @@ fn apply_preview_settings(
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
     settings.ui_language = app.sessions.settings.ui_language;
+    settings
+        .appearance
+        .local_shell_icon_override
+        .clone_from(&app.sessions.settings.appearance.local_shell_icon_override);
     let font_families = changed_font_families(&app.sessions.settings, &settings);
     app.sessions.settings = settings;
     app.apply_scrollback_setting();
@@ -1518,4 +1611,71 @@ mod tests {
             assert_eq!(fixed_shortcut_matches[0].title, title);
         }
     }
+}
+#[test]
+fn local_icon_save_preserves_preview_and_ignores_superseded_choices() {
+    let directory = std::env::temp_dir().join(format!("axssh-local-icon-{}", Uuid::new_v4()));
+    let config = ConfigStore::new(directory.join("sessions.json"));
+    let state = Arc::new(Mutex::new(AppState::new(
+        config.clone(),
+        SessionStore::default(),
+    )));
+    let mut preview = AppSettings::default();
+    preview.terminal.scrollback_lines = 321;
+    apply_preview_settings(&state, preview.clone()).unwrap();
+    let latest = AtomicU64::new(2);
+    assert!(
+        save_local_shell_icon(&state, Some("windows".into()), 1, &latest)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        save_local_shell_icon(&state, Some("debian".into()), 2, &latest)
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        config.load().unwrap().settings.terminal.scrollback_lines,
+        AppSettings::default().terminal.scrollback_lines
+    );
+    apply_preview_settings(&state, preview.clone()).unwrap();
+    let saved = save_workspace_settings(&state, preview).unwrap();
+    assert_eq!(
+        saved.appearance.local_shell_icon_override.as_deref(),
+        Some("debian")
+    );
+    assert!(
+        save_local_shell_icon(&state, None, 2, &latest)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        config
+            .load()
+            .unwrap()
+            .settings
+            .appearance
+            .local_shell_icon_override
+            .is_none()
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn icon_picker_search_uses_shared_names_ids_and_aliases() {
+    assert_eq!(
+        system_icon_choices("").len(),
+        ax_ssh::config::system_icon_choices().len()
+    );
+    assert!(
+        system_icon_choices("RED HAT")
+            .iter()
+            .any(|icon| icon.id == "rhel")
+    );
+    assert_eq!(system_icon_choices("microsoft")[0].id, "windows");
+    assert!(system_icon_choices("absent-distribution").is_empty());
+    assert_eq!(
+        settings_search_results("本地终端图标", "simplified-chinese")[0].section,
+        "General"
+    );
 }

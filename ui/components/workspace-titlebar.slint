@@ -1,5 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { SystemPlatformIcon } from "system-platform-icon.slint";
 import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 
 export struct WorkspaceTabRow {
@@ -7,6 +8,8 @@ export struct WorkspaceTabRow {
     title: string,
     kind: string,
     connected: bool,
+    system_release: string,
+    system_platform: string,
 }
 
 export struct ConnectableSessionRow {
@@ -59,10 +62,55 @@ component WorkspaceTransferGlyph inherits Rectangle {
     }
 }
 
+component TabKindGlyph inherits Rectangle {
+    in property <string> kind;
+    in property <string> system-platform;
+    in property <color> glyph-color: Theme.text;
+
+    width: Theme.tab-platform-icon-size;
+    height: Theme.tab-platform-icon-size;
+    background: transparent;
+
+    if !root.system-platform.is-empty : SystemPlatformIcon {
+        width: parent.width;
+        height: parent.height;
+        platform: root.system-platform;
+        glyph-color: root.glyph-color;
+    }
+    if root.system-platform.is-empty && (root.kind == "terminal" || root.kind == "sftp") : Rectangle {
+        x: Theme.hairline;
+        y: parent.height * 0.16;
+        width: parent.width - 2 * Theme.hairline;
+        height: parent.height * 0.68;
+        border-width: Theme.hairline;
+        border-color: root.glyph-color;
+        border-radius: Theme.radius-small;
+        background: transparent;
+        Rectangle {
+            x: Theme.hairline;
+            y: parent.height * 0.72;
+            width: parent.width - 2 * Theme.hairline;
+            height: Theme.hairline;
+            background: root.glyph-color;
+        }
+    }
+    if root.system-platform.is-empty && root.kind == "settings" : Text {
+        width: parent.width;
+        height: parent.height;
+        text: "⚙";
+        color: root.glyph-color;
+        font-size: Theme.tab-platform-icon-size;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 component WorkspaceTabContent inherits HorizontalLayout {
     in property <string> title;
     in property <string> kind;
     in property <bool> connected;
+    in property <string> system-release;
+    in property <string> system-platform;
     in property <bool> active: false;
     in property <int> order;
     in property <bool> close-enabled: false;
@@ -86,16 +134,14 @@ component WorkspaceTabContent inherits HorizontalLayout {
     spacing: Theme.tab-content-spacing;
 
     Rectangle {
-        width: Theme.tab-status-size;
+        width: Theme.tab-platform-icon-size;
         background: transparent;
-        Rectangle {
+        TabKindGlyph {
+            x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            width: Theme.tab-status-size;
-            height: Theme.tab-status-size;
-            border-radius: Theme.radius-small;
-            background: root.connected
-                ? Theme.success
-                : (root.kind == "terminal" ? Theme.accent : Theme.muted);
+            kind: root.kind;
+            system-platform: root.system-platform;
+            glyph-color: root.active ? Theme.text : Theme.muted;
         }
     }
     Text {
@@ -110,11 +156,19 @@ component WorkspaceTabContent inherits HorizontalLayout {
     ElidedLabel {
         horizontal-stretch: 1;
         text: root.title;
+        tooltip-text: root.system-release;
+        tooltip-enabled: !root.system-release.is-empty;
         text-color: root.active ? Theme.tab-active-text : Theme.tab-inactive-text;
         font-size: Theme.tab-title-font-size;
         font-weight: root.active
             ? Theme.tab-title-active-font-weight
             : Theme.tab-title-inactive-font-weight;
+    }
+    if root.connected : Rectangle {
+        width: Theme.tab-status-size;
+        height: Theme.tab-status-size;
+        border-radius: Theme.tab-status-size / 2;
+        background: Theme.success;
     }
     if root.window-action-enabled : Rectangle {
         width: root.close-button-size;
@@ -424,6 +478,8 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <length> drag-pointer-offset-x: 0px;
     private property <string> drag-title;
     private property <string> drag-kind;
+    private property <string> drag-system-release;
+    private property <string> drag-system-platform;
     private property <bool> drag-connected: false;
     private property <int> drag-order: 0;
     private property <int> tab-visibility-revision: 0;
@@ -482,6 +538,7 @@ export component WorkspaceTitlebar inherits Rectangle {
 
     function begin-tab-drag(
         id: string, index: int, title: string, kind: string, connected: bool,
+        system-release: string, system-platform: string,
         pointer-x: length,
     ) {
         root.drag-source-id = id;
@@ -492,6 +549,8 @@ export component WorkspaceTitlebar inherits Rectangle {
         root.drag-title = title;
         root.drag-kind = kind;
         root.drag-connected = connected;
+        root.drag-system-release = system-release;
+        root.drag-system-platform = system-platform;
         root.drag-order = index + 1;
     }
 
@@ -593,7 +652,9 @@ export component WorkspaceTitlebar inherits Rectangle {
                         focus-on-click: true;
                         focus-on-tab-navigation: true;
                         accessible-role: button;
-                        accessible-label: tab.title;
+                        accessible-label: tab.system_release.is-empty
+                            ? tab.title
+                            : "\{tab.title}, \{tab.system_release}";
 
                         changed active => {
                             if self.active {
@@ -678,6 +739,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                                 tab-focus.focus();
                                 root.begin-tab-drag(
                                     tab.id, index, tab.title, tab.kind, tab.connected,
+                                    tab.system_release, tab.system_platform,
                                     self.mouse-x,
                                 );
                             } else if event.kind == PointerEventKind.up
@@ -706,6 +768,8 @@ export component WorkspaceTitlebar inherits Rectangle {
                         title: tab.title;
                         kind: tab.kind;
                         connected: tab.connected;
+                        system-release: tab.system_release;
+                        system-platform: tab.system_platform;
                         active: tab.id == root.active-tab-id;
                         order: index + 1;
                         close-enabled: true;
@@ -813,6 +877,8 @@ export component WorkspaceTitlebar inherits Rectangle {
                     title: root.drag-title;
                     kind: root.drag-kind;
                     connected: root.drag-connected;
+                    system-release: root.drag-system-release;
+                    system-platform: root.drag-system-platform;
                     active: true;
                     order: root.drag-order;
                 }

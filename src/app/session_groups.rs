@@ -127,16 +127,6 @@ fn mask_ipv4_host(host: &str, mask_character: &str) -> String {
     format!("{first}.{mask_character}.{third}.{fourth}")
 }
 
-pub(super) fn compact_label(value: &str, fallback: &str, max_chars: usize) -> String {
-    let value = value.trim();
-    let value = if value.is_empty() { fallback } else { value };
-    if max_chars == 0 {
-        value.to_owned()
-    } else {
-        value.chars().take(max_chars).collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,14 +149,6 @@ mod tests {
             group_options(&sessions),
             ["Ungrouped", "Empty", "Production", "Staging"]
         );
-    }
-
-    #[test]
-    fn compact_labels_keep_the_first_two_unicode_characters() {
-        assert_eq!(compact_label("Production", "Un", 2), "Pr");
-        assert_eq!(compact_label("生产环境", "Un", 2), "生产");
-        assert_eq!(compact_label("Production", "Un", 0), "Production");
-        assert_eq!(compact_label("", "Un", 2), "Un");
     }
 
     #[test]

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-env-changed=AXSSH_BUILD_REVISION");
     println!("cargo:rerun-if-changed=ui");
+    println!("cargo:rerun-if-changed=assets/os-icons/ui/folder/material-symbols-folder.svg");
     println!("cargo:rerun-if-changed=translations");
     println!("cargo:rerun-if-changed=assets/ion/terminal_icon.svg");
     println!("cargo:rerun-if-changed=assets/ion/terminal_icon_all_formats/terminal_icon_256.png");

@@ -374,6 +374,7 @@ fn validate_transfer_text(label: &str, value: &str, max_chars: usize) -> Result<
 
 fn sanitize_transferred_profile(profile: &mut SessionProfile) {
     profile.id = Uuid::nil();
+    profile.detected_system = None;
     profile.group_name = normalize_group_name(&profile.group_name);
     if let Some(ssh) = profile.ssh_mut() {
         ssh.credential_storage = None;
