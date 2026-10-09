@@ -1,18 +1,18 @@
 {
   "schema_version": 2,
-  "checked_at": "2026-10-09T01:13:05+00:00",
+  "checked_at": "2026-10-09T02:10:00+00:00",
   "status": "passed",
   "counts": {
-    "systems": 177,
-    "assets": 327,
+    "systems": 178,
+    "assets": 328,
     "formats": {
-      "svg": 311,
+      "svg": 312,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 4,
+      "windows": 5,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -21,7 +21,7 @@
       "desktop": 11
     },
     "variants": {
-      "color": 151,
+      "color": 152,
       "light": 74,
       "dark": 71,
       "original": 29,
@@ -30,7 +30,7 @@
     }
   },
   "original_assets_unchanged": 135,
-  "checked_assets": 327,
+  "checked_assets": 328,
   "checks": [
     {
       "path": "linux/generic/selfhst-linux.svg",
@@ -3939,6 +3939,18 @@
         "positive-dimensions",
         "chunk-crcs-and-complete-file"
       ]
+    },
+    {
+      "path": "windows/server/commons-windows-server.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-upstream-bytes",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ]
     }
   ],
   "rendering": {
@@ -3946,13 +3958,13 @@
       16,
       64
     ],
-    "successful_renders": 654,
-    "nonempty_renders": 654,
+    "successful_renders": 656,
+    "nonempty_renders": 656,
     "tool": "ImageMagick",
     "source_artwork_unmodified": true
   },
   "visual_review": {
-    "new_asset_count": 192,
+    "new_asset_count": 193,
     "new_contact_sheets": 8,
     "backgrounds": [
       "#ffffff",
@@ -3961,25 +3973,26 @@
     "status": "passed",
     "previous_135_assets_reviewed": true,
     "application_screenshots_used": false,
-    "reviewed_new_assets": 192,
+    "reviewed_new_assets": 193,
     "observations": [
       "Flatcar CNCF icon files contain the project wordmark and are classified accordingly.",
       "Original opaque backgrounds and native palette differences are retained and documented.",
       "White/light ink can vanish on white and black/dark ink can vanish on dark backgrounds; choose the matching background.",
-      "Wordmarks and fine-detail marks remain legible only at larger sizes; nonempty rendering does not guarantee small-size readability."
+      "Wordmarks and fine-detail marks remain legible only at larger sizes; nonempty rendering does not guarantee small-size readability.",
+      "Windows Server Microsoft wordmark is retained as a wordmark because no dedicated Iconify symbol was found; the unofficial Windows Server 2025 candidate was excluded."
     ]
   },
   "licenses": {
-    "collection_notices": 8,
+    "collection_notices": 9,
     "official_assets_have_explicit_publisher_status": true
   },
   "observed_svg_tags": {
-    "svg": 311,
-    "path": 1107,
-    "g": 74,
-    "rect": 39,
-    "defs": 36,
-    "clipPath": 27,
+    "svg": 312,
+    "path": 1121,
+    "g": 78,
+    "rect": 43,
+    "defs": 37,
+    "clipPath": 31,
     "linearGradient": 66,
     "stop": 326,
     "circle": 72,

@@ -2,7 +2,7 @@
 
 [English](README.md) · [离线预览](preview.html) · [来源清单](manifest.json) · [检索覆盖/缺口](search-coverage.json) · [检查结果](validation.json)
 
-共 **327 个文件**（311 SVG, 16 PNG），覆盖 **177 个系统/平台条目**。本轮补充 192 个图标、121 个条目，原先 135 个 SVG 完整保留。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
+共 **328 个文件**（312 SVG, 16 PNG），覆盖 **178 个系统/平台条目**。本轮补充 193 个图标、122 个条目，原先 135 个 SVG 完整保留。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
 
 图标来源包括 [Iconify](https://icon-sets.iconify.design/?query=Linux)、项目官网/品牌页/官方仓库、[Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) 和 [Font Logos](https://github.com/lukas-w/font-logos)。优先符号，保留必要的字母徽记；只找到带完整名称的标志时，原样保留并标记。原生 SVG/PNG 字节未改动；Iconify 图形只添加 SVG 外壳，没有裁字、裁图或自行配色。
 
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | `linux/` | 114 | Linux / GNU 系统 |
 | `macos/` | 1 | macOS |
-| `windows/` | 4 | Windows |
+| `windows/` | 5 | Windows、Windows Server 和历史变体 |
 | `bsd/` | 7 | BSD 系统 |
 | `appliances/` | 15 | NAS / 路由 / 家庭服务器 / 媒体系统 |
 | `platforms/` | 14 | 云 / 容器 / 虚拟化 / 管理平台 |
@@ -20,7 +20,7 @@
 | `other/` | 7 | 其他操作系统 |
 | `desktop/` | 11 | 桌面环境 / 窗口管理器 |
 
-`linux/generic/` 为 Tux；Windows 子目录保留 Windows 8/11 和旧版旗帜。`licenses/` 保存来源集合许可、官网品牌说明和政策。目录不代表所有条目都是发行版，准确类型见清单的 `kind`。
+`linux/generic/` 为 Tux；Windows 子目录保留 Windows Server、Windows 8/11 和旧版旗帜。`licenses/` 保存来源集合许可、官网品牌说明和政策。目录不代表所有条目都是发行版，准确类型见清单的 `kind`。
 
 只有上游实际存在的变体才保存；缺少 light/dark 表示检查的来源未发现该变体。
 
@@ -33,11 +33,12 @@
 
 ## 选择说明与检索缺口
 
-新增包括 CachyOS、openEuler、Talos、openKylin、UOS、Anolis、OpenCloudOS、BlackArch、Bazzite、SteamOS、Ubuntu Budgie/Studio、Flatcar、DietPi、Bottlerocket，以及 BSD/NAS/路由、云容器平台和桌面环境。Mageia 补充无文字坩埚符号；NetBSD 优先无文字旗帜；Volumio 使用官方无文字符号；Flatcar 官方 icon 文件仍含名称。
+新增包括 CachyOS、openEuler、Talos、openKylin、UOS、Anolis、OpenCloudOS、BlackArch、Bazzite、SteamOS、Ubuntu Budgie/Studio、Flatcar、DietPi、Bottlerocket、Windows Server，以及 BSD/NAS/路由、云容器平台和桌面环境。Mageia 补充无文字坩埚符号；NetBSD 优先无文字旗帜；Volumio 使用官方无文字符号；Flatcar 官方 icon 文件仍含名称。
 
-默认图形仍含完整名称的例外：YunoHost、ZimaOS、IBM AIX、LXLE、MS-DOS、BigLinux、Synology (DSM vendor brand)、Amazon Web Services、Oracle Linux、openKylin、OpenCloudOS、UnionTech UOS、DietPi、Flatcar Container Linux、IPFire、LibreELEC、Funtoo Linux。每个文件的 `text_kind` 区分 symbol、lettermark、wordmark；Ubuntu Budgie 和旧 Mageia 名称版本作为附加资源保留。
+默认图形仍含完整名称的例外：YunoHost、ZimaOS、IBM AIX、LXLE、MS-DOS、BigLinux、Synology (DSM vendor brand)、Amazon Web Services、Oracle Linux、openKylin、OpenCloudOS、UnionTech UOS、DietPi、Flatcar Container Linux、Windows Server、IPFire、LibreELEC、Funtoo Linux。每个文件的 `text_kind` 区分 symbol、lettermark、wordmark；Ubuntu Budgie 和旧 Mageia 名称版本作为附加资源保留。
 
 - **Amazon Linux / RancherOS**：检查的来源未确认专用 SVG/PNG 图标。AWS 和 Rancher 通用品牌另存 `platforms/`，没有将它们冒充专用系统标志。
+- **Windows Server**：未找到 Iconify 专用条目；保留 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg) 的 Microsoft 名称标志，文件页将 2017 图形标为公共领域。Commons 页面将 Windows Server 2025 标为非官方，因此排除该候选。
 - **Synology DSM**：本轮只有明确标注的厂商品牌；Anolis OS 和 Raspberry Pi OS 也分别说明使用社区/厂商品牌。
 - **身份排除**：selfhst:endless 未确认为 Endless OS；Apache Kylin 不是 openKylin；token:uos 不是统信 UOS。
 - **旧版/社区资源**：Puppy 上游 hidden、openSUSE ALP/Evergreen/Step 计划标志仍明确标注。Funtoo 官网标记项目结束。Papirus/Font Logos 的收集不代表系统仍在发布/维护，也不代表其为官方品牌文件。
@@ -56,6 +57,7 @@
 | `font-logos` | [Lukas W. and contributors](https://github.com/lukas-w/font-logos) | Unlicense | [LICENSE-font-logos.txt](licenses/LICENSE-font-logos.txt) |
 | `cncf-artwork` | [CNCF project contributors](https://github.com/cncf/artwork) | Linux Foundation trademark usage guidelines | [NOTICE-cncf-artwork.txt](licenses/NOTICE-cncf-artwork.txt) |
 | `official-branding` | Respective project and brand owners | Per-publisher brand terms; no common asset license | [NOTICE-official-branding.txt](licenses/NOTICE-official-branding.txt) |
+| `wikimedia-commons` | Wikimedia Commons contributors / Microsoft Corporation | Public domain as recorded by Wikimedia Commons | [NOTICE-wikimedia-commons.txt](licenses/NOTICE-wikimedia-commons.txt) |
 
 集合许可只适用于相应来源文件。官网品牌资源没有共同版权许可；未明确给出图标许可时，清单记录 `not-explicitly-stated`，没有套用 MIT/CC0 或软件仓库许可。CNCF artwork 使用 Linux Foundation 品牌条款。所有商标属于各自权利人，分发时保留对应声明和归属。
 
@@ -193,6 +195,7 @@ SVG 的 XML、viewBox 或明确尺寸、文件哈希、内部引用和无脚本/
 | 名称 | 类型 | 优先图标 | 已保存变体 | 图形文字 |
 | --- | --- | --- | --- | --- |
 | Windows | operating-system | [selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) | color, light, dark, light (badge), dark (badge) | symbol |
+| Windows Server | operating-system | [commons-windows-server.svg](windows/server/commons-windows-server.svg) | color | wordmark |
 | Windows (legacy flag) | operating-system | [selfhst-windows-retro.svg](windows/retro/selfhst-windows-retro.svg) | color, light, dark | symbol |
 | Windows 11 | operating-system | [thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) | color | symbol |
 | Windows 8 | operating-system | [thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) | color | symbol |

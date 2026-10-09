@@ -67,6 +67,10 @@ in `assets/os-icons/licenses/NOTICE-cncf-artwork.txt`. Publisher originals have
 individual branding terms and no common asset copyright license. Their source
 pages and policy links are recorded in
 `assets/os-icons/licenses/NOTICE-official-branding.txt` and per-asset metadata.
+The Windows Server reference copy is separately attributed in
+`assets/os-icons/licenses/NOTICE-wikimedia-commons.txt`; its Commons page
+records the 2017 Microsoft artwork as public domain, while Microsoft
+trademarks remain with Microsoft Corporation.
 An unspecified asset license is explicitly recorded rather than replaced by
 MIT, CC0, or a software repository's code license.
 

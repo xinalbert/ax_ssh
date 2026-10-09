@@ -2,7 +2,7 @@
 
 [中文说明](README.zh.md) · [Offline preview](preview.html) · [Source manifest](manifest.json) · [Search coverage / gaps](search-coverage.json) · [Checks](validation.json)
 
-**327 files** (311 SVG, 16 PNG) cover **177 system/platform entries**. This expansion adds 192 icons and 121 entries; the original 135 SVGs are unchanged. Open `preview.html` locally to compare every file on white and dark backgrounds.
+**328 files** (312 SVG, 16 PNG) cover **178 system/platform entries**. This expansion adds 193 icons and 122 entries; the original 135 SVGs are unchanged. Open `preview.html` locally to compare every file on white and dark backgrounds.
 
 Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), project websites/brand pages/official repositories, [Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme), and [Font Logos](https://github.com/lukas-w/font-logos). Symbols are preferred, with native letter emblems retained. Full-name exceptions are explicitly marked. Native SVG/PNG bytes are unchanged; Iconify bodies only receive an SVG wrapper. No logo was cropped or recolored.
 
@@ -12,7 +12,7 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 | --- | --- | --- |
 | `linux/` | 114 | Linux / GNU systems |
 | `macos/` | 1 | macOS |
-| `windows/` | 4 | Windows |
+| `windows/` | 5 | Windows, Windows Server and historical variants |
 | `bsd/` | 7 | BSD systems |
 | `appliances/` | 15 | NAS / router / server / media systems |
 | `platforms/` | 14 | Cloud / container / virtualization / management platforms |
@@ -20,7 +20,7 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 | `other/` | 7 | Other operating systems |
 | `desktop/` | 11 | Desktop environments / window managers |
 
-`linux/generic/` contains Tux; Windows subdirectories preserve Windows 8/11 and the legacy flag. `licenses/` contains collection licenses and publisher notices/policies. Entries are not all distributions; the manifest `kind` records their actual category.
+`linux/generic/` contains Tux; Windows subdirectories preserve Windows Server, Windows 8/11 and the legacy flag. `licenses/` contains collection licenses and publisher notices/policies. Entries are not all distributions; the manifest `kind` records their actual category.
 
 Only native upstream variants are saved. A missing light/dark entry means no matching variant was found in the inspected source.
 
@@ -33,11 +33,12 @@ Only native upstream variants are saved. A missing light/dark entry means no mat
 
 ## Selection notes and search gaps
 
-Additions include CachyOS, openEuler, Talos, openKylin, UOS, Anolis, OpenCloudOS, BlackArch, Bazzite, SteamOS, Ubuntu Budgie/Studio, Flatcar, DietPi, Bottlerocket, BSD/NAS/router systems, cloud/container platforms and desktop environments. Mageia now has a wordless cauldron; NetBSD prefers a wordless flag; Volumio uses official wordless symbols; the Flatcar official icon files still contain its name.
+Additions include CachyOS, openEuler, Talos, openKylin, UOS, Anolis, OpenCloudOS, BlackArch, Bazzite, SteamOS, Ubuntu Budgie/Studio, Flatcar, DietPi, Bottlerocket, Windows Server, BSD/NAS/router systems, cloud/container platforms and desktop environments. Mageia now has a wordless cauldron; NetBSD prefers a wordless flag; Volumio uses official wordless symbols; the Flatcar official icon files still contain its name.
 
-Preferred full-name exceptions: YunoHost, ZimaOS, IBM AIX, LXLE, MS-DOS, BigLinux, Synology (DSM vendor brand), Amazon Web Services, Oracle Linux, openKylin, OpenCloudOS, UnionTech UOS, DietPi, Flatcar Container Linux, IPFire, LibreELEC, Funtoo Linux. Per-file `text_kind` distinguishes symbol, lettermark and wordmark; the Ubuntu Budgie and original Mageia wordmarks are retained as extra files.
+Preferred full-name exceptions: YunoHost, ZimaOS, IBM AIX, LXLE, MS-DOS, BigLinux, Synology (DSM vendor brand), Amazon Web Services, Oracle Linux, openKylin, OpenCloudOS, UnionTech UOS, DietPi, Flatcar Container Linux, Windows Server, IPFire, LibreELEC, Funtoo Linux. Per-file `text_kind` distinguishes symbol, lettermark and wordmark; the Ubuntu Budgie and original Mageia wordmarks are retained as extra files.
 
 - **Amazon Linux / RancherOS**: no dedicated SVG/PNG mark was confirmed in the inspected sources. Generic AWS and Rancher branding is separately stored under `platforms/`.
+- **Windows Server**: no dedicated Iconify entry was found. The Microsoft wordmark is retained from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg), whose file page records the 2017 artwork as public domain. The unofficial Windows Server 2025 candidate was excluded.
 - **Synology DSM**: only explicitly labelled vendor branding was selected. Anolis OS and Raspberry Pi OS also document their community/vendor brand proxies.
 - **Identity exclusions**: selfhst:endless was not verified as Endless OS; Apache Kylin is not openKylin; token:uos is not UnionTech UOS.
 - **Legacy/community artwork**: Puppy remains upstream-hidden; openSUSE ALP/Evergreen/Step remain initiative variants. Funtoo is marked ended by its website. Inclusion of Papirus/Font Logos artwork does not establish current support/release status or official branding.
@@ -56,6 +57,7 @@ See [search-coverage.json](search-coverage.json) for individual outcomes. This i
 | `font-logos` | [Lukas W. and contributors](https://github.com/lukas-w/font-logos) | Unlicense | [LICENSE-font-logos.txt](licenses/LICENSE-font-logos.txt) |
 | `cncf-artwork` | [CNCF project contributors](https://github.com/cncf/artwork) | Linux Foundation trademark usage guidelines | [NOTICE-cncf-artwork.txt](licenses/NOTICE-cncf-artwork.txt) |
 | `official-branding` | Respective project and brand owners | Per-publisher brand terms; no common asset license | [NOTICE-official-branding.txt](licenses/NOTICE-official-branding.txt) |
+| `wikimedia-commons` | Wikimedia Commons contributors / Microsoft Corporation | Public domain as recorded by Wikimedia Commons | [NOTICE-wikimedia-commons.txt](licenses/NOTICE-wikimedia-commons.txt) |
 
 Collection licenses apply only to the corresponding source files. Publisher brand originals have no common copyright license; where an asset license is not explicit, the manifest records `not-explicitly-stated` rather than assigning MIT/CC0 or the software repository license. CNCF artwork follows Linux Foundation brand terms. Trademarks remain with their owners; preserve the corresponding notices and attribution when distributing assets.
 
@@ -193,6 +195,7 @@ SVG XML, viewBoxes or explicit dimensions, hashes, internal references and absen
 | Name | Kind | Preferred icon | Saved variants | Text kind |
 | --- | --- | --- | --- | --- |
 | Windows | operating-system | [selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) | color, light, dark, light (badge), dark (badge) | symbol |
+| Windows Server | operating-system | [commons-windows-server.svg](windows/server/commons-windows-server.svg) | color | wordmark |
 | Windows (legacy flag) | operating-system | [selfhst-windows-retro.svg](windows/retro/selfhst-windows-retro.svg) | color, light, dark | symbol |
 | Windows 11 | operating-system | [thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) | color | symbol |
 | Windows 8 | operating-system | [thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) | color | symbol |

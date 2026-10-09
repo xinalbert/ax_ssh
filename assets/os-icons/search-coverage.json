@@ -1,21 +1,21 @@
 {
   "schema_version": 1,
-  "retrieved_at": "2026-10-09T01:00:59+00:00",
+  "retrieved_at": "2026-10-09T02:10:00+00:00",
   "scope": "Follow-up missing-icon audit plus BSD, appliances, platforms and desktop environments; not an exhaustive list of every operating system.",
   "original_asset_count": 135,
-  "new_asset_count": 192,
-  "new_system_count": 121,
+  "new_asset_count": 193,
+  "new_system_count": 122,
   "counts": {
-    "systems": 177,
-    "assets": 327,
+    "systems": 178,
+    "assets": 328,
     "formats": {
-      "svg": 311,
+      "svg": 312,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 4,
+      "windows": 5,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -24,7 +24,7 @@
       "desktop": 11
     },
     "variants": {
-      "color": 151,
+      "color": 152,
       "light": 74,
       "dark": 71,
       "original": 29,
@@ -3347,6 +3347,34 @@
       ],
       "notes_en": "Only the vendor brand was selected, explicitly labelled as such.",
       "notes_zh": "本轮选取厂商品牌并明确标注，未将其称为 DSM 专用图标。"
+    },
+    {
+      "id": "windows-server",
+      "name": "Windows Server",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "Windows Server logo SVG",
+        "Windows Server icon",
+        "Windows Server 2025 logo"
+      ],
+      "source_classes": [
+        "community-reference"
+      ],
+      "source_urls": [
+        "https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg",
+        "https://upload.wikimedia.org/wikipedia/commons/2/26/Windows_Server_logo.svg",
+        "https://api.iconify.design/collection?prefix=selfhst"
+      ],
+      "assets": [
+        "windows/server/commons-windows-server.svg"
+      ],
+      "preferred_asset": "windows/server/commons-windows-server.svg",
+      "native_variants": [
+        "color"
+      ],
+      "notes_en": "A dedicated Iconify Windows Server entry was not found. The Microsoft Corporation wordmark is preserved from the Wikimedia Commons file page, which records the 2017 artwork as public domain. The Wikimedia page labels Windows Server 2025 as unofficial, so that candidate was excluded.",
+      "notes_zh": "未找到 Iconify 专用 Windows Server 条目。保留 Wikimedia Commons 文件页中的 Microsoft Corporation 名称标志；该页将 2017 图形标为公共领域。Commons 页面将 Windows Server 2025 标为非官方，因此排除该候选。"
     }
   ],
   "exclusions": [

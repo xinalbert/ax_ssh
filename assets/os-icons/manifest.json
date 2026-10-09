@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "retrieved_at": "2026-10-08T10:15:44+00:00",
+  "retrieved_at": "2026-10-09T02:10:00+00:00",
   "search_url": "https://icon-sets.iconify.design/?query=Linux",
   "selection_policy": "Prefer symbols over wordmarks; retain available upstream light/dark variants without recoloring.",
   "export_policy": "Iconify body in an SVG wrapper, or unmodified upstream SVG/PNG bytes; no artwork recoloring or cropping.",
@@ -189,6 +189,23 @@
       "data_source": {
         "type": "publisher-originals",
         "description": "Individual source and download URLs, optional repository revisions and archive members are recorded on each asset."
+      }
+    },
+    "wikimedia-commons": {
+      "name": "Wikimedia Commons reference artwork",
+      "author": {
+        "name": "Wikimedia Commons contributors / Microsoft Corporation",
+        "url": "https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg"
+      },
+      "license": {
+        "title": "Public domain as recorded by Wikimedia Commons",
+        "spdx": null,
+        "url": "https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg"
+      },
+      "license_file": "licenses/NOTICE-wikimedia-commons.txt",
+      "data_source": {
+        "type": "commons-file",
+        "description": "The file page records Microsoft Corporation as artist and the 2017 Windows Server artwork as public domain."
       }
     }
   },
@@ -1169,6 +1186,23 @@
       "kind": "operating-system",
       "saved_text_kinds": [
         "symbol"
+      ]
+    },
+    {
+      "id": "windows-server",
+      "name": "Windows Server",
+      "platform": "windows",
+      "directory": "windows/server",
+      "text_kind": "wordmark",
+      "notes_en": "Microsoft Windows Server wordmark. Iconify has no dedicated Windows Server entry; the byte-preserved reference copy is sourced from Wikimedia Commons and marked public domain there.",
+      "notes_zh": "Microsoft Windows Server 名称标志。Iconify 没有专用 Windows Server 条目；保留 Wikimedia Commons 的原始文件，并按其页面标为公共领域。",
+      "assets": [
+        "windows/server/commons-windows-server.svg"
+      ],
+      "preferred_asset": "windows/server/commons-windows-server.svg",
+      "kind": "operating-system",
+      "saved_text_kinds": [
+        "wordmark"
       ]
     },
     {
@@ -5561,6 +5595,26 @@
       "format": "svg"
     },
     {
+      "path": "windows/server/commons-windows-server.svg",
+      "system_id": "windows-server",
+      "collection": "wikimedia-commons",
+      "variant": "color",
+      "presentation": "mark",
+      "text_kind": "wordmark",
+      "format": "svg",
+      "source_class": "community-reference",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Windows_Server_logo.svg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/2/26/Windows_Server_logo.svg",
+      "width": 2134,
+      "height": 301,
+      "sha256": "3470229e51898e1b87b355fae86a148597c6f9efbcd76cabf71d856f51b85f81",
+      "upstream_hidden": false,
+      "transformation": "none",
+      "source_artifact_name": "Windows_Server_logo.svg",
+      "asset_license_status": "public-domain-as-recorded-by-wikimedia-commons",
+      "copyright_holder": "Microsoft Corporation"
+    },
+    {
       "path": "windows/windows-8/thesvg-color-windows8.svg",
       "system_id": "windows-8",
       "iconify_id": "thesvg-color:windows8",
@@ -9729,24 +9783,25 @@
       "copyright_holder": "Funtoo Linux project / brand owner"
     }
   ],
-  "updated_at": "2026-10-09T01:00:59+00:00",
+  "updated_at": "2026-10-09T02:10:00+00:00",
   "search_urls": [
     "https://icon-sets.iconify.design/?query=Linux",
     "https://icon-sets.iconify.design/?query=macOS",
-    "https://icon-sets.iconify.design/?query=Windows"
+    "https://icon-sets.iconify.design/?query=Windows",
+    "https://api.iconify.design/collection?prefix=selfhst"
   ],
   "coverage_report": "search-coverage.json",
   "counts": {
-    "systems": 177,
-    "assets": 327,
+    "systems": 178,
+    "assets": 328,
     "formats": {
-      "svg": 311,
+      "svg": 312,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 4,
+      "windows": 5,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -9755,7 +9810,7 @@
       "desktop": 11
     },
     "variants": {
-      "color": 151,
+      "color": 152,
       "light": 74,
       "dark": 71,
       "original": 29,

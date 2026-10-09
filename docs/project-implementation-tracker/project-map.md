@@ -21,7 +21,7 @@
 | `translations/` | 构建时内嵌的 Slint 界面翻译目录 | 增加或修改静态用户可见文案、locale 或语言选择时 | 当前完整目录为 `zh-CN`；远端内容、用户值、日志与运行时技术错误详情不进入翻译键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
-| `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 327 个图标、177 个系统/平台条目，含 Linux/macOS/Windows、BSD、NAS/路由、容器/虚拟化与桌面环境；仅准备资源，未接入 Rust/Slint 或打包 |
+| `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 328 个图标、178 个系统/平台条目，含 Linux/macOS/Windows/Windows Server、BSD、NAS/路由、容器/虚拟化与桌面环境；仅准备资源，未接入 Rust/Slint 或打包 |
 | `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 转发 `PhysicalRegion::iter()` 的多矩形 damage，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；Windows 窗口重新聚焦时使 renderer 失效并请求整窗重绘；不得承载 AxSSH UI、终端或 SSH 逻辑 |
 | `vendor/i-slint-renderer-skia/` | 锁定 Slint 1.18.1 的 Skia GPU layer cache 生命周期补丁 | 修改 GPU 资源释放、行缓存或升级 Slint 时 | 仅在 `free_graphics_resources` 对销毁组件调用 `layer_cache.component_destroyed`；保留原 crate 许可证与其余源码，不承载 AxSSH 状态或 SSH 逻辑 |
 | `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。Win32 surface 在失效时重置 buffer age；macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
@@ -229,7 +229,7 @@
 
 ## 最后更新时间
 
-- 2026-10-09 09:45 +0800：完成 `assets/os-icons/` 327 个图形文件的来源/哈希/结构检查、654 次小尺寸渲染和 192 项新增图形复核；Flatcar wordmark 例外及检索缺口已记录，资源保持未接入 UI/打包。
+- 2026-10-09 11:10 +0800：补入 Windows Server Commons/Microsoft wordmark，排除非官方 Windows Server 2025 候选；`assets/os-icons/` 328 个图形文件、656 次小尺寸渲染和 193 项新增图形复核记录已同步，资源保持未接入 UI/打包。
 
 - 2026-10-08 15:55 +0800：Windows/Linux 窗口控件改为固定 viewbox 矢量路径；尺寸集中到 Theme，补充 Tooltip、焦点和无障碍默认动作。
 
