@@ -352,28 +352,60 @@ change the recent-open order, and the Save dialog still defaults to the private
 
 Saved sessions are organized beneath collapsible group rows in the expanded
 navigator. Right-click blank list space to create an empty group or an
-Ungrouped server even before any profile exists. Expanded group rows show their
-name, count, and a centered
-drawn down chevron; collapsed groups use the matching drawn up chevron. This
-avoids repeating the name as a badge. Select the group row, or focus it and
-press Enter or Space, to change that state. Every visible server remains a
-single indented row: its name is on the left and its masked endpoint is on the
-right. **View > Toggle Session Sidebar** switches between this view and the
-compact activity bar. The compact bar uses the first 1-4 characters of each
-group name by default. These group labels use bold accent text without a
-permanent outline or background; server labels use a lighter weight, and group
-spacing keeps the hierarchy visible. Hover and selection add a background,
-while focus retains a visible outline. Choose **Full name** in
-**Settings > Workspace** to show the complete group name. Full-name mode widens
-the collapsed rail to 180px and uses a dense single-line list with a trailing sidebar control, labeled Local
-Shell action, group disclosure and counts, and indented full server names.
-Long labels are elided and available in tooltips. The same row context menus
-are available in the compact rail. The most recently selected group or server
-remains highlighted across
-expanded and compact sidebar views; hover and keyboard focus use separate
-feedback. Deleting a group moves its servers to Ungrouped. Deleting a profile
-also removes its remembered password but does not close terminal tabs that are
-already open.
+Ungrouped server even before any profile exists. Use the search field to find a
+group or server by name or connection details; matching groups expand to show
+results. Groups show a folder icon, name, count, and disclosure chevron. Click a
+group row, or focus it and press Enter or Space, to expand or collapse it. Every
+visible server has a system icon, name, and masked endpoint on a single indented
+row. After a successful SSH or SFTP connection, AxSSH tries to read a short
+remote release label for the tab and its sidebar icon. An unavailable release
+keeps the connected session usable and uses a generic server icon.
+
+**View > Toggle Session Sidebar** switches to a narrow icon rail. Groups use
+folder icons, and servers use their detected system's icon. Linux distributions
+such as Ubuntu, Debian, Fedora, Rocky Linux and openSUSE use their own artwork;
+Tux is the fallback for Linux with no recognized dedicated mark.
+The Local Shell entry and its tabs use the host operating system's icon,
+regardless of the chosen shell or tab title; unsupported systems use a terminal
+icon. Hover for names and connection details;
+keyboard focus and accessible labels retain each action's identity. The rail
+keeps group disclosure and the same row context menus. The obsolete collapsed
+group-label picker is removed from Settings; existing saved values remain
+compatible and the rail always stays narrow. System icons, including Local
+Shell's, retain their source colors by default. With AxSSH closed, edit
+`settings.appearance.system_icons_follow_theme` in `sessions.json`: `false` is
+the default; set it to `true` and restart to tint sidebar and tab system icons
+with the current theme. This option has no Settings control, and Settings
+preview/save preserves its value. Folder, terminal, and generic-server UI
+symbols continue to use theme colors. Group folders, server icons, and Local Shell
+use a shared 20px icon box in the sidebar; indentation and disclosure arrows
+express the hierarchy. Tab icons retain their compact 16px size.
+
+In the server editor, **System icon** opens a searchable list of bundled system
+names. A manual choice takes priority; **Automatic** restores automatic selection.
+The profile's optional `system_icon_override` stores the canonical ID. Successful
+SSH/SFTP discovery saves a bounded release label and icon ID in the profile's
+`detected_system`; later connections, closed tabs, and application restarts reuse
+it without probing again. Cache validity includes host, port, username, and host-key
+fingerprint. Failed detection is not cached; successful unknown systems retain a
+generic icon without repeated probes. To update an automatic choice after changing
+the server OS, select **Detect again on next connection**, save, and reconnect.
+Manual choices skip the icon probe. Editing the destination invalidates automatic
+metadata while preserving the manual choice. Exports preserve manual choices and
+omit detected metadata.
+
+**Settings > General > Local shell icon** uses the same picker and saves immediately
+to `settings.appearance.local_shell_icon_override`; **Automatic** restores host
+identification. Unknown or invalid IDs in configuration fall back to automatic.
+Local Shell's platform icon is available before opening
+a shell. On Linux, AxSSH reads local os-release once in the background to select
+the distribution icon; unavailable or unrecognized information keeps Tux.
+The [system name index](../assets/os-icons/names.md) lists canonical IDs,
+display names, accepted aliases and shared icon paths.
+The selected group or server remains highlighted across expanded and compact
+views, and release updates preserve the current group's disclosure state.
+Deleting a group moves its servers to Ungrouped. Deleting a profile also removes
+its remembered password but does not close terminal tabs already open.
 
 Text-bearing buttons and button-like rows stay on one line. When their label
 does not fit, AxSSH shows an ellipsis; hover the control to read the complete

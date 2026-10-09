@@ -74,6 +74,18 @@ Process startup (src/main.rs)
 - The window router is installed once before callbacks. UI updates use its
   bounded refresh gate. SFTP browser/transfer tasks belong to the SFTP-only
   worker; the terminal worker owns shell and X11 tasks.
+- After an SSH session reports `Connected`, its worker may open a separate,
+  bounded exec channel to read a short remote release label. Each worker probes at most once, with a
+  four-second timeout and a 2 KiB output cap, never writes into the interactive
+  terminal, and reports no label when the remote shell or release source is
+  unavailable. The application deduplicates probes across a profile's SSH/SFTP tabs,
+  skips them for manual choices or valid caches, and binds successful metadata to
+  the current destination and attempt. Config owns the persistent cache schema;
+  a blocking task saves only that metadata under the process-wide persistence gate,
+  waiting for pending profile/credential mutations and preserving Settings previews.
+  Results from
+  detached windows also refresh the main connection model; the existing
+  connected state remains the fallback.
 - User exports and private configuration share temporary-file write, fsync,
   close, atomic replacement and cleanup. Their wrappers retain distinct parent
   permission rules: exports preserve the directory, private storage restricts it.
@@ -1054,25 +1066,71 @@ tab-local terminal connection notice deliberately remains non-blocking.
     Expanded and compact rows consume the same local selection identity, so
     selection remains visible across sidebar-mode changes while hover and focus
     remain separate transient states. Selection is not serialized, copied into
-    `AppState`, logged with target values, or sent to any transport. Rust supplies a complete, read-only
+    `AppState`, logged with target values, or sent to any transport. Rust supplies a search-filtered, read-only
     `SessionGroupRow` snapshot with a nested bounded profile model; it does not
     retain an expanded-group set or receive a group-toggle callback.
     `SessionNavigationGroup` and `CompactSessionNavigationGroup` independently
-    expand/collapse their own Group rows, so either click or Enter/Space changes
-    only that component's presentation state. Persisted group names belong to
+    expand/collapse their Group rows through click or Enter/Space. When release
+    information arrives, the outer model reuses rows with matching group identities
+    to preserve their disclosure state. Persisted group names belong to
     `SessionStore`, so empty groups survive restart. The expanded view renders
-    the independent sidebar toggle row first, followed by the Local Shell card,
-    then collapsible parent group rows and their single-line server children.
-    Only the masked endpoint crosses into Slint. The expanded
-    parent shows its name, count, and a centered drawn down chevron; a collapsed
-    parent shows the matching up chevron. The compact rail alone uses a
-    configurable 1-4 character badge derived from the group name, or the full
-    group name in Full-name mode, rather than a folder icon. Full-name mode
-    widens the collapsed rail to a bounded 180px and switches to a dense list:
-    the header keeps the sidebar control at the trailing edge, Local Shell uses
-    an icon-and-label row, groups use a single-line label with disclosure and
-    count, and indented servers use their single-line names. Long labels elide
-    within stable-height rows and remain available through tooltips.
+    the sidebar toggle, Local Shell card, bounded connection search input, and
+    collapsible groups with single-line server children. Search matches group
+    names, server names, and connection details. Groups show a folder icon, name,
+    count, and disclosure chevron. Servers show a platform icon, name, and masked
+    inline endpoint; full non-secret details remain available in tooltips.
+    The collapsed sidebar always uses the 52px icon rail: groups show a folder
+    icon and disclosure indicator; servers show Linux distribution, Windows, or macOS icons
+    derived from release information, with a generic server icon for unknown or
+    undetected systems. Names and connection details remain in tooltips and
+    accessible labels. The application maps Local terminal sources to
+    `std::env::consts::OS` for both the sidebar entry and main/detached tabs;
+    unsupported host systems retain the terminal glyph. Runtime titles and
+    selected shell names do not determine platform identity. On Linux, one startup
+    blocking worker reads at most 8 KiB from `/etc/os-release` (with
+    `/usr/lib/os-release` fallback), caches the canonical platform ID and refreshes
+    Local Shell's sidebar entry and all routed tabs through UI dispatch. No shell
+    command or synthetic release label is needed. Local distribution mapping
+    uses `ID` and does not inherit an `ID_LIKE` parent icon. Known distribution
+    names/editions in remote release labels select their own artwork; known Linux
+    without a recognized dedicated mark uses Tux.
+    `assets/os-icons/catalog.json` owns canonical IDs, display names, aliases and
+    icon paths for the three families and 113 Linux entries. The offline
+    `scripts/generate_system_icons.py` generates private Rust recognition constants,
+    a domain choice table used by config validation and the bounded searchable picker,
+    `SystemPlatformIcon` shared by sidebar/tabs, and bilingual name indexes;
+    `--check` validates resource existence, alias uniqueness and generated consistency.
+    The runtime never reads this catalog. Original artwork and attribution remain
+    unchanged. Tab model comparisons include release
+    and platform fields so information arriving after Connected updates existing
+    rows without replacing their model.
+    System icons, including Local Shell's, retain their source colors by default.
+    Schema version 34 adds
+    the default-disabled `settings.appearance.system_icons_follow_theme` option,
+    editable only in the configuration file. Config owns the boolean; the
+    application maps it to a read-only Theme property controlling sidebar and
+    titlebar Image `colorize`. Transparent colorization preserves source colors;
+    enabling the option uses the current text/accent color. Settings preview/save
+    carries this hidden value from current AppState. Folder, terminal, and generic
+    server UI symbols continue to use theme colors.
+    Schema version 35 adds optional `system_icon_override` and `detected_system`
+    profile metadata plus `settings.appearance.local_shell_icon_override`.
+    Manual choices precede valid detection caches, runtime release mapping, and
+    generic glyphs. Unknown/invalid optional values fall back without preventing
+    profile loading. Successful discovery stores at most 96 release characters
+    and a canonical bundled ID; failed probes remain uncached. Cache identity includes
+    host, port, username, and host-key fingerprint. A per-profile probe lease rejects
+    stale attempts and coalesces SSH/SFTP discovery. Successful caches survive closing
+    tabs and restart. The editor's explicit reset clears cached and in-flight metadata
+    only on a successful save; the next automatic connection probes again. Destination
+    edits invalidate detection while preserving manual choices. Profile deletion
+    removes transient metadata; exports omit detected data and preserve manual IDs.
+    Local Shell selection saves independently and immediately; Settings preview/save
+    preserves it. Slint owns picker drafts and gestures; config exposes bounded choices
+    without generated UI types, network handles, credentials, or artwork paths.
+    The legacy group-label-length field remains readable and writable for storage
+    compatibility but no longer controls rail width or icons; Settings removes
+    its obsolete text-badge picker.
     A separate, focusable sidebar toggle row is the only action that expands or
     collapses the sidebar. In the expanded sidebar it appears above the Local
     Shell row, while the collapsed rail keeps the toggle at the top and Local
@@ -1100,8 +1158,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
     trust for the unchanged endpoint. Deleting a group moves its profiles to
     Ungrouped; deleting
     a profile removes only its persisted definition and credential. The
-    collapsed rail renders a larger Group badge and smaller, tightly stacked
-    server badges, while Local Shell keeps its dedicated entry. The application
+    collapsed rail and expanded rows use the same 20px icon box for Group folders,
+    servers, and Local Shell; indentation, disclosure arrows and spacing express
+    hierarchy. Tab icons retain their 16px box. The application
     formatter masks usernames and IPv4 middle octets before data enters the
     Slint model. Static geometry is in `ui/theme.slint`; the persisted
     single-character mask setting is owned by `WorkspaceSettings`.

@@ -207,19 +207,42 @@ Tab 与 pane/window 布局，并通过正常的信任与认证流程启动新 wo
 **Clear Recent** 只清除路径历史。
 保存快照不会改变最近打开顺序，Save 弹层仍默认使用私有 `workspace.json`，避免误覆盖。
 
-展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时创建
-空 Group 或 Ungrouped 服务器。展开后的 Group 行显示名称、数量和
-居中的绘制下尖角；收起后显示对应的绘制上尖角，避免名称与文字徽标重复。点击 Group
-行，或将焦点移到该行后按 Enter/Space，可切换状态。每台可见服务器仍只占一行：左侧为
-名称，右侧为遮蔽后的 endpoint。**View > Toggle Session Sidebar** 可在此视图和紧凑
-Activity Bar 之间切换；紧凑栏默认使用 Group 名称前 1-4 个字符，采用强调色粗体，去掉常驻
-边框和底色；服务器名称字重略轻，并通过组间留白区分层级。悬停和选中时显示底色，焦点保留
-清晰轮廓。也可在 **Settings > Workspace** 选择 **Full name** 显示完整组名。Full name 模式
-会将收起栏加宽到 180px，并使用高密度单行列表：侧栏按钮位于标题行末端，Local Shell 显示图标和文字，Group
-显示展开尖角与数量，服务器缩进显示全名；长名称会省略并通过 tooltip 提供全文。紧凑栏行也
-提供相同的右键菜单。删除 Group 会把其中
-服务器移入 Ungrouped。最近选中的 Group 或服务器会在展开与收起侧栏中持续高亮，hover 和
-键盘焦点仍使用独立反馈。删除 profile 也会删除记住的密码，但不会关闭已经打开的终端 Tab。
+展开的会话导航以可折叠的 Group 行组织服务器；右击列表空白区域可在没有 profile 时
+创建空 Group 或 Ungrouped 服务器。搜索框可按组名、服务器名称或连接详情查找，匹配组
+会展开以显示结果。Group 显示文件夹图标、名称、数量和展开尖角。点击 Group 行，或
+聚焦后按 Enter/Space，可切换展开状态。每台可见服务器只占一行，显示系统图标、名称和
+遮蔽后的 endpoint。SSH 或 SFTP 成功连接后，AxSSH 会尝试读取短的远端 release，
+用于标签和侧栏系统图标；release 不可用时保持连接可用，并显示通用服务器图标。
+
+**View > Toggle Session Sidebar** 切换到图标窄栏。Group 使用文件夹图标，已识别的
+服务器使用识别到的系统图标。Ubuntu、Debian、Fedora、Rocky Linux、openSUSE 等 Linux
+发行版优先使用自己的图标；Linux 未识别到专用图标时才使用 Tux。Local Shell 入口和标签使用本机操作系统图标，
+不受所选 shell 或标签名称影响；不支持的系统回退为终端图标。悬停可查看名称
+和连接详情；键盘焦点和无障碍标签保留各操作身份。窄栏仍支持 Group 展开和相同行右键
+菜单。Settings 移除旧的收起组名文字选项，已有保存值保持兼容，收起栏始终保持窄宽度。
+系统图标（包括 Local Shell）默认保留资源彩色，不随主题重新着色。在应用关闭时编辑 `sessions.json` 中的
+`settings.appearance.system_icons_follow_theme`：默认 `false`；改为 `true` 后重新启动，
+侧栏和标签栏的系统图标才会使用当前主题颜色。Settings 没有对应开关，其预览和保存会
+保留该配置值。文件夹、终端和通用服务器等界面符号继续使用主题色。
+侧栏的 Group 文件夹、服务器和 Local Shell 共用 20px 图标与占位框，通过缩进和展开箭头表达
+层级；标签栏保留紧凑的 16px 图标。
+
+服务器编辑页的**系统图标**可展开搜索已有系统名称；手动选择优先，切回**自动**后恢复自动选择。
+profile 的可选 `system_icon_override` 保存规范标识。SSH/SFTP 成功识别后，将有界 release 标签和
+图标标识写入对应 profile 的 `detected_system`，后续连接、关闭 Tab 和重启均复用，不再探测。
+缓存绑定 host、port、username 和主机密钥指纹；失败不缓存，成功读取的未知系统保存结果并使用
+通用图标。服务器更换系统后，可在自动模式下勾选**下次连接时重新识别**，保存并重新连接。
+手动指定时跳过图标探测；修改连接目标使自动缓存失效，仍保留手动选择。导出保留手动选择，
+移除已识别元数据。
+
+**Settings > General > 本地终端图标**使用同一个选择器，更改后立即保存到
+`settings.appearance.local_shell_icon_override`；选择**自动**恢复本机判断。配置中无效或未知的
+图标标识回退自动。Local Shell 在打开 shell 前就有本机系统图标；Linux 上在后台一次性读取本机 os-release，
+选择发行版图标，信息不可用或无法识别时保留 Tux。
+[系统名称索引](../assets/os-icons/names.zh.md) 统一列出规范标识、显示名称、识别别名和共用图标路径。选中的
+Group 或服务器在展开与收起视图中持续高亮，release 更新也会保留当前 Group 的展开状态。
+删除 Group 会把服务器移入 Ungrouped；删除 profile 也会删除记住的密码，但不会关闭
+已经打开的终端 Tab。
 
 带文字的按钮和按钮型行保持单行；文案显示不下时使用省略号，鼠标悬浮可在有界 tooltip 中
 查看完整内容。纯图标控件继续使用已有的用途 tooltip 和无障碍名称说明操作。

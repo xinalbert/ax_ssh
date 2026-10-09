@@ -63,6 +63,12 @@ Slint UI（.slint）
   `check_server_key` 独立执行信任校验。
 - 窗口 router 在 callback 接线前仅安装一次，UI 更新统一经过有界刷新 gate。
   SFTP-only worker 独占 browser/transfer 任务；终端 worker 负责 shell 和 X11。
+- SSH session 报告 `Connected` 后，worker 可以通过独立且有界的 exec channel 读取短的远端
+  release 标签。每个 worker 只探测一次，有四秒超时和 2 KiB 输出上限，不会把命令写入交互终端；远端 shell 或
+  release 来源不可用时返回空值。应用按 profile 合并 SSH/SFTP 探测，手动指定或有效缓存时跳过；
+  成功元数据绑定当前目标和 attempt。config 独占持久缓存 schema，blocking task 在进程级持久化
+  gate 下等待 profile/凭据事务完成，只保存识别元数据并保留未保存的 Settings 预览；即使结果来自
+  独立窗口，也会刷新主窗口的连接模型。原有已连接状态继续作为回退。
 - 用户导出和私有配置共用临时文件写入、fsync、关闭句柄、原子替换与清理；各自包装仍
   保留父目录权限差异：导出不改已有目录权限，私有存储收紧目录权限。
 
@@ -631,17 +637,47 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     选中 kind/ID/Group 名称。展开与收起行共享这份本地选择身份，因此切换侧栏模式后仍保持
     选中高亮，hover 和焦点则是独立的瞬时状态。选择身份不序列化、不进入 `AppState`、不把目标值
     写入日志，也不发送到 transport。Rust
-    只提供完整、只读的 `SessionGroupRow` 快照及其嵌套的有界 profile model，不再保存
+    提供按搜索过滤的只读 `SessionGroupRow` 快照及嵌套的有界 profile model，不保存
     展开 Group 集合，也不接收 Group 切换 callback。`SessionNavigationGroup` 与
     `CompactSessionNavigationGroup` 分别管理各自的 Group 展开/收起，因此点击或
-    Enter/Space 只改变当前组件的呈现状态。持久化 Group 名称仍由 `SessionStore` 持有，
-    空 Group 也能跨重启保留。展开态先渲染独立的侧栏切换行，再渲染 Local Shell 卡片、可折叠的
-    Group 父行及其单行服务器子项；进入 Slint 的 endpoint 仍是遮蔽值。展开父行显示名称、数量和
-    居中的绘制下尖角；收起父行显示对应的上尖角。只有紧凑栏以可配置的 1-4 个 Group 名称
-    字符生成文字徽标，或在 Full name 模式显示完整组名，而不是文件夹图标。Full name 模式
-    将收起栏限制为 180px，并切换为高密度列表：标题行把侧栏按钮放在末端，Local Shell 使用
-    图标加文字的单行项，Group 使用带展开尖角和数量的单行名称，服务器则缩进显示单行全名。
-    长名称在稳定行高中省略，并可通过 tooltip 查看全文。
+    Enter/Space 只改变当前组件的呈现状态。系统 release 返回时复用同身份的外层 Group
+    model，以保留当前展开状态。持久化 Group 名称仍由 `SessionStore` 持有，空 Group
+    也能跨重启保留。展开态依次渲染独立侧栏切换行、Local Shell 卡片、有界连接搜索输入、
+    可折叠的 Group 父行和单行服务器子项；搜索匹配组名、服务器名称和连接详情。
+    Group 显示文件夹图标、名称、数量和展开尖角。服务器显示系统图标、名称和遮蔽后的
+    endpoint；非秘密完整详情仍用于悬停提示。
+    收起态固定使用 52px 图标窄栏：Group 显示文件夹图标和展开指示，服务器按已读取的
+    release 显示 Linux 发行版、Windows 或 macOS 图标，未知/未读取系统显示通用服务器图标。
+    名称与连接详情保留在 tooltip 和无障碍标签中，不在窄栏常驻显示。
+    应用将 Local 终端来源映射到 `std::env::consts::OS`，同时用于侧栏入口和主窗口/独立窗口
+    标签；不支持的本机系统保留终端 glyph。运行时标签名称和所选 shell 名称不决定系统身份，
+    Linux 上在启动时通过单个 blocking worker 有界读取 `/etc/os-release`，不可用时尝试
+    `/usr/lib/os-release`，每个来源最多读取 8 KiB；缓存规范图标标识后通过 UI dispatch 更新
+    Local Shell 入口及全部路由窗口的标签。无需 shell 命令或合成 release；本机发行版按
+    `ID` 识别，不按 `ID_LIKE` 继承母发行版图标。远端 release 中可识别的发行版/版本名
+    优先选择自己的图标，已知 Linux 但无法识别专用图标时才使用 Tux。
+    `assets/os-icons/catalog.json` 统一保存三类系统家族和 113 个 Linux 条目的规范标识、
+    显示名称、识别别名及图标路径。离线 `scripts/generate_system_icons.py` 生成私有 Rust
+    识别常量、config 校验与有界可搜索选择器共用的领域选择表、侧栏/标签共用的 `SystemPlatformIcon`
+    和双语名称索引；`--check` 校验资源
+    存在、别名唯一及生成结果一致。运行时不读取该目录，原图和归属记录保持不变。
+    标签模型比较包含 release 和 platform 字段，使 Connected
+    之后返回的系统信息能更新既有行而不替换 model。
+    系统图标（包括 Local Shell）默认使用资源原始彩色；schema 版本 34 新增默认关闭的
+    `settings.appearance.system_icons_follow_theme`，只在配置文件中编辑。config 独占该布尔值，
+    应用映射到 Theme 的只读展示属性，同时控制侧栏和标签栏的 Image `colorize`；关闭时使用
+    transparent 保留资源颜色，开启时使用当前主题的正文/强调色。Settings 预览与保存从当前
+    AppState 保留该隐藏配置。文件夹、终端和通用服务器等界面符号仍使用主题色。
+    schema 版本 35 增加 profile 可选的 `system_icon_override`、`detected_system`，以及
+    `settings.appearance.local_shell_icon_override`。显示优先级为手动选择、有效识别缓存、运行时
+    release 映射、通用图标；未知/无效可选值回退而不阻止 profile 加载。成功识别保存最多 96 字符的
+    release 和内置规范图标标识，失败不缓存。缓存绑定 host、port、username 和主机密钥指纹；
+    profile 探测租约拒绝旧 attempt 结果，并合并 SSH/SFTP 请求。成功缓存跨 Tab 关闭和重启保留。
+    编辑器显式重置只在保存成功后清除缓存与在途元数据，下次自动模式连接重新探测；修改目标使
+    识别失效并保留手动选择。删除 profile 清理瞬时元数据；导出移除识别数据、保留手动标识。
+    Local Shell 图标独立立即保存，Settings 预览/保存保留该值。Slint 持有选择 draft 与手势，
+    config 提供有界领域选择，不持有生成 UI 类型、网络句柄、凭据或资源路径。旧的组名字符数配置继续兼容读取和
+    保存，不再影响侧栏宽度或图标；Settings 移除对应的文字徽标选项。
     自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击执行
     相同的本地展开动作；独立、可聚焦的侧栏切换行负责展开或收起侧栏，展开态位于 Local Shell
     上方，收起态保持在顶部，而 Local Shell 位于其下方；两者在两种模式中都使用独立行和独立触控区域。原生行右键菜单可在 Group 内
@@ -654,11 +690,11 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     引用和主机密钥指纹。导入总是生成新 UUID、处理名称/Group 冲突、校验有界字段，并在保存候选
     `SessionStore` 前再次清除凭据/信任字段。Group Duplicate 与现有 Server Duplicate 保持一致：
     profile ID 全部更新、已记住密码引用被清除，但同一 endpoint 的信任指纹保留。删除 Group
-    会把 profile 移入 Ungrouped；删除 profile 只移除持久化定义和凭据。收起态用更大的
-    Group 徽标和更小、连续排列的服务器徽标保留层级，Local Shell 保持专用入口。应用层
+    会把 profile 移入 Ungrouped；删除 profile 只移除持久化定义和凭据。展开/收起态的 Group 文件夹、
+    服务器和 Local Shell 共用 20px 图标占位框，通过缩进、展开箭头和间距表达层级；标签栏保持 16px。应用层
     formatter 会在数据进入 Slint model
     前遮蔽用户名和 IPv4 的中间段。静态尺寸进入 `ui/theme.slint`，持久化的单字符遮蔽设置
-    由 `WorkspaceSettings` 持有；收起组名字符数同样由该设置持有，`0` 表示完整名称。
+    由 `WorkspaceSettings` 持有；旧收起组名字符数字段仅用于存储兼容。
 
 ## 工作区快照恢复
 
