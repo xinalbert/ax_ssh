@@ -13,12 +13,13 @@ pub(in crate::app) use self::session_editor::{
 pub(super) use self::session_management::wire_session_management;
 pub(super) use self::tabs::{close_terminal_child_pane, close_workspace_tab, wire_workspace_tabs};
 
-use self::session_editor::delete_session_profile;
+use self::session_editor::{clear_saved_password, delete_session_profile};
 use self::tabs::clear_session_editor_resources;
 
 #[cfg(test)]
 use self::session_editor::{
-    CredentialChange, commit_profile_delete, commit_profile_save, profile_from_editor,
+    CredentialChange, clear_saved_password_in_store, commit_profile_delete,
+    commit_profile_password_clear, commit_profile_save, profile_from_editor,
     profile_from_editor_with_password, should_connect_after_save,
 };
 #[cfg(test)]

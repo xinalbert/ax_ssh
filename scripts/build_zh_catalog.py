@@ -11,6 +11,11 @@ from check_translations import slint_messages
 
 
 TRANSLATIONS = {
+    "Saved password": "已保存密码",
+    "No saved password": "未保存密码",
+    "Saved in {0}.": "已保存至{0}。",
+    "Clear saved password": "清除已保存密码",
+    "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved.": "立即清除{0}的已保存密码？确认后立即生效，其他编辑内容不会随之保存。",
     "Search system icons": "搜索系统图标",
     "No matching system icons": "没有匹配的系统图标",
     "System icon": "系统图标",

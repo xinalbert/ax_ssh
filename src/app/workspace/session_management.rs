@@ -179,9 +179,14 @@ pub(in crate::app) fn wire_session_management(
         let ui = ui_for_action.clone();
         let state = state.clone();
         let persistence = persistence_for_action.clone();
+        if action == "clear-saved-password" {
+            set_status(&ui, "Clearing saved password...");
+        }
         runtime.spawn(async move {
             let result = if action == "delete-session" {
                 delete_session_profile(&state, &persistence, &target).await
+            } else if action == "clear-saved-password" {
+                clear_saved_password(&state, &persistence, &target).await
             } else {
                 let _persistence_guard = persistence.gate.lock().await;
                 update_session_group(&state, &action, &target, &value)
@@ -198,7 +203,11 @@ pub(in crate::app) fn wire_session_management(
                     set_status(&ui, &message);
                 }
                 Err(error) => {
-                    set_status(&ui, &format!("Cannot update sessions: {error}"));
+                    if action == "clear-saved-password" {
+                        set_status(&ui, &format!("Cannot clear saved password: {error}"));
+                    } else {
+                        set_status(&ui, &format!("Cannot update sessions: {error}"));
+                    }
                 }
             }
         });

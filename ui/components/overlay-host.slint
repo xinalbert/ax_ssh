@@ -69,13 +69,16 @@ export component OverlayHost inherits Rectangle {
         root.session-management-action == "new-group" ? @tr("New group")
         : (root.session-management-action == "rename-group" ? @tr("Rename group")
         : (root.session-management-action == "delete-group" ? @tr("Delete group")
-        : @tr("Delete server")));
+        : (root.session-management-action == "clear-saved-password" ? @tr("Clear saved password")
+        : @tr("Delete server"))));
     private property <string> session-management-message:
         root.session-management-action == "delete-group"
             ? @tr("Delete {0}? Servers in this group will move to Ungrouped.", root.session-management-subject)
             : (root.session-management-action == "delete-session"
                 ? @tr("Delete {0} and its saved credential?", root.session-management-subject)
-                : "");
+                : (root.session-management-action == "clear-saved-password"
+                    ? @tr("Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved.", root.session-management-subject)
+                    : ""));
 
     public function show-session-management(action: string, target: string, subject: string) {
         if root.security-open || root.workspace-file-open || root.session-management-open || root.upload-conflict-open {

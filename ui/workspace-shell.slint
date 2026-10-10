@@ -1275,6 +1275,13 @@ export component WorkspaceShell inherits Rectangle {
                         refresh-serial-ports => { root.refresh-serial-ports(); }
                         serial-mode-changed(enabled) => { root.serial-mode-changed(enabled); }
                         private-key-mode-changed(enabled) => { root.private-key-mode-changed(enabled); }
+                        clear-saved-password => {
+                            root.request-session-management(
+                                "clear-saved-password",
+                                root.view.session_editor.profile_id,
+                                root.view.session_editor.name,
+                            );
+                        }
                         cancel => { root.cancel-session-dialog(); }
                     }
 

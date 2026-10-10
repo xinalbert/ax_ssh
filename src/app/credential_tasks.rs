@@ -127,6 +127,7 @@ pub(super) async fn save_password(
             return Err(error).context("failed to remove the replaced remembered password");
         }
         Ok(CredentialRollback {
+            store,
             session_id,
             backups,
             vault_unlock_backup,
@@ -136,6 +137,7 @@ pub(super) async fn save_password(
 }
 
 pub(super) struct CredentialRollback {
+    store: CredentialStore,
     session_id: Uuid,
     backups: Vec<(CredentialStorage, CredentialBackup)>,
     vault_unlock_backup: Option<Option<Zeroizing<String>>>,
@@ -144,7 +146,7 @@ pub(super) struct CredentialRollback {
 impl CredentialRollback {
     pub(super) async fn restore(self) -> Result<()> {
         run_mutation(move || {
-            let store = CredentialStore::platform()?;
+            let store = self.store;
             restore_backups(&store, self.session_id, self.backups)?;
             if let Some(backup) = self.vault_unlock_backup {
                 store.restore_vault_unlock_password(self.session_id, backup)?;
@@ -160,8 +162,22 @@ pub(super) async fn delete_password(
     previous_storage: CredentialStorage,
     vault_password_generated: bool,
 ) -> Result<CredentialRollback> {
+    delete_password_in_store(
+        CredentialStore::platform()?,
+        session_id,
+        previous_storage,
+        vault_password_generated,
+    )
+    .await
+}
+
+pub(super) async fn delete_password_in_store(
+    store: CredentialStore,
+    session_id: Uuid,
+    previous_storage: CredentialStorage,
+    vault_password_generated: bool,
+) -> Result<CredentialRollback> {
     run_mutation(move || {
-        let store = CredentialStore::platform()?;
         let backup = store.backup(previous_storage, session_id)?;
         let vault_unlock_backup = vault_password_generated
             .then(|| store.backup_vault_unlock_password(session_id))
@@ -179,6 +195,7 @@ pub(super) async fn delete_password(
             return Err(error).context("failed to remove encrypted vault unlock key");
         }
         Ok(CredentialRollback {
+            store,
             session_id,
             backups: vec![(previous_storage, backup)],
             vault_unlock_backup,

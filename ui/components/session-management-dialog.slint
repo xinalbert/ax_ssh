@@ -14,11 +14,13 @@ export component SessionManagementDialog inherits ModalFrame {
 
     private property <bool> accepts-name: root.action == "new-group"
         || root.action == "rename-group";
+    private property <bool> destructive: root.action == "delete-group"
+        || root.action == "delete-session" || root.action == "clear-saved-password";
 
     dialog-width: Theme.session-management-dialog-width;
-    dialog-height: Theme.session-management-dialog-height;
-    dialog-border-color: root.action == "delete-group" || root.action == "delete-session"
-        ? Theme.danger : Theme.frame-border;
+    dialog-height: Theme.session-management-dialog-height
+        + (root.action == "clear-saved-password" ? 2 * Theme.space-xl : 0px);
+    dialog-border-color: root.destructive ? Theme.danger : Theme.frame-border;
     dismissed => { root.cancel(); }
 
     VerticalLayout {
@@ -26,8 +28,7 @@ export component SessionManagementDialog inherits ModalFrame {
         spacing: Theme.space-xl;
         Text {
             text: root.title;
-            color: root.action == "delete-group" || root.action == "delete-session"
-                ? Theme.danger : Theme.text;
+            color: root.destructive ? Theme.danger : Theme.text;
             font-size: Theme.font-title;
             font-weight: 700;
         }
@@ -53,8 +54,8 @@ export component SessionManagementDialog inherits ModalFrame {
             spacing: Theme.space-md;
             ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
             ElidedButton {
-                text: root.action == "delete-group" || root.action == "delete-session"
-                    ? @tr("Delete") : @tr("Save");
+                text: root.action == "clear-saved-password" ? @tr("Clear")
+                    : root.destructive ? @tr("Delete") : @tr("Save");
                 enabled: !root.accepts-name || !root.value.is-empty;
                 clicked => { root.confirm(root.value); }
             }

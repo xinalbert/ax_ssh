@@ -296,6 +296,125 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
     );
 }
 
+pub(super) async fn clear_saved_password(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    session_id: &str,
+) -> Result<String> {
+    clear_saved_password_in_store(
+        state,
+        persistence,
+        session_id,
+        ax_ssh::credentials::CredentialStore::platform()?,
+    )
+    .await
+}
+
+pub(super) async fn clear_saved_password_in_store(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    session_id: &str,
+    store: ax_ssh::credentials::CredentialStore,
+) -> Result<String> {
+    let session_id = Uuid::parse_str(session_id).context("invalid session id")?;
+    let profile = {
+        let app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        app.sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == session_id)
+            .cloned()
+            .context("session not found")?
+    };
+    let ssh = profile
+        .ssh()
+        .context("saved passwords require an SSH profile")?;
+    let storage = ssh
+        .credential_storage
+        .context("session has no saved password")?;
+    let vault_password_generated = ssh.credential_vault_key_saved;
+    let mutation_token = begin_profile_mutation(state, session_id, Some(&profile))?;
+    let _mutation_guard = persistence.gate.lock().await;
+    if let Err(error) =
+        ensure_profile_mutation_current(state, session_id, mutation_token, Some(&profile))
+    {
+        finish_profile_mutation(state, session_id, mutation_token);
+        return Err(error);
+    }
+    let rollback = match crate::app::credential_tasks::delete_password_in_store(
+        store,
+        session_id,
+        storage,
+        vault_password_generated,
+    )
+    .await
+    {
+        Ok(rollback) => rollback,
+        Err(error) => {
+            finish_profile_mutation(state, session_id, mutation_token);
+            return Err(error);
+        }
+    };
+    if let Err(error) = commit_profile_password_clear(state, &profile, mutation_token) {
+        if let Err(rollback_error) = rollback.restore().await {
+            warn!(session_id = %session_id, %rollback_error, "failed to restore credential after password clear failure");
+            return Err(error).context(format!(
+                "failed to restore the saved password after configuration failure: {rollback_error}"
+            ));
+        }
+        return Err(error);
+    }
+    info!(session_id = %session_id, "saved session password cleared");
+    Ok(format!("Saved password for {} cleared", profile.name))
+}
+
+pub(super) fn commit_profile_password_clear(
+    state: &Arc<Mutex<AppState>>,
+    expected: &SessionProfile,
+    token: Uuid,
+) -> Result<()> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    if !app.profile_mutation_is_current(expected.id, token) {
+        anyhow::bail!("password clear was superseded");
+    }
+    let result = (|| {
+        let current = app
+            .sessions
+            .sessions
+            .iter()
+            .find(|profile| profile.id == expected.id);
+        if current != Some(expected) {
+            anyhow::bail!("session changed while clearing its password");
+        }
+        // Read the persisted store so this immediate action does not save a
+        // Settings preview. Keep the editor draft identity and live state intact.
+        let mut candidate = app.config.load()?;
+        let persisted = candidate
+            .sessions
+            .iter()
+            .find(|profile| profile.id == expected.id);
+        if persisted != Some(expected) {
+            anyhow::bail!("saved session changed while clearing its password");
+        }
+        let mut profile = expected.clone();
+        let ssh = profile
+            .ssh_mut()
+            .context("saved passwords require an SSH profile")?;
+        ssh.credential_storage = None;
+        ssh.credential_vault_key_saved = false;
+        candidate.upsert(profile.clone());
+        app.config.save(&candidate)?;
+        app.sessions.upsert(profile);
+        Ok(())
+    })();
+    app.finish_profile_mutation(expected.id, token);
+    result
+}
+
 pub(super) async fn delete_session_profile(
     state: &Arc<Mutex<AppState>>,
     persistence: &PersistenceCoordinator,

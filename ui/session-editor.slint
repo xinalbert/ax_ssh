@@ -55,6 +55,7 @@ export component SessionEditorPane inherits Rectangle {
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
     callback private-key-mode-changed(bool);
+    callback clear-saved-password();
     callback cancel();
 
     private property <string> incoming-draft-id: root.source.draft_id;
@@ -623,6 +624,30 @@ export component SessionEditorPane inherits Rectangle {
                         ];
                         selected-method <=> root.auth-method;
                         accessible-name: @tr("SSH authentication method");
+                    }
+
+                    if root.editing : SessionEditorField {
+                        label: @tr("Saved password");
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            Text {
+                                text: root.source.credential_storage.is-empty
+                                    ? @tr("No saved password")
+                                    : @tr("Saved in {0}.", root.source.credential_storage == "system-keyring"
+                                        ? @tr("System credential store")
+                                        : @tr("Encrypted application vault"));
+                                color: Theme.muted;
+                                font-size: Theme.font-body;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                            ElidedButton {
+                                text: @tr("Clear saved password");
+                                enabled: !root.source.credential_storage.is-empty;
+                                clicked => { root.clear-saved-password(); }
+                            }
+                        }
                     }
 
                     if root.auth-method == "Password" : VerticalLayout {

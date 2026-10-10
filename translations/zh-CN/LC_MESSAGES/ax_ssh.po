@@ -211,8 +211,14 @@ msgstr "清除"
 msgid "Clear Recent"
 msgstr "清除最近记录"
 
+msgid "Clear saved password"
+msgstr "清除已保存密码"
+
 msgid "Clear settings search"
 msgstr "清除设置搜索"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "立即清除{0}的已保存密码？确认后立即生效，其他编辑内容不会随之保存。"
 
 msgid "Close Current Tab"
 msgstr "关闭当前标签页"
@@ -718,6 +724,9 @@ msgstr "没有匹配的系统图标"
 msgid "No saved connections"
 msgstr "没有已保存的连接"
 
+msgid "No saved password"
+msgstr "未保存密码"
+
 msgid "No saved servers"
 msgstr "没有已保存的服务器"
 
@@ -1080,6 +1089,12 @@ msgstr "保存会话"
 
 msgid "Saved connections"
 msgstr "已保存的连接"
+
+msgid "Saved in {0}."
+msgstr "已保存至{0}。"
+
+msgid "Saved password"
+msgstr "已保存密码"
 
 msgid "Scrollback"
 msgstr "回滚行数"

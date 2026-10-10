@@ -913,3 +913,402 @@ fn credential_storage_commit_requires_the_current_profile_mutation() {
     );
     let _ = std::fs::remove_file(path);
 }
+
+struct PasswordClearFixture {
+    root: PathBuf,
+    profile: SessionProfile,
+    state: Arc<Mutex<AppState>>,
+    store: ax_ssh::credentials::CredentialStore,
+}
+
+impl PasswordClearFixture {
+    fn new(storage: CredentialStorage, generated: bool) -> Self {
+        let root = std::env::temp_dir().join(format!("ax-ssh-password-clear-{}", Uuid::new_v4()));
+        let store = ax_ssh::credentials::CredentialStore::new(root.join("credentials"));
+        let mut profile = SessionProfile::new("server", "server.example", "alice");
+        profile.group_name = "Production".into();
+        profile.system_icon_override = Some("ubuntu".into());
+        let ssh = profile.ssh_mut().expect("fixture should be SSH");
+        ssh.credential_storage = Some(storage);
+        ssh.credential_vault_key_saved = generated;
+        ssh.host_key_fingerprint = Some("SHA256:trusted".into());
+        profile.detected_system =
+            ax_ssh::config::SystemDetection::new(&profile, "Ubuntu 24.04 LTS", "ubuntu")
+                .map(Box::new);
+        if storage == CredentialStorage::EncryptedVault {
+            store
+                .save_vault_password(profile.id, "fixture-password", "fixture-unlock")
+                .expect("temporary vault should save");
+            if generated {
+                store
+                    .save_vault_unlock_password(profile.id, "fixture-unlock")
+                    .expect("temporary unlock key should save");
+            }
+        }
+        let mut sessions = SessionStore::default();
+        sessions.upsert(profile.clone());
+        let config = ConfigStore::new(root.join("sessions.json"));
+        config.save(&sessions).expect("fixture config should save");
+        Self {
+            root,
+            profile,
+            state: Arc::new(Mutex::new(AppState::new(config, sessions))),
+            store,
+        }
+    }
+
+    fn persistence(&self) -> Arc<crate::app::state::PersistenceCoordinator> {
+        self.state
+            .lock()
+            .expect("fixture state should be readable")
+            .persistence_coordinator
+            .clone()
+    }
+
+    fn cleanup(self) {
+        std::fs::remove_dir_all(self.root).expect("temporary fixture should be removed");
+    }
+}
+
+#[test]
+fn password_clear_commit_preserves_profile_editor_and_open_terminal() {
+    // This tests the keyring reference without accessing a real system keyring.
+    let fixture = PasswordClearFixture::new(CredentialStorage::SystemKeyring, false);
+    let (terminal_id, editor_identity) = {
+        let mut app = fixture.state.lock().expect("state should be readable");
+        let terminal_id = app.open_terminal_tab(&fixture.profile);
+        assert!(app.open_session_editor_for_profile(fixture.profile.id));
+        app.sessions.settings.terminal.scrollback_lines = 321;
+        (terminal_id, app.active_editor_identity())
+    };
+    let token = begin_profile_mutation(&fixture.state, fixture.profile.id, Some(&fixture.profile))
+        .expect("clear should start");
+    commit_profile_password_clear(&fixture.state, &fixture.profile, token)
+        .expect("clear should commit");
+
+    let mut expected = fixture.profile.clone();
+    expected
+        .ssh_mut()
+        .expect("expected profile should be SSH")
+        .credential_storage = None;
+    let mut app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![expected.clone()]);
+    assert_eq!(
+        app.config.load().expect("config should load").sessions,
+        vec![expected]
+    );
+    assert_eq!(app.active_editor_identity(), editor_identity);
+    assert!(
+        app.active_snapshot()
+            .editor
+            .expect("editor should remain open")
+            .credential_storage
+            .is_empty()
+    );
+    assert!(app.terminal(terminal_id).is_some());
+    assert_eq!(app.sessions.settings.terminal.scrollback_lines, 321);
+    assert_eq!(
+        app.config.load().expect("config should load").settings,
+        SessionStore::default().settings
+    );
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
+
+#[tokio::test]
+async fn password_clear_removes_only_the_referenced_vault_record_and_unlock_key() {
+    for generated in [false, true] {
+        let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, generated);
+        let other = SessionProfile::new("other", "other.example", "bob");
+        fixture
+            .store
+            .save_vault_password(other.id, "other-password", "other-unlock")
+            .expect("unrelated record should save");
+        let persistence = fixture.persistence();
+        clear_saved_password_in_store(
+            &fixture.state,
+            &persistence,
+            &fixture.profile.id.to_string(),
+            fixture.store.clone(),
+        )
+        .await
+        .expect("saved password should clear immediately");
+
+        assert_eq!(
+            fixture
+                .store
+                .load_vault_password(fixture.profile.id, "fixture-unlock")
+                .expect("cleared record should be absent"),
+            None
+        );
+        assert_eq!(
+            fixture
+                .store
+                .load_vault_unlock_password(fixture.profile.id)
+                .expect("cleared unlock key should be absent"),
+            None
+        );
+        assert_eq!(
+            fixture
+                .store
+                .load_vault_password(other.id, "other-unlock")
+                .expect("unrelated record should load"),
+            Some("other-password".into())
+        );
+        let mut expected = fixture.profile.clone();
+        let ssh = expected.ssh_mut().expect("expected profile should be SSH");
+        ssh.credential_storage = None;
+        ssh.credential_vault_key_saved = false;
+        {
+            let app = fixture.state.lock().expect("state should be readable");
+            assert_eq!(app.sessions.sessions, vec![expected.clone()]);
+            assert_eq!(
+                app.config.load().expect("config should load").sessions,
+                vec![expected]
+            );
+        }
+
+        let error = clear_saved_password_in_store(
+            &fixture.state,
+            &persistence,
+            &fixture.profile.id.to_string(),
+            fixture.store.clone(),
+        )
+        .await
+        .expect_err("a cleared profile must not mutate storage again");
+        assert!(error.to_string().contains("no saved password"));
+        fixture.cleanup();
+    }
+}
+
+#[tokio::test]
+async fn password_clear_restores_vault_and_unlock_key_if_config_is_unreadable() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, true);
+    let record = fixture
+        .root
+        .join("credentials")
+        .join(format!("{}.json", fixture.profile.id));
+    let original_record = std::fs::read(&record).expect("encrypted record should exist");
+    let config = fixture.root.join("sessions.json");
+    std::fs::rename(&config, fixture.root.join("original.json"))
+        .expect("original config should move");
+    std::fs::create_dir(&config).expect("directory should block config replacement");
+    let persistence = fixture.persistence();
+
+    clear_saved_password_in_store(
+        &fixture.state,
+        &persistence,
+        &fixture.profile.id.to_string(),
+        fixture.store.clone(),
+    )
+    .await
+    .expect_err("config failure should fail the clear");
+
+    assert_eq!(
+        std::fs::read(&record).expect("record should be restored"),
+        original_record
+    );
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_password(fixture.profile.id, "fixture-unlock")
+            .expect("restored password should decrypt"),
+        Some("fixture-password".into())
+    );
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_unlock_password(fixture.profile.id)
+            .expect("unlock key should be restored"),
+        Some("fixture-unlock".into())
+    );
+    let app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![fixture.profile.clone()]);
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn password_clear_restores_vault_and_unlock_key_if_config_write_fails() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, true);
+    // The destination fits the filesystem's component limit; its atomic-write
+    // temporary name exceeds it. Loading succeeds and writing fails deterministically.
+    let config = fixture.root.join(format!("{}.json", "c".repeat(240)));
+    let original =
+        std::fs::read(fixture.root.join("sessions.json")).expect("original config should exist");
+    std::fs::write(&config, &original).expect("long destination name should be valid");
+    fixture
+        .state
+        .lock()
+        .expect("state should be readable")
+        .config = ConfigStore::new(&config);
+    let persistence = fixture.persistence();
+
+    let error = clear_saved_password_in_store(
+        &fixture.state,
+        &persistence,
+        &fixture.profile.id.to_string(),
+        fixture.store.clone(),
+    )
+    .await
+    .expect_err("atomic write failure should fail the clear");
+    assert!(format!("{error:#}").contains("failed to create"));
+    assert_eq!(
+        std::fs::read(&config).expect("config should remain"),
+        original
+    );
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_password(fixture.profile.id, "fixture-unlock")
+            .expect("restored password should decrypt"),
+        Some("fixture-password".into())
+    );
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_unlock_password(fixture.profile.id)
+            .expect("unlock key should be restored"),
+        Some("fixture-unlock".into())
+    );
+    let app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![fixture.profile.clone()]);
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
+
+#[tokio::test]
+async fn password_clear_removes_stale_references_when_vault_files_are_already_missing() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, true);
+    fixture
+        .store
+        .delete_vault_password(fixture.profile.id)
+        .expect("external password deletion should succeed");
+    fixture
+        .store
+        .delete_vault_unlock_password(fixture.profile.id)
+        .expect("external unlock deletion should succeed");
+    let persistence = fixture.persistence();
+    clear_saved_password_in_store(
+        &fixture.state,
+        &persistence,
+        &fixture.profile.id.to_string(),
+        fixture.store.clone(),
+    )
+    .await
+    .expect("missing records should still allow clearing the reference");
+
+    let app = fixture.state.lock().expect("state should be readable");
+    let ssh = app.sessions.sessions[0]
+        .ssh()
+        .expect("profile should remain SSH");
+    assert_eq!(ssh.credential_storage, None);
+    assert!(!ssh.credential_vault_key_saved);
+    assert_eq!(
+        app.config.load().expect("config should load").sessions,
+        app.sessions.sessions
+    );
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
+
+#[tokio::test]
+async fn password_clear_releases_its_token_when_the_vault_cannot_be_read() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, true);
+    let record = fixture
+        .root
+        .join("credentials")
+        .join(format!("{}.json", fixture.profile.id));
+    std::fs::remove_file(&record).expect("fixture record should remove");
+    std::fs::create_dir(&record).expect("directory should block the vault read");
+    let persistence = fixture.persistence();
+
+    clear_saved_password_in_store(
+        &fixture.state,
+        &persistence,
+        &fixture.profile.id.to_string(),
+        fixture.store.clone(),
+    )
+    .await
+    .expect_err("unreadable vault should fail the clear");
+
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_unlock_password(fixture.profile.id)
+            .expect("unlock key should remain"),
+        Some("fixture-unlock".into())
+    );
+    let app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![fixture.profile.clone()]);
+    assert_eq!(
+        app.config.load().expect("config should load").sessions,
+        vec![fixture.profile.clone()]
+    );
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
+
+#[tokio::test]
+async fn password_clear_rejects_an_overlapping_profile_mutation() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::EncryptedVault, true);
+    let token = begin_profile_mutation(&fixture.state, fixture.profile.id, Some(&fixture.profile))
+        .expect("first mutation should start");
+    let persistence = fixture.persistence();
+    let error = clear_saved_password_in_store(
+        &fixture.state,
+        &persistence,
+        &fixture.profile.id.to_string(),
+        fixture.store.clone(),
+    )
+    .await
+    .expect_err("overlapping clear should fail");
+    assert!(error.to_string().contains("already being modified"));
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_password(fixture.profile.id, "fixture-unlock")
+            .expect("original password should remain"),
+        Some("fixture-password".into())
+    );
+    let app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![fixture.profile.clone()]);
+    assert!(app.profile_mutation_is_current(fixture.profile.id, token));
+    drop(app);
+    finish_profile_mutation(&fixture.state, fixture.profile.id, token);
+    fixture.cleanup();
+}
+
+#[test]
+fn password_clear_commit_rejects_a_changed_profile() {
+    let fixture = PasswordClearFixture::new(CredentialStorage::SystemKeyring, false);
+    let token = begin_profile_mutation(&fixture.state, fixture.profile.id, Some(&fixture.profile))
+        .expect("clear should start");
+    fixture
+        .state
+        .lock()
+        .expect("state should be readable")
+        .sessions
+        .sessions[0]
+        .name = "changed".into();
+    commit_profile_password_clear(&fixture.state, &fixture.profile, token)
+        .expect_err("stale clear must not overwrite the current profile");
+
+    let mut expected = fixture.profile.clone();
+    expected.name = "changed".into();
+    let app = fixture.state.lock().expect("state should be readable");
+    assert_eq!(app.sessions.sessions, vec![expected]);
+    assert_eq!(
+        app.config.load().expect("config should load").sessions,
+        vec![fixture.profile.clone()]
+    );
+    assert!(!app.profile_mutation_is_pending(fixture.profile.id));
+    drop(app);
+    fixture.cleanup();
+}
