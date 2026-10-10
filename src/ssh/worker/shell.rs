@@ -18,6 +18,7 @@ pub(super) struct TerminalSessionTask {
     pub(super) x11_dispatcher: Option<X11Dispatcher>,
     pub(super) x11_requests: Option<mpsc::Receiver<X11ChannelRequest>>,
     pub(super) command_rx: mpsc::Receiver<SshCommand>,
+    pub(super) latency_foreground_rx: watch::Receiver<bool>,
     pub(super) resize_rx: watch::Receiver<TerminalSize>,
     pub(super) event_tx: mpsc::Sender<SshSessionEvent>,
 }
@@ -32,6 +33,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         mut x11_requests,
         mut command_rx,
         mut resize_rx,
+        latency_foreground_rx,
         event_tx,
     } = task;
     let (mut x11_forwarding, x11_unavailable) = match x11_mode {
@@ -116,6 +118,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         }
     }
 
+    let mut latency = LatencyMonitor::new(connection.clone(), latency_foreground_rx);
     let output_flush = sleep(OUTPUT_FLUSH_INTERVAL);
     tokio::pin!(output_flush);
     let mut output = Vec::new();
@@ -129,6 +132,9 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut shell_exited = false;
     loop {
         tokio::select! {
+            event = latency.next_event() => {
+                if !send_event(&event_tx, event, session_id).await { break; }
+            }
             command = command_rx.recv() => {
                 match command {
                     Some(SshCommand::Send {

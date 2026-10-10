@@ -1060,6 +1060,63 @@ impl WindowRouter {
             .collect()
     }
 
+    /// Tab summaries only: telemetry must not snapshot terminal buffers or SFTP rows.
+    pub(super) fn tab_views(
+        &self,
+        app: &AppState,
+    ) -> Vec<(slint::Weak<AppWindow>, Vec<WorkspaceTabSummary>)> {
+        let Ok(router) = self.inner.lock() else {
+            return Vec::new();
+        };
+        let detached_ids = router
+            .routes
+            .values()
+            .filter_map(|route| route.transfer.as_ref())
+            .flat_map(|transfer| transfer.tab_ids.iter().copied())
+            .collect::<HashSet<_>>();
+        router
+            .routes
+            .values()
+            .map(|route| {
+                let hidden = route
+                    .pane_trees
+                    .iter()
+                    .flat_map(|(root, tree)| {
+                        tree.tab_ids().into_iter().filter(move |id| id != root)
+                    })
+                    .collect::<HashSet<_>>();
+                let tabs = route
+                    .transfer
+                    .as_ref()
+                    .map(|transfer| app.tab_summaries_for(&transfer.tab_ids))
+                    .unwrap_or_else(|| {
+                        app.tab_summaries()
+                            .into_iter()
+                            .filter(|tab| !detached_ids.contains(&tab.id))
+                            .collect()
+                    })
+                    .into_iter()
+                    .filter(|tab| !hidden.contains(&tab.id))
+                    .collect();
+                (route.ui.clone(), tabs)
+            })
+            .collect()
+    }
+
+    pub(super) fn latency_probe_is_foreground(&self, tab_id: Uuid) -> bool {
+        self.inner.lock().is_ok_and(|router| {
+            router.routes.values().any(|route| {
+                route.window_active
+                    && route.active_tab_id.is_some_and(|active| {
+                        route
+                            .pane_trees
+                            .get(&active)
+                            .map_or(active == tab_id, |tree| tree.focused_tab_id() == tab_id)
+                    })
+            })
+        })
+    }
+
     pub(super) fn terminal_presentation_mode(
         &self,
         tab_id: Uuid,

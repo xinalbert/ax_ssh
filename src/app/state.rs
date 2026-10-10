@@ -25,6 +25,8 @@ use ax_ssh::terminal::{
 use super::local_files::{LocalDirectoryEntry, default_local_directory};
 
 mod editor;
+mod latency;
+use latency::{ConnectionLatency, ConnectionLatencySnapshot};
 mod sftp;
 mod system_detection;
 mod tabs;
@@ -62,6 +64,7 @@ struct UiRefreshState {
     in_progress: bool,
     generation: u64,
     full: bool,
+    tabs: bool,
     terminal_ids: HashSet<Uuid>,
     earliest_output_received_at: Option<Instant>,
     coalesced_requests: u64,
@@ -70,6 +73,7 @@ struct UiRefreshState {
 pub(super) struct UiRefreshBatch {
     pub(super) generation: u64,
     pub(super) full: bool,
+    pub(super) tabs: bool,
     pub(super) terminal_ids: HashSet<Uuid>,
     pub(super) earliest_output_received_at: Option<Instant>,
     pub(super) coalesced_requests: u64,
@@ -154,6 +158,7 @@ pub(super) struct TerminalTabState {
     cursor_hide_deadline: Option<tokio::time::Instant>,
     pub(super) status: String,
     pub(super) connected: bool,
+    pub(super) connection_latency: ConnectionLatency,
     pub(super) system_release: Option<String>,
     pub(super) worker_running: bool,
     pub(super) selection_revision: i32,
@@ -499,6 +504,7 @@ pub(super) struct WorkspaceTabSummary {
     pub(super) title: String,
     pub(super) kind: &'static str,
     pub(super) connected: bool,
+    pub(super) latency: ConnectionLatencySnapshot,
     pub(super) local: bool,
     pub(super) system_icon: Option<String>,
     pub(super) system_release: Option<String>,

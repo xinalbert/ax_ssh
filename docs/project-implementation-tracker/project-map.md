@@ -71,6 +71,8 @@
 | `src/app/settings_bridge.rs` | Settings 预览/保存 bridge | `wire_settings`、`apply_preview_settings`、`load_settings_fonts`、`register_settings_fonts`、`system_icon_choices`、`system_icon_choice`、`COMMON_SYSTEM_ICON_IDS` | 合并草稿即时更新内存/Theme/终端/布局，包含 Terminal 文字亮度、可选语义高亮及其颜色，以及 SFTP 传输过滤、传输策略和本地打开快照上限草稿；新自带字体异步注册；关闭请求才原子保存并关闭指定 Settings Tab；系统图标搜索和精确查询只读取内置有界目录，选择器统一常用优先、其余按名称排序，搜索保持同一顺序 |
 | `src/app/view.rs` 与 `src/app/view/` | Slint model/snapshot/主题映射 | `refresh_workspace`、`prepare_terminal_output_snapshot`、`apply_terminal_panes`、`apply_terminal_pane_updates`、`apply_terminal_pane_layout`、`apply_sftp_snapshot`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component` | 根模块维持窄 re-export；子模块分别承载 workspace、terminal、SFTP、sidebar、settings/options 映射；sidebar 以同身份 Group model 行更新保留展开状态；Local Shell 侧栏/标签按本机系统映射图标，标签比较涵盖 release/platform 到达后的变化。启动只安装一次 router，移除无 router 的旧单窗口路径；完整刷新按 WindowRouter 构造路由视图；terminal-only 刷新只应用脏 UUID 命中的可见 pane，按单层 `TerminalRenderLine` model 复用 source/render revision，只更新变化行，跳过未变化父行、divider、SFTP 与无关 workspace 属性；无 dirty-row 且 cursor/viewport/mouse-reporting 未变化的初始 snapshot 不进入 Slint queue，UI 消费前会把较新的 damage 合并到其有界 pending snapshot |
 | `src/config/system_icons.rs`、`src/config/system_icons/catalog.rs` | 内置图标领域选择和逐服务器识别缓存 schema | `SystemIconChoice`、`SystemDetection`、`system_icon_id`、目标匹配 | schema v35；可选值无效时回退自动，成功缓存绑定 SSH host/port/username/主机指纹；没有 Slint、transport 或资源路径 |
+| `src/ssh/worker/latency.rs`、`src/ssh.rs` | 认证 transport 上的单请求 SSH RTT 采样 | `LatencyMonitor`、`measure_latency`、`set_latency_foreground` | 10/30 秒节奏，5 秒展示超时后保留 pending future，90 秒过期；成功/失败均计响应，receiver 关闭为错误；与 worker 生命周期共用取消，不改变存活/信任或执行远端命令 |
+| `src/app/state/latency.rs`、`src/app/view/workspace.rs`、`ui/components/workspace-titlebar.slint` | 临时延迟状态与 Tab 状态点 | `ConnectionLatency`、`ConnectionLatencySnapshot`、`refresh_workspace_tabs` | 20% EWMA、连续两次新档位切色，重连清空；attempt guard 拒绝旧事件，Tab-only 刷新共用有界门控，不构造终端/SFTP snapshot；颜色、tooltip、可访问文本及拖动预览共用摘要，无配置 schema |
 | `src/app/state/system_detection.rs` | 逐 profile 探测租约、缓存优先级与后台保存事务 | `request_system_detection`、`accept_system_detection`、`save_system_detection` | 合并 SSH/SFTP，手动/有效缓存跳过；重置和旧 attempt/目标拒绝；等待 profile/凭据事务，从磁盘只保存缓存字段、保留 Settings 预览 |
 | `ui/components/system-icon-picker.slint` | 服务器/Local Shell 共用有界搜索选择器 | `SystemIconPicker`、`SystemIconChoiceRow` | 固定 32px 下拉控件、20px 居中 glyph/系统显示名称，独立 360px 搜索弹层和六行虚拟列表，不改变父行高度；is-open 控制箭头/无障碍状态；Rust 纯筛选/精确查询内置目录，手动覆盖可切回自动，Local Shell 独立立即保存 |
 | `src/app/system_icons.rs`、`src/app/system_icons/catalog.rs` | 系统/发行版图标身份映射和本机 Linux 有界发现 | `local_platform`、`discover_local_platform`、`platform_for_release`、生成的 family/distro alias 表 | 缓存只读规范标识；本机 os-release 由启动 blocking worker 最多读取 8 KiB，优先 ID、不继承 ID_LIKE；远端短 release 识别具体发行版/版本，未知 Linux 使用 Tux；不持有 Slint 或 transport |
@@ -236,6 +238,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-10 15:04 +0800：增加 worker 单请求延迟采样、应用临时平滑状态、Tab-only 刷新和窗口焦点采样定位；无 schema 或主机信任变化。
 
 - 2026-10-10 13:49 +0800：系统图标选择器的共享应用查询增加常用优先、其余显示名称排序，定位唯一常用列表和搜索顺序；领域目录、身份/识别与保存边界不变。
 

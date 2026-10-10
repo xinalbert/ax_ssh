@@ -656,10 +656,20 @@ async fn idle_shell_does_not_disconnect_when_no_channel_data_arrives() {
         !worker.is_finished(),
         "a quiet shell must remain owned by its worker until transport liveness fails"
     );
-    assert!(
-        events.try_recv().is_err(),
-        "a quiet shell must not report a synthetic terminal failure"
-    );
+    loop {
+        match events.try_recv() {
+            Ok(
+                SshSessionEvent::LatencyMeasured { .. }
+                | SshSessionEvent::LatencyTimedOut
+                | SshSessionEvent::LatencyExpired
+                | SshSessionEvent::LatencyUnavailable,
+            ) => {}
+            Err(mpsc::error::TryRecvError::Empty) => break,
+            event => {
+                panic!("a quiet shell must not report a synthetic terminal failure: {event:?}")
+            }
+        }
+    }
 
     resume();
     worker
@@ -890,10 +900,20 @@ async fn probe_then_password_login_preserves_host_key_verification() {
         .await
         .expect("trusted host with valid password should authenticate");
     assert!(!connection.is_closed());
+    timeout(Duration::from_secs(2), connection.measure_latency())
+        .await
+        .expect("trusted server should answer latency request")
+        .expect("REQUEST_FAILURE is a valid RTT response");
     connection
         .disconnect()
         .await
         .expect("authenticated test connection should disconnect");
+    assert!(
+        timeout(Duration::from_secs(2), connection.measure_latency())
+            .await
+            .expect("closed transport should reject promptly")
+            .is_err()
+    );
 
     let (failed_worker, mut failed_events) = SshSessionHandle::spawn(
         &Handle::current(),
@@ -930,9 +950,16 @@ async fn probe_then_password_login_preserves_host_key_verification() {
     worker
         .request_resize(100, 30)
         .expect("SSH worker should accept terminal resize");
-    let resized = timeout(Duration::from_secs(2), events.recv())
-        .await
-        .expect("SSH worker should report terminal resize promptly");
+    let resized = timeout(Duration::from_secs(2), async {
+        loop {
+            match events.recv().await {
+                Some(SshSessionEvent::LatencyMeasured { .. }) => {}
+                event => break event,
+            }
+        }
+    })
+    .await
+    .expect("SSH worker should report terminal resize promptly");
     assert_eq!(
         resized,
         Some(SshSessionEvent::Resized {

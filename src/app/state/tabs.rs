@@ -45,7 +45,7 @@ impl AppState {
     }
 
     pub(in crate::app) fn request_full_ui_refresh(&mut self) -> bool {
-        self.request_ui_refresh(None, None)
+        self.request_ui_refresh(None, None, false)
     }
 
     pub(in crate::app) fn request_terminal_ui_refresh(
@@ -53,15 +53,22 @@ impl AppState {
         tab_id: Uuid,
         output_received_at: Option<Instant>,
     ) -> bool {
-        self.request_ui_refresh(Some(tab_id), output_received_at)
+        self.request_ui_refresh(Some(tab_id), output_received_at, false)
+    }
+
+    pub(in crate::app) fn request_tab_ui_refresh(&mut self) -> bool {
+        self.request_ui_refresh(None, None, true)
     }
 
     fn request_ui_refresh(
         &mut self,
         terminal_id: Option<Uuid>,
         output_received_at: Option<Instant>,
+        tabs_only: bool,
     ) -> bool {
-        if let Some(tab_id) = terminal_id {
+        if tabs_only {
+            self.ui_refresh.tabs = true;
+        } else if let Some(tab_id) = terminal_id {
             if !self.ui_refresh.full {
                 self.ui_refresh.terminal_ids.insert(tab_id);
             }
@@ -100,6 +107,7 @@ impl AppState {
         Some(UiRefreshBatch {
             generation: self.ui_refresh.generation,
             full: std::mem::take(&mut self.ui_refresh.full),
+            tabs: std::mem::take(&mut self.ui_refresh.tabs),
             terminal_ids: std::mem::take(&mut self.ui_refresh.terminal_ids),
             earliest_output_received_at: self.ui_refresh.earliest_output_received_at.take(),
             coalesced_requests: std::mem::take(&mut self.ui_refresh.coalesced_requests),
@@ -251,6 +259,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Preparing connection...".to_owned(),
                 connected: false,
+                connection_latency: ConnectionLatency::default(),
                 system_release: None,
                 worker_running: false,
                 selection_revision: 0,
@@ -317,6 +326,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Preparing SFTP connection...".to_owned(),
                 connected: false,
+                connection_latency: ConnectionLatency::default(),
                 system_release: None,
                 worker_running: false,
                 selection_revision: 0,
@@ -360,6 +370,7 @@ impl AppState {
                 cursor_hide_deadline: None,
                 status: "Starting local shell...".to_owned(),
                 connected: false,
+                connection_latency: ConnectionLatency::default(),
                 system_release: None,
                 worker_running: true,
                 selection_revision: 0,
@@ -653,6 +664,12 @@ impl AppState {
                             })
                         }),
                     _ => None,
+                },
+                latency: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) if terminal.ssh_route().is_some() => {
+                        terminal.connection_latency.snapshot(Instant::now())
+                    }
+                    _ => ConnectionLatencySnapshot::default(),
                 },
                 system_release: match &tab.kind {
                     WorkspaceTabKind::Terminal(terminal) => terminal
@@ -959,6 +976,7 @@ impl AppState {
                                 snapshot.status.clone()
                             },
                             connected: false,
+                            connection_latency: ConnectionLatency::default(),
                             system_release: None,
                             worker_running: false,
                             selection_revision: 0,
@@ -995,6 +1013,7 @@ impl AppState {
                             cursor_hide_deadline: None,
                             status: snapshot.status.clone(),
                             connected: false,
+                            connection_latency: ConnectionLatency::default(),
                             system_release: None,
                             worker_running: false,
                             selection_revision: 0,
@@ -1483,6 +1502,12 @@ impl AppState {
                             })
                         }),
                     _ => None,
+                },
+                latency: match &tab.kind {
+                    WorkspaceTabKind::Terminal(terminal) if terminal.ssh_route().is_some() => {
+                        terminal.connection_latency.snapshot(Instant::now())
+                    }
+                    _ => ConnectionLatencySnapshot::default(),
                 },
                 system_release: match &tab.kind {
                     WorkspaceTabKind::Terminal(terminal) => terminal

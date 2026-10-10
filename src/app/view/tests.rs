@@ -124,6 +124,7 @@ fn detached_system_icon_properties_follow_identity_and_clear_stale_metadata() {
         let ui = &harness.ui;
         ui.set_detached_window(true);
         let summary = |icon: Option<&str>, release: Option<&str>| WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::from_u128(1),
             title: "Server".into(),
             kind: "terminal",
@@ -257,6 +258,7 @@ fn window_drag_gestures(detached: bool) {
             connected: false,
             system_release: String::new().into(),
             system_platform: String::new().into(),
+            ..Default::default()
         }])));
         let drags = Rc::new(Cell::new(0));
         let received_drags = drags.clone();
@@ -1006,6 +1008,7 @@ fn terminal_select_all_shortcut_preserves_shell_control_a() {
 fn settings_workbench_is_exposed_as_a_workspace_tab() {
     let rows = visible_workspace_tab_rows(vec![
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "Settings".to_owned(),
             kind: "settings",
@@ -1015,6 +1018,7 @@ fn settings_workbench_is_exposed_as_a_workspace_tab() {
             system_release: None,
         },
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "New session".to_owned(),
             kind: "session-editor",
@@ -1034,6 +1038,7 @@ fn settings_workbench_is_exposed_as_a_workspace_tab() {
 fn workspace_tabs_expose_release_and_platform_with_safe_fallbacks() {
     let rows = visible_workspace_tab_rows(vec![
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "Windows host".to_owned(),
             kind: "terminal",
@@ -1043,6 +1048,7 @@ fn workspace_tabs_expose_release_and_platform_with_safe_fallbacks() {
             system_release: Some("Microsoft Windows Server 2022".to_owned()),
         },
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "Unknown host".to_owned(),
             kind: "terminal",
@@ -1066,6 +1072,7 @@ fn workspace_tabs_expose_release_and_platform_with_safe_fallbacks() {
 fn local_shell_icons_use_host_platform_without_guessing_from_the_title() {
     let rows = visible_workspace_tab_rows(vec![
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "build".to_owned(),
             kind: "terminal",
@@ -1075,6 +1082,7 @@ fn local_shell_icons_use_host_platform_without_guessing_from_the_title() {
             system_release: None,
         },
         WorkspaceTabSummary {
+            latency: Default::default(),
             id: Uuid::new_v4(),
             title: "Local Shell #1".to_owned(),
             kind: "terminal",

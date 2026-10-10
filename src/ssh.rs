@@ -597,6 +597,19 @@ pub struct SshConnection {
 }
 
 impl SshConnection {
+    /// Measure a response on the authenticated transport without opening a channel.
+    async fn measure_latency(&self) -> Result<std::time::Duration> {
+        let started = std::time::Instant::now();
+        match self
+            .handle
+            .send_global_request("keepalive@openssh.com", &[], true)
+            .await
+        {
+            Ok(_) | Err(russh::Error::RequestDenied) => Ok(started.elapsed()),
+            Err(error) => Err(error).context("SSH latency request did not receive a response"),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) async fn connect(
         profile: &SessionProfile,

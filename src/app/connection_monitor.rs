@@ -1,5 +1,20 @@
 use super::*;
 
+fn update_latency_foreground(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    attempt_id: Uuid,
+) {
+    let foreground =
+        global_window_router().is_some_and(|router| router.latency_probe_is_foreground(tab_id));
+    mutate_terminal_attempt(state, tab_id, profile_id, attempt_id, |terminal| {
+        if let Some(state::TerminalWorker::Ssh(worker)) = &terminal.worker {
+            worker.set_latency_foreground(foreground);
+        }
+    });
+}
+
 fn persist_system_detection(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,
@@ -67,8 +82,20 @@ pub(super) fn spawn_session_monitor(
         let mut terminal_event = false;
         let mut presentation =
             crate::app::terminal_presentation::TerminalPresentation::new();
+        let mut route_changes = global_window_router().map(|router| router.subscribe_terminal_presentation_changes());
+        update_latency_foreground(&state, tab_id, profile.id, attempt_id);
         loop {
             let event = tokio::select! {
+                changed = async {
+                    match route_changes.as_mut() {
+                        Some(rx) => rx.changed().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    if changed.is_err() { route_changes = None; }
+                    else { update_latency_foreground(&state, tab_id, profile.id, attempt_id); }
+                    continue;
+                }
                 event = events.recv() => {
                     let Some(event) = event else {
                         break;
@@ -109,6 +136,7 @@ pub(super) fn spawn_session_monitor(
                         profile.id,
                         attempt_id,
                         |terminal| {
+                            terminal.connection_latency = Default::default();
                             terminal.connected = true;
                             terminal.worker_running = true;
                             let generation = terminal.reconnect_generation();
@@ -121,6 +149,7 @@ pub(super) fn spawn_session_monitor(
                     if let Ok(mut app) = state.lock() {
                         app.request_system_detection(&profile, tab_id, attempt_id);
                     }
+                    update_latency_foreground(&state, tab_id, profile.id, attempt_id);
                     info!(tab_id = %tab_id, session_id = %profile.id, "SSH worker reported connected");
                     if active {
                         dispatch_active_snapshot(&ui, &state);
@@ -136,6 +165,23 @@ pub(super) fn spawn_session_monitor(
                             attempt_id,
                             credential,
                         );
+                    }
+                }
+                SshSessionEvent::LatencyMeasured { .. }
+                | SshSessionEvent::LatencyTimedOut
+                | SshSessionEvent::LatencyExpired
+                | SshSessionEvent::LatencyUnavailable => {
+                    if mutate_terminal_attempt(&state, tab_id, profile.id, attempt_id, |terminal| {
+                        match event {
+                            SshSessionEvent::LatencyMeasured { round_trip, measured_at } =>
+                                terminal.connection_latency.record_sample(round_trip, measured_at),
+                            SshSessionEvent::LatencyTimedOut => terminal.connection_latency.record_timeout(),
+                            SshSessionEvent::LatencyExpired => terminal.connection_latency.expire(),
+                            SshSessionEvent::LatencyUnavailable => terminal.connection_latency.unavailable(),
+                            _ => (),
+                        }
+                    }).is_some() {
+                        view::refresh_workspace_tabs(&ui, &state);
                     }
                 }
                 SshSessionEvent::SystemRelease(release) => {
@@ -1171,6 +1217,51 @@ fn session_is_loading_stored_credential(
 mod tests {
     use super::*;
     use crate::app::state::SftpBrowserState;
+    use std::time::Instant;
+
+    #[test]
+    fn latency_events_cannot_mutate_a_replaced_connection_attempt() {
+        let state = Arc::new(Mutex::new(AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("ax-ssh-latency-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        )));
+        let profile = SessionProfile::new("Remote", "remote.example", "alice");
+        let attempt = Uuid::new_v4();
+        let tab = {
+            let mut app = state.lock().unwrap();
+            let tab = app.open_terminal_tab(&profile);
+            app.terminal_mut(tab)
+                .unwrap()
+                .set_ssh_attempt(Some(attempt));
+            tab
+        };
+        assert!(
+            mutate_terminal_attempt(&state, tab, profile.id, attempt, |terminal| {
+                terminal
+                    .connection_latency
+                    .record_sample(Duration::from_millis(800), Instant::now());
+            })
+            .is_some()
+        );
+        state
+            .lock()
+            .unwrap()
+            .terminal_mut(tab)
+            .unwrap()
+            .set_ssh_attempt(Some(Uuid::new_v4()));
+        assert!(
+            mutate_terminal_attempt(&state, tab, profile.id, attempt, |terminal| {
+                terminal.connection_latency.record_timeout();
+            })
+            .is_none()
+        );
+        assert_eq!(
+            state.lock().unwrap().tab_summaries()[0].latency.state,
+            "measuring"
+        );
+    }
 
     fn entry(name: &str) -> SftpEntry {
         SftpEntry {

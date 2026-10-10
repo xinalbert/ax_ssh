@@ -1,8 +1,10 @@
 //! Bounded command/event worker for one authenticated SSH transport.
 
+mod latency;
 mod sftp;
 mod shell;
 
+use self::latency::LatencyMonitor;
 use self::sftp::run_sftp_session;
 use self::shell::{TerminalSessionTask, run_terminal_session, x11_mode_for};
 
@@ -58,6 +60,13 @@ pub enum SshSessionEvent {
     Authenticated,
     Connected,
     SystemRelease(Option<String>),
+    LatencyMeasured {
+        round_trip: Duration,
+        measured_at: Instant,
+    },
+    LatencyTimedOut,
+    LatencyExpired,
+    LatencyUnavailable,
     Resized {
         columns: u32,
         rows: u32,
@@ -147,6 +156,7 @@ struct SshSessionTask {
     sftp_policy: crate::config::SftpTransferPolicy,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
+    latency_foreground_rx: watch::Receiver<bool>,
     event_tx: mpsc::Sender<SshSessionEvent>,
 }
 
@@ -155,6 +165,7 @@ pub struct SshSessionHandle {
     session_id: Uuid,
     command_tx: mpsc::Sender<SshCommand>,
     resize_tx: watch::Sender<TerminalSize>,
+    latency_foreground_tx: watch::Sender<bool>,
     next_input_sequence: AtomicU64,
     task: JoinHandle<()>,
     sftp_max_file_bytes: u64,
@@ -243,6 +254,7 @@ impl SshSessionHandle {
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (resize_tx, resize_rx) = watch::channel(initial_size);
+        let (latency_foreground_tx, latency_foreground_rx) = watch::channel(false);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let task = runtime.spawn(run_session(SshSessionTask {
             session_id,
@@ -253,6 +265,7 @@ impl SshSessionHandle {
             sftp_policy,
             command_rx,
             resize_rx,
+            latency_foreground_rx,
             event_tx,
         }));
         (
@@ -260,12 +273,25 @@ impl SshSessionHandle {
                 session_id,
                 command_tx,
                 resize_tx,
+                latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
                 task,
                 sftp_max_file_bytes: sftp_policy.max_file_bytes(),
             },
             event_rx,
         )
+    }
+
+    /// Change sampling cadence without queuing commands or cancelling a probe.
+    pub fn set_latency_foreground(&self, foreground: bool) {
+        self.latency_foreground_tx.send_if_modified(|current| {
+            if *current == foreground {
+                false
+            } else {
+                *current = foreground;
+                true
+            }
+        });
     }
 
     pub fn is_finished(&self) -> bool {
@@ -582,6 +608,7 @@ async fn run_session(task: SshSessionTask) {
         sftp_policy,
         mut command_rx,
         resize_rx,
+        latency_foreground_rx,
         event_tx,
     } = task;
     let x11_mode = x11_mode_for(mode, &profile);
@@ -701,6 +728,7 @@ async fn run_session(task: SshSessionTask) {
             command_rx,
             event_tx,
             sftp_policy,
+            latency_foreground_rx,
         )
         .await;
         return;
@@ -715,6 +743,7 @@ async fn run_session(task: SshSessionTask) {
         x11_requests,
         command_rx,
         resize_rx,
+        latency_foreground_rx,
         event_tx,
     })
     .await;
@@ -841,6 +870,7 @@ mod tests {
             session_id: Uuid::new_v4(),
             command_tx,
             resize_tx,
+            latency_foreground_tx: watch::channel(false).0,
             next_input_sequence: AtomicU64::new(0),
             task,
             sftp_max_file_bytes: crate::config::SftpTransferSettings::default()

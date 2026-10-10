@@ -9,6 +9,9 @@ export struct WorkspaceTabRow {
     title: string,
     kind: string,
     connected: bool,
+    latency_state: string,
+    latency_ms: int,
+    latency_updated_at: string,
     system_release: string,
     system_platform: string,
 }
@@ -111,6 +114,16 @@ component WorkspaceTabContent inherits HorizontalLayout {
     in property <string> title;
     in property <string> kind;
     in property <bool> connected;
+    in property <string> latency-state;
+    in property <int> latency-ms;
+    in property <string> latency-updated-at;
+    private property <string> connection-tooltip:
+        root.latency-state.is-empty ? @tr("Connected")
+        : root.latency-state == "measuring" ? @tr("Connected · Measuring SSH latency")
+        : root.latency-state == "timeout" ? @tr("Connected · SSH latency probe timed out")
+        : root.latency-state == "stale" ? @tr("Connected · SSH latency data expired")
+        : root.latency-state == "unavailable" ? @tr("Connected · SSH latency unavailable")
+        : @tr("Connected · SSH RTT: {} ms\nUpdated: {}", root.latency-ms, root.latency-updated-at);
     in property <string> system-release;
     in property <string> system-platform;
     in property <bool> active: false;
@@ -170,7 +183,16 @@ component WorkspaceTabContent inherits HorizontalLayout {
         width: Theme.tab-status-size;
         height: Theme.tab-status-size;
         border-radius: Theme.tab-status-size / 2;
-        background: Theme.success;
+        background: root.latency-state.is-empty || root.latency-state == "good" ? Theme.success
+            : root.latency-state == "moderate" ? Theme.latency-moderate-color
+            : root.latency-state == "high" ? Theme.latency-high-color
+            : root.latency-state == "poor" || root.latency-state == "timeout" ? Theme.danger
+            : Theme.muted;
+        accessible-role: text;
+        accessible-label: root.connection-tooltip;
+        Tooltip {
+            ElidedTooltipContent { text: root.connection-tooltip; }
+        }
     }
     if root.window-action-enabled : Rectangle {
         width: root.close-button-size;
@@ -501,6 +523,9 @@ export component WorkspaceTitlebar inherits Rectangle {
     private property <string> drag-system-release;
     private property <string> drag-system-platform;
     private property <bool> drag-connected: false;
+    private property <string> drag-latency-state;
+    private property <int> drag-latency-ms;
+    private property <string> drag-latency-updated-at;
     private property <int> drag-order: 0;
     private property <int> tab-visibility-revision: 0;
     changed tabs => {
@@ -559,6 +584,7 @@ export component WorkspaceTitlebar inherits Rectangle {
     function begin-tab-drag(
         id: string, index: int, title: string, kind: string, connected: bool,
         system-release: string, system-platform: string,
+        latency-state: string, latency-ms: int, latency-updated-at: string,
         pointer-x: length,
     ) {
         root.drag-source-id = id;
@@ -569,6 +595,9 @@ export component WorkspaceTitlebar inherits Rectangle {
         root.drag-title = title;
         root.drag-kind = kind;
         root.drag-connected = connected;
+        root.drag-latency-state = latency-state;
+        root.drag-latency-ms = latency-ms;
+        root.drag-latency-updated-at = latency-updated-at;
         root.drag-system-release = system-release;
         root.drag-system-platform = system-platform;
         root.drag-order = index + 1;
@@ -760,6 +789,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                                 root.begin-tab-drag(
                                     tab.id, index, tab.title, tab.kind, tab.connected,
                                     tab.system_release, tab.system_platform,
+                                    tab.latency_state, tab.latency_ms, tab.latency_updated_at,
                                     self.mouse-x,
                                 );
                             } else if event.kind == PointerEventKind.up
@@ -788,6 +818,9 @@ export component WorkspaceTitlebar inherits Rectangle {
                         title: tab.title;
                         kind: tab.kind;
                         connected: tab.connected;
+                        latency-state: tab.latency_state;
+                        latency-ms: tab.latency_ms;
+                        latency-updated-at: tab.latency_updated_at;
                         system-release: tab.system_release;
                         system-platform: tab.system_platform;
                         active: tab.id == root.active-tab-id;
@@ -897,6 +930,9 @@ export component WorkspaceTitlebar inherits Rectangle {
                     title: root.drag-title;
                     kind: root.drag-kind;
                     connected: root.drag-connected;
+                    latency-state: root.drag-latency-state;
+                    latency-ms: root.drag-latency-ms;
+                    latency-updated-at: root.drag-latency-updated-at;
                     system-release: root.drag-system-release;
                     system-platform: root.drag-system-platform;
                     active: true;

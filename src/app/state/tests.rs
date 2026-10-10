@@ -2,12 +2,67 @@ use super::*;
 use crate::app::terminal_bridge::process_terminal_output;
 use crate::app::terminal_presentation::TerminalPresentation;
 use ax_ssh::config::{AuthMethod, CredentialStorage};
+use std::time::Duration;
 
 fn test_state() -> AppState {
     AppState::new(
         ConfigStore::new(std::env::temp_dir().join(format!("ax-ssh-tabs-{}.json", Uuid::new_v4()))),
         SessionStore::default(),
     )
+}
+
+#[test]
+fn latency_tab_refresh_coalesces_with_output_and_has_a_bounded_follow_up() {
+    let mut state = test_state();
+    let tab = Uuid::new_v4();
+    assert!(state.request_tab_ui_refresh());
+    assert!(!state.request_terminal_ui_refresh(tab, None));
+    let batch = state.take_ui_refresh_batch().unwrap();
+    assert!(batch.tabs);
+    assert!(!batch.full);
+    assert_eq!(batch.terminal_ids, HashSet::from([tab]));
+    for _ in 0..100 {
+        assert!(!state.request_tab_ui_refresh());
+    }
+    assert!(state.finish_ui_refresh(batch.generation));
+    let follow_up = state.take_ui_refresh_batch().unwrap();
+    assert!(follow_up.tabs);
+    assert!(follow_up.terminal_ids.is_empty());
+    assert!(!state.finish_ui_refresh(follow_up.generation));
+}
+
+#[test]
+fn reconnect_resets_latency_and_non_ssh_tabs_have_no_latency_sample() {
+    let mut state = test_state();
+    let profile = SessionProfile::new("Remote", "remote.example", "alice");
+    let tab = state.open_terminal_tab(&profile);
+    let first = Uuid::new_v4();
+    let terminal = state.terminal_mut(tab).unwrap();
+    assert!(terminal.set_ssh_attempt(Some(first)));
+    terminal
+        .connection_latency
+        .record_sample(Duration::from_millis(800), Instant::now());
+    assert!(terminal.set_ssh_attempt(Some(first)));
+    assert_eq!(
+        terminal.connection_latency.snapshot(Instant::now()).state,
+        "poor"
+    );
+    assert!(terminal.set_ssh_attempt(Some(Uuid::new_v4())));
+    assert_eq!(
+        terminal.connection_latency.snapshot(Instant::now()).state,
+        "measuring"
+    );
+    let local = state.open_local_shell_tab();
+    assert_eq!(
+        state
+            .tab_summaries()
+            .iter()
+            .find(|row| row.id == local)
+            .unwrap()
+            .latency
+            .state,
+        ""
+    );
 }
 
 #[test]

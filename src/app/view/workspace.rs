@@ -8,8 +8,18 @@ pub(in crate::app) fn refresh_workspace(ui: &slint::Weak<AppWindow>, state: &Arc
     refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Full);
 }
 
+pub(in crate::app) fn refresh_workspace_tabs(
+    ui: &slint::Weak<AppWindow>,
+    state: &Arc<Mutex<AppState>>,
+) {
+    if let Some(router) = global_window_router() {
+        refresh_workspace_multi_window(ui, state, &router, WorkspaceRefreshRequest::Tabs);
+    }
+}
+
 pub(super) enum WorkspaceRefreshRequest {
     Full,
+    Tabs,
     Terminal {
         tab_id: Uuid,
         output_received_at: Option<Instant>,
@@ -25,6 +35,7 @@ pub(super) fn refresh_workspace_multi_window(
     let should_schedule = match state.lock() {
         Ok(mut app) => match request {
             WorkspaceRefreshRequest::Full => app.request_full_ui_refresh(),
+            WorkspaceRefreshRequest::Tabs => app.request_tab_ui_refresh(),
             WorkspaceRefreshRequest::Terminal {
                 tab_id,
                 output_received_at,
@@ -55,17 +66,22 @@ fn schedule_pending_ui_refresh(
     if slint::invoke_from_event_loop(move || {
         let ui_started_at = Instant::now();
         let views_started_at = Instant::now();
-        let (batch, full_views, terminal_updates) = match state_for_ui.lock() {
+        let (batch, full_views, tab_views, terminal_updates) = match state_for_ui.lock() {
             Ok(mut app) => {
                 let Some(batch) = app.take_ui_refresh_batch() else {
                     return;
                 };
                 if batch.full {
                     let views = router.views(&mut app);
-                    (batch, views, Vec::new())
+                    (batch, views, Vec::new(), Vec::new())
                 } else {
+                    let tabs = if batch.tabs {
+                        router.tab_views(&app)
+                    } else {
+                        Vec::new()
+                    };
                     let updates = router.terminal_updates(&mut app, &batch.terminal_ids);
-                    (batch, Vec::new(), updates)
+                    (batch, Vec::new(), tabs, updates)
                 }
             }
             Err(poisoned) => {
@@ -105,6 +121,12 @@ fn schedule_pending_ui_refresh(
             }
             apply_terminal_panes(&ui, view.terminal_panes, view.terminal_dividers);
             applied_view_count = applied_view_count.saturating_add(1);
+        }
+        for (weak, tabs) in tab_views {
+            if let Some(ui) = weak.upgrade() {
+                apply_workspace_tab_rows(&ui, visible_workspace_tab_rows(tabs));
+                applied_view_count = applied_view_count.saturating_add(1);
+            }
         }
         for update in terminal_updates {
             let Some(ui) = update.ui.upgrade() else {
@@ -175,6 +197,9 @@ pub(in crate::app) fn visible_workspace_tab_rows(
             title: tab.title.into(),
             kind: tab.kind.into(),
             connected: tab.connected,
+            latency_state: tab.latency.state.into(),
+            latency_ms: tab.latency.milliseconds,
+            latency_updated_at: tab.latency.updated_at.into(),
             system_release: tab.system_release.clone().unwrap_or_default().into(),
             system_platform: if let Some(icon) = tab
                 .system_icon

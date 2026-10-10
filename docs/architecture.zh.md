@@ -912,6 +912,16 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 取消既能中断连接/认证，也能断开已建立会话；
 - 20 秒 keepalive 和三次未响应上限、以及 90 秒传输 inactivity 边界共同判定连接
   存活；安静的 shell 数据通道是有效状态，绝不单独按无输出超时；
+- worker 内的 latency monitor 在同一认证 transport 上发送需要回复的
+  `keepalive@openssh.com` 全局请求；成功和拒绝都是有效响应，receiver 关闭则是错误。
+  未完成 future 跨 worker select 取消和 5 秒展示超时保留，完成前不追加探测；monitor 与
+  Terminal/SFTP worker 一同释放，只在 `Connected` 后开始，合并的前后台 watch 选择
+  10/30 秒节奏，90 秒过期产生有界 stale 事件。探测不负责断开、信任、认证、profile 保存或
+  既有存活判定；
+- 应用层 `state/latency.rs` 保存有界临时样本、20% EWMA 和连续两次样本的颜色切换缓冲。
+  monitor 的 attempt guard 拒绝旧路由事件，重连清空数据；Tab-only 刷新共用现有合并门控，
+  router 只构造摘要，不重建终端/SFTP snapshot。Slint 只接收档位、毫秒和有界本地更新时间。
+  Local/Telnet/Serial 没有 SSH 测量，分屏可见 Tab 表示根会话；
 - SFTP-only worker 观察 SSH transport，浏览器观察 SFTP subsystem channel；即使没有界面命令，
   任一连接关闭也会进入既有有界重连流程。目录请求遇到传输或协议故障时也会结束浏览器，路径或权限
   状态错误则只影响该次请求；

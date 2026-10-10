@@ -53,7 +53,7 @@ pub(super) use self::terminal::{
     dispatch_terminal_output_snapshot, dispatch_terminal_snapshot,
     prepare_terminal_output_snapshot, set_tab_status,
 };
-pub(super) use self::workspace::refresh_workspace;
+pub(super) use self::workspace::{refresh_workspace, refresh_workspace_tabs};
 
 #[cfg(test)]
 use self::workspace::visible_workspace_tab_rows;

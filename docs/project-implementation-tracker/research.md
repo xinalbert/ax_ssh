@@ -486,3 +486,13 @@
 - 关键结论：可补齐此前多项遗漏；官网部分只提供 PNG 或带完整名称的标志。Papirus/Font Logos 可提供更多社区系统符号，但不代表官方或系统仍维护。品牌资源不能沿用 Iconify 集合许可证；原生配色名称和主题含义也必须分别记录。
 - 对实施计划的影响：扩展到 SVG/PNG，保留原文件及哈希，按系统/平台/桌面环境分类；单列官方品牌条款与社区许可；新增检索覆盖和缺口资料，不裁字或自行配色。
 - 未解决问题：Amazon Linux 与 RancherOS 暂未确认专用系统图形，通用 AWS/Rancher 品牌不得标成专用系统标志；最终选择和检查见资源清单。
+
+## 2026-10-10 SSH Tab 延迟探测
+
+- 时间：2026-10-10 14:42 +0800
+- 检索问题：如何使用锁定 russh 0.64.1 的已认证连接连续测量 SSH 响应时间，且不污染终端或堆积无响应请求？
+- 检索原因：用户要求评估 Tab 状态点按延迟配色的检测方式，随后授权按建议实施。
+- 来源列表：[固定版本 client Handle](https://github.com/warp-tech/russh/blob/e5d80a07dc554480b6ea3b2e14adfc190407b627/russh/src/client/mod.rs)、[固定版本 global request 入队](https://github.com/warp-tech/russh/blob/e5d80a07dc554480b6ea3b2e14adfc190407b627/russh/src/client/session.rs)、[RFC4254 全局请求](https://www.rfc-editor.org/rfc/rfc4254.html#section-4)；本机 Cargo.lock 和对应依赖缓存源码。
+- 关键结论：`keepalive@openssh.com` 配合 want-reply 可使用现有 SSH transport；REQUEST_FAILURE 也是有效往返响应，未知请求须按协议拒绝；全局响应按顺序匹配，没有请求 ID。固定版本 send_ping 忽略 oneshot 关闭，因此直接使用 send_global_request 区分拒绝与断线。既有保活仅在无入站数据时运行，不能独立提供持续 RTT。
+- 对实施计划的影响：RT2 使用拥有单个 pending future 的 worker 内 sampler，展示超时后保留该请求；成功或拒绝返回测量，断线错误停止采样。RT3 只保存临时延迟，复用代次 guard 和有界 Tab 刷新，不引入 ICMP、新连接或远端 exec。
+- 未解决问题：数值包含 SSH 队列、传输和服务端处理时间；真实高延迟、不同服务端、前后台/重连与各平台视觉仍需用户原生验收。

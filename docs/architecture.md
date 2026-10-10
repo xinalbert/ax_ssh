@@ -1464,6 +1464,21 @@ Authenticated connections follow this lifecycle:
 - a 20-second keepalive with three missed-reply limit and the 90-second
   transport inactivity boundary decide connection liveness; a quiet shell data
   channel is valid and never has its own output timeout;
+- a worker-owned latency monitor measures a reply-requesting
+  `keepalive@openssh.com` global request on this same authenticated transport;
+  both SSH request success and failure count as replies, while receiver closure
+  is an error. Its pending future survives worker-select cancellation and the
+  5-second presentation timeout; no second request is queued until it completes.
+  The monitor is dropped with its terminal/SFTP worker, starts only after
+  `Connected`, and uses a coalesced foreground watch for 10/30-second cadence.
+  A 90-second expiry produces a bounded stale event. It does not own disconnect,
+  trust, authentication, profile mutation, or the existing liveness policy;
+- application-only `state/latency.rs` retains bounded, volatile samples, a 20%
+  EWMA and two-sample colour transitions. Attempt-guarded monitor events reject
+  old routes and reset on reconnect. A coalesced Tab-only refresh uses router
+  summaries without terminal/SFTP snapshots; Slint receives only quality,
+  milliseconds, and a bounded local update-time label. Local/Telnet/Serial have
+  no SSH measurement; the visible split Tab represents its root session;
 - the SFTP-only worker observes a closed SSH transport, while the browser
   observes SFTP subsystem channel closure, even without UI commands; either
   enters the existing bounded reconnect path. Transport/protocol failure in a

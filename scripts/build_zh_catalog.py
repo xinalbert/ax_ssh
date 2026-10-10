@@ -11,6 +11,12 @@ from check_translations import slint_messages
 
 
 TRANSLATIONS = {
+    "Connected": "已连接",
+    "Connected · Measuring SSH latency": "已连接 · 正在测量 SSH 延迟",
+    "Connected · SSH latency probe timed out": "已连接 · SSH 延迟探测超时",
+    "Connected · SSH latency data expired": "已连接 · SSH 延迟数据已过期",
+    "Connected · SSH latency unavailable": "已连接 · 无法获取 SSH 延迟",
+    "Connected · SSH RTT: {} ms\nUpdated: {}": "已连接 · SSH 往返延迟：{} ms\n更新时间：{}",
     "Saved password": "已保存密码",
     "No saved password": "未保存密码",
     "Saved in {0}.": "已保存至{0}。",

@@ -163,6 +163,16 @@ fn split_sessions_share_one_visible_workspace_tab() {
     );
     assert!(router.terminal_is_visible(root_tab_id));
     assert!(router.terminal_is_visible(child_tab_id));
+    assert!(!router.latency_probe_is_foreground(root_tab_id));
+    assert!(router.latency_probe_is_foreground(child_tab_id));
+    assert_eq!(
+        router.tab_views(&app)[0]
+            .1
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        vec![root_tab_id]
+    );
     assert_eq!(
         router.terminal_presentation_mode(root_tab_id),
         terminal_presentation::TerminalPresentationMode::Unfocused
@@ -325,16 +335,30 @@ fn inactive_native_window_uses_the_visible_unfocused_refresh_mode() {
     );
 
     router.set_window_active(MAIN_WINDOW_ID, false);
+    assert!(!router.latency_probe_is_foreground(tab_id));
     assert_eq!(
         router.terminal_presentation_mode(tab_id),
         terminal_presentation::TerminalPresentationMode::Unfocused
     );
 
     router.set_window_active(MAIN_WINDOW_ID, true);
+    assert!(router.latency_probe_is_foreground(tab_id));
     assert_eq!(
         router.terminal_presentation_mode(tab_id),
         terminal_presentation::TerminalPresentationMode::Focused
     );
+}
+
+#[test]
+fn active_sftp_tab_uses_foreground_sampling_without_a_terminal_pane_tree() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let profile = SessionProfile::new("Files", "remote.example", "alice");
+    let sftp = app.open_sftp_tab(&profile);
+    assert!(router.activate_tab(MAIN_WINDOW_ID, sftp, &mut app));
+    assert!(router.latency_probe_is_foreground(sftp));
+    router.set_window_active(MAIN_WINDOW_ID, false);
+    assert!(!router.latency_probe_is_foreground(sftp));
 }
 
 #[test]

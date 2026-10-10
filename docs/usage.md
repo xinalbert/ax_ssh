@@ -438,6 +438,26 @@ New Server** and the sidebar blank-area context menu open the session editor.
 Activating a connection or opening a new editor synchronizes keyboard focus to
 the active workspace Tab and scrolls it into view; the editor then focuses its
 **Session name** field.
+
+Connected SSH and SFTP Tabs use the status dot to show smoothed SSH round-trip
+response time: green below 100 ms, yellow from 100 to below 250 ms, orange from
+250 to below 500 ms, and red at 500 ms or above. Hover the dot for the current
+value and last update time. Colours use a 20% exponentially weighted moving
+average and require two consecutive samples in a new band before changing.
+The first sample and recovery after a timeout use the fresh value immediately.
+
+AxSSH sends a reply-requesting keepalive on the existing authenticated SSH
+connection immediately after connection, then every 10 seconds for the focused
+session in the active window and every 30 seconds for other sessions. This
+measures SSH response time, including transport and server processing; it does
+not use ICMP, open another connection, or execute a remote command. A probe
+that exceeds 5 seconds turns the dot red without declaring the connection lost.
+Only one probe remains outstanding; sampling resumes after its late response.
+Unmeasured, unavailable, or 90-second-old data is grey. Latency is kept in memory
+and cleared on reconnection. Local Shell, Telnet, and Serial keep their ordinary
+green connected dot. In a split workspace the visible Tab dot belongs to its
+root session; each pane samples according to its own focus.
+
 Workspace Tabs participate in Tab navigation; `Enter` or `Space` activates the
 focused Tab.
 When switching between host-backed workspace Tabs, the matching server row in

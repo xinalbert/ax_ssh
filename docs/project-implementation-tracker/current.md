@@ -2,65 +2,66 @@
 
 ## 当前目标
 
-- 目标 ID：20261010-system-icon-picker-layout
-- 目标：调整服务器和 Local Shell 的系统图标选择器，解决布局问题，并将常用图标排在前面。
-- 交付物：共用紧凑图标下拉控件、独立搜索弹层、规范显示名称、统一常用优先顺序、键盘/选中反馈、双语文档和验证记录。
+- 目标 ID：20261010-ssh-tab-latency
+- 目标：使用已认证 SSH 连接的往返延迟更新 Tab 状态点颜色和悬停提示。
+- 交付物：有界单请求采样、前后台节奏、临时延迟状态、平滑与颜色缓冲、双语提示/说明、确定性测试和本地提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：Slint 图标选择器及 Settings/Session Editor 接线、应用层纯目录查询和统一展示排序、尺寸 token、双语文档与 tracker、本地提交。
-- 不在本轮范围内：图标识别或资源目录修改、配置 schema/保存语义、凭据/SSH、原生标题栏、用户 LICENSE 修改、推送或修改发行标签。
-- 所有权：Slint 拥有弹层、搜索/焦点和视觉状态；应用层提供内置目录的有界查询与常用优先展示排序；既有保存 callback 保持不变。
-- 安全边界：只读查询内置名称，不增加文件/网络/凭据访问，不修改主机信任或服务器识别。
+- 当前范围：SSH/SFTP worker、应用临时状态和窗口路由、Slint Tab 状态点、双语文档与 tracker、本地提交。
+- 不在本轮范围内：ICMP、额外 TCP 连接、远端命令、配置 schema、用户 LICENSE、推送或发行标签。
+- 所有权：SSH worker 拥有认证连接和探测生命周期；应用层拥有临时样本、连接代次校验和刷新合并；Slint 拥有颜色、可访问名称和悬停文本。
+- 安全边界：不改变主机信任、认证、既有保活或断线判定；最多一个未完成探测，超时后保留请求等待迟到响应或关闭。
 
 ## 当前状态
 
 - 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| IP1 | completed | 结合用户截图核对两处布局原因 | 共用选择器、SettingsField/Row、Session Editor | 内联列表扩大设置行，右侧控制只获得狭窄宽度 |
-| IP2 | completed | 紧凑控件、独立弹层和准确显示名称 | Slint 编译、目录名称专项、键盘/选中状态静态复核 | 32px 控件，20px 居中图标，搜索和有界列表不占用表单行高 |
-| IP3 | completed | 全部自动门禁和本机构建 | fmt/check/Clippy/tests、资源/翻译/diff | 657 项测试，aarch64 macOS check/严格 Clippy/build 通过 |
-| IP4 | completed | 双语说明、地图、历史与本地提交 | relative links、skill/tracker validators、index diff | 文档与实现随本地提交收口，保留 LICENSE |
-| IP6 | completed | 统一常用优先和其余名称排序 | 共享 callback、筛选前后顺序、内置目录身份 | 自动项仍由 Slint 固定在最前，排名只影响展示 |
-| IP7 | completed | 常用排序完整自动验证 | 现有名称/搜索专项、fmt/check/Clippy/tests/diff | 657 项测试及原生 macOS 构建通过 |
-| IP8 | completed | 排序双语说明、地图、历史与本地提交 | relative links、skill/tracker validators、index diff | 排序实现与双语说明随本地提交收口 |
-| IP5 | pending | 用户验收服务器/Local Shell 选择器 | 宽窄窗口、搜索、自动/手动、点击外部/Escape、焦点 | 实际视觉验收属于用户 |
-| DI5 | pending | 前轮标题栏与 `+` 列表原生验收 | 分屏/返回/恢复、配色与列表键盘 | b6cbad7/f92c2c5 已提交，656 项测试和 Mac native 构建通过 |
-| PW5 | pending | 前轮逐服务器凭据清除原生验收 | 状态刷新、确认/取消、真实系统后端 | 前轮实现与自动验证完成 |
-| UI7 | pending | 前轮导航系统图标原生验收 | 发行版/手动指定、配色、tooltip/焦点 | 前轮实现与自动验证完成 |
+| RT1 | completed | 核对 SSH 探测协议和现有连接/路由边界 | russh 0.64.1、RFC4254、worker/attempt guard | 使用 want-reply 的 keepalive 全局请求；成功或拒绝均是有效响应 |
+| RT2 | completed | 单请求 SSH/SFTP 采样和前后台节奏 | 确定性时钟、超时/迟到/关闭、协议响应测试 | 前台 10s、后台 30s、超时 5s、过期 90s |
+| RT3 | completed | 临时状态、代次校验、Tab 刷新和展示 | 平滑、阈值、重连、刷新合并、Slint 编译 | Local/Telnet/Serial 保留普通连接状态 |
+| RT4 | completed | 全部自动门禁与本机链接构建 | focused tests、fmt/check/Clippy/tests/diff | 不捕获应用截图 |
+| RT5 | completed | 双语说明、地图、研究/历史与本地提交 | translations/links/skill/tracker validators、index diff | 保留 LICENSE，不推送或改 tag |
+| RT6 | pending | 用户原生验收延迟提示和连接生命周期 | 前后台、分屏/独立窗口、重连、真实 SSH/SFTP | GUI 验收属于用户 |
+| IP5 | pending | 前轮服务器/Local Shell 选择器验收 | 宽窄窗口、常用排序/搜索、自动/手动、焦点 | 715c5dc/69b091f 已提交，657 项测试通过 |
+| DI5 | pending | 前轮标题栏与 `+` 列表原生验收 | 分屏/返回/恢复、配色与列表键盘 | b6cbad7/f92c2c5 已提交 |
+| PW5 | pending | 前轮逐服务器凭据清除原生验收 | 状态刷新、确认/取消、真实系统后端 | 自动验证完成 |
+| UI7 | pending | 前轮导航系统图标原生验收 | 发行版/手动指定、配色、tooltip/焦点 | 自动验证完成 |
 
 ## 已完成
 
-- 用户提供服务器编辑页和 General Settings 的截图，授权调整图标设置布局；确认共享组件直接将六行列表展开在父行中，导致设置行增高和列表挤在右侧。
-- 核对既有配置和保存边界：服务器选择仍是编辑 draft，Local Shell 仍独立立即保存；本轮只调整展示和纯目录查询。
-- 已实现独立弹层、当前选项/键盘反馈、共享 20px 居中图标和规范名称精确查询；Settings 控件使用完整字段宽度，编辑器使用紧凑左对齐控件。
-- 目录名称专项及完整 Rust/Slint 门禁通过；本机 aarch64 macOS 完成显式 target check、严格 all-target Clippy 和链接构建。
-- 同步双语用法、架构、项目地图与月度历史，复核实际功能差异后按此前用户授权整理本地提交；未推送或修改发行标签。
-- 共享展示 callback 已实现唯一常用系统优先表，其余按不区分大小写的名称排序，以规范标识消除同名顺序的不确定性；搜索筛选使用同一排序，两个选择器无独立顺序。
-- 常用排序复验 2 项现有名称/别名搜索专项及 657 项完整测试，严格 Clippy 和 aarch64 macOS 构建通过；同步双语用法/架构、地图和历史，按此前授权复核本地提交内容。
+- 用户已授权按照评估方案实施；明确采样归属和安全边界。
+- 核对固定 russh 的全局请求响应：拒绝也表示收到响应，断线不能当作有效往返；不使用忽略 oneshot 关闭结果的 send_ping 包装。
+
+- 已实现 Terminal/SFTP 单请求采样、10/30 秒节奏、5 秒超时和 90 秒过期；迟到回复恢复，worker 释放取消 pending future。
+- 已实现临时样本、20% EWMA、连续两次新档位切色、连接代次校验和重连清空；Tab-only 刷新共用有界门控，独立/分屏路由和 SFTP 焦点均覆盖。
+- 已编译 Slint 颜色/悬停/可访问文本及拖动预览数据，同步双语用法和架构说明。
+
+- 更新静默 shell 回归：只允许正常遥测事件，仍拒绝任何终端失败/断线或事件 channel 关闭；完整门禁复验通过。
+- 已同步地图、协议研究和月度历史，复核本地提交内容；用户 LICENSE 修改保留，不推送或修改 tag。
 
 ## 验证
 
-- 已完成：本轮排序复验 fmt、locked/offline check、严格 all-target Clippy、2 项现有名称/搜索专项、657 项完整测试（311 library + 346 binary）、aarch64-apple-darwin 构建和 diff；15 项常用标识无重复或目录缺失，697 条 Markdown 相对链接与项目 skill validator 通过；当前/地图/新增历史无新增 tracker 错误，全局保留同一 55 项历史格式问题。前轮布局的 Slint 重编译、520 条中文翻译、116 项图标/5 个生成文件和显式 macOS target check/严格 Clippy/build 已通过。
-- 未完成：IP5 及前轮 DI5/PW5/UI7 原生视觉验收持续保留。本机仅验证可用的 aarch64 macOS SDK/链接环境，其他 CI 原生平台未运行。
+- 已完成：11 项延迟专项和现有可信 SSH/静默 shell 专项；完整 669 项测试（315 library + 354 binary）、fmt/check/严格 all-target Clippy、Slint 重编译、aarch64-apple-darwin 显式 check/严格 Clippy/build、diff；526 条中文翻译、116 项图标/5 个生成文件、696 条相对链接和 skill validator 通过。tracker 与同一历史基线比较仍为 55 项、无新增错误。
+- 未完成：RT6 及前轮 IP5/DI5/PW5/UI7 原生验收。仅运行可用的 aarch64 macOS 原生环境，其他 CI 平台未在本机验证。
 
 ## 风险与阻塞
 
-- PopupWindow 内部控件只在弹层内部读取；开启状态使用内置只读 is-open，避免点击外部后状态残留。
-- tracker 全局保留 55 项既有历史格式问题，本轮不得新增错误。
+- 全局请求按 FIFO 匹配，无响应时不得取消后追加新请求。
+- tracker 保留 55 项既有历史格式问题，本轮不得新增。
 
 ## 下一步
 
-- IP5 由用户验证两处选择器中的常用排序、搜索和选择体验，前轮原生验收继续保留。
+- RT6 由用户验证状态点配色/tooltip、前后台和真实服务器的延迟/重连体验；前轮原生验收继续保留。
 
 ## 最后更新时间
 
-- 2026-10-10 13:49 +0800：常用排序、完整自动验证、双语说明和本地提交内容收口，保留 IP5 与前轮原生验收。
+- 2026-10-10 15:04 +0800：实现、完整门禁、本机构建、双语文档和本地提交内容收口，保留用户原生验收。

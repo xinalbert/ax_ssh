@@ -334,6 +334,9 @@ impl TerminalTabState {
                 attempt_id: current,
                 ..
             } => {
+                if *current != attempt_id {
+                    self.connection_latency = super::ConnectionLatency::default();
+                }
                 *current = attempt_id;
                 true
             }

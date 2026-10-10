@@ -106,6 +106,7 @@ pub(super) async fn run_sftp_session(
     mut command_rx: mpsc::Receiver<SshCommand>,
     event_tx: mpsc::Sender<SshSessionEvent>,
     policy: crate::config::SftpTransferPolicy,
+    latency_foreground_rx: watch::Receiver<bool>,
 ) {
     let per_tab_limit = usize::from(policy.per_tab_transfers);
     let rate_limiter = Arc::new(TransferRateLimiter::new(policy.rate_bytes_per_second()));
@@ -153,6 +154,8 @@ pub(super) async fn run_sftp_session(
             return;
         }
     };
+    let mut latency = None::<LatencyMonitor>;
+    let mut latency_foreground_rx = Some(latency_foreground_rx);
     let mut connected = false;
     let mut failed = false;
     let mut browser_error: Option<String> = None;
@@ -181,6 +184,14 @@ pub(super) async fn run_sftp_session(
     tokio::pin!(transport_closed);
     loop {
         tokio::select! {
+            event = async {
+                match latency.as_mut() {
+                    Some(monitor) => monitor.next_event().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                if !send_event(&event_tx, event, session_id).await { break; }
+            }
             _ = &mut transport_closed => {
                 info!(%session_id, "SSH transport closed during SFTP session");
                 break;
@@ -783,6 +794,9 @@ pub(super) async fn run_sftp_session(
                         break;
                     }
                     connected = true;
+                    if let Some(rx) = latency_foreground_rx.take() {
+                        latency = Some(LatencyMonitor::new(connection.clone(), rx));
+                    }
                 }
                 if closed {
                     if let Some(message) = browser_error.take() {
