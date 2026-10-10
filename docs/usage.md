@@ -391,6 +391,10 @@ with centered icons and a check beside the current choice; it leaves the form's
 height unchanged. Search by name, ID, or alias. Use arrow keys and Enter to select,
 or Escape/click outside to dismiss. The **Automatic** row restores automatic
 selection. A manual choice takes priority.
+**Automatic** stays first, followed by a common-system shortlist beginning with
+Ubuntu, Debian, Windows, macOS, CentOS, and Rocky Linux. Other choices are sorted
+alphabetically by display name, ignoring case. Search results use the same order
+in both the server and Local Shell pickers.
 The profile's optional `system_icon_override` stores the canonical ID. Successful
 SSH/SFTP discovery saves a bounded release label and icon ID in the profile's
 `detected_system`; later connections, closed tabs, and application restarts reuse

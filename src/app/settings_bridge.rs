@@ -1146,9 +1146,28 @@ fn save_workspace_settings(
     Ok(settings)
 }
 
+// Presentation order shared by the server and Local Shell pickers.
+const COMMON_SYSTEM_ICON_IDS: &[&str] = &[
+    "ubuntu",
+    "debian",
+    "windows",
+    "macos",
+    "centos",
+    "rocky-linux",
+    "almalinux",
+    "rhel",
+    "fedora",
+    "arch-linux",
+    "alpine-linux",
+    "opensuse",
+    "openeuler",
+    "anolis-os",
+    "linux",
+];
+
 fn system_icon_choices(query: &str) -> Vec<SystemIconChoiceRow> {
     let query = query.chars().take(128).collect::<String>().to_lowercase();
-    ax_ssh::config::system_icon_choices()
+    let mut choices = ax_ssh::config::system_icon_choices()
         .iter()
         .filter(|icon| {
             query.split_whitespace().all(|word| {
@@ -1158,6 +1177,19 @@ fn system_icon_choices(query: &str) -> Vec<SystemIconChoiceRow> {
                     || icon.aliases.iter().any(|alias| alias.contains(word))
             })
         })
+        .collect::<Vec<_>>();
+    choices.sort_by_cached_key(|icon| {
+        (
+            COMMON_SYSTEM_ICON_IDS
+                .iter()
+                .position(|id| *id == icon.id)
+                .unwrap_or(COMMON_SYSTEM_ICON_IDS.len()),
+            icon.name.to_lowercase(),
+            icon.id,
+        )
+    });
+    choices
+        .into_iter()
         .map(|icon| SystemIconChoiceRow {
             id: icon.id.into(),
             name: icon.name.into(),

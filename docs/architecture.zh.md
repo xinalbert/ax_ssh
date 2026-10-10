@@ -690,7 +690,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     六行虚拟列表，并标记当前选项。展开不改变表单或 Settings 行高；Settings 弹层右边缘对齐，编辑器
     在紧凑控件下方展开。内置 `is-open` 驱动展开反馈，点击外部或 Escape 不提交选择，显式关闭/选择后
     恢复控件焦点。纯 `system-icon-choice` callback 从内置领域目录按规范标识或别名查询单个有界显示 DTO，
-    不依赖子串搜索结果，不执行 I/O。Slint 持有选择 draft 与手势，
+    不依赖子串搜索结果，不执行 I/O。
+    应用层 `system-icon-choices` callback 统一展示排序：固定常用系统列表优先，其余按显示名称排序、
+    不区分大小写，再以规范标识消除同名排序的不确定性；筛选结果保持同一顺序，Slint 将自动选项固定
+    在其上方。生成的领域目录和持久化标识保持不变。Slint 持有选择 draft 与手势，
     config 提供有界领域选择，不持有生成 UI 类型、网络句柄、凭据或资源路径。旧的组名字符数配置继续兼容读取和
     保存，不再影响侧栏宽度或图标；Settings 移除对应的文字徽标选项。
     自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击执行

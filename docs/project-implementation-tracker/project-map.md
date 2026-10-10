@@ -68,7 +68,7 @@
 | `ui/terminal-pane.slint`、`ui/components/terminal-grid.slint` | 标准终端鼠标及焦点 UI 输入 | `TerminalPointerInput`、`TerminalGrid`、`TerminalPane`、`terminal-focus-state` | 以 Slint 标准 pointer/scroll 事件采集；按标准 xterm 默认路由、`Shift` 作为本地选择绕过；motion 每 16 ms 至多一条最新坐标，滚轮的每个归一化单位展开为独立 xterm report，单一源事件最多 256 条；仅在可见、focused、connected、活动窗口且非阻塞 modal 的 pane 发出终端 UUID + 焦点布尔值；只传小型 DTO，不持有 worker、transport 或终端内容 |
 | `src/app/terminal_presentation.rs` | 四协议终端 UI 呈现调度 | `TerminalPresentation`、`TerminalPresentationState`、`TerminalPresentationMode`、`TerminalPresentationPolicy` | dirty-only 动态判定：GPU/其它 renderer 的 focused 首帧立即并按连续时长采用 16/33/50 ms，安静 250 ms 重置；实际 `winit-software` 的聚焦输出没有固定 FPS timer，立即进入有界 latest-frame UI gate；所有可见未聚焦终端按 Appearance FPS 上限（默认 4 FPS），hidden 无 deadline；route/policy watch 唤醒 pending monitor，sender 关闭后移除 receiver，避免 closed future 反复 ready；SSH 批次保留最早接收时间；沿用 monitor timer 等待 state 给出的固定光标隐藏合并窗口或标准 2026 hold；不延迟 parser、协议应答、错误、断开或 shutdown |
 | `src/app/terminal_targets.rs` | 有界可点击终端目标 parser | `TerminalTarget`、`TerminalTargetSpan`、`terminal_target_at_cell`、`terminal_target_span_at_cell` | 只解析单条可见行中的 HTTP(S) URL 或 `/`、`./`、`../` Unix 远端路径，并返回完整字符区间；移除尾随标点与诊断行列号，拒绝控制字符和超限内容；不存储文本、不联网、不接触 worker |
-| `src/app/settings_bridge.rs` | Settings 预览/保存 bridge | `wire_settings`、`apply_preview_settings`、`load_settings_fonts`、`register_settings_fonts`、`system_icon_choices`、`system_icon_choice` | 合并草稿即时更新内存/Theme/终端/布局，包含 Terminal 文字亮度、可选语义高亮及其颜色，以及 SFTP 传输过滤、传输策略和本地打开快照上限草稿；新自带字体异步注册；关闭请求才原子保存并关闭指定 Settings Tab；系统图标搜索和精确显示名称查询只读取内置有界目录 |
+| `src/app/settings_bridge.rs` | Settings 预览/保存 bridge | `wire_settings`、`apply_preview_settings`、`load_settings_fonts`、`register_settings_fonts`、`system_icon_choices`、`system_icon_choice`、`COMMON_SYSTEM_ICON_IDS` | 合并草稿即时更新内存/Theme/终端/布局，包含 Terminal 文字亮度、可选语义高亮及其颜色，以及 SFTP 传输过滤、传输策略和本地打开快照上限草稿；新自带字体异步注册；关闭请求才原子保存并关闭指定 Settings Tab；系统图标搜索和精确查询只读取内置有界目录，选择器统一常用优先、其余按名称排序，搜索保持同一顺序 |
 | `src/app/view.rs` 与 `src/app/view/` | Slint model/snapshot/主题映射 | `refresh_workspace`、`prepare_terminal_output_snapshot`、`apply_terminal_panes`、`apply_terminal_pane_updates`、`apply_terminal_pane_layout`、`apply_sftp_snapshot`、`apply_active_snapshot`、`apply_security_prompt`、`apply_theme_to_component` | 根模块维持窄 re-export；子模块分别承载 workspace、terminal、SFTP、sidebar、settings/options 映射；sidebar 以同身份 Group model 行更新保留展开状态；Local Shell 侧栏/标签按本机系统映射图标，标签比较涵盖 release/platform 到达后的变化。启动只安装一次 router，移除无 router 的旧单窗口路径；完整刷新按 WindowRouter 构造路由视图；terminal-only 刷新只应用脏 UUID 命中的可见 pane，按单层 `TerminalRenderLine` model 复用 source/render revision，只更新变化行，跳过未变化父行、divider、SFTP 与无关 workspace 属性；无 dirty-row 且 cursor/viewport/mouse-reporting 未变化的初始 snapshot 不进入 Slint queue，UI 消费前会把较新的 damage 合并到其有界 pending snapshot |
 | `src/config/system_icons.rs`、`src/config/system_icons/catalog.rs` | 内置图标领域选择和逐服务器识别缓存 schema | `SystemIconChoice`、`SystemDetection`、`system_icon_id`、目标匹配 | schema v35；可选值无效时回退自动，成功缓存绑定 SSH host/port/username/主机指纹；没有 Slint、transport 或资源路径 |
 | `src/app/state/system_detection.rs` | 逐 profile 探测租约、缓存优先级与后台保存事务 | `request_system_detection`、`accept_system_detection`、`save_system_detection` | 合并 SSH/SFTP，手动/有效缓存跳过；重置和旧 attempt/目标拒绝；等待 profile/凭据事务，从磁盘只保存缓存字段、保留 Settings 预览 |
@@ -237,7 +237,7 @@
 
 ## 最后更新时间
 
-- 2026-10-10 12:07 +0800：系统图标选择器改为固定 32px 控件、20px 居中 glyph 和独立 360px 搜索弹层，定位共用 UI、纯目录精确查询、Settings/编辑器接线及现有保存边界。
+- 2026-10-10 13:49 +0800：系统图标选择器的共享应用查询增加常用优先、其余显示名称排序，定位唯一常用列表和搜索顺序；领域目录、身份/识别与保存边界不变。
 
 - 2026-10-10 09:06 +0800：逐服务器确认后立即清除密码与原存储回滚定位完成；8 项专项/650 项完整测试和原生 macOS check/Clippy/build 通过。
 

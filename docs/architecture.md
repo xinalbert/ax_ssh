@@ -1152,6 +1152,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
     explicit dismissal/selection restores control focus. The pure `system-icon-choice`
     callback resolves a canonical ID or alias to one bounded display DTO from the
     bundled domain catalog, independently of substring search results; it performs no I/O.
+    The application `system-icon-choices` callback applies a shared presentation
+    order: a fixed common-system shortlist, then case-insensitive display names
+    and canonical IDs as a deterministic tie-breaker. Filtered results retain
+    that order; Slint keeps Automatic above them. The generated domain catalog
+    and persisted IDs are unchanged.
     Slint owns picker drafts and gestures; config exposes bounded choices
     without generated UI types, network handles, credentials, or artwork paths.
     The legacy group-label-length field remains readable and writable for storage
