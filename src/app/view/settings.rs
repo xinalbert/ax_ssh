@@ -281,6 +281,10 @@ pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &
         ) {
             warn!(%error, "failed to update detached macOS title-bar background");
         }
+        #[cfg(target_os = "macos")]
+        if let Err(error) = update_macos_detached_system_icon(&detached_ui) {
+            warn!(%error, "failed to update detached macOS system icon theme");
+        }
     }
 }
 

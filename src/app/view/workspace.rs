@@ -95,7 +95,14 @@ fn schedule_pending_ui_refresh(
                 .unwrap_or_default();
             apply_workspace_tab_rows(&ui, visible_workspace_tab_rows(view.tabs));
             ui.set_settings_tab_id(settings_tab_id.into());
+            apply_active_session_icon(&ui, view.active_session);
             apply_active_snapshot(&ui, view.snapshot, view.active_tab_id);
+            #[cfg(target_os = "macos")]
+            if ui.get_detached_window()
+                && let Err(error) = update_macos_detached_system_icon(&ui)
+            {
+                warn!(%error, "failed to update detached macOS system icon");
+            }
             apply_terminal_panes(&ui, view.terminal_panes, view.terminal_dividers);
             applied_view_count = applied_view_count.saturating_add(1);
         }
@@ -190,6 +197,16 @@ pub(in crate::app) fn visible_workspace_tab_rows(
 
 pub(super) fn local_system_platform() -> &'static str {
     system_icons::local_platform()
+}
+
+pub(super) fn apply_active_session_icon(ui: &AppWindow, session: Option<WorkspaceTabSummary>) {
+    let row = visible_workspace_tab_rows(session.into_iter().collect()).pop();
+    ui.set_active_tab_system_platform(
+        row.as_ref()
+            .map(|row| row.system_platform.clone())
+            .unwrap_or_default(),
+    );
+    ui.set_active_tab_system_release(row.map(|row| row.system_release).unwrap_or_default());
 }
 
 pub(super) fn system_platform(release: &str) -> &'static str {

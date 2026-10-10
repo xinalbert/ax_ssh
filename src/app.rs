@@ -254,14 +254,11 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         let app = state
             .lock()
             .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        let profile_releases = app.profile_system_releases();
         (
-            session_group_rows(
-                &app.sessions,
-                &app.session_filter,
-                &app.profile_system_releases(),
-            ),
+            session_group_rows(&app.sessions, &app.session_filter, &profile_releases),
             group_option_rows(&app.sessions),
-            connection_option_rows(&app.sessions),
+            connection_option_rows(&app.sessions, &profile_releases),
             app.sessions.settings.clone(),
             app.sessions.recent_workspace_paths().to_vec(),
         )

@@ -8,13 +8,15 @@ use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSColor,
     NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags,
-    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageNameMultipleDocuments, NSInsertFunctionKey,
-    NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
-    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
-    NSWindowStyleMask, NSWindowTitleVisibility,
+    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageNameMultipleDocuments, NSImageScaling,
+    NSImageView, NSInsertFunctionKey, NSLeftArrowFunctionKey, NSMenu, NSMenuItem,
+    NSPageDownFunctionKey, NSPageUpFunctionKey, NSRightArrowFunctionKey, NSUpArrowFunctionKey,
+    NSView, NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+use std::cell::RefCell;
+use std::io::Cursor;
 
 use super::input::NativeMenuShortcut;
 
@@ -76,6 +78,9 @@ const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
 const TITLE_BAR_LEADING_CLEARANCE: f64 = 80.0;
 // Matches Theme.tab-height's current maximum in the main title-bar layout.
 const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
+// Matches Theme.tab-platform-icon-size; the larger raster supports HiDPI.
+const TITLE_BAR_SYSTEM_ICON_SIZE: f64 = 16.0;
+const TITLE_BAR_SYSTEM_ICON_RASTER_SIZE: u32 = 64;
 
 fn in_native_drag_clearance(x: f64, y_from_top: f64) -> bool {
     (0.0..TITLE_BAR_LEADING_CLEARANCE).contains(&x)
@@ -169,6 +174,34 @@ impl NativeTitleBarButton {
                 NSSize::new(TITLE_BAR_BUTTON_WIDTH, TITLE_BAR_BUTTON_HEIGHT),
             )]
         }
+    }
+}
+
+struct NativeTitleBarSystemIconIvars {
+    source: RefCell<Option<slint::Image>>,
+}
+
+define_class!(
+    // SAFETY: NSImageView has no subclassing requirements. AppKit owns the
+    // view and its single cached image for the lifetime of the native window.
+    #[unsafe(super(NSImageView))]
+    #[name = "AxSSHNativeTitleBarSystemIcon"]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = NativeTitleBarSystemIconIvars]
+    struct NativeTitleBarSystemIcon;
+
+    // SAFETY: NSObjectProtocol has no additional implementation requirements.
+    unsafe impl NSObjectProtocol for NativeTitleBarSystemIcon {}
+);
+
+impl NativeTitleBarSystemIcon {
+    fn new(mtm: MainThreadMarker) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(NativeTitleBarSystemIconIvars {
+            source: RefCell::new(None),
+        });
+        // SAFETY: `this` is allocated and NSImageView's frame initializer
+        // accepts the NSRect value used here. The view stays main-thread-only.
+        unsafe { msg_send![super(this), initWithFrame: NSRect::ZERO] }
     }
 }
 
@@ -275,6 +308,94 @@ fn configure_detached_titlebar_appearance(
     let titlebar_background = ns_color(terminal_background);
     native_window.setTitlebarAppearsTransparent(true);
     native_window.setBackgroundColor(Some(&titlebar_background));
+}
+
+pub(super) fn update_detached_system_icon(
+    window: &slint::Window,
+    source: &slint::Image,
+    title: &str,
+    release: &str,
+    follow_theme: bool,
+    text_color: slint::Color,
+) -> Result<()> {
+    let mtm =
+        MainThreadMarker::new().context("macOS system icon must update on the main thread")?;
+    with_native_window(window, |native_window| {
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: The standard button and superview are borrowed only while
+        // this live native window is held. AppKit retains the added image view.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit zoom button has no title-bar view")?;
+        let icon = title_bar
+            .subviews()
+            .iter()
+            .find_map(|view| view.downcast::<NativeTitleBarSystemIcon>().ok())
+            .unwrap_or_else(|| {
+                let icon = NativeTitleBarSystemIcon::new(mtm);
+                icon.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
+                icon.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMaxXMargin);
+                title_bar.addSubview(&icon);
+                icon
+            });
+        let bounds = title_bar.bounds();
+        icon.setFrame(NSRect::new(
+            NSPoint::new(
+                TITLE_BAR_LEADING_CLEARANCE,
+                ((bounds.size.height - TITLE_BAR_SYSTEM_ICON_SIZE) / 2.0).max(0.0),
+            ),
+            NSSize::new(TITLE_BAR_SYSTEM_ICON_SIZE, TITLE_BAR_SYSTEM_ICON_SIZE),
+        ));
+        if icon.ivars().source.borrow().as_ref() != Some(source) {
+            let data = NSData::with_bytes(&titlebar_icon_png(source)?);
+            let image = NSImage::initWithData(NSImage::alloc(), &data)
+                .context("AppKit could not decode the bundled system icon")?;
+            icon.setImage(Some(&image));
+            *icon.ivars().source.borrow_mut() = Some(source.clone());
+        }
+        let description = if release.is_empty() {
+            title.to_owned()
+        } else {
+            format!("{title}\n{release}")
+        };
+        let label = NSString::from_str(&description);
+        icon.setToolTip(Some(&label));
+        if let Some(image) = icon.image() {
+            image.setTemplate(follow_theme);
+            image.setAccessibilityDescription(Some(&label));
+        }
+        let tint = follow_theme.then(|| ns_color(text_color));
+        icon.setContentTintColor(tint.as_deref());
+        Ok(())
+    })
+}
+
+fn titlebar_icon_png(source: &slint::Image) -> Result<Vec<u8>> {
+    let size = source.size();
+    let longest = size.width.max(size.height);
+    anyhow::ensure!(longest > 0, "system icon has no image pixels");
+    let dimension = |value: u32| {
+        ((u64::from(value) * u64::from(TITLE_BAR_SYSTEM_ICON_RASTER_SIZE)) / u64::from(longest))
+            .max(1) as u32
+    };
+    let pixels = i_slint_core::graphics::image_to_rgba8_with_target_size(
+        source,
+        i_slint_core::graphics::IntSize::new(dimension(size.width), dimension(size.height)),
+    )
+    .context("bundled system icon has no readable pixel buffer")?;
+    let rgba =
+        ::image::RgbaImage::from_raw(pixels.width(), pixels.height(), pixels.as_bytes().to_vec())
+            .context("system icon pixel buffer has an invalid size")?;
+    let thumbnail = ::image::DynamicImage::ImageRgba8(rgba).thumbnail(
+        TITLE_BAR_SYSTEM_ICON_RASTER_SIZE,
+        TITLE_BAR_SYSTEM_ICON_RASTER_SIZE,
+    );
+    let mut output = Cursor::new(Vec::new());
+    thumbnail
+        .write_to(&mut output, ::image::ImageFormat::Png)
+        .context("cannot encode bounded title-bar system icon")?;
+    Ok(output.into_inner())
 }
 
 fn ns_color(color: slint::Color) -> Retained<NSColor> {
@@ -571,6 +692,36 @@ fn bind_menu_item(item: &NSMenuItem, target: &NativeMenuTarget, action: Sel) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detached_system_icon_png_preserves_alpha_color_and_bounds() {
+        let mut pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(256, 128);
+        pixels
+            .make_mut_slice()
+            .fill(slint::Rgba8Pixel::new(32, 96, 160, 128));
+        let source = slint::Image::from_rgba8(pixels);
+        let encoded = titlebar_icon_png(&source).expect("title-bar icon should encode");
+        let decoded = ::image::load_from_memory(&encoded)
+            .expect("PNG should decode")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (64, 32));
+        assert_eq!(decoded.get_pixel(32, 16).0, [32, 96, 160, 128]);
+        assert!(encoded.len() < 64 * 64 * 4);
+    }
+
+    #[test]
+    fn detached_system_icon_png_bounds_svg_and_rejects_empty_images() {
+        let source = slint::Image::load_from_svg_data(
+            br#"<svg xmlns="http://www.w3.org/2000/svg" width="4096" height="1024"><rect width="4096" height="1024" fill="red"/></svg>"#,
+        ).expect("SVG should load");
+        let encoded = titlebar_icon_png(&source).expect("SVG should rasterize");
+        let decoded = ::image::load_from_memory(&encoded)
+            .expect("PNG should decode")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (64, 16));
+        assert_eq!(decoded.get_pixel(32, 8).0, [255, 0, 0, 255]);
+        assert!(titlebar_icon_png(&slint::Image::default()).is_err());
+    }
 
     #[test]
     fn native_drag_clearance_excludes_sidebar_and_tab_strip() {

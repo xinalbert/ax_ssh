@@ -294,6 +294,8 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_active_profile_id("".into());
     ui.set_active_tab_kind("empty".into());
     ui.set_active_tab_title("".into());
+    ui.set_active_tab_system_platform("".into());
+    ui.set_active_tab_system_release("".into());
     ui.set_active_tab_status("".into());
     ui.set_active_tab_notice_visible(false);
     ui.set_active_tab_notice_severity("".into());
@@ -712,7 +714,23 @@ fn schedule_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_action
         ) {
             warn!(%error, "failed to configure detached macOS title-bar buttons");
         }
+        if let Err(error) = update_macos_detached_system_icon(&ui) {
+            warn!(%error, "failed to configure detached macOS system icon");
+        }
     });
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn update_macos_detached_system_icon(ui: &AppWindow) -> Result<()> {
+    let theme = ui.global::<Theme>();
+    macos_window::update_detached_system_icon(
+        ui.window(),
+        &ui.get_active_tab_system_image(),
+        &ui.get_active_tab_title(),
+        &ui.get_active_tab_system_release(),
+        theme.get_system_icons_follow_theme() || ui.get_active_tab_system_platform().is_empty(),
+        theme.get_text(),
+    )
 }
 
 #[cfg(target_os = "macos")]

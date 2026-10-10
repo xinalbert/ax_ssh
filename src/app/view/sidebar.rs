@@ -50,18 +50,7 @@ pub(in crate::app) fn session_group_rows(
                         &sessions.settings.workspace.session_mask_character,
                     )
                     .into(),
-                    system_platform: profile
-                        .system_icon_override
-                        .as_deref()
-                        .and_then(ax_ssh::config::system_icon_id)
-                        .or_else(|| profile.cached_system().and_then(|system| system.icon_id()))
-                        .or_else(|| {
-                            profile_releases
-                                .get(&profile.id)
-                                .map(|release| system_platform(release))
-                        })
-                        .unwrap_or("")
-                        .into(),
+                    system_platform: profile_system_platform(profile, profile_releases).into(),
                     sftp_enabled: profile.ssh().is_some(),
                 })
                 .collect::<Vec<_>>();
@@ -90,6 +79,7 @@ pub(in crate::app) fn session_filter_changed(filter: &str, state: &Arc<Mutex<App
 
 pub(in crate::app) fn connection_option_rows(
     sessions: &SessionStore,
+    profile_releases: &HashMap<Uuid, String>,
 ) -> Vec<ConnectableSessionRow> {
     sessions
         .sessions
@@ -102,8 +92,26 @@ pub(in crate::app) fn connection_option_rows(
                 &sessions.settings.workspace.session_mask_character,
             )
             .into(),
+            system_platform: profile_system_platform(profile, profile_releases).into(),
         })
         .collect()
+}
+
+fn profile_system_platform<'a>(
+    profile: &'a SessionProfile,
+    profile_releases: &HashMap<Uuid, String>,
+) -> &'a str {
+    profile
+        .system_icon_override
+        .as_deref()
+        .and_then(ax_ssh::config::system_icon_id)
+        .or_else(|| profile.cached_system().and_then(|system| system.icon_id()))
+        .or_else(|| {
+            profile_releases
+                .get(&profile.id)
+                .map(|release| system_platform(release))
+        })
+        .unwrap_or("")
 }
 
 pub(in crate::app) fn group_option_rows(sessions: &SessionStore) -> Vec<SharedString> {
@@ -145,16 +153,15 @@ pub(in crate::app) fn refresh_session_models(
     let state = Arc::clone(state);
     dispatch_ui(&ui, move |ui| {
         let (rows, groups, options, filter) = match state.lock() {
-            Ok(app) => (
-                session_group_rows(
-                    &app.sessions,
-                    &app.session_filter,
-                    &app.profile_system_releases(),
-                ),
-                group_option_rows(&app.sessions),
-                connection_option_rows(&app.sessions),
-                app.session_filter.clone(),
-            ),
+            Ok(app) => {
+                let profile_releases = app.profile_system_releases();
+                (
+                    session_group_rows(&app.sessions, &app.session_filter, &profile_releases),
+                    group_option_rows(&app.sessions),
+                    connection_option_rows(&app.sessions, &profile_releases),
+                    app.session_filter.clone(),
+                )
+            }
             Err(_) => {
                 ui.set_status("State lock poisoned".into());
                 return;

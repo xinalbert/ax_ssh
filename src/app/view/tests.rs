@@ -117,6 +117,50 @@ struct LayoutTestHarness {
     time: std::rc::Rc<std::cell::Cell<std::time::Duration>>,
 }
 
+#[test]
+fn detached_system_icon_properties_follow_identity_and_clear_stale_metadata() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_detached_window(true);
+        let summary = |icon: Option<&str>, release: Option<&str>| WorkspaceTabSummary {
+            id: Uuid::from_u128(1),
+            title: "Server".into(),
+            kind: "terminal",
+            connected: true,
+            local: false,
+            system_icon: icon.map(str::to_owned),
+            system_release: release.map(str::to_owned),
+        };
+        apply_active_session_icon(ui, Some(summary(None, Some("Debian GNU/Linux 12"))));
+        assert_eq!(ui.get_active_tab_system_platform(), "debian");
+        assert_eq!(ui.get_active_tab_system_release(), "Debian GNU/Linux 12");
+        let detected = ui.get_active_tab_system_image();
+        assert!(detected.size().width > 0);
+        apply_active_session_icon(
+            ui,
+            Some(summary(Some("ubuntu"), Some("Debian GNU/Linux 12"))),
+        );
+        assert_eq!(ui.get_active_tab_system_platform(), "ubuntu");
+        assert_ne!(ui.get_active_tab_system_image(), detected);
+        apply_active_session_icon(ui, Some(summary(None, Some("Linux"))));
+        assert_eq!(ui.get_active_tab_system_platform(), "linux");
+        let tux = ui.get_active_tab_system_image();
+        apply_active_session_icon(ui, Some(summary(None, Some("FreeBSD 14"))));
+        assert!(ui.get_active_tab_system_platform().is_empty());
+        assert_ne!(ui.get_active_tab_system_image(), tux);
+        apply_active_session_icon(ui, None);
+        assert!(ui.get_active_tab_system_platform().is_empty());
+        assert!(ui.get_active_tab_system_release().is_empty());
+        assert!(
+            ui.get_active_tab_system_image().size().width > 0,
+            "generic server fallback should remain available"
+        );
+    })
+    .join()
+    .expect("icon mapping should finish");
+}
+
 impl LayoutTestHarness {
     fn new() -> Self {
         use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
@@ -1255,7 +1299,7 @@ fn connection_options_include_collapsed_profiles_with_masked_endpoints() {
         ..SessionStore::default()
     };
 
-    let options = connection_option_rows(&sessions);
+    let options = connection_option_rows(&sessions, &HashMap::new());
 
     assert_eq!(options.len(), 2);
     assert_eq!(options[0].id.as_str(), visible.id.to_string());
@@ -1264,4 +1308,62 @@ fn connection_options_include_collapsed_profiles_with_masked_endpoints() {
     assert_eq!(options[1].id.as_str(), hidden.id.to_string());
     assert_eq!(options[1].name.as_str(), "hidden");
     assert_eq!(options[1].endpoint.as_str(), "zh*in@192.*.1.202:22");
+    assert!(
+        options
+            .iter()
+            .all(|option| option.system_platform.is_empty())
+    );
+}
+
+#[test]
+fn connection_options_share_sidebar_icon_priority_and_reject_stale_detection() {
+    let mut manual = SessionProfile::new("Manual", "manual.example", "alice");
+    manual.system_icon_override = Some("UBUNTU".into());
+    manual.detected_system =
+        ax_ssh::config::SystemDetection::new(&manual, "Debian 12", "debian").map(Box::new);
+    let mut cached = SessionProfile::new("Cached", "cached.example", "alice");
+    cached.detected_system =
+        ax_ssh::config::SystemDetection::new(&cached, "Debian 12", "debian").map(Box::new);
+    let runtime = SessionProfile::new("Runtime", "runtime.example", "alice");
+    let unknown = SessionProfile::new("Unknown", "unknown.example", "alice");
+    let mut stale = SessionProfile::new("Stale", "old.example", "alice");
+    stale.detected_system =
+        ax_ssh::config::SystemDetection::new(&stale, "Debian 12", "debian").map(Box::new);
+    stale.ssh_mut().unwrap().host = "new.example".into();
+    let releases = HashMap::from([
+        (manual.id, "Fedora Linux 42".into()),
+        (cached.id, "Fedora Linux 42".into()),
+        (runtime.id, "Microsoft Windows Server 2022".into()),
+    ]);
+    let mut sessions = SessionStore {
+        sessions: vec![manual, cached, runtime, unknown, stale],
+        ..SessionStore::default()
+    };
+
+    let options = connection_option_rows(&sessions, &releases);
+    let platforms = options
+        .iter()
+        .map(|option| option.system_platform.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(platforms, ["ubuntu", "debian", "windows", "", ""]);
+    let sidebar = session_group_rows(&sessions, "", &releases);
+    for option in &options {
+        let profile = sidebar
+            .iter()
+            .flat_map(|group| group.profiles.iter())
+            .find(|profile| profile.id == option.id)
+            .expect("connection option should have a sidebar profile");
+        assert_eq!(option.system_platform, profile.system_platform);
+    }
+
+    sessions.sessions[0].system_icon_override = None;
+    assert_eq!(
+        connection_option_rows(&sessions, &releases)[0].system_platform,
+        "debian"
+    );
+    sessions.sessions[1].system_icon_override = Some("Rocky Linux".into());
+    assert_eq!(
+        connection_option_rows(&sessions, &releases)[1].system_platform,
+        "rocky-linux"
+    );
 }

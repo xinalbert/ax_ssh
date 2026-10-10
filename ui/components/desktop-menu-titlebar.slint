@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
-import { ElidedTooltipContent } from "elided-controls.slint";
+import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
+import { SidebarPlatformGlyph } from "sidebar-controls.slint";
 
 component MenuTitleButton inherits FocusScope {
     in property <string> label;
@@ -121,6 +122,9 @@ component WindowControl inherits FocusScope {
 
 export component DesktopMenuTitlebar inherits Rectangle {
     in property <bool> main-window;
+    in property <string> connection-title;
+    in property <string> system-platform;
+    in property <string> system-release;
     in property <bool> actions-enabled;
     in property <bool> terminal-active;
     in property <bool> multiple-tabs;
@@ -326,6 +330,32 @@ export component DesktopMenuTitlebar inherits Rectangle {
         Rectangle {
             horizontal-stretch: 1;
             background: Theme.panel;
+            if !root.main-window : HorizontalLayout {
+                accessible-role: text;
+                accessible-label: root.connection-title;
+                padding-left: Theme.space-xs;
+                padding-right: Theme.space-xs;
+                spacing: Theme.space-xs;
+                Rectangle {
+                    width: Theme.tab-platform-icon-size;
+                    horizontal-stretch: 0;
+                    background: transparent;
+                    SidebarPlatformGlyph {
+                        y: (parent.height - self.height) / 2;
+                        width: Theme.tab-platform-icon-size;
+                        height: Theme.tab-platform-icon-size;
+                        platform: root.system-platform.is-empty ? "server" : root.system-platform;
+                        accessible-role: none;
+                    }
+                }
+                ElidedLabel {
+                    text: root.connection-title;
+                    tooltip-enabled: false;
+                    text-color: Theme.text;
+                    font-size: Theme.font-body;
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
             TouchArea {
                 width: parent.width;
                 height: parent.height;
@@ -336,6 +366,12 @@ export component DesktopMenuTitlebar inherits Rectangle {
                     }
                 }
                 double-clicked => { root.toggle-maximize(); }
+            }
+            if !root.main-window : Tooltip {
+                ElidedTooltipContent {
+                    text: root.system-release.is-empty ? root.connection-title
+                        : root.connection-title + "\n" + root.system-release;
+                }
             }
         }
         WindowControl {

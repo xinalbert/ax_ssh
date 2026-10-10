@@ -14,6 +14,125 @@ fn test_router() -> WindowRouter {
 }
 
 #[test]
+fn detached_system_icon_tracks_the_focused_connection_and_profile_changes() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let mut profile = SessionProfile::new("Ubuntu server", "ubuntu.example", "alice");
+    profile.system_icon_override = Some("ubuntu".into());
+    app.sessions.upsert(profile.clone());
+    app.sessions.settings.appearance.local_shell_icon_override = Some("arch-linux".into());
+    let root_id = app.open_terminal_tab(&profile);
+    assert!(router.activate_tab(MAIN_WINDOW_ID, root_id, &mut app));
+    let child_id = app.open_local_shell_tab();
+    assert!(router.complete_pane_split(
+        MAIN_WINDOW_ID,
+        root_id,
+        PaneDirection::Right,
+        child_id,
+        &mut app
+    ));
+    let pane_ids = router.pane_tab_ids(MAIN_WINDOW_ID, root_id);
+    let tree = router
+        .take_pane_tree_for_detach(MAIN_WINDOW_ID, root_id)
+        .expect("pane tree");
+    let transfer = app
+        .workspace_transfer_for_terminal_panes(&pane_ids, MAIN_WINDOW_ID, root_id)
+        .expect("transfer");
+    let detached_id = Uuid::new_v4();
+    router.register_detached(detached_id, slint::Weak::default(), transfer, Some(tree));
+
+    let view = router
+        .views(&mut app)
+        .into_iter()
+        .find(|view| view.active_tab_id == Some(root_id))
+        .expect("detached view");
+    assert_eq!(view.tabs.len(), 1);
+    let session = view.active_session.expect("focused local shell summary");
+    assert_eq!(session.id, child_id);
+    assert_eq!(view.snapshot.id, Some(session.id));
+    assert!(session.local);
+    assert_eq!(session.system_icon.as_deref(), Some("arch-linux"));
+
+    assert!(
+        router
+            .focus_terminal_pane(detached_id, root_id, &mut app)
+            .is_some()
+    );
+    let view = router
+        .views(&mut app)
+        .into_iter()
+        .find(|view| view.active_tab_id == Some(root_id))
+        .expect("detached view");
+    let session = view.active_session.expect("focused server summary");
+    assert_eq!(session.id, root_id);
+    assert_eq!(view.snapshot.title, session.title);
+    assert_eq!(session.system_icon.as_deref(), Some("ubuntu"));
+
+    app.sessions.sessions[0].system_icon_override = Some("fedora".into());
+    let view = router
+        .views(&mut app)
+        .into_iter()
+        .find(|view| view.active_tab_id == Some(root_id))
+        .expect("updated detached view");
+    assert_eq!(
+        view.active_session
+            .expect("updated summary")
+            .system_icon
+            .as_deref(),
+        Some("fedora")
+    );
+}
+
+#[test]
+fn detached_system_icon_for_sftp_uses_cached_identity_then_manual_override() {
+    let router = test_router();
+    let mut app = router_test_state();
+    let mut profile = SessionProfile::new("Debian files", "debian.example", "alice");
+    profile.detected_system =
+        ax_ssh::config::SystemDetection::new(&profile, "Debian GNU/Linux 12", "debian")
+            .map(Box::new);
+    app.sessions.upsert(profile.clone());
+    let tab_id = app.open_sftp_tab(&profile);
+    router.register_detached(
+        Uuid::new_v4(),
+        slint::Weak::default(),
+        WorkspaceTransfer {
+            source_window_id: MAIN_WINDOW_ID,
+            tab_ids: vec![tab_id],
+            active_tab_id: Some(tab_id),
+        },
+        None,
+    );
+    let view = router
+        .views(&mut app)
+        .into_iter()
+        .find(|view| view.active_tab_id == Some(tab_id))
+        .expect("SFTP detached view");
+    let session = view.active_session.expect("SFTP summary");
+    assert_eq!(session.id, tab_id);
+    assert_eq!(session.kind, "sftp");
+    assert_eq!(session.system_icon.as_deref(), Some("debian"));
+    assert_eq!(
+        session.system_release.as_deref(),
+        Some("Debian GNU/Linux 12")
+    );
+
+    app.sessions.sessions[0].system_icon_override = Some("ubuntu".into());
+    let view = router
+        .views(&mut app)
+        .into_iter()
+        .find(|view| view.active_tab_id == Some(tab_id))
+        .expect("updated SFTP detached view");
+    assert_eq!(
+        view.active_session
+            .expect("manual override")
+            .system_icon
+            .as_deref(),
+        Some("ubuntu")
+    );
+}
+
+#[test]
 fn split_sessions_share_one_visible_workspace_tab() {
     let router = test_router();
     let mut app = router_test_state();

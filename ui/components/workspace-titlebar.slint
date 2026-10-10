@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SystemPlatformIcon } from "system-platform-icon.slint";
+import { SidebarPlatformGlyph } from "sidebar-controls.slint";
 import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 
 export struct WorkspaceTabRow {
@@ -16,6 +17,7 @@ export struct ConnectableSessionRow {
     id: string,
     name: string,
     endpoint: string,
+    system_platform: string,
 }
 
 component WindowFrameGlyph inherits Rectangle {
@@ -226,6 +228,7 @@ component ConnectionPickerRow inherits FocusScope {
     in property <string> id;
     in property <string> name;
     in property <string> endpoint;
+    in property <string> system-platform;
     callback connect-session(string);
 
     private property <length> name-line-height: name-label.line-height;
@@ -256,26 +259,42 @@ component ConnectionPickerRow inherits FocusScope {
         border-radius: Theme.radius-small;
         background: row-touch.has-hover || root.has-focus ? Theme.hover : transparent;
 
-        VerticalLayout {
+        HorizontalLayout {
             padding-left: Theme.space-md;
             padding-right: Theme.space-md;
             padding-top: Theme.titlebar-connection-picker-row-padding-y;
             padding-bottom: Theme.titlebar-connection-picker-row-padding-y;
-            spacing: Theme.titlebar-connection-picker-row-spacing;
+            spacing: Theme.space-md;
 
-            name-label := ElidedLabel {
-                height: root.name-line-height;
-                text: root.name;
-                text-color: Theme.text;
-                font-size: Theme.font-body;
-                font-weight: 700;
+            Rectangle {
+                width: Theme.sidebar-glyph-size;
+                horizontal-stretch: 0;
+                SidebarPlatformGlyph {
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.sidebar-glyph-size;
+                    height: Theme.sidebar-glyph-size;
+                    platform: root.system-platform.is-empty ? "server" : root.system-platform;
+                    accessible-role: none;
+                }
             }
-            endpoint-label := ElidedLabel {
-                height: root.endpoint-line-height;
-                text: root.endpoint;
-                text-color: Theme.muted;
-                font-family: Theme.application-font-family;
-                font-size: Theme.font-caption;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Theme.titlebar-connection-picker-row-spacing;
+
+                name-label := ElidedLabel {
+                    height: root.name-line-height;
+                    text: root.name;
+                    text-color: Theme.text;
+                    font-size: Theme.font-body;
+                    font-weight: 700;
+                }
+                endpoint-label := ElidedLabel {
+                    height: root.endpoint-line-height;
+                    text: root.endpoint;
+                    text-color: Theme.muted;
+                    font-family: Theme.application-font-family;
+                    font-size: Theme.font-caption;
+                }
             }
         }
 
@@ -362,6 +381,7 @@ export component ConnectionPicker inherits FocusScope {
                     id: session.id;
                     name: session.name;
                     endpoint: session.endpoint;
+                    system-platform: session.system_platform;
                     connect-session(id) => { root.connect-session(id); }
                 }
             }

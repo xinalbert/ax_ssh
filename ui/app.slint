@@ -1,4 +1,5 @@
 import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
+import { SystemPlatformIcon } from "components/system-platform-icon.slint";
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 export { Theme } from "theme.slint";
@@ -94,6 +95,11 @@ export component AppWindow inherits Window {
     in property <string> settings-tab-id: "";
     in property <string> active-tab-kind: "empty";
     in property <string> active-tab-title: "Workspace";
+    in property <string> active-tab-system-platform;
+    in property <string> active-tab-system-release;
+    out property <image> active-tab-system-image: active-tab-system-platform.is-empty
+        ? @image-url("../assets/os-icons/ui/server/server.svg")
+        : detached-system-icon.source;
     in property <string> active-tab-status: "";
     in property <bool> active-tab-notice-visible: false;
     in property <string> active-tab-notice-severity: "";
@@ -876,11 +882,19 @@ export component AppWindow inherits Window {
         }
     }
 
+    detached-system-icon := SystemPlatformIcon {
+        visible: false;
+        platform: root.active-tab-system-platform;
+    }
+
     if !root.apple-platform : desktop-titlebar := DesktopMenuTitlebar {
         x: 0px;
         y: 0px;
         width: parent.width;
         main-window: !root.detached-window;
+        connection-title: root.active-tab-title;
+        system-platform: root.active-tab-system-platform;
+        system-release: root.active-tab-system-release;
         actions-enabled: root.menu-shortcuts-enabled;
         terminal-active: root.menu-terminal-active;
         multiple-tabs: root.menu-has-multiple-tabs;

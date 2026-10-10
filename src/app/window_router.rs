@@ -36,6 +36,7 @@ pub(super) struct WindowView {
     pub(super) ui: slint::Weak<AppWindow>,
     pub(super) tabs: Vec<WorkspaceTabSummary>,
     pub(super) active_tab_id: Option<Uuid>,
+    pub(super) active_session: Option<WorkspaceTabSummary>,
     pub(super) snapshot: ActiveTabSnapshot,
     pub(super) terminal_panes: Vec<WindowTerminalPane>,
     pub(super) terminal_dividers: Vec<PaneDividerPlacement>,
@@ -1021,6 +1022,8 @@ impl WindowRouter {
                         .map(PaneTree::focused_tab_id)
                         .unwrap_or(tab_id)
                 });
+                let active_session =
+                    active_session_id.and_then(|id| app.tab_summaries_for(&[id]).pop());
                 let snapshot = app.snapshot_without_terminal_for(active_session_id);
                 route.active_tab_id = active_tab_id;
                 let (terminal_panes, terminal_dividers) = active_tab_id
@@ -1048,6 +1051,7 @@ impl WindowRouter {
                     ui: route.ui.clone(),
                     tabs,
                     active_tab_id,
+                    active_session,
                     snapshot,
                     terminal_panes,
                     terminal_dividers,
