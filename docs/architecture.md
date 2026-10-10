@@ -547,6 +547,10 @@ every editor open, are cleared after submit, and never enter the read-only
 source snapshot. A password may be left empty when saving a profile, and the
 save-password toggle is explicit intent only; the storage choice is ignored
 until saving is enabled.
+The editor's saved-password status consumes only the current non-secret backend
+reference. **Clear saved password** opens the shared management confirmation;
+confirmation submits a separate `clear-saved-password` command with the profile
+UUID. It runs immediately without submitting or resetting any local draft.
 The editor also carries SSH-only, non-secret `sftp_remote_path` and
 `sftp_local_path` fields. They are ordinary local drafts: changing them does
 not open either directory, and saving them does not mutate a running Tab.
@@ -646,7 +650,15 @@ tab-local terminal connection notice deliberately remains non-blocking.
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
-   terminal worker. Every `SessionStore` persistence path shares one process-wide
+   terminal worker. Explicit **Clear saved password** uses the same credential
+   deletion and rollback task, including the automatic vault unlock file, and
+   commits only the cleared backend reference and unlock marker on a clone of
+   the expected profile. The editor draft UUID, host trust, system detection,
+   and live workers stay intact. Only the referenced profile in the persisted
+   store is updated, preserving uncommitted Settings previews in memory.
+   The read-only status refreshes without resetting
+   local fields. A rollback retains the exact credential-store instance used
+   for the mutation. Every `SessionStore` persistence path shares one process-wide
    asynchronous gate, while profile save and delete operations reserve an exclusive
    mutation token per profile. They validate
    the original profile before changing a credential and again before replacing

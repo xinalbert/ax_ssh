@@ -90,6 +90,7 @@ vendor/product/serial-number 元数据跟踪被操作系统改名的设备；找
 修改 SSH host 或 port 会清除
 已确认的主机密钥指纹，下次连接必须重新明确确认；把 SSH profile 切换为 Telnet 或 Serial
 会移除其已记住的 SSH 凭据引用。会话编辑器不会显示已保存密码，密码留空会保留原凭据；
+修改服务器名称、host、port 或 username 也会保留密码，因为凭据按 profile 的固定 UUID 定位。
 新输入的密码可以由 **Save & connect** 使用一次，也可以勾选 **Save password (optional)** 并选择后端后保存；
 选择加密保险库但保险库口令留空时会生成隐藏的逐服务器解锁密钥并保存到应用私有目录。
 修改 **Settings > General** 的默认后端只用于初始化之后的保存选择，不会迁移或破坏既有 SSH profile
@@ -472,12 +473,28 @@ forwarding 方式；X11 cookie 永远不会保存。Serial 可以保存
 用于稳定匹配的非敏感 USB 身份元数据。profile 不包含密码、保险库口令、私钥 passphrase、
 私钥内容、终端输出或运行中的进程状态。
 
-选择 **System credential store** 后，记住的密码通过 macOS Keychain、Windows Credential
-Manager 或 Unix Secret Service 保存。选择 **Encrypted application vault** 后，应用会在
+只有选择 **System credential store** 才会通过 macOS Keychain、Windows Credential
+Manager 或 Unix Secret Service 保存密码。默认后端为 **Encrypted application vault**，应用会在
 配置目录中为每个 profile 保存一个私有加密记录。保险库口令留空时，随机解锁密钥会单独保存到应用私有目录的 `0600` 文件且不会显示；用户输入的保险库口令不会保存。这样可避免额外的系统密钥库口令提示，但同一操作系统账户下有文件访问权限的进程仍可读取解锁文件。每日日志单独写入
 平台本地应用数据目录的 `logs` 子目录，最多保留 15 个文件。`RUST_LOG` 可以覆盖默认的
 `ax_ssh=info,russh=warn` 过滤规则。凭据和终端内容不得写入日志；运行日志仍可能包含 host、
 port、session ID 或主机指纹等连接元数据，附加到 issue 前应先检查。
+
+管理单台服务器的密码时，打开其编辑页，查看 **Authentication > Saved password**
+（身份验证 > 已保存密码）。这里显示 profile 引用的保存后端，不读取密码内容。点击
+**Clear saved password**（清除已保存密码），再确认 **Clear**（清除），立即删除该后端中的
+密码并清空保存引用；应用保险库的自动解锁文件也会一并删除。取消确认则保留密码。
+其他未保存的编辑、已信任主机密钥、私钥文件和已连接终端会保留。profile 写入失败时会恢复
+删除的凭据。输入新密码并勾选 **Save password (optional)** 可以重新保存。系统中手工删除的
+条目会在下次连接时发现；编辑页状态来自 profile 引用，不是对凭据库进行枚举。
+
+系统密码条目使用 service `com.axsoft.ax_ssh` 和 account `session:<profile UUID>`，
+不依赖服务器名称或连接地址。macOS 可打开“钥匙串访问”搜索该 service，再查看 account，
+与 `sessions.json` 中对应 profile 的 `id` 匹配。默认应用保险库位于应用配置目录的
+`credentials/<UUID>.json`，可选自动解锁文件为 `credentials/<UUID>.unlock`，与系统钥匙串
+分开。旧版钥匙串解锁条目的 account 为 `vault-unlock:<UUID>`，迁移到私有解锁文件时会删除
+旧条目。AxSSH 不会枚举或清理失去引用的系统条目。手工移除 UUID 或凭据引用前，应先在
+编辑页清除密码；只修改 JSON 不会触发凭据删除。
 
 已连接的终端可以合法地长时间没有 shell 输出。AxSSH 使用 SSH 传输层的 keepalive 和
 inactivity 策略，而不是 shell 输出计时器，来判断连接何时不再存活。

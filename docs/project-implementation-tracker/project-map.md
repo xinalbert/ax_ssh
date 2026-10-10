@@ -59,7 +59,7 @@
 | `src/app/workspace.rs` | 工作区 application bridge 私有 facade | `SessionEditorContext`、profile mutation/credential commit helpers、`wire_workspace_tabs`、`wire_workspace_file_actions`、`wire_session_editor`、`wire_session_management`、`close_workspace_tab`、`close_terminal_child_pane` 的窄 re-export | 只声明现代子模块和维持 `src/app.rs` 既有调用面；不承载 callback 实现；coordinator 所有权归 `AppState` |
 | `src/app/workspace/files.rs` | workspace 文件菜单动作与替换编排 | 路径校验、异步读写、最近路径 MRU 记录/清理、旧 worker/probe 停止、UI 线程快照应用与连接恢复 | 不拥有 schema、凭据、transport 实现或 Slint 组件声明；文件内容由 `src/config/workspace.rs` 校验，历史持久化委托 `PersistenceCoordinator` |
 | `src/app/workspace/tabs.rs` | 工作区 Tab 与子 pane 生命周期 bridge | `wire_workspace_tabs`、`close_workspace_tab`、`close_terminal_child_pane` | 可见 Tab 激活/循环/内存排序、Terminal pane group/子 pane 关闭、pending probe 取消、worker shutdown 和 settings/editor/icon 资源回收；创建、排序和关闭动作先经过窗口模态闸门 |
-| `src/app/workspace/session_editor.rs` | Session Editor 与 profile mutation bridge | `SessionEditorContext`、`begin_profile_mutation`、`commit_profile_credential_storage`、`wire_session_editor`、profile 构造与 mutation commit | 编辑器 callback、逐 profile 最新 mutation token、进程级持久化 gate、SFTP 远端/本地默认目录、串行凭据副作用与失败回滚、一次性密码/显式保存分流、隐藏随机保险库解锁密钥和保存后 SSH 连接 |
+| `src/app/workspace/session_editor.rs` | Session Editor 与 profile mutation bridge | `SessionEditorContext`、`begin_profile_mutation`、`commit_profile_credential_storage`、`clear_saved_password`、`commit_profile_password_clear`、`wire_session_editor`、profile 构造与 mutation commit | 编辑器 callback、逐 profile 最新 mutation token、进程级持久化 gate、SFTP 远端/本地默认目录、串行凭据副作用与失败回滚、一次性密码/显式保存分流、隐藏随机保险库解锁密钥、单独确认后立即清除保存密码并保留编辑 draft、保存后 SSH 连接 |
 | `src/app/workspace/session_management.rs` | Group/Profile 管理与配置传输 bridge | `wire_session_management`、`SessionTransferEnvelope`、duplicate/import/export/delete helpers | Group/Profile CRUD、Group/Server Duplicate、256 KiB/128 profile 有界脱敏 JSON 导入导出；不导出凭据或 host trust |
 | `src/app/workspace/tests.rs` | workspace application bridge 回归 | editor credential、mutation ordering、group/profile CRUD 和 transfer tests | 修改 workspace callback、凭据事务、导入导出或 profile 删除语义后 |
 | `src/app/connection.rs` 与 `src/app/connection/` | 多协议连接控制器组装入口与单一流程模块 | `wire_connection_request`、`request_profile_connection`、`begin_authentication`、`start_telnet_connection`、`start_serial_connection`、`start_session_worker`、`schedule_reconnect` | `request` 共用新建/恢复的 `spawn_host_key_probe` 与 Tab/profile/target/phase 校验，解析 SSH/SFTP companion 导航、分发协议并以原子注册将新 Tab 加入目标窗口/pane；`authentication` 让 agent/private-key/系统凭据走既有安全流程；`direct` 通过事件适配共用 `spawn_direct_monitor`，负责 Telnet/Serial attempt、即时 parser/协议应答和统一 UI 呈现调度，创建 worker 前校验完整当前 profile，Serial 在异步发现后再校验一次；`host_key` 以进程级持久化 gate 和 profile token 保护 blocking known_hosts/config 写入并保持 revoked deny-by-default；`reconnect` 使用最多 5 次指数退避和代次隔离，触发时重读 profile；未知或变化密钥仍须明确确认 |
@@ -84,7 +84,7 @@
 | `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、Tab wrap、duplicate tab、pane transfer、SFTP transfer、SSH/SFTP companion、active prompt、attempt/credential isolation tests | 修改 Tab、pane、配对导航、认证 phase 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`profile_endpoint`、`profile_sidebar_endpoint`、`profile_sidebar_details` | 持久化空 Group 与 profile 聚合、编辑器组选项、行内脱敏 sidebar endpoint 与完整非秘密悬停详情 |
-| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking`；读取有界超时、mutation 软截止、rollback 和隐藏随机保险库解锁材料 | 在 UI 线程外调用系统凭据库和加密保险库；默认自动解锁使用应用私有文件，旧 profile 缺少本地文件时才一次性读取并迁移旧 keyring 条目；读取可超时，保存/删除/回滚则等待不可取消的 blocking 操作完成后才释放持久化闸门；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时恢复记录，自动生成的保险库解锁密钥不进入 UI 或 profile JSON |
+| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking`；读取有界超时、mutation 软截止、rollback 和隐藏随机保险库解锁材料 | 在 UI 线程外调用系统凭据库和加密保险库；默认自动解锁使用应用私有文件，旧 profile 缺少本地文件时才一次性读取并迁移旧 keyring 条目；读取可超时，保存/删除/回滚则等待不可取消的 blocking 操作完成后才释放持久化闸门；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时用原 CredentialStore 恢复记录，自动生成的保险库解锁密钥不进入 UI 或 profile JSON |
 | `src/app/serial_bridge.rs` | Serial 按需发现 bridge | `wire_serial_port_discovery`、`refresh_serial_ports`、`invalidate_serial_port_discovery` | Session Editor 进入 Serial 或显式刷新时枚举 descriptor，离开/关闭时清理并用 generation 丢弃迟到结果；启动不扫描，不得打开设备 |
 | `src/app/sftp_bridge.rs` | SFTP 浏览、本地打开、远端递归下载与 transfer intent bridge | `wire_sftp`、`handle_native_dropped_file_on_remote_pane`、`queue_remote_downloads`、`queue_native_remote_download`、`wire_selected_transfer_actions`、`navigate_sftp_tab_to_path`、`prepare_local_file_open`、`open_local_file`、`reveal_local_path` | 所有 SFTP UI intent 在 callback 时按来源窗口经 `WindowRouter::active_tab` 解析 Tab，并将该 UUID 传入状态/worker；不使用进程级 active Tab；只接受 connected 的 SFTP Tab 当前 snapshot；表头排序在 AppState 中切换；远端 `More` 请求下一页，本地 `More` 释放当前有界快照的下一页；Winit 外部文件仅在上游已确认 Remote files 目标后进入同一上传队列，桥接再次拒绝 loading 的远端目录；Slint DropArea 的内部拖放按本地/远端来源前缀分流为上传或下载；macOS 远端普通文件的 file-promise 仅在接受目标后进入明确本地路径下载，发起窗口的返回拖放使用开始时捕获的 local directory 和 Local files 原生区域；上传、Finder 拖入、远端选择下载和远端拖动均应用 AppSettings 的平台/自定义文件名过滤；远端选择发送当前 local directory 和小型下载根，暂停/继续/取消先校验 AppState；本地行与终态 transfer 的显示位置操作都在 blocking worker 重验非链接路径，bridge 不持有协议 session |
 | `src/app/local_directory_watch.rs` | SFTP 本地栏当前目录的文件系统事件监听 | `ensure_local_directory_watch`、`queue_local_change_refresh` | 每个已加载的 SFTP Tab 至多一条 Tokio 监听任务；只监听当前目录直接子项，单槽事件通道合并变化，延迟 150ms 后通过状态门禁与既有后台读取刷新；切换目录重新注册，关闭 Tab 退出；事件不可用时保留手动 Refresh |
@@ -120,9 +120,9 @@
 | `ui/components/desktop-menu-titlebar.slint` | Windows/Linux 应用菜单与窗口控件顶栏 | `DesktopMenuTitlebar`、`MenuTitleButton`、`WindowControl`、`WindowControlGlyph` | 主窗口六组业务菜单以 ContextMenuArea 展开；独立窗口显示 Return；仅菜单顶栏空白 `TouchArea` 转发当前窗口的原生拖动；最小化/最大化/还原/关闭/Return 使用有明确 viewbox 的矢量路径和 Theme 固定控件尺寸，保留 Tooltip、焦点及无障碍默认动作；只传菜单 action ID 和路径到 AppWindow，不持有窗口 route 或 worker 状态 |
 | `ui/components/flat-action-menu.slint` | 通用扁平动作菜单 | `ActionMenuItem`、`FlatActionMenu`、`show-at` | 用同一 action model 承载原生右键菜单与按钮主动触发的下拉菜单 |
 | `ui/components/session-navigation.slint` | 会话导航组件 | `SessionNavigation`、`SessionNavigationGroup`、`CompactSessionNavigationGroup`、`SessionProfileRow`、`SessionGroupRow`、`SessionActionMenu` | 全高/紧凑侧栏共享本地选择身份；Group 独占展开状态；扩展侧栏提供有界搜索、文件夹/系统图标和遮蔽 endpoint，紧凑侧栏固定为图标窄栏，名称保留在 tooltip/无障碍标签；对象菜单保留 Copy/Duplicate/Open SFTP |
-| `ui/components/session-management-dialog.slint` | Group/profile 管理覆盖层 | `SessionManagementDialog` | 新建/重命名 Group 输入，以及删除 Group/profile 的明确确认语义 |
+| `ui/components/session-management-dialog.slint` | Group/profile 管理覆盖层 | `SessionManagementDialog` | 新建/重命名 Group 输入，以及删除 Group/profile 或立即清除保存密码的明确确认语义 |
 | `ui/components/modal-frame.slint` | 共享阻塞式 dialog 外壳 | `ModalFrame` | 遮罩、居中 surface、响应式尺寸、focus handoff 与 Escape 取消；只承载 UI chrome，不保存业务状态或秘密 |
-| `ui/components/overlay-host.slint` | 覆盖层组合、互斥仲裁与普通会话管理 dialog 状态 | `OverlayHost`、`SecurityOverlayViewState`、`modal-open` | Group/Profile 管理 action、标题/文案/草稿；当前活动 pane 的非阻塞 notice 在窗口居中且安全/本地 dialog 优先；安全 prompt 暂存本地 dialog，重复本地请求忽略；HostKey/Authentication 只读消费 Rust 安全 phase 并转发确认/取消意图 |
+| `ui/components/overlay-host.slint` | 覆盖层组合、互斥仲裁与普通会话管理 dialog 状态 | `OverlayHost`、`SecurityOverlayViewState`、`modal-open` | Group/Profile 与 clear-saved-password 管理 action、标题/文案/草稿；当前活动 pane 的非阻塞 notice 在窗口居中且安全/本地 dialog 优先；安全 prompt 暂存本地 dialog，重复本地请求忽略；HostKey/Authentication 只读消费 Rust 安全 phase 并转发确认/取消意图 |
 | `ui/components/sftp-upload-conflict-dialog.slint` | SFTP 同名上传的标准阻塞弹窗 | `SftpUploadConflictDialog`、`ModalFrame` | 只显示 Rust-owned 冲突 DTO，转发 Skip/Keep both/Overwrite 和本批次选择；不接触文件或网络 |
 | `ui/components/themed-combo-box.slint` | AxSSH 主题化共享下拉 | `ThemedComboBox`、`ComboBoxChevron` | 需要控件本体、弹层、选中/hover、焦点和滚动指示完全消费语义主题色时 |
 | `ui/components/flat-text-input.slint` | AxSSH 主题化共享非秘密文本输入 | `FlatTextInput` | Settings、会话编辑器和管理弹窗的单行编辑、原生文本选择以及 Copy/Cut/Paste/Select All 和编辑菜单 |
@@ -137,7 +137,7 @@
 | `ui/components/settings-controls.slint` | Settings 基础组件集 | `SettingsNavIcon`、`SettingsNavGlyph`、`SettingsNavItem`、`SettingsHeader`、`SettingsSearchResult`、`SettingsPage`、`SettingsField`、`SettingsRow`、`SettingsInfoRow` | 统一 Settings 矢量图标、导航、固定搜索标题、结果行、详情滚动容器、紧凑字段和行布局；InfoRow 用于只读固定快捷键展示；标题不再承载 Save/Close 状态操作 |
 | `ui/settings.slint` | Settings 工作台编排 | `SettingsPane`、`SettingsSearchEntry`、`SettingsViewState`、统一草稿、`submit-draft`、`commit-settings`、`request-close` | 只读设置源、组件私有分类选择/跨页草稿/搜索查询；有界、无持久化的结果目录仅搜索分类名、标题和说明；Shortcuts 固定项随平台显示只读快捷键；标签页关闭请求提交保存并由 Rust 在成功后关闭 |
 | `ui/settings/` | Settings 分类页面 | `AppearanceSettingsPage`、`TerminalSettingsPage`、`X11SettingsPage`、`SftpSettingsPage`、`ThemePaletteEditor`、`AboutSettingsPage`、General/Workspace/Shortcuts/About | SFTP 单独配置过滤、传输单文件上限、带宽、并发及应用级本地打开快照上限；Appearance 显示 terminal drawing preference，当前 item-tree 可用、Canvas 明确不可用；其它设置保持原有归属与映射 |
-| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`private-key-mode-changed`、`serial-mode-changed`、`submit` | 组件私有 profile 草稿、按模式发现/释放意图、Password/Private key/SSH agent 选择、SSH-only X11 forwarding 专用 Off/`-X`/`-Y` 下拉及 SFTP 传输覆盖开关、内嵌遮蔽密码/保险库口令、预选 Group 和私钥路径；agent 模式不显示秘密输入，新建 SSH 可 Save & connect |
+| `ui/session-editor.slint` | 新建/编辑 Session Tab | `SessionEditorPane`、`SessionEditorViewState`、`private-key-mode-changed`、`serial-mode-changed`、`submit` | 组件私有 profile 草稿、按模式发现/释放意图、Password/Private key/SSH agent 选择、SSH-only X11 forwarding 专用 Off/`-X`/`-Y` 下拉及 SFTP 传输覆盖开关、内嵌遮蔽密码/保险库口令、保存后端状态/清除确认意图、预选 Group 和私钥路径；agent 模式不显示秘密输入，新建 SSH 可 Save & connect |
 | `docs/architecture.zh.md` | 当前架构契约 | 模块职责、事件流、安全契约 | 跨模块设计和扩展 |
 
 | `src/config/persistence.rs` | 私有配置和用户工作区导出 | `write_private_file_atomically`、`write_user_file_atomically`、`write_file_contents_atomically` | 包装保留父目录权限差异，共同内核负责唯一私有临时文件、fsync/关闭句柄、原子替换和失败清理 |
@@ -213,6 +213,8 @@
 
 ## 最近依据
 
+- 2026-10-10：服务器编辑页显示保存密码的后端引用，clear-saved-password 复用独立管理确认并立即执行；逐 profile token/持久化 gate、原存储回滚和 draft identity 保留共用既有应用边界。
+
 - 2026-10-08：`russh` 从 0.63.3 跨 `0.x` minor 升级到 0.64.1，`PublicKeyOrCertificate` host-key 回调、RSA compatibility feature 和 SSH worker 所有权保持不变；`Cargo.lock` 与 CI/双语架构版本说明已同步。
 
 - 2026-10-03：重复链路清理，删除未引用历史解析器及重复图标；设置、字体、目录 history、直连 monitor、SSH probe、原子写入共用实现；SFTP/终端各自 worker、统一 router 刷新和 Cargo Debian 安装清单。详见 `docs/duplicate-link-cleanup.zh.md`。
@@ -233,6 +235,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-10 09:06 +0800：逐服务器确认后立即清除密码与原存储回滚定位完成；8 项专项/650 项完整测试和原生 macOS check/Clippy/build 通过。
 
 - 2026-10-09 18:04 +0800：schema v35 手动图标与逐服务器识别缓存，选择器共用领域目录，Group/服务器/Local Shell 统一 20px 图标框；642 项测试与原生 macOS target check/严格 Clippy/build 通过。
 - 2026-10-09 17:04 +0800：连接侧栏/标签接入系统图标与受限 release 探测；侧栏搜索、同身份 Group model 刷新和默认彩色图标配置已接通，schema v34 持久化默认关闭的主题着色选项。 Local Shell 按本机系统/发行版映射，116 项规范名称目录生成共用 Rust/Slint 图标映射和双语索引；本机 630 项测试通过。

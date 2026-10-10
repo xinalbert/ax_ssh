@@ -143,7 +143,9 @@ Changing an SSH host or port
 clears the confirmed host-key fingerprint, so the new endpoint must be trusted
 explicitly on its next connection. Switching an SSH profile to Telnet or Serial
 removes its remembered SSH credential reference. The session editor never shows
-a saved password; leaving the field blank preserves it. A newly entered password
+a saved password; leaving the field blank preserves it. Renaming a profile or
+changing its host, port, or username also preserves the saved password because
+the credential is keyed by the profile's stable UUID. A newly entered password
 can be used once by **Save & connect**, or persisted by selecting **Save
 password (optional)** and a backend. An encrypted-vault save with an empty vault
 password uses a hidden per-server unlock key stored in a private application
@@ -825,6 +827,30 @@ overrides the default `ax_ssh=info,russh=warn` filter. Credentials and terminal
 contents must not be logged. Operational logs may still contain connection
 metadata such as a host, port, session ID, or host-key fingerprint, so review
 them before attaching them to an issue.
+
+To manage one server's password, open its editor and check **Authentication >
+Saved password**. This shows the backend referenced by the profile, without
+reading the password. Select **Clear saved password** and confirm **Clear** to
+remove it immediately from that backend and clear its saved-password reference.
+An application-vault record's automatic unlock file is removed too. Canceling
+the confirmation leaves the saved password intact. Other unsaved editor fields,
+trusted host keys, private-key files, and connected terminals are preserved.
+If writing the profile fails, AxSSH restores the removed credential. You can
+save a replacement by entering a new password and selecting **Save password
+(optional)**. An externally removed record is detected on the next connection;
+the editor status describes the profile reference rather than enumerating the store.
+
+System-password entries use service `com.axsoft.ax_ssh` and account
+`session:<profile UUID>`, independent of the server's display name or endpoint.
+On macOS, open Keychain Access and search for the service, then inspect the
+account to match it to the profile's `id` in `sessions.json`. The default
+application vault uses `credentials/<UUID>.json`, with an optional
+`credentials/<UUID>.unlock` file, under the application configuration directory;
+these are separate from Keychain. Old keyring unlock entries use account
+`vault-unlock:<UUID>` and are removed during migration to a private unlock file.
+AxSSH does not enumerate or clean unreferenced system entries. Use the editor
+before removing a profile's UUID or credential reference manually; editing JSON
+alone does not trigger credential deletion.
 
 A connected terminal may legitimately have no shell output. AxSSH uses SSH
 transport keepalive and inactivity policy, not a shell-output timer, to decide

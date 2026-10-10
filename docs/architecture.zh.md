@@ -341,6 +341,8 @@ preferred height 显式设置 viewport height，因此内容高于当前窗口�
 密码和保险库口令是编辑器私有的秘密草稿：每次打开都为空，提交后立即清空，绝不进入只读
 source snapshot。保存 profile 时密码可以留空；保存密码开关和凭据后端只是明确的保存意图，
 未启用保存时后端选择不参与处理。
+编辑器的“已保存密码”状态只读取当前非敏感后端引用。“清除已保存密码”复用管理确认弹窗，
+确认后携带 profile UUID 单独提交 `clear-saved-password` 命令，立即执行，不提交或重置本地草稿。
 `AppSettings` 还持有有界的 `SftpTransferFilterSettings`：平台默认规则、启用开关和用户文件名
 模式。application bridge 将生效的 basename 模式传入上传和下载 intent，SFTP 领域用同一个 `*`
 匹配器处理直接条目和递归发现，因此传输过滤与浏览器的 Hidden 显示开关保持分离。General 草稿
@@ -404,7 +406,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    **Save password (optional)** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
    勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会把随机隐藏解锁密钥保存到应用私有目录，不会把 SSH 密码后端改为系统凭据库，也不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
-   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。所有 `SessionStore` 持久化路径
+   保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
+   明确的“清除已保存密码”操作共用后台凭据删除与回滚，包括自动保险库解锁文件；只在原 profile
+   副本上清空后端引用和解锁标记并提交，不改变编辑器 draft UUID、主机信任、系统识别缓存或 worker。
+   只更新持久化 store 中该 profile 的字段，内存中尚未保存的 Settings 预览不会随之写盘或被重置。
+   只读状态刷新不会重置局部输入；回滚持有执行该次变更的同一 CredentialStore 实例。
+   所有 `SessionStore` 持久化路径
    共享一个进程级异步闸门，profile 保存和删除另为每个 profile 保留互斥 mutation token；在修改凭据前和替换
    `SessionStore` 前都会重新核验原 profile。已被后续操作取代的事务会在释放闸门前恢复自己的
    凭据备份；凭据后端引用也必须用同一个 token 提交，且只有密码认证 profile 才能写入。
