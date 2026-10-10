@@ -16,6 +16,8 @@ thread_local! {
     static NATIVE_EVENT_MODIFIERS: Cell<Option<TerminalModifiers>> = const { Cell::new(None) };
 }
 
+pub(super) const MAX_MENU_ROWS: usize = 128;
+
 pub(super) struct MenuShortcut {
     pub(super) keys: slint::Keys,
     #[cfg(target_os = "macos")]
@@ -93,6 +95,31 @@ impl NormalizedKeyboardInput {
     pub(super) fn is_physical_key_event(&self) -> bool {
         self.uses_native_modifiers
     }
+}
+
+/// Move within the bounded application menu, skipping separators and disabled items.
+/// The callback reads UI model rows synchronously without retaining the model.
+pub(super) fn next_menu_index(
+    row_count: usize,
+    current: i32,
+    direction: i32,
+    is_selectable: impl Fn(usize) -> bool,
+) -> i32 {
+    // Application menus contain at most the bounded recent-workspace list and
+    // fixed actions. Cap the scan defensively at the UI boundary.
+    let count = row_count.min(MAX_MENU_ROWS) as i32;
+    if count == 0 {
+        return -1;
+    }
+    let step = if direction < 0 { -1 } else { 1 };
+    let mut index = current.rem_euclid(count);
+    for _ in 0..count {
+        index = (index + step).rem_euclid(count);
+        if is_selectable(index as usize) {
+            return index;
+        }
+    }
+    -1
 }
 
 pub(super) fn menu_shortcut_from_setting(shortcut: &str) -> anyhow::Result<MenuShortcut> {
@@ -1360,5 +1387,41 @@ mod tests {
                 false,
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod menu_navigation_tests {
+    use super::next_menu_index;
+
+    #[test]
+    fn navigation_skips_disabled_items_and_wraps_in_both_directions() {
+        let selectable = [false, true, false, true, false];
+        let next = |current, direction| {
+            next_menu_index(selectable.len(), current, direction, |i| selectable[i])
+        };
+        assert_eq!(next(-1, 1), 1);
+        assert_eq!(next(1, 1), 3);
+        assert_eq!(next(3, 1), 1);
+        assert_eq!(next(1, -1), 3);
+        assert_eq!(next(0, -1), 3);
+    }
+
+    #[test]
+    fn empty_and_disabled_menus_have_no_selection() {
+        assert_eq!(next_menu_index(0, -1, 1, |_| unreachable!()), -1);
+        assert_eq!(next_menu_index(5, 2, -1, |_| false), -1);
+    }
+
+    #[test]
+    fn navigation_bounds_model_access_and_normalizes_stale_indices() {
+        assert_eq!(
+            next_menu_index(usize::MAX, i32::MAX, 1, |i| {
+                assert!(i < 128);
+                i == 7
+            }),
+            7
+        );
+        assert_eq!(next_menu_index(2, i32::MIN, -1, |i| i == 1), 1);
     }
 }

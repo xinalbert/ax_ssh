@@ -1,9 +1,11 @@
+import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
 import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 import { SidebarPlatformGlyph } from "sidebar-controls.slint";
 
 component MenuTitleButton inherits FocusScope {
     in property <string> label;
+    in property <bool> active;
     callback activated();
 
     width: Theme.desktop-menu-button-width;
@@ -14,7 +16,7 @@ component MenuTitleButton inherits FocusScope {
     accessible-label: root.label;
 
     Rectangle {
-        background: touch.has-hover || root.has-focus ? Theme.panel-alt : Theme.panel;
+        background: root.active || touch.has-hover || root.has-focus ? Theme.hover : Theme.panel;
     }
 
     key-pressed(event) => {
@@ -146,180 +148,132 @@ export component DesktopMenuTitlebar inherits Rectangle {
 
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
-            background: Theme.panel;
-            trigger := MenuTitleButton {
+            MenuTitleButton {
                 label: @tr("File");
-                activated => { file-menu.show({ x: 0px, y: root.height }); }
+                active: file-menu.is-open;
+                activated => {
+                    if file-menu.is-open { file-menu.close(); }
+                    else { file-menu.show-at({ x: 0px, y: root.height }); }
+                }
             }
-            file-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("New Server");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("new-session", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Open Workspace");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("open-workspace", ""); }
-                    }
-                    Menu {
-                        title: @tr("Open Recent");
-                        enabled: root.actions-enabled && root.recent-paths.length > 0;
-                        for path in root.recent-paths : MenuItem {
-                            title: path;
-                            enabled: root.actions-enabled;
-                            activated => { root.command("open-recent-workspace", path); }
-                        }
-                        MenuSeparator { }
-                        MenuItem {
-                            title: @tr("Clear Recent");
-                            enabled: root.actions-enabled;
-                            activated => { root.command("clear-recent-workspaces", ""); }
-                        }
-                    }
-                    MenuItem {
-                        title: @tr("Save Workspace");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("save-workspace", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Import from Clipboard");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("import-sessions", ""); }
-                    }
-                    MenuItem {
-                        title: @tr("Export Selected to Clipboard");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("export-selected", ""); }
+            file-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("new-session", @tr("New Server"), root.actions-enabled),
+                    MenuActions.separator(),
+                    MenuActions.item("open-workspace", @tr("Open Workspace"), root.actions-enabled),
+                    MenuActions.item("open-recent", @tr("Open Recent"), root.actions-enabled && root.recent-paths.length > 0),
+                    MenuActions.item("save-workspace", @tr("Save Workspace"), root.actions-enabled),
+                    MenuActions.separator(),
+                    MenuActions.item("import-sessions", @tr("Import from Clipboard"), root.actions-enabled),
+                    MenuActions.item("export-selected", @tr("Export Selected to Clipboard"), root.actions-enabled),
+                ];
+                submenu-id: "open-recent";
+                submenu-actions: MenuActions.recent-items(root.recent-paths, root.actions-enabled, @tr("Clear Recent"));
+                submenu-triggered(action, index) => {
+                    if action == "clear-recent-workspaces" {
+                        root.command(action, "");
+                    } else if index >= 0 && index < root.recent-paths.length {
+                        root.command("open-recent-workspace", root.recent-paths[index]);
                     }
                 }
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Edit");
-                activated => { edit-menu.show({ x: 0px, y: root.height }); }
-            }
-            edit-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("Copy");
-                        enabled: root.actions-enabled && root.terminal-active;
-                        activated => { root.command("copy-terminal", ""); }
-                    }
-                    MenuItem {
-                        title: @tr("Paste");
-                        enabled: root.actions-enabled && root.terminal-active;
-                        activated => { root.command("paste-terminal", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Select All");
-                        enabled: root.actions-enabled && root.terminal-active;
-                        activated => { root.command("select-all-terminal", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Settings...");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("open-settings", ""); }
-                    }
+                active: edit-menu.is-open;
+                activated => {
+                    if edit-menu.is-open { edit-menu.close(); }
+                    else { edit-menu.show-at({ x: 0px, y: root.height }); }
                 }
+            }
+            edit-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("copy-terminal", @tr("Copy"), root.actions-enabled && root.terminal-active),
+                    MenuActions.item("paste-terminal", @tr("Paste"), root.actions-enabled && root.terminal-active),
+                    MenuActions.separator(),
+                    MenuActions.item("select-all-terminal", @tr("Select All"), root.actions-enabled && root.terminal-active),
+                    MenuActions.separator(),
+                    MenuActions.item("open-settings", @tr("Settings..."), root.actions-enabled),
+                ];
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("View");
-                activated => { view-menu.show({ x: 0px, y: root.height }); }
-            }
-            view-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("Toggle Session Sidebar");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("toggle-sidebar", ""); }
-                    }
+                active: view-menu.is-open;
+                activated => {
+                    if view-menu.is-open { view-menu.close(); }
+                    else { view-menu.show-at({ x: 0px, y: root.height }); }
                 }
+            }
+            view-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("toggle-sidebar", @tr("Toggle Session Sidebar"), root.actions-enabled),
+                ];
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Pane");
-                activated => { pane-menu.show({ x: 0px, y: root.height }); }
-            }
-            pane-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("New Local Shell");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("new-local-shell", ""); }
-                    }
-                    MenuItem {
-                        title: @tr("Switch SSH/SFTP Tab");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("switch-ssh-sftp", ""); }
-                    }
+                active: pane-menu.is-open;
+                activated => {
+                    if pane-menu.is-open { pane-menu.close(); }
+                    else { pane-menu.show-at({ x: 0px, y: root.height }); }
                 }
+            }
+            pane-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("new-local-shell", @tr("New Local Shell"), root.actions-enabled),
+                    MenuActions.item("switch-ssh-sftp", @tr("Switch SSH/SFTP Tab"), root.actions-enabled),
+                ];
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Window");
-                activated => { window-menu.show({ x: 0px, y: root.height }); }
-            }
-            window-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("Previous Tab");
-                        enabled: root.actions-enabled && root.multiple-tabs;
-                        activated => { root.command("previous-tab", ""); }
-                    }
-                    MenuItem {
-                        title: @tr("Next Tab");
-                        enabled: root.actions-enabled && root.multiple-tabs;
-                        activated => { root.command("next-tab", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Move Current Workspace to New Window");
-                        enabled: root.actions-enabled && root.has-active-tab;
-                        activated => { root.command("detach-workspace", ""); }
-                    }
-                    MenuSeparator { }
-                    MenuItem {
-                        title: @tr("Close Current Tab");
-                        enabled: root.actions-enabled && root.has-active-tab;
-                        activated => { root.command("close-tab", ""); }
-                    }
+                active: window-menu.is-open;
+                activated => {
+                    if window-menu.is-open { window-menu.close(); }
+                    else { window-menu.show-at({ x: 0px, y: root.height }); }
                 }
+            }
+            window-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("previous-tab", @tr("Previous Tab"), root.actions-enabled && root.multiple-tabs),
+                    MenuActions.item("next-tab", @tr("Next Tab"), root.actions-enabled && root.multiple-tabs),
+                    MenuActions.separator(),
+                    MenuActions.item("detach-workspace", @tr("Move Current Workspace to New Window"), root.actions-enabled && root.has-active-tab),
+                    MenuActions.separator(),
+                    MenuActions.item("close-tab", @tr("Close Current Tab"), root.actions-enabled && root.has-active-tab),
+                ];
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if root.main-window : Rectangle {
             width: Theme.desktop-menu-button-width;
             MenuTitleButton {
                 label: @tr("Help");
-                activated => { help-menu.show({ x: 0px, y: root.height }); }
-            }
-            help-menu := ContextMenuArea {
-                Menu {
-                    MenuItem {
-                        title: @tr("Keyboard Shortcuts");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("open-shortcuts", ""); }
-                    }
-                    MenuItem {
-                        title: @tr("About AxSSH");
-                        enabled: root.actions-enabled;
-                        activated => { root.command("open-about", ""); }
-                    }
+                active: help-menu.is-open;
+                activated => {
+                    if help-menu.is-open { help-menu.close(); }
+                    else { help-menu.show-at({ x: 0px, y: root.height }); }
                 }
+            }
+            help-menu := FlatActionMenu {
+                actions: [
+                    MenuActions.item("open-shortcuts", @tr("Keyboard Shortcuts"), root.actions-enabled),
+                    MenuActions.item("open-about", @tr("About AxSSH"), root.actions-enabled),
+                ];
+                triggered(action) => { root.command(action, ""); }
             }
         }
         if !root.main-window : WindowControl {

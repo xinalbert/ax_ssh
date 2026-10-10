@@ -1,3 +1,4 @@
+import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
 
 // A theme-owned single-line input that avoids platform widget chrome.
@@ -60,31 +61,15 @@ export component FlatTextInput inherits FocusScope {
             accessible-role: none;
         }
 
-        ContextMenuArea {
+        TouchArea {
             width: parent.width;
             height: parent.height;
             enabled: root.enabled;
-
-            Menu {
-                MenuItem {
-                    title: @tr("Cut");
-                    enabled: !root.read-only && root.enabled;
-                    activated => { input.cut(); }
-                }
-                MenuItem {
-                    title: @tr("Copy");
-                    enabled: !root.text.is-empty;
-                    activated => { input.copy(); }
-                }
-                MenuItem {
-                    title: @tr("Paste");
-                    enabled: !root.read-only && root.enabled;
-                    activated => { input.paste(); }
-                }
-                MenuItem {
-                    title: @tr("Select All");
-                    enabled: !root.text.is-empty;
-                    activated => { input.select-all(); }
+            mouse-cursor: MouseCursor.text;
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    input.focus();
+                    edit-menu.show-at({ x: self.mouse-x, y: self.mouse-y });
                 }
             }
 
@@ -135,6 +120,29 @@ export component FlatTextInput inherits FocusScope {
                 accepted => { root.accepted(root.text); }
                 edited => { root.edited(root.text); }
             }
+        }
+    }
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            edit-menu.show-at({ x: 0px, y: root.height });
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+    edit-menu := FlatActionMenu {
+        context-enabled: root.enabled;
+        actions: [
+            MenuActions.item("cut", @tr("Cut"), root.enabled && !root.read-only),
+            MenuActions.item("copy", @tr("Copy"), !root.text.is-empty),
+            MenuActions.item("paste", @tr("Paste"), root.enabled && !root.read-only),
+            MenuActions.item("select-all", @tr("Select All"), !root.text.is-empty),
+        ];
+        triggered(action) => {
+            if action == "cut" { input.cut(); }
+            else if action == "copy" { input.copy(); }
+            else if action == "paste" { input.paste(); }
+            else if action == "select-all" { input.select-all(); }
         }
     }
 }

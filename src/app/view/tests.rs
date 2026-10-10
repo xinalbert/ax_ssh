@@ -229,6 +229,149 @@ impl LayoutTestHarness {
             });
         }
     }
+
+    fn click(&self, position: slint::LogicalPosition) {
+        use slint::platform::{PointerEventButton, WindowAdapter, WindowEvent};
+        let window = self.window.window();
+        window.dispatch_event(WindowEvent::PointerMoved { position });
+        window.dispatch_event(WindowEvent::PointerPressed {
+            position,
+            button: PointerEventButton::Left,
+        });
+        window.dispatch_event(WindowEvent::PointerReleased {
+            position,
+            button: PointerEventButton::Left,
+        });
+        self.settle();
+    }
+
+    fn press_key(&self, key: slint::platform::Key) {
+        use slint::platform::{WindowAdapter, WindowEvent};
+        let text: SharedString = key.into();
+        self.window
+            .window()
+            .dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+        self.window
+            .window()
+            .dispatch_event(WindowEvent::KeyReleased { text });
+        self.settle();
+    }
+}
+
+#[test]
+fn themed_menu_submenu_restores_parent_keyboard_focus_and_routes_literal_paths() {
+    std::thread::spawn(|| {
+        use slint::platform::Key;
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        wire_menu_helpers(ui);
+        ui.set_recent_workspace_paths(ModelRc::new(VecModel::from(vec![
+            SharedString::from("clear-recent-workspaces"),
+            SharedString::from("/second-workspace"),
+        ])));
+        let new_sessions = Rc::new(Cell::new(0));
+        let received_sessions = new_sessions.clone();
+        ui.on_new_session(move || received_sessions.set(received_sessions.get() + 1));
+        let files = Rc::new(RefCell::new(Vec::new()));
+        let received_files = files.clone();
+        ui.on_workspace_file_action(move |action, path| {
+            received_files.borrow_mut().push((action, path));
+        });
+        ui.show().expect("headless menu window should show");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+        let title = slint::LogicalPosition::new(20.0, 16.0);
+        harness.click(title);
+        harness.press_key(Key::DownArrow);
+        harness.press_key(Key::DownArrow);
+        harness.press_key(Key::RightArrow);
+        harness.press_key(Key::LeftArrow);
+        harness.press_key(Key::Home);
+        harness.press_key(Key::Return);
+        assert_eq!(
+            new_sessions.get(),
+            1,
+            "Left must restore parent keyboard input"
+        );
+        assert!(files.borrow().is_empty());
+
+        harness.click(title);
+        harness.press_key(Key::DownArrow);
+        harness.press_key(Key::DownArrow);
+        harness.press_key(Key::RightArrow);
+        harness.press_key(Key::Return);
+        assert_eq!(
+            files.borrow().as_slice(),
+            &[(
+                SharedString::from("open-recent"),
+                SharedString::from("clear-recent-workspaces"),
+            )],
+            "a workspace name matching a command must still open that workspace"
+        );
+    })
+    .join()
+    .expect("submenu keyboard test should finish");
+}
+
+#[test]
+fn themed_menu_submenu_keeps_parent_pointer_actions_reachable() {
+    std::thread::spawn(|| {
+        use slint::platform::{Key, WindowAdapter, WindowEvent};
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        wire_menu_helpers(ui);
+        ui.set_recent_workspace_paths(ModelRc::new(VecModel::from(vec![SharedString::from(
+            "/recent-workspace",
+        )])));
+        let new_sessions = Rc::new(Cell::new(0));
+        let received_sessions = new_sessions.clone();
+        ui.on_new_session(move || received_sessions.set(received_sessions.get() + 1));
+        ui.show().expect("headless menu window should show");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+        harness.click(slint::LogicalPosition::new(20.0, 16.0));
+        let popup_width = || {
+            let window = i_slint_core::window::WindowInner::from_pub(harness.window.window());
+            let popups = window.active_popups();
+            let popup = popups.last().expect("menu should remain open");
+            i_slint_core::item_tree::ItemRc::new_root(popup.component.clone())
+                .geometry()
+                .size
+                .width
+        };
+        let parent_width = popup_width();
+        harness.press_key(Key::DownArrow);
+        harness.press_key(Key::DownArrow);
+        let theme = ui.global::<Theme>();
+        let top = theme.get_desktop_titlebar_height() + theme.get_menu_padding();
+        let recent_y = top + 2.5 * theme.get_menu_row_height() + theme.get_menu_separator_height();
+        harness
+            .window
+            .window()
+            .dispatch_event(WindowEvent::PointerMoved {
+                position: slint::LogicalPosition::new(20.0, recent_y),
+            });
+        // Advance past the submenu hover delay; resolve layout without saving an image.
+        harness.settle();
+        assert!(popup_width() > parent_width, "hover must open the submenu");
+        harness.click(slint::LogicalPosition::new(
+            20.0,
+            top + theme.get_menu_row_height() / 2.0,
+        ));
+        assert_eq!(
+            new_sessions.get(),
+            1,
+            "an open submenu must allow a pointer action in its parent"
+        );
+    })
+    .join()
+    .expect("submenu pointer test should finish");
 }
 
 #[test]

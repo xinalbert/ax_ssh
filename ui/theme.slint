@@ -147,6 +147,15 @@ export global Theme {
     out property <length> window-preferred-width: 1180px;
     out property <length> window-preferred-height: 740px;
     // Windows/Linux share font-independent controls on one fixed titlebar row.
+    // Every application-owned menu uses the same palette and bounded geometry.
+    out property <length> menu-min-width: 200px;
+    out property <length> menu-max-width: 560px;
+    out property <length> menu-row-height: 30px;
+    out property <length> menu-separator-height: 8px;
+    out property <length> menu-padding: 4px;
+    out property <length> menu-horizontal-padding: 10px;
+    out property <length> menu-chevron-size: 12px;
+    out property <int> menu-max-visible-items: 10;
     out property <length> desktop-titlebar-height: 32px;
     out property <length> desktop-menu-button-width: 52px;
     out property <length> desktop-window-control-width: 44px;

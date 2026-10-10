@@ -1,4 +1,5 @@
-import { CheckBox, ListView, TextEdit } from "std-widgets.slint";
+import { FlatTextEdit } from "components/flat-text-edit.slint";
+import { CheckBox, ListView } from "std-widgets.slint";
 import { ActionMenuItem, FlatActionMenu } from "components/flat-action-menu.slint";
 import { ElidedLabel } from "components/elided-controls.slint";
 import { FlatTextInput } from "components/flat-text-input.slint";
@@ -340,6 +341,17 @@ component SftpDirectoryHeader inherits Rectangle {
 }
 
 component SftpEntry inherits Rectangle {
+    function show-menu-at(position: Point) {
+        file-actions.show-at(position);
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+
     in property <SftpEntryRow> entry;
     in property <bool> shown: true;
     in property <bool> interactive: true;
@@ -501,6 +513,15 @@ component SftpEntry inherits Rectangle {
         background: Theme.divider.with-alpha(0.44);
     }
     touch := TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
         width: parent.width;
         height: parent.height;
         enabled: root.shown && root.interactive;
@@ -515,6 +536,15 @@ component SftpEntry inherits Rectangle {
         }
     }
     TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
         x: 0px;
         width: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
         height: parent.height;
@@ -551,6 +581,15 @@ component SftpEntry inherits Rectangle {
         // in its child so a double-click still reaches the same directory/file
         // callbacks instead of being swallowed by the drag hit target.
         TouchArea {
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    root.show-menu-at({
+                        x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                        y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                    });
+                }
+            }
+
             width: parent.width;
             height: parent.height;
             enabled: root.shown && root.interactive && root.drag-enabled
@@ -576,6 +615,13 @@ component SftpEntry inherits Rectangle {
             && root.remote-actions && root.entry.kind == "file";
         mouse-cursor: pointer;
         pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+
             if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
                 root.native-drag-started = false;
                 root.native-drag-start-x = self.mouse-x;
@@ -595,7 +641,7 @@ component SftpEntry inherits Rectangle {
         }
         double-clicked => { root.open-file(root.entry.path); }
     }
-    FlatActionMenu {
+    file-actions := FlatActionMenu {
         actions: root.context-actions;
         context-enabled: root.shown && root.interactive && (root.remote-actions || root.local-actions);
         triggered(action-id) => {
@@ -984,6 +1030,17 @@ component SftpDirectoryPane inherits Rectangle {
 }
 
 component SftpTransferEntry inherits Rectangle {
+    function show-menu-at(position: Point) {
+        transfer-actions.show-at(position);
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+
     in property <SftpTransferRow> transfer;
     callback toggle-selection(string, bool);
     callback pause(string);
@@ -1000,19 +1057,24 @@ component SftpTransferEntry inherits Rectangle {
         }
     }
 
-    private property <[ActionMenuItem]> context-actions: root.transfer.pausable
+    // Progress-only snapshots preserve the open menu model and keyboard focus.
+    private property <bool> menu-pausable: root.transfer.pausable;
+    private property <bool> menu-resumable: root.transfer.resumable;
+    private property <bool> menu-cancellable: root.transfer.cancellable;
+    private property <bool> menu-has-local-path: root.transfer.has_local_path;
+    private property <[ActionMenuItem]> context-actions: root.menu-pausable
         ? [
             root.action("pause", @tr("Pause")),
             root.action("cancel", @tr("Cancel")),
         ]
-        : (root.transfer.resumable
+        : (root.menu-resumable
             ? [
                 root.action("resume", @tr("Resume")),
                 root.action("cancel", @tr("Cancel")),
             ]
-            : (root.transfer.cancellable
+            : (root.menu-cancellable
                 ? [root.action("cancel", @tr("Cancel"))]
-                : (root.transfer.has_local_path
+                : (root.menu-has-local-path
                     ? [
                         root.action("show-in-folder", @tr("Show in Folder")),
                         root.action("remove", @tr("Remove")),
@@ -1135,6 +1197,15 @@ component SftpTransferEntry inherits Rectangle {
         vertical-alignment: center;
     }
     TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
         x: 0px;
         width: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
         height: parent.height;
@@ -1155,6 +1226,9 @@ component SftpTransferEntry inherits Rectangle {
         }
     }
     if root.transfer.pausable : SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
         x: parent.width - Theme.sftp-column-padding - self.width
             - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
         y: (parent.height - self.height) / 2;
@@ -1166,6 +1240,9 @@ component SftpTransferEntry inherits Rectangle {
         clicked => { root.pause(root.transfer.id); }
     }
     if root.transfer.resumable : SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
         x: parent.width - Theme.sftp-column-padding - self.width
             - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
         y: (parent.height - self.height) / 2;
@@ -1177,6 +1254,9 @@ component SftpTransferEntry inherits Rectangle {
         clicked => { root.resume(root.transfer.id); }
     }
     action-button := SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
         visible: root.transfer.cancellable;
         x: parent.width - Theme.sftp-column-padding - self.width;
         y: (parent.height - self.height) / 2;
@@ -1188,7 +1268,7 @@ component SftpTransferEntry inherits Rectangle {
         enabled: root.transfer.cancellable;
         clicked => { root.cancel(root.transfer.id); }
     }
-    FlatActionMenu {
+    transfer-actions := FlatActionMenu {
         actions: root.context-actions;
         triggered(action-id) => {
             if action-id == "pause" {
@@ -1786,7 +1866,7 @@ export component SftpPane inherits Rectangle {
                         vertical-alignment: center;
                     }
                 }
-                editor := TextEdit {
+                editor := FlatTextEdit {
                     vertical-stretch: 1;
                     text <=> editor-text-draft;
                     accessible-label: @tr("Remote text editor");

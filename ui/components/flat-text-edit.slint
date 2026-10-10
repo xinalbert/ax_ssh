@@ -1,0 +1,119 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
+
+// Multiline editing keeps TextInput's selection/IME and the shared themed menu.
+export component FlatTextEdit inherits FocusScope {
+    in-out property <string> text;
+    in property <string> placeholder-text;
+    in property <bool> read-only: false;
+    in property <TextWrap> wrap: word-wrap;
+    in property <string> font-family: Theme.application-font-family;
+    in property <length> font-size: Theme.font-body;
+    callback edited(string);
+    forward-focus: input;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    accessible-role: text-input;
+    accessible-enabled: root.enabled;
+    accessible-value <=> root.text;
+    accessible-placeholder-text: root.placeholder-text;
+    accessible-read-only: root.read-only;
+    accessible-action-set-value(value) => {
+        if root.enabled && !root.read-only { root.text = value; root.edited(value); }
+    }
+    accessible-action-set-selection-offsets(anchor, focus) => {
+        input.set-selection-offsets(anchor, focus);
+    }
+    capture-key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            edit-menu.show-at({ x: 0px, y: 0px });
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: root.enabled ? Theme.panel : Theme.hover;
+        border-width: Theme.hairline;
+        border-color: input.has-focus ? Theme.focus : Theme.control-border;
+        border-radius: Theme.radius-small;
+        clip: true;
+        TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: MouseCursor.text;
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    input.focus();
+                    edit-menu.show-at({ x: self.mouse-x, y: self.mouse-y });
+                }
+            }
+            scroll := ScrollView {
+                x: Theme.space-xs;
+                y: Theme.space-xs;
+                width: parent.width - 2 * Theme.space-xs;
+                height: parent.height - 2 * Theme.space-xs;
+                content-width: root.wrap == TextWrap.no-wrap
+                    ? max(self.visible-width, input.preferred-width) : self.visible-width;
+                content-height: max(self.visible-height, input.preferred-height);
+                input := TextInput {
+                    width: scroll.content-width;
+                    height: scroll.content-height;
+                    text <=> root.text;
+                    single-line: false;
+                    wrap: root.wrap;
+                    enabled: root.enabled;
+                    read-only: root.read-only;
+                    color: root.enabled ? Theme.text : Theme.muted;
+                    font-family: root.font-family;
+                    font-size: root.font-size;
+                    selection-background-color: Theme.selected;
+                    selection-foreground-color: Theme.text;
+                    page-height: scroll.visible-height;
+                    accessible-role: none;
+                    edited => { root.edited(self.text); }
+                    cursor-position-changed(position) => {
+                        let line-height = root.font-size * 1.6;
+                        if position.y + scroll.content-y < 0px {
+                            scroll.content-y = -position.y;
+                        } else if position.y + line-height + scroll.content-y > scroll.visible-height {
+                            scroll.content-y = min(0px, scroll.visible-height - position.y - line-height);
+                        }
+                        if position.x + scroll.content-x < 0px {
+                            scroll.content-x = -position.x;
+                        } else if position.x + scroll.content-x > scroll.visible-width {
+                            scroll.content-x = min(0px, scroll.visible-width - position.x);
+                        }
+                    }
+                }
+            }
+        }
+        Text {
+            x: Theme.space-xs;
+            y: Theme.space-xs;
+            width: parent.width - 2 * Theme.space-xs;
+            text: root.text.is-empty && input.preedit-text.is-empty ? root.placeholder-text : "";
+            font-family: root.font-family;
+            font-size: root.font-size;
+            color: Theme.muted;
+            accessible-role: none;
+        }
+    }
+    edit-menu := FlatActionMenu {
+        context-enabled: root.enabled;
+        actions: [
+            MenuActions.item("cut", @tr("Cut"), root.enabled && !root.read-only),
+            MenuActions.item("copy", @tr("Copy"), !root.text.is-empty),
+            MenuActions.item("paste", @tr("Paste"), root.enabled && !root.read-only),
+            MenuActions.item("select-all", @tr("Select All"), !root.text.is-empty),
+        ];
+        triggered(action) => {
+            if action == "cut" { input.cut(); }
+            else if action == "copy" { input.copy(); }
+            else if action == "paste" { input.paste(); }
+            else if action == "select-all" { input.select-all(); }
+        }
+    }
+}

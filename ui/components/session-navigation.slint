@@ -120,29 +120,29 @@ component SessionActionMenu inherits Rectangle {
     private property <[ActionMenuItem]> actions:
         root.kind == SessionActionMenuKind.list
             ? [
-                root.action("new-group", "New Group", true),
-                root.action("new-server", "New Server", true),
+                root.action("new-group", @tr("New Group"), true),
+                root.action("new-server", @tr("New Server"), true),
             ]
             : (root.kind == SessionActionMenuKind.group
                 ? [
-                    root.action("add-server", "Add Server", true),
-                    root.action("copy-group", "Copy Group", true),
-                    root.action("duplicate-group", "Duplicate Group", true),
-                    root.action("rename-group", "Rename Group", true),
-                    root.action("delete-group", "Delete Group", true),
+                    root.action("add-server", @tr("Add Server"), true),
+                    root.action("copy-group", @tr("Copy Group"), true),
+                    root.action("duplicate-group", @tr("Duplicate Group"), true),
+                    root.action("rename-group", @tr("Rename Group"), true),
+                    root.action("delete-group", @tr("Delete Group"), true),
                 ]
                 : (root.kind == SessionActionMenuKind.ungrouped
                     ? [
-                        root.action("add-server", "Add Server", true),
+                        root.action("add-server", @tr("Add Server"), true),
                     ]
                     : [
-                        root.action("connect", "Connect", true),
-                        root.action("open-sftp", "Open SFTP", root.sftp-enabled),
-                        root.action("copy-address", "Copy Address", true),
-                        root.action("copy-server", "Copy Server", true),
-                        root.action("duplicate-session", "Duplicate", true),
-                        root.action("edit-server", "Edit Server", true),
-                        root.action("delete-server", "Delete Server", true),
+                        root.action("connect", @tr("Connect"), true),
+                        root.action("open-sftp", @tr("Open SFTP"), root.sftp-enabled),
+                        root.action("copy-address", @tr("Copy Address"), true),
+                        root.action("copy-server", @tr("Copy Server"), true),
+                        root.action("duplicate-session", @tr("Duplicate"), true),
+                        root.action("edit-server", @tr("Edit Server"), true),
+                        root.action("delete-server", @tr("Delete Server"), true),
                     ]));
 
     public function show-at(position: Point) {
@@ -239,6 +239,10 @@ component SessionNavigationRow inherits FocusScope {
     accessible-expanded: root.expanded;
 
     key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            nav-menu1.show-at({ x: 0px, y: root.height });
+            return EventResult.accept;
+        }
         if event.text == Key.Return || event.text == Key.Space {
             root.select-target(
                 root.group ? "group" : "server",
@@ -265,6 +269,11 @@ component SessionNavigationRow inherits FocusScope {
 
         row-touch := TouchArea {
             mouse-cursor: pointer;
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    nav-menu1.show-at({ x: self.mouse-x, y: self.mouse-y });
+                }
+            }
             clicked => {
                 root.select-target(
                     root.group ? "group" : "server",
@@ -346,7 +355,7 @@ component SessionNavigationRow inherits FocusScope {
             }
         }
 
-        SessionActionMenu {
+        nav-menu1 := SessionActionMenu {
             kind: root.group
                 ? (root.group-name.is-empty
                     ? SessionActionMenuKind.ungrouped
@@ -517,6 +526,7 @@ component CompactSessionNavigationGroup inherits Rectangle {
 
             group-item := SidebarRailItem {
                 width: parent.width;
+                context-requested(position) => { nav-menu2.show-at(position); }
                 label: root.source.name;
                 group: true;
                 expandable: true;
@@ -534,7 +544,7 @@ component CompactSessionNavigationGroup inherits Rectangle {
                     root.group-expanded = !root.group-expanded;
                 }
             }
-            SessionActionMenu {
+            nav-menu2 := SessionActionMenu {
                 group-name: root.source.group-name;
                 name: root.source.name;
                 kind: root.source.group-name.is-empty
@@ -566,6 +576,7 @@ component CompactSessionNavigationGroup inherits Rectangle {
 
                 profile-item := SidebarRailItem {
                     width: parent.width;
+                    context-requested(position) => { nav-menu3.show-at(position); }
                     label: profile.name;
                     group: false;
                     icon-kind: profile.system_platform.is-empty
@@ -586,7 +597,7 @@ component CompactSessionNavigationGroup inherits Rectangle {
                         details: profile.details;
                     }
                 }
-                SessionActionMenu {
+                nav-menu3 := SessionActionMenu {
                     target-id: profile.id;
                     group-name: root.source.group-name;
                     name: profile.name;
@@ -703,7 +714,15 @@ export component SessionNavigation inherits Rectangle {
                 vertical-stretch: 1;
                 background: transparent;
 
-                SessionActionMenu {
+                TouchArea {
+                    pointer-event(event) => {
+                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                            nav-menu4.show-at({ x: self.mouse-x, y: self.mouse-y });
+                        }
+                    }
+                }
+
+                nav-menu4 := SessionActionMenu {
                     kind: SessionActionMenuKind.list;
                     new-group => { root.new-group(); }
                     new-session => { root.new-session(); }
@@ -848,7 +867,15 @@ export component SessionNavigation inherits Rectangle {
                 vertical-stretch: 1;
                 background: transparent;
 
-                SessionActionMenu {
+                TouchArea {
+                    pointer-event(event) => {
+                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                            nav-menu5.show-at({ x: self.mouse-x, y: self.mouse-y });
+                        }
+                    }
+                }
+
+                nav-menu5 := SessionActionMenu {
                     kind: SessionActionMenuKind.list;
                     new-group => { root.new-group(); }
                     new-session => { root.new-session(); }

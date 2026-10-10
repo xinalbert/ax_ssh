@@ -79,6 +79,9 @@ msgstr "关于 AxSSH"
 msgid "Accent / focus"
 msgstr "强调色 / 焦点"
 
+msgid "Add Server"
+msgstr "添加服务器"
+
 msgid "Allow local connections without X authority"
 msgstr "允许无 X authority 的本地连接"
 
@@ -277,6 +280,15 @@ msgstr "连接协议"
 msgid "Copy"
 msgstr "复制"
 
+msgid "Copy Address"
+msgstr "复制地址"
+
+msgid "Copy Group"
+msgstr "复制组"
+
+msgid "Copy Server"
+msgstr "复制服务器"
+
 msgid "Copy Terminal Selection"
 msgstr "复制终端选区"
 
@@ -358,6 +370,12 @@ msgstr "默认终端文字颜色"
 msgid "Delete"
 msgstr "删除"
 
+msgid "Delete Group"
+msgstr "删除组"
+
+msgid "Delete Server"
+msgstr "删除服务器"
+
 msgid "Delete group"
 msgstr "删除组"
 
@@ -403,8 +421,17 @@ msgstr "分隔线和控件轮廓"
 msgid "Download"
 msgstr "下载"
 
+msgid "Duplicate"
+msgstr "创建副本"
+
+msgid "Duplicate Group"
+msgstr "创建组副本"
+
 msgid "Edit"
 msgstr "编辑"
+
+msgid "Edit Server"
+msgstr "编辑服务器"
 
 msgid "Edit selected remote file"
 msgstr "编辑选中的远端文件"
@@ -709,6 +736,9 @@ msgstr "名称"
 msgid "Navigation and title surfaces"
 msgstr "导航和标题表面"
 
+msgid "New Group"
+msgstr "新建组"
+
 msgid "New Local Shell"
 msgstr "新建本地 Shell"
 
@@ -771,6 +801,9 @@ msgstr "打开"
 
 msgid "Open Recent"
 msgstr "打开最近文件"
+
+msgid "Open SFTP"
+msgstr "打开 SFTP"
 
 msgid "Open Settings"
 msgstr "打开设置"
@@ -954,6 +987,9 @@ msgstr "移除已撤销记录"
 
 msgid "Rename"
 msgstr "重命名"
+
+msgid "Rename Group"
+msgstr "重命名组"
 
 msgid "Rename group"
 msgstr "重命名组"

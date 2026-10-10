@@ -11,6 +11,7 @@ export component SftpActionButton inherits FocusScope {
     in property <length> font-size: Theme.sftp-control-font-size;
     in property <int> font-weight: Theme.sftp-control-font-weight;
     callback clicked();
+    callback context-requested(Point);
 
     private property <length> text-height: label.line-height;
     // Keep enough room for the measured label and both horizontal insets.
@@ -40,6 +41,10 @@ export component SftpActionButton inherits FocusScope {
     }
 
     key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            root.context-requested({ x: 0px, y: root.height });
+            return EventResult.accept;
+        }
         if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
             root.clicked();
             return EventResult.accept;
@@ -80,6 +85,11 @@ export component SftpActionButton inherits FocusScope {
             horizontal-alignment: TextHorizontalAlignment.center;
         }
         touch := TouchArea {
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    root.context-requested({ x: self.mouse-x, y: self.mouse-y });
+                }
+            }
             enabled: root.enabled;
             mouse-cursor: root.enabled ? pointer : default;
             clicked => { root.clicked(); }

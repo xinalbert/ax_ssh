@@ -201,6 +201,7 @@ export component SidebarRailItem inherits FocusScope {
     in property <bool> expanded: false;
     in property <bool> selected: false;
     callback activated();
+    callback context-requested(Point);
 
     private property <length> card-height: root.local
         ? Theme.sidebar-rail-local-card-size
@@ -228,6 +229,10 @@ export component SidebarRailItem inherits FocusScope {
     accessible-expanded: root.expanded;
 
     key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            root.context-requested({ x: 0px, y: root.height });
+            return EventResult.accept;
+        }
         if event.text == Key.Return || event.text == Key.Space {
             root.activated();
             return EventResult.accept;
@@ -286,6 +291,14 @@ export component SidebarRailItem inherits FocusScope {
 
         item-touch := TouchArea {
             mouse-cursor: pointer;
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    root.context-requested({
+                        x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                        y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                    });
+                }
+            }
             clicked => {
                 root.focus();
                 root.activated();

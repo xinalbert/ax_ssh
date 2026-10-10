@@ -1,4 +1,5 @@
-import { CheckBox, SpinBox, TextEdit } from "std-widgets.slint";
+import { FlatTextEdit } from "../components/flat-text-edit.slint";
+import { CheckBox, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { SettingsField, SettingsPage, SettingsRow, SettingsSectionHeading } from "../components/settings-controls.slint";
 import { SftpActionButton } from "../components/sftp-controls.slint";
@@ -112,7 +113,7 @@ export component SftpSettingsPage inherits SettingsPage {
         label: @tr("Custom filename patterns");
         description: @tr("One pattern per line; * matches any characters");
         SettingsField {
-            TextEdit {
+            FlatTextEdit {
                 width: Theme.settings-field-width;
                 height: 88px;
                 text <=> root.draft-sftp-filter-custom-patterns;

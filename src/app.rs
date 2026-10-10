@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 #[cfg(target_os = "macos")]
 use slint::TimerMode;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
@@ -559,7 +559,38 @@ struct WindowCallbackContext {
     detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 }
 
+fn wire_menu_helpers(ui: &AppWindow) {
+    ui.global::<MenuActions>()
+        .on_recent_items(|paths, enabled, clear_title| {
+            let mut rows: Vec<ActionMenuItem> = paths
+                .iter()
+                .take(input::MAX_MENU_ROWS - 2)
+                .map(|path| ActionMenuItem {
+                    action_id: "open-recent-workspace".into(),
+                    title: path,
+                    enabled,
+                })
+                .collect();
+            rows.push(ActionMenuItem::default());
+            rows.push(ActionMenuItem {
+                action_id: "clear-recent-workspaces".into(),
+                title: clear_title,
+                enabled,
+            });
+            ModelRc::new(VecModel::from(rows))
+        });
+    ui.global::<MenuActions>()
+        .on_next_index(|actions, current, direction| {
+            input::next_menu_index(actions.row_count(), current, direction, |index| {
+                actions
+                    .row_data(index)
+                    .is_some_and(|action| action.enabled && !action.action_id.is_empty())
+            })
+        });
+}
+
 fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
+    wire_menu_helpers(ui);
     let WindowCallbackContext {
         state,
         runtime,

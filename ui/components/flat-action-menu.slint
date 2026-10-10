@@ -1,29 +1,292 @@
+import { Theme } from "../theme.slint";
+
 export struct ActionMenuItem {
     action-id: string,
     title: string,
     enabled: bool,
 }
 
+// An empty action ID is a separator. The model contains only labels and intent.
+export global MenuActions {
+    pure callback next-index([ActionMenuItem], int, int) -> int;
+    pure callback recent-items([string], bool, string) -> [ActionMenuItem];
+    public pure function item(id: string, title: string, enabled: bool) -> ActionMenuItem {
+        { action-id: id, title: title, enabled: enabled }
+    }
+    public pure function separator() -> ActionMenuItem {
+        { action-id: "", title: "", enabled: false }
+    }
+}
+
+component ActionMenuBody inherits FocusScope {
+    in property <[ActionMenuItem]> actions;
+    in property <string> submenu-id;
+    in property <int> reset-revision;
+    changed reset-revision => { root.reset(); }
+    init => { root.reset(); }
+    in-out property <int> highlighted: -1;
+    callback activated(string, int);
+    callback dismissed();
+    callback open-submenu(length);
+    callback return-to-parent();
+    callback dismiss-submenu();
+    private property <bool> submenu-pending;
+    private property <length> pending-submenu-y;
+    Timer {
+        interval: 250ms;
+        running: root.submenu-pending;
+        triggered => {
+            root.submenu-pending = false;
+            if root.highlighted >= 0 && root.highlighted < root.actions.length
+                    && root.actions[root.highlighted].enabled
+                    && root.actions[root.highlighted].action-id == root.submenu-id {
+                root.open-submenu(root.pending-submenu-y);
+            }
+        }
+    }
+
+    private property <length> scroll-y;
+    private property <length> highlighted-y;
+    public function reset() {
+        root.highlighted = MenuActions.next-index(root.actions, -1, 1);
+        root.scroll-y = 0px;
+        root.submenu-pending = false;
+    }
+    function activate(index: int, y: length) {
+        if index < 0 || index >= root.actions.length || !root.actions[index].enabled
+                || root.actions[index].action-id.is-empty { return; }
+        root.highlighted = index;
+        if root.actions[index].action-id == root.submenu-id {
+            root.open-submenu(y);
+        } else {
+            root.activated(root.actions[index].action-id, index);
+        }
+    }
+    function reveal(y: length, height: length) {
+        if y + root.scroll-y < 0px {
+            root.scroll-y = -y;
+        } else if y + height + root.scroll-y > rows.height {
+            root.scroll-y = rows.height - y - height;
+        }
+    }
+
+    width: min(Theme.menu-max-width, max(Theme.menu-min-width,
+        menu-layout.preferred-width + 2 * Theme.menu-padding));
+    height: min(menu-layout.preferred-height,
+        Theme.menu-max-visible-items * Theme.menu-row-height) + 2 * Theme.menu-padding;
+    accessible-role: list;
+    accessible-item-count: root.actions.length;
+
+    capture-key-pressed(event) => {
+        root.submenu-pending = false;
+        if event.text == Key.Escape {
+            root.dismissed();
+            return EventResult.accept;
+        }
+        if event.text == Key.UpArrow || event.text == Key.DownArrow {
+            root.highlighted = MenuActions.next-index(root.actions, root.highlighted,
+                event.text == Key.UpArrow ? -1 : 1);
+            return EventResult.accept;
+        }
+        if event.text == Key.Home || event.text == Key.End {
+            root.highlighted = MenuActions.next-index(root.actions, event.text == Key.Home ? -1 : 0,
+                event.text == Key.Home ? 1 : -1);
+            return EventResult.accept;
+        }
+        if event.text == Key.Return || event.text == Key.Space || event.text == Key.RightArrow {
+            if event.text != Key.RightArrow || (root.highlighted >= 0
+                    && root.highlighted < root.actions.length
+                    && root.actions[root.highlighted].action-id == root.submenu-id) {
+                root.activate(root.highlighted, root.highlighted-y);
+            }
+            return EventResult.accept;
+        }
+        if event.text == Key.LeftArrow {
+            root.return-to-parent();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        background: Theme.panel;
+        border-width: Theme.hairline;
+        border-color: Theme.frame-border;
+        border-radius: Theme.radius-small;
+        clip: true;
+        parent-touch := TouchArea {
+            rows := Flickable {
+                x: Theme.menu-padding;
+                y: Theme.menu-padding;
+                width: parent.width - 2 * Theme.menu-padding;
+                height: parent.height - 2 * Theme.menu-padding;
+                content-width: self.width;
+                content-height: menu-layout.preferred-height;
+                content-y <=> root.scroll-y;
+                interactive: self.content-height > self.height;
+                menu-layout := VerticalLayout {
+                    width: rows.width;
+                    spacing: 0px;
+                    for action[index] in root.actions : Rectangle {
+                        height: action.action-id.is-empty ? Theme.menu-separator-height : Theme.menu-row-height;
+                        min-width: metrics.preferred-width + 2 * Theme.menu-horizontal-padding
+                            + Theme.menu-chevron-size;
+                        metrics := Text {
+                            visible: false;
+                            text: action.title;
+                            font-size: Theme.font-body;
+                        }
+                        if action.action-id.is-empty : Rectangle {
+                            x: Theme.menu-horizontal-padding;
+                            y: (parent.height - Theme.hairline) / 2;
+                            width: parent.width - 2 * Theme.menu-horizontal-padding;
+                            height: Theme.hairline;
+                            background: Theme.divider;
+                        }
+                        if !action.action-id.is-empty : FocusScope {
+                            focus-on-tab-navigation: action.enabled && !action.action-id.is-empty;
+                            accessible-role: button;
+                            accessible-label: action.title;
+                            accessible-enabled: action.enabled;
+                            accessible-expandable: action.action-id == root.submenu-id && !action.action-id.is-empty;
+                            accessible-action-default => { root.activate(index, self.absolute-position.y - rows.absolute-position.y); }
+                            changed has-focus => {
+                                if self.has-focus { root.highlighted = index; }
+                            }
+                            private property <bool> highlighted: root.highlighted == index;
+                            changed highlighted => {
+                                if self.highlighted {
+                                    self.focus();
+                                    root.reveal(self.absolute-position.y - menu-layout.absolute-position.y, self.height);
+                                    root.highlighted-y = self.absolute-position.y - rows.absolute-position.y;
+                                }
+                            }
+                            Rectangle {
+                                background: action.enabled && (touch.has-hover || root.highlighted == index)
+                                    ? Theme.hover : transparent;
+                                border-radius: Theme.radius-small;
+                                Text {
+                                    x: Theme.menu-horizontal-padding;
+                                    width: parent.width - 2 * Theme.menu-horizontal-padding - Theme.menu-chevron-size;
+                                    height: parent.height;
+                                    text: action.title;
+                                    color: action.enabled ? Theme.text : Theme.muted;
+                                    font-size: Theme.font-body;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                if action.action-id == root.submenu-id : Path {
+                                    x: parent.width - Theme.menu-horizontal-padding - self.width;
+                                    y: (parent.height - self.height) / 2;
+                                    width: Theme.menu-chevron-size;
+                                    height: Theme.menu-chevron-size;
+                                    viewbox-width: 12;
+                                    viewbox-height: 12;
+                                    commands: "M 4 2 L 8 6 L 4 10";
+                                    fill: transparent;
+                                    stroke: action.enabled ? Theme.text : Theme.muted;
+                                    stroke-width: Theme.hairline;
+                                }
+                                touch := TouchArea {
+                                    enabled: action.enabled;
+                                    mouse-cursor: pointer;
+                                    changed has-hover => {
+                                        if self.has-hover {
+                                            root.highlighted = index;
+                                            root.submenu-pending = action.action-id == root.submenu-id;
+                                            root.pending-submenu-y = self.absolute-position.y - rows.absolute-position.y;
+                                            if action.action-id != root.submenu-id { root.dismiss-submenu(); }
+                                        } else if action.action-id == root.submenu-id {
+                                            root.submenu-pending = false;
+                                        }
+                                    }
+                                    clicked => { root.activate(index, self.absolute-position.y - rows.absolute-position.y); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Callers own right-click hit testing, so left presses and drag grabs keep their owners.
 export component FlatActionMenu inherits Rectangle {
     in property <[ActionMenuItem]> actions;
     in property <bool> context-enabled: true;
+    in property <string> submenu-id;
+    in property <[ActionMenuItem]> submenu-actions;
+    out property <bool> is-open: popup.is-open;
     callback triggered(string);
-
-    public function show-at(position: Point) {
-        menu-area.show(position);
-    }
-
+    callback submenu-triggered(string, int);
+    private property <Point> anchor;
+    private property <length> submenu-y;
+    private property <bool> submenu-visible;
+    private property <int> reset-revision;
+    private property <int> submenu-reset-revision;
+    // show-at receives owner-local coordinates; a zero-sized anchor must not center.
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
     background: transparent;
 
-    menu-area := ContextMenuArea {
-        enabled: root.context-enabled;
+    private property <bool> main-open: popup.is-open;
+    changed main-open => { if !root.main-open { root.submenu-visible = false; } }
+    changed context-enabled => { if !root.context-enabled { root.close(); } }
 
-        Menu {
-            for action in root.actions : MenuItem {
-                title: action.title;
-                enabled: action.enabled;
-                activated => { root.triggered(action.action-id); }
+    public function show-at(position: Point) {
+        if !root.context-enabled || root.actions.length == 0 { return; }
+        root.anchor = position;
+        root.submenu-visible = false;
+        popup.show();
+        root.reset-revision = mod(root.reset-revision + 1, 2147483647);
+    }
+    public function close() {
+        root.submenu-visible = false;
+        popup.close();
+    }
+
+    // Keep both panels in one popup: ordinary PopupWindow instances do not
+    // dispatch pointer events through to earlier popups in Slint's stack.
+    popup := PopupWindow {
+        x: root.anchor.x;
+        y: root.anchor.y;
+        width: body.width + (root.submenu-visible ? submenu-body.width : 0px);
+        height: root.submenu-visible ? max(body.height, root.submenu-y + submenu-body.height) : body.height;
+        close-policy: close-on-click-outside;
+        forward-focus: body;
+        TouchArea {
+            clicked => { root.close(); }
+        }
+        body := ActionMenuBody {
+            x: 0px;
+            y: 0px;
+            actions: root.actions;
+            reset-revision: root.reset-revision;
+            submenu-id: root.submenu-id;
+            activated(id, _) => { root.close(); if root.context-enabled { root.triggered(id); } }
+            dismissed => { root.close(); }
+            return-to-parent => { root.close(); }
+            dismiss-submenu => { root.submenu-visible = false; }
+            open-submenu(y) => {
+                if root.submenu-actions.length == 0 { return; }
+                root.submenu-y = y + Theme.menu-padding;
+                root.submenu-visible = true;
+                root.submenu-reset-revision = mod(root.submenu-reset-revision + 1, 2147483647);
+                submenu-body.focus();
             }
+        }
+        submenu-body := ActionMenuBody {
+            visible: root.submenu-visible;
+            x: body.width;
+            y: root.submenu-y;
+            actions: root.submenu-actions;
+            reset-revision: root.submenu-reset-revision;
+            activated(id, index) => { root.close(); if root.context-enabled { root.submenu-triggered(id, index); } }
+            dismissed => { root.close(); }
+            return-to-parent => { root.submenu-visible = false; body.focus(); }
         }
     }
 }
