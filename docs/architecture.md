@@ -999,7 +999,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    the sidebar expands or collapses; on Windows/Linux it begins at the
    sidebar's right edge below the application menu titlebar.
    Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
-   masked, read-only snapshot of every saved connection profile; selection routes only
+   masked, read-only snapshot of every saved connection profile. `ConnectableSessionRow`
+   also carries the bounded canonical platform ID; the application shares profile
+   icon resolution with the sidebar (manual choice, valid cache, runtime release,
+   generic fallback). `ConnectionPicker` renders a 20px `SidebarPlatformGlyph` beside
+   each name/endpoint pair using the sidebar's shared size token and existing theme
+   option, without discovery or filesystem access. Selection routes only
    the profile UUID through the existing connection callback. File > New
    Server, its configurable `Cmd+N`/`Ctrl+N` shortcut, and the sidebar
    blank-area context menu remain distinct session-editor actions. File also
@@ -1184,6 +1189,22 @@ that workspace into a second native Slint window. A detached window retains the
 active connection title as system window metadata. On macOS, it displays that
 title in a transparent native title bar over the active client surface:
 Terminal background for a Terminal view and application background for SFTP.
+The native title bar also shows the connection's 16px system icon after the
+traffic-light controls. Windows/Linux show the same icon and connection name
+in their frameless control row. `WindowView.active_session` carries one existing
+Tab summary for the focused pane, including hidden split panes, rather than
+using the root Tab's identity. The view maps this through the same manual/cache/
+local/release priority as the Tab strip and publishes only an icon ID and release.
+Slint reuses the sidebar platform glyph and `SystemPlatformIcon`; unknown systems
+use a generic server glyph, with a bundled monochrome SVG for native rendering.
+macOS consumes the bundled image source, encodes an aspect-preserving raster of
+at most 64x64 pixels, and retains one
+`NSImageView` and source cache under the native title-bar view. Full workspace
+refreshes update identity; terminal-only output does not rasterize icons.
+Theme preview/save also refreshes native template tint using the existing
+`system_icons_follow_theme` value. Original colors remain the default. Native
+window destruction releases the image view and cache; no server discovery,
+credentials, represented file URL, or application icon is involved.
 Its macOS icon-only return button uses the system overlapping-window symbol,
 with the matching AppKit multiple-documents template fallback. Windows/Linux
 instead provide Return in the frameless control row. The client content contains only the active

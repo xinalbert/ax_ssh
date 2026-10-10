@@ -376,12 +376,14 @@ group-label picker is removed from Settings; existing saved values remain
 compatible and the rail always stays narrow. System icons, including Local
 Shell's, retain their source colors by default. With AxSSH closed, edit
 `settings.appearance.system_icons_follow_theme` in `sessions.json`: `false` is
-the default; set it to `true` and restart to tint sidebar and tab system icons
-with the current theme. This option has no Settings control, and Settings
+the default; set it to `true` and restart to tint system icons in the sidebar,
+tabs, detached title bars, and `+` connection list with the current theme.
+This option has no Settings control, and Settings
 preview/save preserves its value. Folder, terminal, and generic-server UI
 symbols continue to use theme colors. Group folders, server icons, and Local Shell
-use a shared 20px icon box in the sidebar; indentation and disclosure arrows
-express the hierarchy. Tab icons retain their compact 16px size.
+use a shared 20px icon box in the sidebar; the `+` connection list uses the same
+size for server icons. Indentation and disclosure arrows express the sidebar
+hierarchy. Tab and detached title-bar icons retain their compact 16px size.
 
 In the server editor, **System icon** opens a searchable list of bundled system
 names. A manual choice takes priority; **Automatic** restores automatic selection.
@@ -420,7 +422,10 @@ first and last two characters when available, and `192.168.1.202` becomes
 Hostnames remain visible so they can still be distinguished at a glance.
 New-session editors and terminal sessions share the workspace tab bar, while
 Settings opens as a separate workbench view. The `+` at the right end of that
-bar lists every saved connection and connects the selected profile; **File >
+bar lists every saved connection with its system icon, name, and masked endpoint,
+and connects the selected profile. Its icons use the same manual choice, valid
+cache, current release, and generic fallback priority as the sidebar, including
+before any Tab is opened; opening the list never probes a server. **File >
 New Server** and the sidebar blank-area context menu open the session editor.
 Activating a connection or opening a new editor synchronizes keyboard focus to
 the active workspace Tab and scrolls it into view; the editor then focuses its
@@ -456,7 +461,8 @@ disconnect using at most five attempts with 1, 2, 4, 8, and 16 second backoff
 pane appear in a centered card in the current window; its details can scroll
 without blocking other Tabs. A detached Terminal window shows only its
 terminal panes, while a detached SFTP view shows only SFTP. In the detached
-macOS window, the native title bar matches the active Terminal or SFTP surface
+macOS window, the native title bar shows the connection's system icon and matches
+the active Terminal or SFTP surface
 and its overlapping-window return icon merges the same workspace layout back. Hovering
 the icon shows **Return workspace to main
 window**. Closing the detached window performs the same merge and
@@ -472,7 +478,13 @@ or focus a control with Tab and activate it with Enter or Space.
 The detached window uses the same frameless controls and places Return at the
 left of its top row. Closing it still merges its workspace into the main
 window. Its top-row blank area also moves that detached window. The Tab-row
-blank area never moves a Windows or Linux window. Window titles remain
+blank area never moves a Windows or Linux window. The detached top row shows
+the system icon and connection name. It reuses manual choices and existing
+discovery results without probing again; Local Shell uses its host icon or saved
+override. In a split Terminal, both title and icon follow the focused pane.
+Changes to a connected profile's icon or arriving system information update the
+title bar too. Its colors follow the same configuration as Tab icons, and hover
+shows the connection name and system information. Window titles remain
 available to the taskbar and window switcher.
 
 The terminal Tab toolbar has two controls beside the saved-connection button.

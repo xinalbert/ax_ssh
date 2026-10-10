@@ -593,7 +593,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    并从平台窗口顶栏下方贯穿工作区高度；
    macOS 标题栏内的 Tab 条不随侧栏展开或收起移动；Windows/Linux 的 Tab 条在应用菜单顶栏下方从侧栏右缘开始。
    `+` 固定在最右边缘，打开由 Slint 本地持有的
-    选择器，显示全部已保存连接 profile 的遮蔽只读快照，选择后只将 profile UUID 传入
+    选择器，显示全部已保存连接 profile 的遮蔽只读快照。`ConnectableSessionRow` 同时携带有界的规范
+    平台标识，应用与侧栏共用手动指定、有效缓存、运行时 release、通用图标的解析优先级。
+    `ConnectionPicker` 在名称/endpoint 旁使用侧栏共用尺寸 token 绘制 20px `SidebarPlatformGlyph`，
+    沿用已有主题选项，不探测服务器或读取文件；选择后只将 profile UUID 传入
     现有连接 callback。File > New Server、可配置的 `Cmd+N`/`Ctrl+N` 快捷键与侧栏列表
     空白区域的右键菜单仍是独立的新建会话编辑器动作。File 还统一持有剪贴板导入和所选对象
     导出，默认快捷键分别为可配置的 `Cmd/Ctrl+Shift+I` 与 `Cmd/Ctrl+Shift+E`。
@@ -749,7 +752,16 @@ File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只�
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
 Slint 窗口。detached 窗口保留活动连接名作为系统窗口元数据；macOS 还将其显示在原生标题栏，并将该栏设为透明、使用当前
 客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。macOS 同一行的仅图标返回按钮使用系统重叠窗口符号，系统符号不可用时
-回退到对应的 AppKit 多文档模板图标；Windows/Linux 则在无边框控件行提供 Return。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
+回退到对应的 AppKit 多文档模板图标；Windows/Linux 则在无边框控件行提供 Return。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。
+macOS 在红绿灯控件后显示连接的 16px 系统图标，Windows/Linux 无边框顶栏显示同一图标和连接名称。
+`WindowView.active_session` 只携带当前聚焦 pane 的已有 Tab summary（包括标签栏隐藏的子 pane），
+不使用根 Tab 的身份替代活动连接；view 共用标签栏的手动/缓存/本机/release 优先级，仅发布图标 ID 和 release。
+Slint 复用侧栏平台 glyph 和 `SystemPlatformIcon`；未知系统使用通用服务器符号，并以同类内置单色 SVG 供原生绘制。
+macOS 使用内置图像源，按比例编码最大 64x64 的 raster，
+原生标题栏拥有单个 `NSImageView` 和 source cache。完整 workspace 刷新更新身份，terminal-only 输出不转换图标。
+主题预览/保存同时按既有 `system_icons_follow_theme` 更新原生 template tint，默认保持资源彩色。
+原生窗口销毁时释放图像控件与缓存；不重新探测服务器，不访问凭据，不伪造 represented file URL，不修改应用图标。
+其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
 或 `SftpPane`，不包含 Tab 条、
 会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
 信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
