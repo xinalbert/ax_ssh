@@ -602,7 +602,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     导出，默认快捷键分别为可配置的 `Cmd/Ctrl+Shift+I` 与 `Cmd/Ctrl+Shift+E`。
 11. 声明式 Slint `MenuBar` 保留菜单快捷键。它在 macOS 屏幕菜单栏可见，在 Windows/Linux
     隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
-    每个菜单按钮用 Slint `ContextMenuArea` 展开，两个菜单表面共同调用
+    每个菜单按钮用主题化 `FlatActionMenu` 弹层展开，两个菜单表面共同调用
     `execute-menu-command`，使动态启用状态和动作保持同一应用路由。六像素 winit 缩放边缘、
     菜单顶栏空白区的 `TouchArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。
     该空白区的左键按下经 AppWindow 路由到当前主窗口或独立窗口的 Winit `drag_window()`；菜单、
@@ -702,8 +702,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     新增服务器、复制或 Duplicate Group、重命名或删除 Group，以及连接、复制地址、复制配置、
     Duplicate、编辑或删除服务器；Ungrouped 只提供新增服务器。右击列表空白区域可
     新建空 Group 或 Ungrouped 服务器；剪贴板导入/导出只属于 File 菜单。`SessionActionMenu` 把四种菜单形态
-    映射为扁平 `ActionMenuItem` 列表；`FlatActionMenu` 只组合一个 `ContextMenuArea`，只发出
-    action ID，并暴露 `show-at(Point)`，使同一动作列表也能由按钮触发为下拉菜单。Group/Server
+    映射为扁平 `ActionMenuItem` 列表；`FlatActionMenu` 组合消费 Theme 的 `PopupWindow`，叶菜单发出
+    action ID 与有界子菜单行索引，并暴露 `show-at(Point)`，使同一动作列表也能由按钮触发为下拉菜单。Group/Server
     复制与 File 菜单导出使用版本化 JSON envelope，限制为 256 KiB 和 128 个 profile；导出会移除 identity、凭据
     引用和主机密钥指纹。导入总是生成新 UUID、处理名称/Group 冲突、校验有界字段，并在保存候选
     `SessionStore` 前再次清除凭据/信任字段。Group Duplicate 与现有 Server Duplicate 保持一致：
@@ -1251,13 +1251,28 @@ System 模式把标准控件 `Palette.color-scheme` 保持为 `ColorScheme.unkno
 运行时平台 palette；手动 Light/Dark 则显式设置。唯一的 `resolved-dark` 同时选择对应 palette
 侧、标准控件方向、AxSSH 自绘表面和终端 ANSI palette。Theme 还显式命名 divider、frame/
 control border、focus、hover 和 selected 状态 token，避免共享组件各自重新解释基础色。
-原生 `ContextMenuArea` 仍由平台绘制，所以它的具体色值可能不同，但明暗选择保持一致。主题
+应用内菜单在 Windows、Linux 和 macOS 统一使用 `FlatActionMenu`，直接消费 Theme 色值；
+macOS 屏幕顶部菜单栏继续由 AppKit 系统绘制。主题
 还统一字号层级、间距、圆角、标准工作区尺寸、Settings 控件尺寸、编辑器宽度和覆盖层尺寸。
 `ui/components/themed-combo-box.slint` 统一拥有所有需要 AxSSH 精确配色的应用内选择控件；
 控件表面、弹层、hover/选中行、焦点边框、箭头和滚动指示全部消费语义 `Theme` token，不再
 使用 Slint 标准控件 palette。组件保留有界字符串 model、current-index、selected callback、
 键盘导航、点击外部关闭和 combobox 可访问性契约。其它标准控件继续使用已同步的 Slint
-`Palette`，原生 `ContextMenuArea` 菜单仍由平台拥有。
+`Palette`。
+`ui/components/flat-action-menu.slint` 统一拥有顶部、终端、会话、SFTP 和文本编辑菜单的表面、
+标签、分隔线、禁用、hover 与滚动，最多同时显示十行。Up/Down 和 Home/End 跳过分隔线与
+禁用项，Enter/Space 激活，Escape 或外部点击关闭。“最近打开”通过 hover、点击或 Right
+打开主题化子菜单；Left 关闭子菜单并恢复父菜单焦点。父子菜单共用一个 popup 生命周期，鼠标可返回父菜单。
+既有 TouchArea owner 转发右键，左键选择和文件拖动仍留在原局部 owner。
+`MenuActions` 只提供无状态 UI helper；Rust callback 最多扫描 128 行且不保留 model；最近工作区使用固定动作 ID 与有界行索引，
+路径名称不会被当作菜单命令。
+秘密输入菜单只提供 Paste。
+终端和传输菜单 model 只依赖稳定的动作状态标量，输出或进度 snapshot 不会替换打开中的菜单行。
+
+`ui/components/flat-text-edit.slint` 拥有 SFTP 文件编辑器与过滤设置的非秘密多行输入，保留
+TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用相同主题菜单，替代标准 TextEdit
+内含的原生菜单。
+
 `ui/components/elided-controls.slint` 统一拥有单行文本按钮的呈现契约。`ElidedLabel` 将配置
 字体的自然宽度测量与可见省略标签分开，并输出 `natural-width`、`line-height` 和
 `overflowed`；仅在标签真实溢出时创建有最大宽度且可换行的全文 tooltip。`ElidedButton`

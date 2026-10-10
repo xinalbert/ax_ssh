@@ -496,6 +496,14 @@ the icon shows **Return workspace to main
 window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
+
+Application popup menus follow the selected AxSSH palette on Windows, Linux,
+and macOS, including terminal, session, SFTP, and text-edit menus. Use Up/Down
+or Home/End to select an enabled action, Enter/Space to activate, and Escape
+or a click outside to close. Recent workspaces open a submenu on hover, click,
+or Right; Left returns to the parent menu. Long menus scroll. Secret inputs
+continue to offer Paste only. The macOS screen menu retains the system appearance.
+
 On Windows and Linux, the main window's menu shares the top row with the
 window controls; there is no separate visible system title bar. Drag the empty
 part of that row to move the window, or double-click it to maximize or restore.
@@ -675,7 +683,7 @@ Settings. Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` elsewhere.
 Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
 The same keyboard shortcuts work in a detached Terminal window even though it
 has no client-area menu. Non-secret text fields retain their native editing
-shortcuts and context menus; secret fields allow paste but remain non-copyable.
+shortcuts and themed context menus; secret fields allow paste but remain non-copyable.
 Hold `Cmd` on macOS, or `Ctrl` on Windows/Linux, and click a visible terminal
 target to open it. While that modifier is held, the complete recognized URL or
 path is underlined; the indicator clears when the modifier is released or text

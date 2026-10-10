@@ -1013,8 +1013,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
 11. The declarative Slint `MenuBar` retains the menu accelerators. It is visible
     in the macOS screen menu and hidden on Windows/Linux, where
     `DesktopMenuTitlebar` renders File/Edit/View/Pane/Window/Help across the
-    top of the frameless client window. Each top-level button opens a Slint
-    `ContextMenuArea`; both menu surfaces call the same `execute-menu-command`
+    top of the frameless client window. Each top-level button opens a themed
+    `FlatActionMenu` popup; both menu surfaces call the same `execute-menu-command`
     function, so dynamic enabled states and actions keep one application
     route. The six-pixel winit resize border, a menu-titlebar blank-area
     `TouchArea`, and minimize/maximize/close controls replace native frame
@@ -1048,7 +1048,7 @@ tab-local terminal connection notice deliberately remains non-blocking.
     preserving plain terminal `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` on those platforms.
     The commands are disabled outside a Terminal Tab, so ordinary non-secret
     text fields retain native Copy, Cut, Paste, and Select All shortcuts and
-    context menus; secret fields expose paste but remain non-copyable. No generic
+    themed context menus; secret fields expose paste but remain non-copyable. No generic
     text-focus bridge, Cut, or Undo command is
     introduced. **Previous Tab** and **Next Tab** use the
     same parser for fixed `Cmd+Shift+[` / `Cmd+Shift+]` accelerators on macOS
@@ -1168,7 +1168,7 @@ tab-local terminal connection notice deliberately remains non-blocking.
     Shell below it. The toggle and Local Shell action use separate rows and
     hit targets in both modes.
     Custom group rows are keyboard focusable and use Enter/Space for the same
-    local disclosure action as a click; this never changes the sidebar state. Native
+    local disclosure action as a click; this never changes the sidebar state. Themed
     row context menus create servers in a group, copy or duplicate a group,
     rename or delete it, and connect, copy-address, copy-config, duplicate,
     edit, or delete a server. Ungrouped exposes only its add-server action.
@@ -1176,8 +1176,9 @@ tab-local terminal connection notice deliberately remains non-blocking.
     server. Clipboard import/export remain File-menu commands.
     `SessionActionMenu` maps
     these four menu shapes to flat
-    `ActionMenuItem` lists. `FlatActionMenu` composes exactly one
-    `ContextMenuArea`, emits only an action ID, and exposes `show-at(Point)` so
+    `ActionMenuItem` lists. `FlatActionMenu` composes theme-owned
+    `PopupWindow` surfaces, emits leaf action IDs and bounded submenu row indices,
+    and exposes `show-at(Point)` so
     the same action list can also back a button-triggered dropdown. Group/server
     copy and File-menu export use a versioned JSON envelope bounded to 256 KiB and 128
     profiles. Exported identities, credential references, and host-key
@@ -2166,19 +2167,39 @@ platform palette; manual Light and Dark modes set it explicitly. One
 `resolved-dark` selects the matching palette side, standard-widget direction,
 custom AxSSH surfaces, and terminal ANSI palette. Theme state tokens name
 dividers, frame/control borders, focus, hover, and selected surfaces so shared
-components do not reinterpret base colors independently. Native
-`ContextMenuArea` rendering remains
-platform-owned, so its exact colors can differ even though its mode selection is
-consistent. The theme also owns type scale, spacing, radii, standard workspace
-geometry, Settings control dimensions, editor widths, and overlay sizes.
+components do not reinterpret base colors independently. Application menus
+use `FlatActionMenu` and consume these exact Theme colors on Windows, Linux,
+and macOS. The macOS screen menu remains an AppKit system surface. The theme
+also owns type scale, spacing, radii, standard workspace geometry, Settings
+control dimensions, editor widths, and overlay sizes.
 `ui/components/themed-combo-box.slint` owns every in-app selection control that
 requires exact AxSSH colors. Its control surface, popup, hover and selected
 rows, focus border, chevron, and scroll indicator consume semantic `Theme`
 tokens rather than the Slint widget palette. It preserves the bounded string
 model, current-index, selected callback, keyboard navigation, outside-click
 close behavior, and combobox accessibility contract. Other standard widgets
-continue to use the synchronized Slint `Palette`; native `ContextMenuArea`
-menus remain platform-owned.
+continue to use the synchronized Slint `Palette`.
+`ui/components/flat-action-menu.slint` owns application menu surfaces, labels,
+separators, disabled states, hover, and scrolling, including desktop titlebar,
+terminal, session, SFTP, and text-edit menus. At most ten rows are visible at
+once. Up/Down and Home/End skip separators and disabled actions, Enter/Space
+activate, and Escape/outside click close. Recent workspaces open a themed
+submenu by hover, click, or Right; Left closes it and restores parent focus.
+Both panels share one popup lifetime, so pointer input can return to the parent
+menu. Existing touch owners route right presses so left selection and file
+dragging stay local.
+`MenuActions` carries stateless UI helpers only; the Rust callback scans at most
+128 model rows and retains no UI model. Recent workspace rows use fixed action IDs
+and bounded indices, so path labels cannot become menu commands. Secret fields
+offer Paste only.
+Terminal and transfer menu models depend on stable scalar action state, so
+output or progress snapshots do not replace the rows of an open menu.
+
+`ui/components/flat-text-edit.slint` owns non-secret multiline editing in the
+SFTP file editor and filename-filter settings. It keeps TextInput selection,
+IME, keyboard editing, and cursor-visible scrolling, and routes editing actions
+through the same themed menu instead of the standard TextEdit's native menu.
+
 `ui/components/elided-controls.slint` owns the shared single-line text-button
 presentation contract. `ElidedLabel` measures the configured font separately
 from its visible elided label and exposes `natural-width`, `line-height`, and

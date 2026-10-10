@@ -298,6 +298,12 @@ SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏显示连接
 返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
+
+Windows、Linux 和 macOS 的应用内弹出菜单统一跟随所选 AxSSH 配色，包括终端、会话、
+SFTP 和文本编辑菜单。Up/Down 或 Home/End 选择可用动作，Enter/Space 激活，Escape 或
+点击外部关闭；“最近打开”可通过悬停、点击或 Right 展开子菜单，Left 返回父菜单，长菜单
+可以滚动。秘密输入仍只提供 Paste。macOS 屏幕顶部菜单栏保留系统外观。
+
 Windows/Linux 主窗口的菜单和窗口按钮共用顶部一行，不再显示单独的系统标题栏。拖动该行空白处可移动窗口，
 双击空白处可最大化或还原。独立窗口也使用无边框控件，并在顶栏左侧提供 Return；拖动其顶栏空白处也可移动独立窗口；关闭独立窗口仍会把工作区合并回主窗口。
 独立窗口标题栏图标复用手动选择和已有识别结果，不会再次探测服务器；Local Shell 使用本机图标或已保存的手动选择。
