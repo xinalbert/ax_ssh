@@ -685,7 +685,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     profile 探测租约拒绝旧 attempt 结果，并合并 SSH/SFTP 请求。成功缓存跨 Tab 关闭和重启保留。
     编辑器显式重置只在保存成功后清除缓存与在途元数据，下次自动模式连接重新探测；修改目标使
     识别失效并保留手动选择。删除 profile 清理瞬时元数据；导出移除识别数据、保留手动标识。
-    Local Shell 图标独立立即保存，Settings 预览/保存保留该值。Slint 持有选择 draft 与手势，
+    Local Shell 图标独立立即保存，Settings 预览/保存保留该值。`SystemIconPicker` 保持 32px 控件高度，
+    居中显示 20px 图标、系统显示名称和展开箭头；独立的 360px `PopupWindow` 包含搜索、自动选项及
+    六行虚拟列表，并标记当前选项。展开不改变表单或 Settings 行高；Settings 弹层右边缘对齐，编辑器
+    在紧凑控件下方展开。内置 `is-open` 驱动展开反馈，点击外部或 Escape 不提交选择，显式关闭/选择后
+    恢复控件焦点。纯 `system-icon-choice` callback 从内置领域目录按规范标识或别名查询单个有界显示 DTO，
+    不依赖子串搜索结果，不执行 I/O。Slint 持有选择 draft 与手势，
     config 提供有界领域选择，不持有生成 UI 类型、网络句柄、凭据或资源路径。旧的组名字符数配置继续兼容读取和
     保存，不再影响侧栏宽度或图标；Settings 移除对应的文字徽标选项。
     自定义 Group 行可通过键盘获得焦点，Enter/Space 与点击执行

@@ -681,6 +681,7 @@ pub(super) fn wire_settings(
     ui.on_system_icon_choices(|query| {
         ModelRc::new(VecModel::from(system_icon_choices(query.as_str())))
     });
+    ui.on_system_icon_choice(|id| system_icon_choice(id.as_str()));
     let state_for_icon = state.clone();
     let ui_for_icon = ui.as_weak();
     let runtime_for_icon = runtime.clone();
@@ -1163,6 +1164,21 @@ fn system_icon_choices(query: &str) -> Vec<SystemIconChoiceRow> {
             family: icon.family.into(),
         })
         .collect()
+}
+
+fn system_icon_choice(value: &str) -> SystemIconChoiceRow {
+    ax_ssh::config::system_icon_id(value)
+        .and_then(|id| {
+            ax_ssh::config::system_icon_choices()
+                .iter()
+                .find(|icon| icon.id == id)
+        })
+        .map(|icon| SystemIconChoiceRow {
+            id: icon.id.into(),
+            name: icon.name.into(),
+            family: icon.family.into(),
+        })
+        .unwrap_or_default()
 }
 
 fn save_local_shell_icon(
@@ -1677,5 +1693,20 @@ fn icon_picker_search_uses_shared_names_ids_and_aliases() {
     assert_eq!(
         settings_search_results("本地终端图标", "simplified-chinese")[0].section,
         "General"
+    );
+}
+
+#[test]
+fn icon_picker_current_name_uses_exact_identity_instead_of_search_matches() {
+    assert_eq!(system_icon_choice("linux").name, "Linux");
+    assert_eq!(system_icon_choice("ubuntu").name, "Ubuntu");
+    let rocky = system_icon_choice("Rocky Linux");
+    assert_eq!(rocky.id, "rocky-linux");
+    assert_eq!(rocky.name, "Rocky Linux");
+    assert_eq!(system_icon_choice("microsoft").id, "windows");
+    assert_eq!(system_icon_choice(""), SystemIconChoiceRow::default());
+    assert_eq!(
+        system_icon_choice("unknown-system"),
+        SystemIconChoiceRow::default()
     );
 }

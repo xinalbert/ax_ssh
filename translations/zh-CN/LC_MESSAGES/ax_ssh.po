@@ -1135,6 +1135,9 @@ msgstr "选择此已保存连接使用的传输方式。"
 msgid "Select {0}"
 msgstr "选择 {0}"
 
+msgid "Selected"
+msgstr "已选择"
+
 msgid "Selection"
 msgstr "选择"
 

@@ -1143,7 +1143,16 @@ tab-local terminal connection notice deliberately remains non-blocking.
     edits invalidate detection while preserving manual choices. Profile deletion
     removes transient metadata; exports omit detected data and preserve manual IDs.
     Local Shell selection saves independently and immediately; Settings preview/save
-    preserves it. Slint owns picker drafts and gestures; config exposes bounded choices
+    preserves it. `SystemIconPicker` keeps a fixed 32px control with a centered 20px
+    glyph, display name and chevron. Its separate 360px `PopupWindow` contains search,
+    Automatic, and a virtualized six-row list with current-choice marks. Opening it
+    does not change the form or Settings row height. Settings aligns the popup's
+    trailing edge; the editor anchors it beneath the compact control. Popup `is-open`
+    owns expansion feedback; outside-click dismissal and Escape do not select, and
+    explicit dismissal/selection restores control focus. The pure `system-icon-choice`
+    callback resolves a canonical ID or alias to one bounded display DTO from the
+    bundled domain catalog, independently of substring search results; it performs no I/O.
+    Slint owns picker drafts and gestures; config exposes bounded choices
     without generated UI types, network handles, credentials, or artwork paths.
     The legacy group-label-length field remains readable and writable for storage
     compatibility but no longer controls rail width or icons; Settings removes

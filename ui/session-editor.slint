@@ -47,6 +47,7 @@ export struct SessionEditorViewState {
 
 export component SessionEditorPane inherits Rectangle {
     pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
+    pure callback system-icon-choice(string) -> SystemIconChoiceRow;
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
@@ -265,11 +266,16 @@ export component SessionEditorPane inherits Rectangle {
                         label: @tr("System icon");
                         description: @tr("Manual selection takes priority over automatic detection.");
                     }
-                    SystemIconPicker {
-                        icon-id: root.icon-draft;
-                        automatic-platform: root.reset-system-draft ? "server" : root.source.automatic_system_icon;
-                        choices(query) => { return root.system-icon-choices(query); }
-                        selected(id) => { root.icon-draft = id; }
+                    HorizontalLayout {
+                        alignment: start;
+                        SystemIconPicker {
+                            width: Theme.settings-field-width;
+                            icon-id: root.icon-draft;
+                            automatic-platform: root.reset-system-draft ? "server" : root.source.automatic_system_icon;
+                            choices(query) => { return root.system-icon-choices(query); }
+                            choice(id) => { return root.system-icon-choice(id); }
+                            selected(id) => { root.icon-draft = id; }
+                        }
                     }
                     if !root.source.detected_system_release.is-empty : Text {
                         text: @tr("Detected system: {}", root.source.detected_system_release);

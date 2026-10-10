@@ -385,8 +385,12 @@ use a shared 20px icon box in the sidebar; the `+` connection list uses the same
 size for server icons. Indentation and disclosure arrows express the sidebar
 hierarchy. Tab and detached title-bar icons retain their compact 16px size.
 
-In the server editor, **System icon** opens a searchable list of bundled system
-names. A manual choice takes priority; **Automatic** restores automatic selection.
+In the server editor, **System icon** is a compact dropdown with the current icon
+and system display name. Its separate search popup shows up to six rows at once,
+with centered icons and a check beside the current choice; it leaves the form's
+height unchanged. Search by name, ID, or alias. Use arrow keys and Enter to select,
+or Escape/click outside to dismiss. The **Automatic** row restores automatic
+selection. A manual choice takes priority.
 The profile's optional `system_icon_override` stores the canonical ID. Successful
 SSH/SFTP discovery saves a bounded release label and icon ID in the profile's
 `detected_system`; later connections, closed tabs, and application restarts reuse

@@ -401,6 +401,7 @@ TRANSLATIONS = {
     "Select all files": "选择所有文件",
     "Select the transport used by this saved connection.": "选择此已保存连接使用的传输方式。",
     "Select {0}": "选择 {0}",
+    "Selected": "已选择",
     "Selection": "选择",
     "Send Option+key as an Escape-prefixed Meta key": "将 Option+按键作为带 Escape 前缀的 Meta 键发送",
     "Serial": "串口",

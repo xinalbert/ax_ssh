@@ -33,6 +33,7 @@ import {
 // read-only component DTOs; local interaction state belongs to child components.
 export component AppWindow inherits Window {
     pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
+    pure callback system-icon-choice(string) -> SystemIconChoiceRow;
     no-frame: !root.apple-platform;
     resize-border-width: root.apple-platform ? 0px : Theme.desktop-resize-border-width;
     title: root.detached-window && !root.active-tab-title.is-empty
@@ -1016,6 +1017,7 @@ export component AppWindow inherits Window {
             save-ui-language(index) => { root.save-ui-language(index); }
             save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
             system-icon-choices(query) => { return root.system-icon-choices(query); }
+            system-icon-choice(id) => { return root.system-icon-choice(id); }
             connect-session(id) => { root.connect-session(id); }
             open-sftp-session(id) => { root.open-sftp-session(id); }
             save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-max-file-gib, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,

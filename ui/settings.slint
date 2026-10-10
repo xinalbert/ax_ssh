@@ -139,6 +139,7 @@ export struct SettingsSearchEntry {
 
 export component SettingsPane inherits Rectangle {
     pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
+    pure callback system-icon-choice(string) -> SystemIconChoiceRow;
     in property <SettingsViewState> source;
     in property <string> tab-id;
     in property <string> requested-section: "General";
@@ -773,6 +774,7 @@ export component SettingsPane inherits Rectangle {
                         save-ui-language(index) => { root.save-ui-language(index); }
                         save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
                         system-icon-choices(query) => { return root.system-icon-choices(query); }
+                        system-icon-choice(id) => { return root.system-icon-choice(id); }
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "SFTP" : SftpSettingsPage {

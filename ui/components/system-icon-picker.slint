@@ -1,6 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { ElidedButton } from "elided-controls.slint";
+import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
 import { FlatTextInput } from "flat-text-input.slint";
 import { SidebarPlatformGlyph } from "sidebar-controls.slint";
 
@@ -8,86 +8,263 @@ export struct SystemIconChoiceRow { id: string, name: string, family: string }
 
 component IconChoiceItem inherits FocusScope {
     in property <SystemIconChoiceRow> choice;
+    in property <string> platform: root.choice.id;
+    in property <bool> current;
+    in property <bool> highlighted;
     callback selected(string);
     height: Theme.combo-box-popup-row-height;
     focus-on-click: true;
     focus-on-tab-navigation: true;
     accessible-role: button;
     accessible-label: root.choice.name;
+    accessible-value: root.current ? @tr("Selected") : "";
     key-pressed(event) => {
-        if event.text == Key.Return || event.text == " " {
+        if event.text == Key.Return || event.text == Key.Space {
             root.selected(root.choice.id);
             return EventResult.accept;
         }
         return EventResult.reject;
     }
     Rectangle {
-        background: touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        border-radius: Theme.radius-small;
+        background: root.highlighted || root.has-focus || touch.has-hover
+            ? Theme.hover : (root.current ? Theme.selected : transparent);
         border-width: root.has-focus ? Theme.hairline : 0px;
         border-color: Theme.focus;
         HorizontalLayout {
-            padding-left: Theme.space-sm;
-            padding-right: Theme.space-sm;
+            padding-left: Theme.combo-box-horizontal-padding;
+            padding-right: Theme.combo-box-horizontal-padding;
             spacing: Theme.space-sm;
-            SidebarPlatformGlyph { platform: root.choice.id; }
-            Text {
+            Rectangle {
+                width: Theme.sidebar-glyph-size;
+                horizontal-stretch: 0;
+                SidebarPlatformGlyph {
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.sidebar-glyph-size;
+                    height: Theme.sidebar-glyph-size;
+                    platform: root.platform;
+                    accessible-role: none;
+                }
+            }
+            ElidedLabel {
                 text: root.choice.name;
-                color: Theme.text;
+                text-color: Theme.text;
                 font-size: Theme.font-body;
-                vertical-alignment: center;
-                overflow: elide;
+                font-weight: root.current ? 600 : 400;
                 horizontal-stretch: 1;
             }
+            Rectangle {
+                width: Theme.combo-box-chevron-size;
+                horizontal-stretch: 0;
+                if root.current : Path {
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.combo-box-chevron-size;
+                    height: Theme.combo-box-chevron-size;
+                    commands: "M 1 6 L 4.5 9.5 L 11 2.5";
+                    fill: transparent;
+                    stroke: Theme.accent;
+                    stroke-width: Theme.combo-box-chevron-stroke;
+                    stroke-line-cap: round;
+                    stroke-line-join: round;
+                    accessible-role: none;
+                }
+            }
         }
-        touch := TouchArea { clicked => { root.selected(root.choice.id); } }
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.selected(root.choice.id); }
+        }
     }
 }
 
-export component SystemIconPicker inherits Rectangle {
+export component SystemIconPicker inherits FocusScope {
     in property <string> icon-id;
     in property <string> automatic-platform: "server";
+    in property <bool> popup-align-end;
+    pure callback choice(string) -> SystemIconChoiceRow;
     pure callback choices(string) -> [SystemIconChoiceRow];
     callback selected(string);
-    private property <bool> expanded: false;
     private property <string> query;
     private property <[SystemIconChoiceRow]> filtered: root.choices(root.query);
+    private property <SystemIconChoiceRow> current-choice: root.choice(root.icon-id);
+    private property <string> current-name: root.icon-id.is-empty
+        ? @tr("Automatic") : (root.current-choice.name.is-empty ? root.icon-id : root.current-choice.name);
+    private property <int> highlighted-index: -1;
+    private property <length> scroll-y: 0px;
+    private property <bool> popup-open: popup.is-open;
+    min-width: 0px;
+    preferred-width: Theme.settings-field-width;
+    min-height: Theme.combo-box-control-height;
+    max-height: Theme.combo-box-control-height;
     horizontal-stretch: 1;
     vertical-stretch: 0;
-    height: content.preferred-height;
-    content := VerticalLayout {
-        spacing: Theme.space-sm;
-        HorizontalLayout {
-            spacing: Theme.space-sm;
-            SidebarPlatformGlyph {
-                platform: root.icon-id.is-empty ? root.automatic-platform : root.icon-id;
-            }
-            ElidedButton {
-                text: root.icon-id.is-empty ? @tr("Automatic") : root.icon-id;
-                clicked => { root.expanded = !root.expanded; }
-            }
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: combobox;
+    accessible-label: @tr("System icon");
+    accessible-value: root.current-name;
+    accessible-expandable: true;
+    accessible-expanded: root.popup-open;
+    accessible-enabled: root.enabled;
+    accessible-action-expand => { root.show-popup(); }
+
+    function show-popup() {
+        if !root.enabled { return; }
+        root.query = "";
+        root.highlighted-index = -1;
+        root.scroll-y = 0px;
+        popup.show();
+    }
+    function close-popup() {
+        popup.close();
+        root.focus();
+    }
+    function select(id: string) {
+        root.selected(id);
+        root.close-popup();
+    }
+    function move-highlight(delta: int) {
+        if root.filtered.length == 0 { return; }
+        root.highlighted-index = (root.highlighted-index + delta).clamp(0, root.filtered.length - 1);
+        root.scroll-y = -max(0, root.highlighted-index - Theme.combo-box-popup-max-visible-items + 1)
+            * Theme.combo-box-popup-row-height;
+    }
+    changed query => {
+        root.highlighted-index = -1;
+        root.scroll-y = 0px;
+    }
+    key-pressed(event) => {
+        if event.text == Key.Return || event.text == Key.Space || event.text == Key.DownArrow {
+            root.show-popup();
+            return EventResult.accept;
         }
-        if root.expanded : VerticalLayout {
+        return EventResult.reject;
+    }
+
+    Rectangle {
+        border-radius: Theme.radius-small;
+        border-width: Theme.hairline;
+        border-color: root.has-focus || root.popup-open ? Theme.focus : Theme.control-border;
+        background: control-touch.has-hover || root.popup-open ? Theme.hover : Theme.panel;
+        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+        HorizontalLayout {
+            padding-left: Theme.combo-box-horizontal-padding;
+            padding-right: Theme.combo-box-horizontal-padding;
             spacing: Theme.space-sm;
-            ElidedButton {
-                text: @tr("Automatic");
-                clicked => { root.selected(""); root.expanded = false; root.query = ""; }
-            }
-            FlatTextInput {
-                text <=> root.query;
-                placeholder-text: @tr("Search system icons");
-                accessible-label: @tr("Search system icons");
-            }
-            ListView {
-                height: Theme.combo-box-popup-row-height * 6;
-                for choice in root.filtered : IconChoiceItem {
-                    choice: choice;
-                    selected(id) => { root.selected(id); root.expanded = false; root.query = ""; }
+            Rectangle {
+                width: Theme.sidebar-glyph-size;
+                horizontal-stretch: 0;
+                SidebarPlatformGlyph {
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.sidebar-glyph-size;
+                    height: Theme.sidebar-glyph-size;
+                    platform: root.icon-id.is-empty ? root.automatic-platform : root.icon-id;
+                    accessible-role: none;
                 }
             }
-            if root.filtered.length == 0 : Text {
-                text: @tr("No matching system icons");
-                color: Theme.muted;
-                font-size: Theme.font-small;
+            control-label := ElidedLabel {
+                text: root.current-name;
+                tooltip-enabled: false;
+                text-color: Theme.text;
+                font-size: Theme.font-body;
+                horizontal-stretch: 1;
+            }
+            Rectangle {
+                width: Theme.combo-box-chevron-size;
+                horizontal-stretch: 0;
+                Path {
+                    y: (parent.height - self.height) / 2;
+                    width: Theme.combo-box-chevron-size;
+                    height: Theme.combo-box-chevron-size;
+                    commands: root.popup-open ? "M 2 9 L 6 5 L 10 9" : "M 2 5 L 6 9 L 10 5";
+                    fill: transparent;
+                    stroke: Theme.muted;
+                    stroke-width: Theme.combo-box-chevron-stroke;
+                    stroke-line-cap: round;
+                    stroke-line-join: round;
+                    accessible-role: none;
+                }
+            }
+        }
+        control-touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: pointer;
+            clicked => {
+                if root.popup-open { root.close-popup(); } else { root.show-popup(); }
+            }
+        }
+        if control-label.overflowed : Tooltip {
+            ElidedTooltipContent { text: root.current-name; }
+        }
+    }
+
+    popup := PopupWindow {
+        x: root.popup-align-end ? min(0px, root.width - self.width) : 0px;
+        y: root.height + Theme.combo-box-popup-offset;
+        width: Theme.system-icon-picker-popup-width;
+        height: popup-layout.preferred-height;
+        close-policy: close-on-click-outside;
+        forward-focus: popup-focus;
+        popup-focus := FocusScope {
+            forward-focus: search;
+            key-pressed(event) => {
+                if event.text == Key.Escape {
+                    root.close-popup();
+                    return EventResult.accept;
+                }
+                if event.text == Key.UpArrow || event.text == Key.DownArrow {
+                    root.move-highlight(event.text == Key.UpArrow ? -1 : 1);
+                    return EventResult.accept;
+                }
+                return EventResult.reject;
+            }
+            Rectangle {
+                background: Theme.panel;
+                border-width: Theme.hairline;
+                border-color: Theme.frame-border;
+                border-radius: Theme.radius;
+                clip: true;
+                popup-layout := VerticalLayout {
+                    padding: Theme.space-sm;
+                    spacing: Theme.space-sm;
+                    search := FlatTextInput {
+                        height: Theme.settings-control-height;
+                        text <=> root.query;
+                        placeholder-text: @tr("Search system icons");
+                        accessible-label: @tr("Search system icons");
+                        accepted(_) => {
+                            if root.filtered.length > 0 {
+                                root.select(root.filtered[max(0, root.highlighted-index)].id);
+                            }
+                        }
+                    }
+                    IconChoiceItem {
+                        choice: { id: "", name: @tr("Automatic"), family: "" };
+                        platform: root.automatic-platform;
+                        current: root.icon-id.is-empty;
+                        selected(id) => { root.select(id); }
+                    }
+                    Rectangle { height: Theme.hairline; background: Theme.divider; }
+                    if root.filtered.length > 0 : ListView {
+                        height: min(root.filtered.length, Theme.combo-box-popup-max-visible-items)
+                            * Theme.combo-box-popup-row-height;
+                        content-y <=> root.scroll-y;
+                        for option[index] in root.filtered : IconChoiceItem {
+                            choice: option;
+                            current: option.id == root.icon-id;
+                            highlighted: index == root.highlighted-index;
+                            selected(id) => { root.select(id); }
+                        }
+                    }
+                    if root.filtered.length == 0 : Text {
+                        height: Theme.combo-box-popup-row-height;
+                        text: @tr("No matching system icons");
+                        color: Theme.muted;
+                        font-size: Theme.font-small;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
+                }
             }
         }
     }
