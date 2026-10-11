@@ -184,8 +184,8 @@ Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。�
 SFTP 浏览器即使空闲也会发现 SSH 连接或 SFTP 子通道断开；重连会恢复上一次显示的远端目录，若尚未加载目录则保留该 Tab 的初始目标。
 未完成的传输不会自动重放。远端目录权限错误只影响该次请求；正常 SSH 安全流程仍可能要求输入密码或确认主机密钥。
 
-远端文件行右键菜单支持删除选中条目（目录不递归）；**Download** 和 **Delete** 不再占用目录顶部工具栏。
-其余远端控件保留重命名和 **Edit**。Edit 下载私有本地副本，并调用 Windows、macOS 或 Linux 中该扩展名关联的程序；AxSSH 不再提供内置 SFTP 编辑器。文本编码和二进制字节保持原样，下载和保存的副本统一使用 **Settings > SFTP > 远程编辑文件大小上限（MiB）**，默认 4 MiB，可设置为 1–64 MiB；超过所设上限的文件可使用常规下载、系统编辑、上传流程。文件关联由操作系统设置，启动失败会报告错误，不回退到内置编辑器。
+远端文件行右键菜单提供 **Download**、**Rename** 和 **Delete**（删除目录不递归）。**Rename** 只操作单个条目，弹窗预填当前名称，Enter 确认、Escape 取消。在未选中行选择动作会仅选中该行；多选时，已选中行的 Rename 禁用。顶部工具栏保留 **Edit**。
+Edit 下载私有本地副本，并调用 Windows、macOS 或 Linux 中该扩展名关联的程序；AxSSH 不再提供内置 SFTP 编辑器。文本编码和二进制字节保持原样，下载和保存的副本统一使用 **Settings > SFTP > 远程编辑文件大小上限（MiB）**，默认 4 MiB，可设置为 1–64 MiB；超过所设上限的文件可使用常规下载、系统编辑、上传流程。文件关联由操作系统设置，启动失败会报告错误，不回退到内置编辑器。
 
 在外部程序中保存副本后，AxSSH 经 500 ms 防抖上传变化。**Auto upload** 默认开启，对当前 Tab 的全部编辑文件生效；关闭后，使用 **Upload changes** 回传编辑状态栏中显示的文件。再次对同一远端文件点击 Edit 会重新打开已有副本，保留待上传改动。每 Tab 最多编辑 8 个文件。**Show local copy** 在系统文件管理器中显示副本；**Stop editing**、断线、重连或关闭 Tab 会停止监听，但保留本地副本，重连不会重放旧编辑。应用缓存的 `sftp-edit` 目录最多保留 128 份副本；达到上限后，请保留需要的文件并在系统文件管理器中清理旧副本。外部程序另存为其他本地文件名不会改变监听文件或远端目标，新文件可通过常规上传操作回传。
 
@@ -298,13 +298,16 @@ Tab 时保留侧栏当前选择，终端和编辑器的键盘输入焦点不会�
 在既有分屏 pane 之间切换时，目标 pane 会立即取得输入焦点。
 
 要把已连接 Terminal 及其当前工作区中的 terminal pane 作为独立原生窗口使用，可点击连接
-Tab 上的外链按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
+Tab 上的重叠窗口按钮，或选择 **Window > Move Current Workspace to New Window**。所有 terminal pane
 及其 SSH/SFTP companion 会作为一个工作区组移动，保留已有终端输出、SFTP 目录状态、传输队列、
 主机密钥提示和认证阶段。SSH、Telnet、Serial 在非主动断开后会自动重连，最多 5 次，退避为 1、2、4、8、16 秒并封顶 30 秒。当前活动 pane 的连接错误和重试提示在窗口中央显示，详情可滚动，不阻止切换其他 Tab。detached Terminal 窗口只显示 terminal pane，detached
 SFTP 视图只显示 SFTP。macOS 的 detached 窗口原生标题栏显示连接的系统图标，并匹配当前 Terminal 或 SFTP 客户区表面色；点击同一行的重叠窗口
 返回图标可把同一份工作区布局合并回主窗口，悬停时会显示 **Return workspace to main window**。直接关闭 detached
 窗口也会执行合并，worker 继续运行。Settings 和会话
 编辑器 Tab 保留在主窗口。
+主窗口和 macOS 独立窗口共用分屏及重叠窗口图标，分屏图标尺寸、按钮间距保持一致。
+独立窗口按钮不显示系统默认底座，图标颜色随 AxSSH 主题更新。
+Windows/Linux 独立窗口的控件行也使用同一返回图标。
 
 Windows、Linux 和 macOS 的应用内弹出菜单统一跟随所选 AxSSH 配色，包括终端、会话、
 SFTP 和文本编辑菜单。Up/Down 或 Home/End 选择可用动作，Enter/Space 激活，Escape 或

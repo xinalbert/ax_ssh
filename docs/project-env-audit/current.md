@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：SFTP 远程编辑文件大小的设置、持久化与动态操作边界；复用现有 Slint/config/SFTP 架构。前轮性能、系统关联编辑和终端媒体实现保留，无依赖或 CI 变化。
+- 当前环境范围：主窗口/独立窗口共用图标、macOS 原生标题栏外观桥接与 SFTP 右键重命名；复用现有 Slint/AppKit、覆盖层和 SFTP worker 架构，无依赖或 CI 变化。
 
 ## 运行环境
 
@@ -13,7 +13,9 @@
 
 ## 测试环境
 
-- 当前大小设置代码已通过 743 项全量测试（349 library + 394 binary，24 项专项）、fmt、locked/offline check、严格 all-target Clippy 和 native ARM64 build，Slint 已重编；562 条翻译、30 条相对链接、skill/tracker/diff 通过。本轮 Intel/Windows/Linux 原生构建和 GUI/真实远端未运行。
+- 本轮窗口图标与右键重命名的最终 Slint 重编、2 项重命名目标回归、fmt、locked/offline check、严格 all-target Clippy、库/应用全量测试（应用 396 项）和默认 build 全部通过。ARM64/Intel macOS 的 CI 同款 check/严格 Clippy/build 及 Mach-O 架构核对通过；562 条翻译、10 条相对链接与 skill/tracker/diff 通过。当前程序为 `target/debug/ax_ssh`，两个架构分别位于 `target/<macOS-target>/debug/ax_ssh`。
+- 本轮 Intel Skia 下载 HTTP/2 失败及 googlesource 超时后，已核对完整本机归档的 tag 0.153.3 与 x86_64/ganesh-gl-jpegd-jpege-metal-pdf key，使用临时 SKIA_BINARIES_URL=file URL 完成目标门禁；不修改依赖、工具链或 CI。没有运行非原生 Intel 测试，Windows/Linux 与 GUI/真实远端仍待验收。
+- 前轮大小设置代码已通过 743 项全量测试（349 library + 394 binary，24 项专项）、fmt、locked/offline check、严格 all-target Clippy 和 native ARM64 build，Slint 已重编；562 条翻译、30 条相对链接、skill/tracker/diff 通过。该轮 Intel/Windows/Linux 原生构建和 GUI/真实远端未运行。
 - 前轮系统关联外部编辑代码已通过 737 项全量测试（345 library + 392 binary，18 项专项）、格式、locked/offline check、严格 all-target Clippy，Slint 已重编译；559 条翻译、30 条相对文档链接与 skill/tracker/diff 检查通过。两个 macOS target 的 CI 同款 check/严格 all-target Clippy/build 和 Mach-O 检查全部通过；真实系统关联/GUI/远端及 Windows/Linux 原生验证仍待完成。
 - 前轮终端媒体完整测试 707 项（329 library + 378 binary）通过，涵盖 45 种音频格式、OSC 52、SFTP 附件、helper 清理、本机转写和非 bracketed paste 终端的插入边界；fmt/check/严格 all-target Clippy，以及两种 macOS 架构的显式 check/严格 Clippy/build 全部通过。560 条翻译、16 条相对文档链接、skill/tracker/diff 已通过。
 - 最终 ARM64 预览位于 `target/agent-media-preview/AxSSH.app`，含麦克风用途声明、字体和许可；ad-hoc 签名验证及 Mach-O 的 macOS 11 最低版本检查通过。没有启动 GUI、打开真实麦克风或连接实际远端服务；Windows/Linux 仍由原生 CI 与真机验收。
@@ -51,10 +53,13 @@ git diff --check
 
 ## 证据文件
 
+- 本轮：`ui/icons/`、`ui/theme.slint`、`ui/components/{workspace-titlebar,desktop-menu-titlebar,overlay-host,sftp-rename-dialog}.slint`、`ui/sftp-pane.slint`、`ui/workspace-shell.slint`、`ui/app.slint`、`src/app/{macos_window,window_bridge,sftp_bridge}.rs`、`src/app/view/settings.rs`。
 - `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app.rs`、`src/app/terminal_render.rs`、`src/app/terminal_render/highlighting.rs`、`src/app/terminal_targets.rs`、`src/app/terminal_bridge.rs`、`src/app/terminal_media.rs`、`src/audio.rs`、`src/media.rs`、`src/ssh/worker/media.rs`、`packaging/macos/Info.plist`、`docs/usage.md`、`docs/usage.zh.md`、`docs/architecture.md`、`docs/architecture.zh.md`。
 
 ## 最后确认时间
 
+- 2026-10-12 00:01 +0800：窗口图标与右键重命名施工及本机门禁完成，两个 macOS 架构检查/严格 Clippy/构建通过；Intel 使用匹配本机 Skia 归档恢复下载失败，不运行其非原生测试。未改依赖、工具链或 CI，GUI/真实远端和 Windows/Linux 验收保留。
+- 2026-10-11 23:07 +0800：窗口动作图标施工预检通过；已核对 Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1 与原生 CI 命令，允许开工。本轮自动门禁待实现后执行。
 - 2026-10-11 19:23 +0800：远程编辑上限改为 Settings > SFTP 可配置（1–64 MiB/default 4，schema v36）；743 项测试及完整本机 Cargo 门禁通过，当前新程序为 `target/debug/ax_ssh`。
 - 2026-10-11 18:52 +0800：SFTP 外部编辑的最终 737 项测试与两个 macOS 架构门禁完成；没有新增依赖、工具链或 CI 变化。当前可运行程序为 `target/<macOS-target>/debug/ax_ssh`，真实关联程序/远端/GUI 与 Windows/Linux 原生验证待验收。
 - 2026-10-11 10:22 +0800：高亮/URL 与终端媒体实现已本地提交；最终源码 707 项测试及两种 macOS 架构 check/严格 Clippy/build 和 ARM64 预览打包通过，真实设备/远端、GUI 和 Windows/Linux 原生 CI 验收保留。

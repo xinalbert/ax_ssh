@@ -304,10 +304,12 @@ initial target if no page loaded yet); unfinished transfers are not replayed.
 Directory permission errors stay on the current connection. A password prompt
 or host-key confirmation may still be required by the normal SSH security flow.
 
-The remote row context menu also supports deleting its selected files and
-directories (directories are non-recursive). Download and Delete no longer
-occupy the directory toolbar. The remaining remote controls support renaming
-one selected entry and **Edit** in the system-associated application. Edit downloads
+The remote row context menu offers **Download**, **Rename**, and **Delete**
+(directory deletion is non-recursive). **Rename** accepts one selected entry
+and opens a dialog with its current name; Enter confirms and Escape cancels.
+On an unselected row, choosing an action selects only that row. Rename is
+disabled on a selected row when multiple entries are selected. The directory
+toolbar retains **Edit** in the system-associated application. Edit downloads
 a private local copy and opens the program associated with its extension on
 Windows, macOS, or Linux. AxSSH has no built-in SFTP editor. Text encodings and
 binary bytes are preserved. **Settings > SFTP > Remote edit file limit (MiB)**
@@ -509,7 +511,7 @@ Terminal Tab's input focus automatically (unless a blocking dialog is open).
 Moving between existing split panes focuses the destination immediately.
 
 To make a connected Terminal and any terminal panes in its current workspace a
-separate native window, use the external-link button on a connection Tab or
+separate native window, use the overlapping-window button on a connection Tab or
 choose **Window > Move Current Workspace to New Window**. The terminal panes and
 their SSH/SFTP companions move as one workspace group and keep existing terminal
 output, SFTP directory state, transfers, host-key prompts, and authentication
@@ -526,6 +528,10 @@ the icon shows **Return workspace to main
 window**. Closing the detached window performs the same merge and
 leaves workers running. Settings and session-editor Tabs remain in the main
 window.
+The main and detached macOS windows share the same split and overlapping-window
+icon artwork. Their split icons and button spacing match; detached
+buttons have no system bezel, and their icon colors update with the AxSSH theme.
+Windows/Linux use the shared return icon in their detached control row too.
 
 Application popup menus follow the selected AxSSH palette on Windows, Linux,
 and macOS, including terminal, session, SFTP, and text-edit menus. Use Up/Down

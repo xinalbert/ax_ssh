@@ -1106,3 +1106,34 @@
 - 环境变化：无依赖、工具链或 CI 修改。
 - 验证结果：24 项专项、743 项完整测试、fmt/check/严格 all-target Clippy、native ARM64 build/Mach-O、562 条翻译、30 条链接和 skill/tracker/diff 通过；程序为 `target/debug/ax_ssh`。
 - 验证缺口：本轮未跑 Intel/Windows/Linux 原生 CI，GUI/系统程序/真实远端仍待验收；不自行截图、提交或发行。
+
+## 2026-10-11 标题栏图标预检
+
+- 当前范围：Slint 共用 SVG/Theme 与 macOS 原生按钮外观。
+- 环境核对：Cargo/lock/build.rs/CI 与 Rust/Cargo 1.97.1、两个 macOS target 一致；Rust 2024/MSRV 1.92.0、Slint 1.18.1 保持。
+- 开工判定：允许开工；无依赖或 CI 变化，Windows/Linux SDK 缺失，GUI 由用户验收。
+
+## 2026-10-11 23:07 +0800 窗口动作图标施工预检
+
+- 目的：统一主/子窗口图标前复核 Slint 与 macOS 原生桥接的环境。
+- 改动范围：`ui/`、`src/app/macos_window.rs`、`src/app/window_bridge.rs`、`src/app/view/settings.rs` 与双语文档；无依赖、工具链或 CI 变化。
+- 执行内容：读取现有记忆、Cargo/lock/build/CI、工程技能及相关源码，确认 Rust/Cargo 1.97.1 与两个 macOS target 已安装。
+- 验证结果：Rust 2024/MSRV 1.92.0、Slint 1.18.1 保持，允许开工；自动门禁待实现后执行。
+- 风险/待办：Windows/Linux 缺少 SDK；GUI 视觉和原生交互由用户验收。
+- 开工判定：允许开工。
+
+## 2026-10-11 图标与右键重命名 Intel 构建环境复核
+
+- 触发原因：Intel target 的 Skia 预编译归档下载发生 HTTP/2 错误，源码回退无法连接 googlesource；Cargo offline 不覆盖依赖 build script 的下载。
+- 执行内容：从本机既有缓存找到完整 gzip/tar，核对 tag 0.153.3 与 b7f043e0b1e2a850e702-x86_64-apple-darwin-ganesh-gl-jpegd-jpege-metal-pdf key；复制到本轮临时缓存，以上游支持的 SKIA_BINARIES_URL=file URL 重新运行 Intel check/严格 all-target Clippy/build。
+- 环境变化：仅临时环境变量与构建缓存；未修改 Cargo/lockfile、工具链、依赖或 CI。
+- 验证结果：ARM64 默认和显式 target 门禁已通过；Intel 本地归档门禁运行中。
+- 风险/待办：不运行非原生 Intel 测试；Windows/Linux 和 GUI/真实远端验收保留。
+
+## 2026-10-12 00:01 +0800 图标与右键重命名环境验证完成
+
+- 改动范围：Slint 共用动作图标、AppKit 原生按钮、SFTP 行菜单/共享名称弹窗、应用层目标重验及双语记录。
+- 环境变化：无依赖、工具链或 CI 修改；Intel 验证使用匹配 tag/架构/特性的本机 Skia 归档与临时环境变量，初次下载失败已恢复。
+- 验证结果：2 项重命名目标专项、fmt、locked/offline check、严格 all-target Clippy、库/应用完整测试（应用 396 项）、默认 build 和 ARM64/Intel 的 CI 同款 check/严格 Clippy/build 全部通过；三份 Mach-O 架构正确。562 条翻译、10 条相对文档链接与 skill/tracker/diff 通过。
+- 验证缺口：不运行非原生 Intel 测试；Windows/Linux 原生平台、GUI 视觉/焦点与真实 SFTP 由 CI/用户验收。
+- 交付：新版程序为 `target/debug/ax_ssh`，目标程序为 `target/<macOS-target>/debug/ax_ssh`；不自行截图、不推送或发布。

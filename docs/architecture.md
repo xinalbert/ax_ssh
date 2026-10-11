@@ -1251,9 +1251,14 @@ Theme preview/save also refreshes native template tint using the existing
 `system_icons_follow_theme` value. Original colors remain the default. Native
 window destruction releases the image view and cache; no server discovery,
 credentials, represented file URL, or application icon is involved.
-Its macOS icon-only return button uses the system overlapping-window symbol,
-with the matching AppKit multiple-documents template fallback. Windows/Linux
-instead provide Return in the frameless control row. The client content contains only the active
+Its macOS icon-only return button consumes the same bundled overlapping-window
+SVG as the Slint Tab action; move and return reverse the foreground window.
+Theme supplies the 14px transfer icon, 16px split icons, 26px button width, 4px
+spacing, and muted foreground color. Native button height fits the title bar
+up to 26px so the icons stay centered. AppKit decodes bounded rasters once when
+installing borderless buttons and assigns the matching logical image sizes;
+it does not select SF Symbols or a system image fallback. Windows/Linux
+provide the shared Return SVG in the frameless control row. The client content contains only the active
 `TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
 connection picker, Settings, session editor, or client menu. `AppState` remains
 the sole owner of the Tab
@@ -1265,7 +1270,7 @@ contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
 secret.
 Theme preview and save propagate the existing `AppSettings` value to each live
 detached UI, then update its AppKit title-bar background from that UI's resolved
-client surface color. This appearance-only path keeps each window's local
+client surface color and action-icon tint. This appearance-only path keeps each window's local
 Slint theme coherent without routing AppKit state through `AppState`.
 Detached Terminal panes keep the same direct Copy/Paste/Select All keyboard
 handling even though no client menu is added.
@@ -1325,7 +1330,9 @@ the same `pane-command` callback as the keyboard route; Slint does not create a
 worker, mutate the layout, or add another top-level Tab. On macOS, a detached
 Terminal places the same image-only pair in its native title bar immediately
 before the Return icon, while its client area remains a full-height pane
-surface. Each native action captures only a weak `AppWindow` and invokes the
+surface. Both paths use Theme's images from `ui/icons/`; theme preview/save
+updates native tint without re-encoding the icons. AppKit retains native button
+keyboard, focus, and accessibility behavior. Each native action captures only a weak `AppWindow` and invokes the
 same callback, so `WindowRouter` continues to validate the focused pane. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
 neighbor and `Alt+Shift+H/J/K/L` to create a fresh terminal session on that
 side. A split of a local shell creates a new PTY; a split of SSH, Telnet, or
@@ -1672,9 +1679,13 @@ to its explicit destination through the normal local writer.
 Each remote file row owns a Slint-only context menu backed by the shared
 `FlatActionMenu`. Activating Download or Delete on an unselected row first
 replaces the remote selection with that row; activating it on a selected row
-preserves the current multi-selection. The menu then reuses the existing
-selection, download, and remove callbacks, so no path, handle, worker, or
-filesystem state is added to Slint. Selecting remote files or directories for
+preserves the current multi-selection. Rename is enabled for a single selected
+entry or an unselected row that will become the sole selection. `OverlayHost`
+owns its modal draft and original Tab/path; Enter confirms and Escape cancels,
+and SSH security prompts retain priority. The application revalidates the
+originating window's active Tab, stable directory, visible path, and sole
+selection before passing the existing rename operation to the worker. No
+network handles or filesystem operations enter Slint. Selecting remote files or directories for
 Download sends a small download-root intent to the worker. Worker-owned
 recursive discovery opens its own SFTP subsystem, rejects
 links and unsafe/non-regular entries, and produces owned file requests rooted
@@ -1760,8 +1771,8 @@ Cancellation and failures remove the partial data; a cancellation observed after
 publication removes the completed target before it can be reported successful.
 Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
-menu owns bounded Download and Delete intents; the remote toolbar retains
-rename and system-associated external edit operations. All selected local files and folders,
+menu owns bounded Download, single-entry Rename, and Delete intents; the remote
+toolbar retains system-associated external edit operations. All selected local files and folders,
 internal drag roots, and native dropped roots enter one batch command. Blocking
 local discovery preserves relative paths, skips links and filtered names, and
 caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,

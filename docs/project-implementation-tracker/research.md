@@ -536,3 +536,12 @@
 - 关键结论：内置/外部没有统一强制要求；外部模式为本地临时副本、关联/指定程序、保存检测、后台回传。FileZilla 可提示上传，Cyberduck 保存上传。WinSCP 不把复用进程的启动器退出当作文件关闭，并提供远端时间戳冲突检查。
 - 对实施计划的影响：采用用户要求的系统文件关联打开；删除内置文本 API；监听目录以兼容原子替换；自动上传可关闭；冲突/失败保留副本，迟到结果不得改写其他编辑上下文。
 - 未解决问题：系统文件关联与权限需目标平台人工验收；size/mtime 无法提供服务器端锁定或精确内容冲突检测。
+
+## 2026-10-11 23:21 +0800 原会话精确中断接口
+
+- 检索问题：如何只中断指定原会话的执行，并确认接手后不再同时修改项目。
+- 检索原因：用户明确授权中断原会话；本机控制 socket 的原始 JSONL 请求未成功，需要确认其真实传输协议。
+- 来源列表：[OpenAI Codex App Server](https://learn.chatgpt.com/docs/app-server)；本机已安装 Codex 的 CLI help 与生成的 TurnInterruptParams/ThreadReadParams schema。
+- 关键结论：Unix socket 使用 WebSocket HTTP Upgrade；初始化后可按 threadId 和 turnId 发送 turn/interrupt，thread/read 的 runtime status 可确认是否 idle。实际中断请求成功，原会话由 active 变为 idle；其遗留本项目构建进程另行按已核实的 PID 和 cwd 停止。
+- 对实施计划的影响：WI2 的最终验证由本会话独立执行，保留既有已落盘源码。工程实现本身不依赖外部资料，不改变依赖或平台接口版本。
+- 未解决问题：无；用户视觉与 Windows/Linux 原生验收仍按 WI3 保留。

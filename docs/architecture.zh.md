@@ -779,8 +779,12 @@ File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只�
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
 Slint 窗口。detached 窗口保留活动连接名作为系统窗口元数据；macOS 还将其显示在原生标题栏，并将该栏设为透明、使用当前
-客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。macOS 同一行的仅图标返回按钮使用系统重叠窗口符号，系统符号不可用时
-回退到对应的 AppKit 多文档模板图标；Windows/Linux 则在无边框控件行提供 Return。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。
+客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。macOS 同一行的仅图标返回按钮
+与 Slint Tab 动作共用内置重叠窗口 SVG，移出和返回通过交换前景窗口表达。
+Theme 提供 14px 转移图标、16px 分屏图标、26px 按钮宽度、4px 间距和 muted 前景色。
+原生按钮高度按标题栏限制为最多 26px，保证图标保持居中。
+AppKit 只在安装无底座按钮时解码有界 raster，并设置相同逻辑图像尺寸；不选择 SF Symbols 或系统图像 fallback。
+Windows/Linux 在无边框控件行使用同一 Return SVG。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。
 macOS 在红绿灯控件后显示连接的 16px 系统图标，Windows/Linux 无边框顶栏显示同一图标和连接名称。
 `WindowView.active_session` 只携带当前聚焦 pane 的已有 Tab summary（包括标签栏隐藏的子 pane），
 不使用根 Tab 的身份替代活动连接；view 共用标签栏的手动/缓存/本机/release 优先级，仅发布图标 ID 和 release。
@@ -796,7 +800,7 @@ macOS 使用内置图像源，按比例编码最大 64x64 的 raster，
 终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
 Tokio receiver、终端缓冲区或秘密。
 主题预览和保存会把既有 `AppSettings` 值同步到每个仍存活的 detached UI，再从该 UI 已解析的
-客户区表面色更新其 AppKit 标题栏背景。此纯外观路径保持各窗口本地 Slint theme 一致，
+客户区表面色和动作图标颜色更新其 AppKit 标题栏。此纯外观路径保持各窗口本地 Slint theme 一致，
 不会把 AppKit 状态写入 `AppState`。
 独立 Terminal 虽然不增加客户区菜单，仍保留相同的 Copy/Paste/Select All 直接键盘处理。
 主布局仅在非 detached 窗口创建自己的 `TerminalPaneGroup`。仅隐藏布局不会停止终端计时器，
@@ -837,6 +841,8 @@ divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只
 Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。macOS 的独立 Terminal 将同一组仅图标控件
 放在原生标题栏、紧邻返回图标左侧，客户区保持为全高 pane 表面。每个原生动作只捕获 weak `AppWindow`
 并调用同一 callback，仍由 `WindowRouter` 校验当前 focused pane。
+两条路径都使用 Theme 中的 `ui/icons/` 图像；主题预览/保存只更新原生 tint，不重新编码图标。
+AppKit 保留原生按钮的键盘、焦点和无障碍行为。
 终端 pane 还可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用
 `Alt+Shift+H/J/K/L` 在对应方向创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和
 Serial 会重新走对应 profile 的常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或
@@ -1035,8 +1041,10 @@ Settings > SFTP 保存应用级本地打开快照上限（默认 512 MiB，有�
 该设置不影响常规流式 SFTP 传输，也不限制远端文件拖到 Finder；后者走明确目标路径的普通本地 writer。
 
 每个远端文件行持有只属于 Slint 的右键菜单，并复用共享 `FlatActionMenu`。在未选中行触发下载或删除时，
-先把远端选择替换为该行；在已选中行触发时保留当前多选集合。随后菜单复用既有选择、下载和删除 callback，
-不会把路径、handle、worker 或文件系统状态新增到 Slint。为下载选择远端文件或目录后，会向 worker 发送
+先把远端选择替换为该行；在已选中行触发时保留当前多选集合。重命名仅在单项已选中，或未选中命中行将成为唯一选择时可用。
+`OverlayHost` 保存重命名草稿及原始 Tab/路径；Enter 确认、Escape 取消，SSH 安全提示仍优先。
+应用层在提交既有 worker 重命名操作前重新校验原窗口的活动 Tab、稳定目录、可见路径和唯一选择。
+Slint 不持有网络 handle，也不执行文件系统操作。为下载选择远端文件或目录后，会向 worker 发送
 小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
 拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
 目录树。发现过程最多扫描 4,096 个条目，并最多接受 512 个文件、256 个目录、16 层和 512 KiB 路径文本。
@@ -1077,7 +1085,7 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
-和活动 transfer。远端文件行右键菜单负责有界下载和删除 intent；远端工具栏保留重命名和系统关联程序的外部编辑。全部选中的本地文件和目录、内部拖动根及系统拖入根会进入单条批次命令。本地递归发现在线程池中保留相对路径、跳过链接和过滤项；每批最多扫描 4,096 项，接受 512 个文件、256 个目录、16 层和 512 KiB 路径文本；单文件按配置上限校验，没有批次总字节上限。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 的上传和下载并发数可设置为 1-16（默认 2），其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
+和活动 transfer。远端文件行右键菜单负责有界下载、单项重命名和删除 intent；远端工具栏保留系统关联程序的外部编辑。全部选中的本地文件和目录、内部拖动根及系统拖入根会进入单条批次命令。本地递归发现在线程池中保留相对路径、跳过链接和过滤项；每批最多扫描 4,096 项，接受 512 个文件、256 个目录、16 层和 512 KiB 路径文本；单文件按配置上限校验，没有批次总字节上限。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 的上传和下载并发数可设置为 1-16（默认 2），其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
 本地 blocking task 只打开源文件一次，每块复核路径与已打开文件的 identity，经两个 chunk 的队列交给 16 请求窗口；
 全部写入 ack 成功后才发布。所有 Tab 共享的同时上传数可设置为 1-32（默认 8），此边界每个活动上传
 的分块数据约 1.2 MiB，不随文件大小增长。关闭接收端会释放阻塞 reader，并按期限 join。
