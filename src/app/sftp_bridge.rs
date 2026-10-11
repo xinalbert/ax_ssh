@@ -1552,28 +1552,16 @@ pub(super) fn wire_sftp(
     let ui_for_rename = ui.as_weak();
     let state_for_rename = state.clone();
     let router_for_rename = window_router.clone();
-    ui.on_rename_remote_sftp(move |new_name| {
+    ui.on_rename_remote_sftp(move |tab_id, path, new_name| {
         log_ui_action("sftp.rename-remote");
         sync_window_active(&router_for_rename, window_id, &state_for_rename);
-        let result = with_window_sftp_terminal(
+        let result = with_window_sftp_rename_target(
             &state_for_rename,
             &router_for_rename,
             window_id,
-            |terminal| {
-                let entry = terminal
-                    .sftp
-                    .entries
-                    .iter()
-                    .filter(|entry| terminal.sftp.selected.contains(&entry.path))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if entry.len() != 1 {
-                    anyhow::bail!("select exactly one remote entry to rename");
-                }
-                let entry = entry
-                    .into_iter()
-                    .next()
-                    .context("remote entry is no longer visible")?;
+            tab_id.as_str(),
+            path.as_str(),
+            |terminal, entry| {
                 let new_name = new_name.trim().to_owned();
                 if new_name.is_empty()
                     || new_name == "."
@@ -2749,6 +2737,38 @@ fn with_window_sftp_terminal<T>(
     with_sftp_terminal_for_tab(state, tab_id, action)
 }
 
+// A modal captures its original target. Revalidate it before enqueueing a
+// write, including when a native menu or another window changes live state.
+fn with_window_sftp_rename_target<T>(
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: &str,
+    path: &str,
+    action: impl FnOnce(&mut TerminalTabState, ax_ssh::sftp::SftpEntry) -> Result<T>,
+) -> Result<T> {
+    let tab_id = tab_id.parse::<Uuid>().context("invalid SFTP rename tab")?;
+    if router.active_tab(window_id) != Some(tab_id) {
+        anyhow::bail!("SFTP rename tab is no longer active in this window");
+    }
+    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        if terminal.sftp.loading || !terminal.sftp.open {
+            anyhow::bail!("remote directory is no longer ready for rename");
+        }
+        if terminal.sftp.selected.len() != 1 || !terminal.sftp.selected.contains(path) {
+            anyhow::bail!("select only the original remote entry to rename");
+        }
+        let entry = terminal
+            .sftp
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .cloned()
+            .context("remote entry is no longer visible")?;
+        action(terminal, entry)
+    })
+}
+
 fn parse_transfer_id(value: &str) -> Result<uuid::Uuid> {
     value
         .parse::<uuid::Uuid>()
@@ -2766,6 +2786,100 @@ mod tests {
             ),
             SessionStore::default(),
         )
+    }
+
+    #[test]
+    fn sftp_rename_rejects_switched_tab_even_with_same_path() {
+        let router = WindowRouter::new(slint::Weak::<AppWindow>::default());
+        let mut app = test_state();
+        let profile = SessionProfile::new("remote", "remote.example", "alice");
+        let original = app.open_sftp_tab(&profile);
+        let other = app.open_sftp_tab(&profile);
+        assert!(router.activate_tab(MAIN_WINDOW_ID, other, &mut app));
+        let state = Arc::new(Mutex::new(app));
+        let error = with_window_sftp_rename_target::<()>(
+            &state,
+            &router,
+            MAIN_WINDOW_ID,
+            &original.to_string(),
+            "/file.txt",
+            |_, _| panic!("a switched target must never enqueue a rename"),
+        )
+        .expect_err("the original modal must not target the newly active tab");
+        assert!(error.to_string().contains("no longer active"));
+    }
+
+    #[test]
+    fn sftp_rename_revalidates_selection_visibility_and_directory_readiness() {
+        let router = WindowRouter::new(slint::Weak::<AppWindow>::default());
+        let mut app = test_state();
+        let profile = SessionProfile::new("remote", "remote.example", "alice");
+        let tab_id = app.open_sftp_tab(&profile);
+        assert!(router.activate_tab(MAIN_WINDOW_ID, tab_id, &mut app));
+        let terminal = app.terminal_mut(tab_id).expect("SFTP tab");
+        terminal.connected = true;
+        terminal.sftp.open = true;
+        terminal.sftp.entries = vec![ax_ssh::sftp::SftpEntry {
+            name: "file.txt".to_owned(),
+            path: "/file.txt".to_owned(),
+            is_dir: false,
+            is_symlink: false,
+            size: 1,
+            modified: None,
+        }];
+        terminal.sftp.selected = HashSet::from(["/file.txt".to_owned()]);
+        let state = Arc::new(Mutex::new(app));
+        let rename_target = || {
+            with_window_sftp_rename_target(
+                &state,
+                &router,
+                MAIN_WINDOW_ID,
+                &tab_id.to_string(),
+                "/file.txt",
+                |_, entry| Ok(entry.path),
+            )
+        };
+        assert_eq!(
+            rename_target().expect("original single selection"),
+            "/file.txt"
+        );
+        for selected in [
+            HashSet::new(),
+            HashSet::from(["/other.txt".to_owned()]),
+            HashSet::from(["/file.txt".to_owned(), "/other.txt".to_owned()]),
+        ] {
+            state
+                .lock()
+                .expect("state lock")
+                .terminal_mut(tab_id)
+                .expect("SFTP tab")
+                .sftp
+                .selected = selected;
+            assert!(
+                rename_target().is_err(),
+                "changed selection must reject rename"
+            );
+        }
+        {
+            let mut app = state.lock().expect("state lock");
+            let sftp = &mut app.terminal_mut(tab_id).expect("SFTP tab").sftp;
+            sftp.selected = HashSet::from(["/file.txt".to_owned()]);
+            sftp.loading = true;
+        }
+        assert!(
+            rename_target().is_err(),
+            "loading directory must reject rename"
+        );
+        {
+            let mut app = state.lock().expect("state lock");
+            let sftp = &mut app.terminal_mut(tab_id).expect("SFTP tab").sftp;
+            sftp.loading = false;
+            sftp.entries.clear();
+        }
+        assert!(
+            rename_target().is_err(),
+            "vanished entry must reject rename"
+        );
     }
 
     #[test]

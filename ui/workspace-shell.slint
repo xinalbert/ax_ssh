@@ -419,7 +419,7 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
-    callback rename-remote-sftp(string);
+    callback rename-remote-sftp(string, string);
     callback edit-remote-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
@@ -589,7 +589,7 @@ component DetachedWorkspaceContent inherits Rectangle {
             remove-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote => { root.remove-selected-remote-sftp(); }
             upload-selected-local => { root.upload-selected-local-sftp(); }
-            rename-remote(name) => { root.rename-remote-sftp(name); }
+            rename-remote(path, name) => { root.rename-remote-sftp(path, name); }
             edit-remote => { root.edit-remote-sftp(); }
             upload-edited-file => { root.upload-edited-sftp-file(); }
             stop-editing-file => { root.stop-editing-sftp-file(); }
@@ -715,7 +715,7 @@ export component WorkspaceShell inherits Rectangle {
     callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
-    callback rename-remote-sftp(string);
+    callback rename-remote-sftp(string, string);
     callback edit-remote-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
@@ -897,7 +897,7 @@ export component WorkspaceShell inherits Rectangle {
         remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
         remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
         upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
-        rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
+        rename-remote-sftp(path, name) => { root.rename-remote-sftp(path, name); }
         edit-remote-sftp => { root.edit-remote-sftp(); }
         upload-edited-sftp-file => { root.upload-edited-sftp-file(); }
             stop-editing-sftp-file => { root.stop-editing-sftp-file(); }
@@ -1189,7 +1189,7 @@ export component WorkspaceShell inherits Rectangle {
                         remove-transfer(id) => { root.remove-sftp-transfer(id); }
                         remove-selected-remote => { root.remove-selected-remote-sftp(); }
                         upload-selected-local => { root.upload-selected-local-sftp(); }
-                        rename-remote(name) => { root.rename-remote-sftp(name); }
+                        rename-remote(path, name) => { root.rename-remote-sftp(path, name); }
                         edit-remote => { root.edit-remote-sftp(); }
                         upload-edited-file => { root.upload-edited-sftp-file(); }
             stop-editing-file => { root.stop-editing-sftp-file(); }

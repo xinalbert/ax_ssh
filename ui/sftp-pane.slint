@@ -356,12 +356,14 @@ component SftpEntry inherits Rectangle {
     in property <bool> interactive: true;
     in property <bool> remote-actions: false;
     in property <bool> local-actions: false;
+    in property <int> selection-count: 0;
     callback open-directory(string);
     callback open-file(string);
     callback toggle-selection(string, bool);
     callback replace-selection(string);
     callback download-selected();
     callback remove-selected();
+    callback rename-entry(string, string);
     callback upload-selected();
     callback reveal-local(string);
     callback begin-native-file-drag(string);
@@ -385,6 +387,7 @@ component SftpEntry inherits Rectangle {
     private property <[ActionMenuItem]> context-actions: root.remote-actions
         ? [
             root.action("download", @tr("Download"), true),
+            root.action("rename", @tr("Rename"), !root.entry.selected || root.selection-count == 1),
             root.action("delete", @tr("Delete"), true),
         ]
         : (root.local-actions
@@ -649,6 +652,8 @@ component SftpEntry inherits Rectangle {
             }
             if action-id == "download" {
                 root.download-selected();
+            } else if action-id == "rename" {
+                root.rename-entry(root.entry.path, root.entry.name);
             } else if action-id == "delete" {
                 root.remove-selected();
             } else if action-id == "open" {
@@ -704,14 +709,13 @@ component SftpDirectoryPane inherits Rectangle {
     callback remove-selected();
     callback upload-selected();
     callback edit-selected();
-    callback rename-selected(string);
+    callback rename-entry(string, string);
     callback reveal-local(string);
     callback sort(string);
     callback dropped(data-transfer);
     callback begin-native-file-drag(string);
     pure callback drag-data(string) -> data-transfer;
     callback drag-diagnostic(string);
-    private property <string> rename-name-draft: "";
 
     private property <string> current-path: root.path;
     private property <string> path-draft: root.current-path;
@@ -731,22 +735,22 @@ component SftpDirectoryPane inherits Rectangle {
     private property <bool> show-local-upload-action:
         !root.allow-navigation && root.selection-count > 0;
     private property <bool> show-toolbar-copy:
-        root.width >= (root.show-remote-edit-actions ? 560px : 300px);
+        root.width >= 300px + (root.show-remote-edit-actions ? Theme.sftp-toolbar-action-reserve-width : 0px);
     private property <bool> show-toolbar-refresh:
         root.allow-refresh
-        && root.width >= (root.show-remote-edit-actions ? 600px : 340px);
+        && root.width >= 340px + (root.show-remote-edit-actions ? Theme.sftp-toolbar-action-reserve-width : 0px);
     private property <int> toolbar-action-count:
         (root.allow-hidden ? 1 : 0)
         + (root.show-toolbar-copy ? 1 : 0)
         + (root.show-toolbar-refresh ? 1 : 0)
-        + (root.show-remote-edit-actions ? 3 : 0)
+        + (root.show-remote-edit-actions ? 1 : 0)
         + (root.show-local-upload-action ? 1 : 0);
     private property <length> toolbar-actions-preferred-width:
         (root.allow-hidden ? Theme.sftp-hidden-control-width : 0px)
         + (root.show-toolbar-copy ? Theme.sftp-nav-icon-button-width : 0px)
         + (root.show-toolbar-refresh ? Theme.sftp-refresh-button-width : 0px)
         + (root.show-remote-edit-actions
-            ? 2 * Theme.sftp-toolbar-action-reserve-width + 150px : 0px)
+            ? Theme.sftp-toolbar-action-reserve-width : 0px)
         + (root.show-local-upload-action
             ? Theme.sftp-toolbar-action-reserve-width : 0px)
         + max(0, root.toolbar-action-count - 1) * Theme.space-sm;
@@ -825,21 +829,6 @@ component SftpDirectoryPane inherits Rectangle {
                     accessible-name: @tr("Edit selected remote file");
                     enabled: root.interactive && !root.loading;
                     clicked => { root.edit-selected(); }
-                }
-                if root.show-remote-edit-actions : FlatTextInput {
-                    width: 150px;
-                    height: root.control-height;
-                    text <=> root.rename-name-draft;
-                    placeholder-text: @tr("New name");
-                    enabled: root.interactive && !root.loading;
-                }
-                if root.show-remote-edit-actions : SftpActionButton {
-                    height: root.control-height;
-                    text: @tr("Rename");
-                    subtle: true;
-                    accessible-name: @tr("Rename selected remote entry");
-                    enabled: root.interactive && !root.loading;
-                    clicked => { root.rename-selected(root.rename-name-draft); }
                 }
                 if root.show-local-upload-action : SftpActionButton {
                     height: root.control-height;
@@ -957,6 +946,7 @@ component SftpDirectoryPane inherits Rectangle {
                     native-file-drag-enabled: root.native-file-drag-enabled;
                     remote-actions: root.allow-navigation;
                     local-actions: root.local-actions;
+                    selection-count: root.selection-count;
                     open-directory(path) => { root.list-directory(path); }
                     open-file(path) => { root.open-file(path); }
                     toggle-selection(path, selected) => { root.toggle-selection(path, selected); }
@@ -966,6 +956,7 @@ component SftpDirectoryPane inherits Rectangle {
                     }
                     download-selected => { root.download-selected(); }
                     remove-selected => { root.remove-selected(); }
+                    rename-entry(path, name) => { root.rename-entry(path, name); }
                     upload-selected => { root.upload-selected(); }
                     reveal-local(path) => { root.reveal-local(path); }
                     begin-native-file-drag(path) => { root.begin-native-file-drag(path); }
@@ -1554,7 +1545,7 @@ export component SftpPane inherits Rectangle {
     callback write-clipboard(string);
     callback remove-selected-remote();
     callback upload-selected-local();
-    callback rename-remote(string);
+    callback rename-remote(string, string);
     callback edit-remote();
     callback upload-edited-file();
     callback stop-editing-file();
@@ -1568,7 +1559,6 @@ export component SftpPane inherits Rectangle {
     callback drag-diagnostic(string, bool);
     callback native-remote-drop-region-changed(SftpNativeDropRegion);
     callback native-local-drop-region-changed(SftpNativeDropRegion);
-    private property <string> rename-name-draft: root.view.rename_name;
 
     // Native file events have no Slint DropArea target. Publish the live,
     // finite layout through callbacks instead of a two-way struct property:
@@ -1598,9 +1588,6 @@ export component SftpPane inherits Rectangle {
     }
     changed native-local-drop-region => {
         root.native-local-drop-region-changed(root.native-local-drop-region);
-    }
-    changed view => {
-        root.rename-name-draft = root.view.rename_name;
     }
 
     min-width: 0px;
@@ -1754,7 +1741,7 @@ export component SftpPane inherits Rectangle {
                 download-selected => { root.download-selected-remote(); }
                 remove-selected => { root.remove-selected-remote(); }
                 upload-selected => { root.upload-selected-local(); }
-                rename-selected(name) => { root.rename-remote(name); }
+                rename-entry(path, name) => { root.rename-remote(path, name); }
                 edit-selected => { root.edit-remote(); }
                 toggle-selection(path, selected) => {
                     root.toggle-remote-selection(path, selected);

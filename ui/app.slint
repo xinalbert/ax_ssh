@@ -597,7 +597,7 @@ export component AppWindow inherits Window {
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
     callback resolve-sftp-upload-conflict(string, string, bool);
-    callback rename-remote-sftp(string);
+    callback rename-remote-sftp(string, string, string);
     callback edit-remote-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
     callback terminal-key-direct(TerminalDirectKeyboardEvent) -> bool;
@@ -1099,7 +1099,9 @@ export component AppWindow inherits Window {
                 root.begin-native-remote-file-drag-sftp(path);
             }
             upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
-            rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
+            rename-remote-sftp(path, name) => {
+                overlay-host.show-sftp-rename(root.active-tab-id, path, name);
+            }
             edit-remote-sftp => { root.edit-remote-sftp(); }
             terminal-key(request) => {
                 return root.terminal-key(request);
@@ -1201,6 +1203,7 @@ export component AppWindow inherits Window {
         }
         cancel-password-dialog => { root.cancel-password-dialog(); }
         workspace-file-action(mode, path) => { root.workspace-file-action(mode, path); }
+        rename-remote-sftp(tab-id, path, name) => { root.rename-remote-sftp(tab-id, path, name); }
     }
 
 }

@@ -1,0 +1,46 @@
+import { ElidedButton } from "elided-controls.slint";
+import { FlatTextInput } from "flat-text-input.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { Theme } from "../theme.slint";
+
+export component SftpRenameDialog inherits ModalFrame {
+    in-out property <string> value;
+    callback confirm(string);
+    callback cancel();
+
+    dialog-width: Theme.session-management-dialog-width;
+    dialog-height: Theme.session-management-dialog-height;
+    dismissed => { root.cancel(); }
+    init => { name-input.focus(); }
+
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: @tr("Rename selected remote entry");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+        name-input := FlatTextInput {
+            text <=> root.value;
+            placeholder-text: @tr("New name");
+            accessible-label: @tr("New name");
+            accepted(value) => {
+                if !value.is-empty { root.confirm(value); }
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+            ElidedButton {
+                text: @tr("Rename");
+                enabled: !root.value.is-empty;
+                clicked => { root.confirm(root.value); }
+            }
+        }
+    }
+}
