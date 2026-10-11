@@ -120,7 +120,7 @@ Process startup (src/main.rs)
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
 | `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
 | `src/ssh/worker.rs` and `src/ssh/worker/` | Bounded session startup/commands, plus private shell/X11 and SFTP-only lifecycle modules; coalesced resize, batched events, cancellation and shutdown | UI state or profile persistence |
-| `src/sftp.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, worker-owned chunked download/upload, text edit, rename/delete and private temporary publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
+| `src/sftp.rs`, `src/sftp/edit.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, worker-owned chunked download/upload, guarded byte edits, rename/delete and private temporary publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
 | `src/telnet.rs` | Plaintext TCP lifetime, RFC 854 option filtering, NAWS, bounded input/output, cancellation and shutdown | Credentials, SSH trust, UI state or terminal rendering |
 | `src/serial.rs` | Non-opening port discovery, stable USB identity matching, serial parameter mapping, and one bounded device worker | Automatic device opening/probing, UI state or persisted profile mutation |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
@@ -1604,10 +1604,13 @@ navigation controls are disabled while a request is in flight. Remote and local
 rows expose real per-Tab selection state, with header controls for select-all
 and clear-all; selection is retained
 only for entries still present in the current directory snapshot and does not
-start a transfer. Commands and events use bounded channels, requests are
+start a transfer. Commands and events use bounded channels, directory requests are
 serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
 `russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
-page. One directory stops when its 2 MiB names-and-paths budget is reached;
+page. A page publishes the first useful server batch without waiting to fill
+250 rows or receive EOF; the final page is published before awaiting CLOSE.
+More may remain available until a later request confirms EOF. One directory
+stops when its 2 MiB names-and-paths budget is reached;
 individual paths/names are also validated and bounded before they enter the
 application snapshot. `More` releases another bounded local page or requests
 another remote page while one is available. `russh-sftp` still has an internal
@@ -1625,6 +1628,21 @@ Slint never calls a platform or filesystem icon API. The provider is first
 created by SFTP icon prewarm, not process startup. Closing the final SFTP Tab
 clears resolved extension icons and invalidates pending prewarm generations;
 fixed fallback icons remain available.
+
+The Slint bridge reuses up to 128 thread-local image values while their cached
+pixel allocation is unchanged. File/transfer models retain their identity for
+unchanged rows, selection/progress updates, and page appends. Only changed rows
+notify Slint; unchanged file sources, selection, and icon revisions skip row
+formatting and image conversion entirely. Navigation or reordering replaces a
+model. A prewarm batch that
+resolves no new icon does not request another workspace refresh.
+
+`src/ssh/worker/sftp/operations.rs` owns one ordered background write worker
+and a 16-operation queue per connection. Remote editing, rename, delete, and
+metadata polling therefore do not suspend the SFTP main command/event loop.
+Shutdown cancels and joins this worker before reclaiming the connection.
+Upload subsystem opening belongs to the cancellable upload task and holds its
+normal per-Tab/global transfer permit while it is pending.
 
 Double-clicking a local regular-file row is a read-only open intent. The bridge
 first requires that exact path in the active SFTP Tab's current local snapshot,
@@ -1693,7 +1711,14 @@ Each request revalidates remote path and handle metadata, reads at most 64 KiB
 per request, uses a two-chunk writer queue, applies 15-second operation
 timeouts and a 30-day transfer deadline (recursive discovery remains 30 minutes),
 and reports owned queue, state,
-progress, and terminal events. The application state owns bounded rows split
+progress, and terminal events. Each transfer polls at most 16 ordered chunk
+requests, including completed replies waiting for an earlier reply; chunk
+storage in this window is at most 1 MiB. Short reads repair only their own
+offset range. Dropping the window cancels its borrowed request futures, with
+no detached request tasks. EOF/path/handle revalidation must succeed before
+the local writer can publish, including when all bytes have arrived. Progress
+is emitted at most once per 100 ms plus the final count; lifecycle events
+remain immediate. The application state owns bounded rows split
 into active, failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
 The active-page batch actions share the right side of the transfer page bar;
@@ -1736,7 +1761,7 @@ publication removes the completed target before it can be reported successful.
 Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
 menu owns bounded Download and Delete intents; the remote toolbar retains
-rename, UTF-8 edit, and Save As operations. All selected local files and folders,
+rename and system-associated external edit operations. All selected local files and folders,
 internal drag roots, and native dropped roots enter one batch command. Blocking
 local discovery preserves relative paths, skips links and filtered names, and
 caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,
@@ -1745,11 +1770,13 @@ creates missing remote directories through its SFTP session, rejecting links or
 unexpected target types. The configured per-Tab transfer limit (1-16, default
 2) applies to uploads and downloads; remaining accepted files wait in the
 bounded worker queue. The application passes only a validated path and size;
-the worker revalidates the source and streams one 64 KiB chunk at a time. The
-configured process-wide upload limit (1-32, default 8) bounds the
-resident upload chunks (about 512 KiB at this boundary), so a 20 GiB upload
-does not become a resident buffer. Editor monitoring polls a remote size/mtime
-fingerprint while the editor is open. A regular remote upload target triggers
+the worker opens the source once on a blocking task, revalidates its path and
+open-file identity per chunk, and streams through a two-chunk local queue into
+the 16-request window. Every write acknowledgement is checked before publish.
+The configured process-wide upload limit (1-32, default 8) bounds resident
+upload data to about 1.2 MiB per active upload at this boundary, independent of
+file size. Dropping the consumer releases a blocked reader, which is joined
+with a deadline. A regular remote upload target triggers
 a Rust-owned conflict queue and a shared `ModalFrame` prompt.
 The user can skip, overwrite, or keep both; the optional batch choice applies
 only to the files from one upload/drop intent in that SFTP worker. New uploads
@@ -1758,9 +1785,7 @@ publishing an overwrite with the server's `posix-rename@openssh.com` extension;
 if the extension is unavailable or the target changed, the upload fails without
 replacing the original. Keep both chooses a numbered free name. Pending upload
 intents and prompts remain bounded, and closing the Tab drops their decisions.
-Automatic upload is
-explicit and off by default, debounced, and still guarded by the observed
-fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
+External edit auto upload defaults on, is debounced, and remains guarded by the observed fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
 local/remote source prefix: selected local rows carry the current selection and
 unselected rows carry only themselves. Local paths dropped on Remote files queue uploads,
@@ -1799,6 +1824,48 @@ request is queued, so it cannot intercept normal AxSSH input while the transfer
 runs; the provider and delegate stay retained only until that terminal transfer
 event completes the promise.
 
+
+### External file editing
+
+`src/app/remote_edit.rs` owns up to eight edit contexts per SFTP tab, private local
+copies, system-associated opening and parent-directory watches. Download and
+upload use the bounded ordered SFTP write worker; `ReadEditFile`/`WriteEditFile`
+and `src/sftp/edit.rs` preserve arbitrary bytes within
+`settings.sftp_transfers.remote_edit_max_file_mib` (schema v36, default 4 MiB,
+normalized to 1–64 MiB; older configurations default to 4). Settings preview/save
+maps the value in main and detached windows. Each edit operation carries its
+owned byte limit, validated again by SFTP before file access. Local creation,
+opening, bounded reads and upload queueing recheck the current setting; watchers
+force another read when the setting changes even if metadata is unchanged.
+Queued network operations keep their submitted limit. Oversized local copies
+remain recoverable, and shrinking an already-open larger remote file is allowed
+when the new payload fits. Downloads validate path/handle size and mtime before and after reading,
+require the expected EOF, and use the same 16-request window as transfers.
+Uploads write an exclusive private remote temporary file, preserve ordinary
+permission bits, recheck the original size/mtime and permissions, and publish
+with `posix-rename@openssh.com`. Unsupported atomic replacement, conflict or
+failed writes preserve the original; cleanup cannot be guaranteed after transport
+loss. Replacing the remote inode does not preserve hard-link identity or ACLs.
+
+Only owned paths, status and action flags enter Slint; the internal text editor,
+text draft, Save As and text-change callbacks are removed. Local copy creation,
+reading and the opener run on blocking workers. Windows uses the checked system
+launcher, while other platforms use detached system opening; the editor process
+is never used as a file-lifetime signal. Watches have a one-slot coalescing signal,
+500 ms debounce and five-second metadata fallback; unchanged fallback probes
+skip content reads. Parent-directory watching handles atomic replacement saves.
+One upload per file is allowed in flight, and matching operation IDs advance the
+remote baseline before a subsequent save is uploaded. Content digests only dedupe
+local saves, not verify trust. Auto upload defaults on and can be disabled.
+
+Stop/disconnect/reconnect/tab close invalidates watches by tab, attempt and edit
+ID, preserves local copies, and never replays the old edit. Reopening the same
+remote path reuses its copy. The cache refuses new copies at 128 retained entries
+rather than deleting possibly unuploaded content; only copies never handed to an
+opener are removed after cancelled preparation. Another local Save As filename
+is outside the watched mapping. Remote size/mtime checks remain optimistic; a
+same-size, same-timestamp rewrite is not detected. Cross-process recovery and
+merge-based conflict resolution remain separate work.
 ## Telnet and serial transport contract
 
 Telnet is intentionally marked as plaintext and never shares SSH credential or
@@ -2227,7 +2294,7 @@ Terminal and transfer menu models depend on stable scalar action state, so
 output or progress snapshots do not replace the rows of an open menu.
 
 `ui/components/flat-text-edit.slint` owns non-secret multiline editing in the
-SFTP file editor and filename-filter settings. It keeps TextInput selection,
+filename-filter settings. It keeps TextInput selection,
 IME, keyboard editing, and cursor-visible scrolling, and routes editing actions
 through the same themed menu instead of the standard TextEdit's native menu.
 

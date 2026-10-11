@@ -35,6 +35,10 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
+| `src/app/remote_edit.rs`、`src/sftp/edit.rs` 及各自 `tests.rs` | 外部编辑副本/监听和 guarded 字节回传；大小上限由 Settings > SFTP 的 remote_edit_max_file_mib 控制 | `RemoteEdit`、`read_edit_file`、`write_edit_file` | 系统关联程序、原子保存、迟到结果、冲突及副本保留 |
+| `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
+| `src/sftp/transfer/pipeline.rs` 与 `src/sftp/transfer/tests/performance.rs` | 有序分块请求窗口及模拟协议回归 | `RequestWindow`、`REQUEST_WINDOW`、`delayed_peer` | 16 × 64 KiB、短读/乱序、完整性和有界取消 |
+| `src/app/view/sftp.rs` | SFTP 文件/传输稳定模型及图标 | `update_file_rows`、`update_sftp_rows`、`slint_icon` | 缓存源快照/图标代次，只更新变化行 |
 | `AGENTS.md` | 全仓库持久指令 | 项目边界、所有权、安全和验证 | 开始任何 Rust/Slint/SSH 变更 |
 | `.agents/skills/ax-ssh-rust-slint/SKILL.md` | AxSSH 实施与评审工作流 | reference 路由、架构决策、安全门禁 | 修改或评审工程代码与边界 |
 | `LICENSE` | AxSSH 主许可证正文 | GNU GPL version 3 | 发布源码或二进制、核对 GPL 条款时 |
@@ -100,7 +104,7 @@
 | `src/app/terminal_render/highlighting.rs` | 标准等级词及 HTTP 上下文的 regex 识别 | `RULE_PATTERN`、`HighlightSpan`、`prepare`、`spans` | 启动预编译；OpenTelemetry/syslog 词和响应/访问日志/HTTP 属性码；无旧词表或裸数字回退 |
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/report.md` | SFTP 图标、临时副本和双击打开的公开实现对标 | 需求定义、候选方法、推荐结论、不可比项 | 规划阶段证据；不承载功能代码，不把 proxy evidence 当 benchmark 排名 |
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/source-tracking.md` | 该主题的来源登记 | source/status/evidence use 表 | 记录官方来源、本机锁定 API 和 AxShell 参考边界 |
-| `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SessionProfile::validate`、`RendererPreference`、`SoftwarePresentationMode`、`TerminalSemanticColors`、`SessionStore::validate`、`ConfigStore`、`MAX_CONFIG_FILE_BYTES`、profile/store 共享上限 | schema v34 增加配置文件专用的 `settings.appearance.system_icons_follow_theme`，默认 false 保留系统图标原色，Settings 预览/保存保留该值；schema v30 增加最多 8 条经过校验的 workspace 路径 MRU；旧 `sessions.json` 通过默认空列表兼容，历史只保存非敏感路径，不保存 snapshot/凭据；schema v29 保存默认 `encrypted-vault` 和应用私有自动解锁标记（兼容旧 keyring 字段名）；schema v27 保存 macOS CPU `layer-images`/`damage-backing-store` 呈现偏好，缺失/无效值默认使用 damage backing store，显式 `layer-images` 为兼容性回退；schema v25/v26 保存紧凑渲染、行 cache 和刷新上限；旧 `terminal_partition_strategy` JSON 字段作为未知字段忽略；schema v24 保存 `automatic`/`gpu`/`software` renderer 偏好；两个启动偏好只在首个 Slint window/surface 前应用；profile/store 上限、私有原子写入和 SSH-only 安全字段隔离不变 |
+| `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SessionProfile::validate`、`RendererPreference`、`SoftwarePresentationMode`、`TerminalSemanticColors`、`SessionStore::validate`、`ConfigStore`、`MAX_CONFIG_FILE_BYTES`、profile/store 共享上限 | schema v36 增加远程编辑上限 remote_edit_max_file_mib（默认 4 MiB，1–64 MiB）；schema v34 增加配置文件专用的 `settings.appearance.system_icons_follow_theme`，默认 false 保留系统图标原色，Settings 预览/保存保留该值；schema v30 增加最多 8 条经过校验的 workspace 路径 MRU；旧 `sessions.json` 通过默认空列表兼容，历史只保存非敏感路径，不保存 snapshot/凭据；schema v29 保存默认 `encrypted-vault` 和应用私有自动解锁标记（兼容旧 keyring 字段名）；schema v27 保存 macOS CPU `layer-images`/`damage-backing-store` 呈现偏好，缺失/无效值默认使用 damage backing store，显式 `layer-images` 为兼容性回退；schema v25/v26 保存紧凑渲染、行 cache 和刷新上限；旧 `terminal_partition_strategy` JSON 字段作为未知字段忽略；schema v24 保存 `automatic`/`gpu`/`software` renderer 偏好；两个启动偏好只在首个 Slint window/surface 前应用；profile/store 上限、私有原子写入和 SSH-only 安全字段隔离不变 |
 | `src/config/workspace.rs` | 版本化、有界 workspace snapshot DTO 与 Tab/window/PaneTree 引用校验 | `WorkspaceSnapshot`、`WorkspaceTabSnapshot`、`WorkspaceWindowSnapshot`、`PaneNodeSnapshot`、`WindowPlacement` | 独立 `workspace.json` 或用户选定文件的运行时布局/文本路径边界；不保存 worker、live handle、凭据或临时 host-key 状态 |
 | `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | 显式选择时访问 Keychain/Credential Manager/Secret Service；默认自动解锁使用权限受限的应用私有文件，并兼容一次性旧 keyring 迁移；另含 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs`、`src/terminal/model.rs`、`src/terminal/render.rs`、`src/terminal/selection.rs` 与 `src/terminal/input.rs` | 有界终端 DTO、模型生命周期/scrollback、增量可见行 snapshot、cell 样式/光标、选区映射、按键与 mouse/focus reporting 编码 | `TerminalModel`、`TerminalSnapshot`、`TerminalStyledLine`、`TermDamage`、`selection_text`、`size`、`resize`、`encode_focus_event`、`TerminalMouseEvent`、`TerminalMouseReporting` | shell 输出原样解析、主屏 reflow、soft-wrap/hard-break 选区提取、规范化尺寸比较、光标和宽字符安全映射；`cursor_visibility_requested` 无损读取 `CSI ?25l/h` 可见性供 application 合并，不触发 parser 缓冲；`CSI ?2026h/l` 才在结束或上游 deadline 前进行协议级同步输出，首帧也不发布局部内容；协议应答经单个有界队列回写原 transport，覆盖 DSR、动态 OSC 颜色、`CSI 14 t` 文本区像素和 `CSI 16 t` 单元像素查询；鼠标按程序选择默认 X10、1005、1015、1006 或 1016 格式，1016 使用实测物理文本区坐标；DEC 1004 仅在实际启用时生成固定 `CSI I`/`CSI O`。快照解析终端局部 OSC 颜色、光标形状/闪烁及 SGR 隐藏/单/双/曲/点/虚线样式，并复用稳定 `Arc` 行 identity，以 64-bit revision 标记变更；application-keypad 不再作为当前输入能力。 |
@@ -116,7 +120,7 @@
 | `src/ssh/worker.rs` 与 `src/ssh/worker/{shell,sftp}.rs` | SSH/SFTP-only worker 与 transfer 生命周期 | `SshSessionHandle`、`SshSessionMode`、`SshSessionEvent`、`run_terminal_session`、`run_sftp_session`、`PendingSftpOpen`、`PendingDiscovery` | 根模块保留有界连接/认证、命令/resize 管道与 mode 路由；shell 不再持有旧 SFTP browser，SFTP-only worker 独占浏览/传输；SSH 输出只在缓冲区非空时启动一次性 16ms flush，16 KiB 上限和输入后首输出即时 flush 不变；Terminal 的 Off 不建立 X11 relay，`-X`/`-Y` 都在 host key 与认证完成后才进入 X11 准备；明确的 shell EOF/close 报告正常 shell 结束，无 EOF/close 消息的 stream 结束仍规范为断开，两者都退出 worker；resize watch 只在尺寸变化时通知，SFTP 子模块独占递归发现、明确 local path 的单文件下载、独立 subsystem opening、暂停/继续/取消和 shutdown join；每 Tab 最多 2 个 pending/active transfer，认证前普通命令仍被忽略 |
 | `src/ssh/x11.rs` | SSH X11 forwarding 协议与本机 X server relay 边界 | `X11Forwarding`、DISPLAY/xauth 解析、`X11Session`、setup cookie rewrite、local endpoint connect、relay | Trusted (`-Y`) shell 创建只生成单次 fake cookie，首个服务端 X11 channel 才解析本机 DISPLAY/xauth/端点并按需启动；Untrusted (`-X`) 在已认证后用私有、短生命周期的 `xauth generate … untrusted` 预建受限 cookie，20 分钟后拒绝新的 channel，且不得退回 no-auth 或可信 cookie；默认要求精确 MIT-MAGIC-COOKIE-1，显式兼容时仍先验证 fake cookie；所有读取、连接、队列与 relay 有界且可取消 |
 | `src/ssh/tests.rs` | 确定性 SSH 回归 | loopback russh server、内存 agent protocol | 主机密钥、密码/私钥认证、agent 外部签名、identity 尝试上限、固定脱敏错误、PTY shell、静默 shell 和 worker 生命周期测试 |
-| `src/sftp.rs` | SFTP v3 浏览与 transfer domain 入口 | `SftpBrowserHandle`、`SftpBrowserEvent`、`SftpTransferEvent`、`SftpDownloadRoot`、`snapshot_local_file_for_open`、`PacketLimitedStream` | 路径/名称、packet/page 和目录文本预算（无固定目录条目数）、递归上限，以及浏览/transfer 的窄导出边界；本地文件打开使用私有 open cache，选中远端条目则下载到当前 local directory |
+| `src/sftp.rs` | SFTP v3 浏览与 transfer domain 入口 | `SftpBrowserHandle`、`SftpBrowserEvent`、`SftpTransferEvent`、`SftpDownloadRoot`、`snapshot_local_file_for_open`、`PacketLimitedStream`、`ReadEditFile` | 路径/名称、packet/page 和目录文本预算（无固定目录条目数）、递归上限，以及浏览/transfer 的窄导出边界；本地文件打开使用私有 open cache，选中远端条目则下载到当前 local directory |
 | `src/sftp/transfer.rs`、`src/sftp/transfer/local.rs` 与 `src/sftp/transfer/cache.rs` | 远端递归下载、本地安全发布与私有 open cache | `discover_download_requests`、`SftpDownloadRequest`、`SftpDownloadHandle`、`LocalDownloadTarget`、`snapshot_local_file_for_open`、`enforce_cache_quota`、`cleanup_stale_sftp_open_cache` | 根模块保留协议下载、metadata 重验、有界递归、明确 final local path 的单文件请求、暂停/从 offset 继续、取消/超时；local 子模块验证组件/符号链接，并以 `.part` fsync 和无覆盖原子发布写入当前 local directory，取消或失败清理；cache 仅保留本地/旧远端 open snapshot 的私有 namespace、按本地打开设置协调的 quota 和 stale cleanup；Finder 拖出走 local writer，不走 cache |
 | `src/telnet.rs` | Telnet transport 与 worker | `TelnetFrameBuffer`、`TelnetSessionHandle`、`TelnetSessionEvent` | 明文 TCP、64 KiB 完整帧组装、IAC 过滤、选项拒绝、NAWS、有界队列、同尺寸 watch 去重；输出非空时才启动一次性 16ms flush，空闲连接不循环 tick；保留取消和分片/loopback 回归 |
 | `src/serial.rs` | Serial 发现、身份解析与 worker | `discover_serial_ports`、`resolve_serial_port`、`SerialSessionHandle` | 只读枚举、稳定 USB 匹配、歧义拒绝、串口参数、设备 I/O 和有界关闭；发现不得自动打开 |
@@ -188,6 +192,8 @@
 
 ## 刷新规则
 
+- 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
+
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
 - 最近依据：2026-09-29 Terminal 首次加载并注册自带 Maple 与 Iosevka；Fontique 回退按主字体、Maple Han、Iosevka 缺失符号选字形，不改变 Slint cell 几何或终端模型，字体仍只在 UI 线程注册并通过既有代次刷新。
 - 最近依据：2026-09-18 移除终端 renderer/Slint DTO 的非 ASCII 居中状态；所有文本 run 和一格/两格光标文字均从协议定义的 cell span 左边缘绘制。宽字符仍占两格，逻辑列、选区、pointer、preedit、IME、PTY resize、worker、SSH trust 和凭据边界不变。
@@ -246,6 +252,11 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-11 19:23 +0800：schema v36、远程编辑大小设置和动态检查已完成；743 项测试及本机 ARM64 门禁通过。
+- 2026-10-11 18:52 +0800：外部编辑模块、系统关联/副本监听、原子回传及内置 UI 移除；737 项测试及两个 macOS 架构门禁完成。
+
+- 2026-10-11 16:07 +0800：SFTP 性能实现及测试路由；720 项测试与两个 macOS 架构门禁完成，真实远端/GUI 留用户验收。
 
 - 2026-10-11 10:22 +0800：补齐剪贴板附件、音频采集/转写、应用媒体 DTO 与 SSH 辅助通道入口；高亮/URL 和终端媒体分别提交为 858b5bf、36a9f1d，707 项测试与两种 macOS 架构验证完成，真机验收保留。
 
@@ -331,3 +342,5 @@
 - 2026-09-26：系统文件管理器拖入坐标桥接扩展到 Windows Win32 与 Linux X11；Wayland/其他平台回退到当前外部 hover 的 Winit 坐标。无可靠坐标、非 Remote files 区域或未就绪 SFTP 状态均拒绝上传，不按活动目录猜测；新增 `src/app/native_file_drop.rs` 与 Linux `x11-dl` 依赖，Windows/Linux 原生 GUI 由 CI 和用户验收。
 
 - 2026-10-03：补充 application 光标隐藏固定 24 ms 合并、timer 无后续输出超时、快照/生命周期边界；核对并修正文档中 software 未聚焦 FPS 描述，现有实现对所有 renderer 的未聚焦终端限帧。
+
+- 2026-10-11：新增外部编辑副本/监听与 guarded 字节下载/原子发布模块及回归；移除内置 SFTP 文本框和文本回调，Slint 只发布路径/状态。

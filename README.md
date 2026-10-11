@@ -21,7 +21,8 @@ together with independent Terminal and SFTP Tabs in one native application.
   boundary. Physical numeric keypads also reach terminal applications, including
   DEC application-keypad mode, on supported desktop platforms.
 - Browse local and remote files in a dedicated SFTP Tab, with bounded directory
-  listing, recursive downloads, uploads, rename, delete, and remote text editing.
+  listing, recursive downloads, uploads, rename, delete, and remote editing
+  through system-associated applications.
 - Use split panes and detached native workspace windows. Settings exposes both
   configurable shortcuts and fixed platform shortcuts; non-secret fields support
   native editing and paste, while secret fields remain non-copyable.

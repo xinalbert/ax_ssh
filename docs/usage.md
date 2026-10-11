@@ -204,6 +204,14 @@ metadata.
 Use **More** to release the next 250-item
 local page or request the next bounded remote page. Click **Name**, **Size**, or
 **Modified** to sort either file list; the default is newest Modified first.
+Remote pages show the server's first available batch, up to 250 rows, so a slow
+connection does not have to fill a page before displaying files. **More** may
+remain available until the next request confirms the end of the directory.
+Uploads and downloads use up to 16 concurrent 64 KiB chunk requests per file;
+this is separate from the number of simultaneous files configured in Settings.
+Progress updates are throttled to 100 ms, and unchanged file rows retain their
+models during transfers. Remote editor operations run in a bounded background
+queue so browsing and cancellation remain responsive.
 Long names are elided to the available column width; hover an elided name to
 see the complete name with wrapping. Rows use the target platform's file-type icon when one is available
 and a built-in folder, link, or generic-file icon otherwise.
@@ -276,7 +284,7 @@ the existing file intact.
 Right-click an active transfer for its applicable Pause, Resume, or Cancel
 action. Right-click a failed, cancelled, or successful record to remove it, or
 to reveal its local source or downloaded file when that path is available.
-After an upload, remote deletion, rename, or inline edit save succeeds, AxSSH
+After an upload, remote deletion, rename, or external edit upload succeeds, AxSSH
 refreshes **Remote files** when that pane still shows the affected directory or
 an ancestor. After a download succeeds, it likewise refreshes **Local files**
 when that pane still shows the destination directory or an ancestor. Changes
@@ -299,10 +307,34 @@ or host-key confirmation may still be required by the normal SSH security flow.
 The remote row context menu also supports deleting its selected files and
 directories (directories are non-recursive). Download and Delete no longer
 occupy the directory toolbar. The remaining remote controls support renaming
-one selected entry, editing bounded UTF-8 text, and saving to an explicit
-remote path. While the editor is open, a worker-owned
-poll checks the remote size/mtime fingerprint; a change disables Save and
-reports a conflict. The local toolbar uploads all selected files and folders.
+one selected entry and **Edit** in the system-associated application. Edit downloads
+a private local copy and opens the program associated with its extension on
+Windows, macOS, or Linux. AxSSH has no built-in SFTP editor. Text encodings and
+binary bytes are preserved. **Settings > SFTP > Remote edit file limit (MiB)**
+controls both downloaded and saved copies (default 4 MiB, range 1–64 MiB).
+Files above the configured limit can use the normal Download/Edit/Upload workflow. Set file
+associations in your operating system; a launcher failure is reported, and
+AxSSH never falls back to an internal editor.
+
+Saving the local copy uploads changes after a 500 ms debounce. **Auto upload**
+is on by default and applies to all files edited in this tab; turn it off to use
+**Upload changes** for the file shown in the edit status bar. Repeating Edit for
+the same remote file reopens its existing local copy, preserving pending changes.
+Each tab supports eight edited files. **Show local copy** reveals the copy in the
+system file manager. **Stop editing**, disconnect, reconnect, or closing the tab
+ends monitoring; the copy remains available, and reconnect does not replay an
+old edit. Up to 128 copies are retained in the application cache's `sftp-edit`
+folder. Preserve needed files and remove old copies there if that limit is reached.
+Saving under a different local filename does not change the watched file or
+remote destination; upload that new file through the normal upload action.
+
+Before uploading and again before publishing, AxSSH checks the original remote
+size/mtime. A conflict or failed upload retains local changes and pauses automatic
+retries; **Upload changes** can retry a transient failure. The server must support
+`posix-rename@openssh.com` for atomic replacement; otherwise the original remote
+file is retained. These checks cannot detect a remote rewrite that preserves both
+size and timestamp, and there is no three-way merge or cross-process edit recovery.
+The local toolbar uploads all selected files and folders.
 Dragging a selected local row carries the current selection; dragging an unselected
 row carries that row. Local files and folders, or files and folders dragged from a
 system file manager such as Finder, Windows Explorer, or a Linux file manager,
@@ -320,9 +352,7 @@ also be dropped into Finder as a native file: AxSSH downloads it only after the
 target accepts the drop. Returning that same drag to its originating AxSSH SFTP
 window downloads it into the Local files directory that was visible when the
 drag started. Folders, links, and filtered entries retain the in-app drag
-behavior; Finder-to-Remote uploads are unchanged. Automatic upload is opt-in, off by default, debounced by 500ms,
-and still guarded by the observed fingerprint. Cross-process edit recovery and
-three-way conflict merging remain outside the current scope.
+behavior; Finder-to-Remote uploads are unchanged.
 
 ## Workspace and terminal controls
 
@@ -789,6 +819,12 @@ The unlimited transfer-size setting applies to normal streaming uploads and
 downloads, including a remote file dragged to Finder. The separately
 configurable local-open snapshot limit affects only the cache copy used to
 open a local file from the SFTP pane, not those transfers.
+**Remote edit file limit (MiB)** separately controls remote Edit downloads and
+external save uploads (default 4 MiB, range 1–64 MiB). The next download or local
+save check uses the changed value without reconnecting; queued network operations
+retain their submitted limit. Lowering it preserves existing copies and suspends
+oversized saves; raising it triggers another check. Server-specific transfer
+policies and the local-open snapshot limit do not override this setting.
 
 In **Settings > Appearance**, Font family changes the application interface
 without changing terminal cell metrics. Renderer selects **Automatic**, **GPU**,
@@ -930,9 +966,8 @@ when such a connection is no longer live.
 
 ## Current limitations
 
-In-app known-hosts administration beyond the shared parser, SFTP upload,
-explicit Save As, mutation/edit sync, reconnect, and persisted workspace
-restoration remain planned work. Serial availability, device permissions, and supported parameter
+In-app known-hosts administration beyond the shared parser,
+cross-process edit recovery and three-way merge remain planned work. Serial availability, device permissions, and supported parameter
 combinations depend on the target operating system and hardware; Telnet has no
 encryption or automated login.
 

@@ -526,3 +526,13 @@
 - 关键结论：OSC 52 只承载文本；arboard 错误可报告且 Linux owner 要保持存活；独立 SSH session 可承载 PCM 至用户级 FIFO 音源；CPAL 0.18 提高 macOS 要求因此固定 0.17.3；/voice 属上游实验功能。
 - 对实施计划的影响：CM1–CM7；使用私有 SFTP 附件和明确启停的独立音频通道，不引入第二 SSH/UI 框架。
 - 未解决问题：真机系统权限、远端音频服务及各 CLI 对文件附件/音源的选择须 CM7 验收。
+
+## 2026-10-11 SFTP 外部编辑流程
+
+- 时间：2026-10-11 17:58 +0800
+- 检索问题：主流 SFTP 客户端如何选编辑器、检测保存、回传及处理文件生命周期。
+- 检索原因：用户要求检索后采用系统关联程序，并完全移除内置编辑器。
+- 来源列表：[WinSCP 编辑](https://winscp.net/eng/docs/task_edit)、[WinSCP 冲突检查](https://winscp.net/eng/docs/ui_pref_editor)、[FileZilla](https://filezillapro.com/docs/v3/advanced/how-to-set-text-editor-in-three-different-ways/)、[Cyberduck](https://docs.cyberduck.io/cyberduck/edit/)、[Windows ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew)。
+- 关键结论：内置/外部没有统一强制要求；外部模式为本地临时副本、关联/指定程序、保存检测、后台回传。FileZilla 可提示上传，Cyberduck 保存上传。WinSCP 不把复用进程的启动器退出当作文件关闭，并提供远端时间戳冲突检查。
+- 对实施计划的影响：采用用户要求的系统文件关联打开；删除内置文本 API；监听目录以兼容原子替换；自动上传可关闭；冲突/失败保留副本，迟到结果不得改写其他编辑上下文。
+- 未解决问题：系统文件关联与权限需目标平台人工验收；size/mtime 无法提供服务器端锁定或精确内容冲突检测。

@@ -2,73 +2,57 @@
 
 ## 当前目标
 
-- 目标 ID：20261011-agent-clipboard-microphone
-- 目标：落实剪贴板审计建议，为 SSH 上的 Codex CLI 等终端工具提供图片附件、本机语音转写和 Linux 远端麦克风链路。
-- 交付物：可报告错误的剪贴板适配、OSC 52 权限/大小修复、私有附件上传、显式麦克风启停、转写确认入口、跨平台编译配置与双语使用说明。
+- 目标 ID：20261011-sftp-edit-limit-setting
+- 目标：将远程外部编辑的文件大小上限纳入 Settings > SFTP，并统一下载/本地副本/保存回传检查。
+- 交付物：持久化配置、设置控件与实时映射、按操作传递的大小上限、旧配置兼容、回归与双语文档。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：平台剪贴板/音频适配、应用回调及小型状态 DTO、现有 SSH worker 的独立 SFTP/音频通道、终端操作入口、依赖和打包/CI、文档与记录，以及用户要求的本地分组提交。
-- 不在本轮范围内：远端安装软件、云端转写/凭据管理、RDP、Codex 内部修改、推送或发行、参考项目代码。
-- 所有权：Slint 发用户意图；平台适配采集/读剪贴板；SSH worker 管认证连接与辅助通道；音频回调只写有界队列；转写/PNG 编码在后台。
-- 安全边界：OSC 52 仍默认关闭且逐次确认读取；撤销后清除请求。图片只在用户粘贴后传送，文件/目录私有。麦克风只由用户开启，退出/断线取消；不把音频写入终端，不开放远端 TCP 音频端口。
+- 当前范围：config/settings、Settings Slint/bridge/view、外部编辑应用和 SFTP 字节操作、测试、翻译与双语文档；复核既有 SFTP 性能与外部编辑改动并创建本地提交。
+- 不在本轮范围内：依赖/工具链升级、流式超大文件编辑、内置编辑器恢复、推送/发布；既有性能和外部编辑实现保留。
+- 所有权：配置层持久化并规范化 1–64 MiB（默认 4）；应用层为操作取得当前设置并限制本地读取；SFTP 层在请求边界再次校验；Slint 只传递数值意图。
+- 安全边界：文件缓冲、监听和队列保持有界；拒绝链接、原子回传与 SSH host-key/短期凭据规则保持。
 
 ## 当前状态
 
 - 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| CM1 | completed | 剪贴板 Result 适配及 OSC 52 撤销/64 KiB 边界 | 回归、各 transport 协议响应 | 持久剪贴板 owner；错误不视为空文本 |
-| CM2 | completed | PNG 图片粘贴及私有 SFTP 附件 | 大小/权限/失败/过期结果回归 | 本地 shell 使用本机附件；SSH 使用远端路径 |
-| CM3 | completed | CPAL 采集和 Linux PulseAudio/PipeWire 麦克风通道 | 合成 PCM、背压、独立通道与取消测试 | 远端需 pactl/module-pipe-source；其他远端系统明确报错 |
-| CM4 | completed | whisper.cpp 本机转写与确认插入 | WAV/命令参数/超时/取消测试 | 引擎和模型由用户配置，不自动下载 |
-| CM5 | completed | 双语文档、打包权限、CI 和地图 | 链接、目录/skill/tracker validators | 保持 macOS 11 部署范围，CPAL 固定 0.17.3；Linux CI 补 ALSA 开发包 |
-| CM6 | completed | 完整本机 Cargo 门禁及可运行预览 | fmt/check/clippy/test/build/diff | 最终源码 707 项测试、macOS ARM64/x86_64 check/严格 Clippy/build 和预览签名通过 |
-| CM7 | pending | 用户真机端到端验收 | 剪贴板图片、系统权限、SSH 音源、CLI 输入 | 不自行捕获 GUI 截图 |
-| CM8 | completed | 用户要求的本地分组提交 | 暂存差异、提交边界、文档与工作区检查 | 高亮/URL 为 858b5bf，终端媒体为 36a9f1d；实施记录单独提交 |
-| HL4 | pending | 用户终端高亮显示验收 | 本地/SSH、ANSI、调色和真实日志 | 已收到 URL 区域异常截图，尚未验收通过 |
-| TM4 | pending | 用户原生 GUI 验收 | Windows/Linux/macOS 菜单配色、键盘、子菜单和焦点 | 不捕获应用截图 |
-| RT6 | pending | 用户原生验收延迟提示和连接生命周期 | 前后台、分屏/独立窗口、重连、真实 SSH/SFTP | GUI 验收属于用户 |
-| IP5 | pending | 前轮服务器/Local Shell 选择器验收 | 宽窄窗口、常用排序/搜索、自动/手动、焦点 | 715c5dc/69b091f 已提交，657 项测试通过 |
-| DI5 | pending | 前轮标题栏与 `+` 列表原生验收 | 分屏/返回/恢复、配色与列表键盘 | b6cbad7/f92c2c5 已提交 |
-| PW5 | pending | 前轮逐服务器凭据清除原生验收 | 状态刷新、确认/取消、真实系统后端 | 自动验证完成 |
-| UI7 | pending | 前轮导航系统图标原生验收 | 发行版/手动指定、配色、tooltip/焦点 | 自动验证完成 |
+| EL1 | completed | schema 默认/规范化及 Settings 持久化链 | 旧配置默认、保存重读、上下界与 Slint 重编 | 默认 4 MiB，1–64 MiB |
+| EL2 | completed | 下载/副本/读取/回传共用当前配置 | 超过旧 4 MiB、设置降低/提高、协议入口与字节边界 | 已排队操作保留取得的限制 |
+| EL3 | completed | 双语文档/翻译/地图与最终门禁 | Cargo fmt/check/strict Clippy/test/build、文档 validators | 不联网、不使用多 agent |
+| GC1 | completed | 按性能优化、系统程序编辑与配置、文档记录整理本地提交 | 每次检查暂存差异，完成后核对提交与工作区 | 代码提交 d9cbc4a / 76eef8f；本记录随文档提交保存，不推送 |
+| EL4 | pending | 用户设置/关联程序/真实远端 GUI 验收 | 新控件、保存后生效与外部编辑回传 | 前轮真实平台验收保留 |
 
 ## 已完成
 
-- 已审计现有文本剪贴板/OSC 52 和 SFTP/worker，确认图片与音频链路原来未实现。
-- 官方来源确认 OSC 52 是文本协议、SSH 无标准麦克风转发；选择独立 SSH session + module-pipe-source，而非音频写入 PTY。
-- 环境预检允许开工：Rust 2024/MSRV 1.92、Slint 1.18.1 不变，已有 image PNG 编码可复用。
-- 前轮高亮/URL 自动门禁通过，已提交为 858b5bf，用户待验收项保留。
-- 已实现图片附件、显式远端麦克风、本机转写确认与可保存的 9 种采样率/5 种声道设置；正常设置保存保留音频配置。
-- 终端媒体实现与双语使用/架构/开发文档已提交为 36a9f1d；环境、研究、地图和施工验证记录单独提交。
+- 已读取工程技能、环境记忆、地图、Cargo/CI、架构契约和相关源码；现有 737 项测试和两种 macOS 构建为历史基线。
+- 环境预检完成：Rust 2024/MSRV 1.92.0、本机 Rust/Cargo 1.97.1、Slint 1.18.1，两个 macOS target 可用；无依赖/工具链/CI 变化。
+- 先计划后施工；无新增 Worker 记录。
+- 本地提交已分离性能优化（d9cbc4a）与系统程序编辑/大小配置（76eef8f）；双语文档和验证记录随文档提交保存。拆分后的性能 index 快照单独通过 fmt 和 all-target Cargo check。
 
 ## 验证
 
-- 已完成：707 项测试（329 library + 378 binary）；45 种采样率/声道合成 PCM、实际 POSIX helper EOF/默认音源条件恢复、模拟 SFTP 权限/分块/失败、OSC 52 撤销代次/64 KiB 与转写 argv/WAV/Unicode/超时/大小检查；560 条中文翻译及文档/skill/tracker 校验。
-- 已完成：最终源码的 fmt/check/严格 all-target Clippy；两种 macOS 架构 check/严格 Clippy/build 与含麦克风用途声明的 ARM64 预览 app；字体/许可资源和 ad-hoc 签名验证通过。Intel 只编译链接，不在 ARM64 主机运行测试。
-- 收尾修复：转写插入把 CR/LF 转为空格，防止非 bracketed paste 终端提交；实际编码回归通过，预览已更新为最终 ARM64 构建。
-- 预览：`target/agent-media-preview/AxSSH.app`，以最终 ARM64 构建打包；未自行启动 GUI 或截图。
-- 未完成：Windows/Linux 原生 CI、真实剪贴板/麦克风/远端音频及 CM7 验收。
+- 已完成：环境与源码预检，Slint 重编及 24 项专项（含 6 项新增），最终 743 项全量测试（349 library + 394 binary），fmt/locked-offline check/严格 all-target Clippy/native ARM64 build，562 条翻译、30 条相对链接、skill/tracker/diff 检查。
+- 未完成：GUI/真实远端、Windows/Linux 原生验证及本轮非原生 Intel 构建；前轮两种 macOS 的验证仅作历史记录。
 
 ## 风险与阻塞
 
-- Linux 远端须有用户级 PulseAudio 或 pipewire-pulse 与 pactl；原生 ALSA 硬件直读程序不自动获得该音源。
-- Codex CLI /voice 为实验功能，账号/版本可限制可用性；音源链路不承诺启用上游未开放的功能。
-- 本地 whisper.cpp 可执行文件和模型不随应用分发；缺失时显示明确配置错误。
-- 本机仅 macOS SDK；其他平台需要 CI 原生编译和真机权限验收。
+- 当前编辑字节会整文件驻留内存，配置范围限制为 1–64 MiB，不提供无限值。
+- 保存期间设置可改变；下一个检查采用当前设置，已排队网络操作保持自己的数值，超限副本保留。
+- 本机缺少 Windows/Linux SDK；真实 GUI/关联程序/SSH 验收由相应平台完成。
 
 ## 下一步
 
-- 用户关闭旧版后运行预览 app，配置转写引擎/模型并按使用说明检查真实剪贴板、权限、声道/采样率与远端音源；保留 CM7 与 Windows/Linux 原生 CI 验收。
+- 使用 `target/debug/ax_ssh` 验收 Settings > SFTP 的远程编辑大小设置与真实回传；当前施工和自动验证完成，GC1 本地提交交付完成；EL4 用户 GUI/真实平台验收保留。
 
 ## 最后更新时间
 
-- 2026-10-11 10:22 +0800：CM1–CM6 和 CM8 完成，707 项测试与两种 macOS 架构门禁/打包通过，实现已分组本地提交；CM7 与前轮用户验收保留。
+- 2026-10-11 19:34 +0800

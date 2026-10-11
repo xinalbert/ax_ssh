@@ -1066,3 +1066,43 @@
 - 受影响文件：Cargo、Rust/Slint/config、macOS 用途声明、Linux CI/release ALSA 依赖、双语开发/使用/架构与实施记录。
 - 更新后的命令或环境：继续使用 locked/offline 本机门禁；可用的两个 macOS target 执行 CI 同款 check/严格 Clippy/build，Skia 使用匹配架构的完整本机归档；不运行非原生 Intel 测试。
 - 验证结果：最终 707 项测试、45 种格式、fmt/check/严格 Clippy、两架构构建、翻译/链接/skill/tracker/diff 与最终 ARM64 app 资源/签名通过。预览在 `target/agent-media-preview/AxSSH.app`；Windows/Linux CI、真实剪贴板/音频/远端/CLI 仍待验收。
+
+# 2026-10-11 SFTP 性能施工预检
+
+- 项目边界：独立 Rust/Slint 项目的 SFTP 请求、worker 生命周期与 UI model；SSH trust/凭据/协议边界保持。
+- 环境记忆状态：已读取并核对 Cargo、lockfile、build.rs、CI、地图、源码；不升级工具链或依赖。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1，Slint 1.18.1、russh 0.64.1、russh-sftp 3.0.1；Cargo 管依赖，build.rs 编译 ui/app.slint。
+- 测试环境：模拟 SFTP/无窗口 Slint 回归，locked/offline fmt/check/严格 all-target Clippy/test，两个 macOS target check/Clippy/build，文档/skill/tracker/diff 检查。
+- 环境变化检查：否；macOS ARM64/x86_64 target 已安装；Windows/Linux SDK 未安装，交原生 CI。
+- 开工判定：允许开工。真实 SSH/GUI 验收由用户完成，不自行截图。
+
+## 2026-10-11 SFTP 性能完整验证
+
+- 变化摘要：目录首批发布、后台有序写队列、16 分块请求窗口、持续本地读取及稳定 UI 源快照/图标缓存已实现；工具链、依赖和 CI 矩阵不变。
+- 更新后的命令或环境：保留 locked/offline 门禁；两种 macOS 架构使用 CI 同款 target check/严格 all-target Clippy/build。Intel Skia 下载失败后，复用完整且 tag 0.153.3、x86_64/特性 key 匹配的本机归档，使用上游 `SKIA_BINARIES_URL=file://…` 环境入口完成门禁。
+- 验证结果：fmt/check/严格 Clippy、720 项测试（339 library + 381 binary，Doc tests 0）、两架构构建与 Mach-O 检查、Markdown/skill/tracker/diff 通过。模拟服务器等待完整窗口再回应，覆盖逆序、短读、最终复核失败和取消；吞吐改善仍需真实远端测量。
+- 验证边界：本机未启动或截图 GUI，不运行非原生 Intel 测试；Windows/Linux 原生 CI、真实 SSH 生命周期和用户视觉验收保留。
+
+## 2026-10-11 SFTP 外部编辑完整环境验证
+
+- 时间：2026-10-11 18:52 +0800
+- 变化摘要：完全移除内置编辑器，复用系统关联 opener、私有副本、保存监听和 guarded 原子回传；保持前轮 SFTP 性能实现与 SSH 安全边界。
+- 环境变化：无依赖、工具链或 CI 变化；Intel Skia 复用已验证的匹配本机归档。
+- 验证结果：最终 737 项测试、fmt/check/严格 all-target Clippy、两个 macOS target 的 CI 参数 check/Clippy/build、两份 Mach-O 架构、559 条翻译、30 条 Markdown 相对链接、skill/tracker/diff 全部通过。
+- 风险与缺口：Windows/Linux 原生 SDK 不可用；真实 GUI/系统关联/远端回传待验收，不自行截图、运行非原生 Intel 测试或发布。
+
+## 2026-10-11 外部编辑大小设置施工预检
+
+- 项目边界：独立 Rust/Slint 的 config、设置桥接及 SFTP 外部编辑大小契约。
+- 环境记忆：已读取并核对 Cargo/lock/build.rs/CI/源码与本机 Rust 1.97.1；保持 Rust 2024/MSRV 1.92.0、锁定 Slint/russh 与既有 open/notify。
+- 环境变化：否；不新增依赖，两个 macOS target 可用，Windows/Linux SDK 缺失。
+- 测试环境：旧配置和持久化回归、动态容量/协议测试，完整 locked/offline Cargo 门禁、Slint 重编和文档/翻译/skill/tracker/diff 检查。
+- 开工判定：允许开工；计划先行，GUI/真实远端仍由用户验收。
+
+## 2026-10-11 编辑上限设置环境验证完成
+
+- 时间：2026-10-11 19:23 +0800
+- 变化摘要：配置 schema v36 新增 remote_edit_max_file_mib，1–64 MiB/default 4，主窗与独立窗口设置/搜索/保存一致，编辑操作按当前值校验。
+- 环境变化：无依赖、工具链或 CI 修改。
+- 验证结果：24 项专项、743 项完整测试、fmt/check/严格 all-target Clippy、native ARM64 build/Mach-O、562 条翻译、30 条链接和 skill/tracker/diff 通过；程序为 `target/debug/ax_ssh`。
+- 验证缺口：本轮未跑 Intel/Windows/Linux 原生 CI，GUI/系统程序/真实远端仍待验收；不自行截图、提交或发行。

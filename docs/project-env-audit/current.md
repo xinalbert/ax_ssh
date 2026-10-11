@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：文本/图片剪贴板、终端 agent 本机语音转写及 Linux SSH 麦克风通道；已读取环境记忆、Cargo/build.rs/CI 与源码，保持 SSH trust、凭据生命周期和 CI target 矩阵。前轮高亮/URL 修改保留。
+- 当前环境范围：SFTP 远程编辑文件大小的设置、持久化与动态操作边界；复用现有 Slint/config/SFTP 架构。前轮性能、系统关联编辑和终端媒体实现保留，无依赖或 CI 变化。
 
 ## 运行环境
 
@@ -13,7 +13,9 @@
 
 ## 测试环境
 
-- 本轮最终完整测试 707 项（329 library + 378 binary）通过，涵盖 45 种音频格式、OSC 52、SFTP 附件、helper 清理、本机转写和非 bracketed paste 终端的插入边界；fmt/check/严格 all-target Clippy，以及两种 macOS 架构的显式 check/严格 Clippy/build 全部通过。560 条翻译、16 条相对文档链接、skill/tracker/diff 已通过。
+- 当前大小设置代码已通过 743 项全量测试（349 library + 394 binary，24 项专项）、fmt、locked/offline check、严格 all-target Clippy 和 native ARM64 build，Slint 已重编；562 条翻译、30 条相对链接、skill/tracker/diff 通过。本轮 Intel/Windows/Linux 原生构建和 GUI/真实远端未运行。
+- 前轮系统关联外部编辑代码已通过 737 项全量测试（345 library + 392 binary，18 项专项）、格式、locked/offline check、严格 all-target Clippy，Slint 已重编译；559 条翻译、30 条相对文档链接与 skill/tracker/diff 检查通过。两个 macOS target 的 CI 同款 check/严格 all-target Clippy/build 和 Mach-O 检查全部通过；真实系统关联/GUI/远端及 Windows/Linux 原生验证仍待完成。
+- 前轮终端媒体完整测试 707 项（329 library + 378 binary）通过，涵盖 45 种音频格式、OSC 52、SFTP 附件、helper 清理、本机转写和非 bracketed paste 终端的插入边界；fmt/check/严格 all-target Clippy，以及两种 macOS 架构的显式 check/严格 Clippy/build 全部通过。560 条翻译、16 条相对文档链接、skill/tracker/diff 已通过。
 - 最终 ARM64 预览位于 `target/agent-media-preview/AxSSH.app`，含麦克风用途声明、字体和许可；ad-hoc 签名验证及 Mach-O 的 macOS 11 最低版本检查通过。没有启动 GUI、打开真实麦克风或连接实际远端服务；Windows/Linux 仍由原生 CI 与真机验收。
 - 前轮原生 macOS ARM64 验证完成：既有 25 项匹配/渲染专项、URL 修复的 12 项目标/路径与 2 项实际选区专项、689 项全量测试（315 library + 374 binary）、fmt、locked/offline check、严格 all-target Clippy、debug build 通过。下列其他数字仅为历史验证。
 - 前轮出现默认/host target 构建锁及 Skia 下载超时，本轮沿用独立 APFS clone 缓存和 SKIA_BINARIES_URL 指定的完整本地归档；已核对 tag 0.153.3 与 ARM64/特性 key。未停止其他进程，可运行预览位于 `target/highlighting-preview/ax_ssh`。
@@ -53,6 +55,8 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-10-11 19:23 +0800：远程编辑上限改为 Settings > SFTP 可配置（1–64 MiB/default 4，schema v36）；743 项测试及完整本机 Cargo 门禁通过，当前新程序为 `target/debug/ax_ssh`。
+- 2026-10-11 18:52 +0800：SFTP 外部编辑的最终 737 项测试与两个 macOS 架构门禁完成；没有新增依赖、工具链或 CI 变化。当前可运行程序为 `target/<macOS-target>/debug/ax_ssh`，真实关联程序/远端/GUI 与 Windows/Linux 原生验证待验收。
 - 2026-10-11 10:22 +0800：高亮/URL 与终端媒体实现已本地提交；最终源码 707 项测试及两种 macOS 架构 check/严格 Clippy/build 和 ARM64 预览打包通过，真实设备/远端、GUI 和 Windows/Linux 原生 CI 验收保留。
 
 # 2026-10-03 SFTP 标题栏控件环境验证
@@ -620,3 +624,46 @@ git diff --check
 - 本轮依赖：arboard 3.6.1（剪贴板错误/图片），CPAL 固定 0.17.3（避开 0.18 的 macOS 14.2 要求），hound（标准 WAV）；复用 image PNG。
 - Linux CPAL 的 ALSA 构建依赖须补充 libasound2-dev，打包保留动态依赖；macOS 增加麦克风用途与显式 TCC 请求。
 - 验证边界：仅本机 macOS 原生验证；Windows/Linux CI 必须保留 check/clippy --all-targets/build/test 原有矩阵。
+
+# 2026-10-11 SFTP 性能施工预检与验证
+
+- 项目边界：独立 Rust/Slint 项目的 SFTP 请求、worker 生命周期与 UI model；SSH trust/凭据/协议边界保持。
+- 环境记忆状态：已读取并核对 Cargo、lockfile、build.rs、CI、地图、源码；不升级工具链或依赖。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1，Slint 1.18.1、russh 0.64.1、russh-sftp 3.0.1；Cargo 管依赖，build.rs 编译 ui/app.slint。
+- 测试环境：模拟 SFTP/无窗口 Slint 回归，locked/offline fmt/check/严格 all-target Clippy/test，两个 macOS target check/Clippy/build，文档/skill/tracker/diff 检查。
+- 环境变化检查：否；macOS ARM64/x86_64 target 已安装；Windows/Linux SDK 未安装，交原生 CI。
+- 构建环境补充：Intel Skia 下载连接重置，源码回退无法连接 googlesource；复用本机完整归档，核对 tag 0.153.3 和 x86_64/ganesh-gl-jpegd-jpege-metal-pdf key，以上游支持的 `SKIA_BINARIES_URL=file://…` 完成检查，不改依赖或 CI。
+- 验证结果：fmt、locked/offline check、严格 all-target Clippy、720 项测试（库 339、应用 381，Doc tests 0）、两架构 CI 参数 check/严格 Clippy/build、Mach-O 架构、Markdown/skill/tracker/diff 均通过；不执行非原生 Intel 测试。
+- 开工判定：施工完成。真实 SSH/GUI 和远端吞吐由用户验收，不自行截图；Windows/Linux 交原生 CI。
+
+# 2026-10-11 SFTP 外部编辑施工预检
+
+- 项目边界：独立 Rust 桌面项目的 SFTP 字节编辑、应用副本/文件监听与 Slint 状态；保持 SSH trust 和凭据边界。
+- 环境记忆状态：已读取现有记录，复核 Cargo/lock、build.rs、CI、地图和源码。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1；Slint 1.18.1、russh 0.64.1；既有 open 5.4.4/notify 8.2.0，无依赖变化。
+- 测试环境：模拟 SFTP、无窗口状态/本地文件测试；locked/offline Cargo 门禁、两种 macOS CI 参数检查与构建。
+- 环境变化检查：否；Windows/Linux SDK 不可用，原生 CI 和真实关联程序/GUI 待验收。
+- 开工判定：允许开工，先写计划后实现；前轮性能修改保留。
+
+## 2026-10-11 SFTP 外部编辑最终环境验证
+
+- 时间：2026-10-11 18:52 +0800
+- 环境变化：无；继续使用既有 open/notify、Rust 2024/MSRV 1.92.0 和锁定 Slint/russh，无 manifest、lockfile 或 CI 修改。
+- 验证结果：最终源码 737 项全量测试（345 library + 392 binary）、格式、locked/offline check、严格 all-target Clippy、两个 macOS target 的 CI 同款 check/Clippy/build 通过；Slint 已重编，559 条翻译、30 条相对文档链接、skill/tracker/diff 通过。
+- 构建环境：Intel 沿用已核对版本、架构和特性 key 的本机 Skia 完整归档；未运行非原生 Intel 测试。两份 Mach-O 位于 `target/<macOS-target>/debug/ax_ssh`。
+- 验证边界：不启动或截图 GUI；Windows/Linux 原生 CI、真实系统文件关联和 SFTP 生命周期由相应平台验证。开工判定：施工与本机自动验证完成。
+
+## 2026-10-11 外部编辑大小设置施工预检
+
+- 项目边界：独立 Rust/Slint 的 config、设置桥接及 SFTP 外部编辑大小契约。
+- 环境记忆：已读取并核对 Cargo/lock/build.rs/CI/源码与本机 Rust 1.97.1；保持 Rust 2024/MSRV 1.92.0、锁定 Slint/russh 与既有 open/notify。
+- 环境变化：否；不新增依赖，两个 macOS target 可用，Windows/Linux SDK 缺失。
+- 测试环境：旧配置和持久化回归、动态容量/协议测试，完整 locked/offline Cargo 门禁、Slint 重编和文档/翻译/skill/tracker/diff 检查。
+- 开工判定：允许开工；计划先行，GUI/真实远端仍由用户验收。
+
+## 2026-10-11 编辑上限设置最终验证
+
+- 时间：2026-10-11 19:23 +0800
+- 环境变化：无工具链、依赖或 CI 变化；配置 schema v36，以默认 4 MiB 兼容旧文件。
+- 验证结果：24 项专项和 743 项全量测试、fmt/check/严格 all-target Clippy、native ARM64 build/Mach-O、562 条翻译、30 条链接、skill/tracker/diff 通过。
+- 验证边界：本轮只执行 native macOS；Intel/Windows/Linux 仍需 CI，GUI/系统关联/真实远端验收保留，不自行截图。开工判定：施工和本机自动验证完成。
