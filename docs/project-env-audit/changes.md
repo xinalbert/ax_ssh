@@ -1004,3 +1004,65 @@
 - 配套门禁：发布 helper 14、512 条翻译、23 条 Markdown 相对链接、Release YAML/18 段 Bash、skill/tracker/diff 检查通过；amd64/arm64 Debian fixture 每包 30 项资源与控制字段一致。
 - 环境与验收限制：未提供 Windows/Linux SDK/原生 runner；真实 GUI/拖放/连接和 Linux 真包安装/运行库依赖需 native CI/用户验证。不自行截图，不执行提交、push、tag 或发布。
 - 开工判定：代码交付和本机验证完成，限制已记录。
+
+## 2026-10-10 标准终端语义高亮施工预检
+
+- 项目边界：独立 Rust 应用的私有 terminal render mapper，新增 regex 直接依赖及启动预编译；保持 Slint/worker/SSH 和四类颜色设置边界。
+- 环境记忆状态：已读取 current，核对 Cargo/build.rs/CI 和工具链；刷新本轮范围，原验证数字仅作历史基线。
+- 运行环境：Rust 2024/MSRV 1.92.0，本机 Rust/Cargo 1.97.1；aarch64/x86_64 macOS target 已安装。
+- 环境变化：Cargo.lock 已有 regex 1.13.1，仅增加根包依赖边，不升级 regex、Slint、Tokio 或 russh。
+- 测试环境：标准等级/HTTP 上下文/样式专项后，执行 fmt、locked/offline check、严格 all-target Clippy、完整 tests、debug build、文档链接/skill/tracker/diff 校验。
+- 风险与缺口：Windows/Linux native SDK 不可用，真实终端高亮由用户验收，不自行截图。
+- 开工判定：允许开工；计划已先行写入 tracker，无多 agent。
+
+## 2026-10-11 独立缓存与 Skia 本地归档验证
+
+- 变化摘要：现有 cargo run 在 Skia 构建阶段持有 target 锁，独立 APFS clone 缓存避免互相等待；GitHub 连接超时，复用已有 Skia 完整 tar 归档。
+- 受影响文件：`ui/settings/terminal.slint`、`scripts/build_zh_catalog.py`、`translations/zh-CN/LC_MESSAGES/ax_ssh.po`、环境与实施记录；不修改 vendor、工具链或 CI。
+- 更新后的命令或环境：本轮 Cargo 命令使用临时 CARGO_TARGET_DIR 和 SKIA_BINARIES_URL，后者由 skia-bindings 上游 build support 支持 file URL；仅使用原锁定版本/目标/特性的本机归档。
+- 验证结果：tar 完整读取，tag 0.153.3 与 b7f043e0b1e2a850e702/ARM64/ganesh-gl-jpegd-jpege-metal-pdf key 一致；538 条中文目录和 Slint 重编译通过，Rust 门禁继续进行。
+- 风险与缺口：不停止其他 cargo run；Windows/Linux 与 GUI 验收仍由 CI/用户完成。
+
+
+## 2026-10-11 标准终端语义高亮环境验证完成
+
+- 项目边界：Rust 私有 regex 匹配与渲染模块、启动预编译、Settings 双语提示；worker、transport、SSH trust、凭据和配置 schema 保持原有所有权。
+- 环境变化：仅将已有 regex 1.13.1 提升为直接依赖，根包 lockfile 依赖同步；MSRV、工具链、Slint/Tokio/russh 和 CI 矩阵未改变。
+- 验证结果：macOS ARM64 上 25 项专项、682 项全量测试（315 library + 367 binary）、fmt、locked/offline check、严格 all-target Clippy、debug build 通过；Slint 已重编译，538 条翻译、10 条 Markdown 相对链接、skill/tracker/diff 校验通过。
+- 构建环境：独立 APFS clone 缓存与已验证的 Skia 同版本/目标/特性归档；所有本轮 Cargo 命令保持同一临时 CARGO_TARGET_DIR 和 SKIA_BINARIES_URL，未安装或替换外部依赖，未停止其他进程。
+- 交付状态：可运行原生程序位于 `target/highlighting-preview/ax_ssh`；未启动 GUI，不截图、不提交或发布。
+- 风险与缺口：Windows/Linux 原生 CI 尚未执行；真实终端高亮及自定义配色由用户验收，保留 512 字节 ASCII run 与不跨样式/行识别的界限。
+- 开工判定：代码施工与本机自动验证完成。
+
+
+## 2026-10-11 URL 目标修复施工预检
+
+- 项目边界：私有 terminal_targets 识别与实际选区回归；Slint DTO、worker、SSH trust、凭据和平台 CI 保持原状。
+- 环境记忆状态：已读取环境记录、Cargo 和项目地图；本机 Rust/Cargo 1.97.1、Rust 2024/MSRV 1.92.0 与此前一致，原 target 锁已释放，保留独立构建缓存以复用已验证 Skia 归档。
+- 环境变化：url 2.5.8 原已存在于 Cargo.lock，计划提升为直接依赖，MSRV 1.63；regex 1.13.1 沿用本轮直接依赖，不升级工具链或 crates。
+- 测试环境：先复现用户 `)。HTTP` 原文，再执行 URL/真实选区专项和 fmt/check/严格 Clippy/test/build、双语链接与记录校验。
+- 风险与缺口：中文行文标点边界属于终端提取策略，URL parser 不能独自推断；保持原文、1024 字符 URL/2048 字符上下文上限与 OSC 8 语义，GUI 由用户验收。
+- 开工判定：允许开工，URL 修复计划已先行记录，无多 agent。
+
+
+## 2026-10-11 URL 目标修复环境验证完成
+
+- 时间：2026-10-11 08:33 +0800
+- 项目边界：应用私有 regex/URL parser 与共享目标区间，保持原有字符/cell/软换行、OSC 8、Slint DTO 及 worker/SSH 契约。
+- 环境变化：regex 1.13.1 和 url 2.5.8 仅增加根包直接依赖边；url MSRV 1.63 满足项目 1.92。无 crate、工具链或 CI target 变化。
+- 验证结果：macOS ARM64 上 12 项目标/路径与 2 项实际选区专项、689 项完整测试（315 library + 374 binary）、fmt、locked/offline check、严格 all-target Clippy、debug build 通过；538 条翻译、Markdown 相对链接、skill/tracker/diff 校验通过。
+- 构建环境：沿用独立缓存和同版本/目标/特性的 Skia 本地归档；没有中断其他 Cargo/应用进程，预览路径已原子更新并与构建结果一致。
+- 风险与缺口：用户原文在终端模型中修复前失败/修复后通过；实际 GUI 双击/悬停仍待用户确认，Windows/Linux 原生 CI 未在本机运行。
+- 开工判定：施工和本机自动验证完成。
+
+## 2026-10-11
+
+- 为剪贴板和麦克风实施完成开工补充，记录 CPAL 版本/ALSA/TCC 要求及原生验证边界。
+
+## 2026-10-11 终端媒体最终环境验证
+
+- 日期：2026-10-11 10:16 +0800
+- 变化摘要：剪贴板图片、CPAL/rubato 多格式麦克风、独立 SSH 音频通道及 whisper.cpp 转写实现完成，保持 Rust 2024/MSRV 1.92、Slint/russh 版本和原生 CI 矩阵。
+- 受影响文件：Cargo、Rust/Slint/config、macOS 用途声明、Linux CI/release ALSA 依赖、双语开发/使用/架构与实施记录。
+- 更新后的命令或环境：继续使用 locked/offline 本机门禁；可用的两个 macOS target 执行 CI 同款 check/严格 Clippy/build，Skia 使用匹配架构的完整本机归档；不运行非原生 Intel 测试。
+- 验证结果：最终 707 项测试、45 种格式、fmt/check/严格 Clippy、两架构构建、翻译/链接/skill/tracker/diff 与最终 ARM64 app 资源/签名通过。预览在 `target/agent-media-preview/AxSSH.app`；Windows/Linux CI、真实剪贴板/音频/远端/CLI 仍待验收。

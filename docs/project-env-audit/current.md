@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 本轮环境范围：Rust 依赖升级后的 SSH transport、Slint 单实例与 Linux 打包；保持 SSH trust、凭据生命周期和 CI target 矩阵。
+- 本轮环境范围：文本/图片剪贴板、终端 agent 本机语音转写及 Linux SSH 麦克风通道；已读取环境记忆、Cargo/build.rs/CI 与源码，保持 SSH trust、凭据生命周期和 CI target 矩阵。前轮高亮/URL 修改保留。
 
 ## 运行环境
 
@@ -13,6 +13,10 @@
 
 ## 测试环境
 
+- 本轮最终完整测试 707 项（329 library + 378 binary）通过，涵盖 45 种音频格式、OSC 52、SFTP 附件、helper 清理、本机转写和非 bracketed paste 终端的插入边界；fmt/check/严格 all-target Clippy，以及两种 macOS 架构的显式 check/严格 Clippy/build 全部通过。560 条翻译、16 条相对文档链接、skill/tracker/diff 已通过。
+- 最终 ARM64 预览位于 `target/agent-media-preview/AxSSH.app`，含麦克风用途声明、字体和许可；ad-hoc 签名验证及 Mach-O 的 macOS 11 最低版本检查通过。没有启动 GUI、打开真实麦克风或连接实际远端服务；Windows/Linux 仍由原生 CI 与真机验收。
+- 前轮原生 macOS ARM64 验证完成：既有 25 项匹配/渲染专项、URL 修复的 12 项目标/路径与 2 项实际选区专项、689 项全量测试（315 library + 374 binary）、fmt、locked/offline check、严格 all-target Clippy、debug build 通过。下列其他数字仅为历史验证。
+- 前轮出现默认/host target 构建锁及 Skia 下载超时，本轮沿用独立 APFS clone 缓存和 SKIA_BINARIES_URL 指定的完整本地归档；已核对 tag 0.153.3 与 ARM64/特性 key。未停止其他进程，可运行预览位于 `target/highlighting-preview/ax_ssh`。
 - 依赖通过 `Cargo.lock` 锁定；`russh` 已升级到 0.64.1，`russh-sftp` 已锁定到 3.0.1，其余依赖沿用此前兼容更新，使用 locked/offline 验证。
 - 聚焦回归：detached 5、SSH probe 2、原子写入 3、发布脚本 14 通过；512 条翻译、skill/tracker/diff、23 条相对链接通过。
 - fmt/check/严格 all-target Clippy/完整 locked-offline test（库 303、应用 312、Doc tests 0）/debug build 全部通过；两个 macOS target 的 CI 同款 check/严格 Clippy/build 通过，未运行非原生 Intel 测试。Windows/Linux 原生 target 交 CI，GUI/真实连接由用户验收。
@@ -36,17 +40,20 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.64.1、russh-sftp 3.0.1、`libmudtelnet-rs` 2.0.10 等由 `Cargo.toml`/`Cargo.lock` 约束；`russh` 的 RSA feature 仍固定 `rsa 0.10.0-rc.18`。
+- 媒体依赖：arboard 3.6.1、固定 CPAL 0.17.3（保持 macOS 11 部署范围）、rubato 0.16.2、hound 3.5.1；复用 image PNG。Linux 构建需要 `libasound2-dev`，CI/release 和双语开发说明已补齐。远端需用户级 PulseAudio/pipewire-pulse 与 pactl；本机 whisper-cli/模型需配置。
 - Linux Release runner 固定安装 cargo-deb 3.7.0 和 dpkg-dev；Cargo metadata 是 Debian 安装清单的唯一来源，保留自动运行库依赖发现。
 - 本机 cargo-deb 3.7.0 已安装；默认 Python 3.10.20 运行仓库脚本，打包 fixture 使用本机 Python 3.13 的 tomllib。
-- 已联网核对 crates.io `russh 0.64.1`、cargo-deb 官方资产与 target 路径合约；`russh` MSRV 1.89，满足项目 1.92。开工判定：施工及本机自动验证完成。
+- 已锁定的 regex 1.13.1 和 url 2.5.8 已提升为直接依赖，url 声明 MSRV 1.63；不升级 crate 或工具链。已核对官方 regex API、rust-url、OpenTelemetry/syslog 等级及 HTTP 标准与访问日志格式。
+- 前轮高亮/URL 施工预检：Rust/Cargo 1.97.1 和两个 macOS target 可用，Cargo 管理依赖；聚焦回归和 locked/offline 完整门禁已通过。当时仅新增 regex/url 直接依赖边；本轮媒体依赖见上文，Cargo.lock 已同步。
+- 风险与缺口：日志语义高亮不跨样式/物理行；URL 目标继续支持连续软换行与宽字符映射。Windows/Linux 原生 SDK 不可用，真实 GUI 高亮与 URL 选区由用户验收。开工判定：施工和本机验证完成。
 
 ## 证据文件
 
-- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`.github/workflows/release.yml`、`src/app/connection/`、`src/app/view/tests.rs`、`src/config/persistence.rs`、`src/ssh/worker/`、`ui/`、`docs/duplicate-link-cleanup.md`、`docs/duplicate-link-cleanup.zh.md`。
+- `Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/app.rs`、`src/app/terminal_render.rs`、`src/app/terminal_render/highlighting.rs`、`src/app/terminal_targets.rs`、`src/app/terminal_bridge.rs`、`src/app/terminal_media.rs`、`src/audio.rs`、`src/media.rs`、`src/ssh/worker/media.rs`、`packaging/macos/Info.plist`、`docs/usage.md`、`docs/usage.zh.md`、`docs/architecture.md`、`docs/architecture.zh.md`。
 
 ## 最后确认时间
 
-- 2026-10-08 11:27 +0800。
+- 2026-10-11 10:22 +0800：高亮/URL 与终端媒体实现已本地提交；最终源码 707 项测试及两种 macOS 架构 check/严格 Clippy/build 和 ARM64 预览打包通过，真实设备/远端、GUI 和 Windows/Linux 原生 CI 验收保留。
 
 # 2026-10-03 SFTP 标题栏控件环境验证
 
@@ -606,3 +613,10 @@ git diff --check
 - 环境变化检查：是；Cargo.lock 中 Skia crate 来源将改为本地 path patch，版本保持 1.18.1；非 macOS CI target 仍按原矩阵验证。
 - 开工判定：施工完成；运行时内存降幅待同负载采样。
 - 施工验证：本地 Skia 1.18.1 patch 已编译；ARM64 macOS fmt、locked/offline check、严格 Clippy、全量测试（库 280、应用 268）和 build 均通过。x86_64 macOS 的显式 target check、严格 Clippy、build 均通过，未在 ARM64 主机运行 x86_64 测试；运行时 GPU footprint 改善仍待新二进制同负载采样。
+
+## 2026-10-11 剪贴板与音频开工补充
+
+- 开工判定：允许开工。现有工具链、MSRV、UI 与 SSH 架构不变。
+- 本轮依赖：arboard 3.6.1（剪贴板错误/图片），CPAL 固定 0.17.3（避开 0.18 的 macOS 14.2 要求），hound（标准 WAV）；复用 image PNG。
+- Linux CPAL 的 ALSA 构建依赖须补充 libasound2-dev，打包保留动态依赖；macOS 增加麦克风用途与显式 TCC 请求。
+- 验证边界：仅本机 macOS 原生验证；Windows/Linux CI 必须保留 check/clippy --all-targets/build/test 原有矩阵。

@@ -496,3 +496,33 @@
 - 关键结论：`keepalive@openssh.com` 配合 want-reply 可使用现有 SSH transport；REQUEST_FAILURE 也是有效往返响应，未知请求须按协议拒绝；全局响应按顺序匹配，没有请求 ID。固定版本 send_ping 忽略 oneshot 关闭，因此直接使用 send_global_request 区分拒绝与断线。既有保活仅在无入站数据时运行，不能独立提供持续 RTT。
 - 对实施计划的影响：RT2 使用拥有单个 pending future 的 worker 内 sampler，展示超时后保留该请求；成功或拒绝返回测量，断线错误停止采样。RT3 只保存临时延迟，复用代次 guard 和有界 Tab 刷新，不引入 ICMP、新连接或远端 exec。
 - 未解决问题：数值包含 SSH 队列、传输和服务端处理时间；真实高延迟、不同服务端、前后台/重连与各平台视觉仍需用户原生验收。
+
+## 2026-10-10 终端语义高亮的标准分类与匹配实现
+
+- 时间：2026-10-10 23:53 +0800
+- 检索问题：哪些成熟匹配实现和有出处的等级/HTTP 规则可以替代手写词表及三位数字扫描？
+- 检索原因：用户要求按标准化方案替换旧识别器，需要区分协议/等级定义与产品显示规则。
+- 来源列表：[regex 1.13.1 API](https://docs.rs/regex/1.13.1/regex/)、[iTerm2 Highlight Text](https://iterm2.com/documentation-triggers.html)、[OpenTelemetry 日志等级](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)、[RFC 5424 等级表](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1)、[RFC 9110 状态码类别](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)、[RFC 9112 状态行](https://www.rfc-editor.org/rfc/rfc9112.html#section-4)、[OpenTelemetry HTTP 属性](https://opentelemetry.io/docs/specs/semconv/registry/attributes/http/)、[Apache Common/Combined Log Format](https://httpd.apache.org/docs/2.4/logs.html#common)。
+- 关键结论：regex 返回字节区间，可预编译复用；RegexSet 仅返回命中的规则编号，不能独自提供着色区间。OpenTelemetry 定义 TRACE/DEBUG/INFO/WARN/ERROR/FATAL；syslog 等级表补充 Emergency/Alert/Critical/Warning/Notice/Informational。HTTP 合法类别为 1xx–5xx，普通三位数不构成 HTTP 上下文；状态行、访问日志请求字段后的码以及明确 HTTP 状态属性提供上下文。不存在由这些标准规定的统一终端配色或普通状态词词典。
+- 对实施计划的影响：HL1 以预编译 regex 的命名捕获区间替代旧关键词/短语/数字扫描和逐字节标记；等级映射为现有 Information/Warning/Error，HTTP 1xx/3xx 为 Information、2xx 为 Success、4xx 为 Warning、5xx 为 Error。这些显示颜色映射为 AxSSH 产品选择，非协议要求。HTTP/2、HTTP/3 的文本状态摘要作为显示约定，不宣称其线上帧是 HTTP/1 状态行。
+- 未解决问题：不跨样式段或物理行拼接，非 ASCII 字词不在此层识别；真实 GUI 效果需用户验收，不引入用户规则执行动作。
+
+
+## 2026-10-11 URL 目标识别与中文行文边界
+
+- 时间：2026-10-11 08:22 +0800
+- 检索问题：如何标准化 URL 候选识别与语法校验，并隔离终端行文标点？
+- 检索原因：用户原文 `https://www.rfc-editor.org/rfc/rfc9110.html#section-15)。HTTP` 被旧 parser 作为完整 URL 返回。
+- 来源列表：[Alacritty 终端 hints](https://alacritty.org/config-alacritty.html#hints)、[rust-url 2.5.8](https://docs.rs/url/2.5.8/url/)、[Url::parse](https://docs.rs/url/2.5.8/url/struct.Url.html#method.parse)。
+- 关键结论：成熟终端将 regex 候选识别、启发式尾部后处理和显式 OSC 8 metadata 分开；rust-url 实现 WHATWG URL 标准，提供主机/端口/IPv6 校验。合法 URL 语法本身不能判定行文中的中文句号或引号是否属于链接，因此明确中文行文分隔是 AxSSH 提取规则，非 URL 标准的禁用字符声明。
+- 对实施计划的影响：HL6 预编译 HTTP(S) matcher，再处理平衡括号/尾随标点并使用 Url::parse 验证；保留原始文本及字节到字符/cell 区间，保留 Unicode 路径、IPv6、查询与片段，不修改 OSC 8 提供的 URI。
+- 未解决问题：包含中文行文标点的字面 URL 需要 percent encoding 才能避免与 prose 边界冲突；GUI 双击/悬停效果仍由用户验收。
+
+## 2026-10-11 终端 agent 的剪贴板与麦克风链路
+
+- 检索问题：文本/图片剪贴板、SSH 远端麦克风和 Codex CLI 的标准能力如何接合？
+- 检索原因：用户要求核对标准实现，原有协议尺寸/授权有缺口，音频与图片未实现。
+- 来源列表：[xterm OSC 52](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)、[arboard](https://docs.rs/arboard/3.6.1/arboard/struct.Clipboard.html)、[RFC 4254](https://www.rfc-editor.org/rfc/rfc4254.html)、[CPAL 0.17.3](https://docs.rs/crate/cpal/0.17.3/source/README.md)、[PipeWire pipe source](https://pipewire.pages.freedesktop.org/pipewire/page_pulse_module_pipe_source.html)、[Apple 麦克风用途](https://developer.apple.com/documentation/bundleresources/information-property-list/nsmicrophoneusagedescription)、[whisper.cpp CLI](https://github.com/ggml-org/whisper.cpp/tree/master/examples/cli)、[Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference)。
+- 关键结论：OSC 52 只承载文本；arboard 错误可报告且 Linux owner 要保持存活；独立 SSH session 可承载 PCM 至用户级 FIFO 音源；CPAL 0.18 提高 macOS 要求因此固定 0.17.3；/voice 属上游实验功能。
+- 对实施计划的影响：CM1–CM7；使用私有 SFTP 附件和明确启停的独立音频通道，不引入第二 SSH/UI 框架。
+- 未解决问题：真机系统权限、远端音频服务及各 CLI 对文件附件/音源的选择须 CM7 验收。
