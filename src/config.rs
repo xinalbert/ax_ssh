@@ -30,9 +30,9 @@ pub use self::session::{
 #[cfg(test)]
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};
 pub use self::settings::{
-    AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, RendererPreference,
-    SftpTransferFilterSettings, SftpTransferPolicy, SftpTransferSettings, ShortcutSettings,
-    SoftwarePresentationMode, TerminalDrawingPreference, TerminalSemanticColors,
+    AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, AudioSettings,
+    RendererPreference, SftpTransferFilterSettings, SftpTransferPolicy, SftpTransferSettings,
+    ShortcutSettings, SoftwarePresentationMode, TerminalDrawingPreference, TerminalSemanticColors,
     TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, UiLanguage,
     WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
 };

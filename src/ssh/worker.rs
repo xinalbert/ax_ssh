@@ -1,6 +1,7 @@
 //! Bounded command/event worker for one authenticated SSH transport.
 
 mod latency;
+mod media;
 mod sftp;
 mod shell;
 
@@ -13,7 +14,7 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use tokio::runtime::Handle;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
@@ -36,7 +37,7 @@ use super::x11::X11Dispatcher;
 use super::{SshConnection, SshError};
 
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(7);
+const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(20);
 const OUTPUT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 const COMMAND_CAPACITY: usize = 32;
 const EVENT_CAPACITY: usize = 32;
@@ -94,6 +95,17 @@ pub enum SshSessionEvent {
 }
 
 pub(crate) enum SshCommand {
+    ClipboardImage {
+        png: Vec<u8>,
+        reply: oneshot::Sender<Result<String>>,
+    },
+    Microphone {
+        format: crate::audio::AudioFormat,
+        pcm: mpsc::Receiver<Vec<u8>>,
+        stop: watch::Receiver<bool>,
+        ready: oneshot::Sender<Result<String>>,
+        finished: oneshot::Sender<Result<()>>,
+    },
     ReadSystemRelease,
     Send {
         input_sequence: u64,
@@ -172,6 +184,46 @@ pub struct SshSessionHandle {
 }
 
 impl SshSessionHandle {
+    /// Upload a private session attachment using the current trusted connection.
+    pub fn request_clipboard_image(
+        &self,
+        png: Vec<u8>,
+    ) -> Result<oneshot::Receiver<Result<String>>> {
+        anyhow::ensure!(
+            png.len() <= crate::media::MAX_IMAGE_BYTES && png.starts_with(b"\x89PNG\r\n\x1a\n"),
+            "invalid or oversized PNG attachment"
+        );
+        let (reply, result) = oneshot::channel();
+        self.command_tx
+            .try_send(SshCommand::ClipboardImage { png, reply })
+            .map_err(|_| anyhow::anyhow!("attachment queue is busy or disconnected"))?;
+        Ok(result)
+    }
+
+    /// A bounded PCM receiver and cancellation token, never a device/transport handle.
+    pub fn request_microphone(
+        &self,
+        format: crate::audio::AudioFormat,
+        pcm: mpsc::Receiver<Vec<u8>>,
+        stop: watch::Receiver<bool>,
+    ) -> Result<super::MicrophoneRequest> {
+        format.validate()?;
+        let (ready, ready_rx) = oneshot::channel();
+        let (finished, finished_rx) = oneshot::channel();
+        self.command_tx
+            .try_send(SshCommand::Microphone {
+                format,
+                pcm,
+                stop,
+                ready,
+                finished,
+            })
+            .map_err(|_| anyhow::anyhow!("microphone queue is busy or disconnected"))?;
+        Ok(super::MicrophoneRequest {
+            ready: ready_rx,
+            finished: finished_rx,
+        })
+    }
     pub fn spawn(
         runtime: &Handle,
         session_id: Uuid,
@@ -635,7 +687,9 @@ async fn run_session(task: SshSessionTask) {
                         info!(session_id = %session_id, "SSH connection attempt cancelled");
                         break None;
                     }
-                    Some(SshCommand::Send { .. })
+                    Some(SshCommand::ClipboardImage { .. })
+                    | Some(SshCommand::Microphone { .. })
+                    | Some(SshCommand::Send { .. })
                     | Some(SshCommand::ReadSystemRelease)
                     | Some(SshCommand::ListSftp { .. })
                     | Some(SshCommand::LoadMoreSftp { .. })

@@ -51,6 +51,7 @@ impl TerminalModel {
             pending_clipboard_store: None,
             pending_clipboard_load: None,
             osc52_clipboard_enabled,
+            osc52_permission_generation: 0,
         }
     }
 
@@ -461,10 +462,23 @@ impl TerminalModel {
         }
     }
 
+    pub fn osc52_permission_generation(&self) -> u64 {
+        self.osc52_permission_generation
+    }
+
+    pub fn osc52_clipboard_enabled(&self) -> bool {
+        self.osc52_clipboard_enabled
+    }
+
     pub fn set_osc52_clipboard_enabled(&mut self, enabled: bool) {
+        if !enabled {
+            self.pending_clipboard_load = None;
+            self.pending_clipboard_store = None;
+        }
         if self.osc52_clipboard_enabled == enabled {
             return;
         }
+        self.osc52_permission_generation = self.osc52_permission_generation.wrapping_add(1);
         self.osc52_clipboard_enabled = enabled;
         self.term
             .set_options(terminal_config(self.scrollback_lines, enabled));
@@ -567,10 +581,14 @@ impl TerminalModel {
                     self.pending_bell = true;
                 }
                 TerminalProtocolEvent::ClipboardStore(text) => {
-                    self.pending_clipboard_store = Some(text);
+                    if self.osc52_clipboard_enabled {
+                        self.pending_clipboard_store = Some(text);
+                    }
                 }
                 TerminalProtocolEvent::ClipboardLoad(formatter) => {
-                    self.pending_clipboard_load = Some(formatter);
+                    if self.osc52_clipboard_enabled {
+                        self.pending_clipboard_load = Some(formatter);
+                    }
                 }
             }
         }

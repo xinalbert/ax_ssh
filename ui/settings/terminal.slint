@@ -1,4 +1,4 @@
-import { ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { Button, ScrollView, Slider, SpinBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
@@ -28,6 +28,12 @@ export component TerminalSettingsPage inherits Rectangle {
     in-out property <bool> draft-option-as-meta;
     in-out property <bool> draft-alternate-scroll-to-home;
     in-out property <bool> draft-osc52-clipboard;
+
+    in-out property <int> draft-audio-rate-index: 6;
+    in-out property <int> draft-audio-channels-index: 1;
+    in-out property <string> draft-whisper-executable;
+    in-out property <string> draft-whisper-model;
+    callback save-audio-settings();
 
     background: Theme.background;
 
@@ -256,6 +262,39 @@ export component TerminalSettingsPage inherits Rectangle {
                     show-divider: false;
                 }
 
+                SettingsSectionHeading { label: @tr("MICROPHONE & DICTATION"); }
+                SettingsRow {
+                    label: @tr("Remote sample rate");
+                    description: @tr("PCM audio forwarded to the Linux SSH session");
+                    SettingsField { ThemedComboBox {
+                        model: ["8 kHz", "16 kHz", "22.05 kHz", "24 kHz", "32 kHz", "44.1 kHz", "48 kHz", "96 kHz", "192 kHz"];
+                        current-index <=> root.draft-audio-rate-index;
+                    } }
+                }
+                SettingsRow {
+                    label: @tr("Remote channels");
+                    description: @tr("Mono, stereo, or multi-channel; adapted from the local device");
+                    SettingsField { ThemedComboBox {
+                        model: [@tr("Mono (1)"), @tr("Stereo (2)"), "4", "6", "8"];
+                        current-index <=> root.draft-audio-channels-index;
+                    } }
+                }
+                SettingsRow {
+                    label: @tr("whisper-cli executable");
+                    description: @tr("Local whisper.cpp executable for dictation");
+                    SettingsField { FlatTextInput { text <=> root.draft-whisper-executable; } }
+                }
+                SettingsRow {
+                    label: @tr("Whisper model");
+                    description: @tr("Path to a local multilingual whisper.cpp model");
+                    SettingsField { FlatTextInput { text <=> root.draft-whisper-model; } }
+                }
+                SettingsRow {
+                    label: @tr("Save audio settings");
+                    description: @tr("Applies to the next recording; dictation uses 16 kHz mono");
+                    show-divider: false;
+                    SettingsField { Button { text: @tr("Save audio settings"); clicked => { root.save-audio-settings(); } } }
+                }
                 SettingsSectionHeading { label: @tr("MOUSE"); }
                 SettingsToggleRow {
                     label: @tr("Local selection priority");

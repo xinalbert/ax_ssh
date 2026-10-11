@@ -2912,3 +2912,33 @@ fn terminal_resize_discards_a_stale_pending_output_snapshot() {
     assert_eq!(snapshot.max_columns, 96);
     assert_eq!(snapshot.lines.len(), 30);
 }
+
+#[test]
+fn osc52_settings_revocation_drops_application_confirmation() {
+    let mut state = test_state();
+    state.sessions.settings.terminal.osc52_clipboard = true;
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    state
+        .terminal_mut(tab_id)
+        .unwrap()
+        .set_test_pending_clipboard_read(Arc::new(|text| text.to_owned()));
+    state.sessions.settings.terminal.osc52_clipboard = false;
+    state.apply_scrollback_setting();
+    assert!(
+        state
+            .terminal(tab_id)
+            .unwrap()
+            .pending_clipboard_read
+            .is_none()
+    );
+    state.sessions.settings.terminal.osc52_clipboard = true;
+    state.apply_scrollback_setting();
+    assert!(
+        state
+            .terminal(tab_id)
+            .unwrap()
+            .pending_clipboard_read
+            .is_none()
+    );
+}

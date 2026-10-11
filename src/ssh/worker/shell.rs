@@ -126,6 +126,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut awaiting_output_after_input = None;
     let mut x11_relays = JoinSet::new();
     let mut release_probes = JoinSet::new();
+    let mut media_tasks = JoinSet::new();
+    let attachment_directories = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let (media_stop, media_shutdown) = watch::channel(false);
+    let mut microphone_task = None;
     let mut release_probe_started = false;
     let mut x11_unavailable_reported = false;
     let mut failed = false;
@@ -188,6 +192,46 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             "russh terminal data call completed"
                         );
                         awaiting_output_after_input = Some((input_sequence, Instant::now()));
+                        continue;
+                    }
+                    Some(SshCommand::ClipboardImage { png, reply }) => {
+                        if media_tasks.len() >= 2 {
+                            if reply.send(Err(anyhow::anyhow!("another media operation is busy"))).is_err() { debug!("attachment requester cancelled"); }
+                        } else {
+                            let connection = connection.clone();
+                            let directories = attachment_directories.clone();
+                            media_tasks.spawn(async move {
+                                let result = super::media::upload_image(connection, png, directories).await;
+                                if reply.send(result).is_err() { debug!("attachment requester cancelled"); }
+                            });
+                        }
+                        continue;
+                    }
+                    Some(SshCommand::Microphone { format, pcm, mut stop, ready, finished }) => {
+                        if microphone_task.as_ref().is_some_and(|task: &tokio::task::AbortHandle| !task.is_finished()) {
+                            if ready.send(Err(anyhow::anyhow!("remote microphone already active"))).is_err() { debug!("microphone requester cancelled"); }
+                            if finished.send(Ok(())).is_err() { debug!("microphone requester cancelled"); }
+                        } else {
+                            let connection = connection.clone();
+                            let mut shutdown = media_shutdown.clone();
+                            let (cancel, cancellation) = watch::channel(false);
+                            microphone_task = Some(media_tasks.spawn(async move {
+                                let forwarding = super::media::forward_microphone(connection, format, pcm, cancellation, ready);
+                                tokio::pin!(forwarding);
+                                let result = tokio::select! {
+                                    result = &mut forwarding => result,
+                                    _ = crate::audio::wait_for_stop(&mut stop) => {
+                                        cancel.send_replace(true);
+                                        forwarding.await
+                                    }
+                                    _ = crate::audio::wait_for_stop(&mut shutdown) => {
+                                        cancel.send_replace(true);
+                                        forwarding.await
+                                    }
+                                };
+                                if finished.send(result).is_err() { debug!("microphone requester cancelled"); }
+                            }));
+                        }
                         continue;
                     }
                     Some(SshCommand::ReadSystemRelease) => {
@@ -395,6 +439,9 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     }
                 }
             }
+            media = media_tasks.join_next(), if !media_tasks.is_empty() => {
+                if let Some(Err(error)) = media && !error.is_cancelled() { warn!(%error, "SSH media task failed"); }
+            }
             probe = release_probes.join_next(), if !release_probes.is_empty() => {
                 if let Some(Err(error)) = probe
                     && !error.is_cancelled()
@@ -423,6 +470,22 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     shutdown_x11_relays(&mut x11_relays, session_id).await;
     release_probes.abort_all();
     while release_probes.join_next().await.is_some() {}
+    media_stop.send_replace(true);
+    if timeout(Duration::from_secs(5), async {
+        while media_tasks.join_next().await.is_some() {}
+    })
+    .await
+    .is_err()
+    {
+        media_tasks.abort_all();
+        while media_tasks.join_next().await.is_some() {}
+        warn!("SSH media shutdown timed out");
+    }
+    if let Err(error) =
+        super::media::cleanup_attachments(&connection, &attachment_directories).await
+    {
+        warn!(%error, "SSH attachment cleanup failed");
+    }
     close_shell(&shell, session_id).await;
     if let Err(error) = connection.disconnect().await {
         warn!(session_id = %session_id, %error, "SSH transport disconnect failed");

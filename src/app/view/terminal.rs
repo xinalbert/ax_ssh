@@ -460,6 +460,9 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current.focused == updated.focused
         && current.closable == updated.closable
         && current_terminal.terminal_id == updated_terminal.terminal_id
+        && current_terminal.media_mode == updated_terminal.media_mode
+        && current_terminal.media_status == updated_terminal.media_status
+        && current_terminal.transcript == updated_terminal.transcript
         && current_terminal.connected == updated_terminal.connected
         && current_terminal.selection_revision == updated_terminal.selection_revision
         && current_terminal.notice == updated_terminal.notice
@@ -654,6 +657,7 @@ pub(super) fn terminal_view_from_snapshot(
     current: Option<&TerminalViewState>,
     ui: &AppWindow,
 ) -> TerminalViewState {
+    let media = snapshot.media;
     let connected = snapshot.connected;
     let selection_revision = snapshot.selection_revision;
     let notice = snapshot.notice;
@@ -680,6 +684,9 @@ pub(super) fn terminal_view_from_snapshot(
     };
     TerminalViewState {
         terminal_id: tab_id.to_string().into(),
+        media_status: media.status.into(),
+        media_mode: media.mode.into(),
+        transcript: media.transcript.into(),
         connected,
         selection_revision,
         notice: terminal_notice_view(notice),
@@ -758,6 +765,7 @@ fn terminal_view_from_snapshot_incremental(
     current: &TerminalViewState,
     ui: &AppWindow,
 ) -> TerminalViewState {
+    let media = snapshot.media;
     let connected = snapshot.connected;
     let selection_revision = snapshot.selection_revision;
     let notice = snapshot.notice;
@@ -808,6 +816,9 @@ fn terminal_view_from_snapshot_incremental(
     }
 
     terminal.terminal_id = tab_id.to_string().into();
+    terminal.media_mode = media.mode.into();
+    terminal.media_status = media.status.into();
+    terminal.transcript = media.transcript.into();
     terminal.connected = connected;
     terminal.selection_revision = selection_revision;
     terminal.notice = terminal_notice_view(notice);

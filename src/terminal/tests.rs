@@ -1504,3 +1504,47 @@ fn changing_scrollback_preserves_the_visible_grid() {
     assert_eq!(terminal.contents(), "prompt");
     assert_eq!(terminal.snapshot().cursor_column, 6);
 }
+
+#[test]
+fn osc52_revocation_clears_both_pending_directions() {
+    let mut terminal = TerminalModel::new_with_osc52_clipboard(80, 3, 10, true);
+    terminal.process(b"\x1b]52;c;SGVsbG8=\x07\x1b]52;c;?\x07");
+    terminal.set_osc52_clipboard_enabled(false);
+    assert!(terminal.take_clipboard_load().is_none());
+    assert!(terminal.take_clipboard_store().is_none());
+    terminal.set_osc52_clipboard_enabled(true);
+    assert!(terminal.take_clipboard_load().is_none());
+    assert!(terminal.take_clipboard_store().is_none());
+}
+
+#[test]
+fn osc52_exact_maximum_read_formats_complete_base64_response() {
+    use base64::Engine;
+    let mut terminal = TerminalModel::new_with_osc52_clipboard(80, 3, 10, true);
+    terminal.process(b"\x1b]52;c;?\x07");
+    let formatter = terminal.take_clipboard_load().unwrap();
+    let text = "x".repeat(super::MAX_OSC52_CLIPBOARD_BYTES);
+    let response = formatter(&text);
+    assert!(response.len() > 16 * 1024);
+    let encoded = response
+        .strip_prefix("\x1b]52;c;")
+        .unwrap()
+        .strip_suffix('\x07')
+        .unwrap();
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap(),
+        text.as_bytes()
+    );
+}
+
+#[test]
+fn osc52_permission_lease_stays_revoked_after_reenable() {
+    let mut terminal = TerminalModel::new_with_osc52_clipboard(80, 3, 10, true);
+    let lease = terminal.osc52_permission_generation();
+    terminal.set_osc52_clipboard_enabled(false);
+    terminal.set_osc52_clipboard_enabled(true);
+    assert!(terminal.osc52_clipboard_enabled());
+    assert_ne!(terminal.osc52_permission_generation(), lease);
+}

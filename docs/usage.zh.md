@@ -551,3 +551,19 @@ regular file：内容先写入私有远端临时文件，再通过 rename 发布
 文件监控默认关闭；拖拽只复用有界上传/下载意图，文件读取不在 UI 线程执行。
 Serial 的端口可见性、权限和参数支持取决于目标操作系统与硬件；Telnet 不提供加密或自动登录。
 主动点击 Disconnect 或关闭 Tab 不会触发自动重连。非主动断开会保留 Tab 和终端滚动内容，显示当前倒计时并为每次尝试创建新的 worker。没有可读取凭据的密码 SSH 会停在认证输入；encrypted-vault 需要解锁；未知或变更主机密钥始终进入既有明确确认流程。达到次数上限后 Tab 保持打开并提示手动恢复。AxSSH 同时读取平台用户的 OpenSSH `~/.ssh/known_hosts`（Windows 使用对应用户路径），支持别名、非默认端口、hashed host、多个密钥和 `@revoked`。有效且未撤销的匹配可直接进入认证；变更密钥仍需确认，撤销密钥始终拒绝。明确确认后，观察到的公钥会以原子方式追加到共享文件，不替换其它记录；读取失败和坏行只会收窄信任，普通确认按钮不能绕过撤销记录。
+
+## 终端 agent 的剪贴板图片与语音
+
+粘贴会报告系统剪贴板错误。文本继续走已有 bracketed paste 路径，上限 4 MiB。剪贴板有图片时，后台编码 PNG（最多 4096 × 4096 像素、16 MiB）；SSH 终端通过同一认证连接的独立 SFTP 通道上传，成功后插入远端路径。本地 Shell 插入本机临时路径；Telnet/Serial 明确提示不支持图片附件。服务器须启用 SFTP。这是文件附件，终端内联图形协议仍关闭。CLI 需要支持粘贴图片路径或如 `codex -i <路径>` 的图片参数；插入路径不保证所有 CLI 都自动识别附件。
+
+Unix 的附件目录/文件权限为 `0700`/`0600`；Windows 继承用户临时目录 ACL。每个会话最多 32 个附件，关闭时删除自己创建的文件。断网后的远端清理属于尽力而为，远端 home 中可能残留 `.axssh-attachment-*`。OSC 52 仍只传文本、默认关闭且每次读取需要确认；读写都限制 64 KiB，关闭设置立即撤销待确认请求。
+
+在 **设置 > 终端 > 麦克风与语音输入** 配置远端采样率、声道数、whisper-cli 程序和本机模型，点击 **保存音频设置** 单独持久化，下次录音生效。远端使用有符号 16-bit little-endian PCM，支持 8/16/22.05/24/32/44.1/48/96/192 kHz 与 1/2/4/6/8 声道，默认 48 kHz 双声道。优先使用设备匹配的硬件格式，否则后台转换；单声道平均设备各声道，输出声道更多时重复已有声道，不会凭空增加独立麦克风信号。
+
+在已连接 SSH 终端点击 **远端麦克风**。远端 Linux 用户需有运行中的 PulseAudio 或 pipewire-pulse、`pactl` 和 `module-pipe-source`，AxSSH 不自动安装。私有 FIFO 与独立 SSH 通道传 PCM；启用期间临时设为该用户的默认 Pulse 输入，并显示生成的音源名称。显示实时传输后，再启动 CLI 语音采集；已运行的采集不一定自动切换。使用 ALSA 的 CLI 还需把 `default` PCM 路由至 Pulse/PipeWire（例如发行版 ALSA Pulse 插件），硬件直读输入不会自动转发。点击 **停止麦克风** 停止采集，仅在默认音源仍为 AxSSH 时恢复原值，再卸载模块、删除 FIFO；关闭、断开、重试也会取消。工作区同时只运行一个录音/转写任务；硬崩溃或远端音频服务故障可能需要手动清理。[PipeWire pipe source](https://pipewire.pages.freedesktop.org/pipewire/page_pulse_module_pipe_source.html)
+
+点击 **语音输入** 可本机转文字，适用于远端或本机的文本 CLI。配置本机 [whisper.cpp CLI](https://github.com/ggml-org/whisper.cpp/tree/master/examples/cli) 和多语言模型；应用不附带或自动下载。设置优先于可选环境变量 `AXSSH_WHISPER_CLI` / `AXSSH_WHISPER_MODEL`。录音最多 60 秒，或点击 **停止录音**；随后本机处理私有 16 kHz 单声道 WAV，超时为 120 秒。结果可编辑，点击 **插入文字** 时将换行转换为空格，避免不支持 bracketed paste 的终端把它当作提交；插入后还需自行提交，应用不发送 Enter。转写中 **取消** 会停止进程。完成/取消后删除临时音频和转写文件。
+
+macOS 请运行打包 `.app`，按系统提示授权麦克风；拒绝后可在 **隐私与安全性 > 麦克风** 中启用 AxSSH。Windows 需启用桌面应用麦克风访问；Linux 需有可用 ALSA 输入。Codex CLI `/voice` 是上游实验功能，版本/账号未开放时，即使音源链路正常也不能开启；本机转文字入口独立可用。[Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)
+
+验收时复制截图并粘贴 SSH pane，核对远端 PNG 和 CLI 附件行为；分别试单声道、双声道及较高采样率，停止后确认 Pulse 默认音源恢复。还需验证权限拒绝、采集/上传中断线、转写取消与插入不自动提交。Windows/Linux 原生 CI、真实设备和远端服务仍需验收。

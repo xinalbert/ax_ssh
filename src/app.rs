@@ -98,6 +98,7 @@ mod software_presentation;
 mod state;
 mod system_icons;
 mod terminal_bridge;
+mod terminal_media;
 mod terminal_presentation;
 mod terminal_render;
 mod terminal_targets;
@@ -470,6 +471,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     )?;
     info!("AxSSH UI initialized");
     let ui_result = slint::run_event_loop().context("Slint event loop failed");
+    release_clipboard();
     if let Err(error) = &ui_result {
         if log_renderer_fault("event-loop", error) {
             persist_renderer_fallback(&log_directory, renderer_preference, error);
@@ -502,7 +504,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         for worker in workers {
             pending.spawn(async move { worker.shutdown().await });
         }
-        let completed = timeout(Duration::from_secs(5), async {
+        let completed = timeout(Duration::from_secs(25), async {
             while let Some(result) = pending.join_next().await {
                 match result {
                     Ok(Ok(())) => {}
@@ -592,6 +594,7 @@ fn wire_menu_helpers(ui: &AppWindow) {
 }
 
 fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
+    terminal_media::wire_settings(ui, context.state.clone(), context.runtime.clone());
     wire_menu_helpers(ui);
     let WindowCallbackContext {
         state,
@@ -628,7 +631,7 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
     ui.on_write_clipboard(move |text| {
         log_ui_action("clipboard.write");
         if let Some(ui) = ui_for_clipboard_write.upgrade() {
-            set_platform_clipboard_text(&ui, text.as_str());
+            let _written = set_platform_clipboard_text(&ui, text.as_str());
         }
     });
     let ui_for_clipboard_read = ui.as_weak();
@@ -636,7 +639,12 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         log_ui_action("clipboard.read");
         ui_for_clipboard_read
             .upgrade()
-            .map(|ui| platform_clipboard_text(&ui))
+            .map(|ui| {
+                platform_clipboard_text(&ui).unwrap_or_else(|error| {
+                    ui.set_status(format!("Cannot read clipboard: {error}").into());
+                    String::new()
+                })
+            })
             .unwrap_or_default()
             .into()
     });
@@ -666,8 +674,9 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
             return;
         };
         let diagnostics = diagnostic_info();
-        set_platform_clipboard_text(&ui, &diagnostics);
-        ui.set_status("Diagnostic information copied".into());
+        if set_platform_clipboard_text(&ui, &diagnostics) {
+            ui.set_status("Diagnostic information copied".into());
+        }
     });
     let ui_for_copy_session = ui.as_weak();
     let state_for_copy_session = state.clone();
@@ -696,8 +705,9 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
             set_status(&ui_for_copy_session, "Session not found");
             return;
         };
-        if let Some(ui) = ui_for_copy_session.upgrade() {
-            set_platform_clipboard_text(&ui, &endpoint);
+        if let Some(ui) = ui_for_copy_session.upgrade()
+            && set_platform_clipboard_text(&ui, &endpoint)
+        {
             set_status(&ui_for_copy_session, "Address copied");
         }
     });

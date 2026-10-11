@@ -1399,3 +1399,17 @@ secret 提示保留为覆盖层。
 - 更完整的 SFTP 冲突解决与跨进程编辑恢复；
 - 跨进程重连任务持久化和工作区恢复；
 - 更完整的全屏终端兼容和鼠标上报。
+
+## 终端媒体所有权
+
+`src/app/platform_support.rs` 在 UI 线程串行使用常驻 arboard 剪贴板 owner，保留 Linux 剪贴板内容并在事件循环退出后释放，错误可见。OSC 52 撤销同时清除模型/应用待确认项，Base64 格式化前检查读取大小；完整协议响应借已有有界 raw-data paste 队列原子排队，不添加 paste 标记。排队的写操作重新核对原连接代次和权限代次，关闭后再开启也不复用旧授权。
+
+`src/media.rs` 拥有有界 PNG 编码与私有临时文件。`src/app/terminal_media.rs` 拥有显式用户意图、工作区唯一媒体任务、会话/代次 token、可确认转写与小型 `MediaSnapshot`；后台完成 PNG、文件读写/删除、配置持久化和转写。Slint 只传意图及有界字符串，不传设备或 stream handle。音频设置为 serde 默认兼容的独立 domain value，普通设置预览/保存保留其最新值。
+
+`src/audio.rs` 持有 CPAL 输入生命周期。固定原生 block 与有界回调队列使回调无堆分配、等待、日志或文件操作；后台 rubato FFT 抗混叠重采样和声道转换生成约 20 ms s16le 包，PCM 队列为 8 包。溢出终止采集，不积累无限音频。正常停止排空尾部输入/重采样帧，移除滤波延迟，仅补齐最后一包；优先匹配硬件格式。macOS AVFoundation 通过 oneshot 返回授权，unsafe 仅涉及系统常量与 block 生命周期。固定 CPAL 0.17.3 保持已有 macOS 部署下限。
+
+`src/audio/transcription.rs` 用 owned argv 直接启动配置的 whisper-cli，不经 shell；最多 60 秒私有 mono WAV、64 KiB 结果和 120 秒超时，取消会杀死子进程。转写插入先将 CR/LF 转为空格，再使用正常粘贴编码，避免无 bracketed paste 的终端提交输入；不添加 Enter，该适配不向云端发送音频。
+
+`src/ssh/worker/media.rs` 打开独立的已认证 SFTP/exec 通道，不向 PTY 写 PNG/PCM。附件使用 UUID 目录、独占创建和私有权限，每块确认后才返回路径；worker 在 transport 关闭前清理所拥有目录。Linux helper 的私有 FIFO 接入 module-pipe-source，临时更改默认 Pulse 输入，并在 EOF/信号时有条件恢复。固定 POSIX helper 只插入已校验的数值格式与随机音源名称。辅助任务显式取消、限时 join，超时 abort 后回收 transport；worker 总 shutdown 上限 20 秒，应用退出预算为 25 秒。连接丢失后不能保证远端清理。没有引入第二套 SSH、音频监听端口、远端安装器、凭据持久化或参考项目耦合。
+
+Linux 原生 CI/release 增加 libasound2-dev；Windows 桌面麦克风权限及 macOS 打包 app TCC 由平台处理。FIFO/模块、真实设备和 CLI 音源选择仍须验收；文件路径或音源可用不等于上游 CLI 已开放附件/实验语音功能。

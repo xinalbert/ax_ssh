@@ -19,6 +19,12 @@ pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
 pub use self::worker::{SshSessionEvent, SshSessionHandle};
 
+/// Startup and final results for a worker-owned remote audio channel.
+pub struct MicrophoneRequest {
+    pub ready: tokio::sync::oneshot::Receiver<Result<String>>,
+    pub finished: tokio::sync::oneshot::Receiver<Result<()>>,
+}
+
 pub fn append_confirmed_known_host(host: &str, port: u16, public_key: &str) -> Result<()> {
     known_hosts::Snapshot::append_confirmed_openssh(
         known_hosts::default_path()?,
@@ -823,6 +829,13 @@ impl SshConnection {
             .context("timed out requesting the SFTP subsystem")?
             .context("server rejected the SFTP subsystem")?;
         Ok(channel.into_stream())
+    }
+
+    pub(crate) async fn open_auxiliary_channel(&self) -> Result<Channel<client::Msg>> {
+        timeout(CONNECT_TIMEOUT, self.handle.channel_open_session())
+            .await
+            .context("auxiliary SSH channel timed out")?
+            .context("cannot open auxiliary SSH channel")
     }
 }
 

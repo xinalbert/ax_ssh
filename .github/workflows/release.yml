@@ -46,7 +46,7 @@ jobs:
         with:
           components: rustfmt
       - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check
@@ -127,7 +127,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev dpkg-dev
+          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev dpkg-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

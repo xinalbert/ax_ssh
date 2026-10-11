@@ -213,6 +213,10 @@ export component AppWindow inherits Window {
     in property <bool> option-as-meta: false;
     in property <bool> alternate-scroll-to-home: false;
     in property <bool> osc52-clipboard: false;
+    in property <int> audio-rate-index: 6;
+    in property <int> audio-channels-index: 1;
+    in property <string> whisper-executable;
+    in property <string> whisper-model;
     in property <[string]> x11-server-provider-options;
     in property <[string]> x11-server-installations;
     in property <string> x11-server-provider: "auto";
@@ -418,6 +422,10 @@ export component AppWindow inherits Window {
             copy_selection_on_select: root.copy-selection-on-select, option_as_meta: root.option-as-meta,
             alternate_scroll_to_home: root.alternate-scroll-to-home,
             osc52_clipboard: root.osc52-clipboard,
+            audio_rate_index: root.audio-rate-index,
+            audio_channels_index: root.audio-channels-index,
+            whisper_executable: root.whisper-executable,
+            whisper_model: root.whisper-model,
             terminal_mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
             x11_server_provider_options: root.x11-server-provider-options,
             x11_server_installations: root.x11-server-installations,
@@ -526,6 +534,7 @@ export component AppWindow inherits Window {
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
+    callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
     callback save-local-shell-icon(string);
     callback connect-session(string);
@@ -1015,6 +1024,7 @@ export component AppWindow inherits Window {
                     sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
                     sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
             }
+            save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
             save-ui-language(index) => { root.save-ui-language(index); }
             save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
             system-icon-choices(query) => { return root.system-icon-choices(query); }

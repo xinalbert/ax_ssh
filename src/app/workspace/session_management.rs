@@ -90,7 +90,9 @@ pub(in crate::app) fn wire_session_management(
                 match export {
                     Ok(text) => {
                         if let Some(ui) = ui_for_transfer.upgrade() {
-                            set_platform_clipboard_text(&ui, &text);
+                            if !set_platform_clipboard_text(&ui, &text) {
+                                return;
+                            }
                             set_status(
                                 &ui_for_transfer,
                                 if action == "copy-server" {
@@ -135,7 +137,13 @@ pub(in crate::app) fn wire_session_management(
                 let Some(ui) = ui_for_transfer.upgrade() else {
                     return;
                 };
-                let clipboard = platform_clipboard_text(&ui);
+                let clipboard = match platform_clipboard_text(&ui) {
+                    Ok(text) => text,
+                    Err(error) => {
+                        ui.set_status(format!("Cannot read clipboard: {error}").into());
+                        return;
+                    }
+                };
                 let mode = match action {
                     "import-server" => SessionImportMode::SingleServer,
                     "import-group" => SessionImportMode::IntoGroup,

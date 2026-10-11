@@ -3,7 +3,7 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use anyhow::{Context, Result};
 use slint::ComponentHandle;
-use slint::platform::Clipboard;
+use std::cell::RefCell;
 #[cfg(target_os = "macos")]
 use tracing::warn;
 
@@ -16,20 +16,45 @@ use super::*;
 
 pub(super) const ISSUES_URL: &str = "https://github.com/xinalbert/ax_ssh/issues/new";
 
-pub(super) fn set_platform_clipboard_text(ui: &AppWindow, text: &str) {
-    // Slint 1.17 exposes clipboard access through its window context.
-    slint::private_unstable_api::re_exports::WindowInner::from_pub(ui.window())
-        .context()
-        .platform()
-        .set_clipboard_text(text, Clipboard::DefaultClipboard);
+// A persistent owner is required by X11/Wayland. All access is serialized on
+// the UI thread, including detached windows; failures remain distinguishable
+// from a valid empty string.
+thread_local! {
+    static CLIPBOARD: RefCell<Option<arboard::Clipboard>> = const { RefCell::new(None) };
 }
 
-pub(super) fn platform_clipboard_text(ui: &AppWindow) -> String {
-    slint::private_unstable_api::re_exports::WindowInner::from_pub(ui.window())
-        .context()
-        .platform()
-        .clipboard_text(Clipboard::DefaultClipboard)
-        .unwrap_or_default()
+pub(super) fn with_clipboard<T>(
+    operation: impl FnOnce(&mut arboard::Clipboard) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    use anyhow::Context as _;
+    CLIPBOARD.with(|slot| {
+        let mut slot = slot.try_borrow_mut().context("clipboard is busy")?;
+        if slot.is_none() {
+            *slot = Some(arboard::Clipboard::new().context("cannot open system clipboard")?);
+        }
+        let clipboard = slot.as_mut().context("clipboard is unavailable")?;
+        operation(clipboard)
+    })
+}
+
+pub(super) fn release_clipboard() {
+    CLIPBOARD.with(|slot| {
+        slot.borrow_mut().take();
+    });
+}
+
+pub(super) fn set_platform_clipboard_text(ui: &AppWindow, text: &str) -> bool {
+    match with_clipboard(|clipboard| Ok(clipboard.set_text(text)?)) {
+        Ok(()) => true,
+        Err(error) => {
+            ui.set_status(format!("Cannot write clipboard: {error}").into());
+            false
+        }
+    }
+}
+
+pub(super) fn platform_clipboard_text(_ui: &AppWindow) -> anyhow::Result<String> {
+    with_clipboard(|clipboard| Ok(clipboard.get_text()?))
 }
 
 pub(super) fn build_revision() -> &'static str {

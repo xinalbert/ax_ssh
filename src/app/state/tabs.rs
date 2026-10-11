@@ -3,6 +3,10 @@ use ax_ssh::config::{WORKSPACE_SNAPSHOT_VERSION, WorkspaceSnapshot};
 use ax_ssh::terminal_dimensions::TerminalSize;
 
 impl AppState {
+    pub(in crate::app) fn microphone_in_use(&self) -> bool {
+        self.tabs.iter().any(|tab| matches!(&tab.kind, WorkspaceTabKind::Terminal(terminal) if terminal.media.has_job()))
+    }
+
     pub(in crate::app) fn profile_system_releases(&self) -> HashMap<Uuid, String> {
         let mut releases = self
             .sessions
@@ -250,6 +254,7 @@ impl AppState {
             title: format!("{} #{}", profile.name, number),
             default_title: format!("{} #{}", profile.name, number),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
+                media: super::super::terminal_media::MediaState::default(),
                 backend,
                 worker: None,
                 terminal: Some(terminal),
@@ -314,6 +319,7 @@ impl AppState {
             title: format!("{} SFTP", profile.name),
             default_title: format!("{} SFTP", profile.name),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
+                media: super::super::terminal_media::MediaState::default(),
                 backend: TerminalBackend::Sftp {
                     profile_id: profile.id,
                     attempt_id: None,
@@ -361,6 +367,7 @@ impl AppState {
             title: format!("Local Shell #{}", self.local_terminal_number),
             default_title: format!("Local Shell #{}", self.local_terminal_number),
             kind: WorkspaceTabKind::Terminal(Box::new(TerminalTabState {
+                media: super::super::terminal_media::MediaState::default(),
                 backend: TerminalBackend::Local,
                 worker: None,
                 terminal: Some(terminal),
@@ -617,6 +624,7 @@ impl AppState {
             let WorkspaceTabKind::Terminal(terminal) = &mut tab.kind else {
                 continue;
             };
+            terminal.media.cancel();
             if let Some(worker) = terminal.worker.take() {
                 workers.push(worker);
             }
@@ -723,6 +731,7 @@ impl AppState {
                     sftp.status = terminal.status.clone();
                 }
                 ActiveTabSnapshot {
+                    media: terminal.media.snapshot(),
                     id: Some(tab.id),
                     profile_id: terminal.profile_id(),
                     kind: terminal.backend.kind(),
@@ -963,6 +972,7 @@ impl AppState {
                         };
                         sftp.path = snapshot.sftp_remote_path.clone();
                         Box::new(TerminalTabState {
+                            media: super::super::terminal_media::MediaState::default(),
                             backend,
                             worker: None,
                             terminal,
@@ -1004,6 +1014,7 @@ impl AppState {
                             self.sessions.settings.terminal.osc52_clipboard,
                         );
                         Box::new(TerminalTabState {
+                            media: super::super::terminal_media::MediaState::default(),
                             backend: TerminalBackend::Local,
                             worker: None,
                             terminal: Some(terminal),
@@ -1333,6 +1344,9 @@ impl AppState {
             {
                 model.set_scrollback_lines(scrollback_lines);
                 model.set_osc52_clipboard_enabled(osc52_clipboard);
+                if !osc52_clipboard {
+                    terminal.clear_pending_clipboard_read();
+                }
                 terminal.discard_pending_terminal_snapshot();
             }
         }

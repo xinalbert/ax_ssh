@@ -658,6 +658,7 @@ export component WorkspaceShell inherits Rectangle {
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
+    callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
     callback save-local-shell-icon(string);
     callback connect-session(string);
@@ -1244,6 +1245,7 @@ export component WorkspaceShell inherits Rectangle {
                                 sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
                                 sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
                         }
+                        save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
                         save-ui-language(index) => { root.save-ui-language(index); }
                         save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
                         system-icon-choices(query) => { return root.system-icon-choices(query); }

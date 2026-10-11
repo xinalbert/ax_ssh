@@ -8,6 +8,12 @@
 - Cargo
 - A desktop backend supported by Slint's winit backend
 - Target-platform serial drivers and device permissions for real Serial tests
+- Linux builds require ALSA development headers and pkg-config for CPAL
+
+On Debian/Ubuntu, install the desktop and audio build dependencies with
+`sudo apt-get install pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev`.
+macOS microphone testing uses a packaged `.app` with the microphone usage
+description; device permissions and real audio behavior need native testing.
 
 The implicit root Cargo workspace contains only the `ax_ssh` package.
 `third_package/axshell` is a reference submodule and is not a workspace member

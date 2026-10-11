@@ -974,6 +974,9 @@ pub(super) fn wire_settings(
                 sftp_local_open_max_file_mib,
             });
             let mut settings = settings;
+            if let Ok(app) = state.lock() {
+                settings.audio = app.sessions.settings.audio.clone();
+            }
             settings.sftp_transfer_filters = SftpTransferFilterSettings::normalized(
                 sftp_filter_enabled,
                 sftp_filter_use_platform_defaults,
@@ -1130,6 +1133,7 @@ fn save_workspace_settings(
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    settings.audio = app.sessions.settings.audio.clone();
     settings.ui_language = app.sessions.settings.ui_language;
     settings
         .appearance
@@ -1258,6 +1262,7 @@ fn apply_preview_settings(
     let mut app = state
         .lock()
         .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    settings.audio = app.sessions.settings.audio.clone();
     settings.ui_language = app.sessions.settings.ui_language;
     settings
         .appearance

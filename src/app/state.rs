@@ -149,6 +149,7 @@ impl WorkspaceTab {
 }
 
 pub(super) struct TerminalTabState {
+    pub(super) media: super::terminal_media::MediaState,
     pub(super) backend: TerminalBackend,
     pub(super) worker: Option<TerminalWorker>,
     pub(super) terminal: Option<TerminalModel>,
@@ -511,6 +512,7 @@ pub(super) struct WorkspaceTabSummary {
 }
 
 pub(super) struct ActiveTabSnapshot {
+    pub(super) media: super::terminal_media::MediaSnapshot,
     pub(super) id: Option<Uuid>,
     pub(super) profile_id: Option<Uuid>,
     pub(super) kind: &'static str,
@@ -528,6 +530,7 @@ pub(super) struct ActiveTabSnapshot {
 impl Default for ActiveTabSnapshot {
     fn default() -> Self {
         Self {
+            media: super::terminal_media::MediaSnapshot::default(),
             id: None,
             profile_id: None,
             kind: "empty",

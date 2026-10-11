@@ -8,6 +8,12 @@
 - Cargo
 - Slint winit 后端支持的桌面环境
 - 实机 Serial 测试所需的目标平台驱动和设备权限
+- Linux 构建需要 CPAL 使用的 ALSA 开发头文件和 pkg-config
+
+Debian/Ubuntu 可执行
+`sudo apt-get install pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev`
+安装桌面和音频构建依赖。macOS 麦克风测试应运行含麦克风用途声明的打包 `.app`；
+设备权限和真实音频行为需在目标平台验收。
 
 根 Cargo 隐式 workspace 只包含 `ax_ssh` package。`third_package/axshell` 是
 参考子模块，不是 workspace member 或构建依赖。

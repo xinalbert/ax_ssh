@@ -1,9 +1,11 @@
 //! Core AxSSH application boundaries.
 
+pub mod audio;
 pub mod config;
 pub mod credentials;
 pub mod local_shell;
 pub mod logging;
+pub mod media;
 pub mod serial;
 pub mod sftp;
 pub mod ssh;

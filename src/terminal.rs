@@ -23,7 +23,7 @@ const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
 const MAX_TERMINAL_TITLE_BYTES: usize = 512;
 const MAX_HYPERLINK_URI_BYTES: usize = 2 * 1024;
-const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
+pub const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
 
 type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
 type TextAreaResponseFormatter = Arc<dyn Fn(WindowSize) -> String + Send + Sync + 'static>;
@@ -430,6 +430,7 @@ pub struct TerminalModel {
     pending_clipboard_store: Option<String>,
     pending_clipboard_load: Option<ClipboardLoadFormatter>,
     osc52_clipboard_enabled: bool,
+    osc52_permission_generation: u64,
 }
 
 fn bound_utf8(mut value: String, max_bytes: usize) -> String {

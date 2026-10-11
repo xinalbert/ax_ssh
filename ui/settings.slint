@@ -84,6 +84,10 @@ export struct SettingsViewState {
     option_as_meta: bool,
     alternate_scroll_to_home: bool,
     osc52_clipboard: bool,
+    audio_rate_index: int,
+    audio_channels_index: int,
+    whisper_executable: string,
+    whisper_model: string,
     x11_server_provider_options: [string],
     x11_server_installations: [string],
     x11_server_provider: string,
@@ -259,6 +263,7 @@ export component SettingsPane inherits Rectangle {
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
+    callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
     callback save-local-shell-icon(string);
     callback format-shortcut(KeyboardEvent) -> string;
@@ -333,6 +338,10 @@ export component SettingsPane inherits Rectangle {
         root.terminal-mouse-local-selection-priority;
     private property <bool> draft-option-as-meta: root.option-as-meta;
     private property <bool> draft-alternate-scroll-to-home: root.source.alternate_scroll_to_home;
+    private property <int> draft-audio-rate-index: root.source.audio_rate_index;
+    private property <int> draft-audio-channels-index: root.source.audio_channels_index;
+    private property <string> draft-whisper-executable: root.source.whisper_executable;
+    private property <string> draft-whisper-model: root.source.whisper_model;
     private property <bool> draft-osc52-clipboard: root.source.osc52_clipboard;
     private property <string> draft-x11-server-provider: root.x11-server-provider;
     private property <int> draft-x11-server-provider-index: root.x11-server-provider-index;
@@ -869,6 +878,11 @@ export component SettingsPane inherits Rectangle {
                         draft-option-as-meta <=> root.draft-option-as-meta;
                         draft-alternate-scroll-to-home <=> root.draft-alternate-scroll-to-home;
                         draft-osc52-clipboard <=> root.draft-osc52-clipboard;
+                        draft-audio-rate-index <=> root.draft-audio-rate-index;
+                        draft-audio-channels-index <=> root.draft-audio-channels-index;
+                        draft-whisper-executable <=> root.draft-whisper-executable;
+                        draft-whisper-model <=> root.draft-whisper-model;
+                        save-audio-settings => { root.save-audio-settings(root.draft-audio-rate-index, root.draft-audio-channels-index, root.draft-whisper-executable, root.draft-whisper-model); }
                     }
 
                     if root.settings-search-query.is-empty && root.selected-section == "X11" : X11SettingsPage {

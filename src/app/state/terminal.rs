@@ -38,7 +38,14 @@ impl TerminalTabState {
         &mut self,
         formatter: ClipboardLoadFormatter,
     ) -> Option<(u64, u64)> {
-        if !self.connected || !self.worker_running || self.worker.is_none() {
+        if !self
+            .terminal
+            .as_ref()
+            .is_some_and(TerminalModel::osc52_clipboard_enabled)
+            || !self.connected
+            || !self.worker_running
+            || self.worker.is_none()
+        {
             return None;
         }
         self.next_clipboard_read_token = self.next_clipboard_read_token.wrapping_add(1);
@@ -57,7 +64,11 @@ impl TerminalTabState {
 
     pub(in crate::app) fn clipboard_read_key(&self) -> Option<(u64, u64)> {
         let pending = self.pending_clipboard_read.as_ref()?;
-        (pending.generation == self.reconnect_generation
+        (self
+            .terminal
+            .as_ref()
+            .is_some_and(TerminalModel::osc52_clipboard_enabled)
+            && pending.generation == self.reconnect_generation
             && self.connected
             && self.worker_running
             && self.worker.is_some())
@@ -254,6 +265,7 @@ impl TerminalTabState {
         self.reconnecting = false;
         self.reconnect_enabled = false;
         self.clear_pending_clipboard_read();
+        self.media.cancel();
     }
 
     pub(in crate::app) fn prepare_manual_retry(&mut self) {
@@ -262,6 +274,7 @@ impl TerminalTabState {
         self.reconnecting = false;
         self.reconnect_enabled = !self.is_local();
         self.clear_pending_clipboard_read();
+        self.media.cancel();
     }
 
     pub(in crate::app) fn enable_reconnect(&mut self) {
@@ -604,6 +617,15 @@ impl TerminalWorker {
             "terminal input request dispatched to transport"
         );
         result
+    }
+
+    /// OSC 52 uses raw protocol bytes, queued atomically through the existing
+    /// bounded/chunked transport path. The formatter adds no paste markers.
+    pub(in crate::app) fn request_send_clipboard_response(&self, data: Vec<u8>) -> Result<()> {
+        const MAX_RESPONSE: usize =
+            ax_ssh::terminal::MAX_OSC52_CLIPBOARD_BYTES.div_ceil(3) * 4 + 32;
+        anyhow::ensure!(data.len() <= MAX_RESPONSE, "OSC 52 response is too large");
+        self.request_send_paste(data)
     }
 
     pub(in crate::app) fn request_send_paste(&self, data: Vec<u8>) -> Result<()> {

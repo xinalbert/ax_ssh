@@ -1376,6 +1376,21 @@ pub(super) fn wire_terminal(
         let Some(tab_id) = parse_uuid(tab_id.as_str(), "terminal", &ui_for_command) else {
             return false;
         };
+        if matches!(
+            command.as_str(),
+            "paste-clipboard" | "microphone" | "dictation" | "discard-transcript"
+        ) || command.as_str().starts_with("insert-transcript\n")
+        {
+            return super::terminal_media::handle_command(
+                tab_id,
+                command.as_str(),
+                &state_for_command,
+                &ui_for_command,
+                &runtime_for_command,
+                &router_for_command,
+                window_id,
+            );
+        }
         if command.as_str() == "close" {
             return close_terminal_child_pane(
                 &router_for_command,
@@ -2027,6 +2042,12 @@ pub(super) fn process_terminal_output(
             model.take_clipboard_load(),
         )
     };
+    let clipboard_permission_generation = terminal
+        .terminal
+        .as_ref()
+        .map(TerminalModel::osc52_permission_generation)
+        .unwrap_or_default();
+    let clipboard_generation = terminal.reconnect_generation;
     let presentation_hold = terminal.terminal_output_presentation_hold();
     let clipboard_read_requested = clipboard_formatter
         .and_then(|formatter| terminal.offer_clipboard_read(formatter))
@@ -2037,6 +2058,8 @@ pub(super) fn process_terminal_output(
             title_update,
             bell,
             clipboard_store,
+            clipboard_generation,
+            clipboard_permission_generation,
             clipboard_read_requested,
         });
     }
@@ -2057,6 +2080,8 @@ pub(super) fn process_terminal_output(
         title_update,
         bell,
         clipboard_store,
+        clipboard_generation,
+        clipboard_permission_generation,
         clipboard_read_requested,
     })
 }
@@ -2067,6 +2092,8 @@ pub(super) struct TerminalOutputEffects {
     pub(super) title_update: Option<Option<String>>,
     pub(super) bell: bool,
     pub(super) clipboard_store: Option<String>,
+    pub(super) clipboard_generation: u64,
+    pub(super) clipboard_permission_generation: u64,
     pub(super) clipboard_read_requested: bool,
 }
 
@@ -2084,7 +2111,26 @@ pub(super) fn apply_terminal_output_effects(
         return;
     }
     if let Some(text) = effects.clipboard_store {
-        dispatch_ui(ui, move |ui| set_platform_clipboard_text(ui, &text));
+        let state = state.clone();
+        let generation = effects.clipboard_generation;
+        let permission_generation = effects.clipboard_permission_generation;
+        dispatch_ui(ui, move |ui| {
+            let allowed = state.lock().ok().is_some_and(|app| {
+                app.sessions.settings.terminal.osc52_clipboard
+                    && app.terminal(tab_id).is_some_and(|t| {
+                        t.reconnect_generation == generation
+                            && t.terminal.as_ref().is_some_and(|model| {
+                                model.osc52_clipboard_enabled()
+                                    && model.osc52_permission_generation() == permission_generation
+                            })
+                            && t.connected
+                            && t.worker_running
+                    })
+            });
+            if allowed {
+                let _written = set_platform_clipboard_text(ui, &text);
+            }
+        });
     }
     let title_changed = match state.lock() {
         Ok(mut app) => effects
@@ -2156,7 +2202,18 @@ fn handle_osc52_clipboard_read(
         return false;
     };
 
-    let text = platform_clipboard_text(&ui);
+    let text = match platform_clipboard_text(&ui) {
+        Ok(text) if text.len() <= ax_ssh::terminal::MAX_OSC52_CLIPBOARD_BYTES => text,
+        result => {
+            let message = match result {
+                Ok(_) => "Clipboard exceeds the OSC 52 limit (64 KiB)".to_owned(),
+                Err(error) => format!("Cannot read clipboard: {error}"),
+            };
+            handle_osc52_clipboard_deny(router, window_id, tab_id, state, &ui.as_weak());
+            ui.set_status(message.into());
+            return false;
+        }
+    };
     let sent = {
         let Ok(mut app) = state.lock() else {
             return false;
@@ -2176,7 +2233,13 @@ fn handle_osc52_clipboard_read(
         let Some(worker) = terminal.worker.as_ref() else {
             return false;
         };
-        worker.request_send(formatter(&text).into_bytes()).is_ok()
+        match worker.request_send_clipboard_response(formatter(&text).into_bytes()) {
+            Ok(()) => true,
+            Err(error) => {
+                ui.set_status(format!("Cannot send clipboard: {error}").into());
+                false
+            }
+        }
     };
     refresh_workspace(&ui.as_weak(), state);
     sent
@@ -2229,6 +2292,7 @@ fn finish_local_terminal(
             let terminal = app.terminal_mut(tab_id)?;
             let worker = terminal.worker.take();
             terminal.clear_pending_clipboard_read();
+            terminal.media.cancel();
             terminal.connected = false;
             terminal.worker_running = false;
             terminal.status = status.to_owned();

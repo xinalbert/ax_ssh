@@ -578,6 +578,7 @@ fn finish_direct_attempt(
     terminal.finish_reconnect_attempt(generation);
     terminal.worker = None;
     terminal.clear_pending_clipboard_read();
+    terminal.media.cancel();
     match protocol {
         DirectProtocol::Telnet => terminal.set_telnet_attempt(None),
         DirectProtocol::Serial => terminal.set_serial_attempt(None),

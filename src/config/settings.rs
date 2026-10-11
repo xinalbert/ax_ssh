@@ -1149,6 +1149,8 @@ fn normalize_sftp_local_open_max_file_mib(value: i32) -> u32 {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AppSettings {
     #[serde(default)]
+    pub audio: AudioSettings,
+    #[serde(default)]
     pub ui_language: UiLanguage,
     #[serde(default)]
     pub appearance: AppearanceSettings,
@@ -1172,6 +1174,7 @@ pub struct AppSettings {
 impl AppSettings {
     pub fn normalized(input: AppSettingsInput<'_>) -> Self {
         Self {
+            audio: AudioSettings::default(),
             ui_language: UiLanguage::from_setting(input.ui_language),
             appearance: AppearanceSettings::normalized(input.appearance),
             terminal: TerminalSettings::normalized(input.terminal),
@@ -1202,6 +1205,9 @@ impl AppSettings {
     }
 
     pub(super) fn normalize_in_place(&mut self) {
+        let format = self.audio.format();
+        self.audio.sample_rate = format.sample_rate;
+        self.audio.channels = format.channels;
         self.ui_language = UiLanguage::from_setting(self.ui_language.as_setting());
         self.appearance.normalize_in_place();
         self.terminal.normalize_in_place();
@@ -1449,5 +1455,41 @@ mod sftp_transfer_filter_tests {
         assert!(settings.use_platform_defaults);
         assert!(settings.custom_patterns.is_empty());
         assert!(!settings.effective_patterns().is_empty());
+    }
+}
+
+/// User-selected remote PCM format and optional local whisper.cpp engine.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AudioSettings {
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub whisper_executable: String,
+    pub whisper_model: String,
+}
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self {
+            sample_rate: 48_000,
+            channels: 2,
+            whisper_executable: String::new(),
+            whisper_model: String::new(),
+        }
+    }
+}
+impl AudioSettings {
+    pub fn format(&self) -> crate::audio::AudioFormat {
+        let selected = crate::audio::AudioFormat {
+            sample_rate: self.sample_rate,
+            channels: self.channels,
+        };
+        if selected.validate().is_ok() {
+            selected
+        } else {
+            crate::audio::AudioFormat {
+                sample_rate: 48_000,
+                channels: 2,
+            }
+        }
     }
 }

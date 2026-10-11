@@ -692,6 +692,15 @@ pub(super) async fn run_sftp_session(
                         Ok(())
                     }
                     Some(SshCommand::Disconnect) | None => break,
+                    Some(SshCommand::ClipboardImage { reply, .. }) => {
+                        if reply.send(Err(anyhow::anyhow!("paste images into an SSH terminal pane"))).is_err() { debug!("attachment requester cancelled"); }
+                        Ok(())
+                    }
+                    Some(SshCommand::Microphone { ready, finished, .. }) => {
+                        if ready.send(Err(anyhow::anyhow!("microphone requires an SSH terminal pane"))).is_err() { debug!("microphone requester cancelled"); }
+                        if finished.send(Ok(())).is_err() { debug!("microphone requester cancelled"); }
+                        Ok(())
+                    }
                     Some(SshCommand::Send { .. }) => {
                         Err(anyhow::anyhow!("SFTP-only session cannot accept terminal input"))
                     }

@@ -78,6 +78,7 @@ fn prepare_retry_with_phase(
         terminal.finish_reconnect_attempt(generation);
         terminal.worker = None;
         terminal.clear_pending_clipboard_read();
+        terminal.media.cancel();
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
@@ -105,6 +106,7 @@ pub(in crate::app) fn prepare_host_key_retry(
         terminal.finish_reconnect_attempt(generation);
         terminal.worker = None;
         terminal.clear_pending_clipboard_read();
+        terminal.media.cancel();
         terminal.set_ssh_attempt(None);
         terminal.connected = false;
         terminal.worker_running = false;
@@ -126,6 +128,7 @@ pub(in crate::app) fn retire_session_attempt(
                 terminal.finish_reconnect_attempt(generation);
                 terminal.worker = None;
                 terminal.clear_pending_clipboard_read();
+                terminal.media.cancel();
                 terminal.set_ssh_attempt(None);
                 terminal.connected = false;
                 terminal.worker_running = false;
