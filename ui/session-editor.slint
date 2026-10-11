@@ -261,37 +261,6 @@ export component SessionEditorPane inherits Rectangle {
 
                 VerticalLayout {
                     vertical-stretch: 0;
-                    spacing: Theme.space-sm;
-                    SessionEditorSectionHeading {
-                        label: @tr("System icon");
-                        description: @tr("Manual selection takes priority over automatic detection.");
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        SystemIconPicker {
-                            width: Theme.settings-field-width;
-                            icon-id: root.icon-draft;
-                            automatic-platform: root.reset-system-draft ? "server" : root.source.automatic_system_icon;
-                            choices(query) => { return root.system-icon-choices(query); }
-                            choice(id) => { return root.system-icon-choice(id); }
-                            selected(id) => { root.icon-draft = id; }
-                        }
-                    }
-                    if !root.source.detected_system_release.is-empty : Text {
-                        text: @tr("Detected system: {}", root.source.detected_system_release);
-                        color: Theme.muted;
-                        font-size: Theme.font-small;
-                        wrap: word-wrap;
-                    }
-                    if root.protocol == "SSH" && root.editing : CheckBox {
-                        text: @tr("Detect again on next connection");
-                        checked <=> root.reset-system-draft;
-                        enabled: root.icon-draft.is-empty;
-                    }
-                }
-
-                VerticalLayout {
-                    vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: @tr("Protocol");
@@ -525,6 +494,122 @@ export component SessionEditorPane inherits Rectangle {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
+                        label: @tr("Authentication");
+                        description: @tr("Credentials used for this SSH connection.");
+                    }
+                    AuthenticationMethodSelector {
+                        options: [
+                            { label: @tr("Password"), value: "Password" },
+                            { label: @tr("Private key"), value: "Private key" },
+                            { label: @tr("SSH agent"), value: "SSH agent" },
+                        ];
+                        selected-method <=> root.auth-method;
+                        accessible-name: @tr("SSH authentication method");
+                    }
+
+                    if root.editing : SessionEditorField {
+                        label: @tr("Saved password");
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            Text {
+                                text: root.source.credential_storage.is-empty
+                                    ? @tr("No saved password")
+                                    : @tr("Saved in {0}.", root.source.credential_storage == "system-keyring"
+                                        ? @tr("System credential store")
+                                        : @tr("Encrypted application vault"));
+                                color: Theme.muted;
+                                font-size: Theme.font-body;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                            ElidedButton {
+                                text: @tr("Clear saved password");
+                                enabled: !root.source.credential_storage.is-empty;
+                                clicked => { root.clear-saved-password(); }
+                            }
+                        }
+                    }
+
+                    if root.auth-method == "Password" : VerticalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.space-md;
+                        SessionEditorField {
+                            label: @tr("Password");
+                            password-edit := SecretTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.password-draft;
+                                placeholder-text: root.editing && !root.source.credential_storage.is-empty
+                                    ? @tr("Leave blank to keep saved password")
+                                    : @tr("Optional; enter only when connecting or saving");
+                                accessible-label: @tr("SSH password");
+                            }
+                        }
+                        CheckBox {
+                            text: @tr("Save password (optional)");
+                            enabled: !root.password-draft.is-empty;
+                            checked <=> root.remember-password-draft;
+                            accessible-label: @tr("Save SSH password for future connections");
+                        }
+                        if root.remember-password-draft : SessionEditorField {
+                            label: @tr("Credential storage");
+                            ThemedComboBox {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                model: root.credential-storage-options;
+                                current-index: root.credential-storage-draft == "encrypted-vault" ? 1 : 0;
+                                accessible-label: @tr("Credential storage");
+                                selected(_value, index) => {
+                                    root.credential-storage-draft = index == 1
+                                        ? "encrypted-vault"
+                                        : "system-keyring";
+                                }
+                            }
+                        }
+                        if root.remember-password-draft
+                                && root.credential-storage-draft == "encrypted-vault" : SessionEditorField {
+                            label: @tr("Vault password");
+                            vault-password-edit := SecretTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.vault-password-draft;
+                                placeholder-text: @tr("Optional; blank enables local automatic unlock");
+                                accessible-label: @tr("Credential vault password");
+                            }
+                        }
+                    }
+
+                    if root.auth-method == "Private key" : VerticalLayout {
+                        vertical-stretch: 0;
+                        spacing: Theme.space-md;
+                        SessionEditorField {
+                            label: @tr("Private key path");
+                            key-edit := FlatTextInput {
+                                width: parent.width;
+                                height: Theme.editor-input-row-height;
+                                text <=> root.private-key-draft;
+                                placeholder-text: @tr("~/.ssh/id_ed25519");
+                                accessible-label: @tr("Private key path");
+                            }
+                        }
+                        if root.private-key-options.length > 0 : SessionEditorField {
+                            label: @tr("Detected key");
+                            ThemedComboBox {
+                                width: min(parent.width, Theme.editor-detected-key-width);
+                                height: Theme.editor-input-row-height;
+                                model: root.private-key-options;
+                                accessible-label: @tr("Detected private keys");
+                                selected(value, _index) => { root.private-key-draft = value; }
+                            }
+                        }
+                    }
+                }
+
+                if root.protocol == "SSH" : VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-md;
+                    SessionEditorSectionHeading {
                         label: @tr("SFTP directories");
                         description: @tr("Choose the remote and local directories opened by new SFTP tabs.");
                     }
@@ -615,96 +700,40 @@ export component SessionEditorPane inherits Rectangle {
                     }
                 }
 
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space-sm;
+                    SessionEditorSectionHeading {
+                        label: @tr("System icon");
+                        description: @tr("Manual selection takes priority over automatic detection.");
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        SystemIconPicker {
+                            width: Theme.settings-field-width;
+                            icon-id: root.icon-draft;
+                            automatic-platform: root.reset-system-draft ? "server" : root.source.automatic_system_icon;
+                            choices(query) => { return root.system-icon-choices(query); }
+                            choice(id) => { return root.system-icon-choice(id); }
+                            selected(id) => { root.icon-draft = id; }
+                        }
+                    }
+                    if !root.source.detected_system_release.is-empty : Text {
+                        text: @tr("Detected system: {}", root.source.detected_system_release);
+                        color: Theme.muted;
+                        font-size: Theme.font-small;
+                        wrap: word-wrap;
+                    }
+                    if root.protocol == "SSH" && root.editing : CheckBox {
+                        text: @tr("Detect again on next connection");
+                        checked <=> root.reset-system-draft;
+                        enabled: root.icon-draft.is-empty;
+                    }
+                }
+
                 if root.protocol == "SSH" : VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.space-md;
-                    SessionEditorSectionHeading {
-                        label: @tr("Authentication");
-                        description: @tr("Credentials used for this SSH connection.");
-                    }
-                    AuthenticationMethodSelector {
-                        options: [
-                            { label: @tr("Password"), value: "Password" },
-                            { label: @tr("Private key"), value: "Private key" },
-                            { label: @tr("SSH agent"), value: "SSH agent" },
-                        ];
-                        selected-method <=> root.auth-method;
-                        accessible-name: @tr("SSH authentication method");
-                    }
-
-                    if root.editing : SessionEditorField {
-                        label: @tr("Saved password");
-                        HorizontalLayout {
-                            spacing: Theme.space-md;
-                            Text {
-                                text: root.source.credential_storage.is-empty
-                                    ? @tr("No saved password")
-                                    : @tr("Saved in {0}.", root.source.credential_storage == "system-keyring"
-                                        ? @tr("System credential store")
-                                        : @tr("Encrypted application vault"));
-                                color: Theme.muted;
-                                font-size: Theme.font-body;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
-                                wrap: word-wrap;
-                            }
-                            ElidedButton {
-                                text: @tr("Clear saved password");
-                                enabled: !root.source.credential_storage.is-empty;
-                                clicked => { root.clear-saved-password(); }
-                            }
-                        }
-                    }
-
-                    if root.auth-method == "Password" : VerticalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.space-md;
-                        SessionEditorField {
-                            label: @tr("Password");
-                            password-edit := SecretTextInput {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                text <=> root.password-draft;
-                                placeholder-text: root.editing && !root.source.credential_storage.is-empty
-                                    ? @tr("Leave blank to keep saved password")
-                                    : @tr("Optional; enter only when connecting or saving");
-                                accessible-label: @tr("SSH password");
-                            }
-                        }
-                        CheckBox {
-                            text: @tr("Save password (optional)");
-                            enabled: !root.password-draft.is-empty;
-                            checked <=> root.remember-password-draft;
-                            accessible-label: @tr("Save SSH password for future connections");
-                        }
-                        if root.remember-password-draft : SessionEditorField {
-                            label: @tr("Credential storage");
-                            ThemedComboBox {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                model: root.credential-storage-options;
-                                current-index: root.credential-storage-draft == "encrypted-vault" ? 1 : 0;
-                                accessible-label: @tr("Credential storage");
-                                selected(_value, index) => {
-                                    root.credential-storage-draft = index == 1
-                                        ? "encrypted-vault"
-                                        : "system-keyring";
-                                }
-                            }
-                        }
-                        if root.remember-password-draft
-                                && root.credential-storage-draft == "encrypted-vault" : SessionEditorField {
-                            label: @tr("Vault password");
-                            vault-password-edit := SecretTextInput {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                text <=> root.vault-password-draft;
-                                placeholder-text: @tr("Optional; blank enables local automatic unlock");
-                                accessible-label: @tr("Credential vault password");
-                            }
-                        }
-                    }
-
                     SessionEditorField {
                         label: @tr("X11 forwarding");
                         ThemedComboBox {
@@ -717,31 +746,6 @@ export component SessionEditorPane inherits Rectangle {
                             selected(_value, index) => {
                                 root.x11-forwarding-mode-draft = index == 0 ? "off"
                                     : index == 1 ? "untrusted" : "trusted";
-                            }
-                        }
-                    }
-
-                    if root.auth-method == "Private key" : VerticalLayout {
-                        vertical-stretch: 0;
-                        spacing: Theme.space-md;
-                        SessionEditorField {
-                            label: @tr("Private key path");
-                            key-edit := FlatTextInput {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                text <=> root.private-key-draft;
-                                placeholder-text: @tr("~/.ssh/id_ed25519");
-                                accessible-label: @tr("Private key path");
-                            }
-                        }
-                        if root.private-key-options.length > 0 : SessionEditorField {
-                            label: @tr("Detected key");
-                            ThemedComboBox {
-                                width: min(parent.width, Theme.editor-detected-key-width);
-                                height: Theme.editor-input-row-height;
-                                model: root.private-key-options;
-                                accessible-label: @tr("Detected private keys");
-                                selected(value, _index) => { root.private-key-draft = value; }
                             }
                         }
                     }
