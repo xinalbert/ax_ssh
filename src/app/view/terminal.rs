@@ -941,10 +941,14 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_sftp_upload_ready(snapshot.upload_ready);
     ui.set_sftp_home(snapshot.home.into());
     ui.set_sftp_path(snapshot.path.into());
-    ui.set_sftp_entries(ModelRc::new(VecModel::from(sftp_entry_rows(
+    let icon_revision = global_provider().revision();
+    ui.set_sftp_entries(update_file_rows(
+        ui.get_sftp_entries(),
         snapshot.entries,
         &snapshot.selected,
-    ))));
+        icon_revision,
+        sftp_entry_rows,
+    ));
     ui.set_sftp_sort_column(snapshot.sort.column_name().into());
     ui.set_sftp_sort_descending(snapshot.sort.descending);
     ui.set_sftp_has_more(snapshot.has_more);
@@ -984,10 +988,13 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_local_sftp_loaded(snapshot.local.loaded);
     ui.set_local_sftp_upload_selection_ready(snapshot.local.upload_selection_ready);
     ui.set_local_sftp_path(snapshot.local.path.into());
-    ui.set_local_sftp_entries(ModelRc::new(VecModel::from(local_entry_rows(
+    ui.set_local_sftp_entries(update_file_rows(
+        ui.get_local_sftp_entries(),
         snapshot.local.entries,
         &snapshot.local.selected,
-    ))));
+        icon_revision,
+        local_entry_rows,
+    ));
     ui.set_local_sftp_sort_column(snapshot.local.sort.column_name().into());
     ui.set_local_sftp_sort_descending(snapshot.local.sort.descending);
     ui.set_local_sftp_has_more(snapshot.local.has_more);
@@ -1015,9 +1022,21 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
             SftpTransferPhase::Completed | SftpTransferPhase::Skipped => completed.push(transfer),
         }
     }
-    ui.set_sftp_active_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(active))));
-    ui.set_sftp_failed_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(failed))));
-    ui.set_sftp_completed_transfers(ModelRc::new(VecModel::from(sftp_transfer_rows(completed))));
+    ui.set_sftp_active_transfers(update_sftp_rows(
+        ui.get_sftp_active_transfers(),
+        sftp_transfer_rows(active),
+        |old, new| old.id == new.id,
+    ));
+    ui.set_sftp_failed_transfers(update_sftp_rows(
+        ui.get_sftp_failed_transfers(),
+        sftp_transfer_rows(failed),
+        |old, new| old.id == new.id,
+    ));
+    ui.set_sftp_completed_transfers(update_sftp_rows(
+        ui.get_sftp_completed_transfers(),
+        sftp_transfer_rows(completed),
+        |old, new| old.id == new.id,
+    ));
     ui.set_sftp_transfer_active_count(transfer_active_count);
     ui.set_sftp_transfer_failed_count(transfer_failed_count);
     ui.set_sftp_transfer_completed_count(transfer_completed_count);

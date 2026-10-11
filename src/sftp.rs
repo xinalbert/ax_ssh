@@ -428,17 +428,34 @@ async fn ensure_remote_target_absent(
 }
 
 async fn write_remote_bytes(session: &RawSftpSession, handle: &str, data: &[u8]) -> Result<()> {
+    use transfer::pipeline::{REQUEST_WINDOW, RequestWindow};
+    let mut requests = RequestWindow::new();
     for (index, chunk) in data.chunks(64 * 1024).enumerate() {
-        timeout(
-            REQUEST_TIMEOUT,
-            session.write(
-                handle.to_owned(),
-                (index * 64 * 1024) as u64,
-                chunk.to_vec(),
-            ),
-        )
-        .await
-        .context("SFTP write timed out")??;
+        if requests.len() == REQUEST_WINDOW {
+            requests
+                .next()
+                .await
+                .context("missing SFTP write acknowledgement")??;
+        }
+        requests
+            .push(async move {
+                timeout(
+                    REQUEST_TIMEOUT,
+                    session.write(
+                        handle.to_owned(),
+                        (index * 64 * 1024) as u64,
+                        chunk.to_vec(),
+                    ),
+                )
+                .await
+                .context("SFTP write timed out")?
+                .context("SFTP write failed")?;
+                Ok(())
+            })
+            .await?;
+    }
+    while let Some(result) = requests.next().await {
+        result?;
     }
     Ok(())
 }
@@ -942,7 +959,15 @@ async fn emit_page(
             truncated: cursor.truncated,
         })
         .await
-        .context("SFTP event receiver dropped")
+        .context("SFTP event receiver dropped")?;
+    // Publish the page before waiting for the server to acknowledge CLOSE.
+    if cursor.done {
+        let handle = std::mem::take(&mut cursor.handle);
+        if !handle.is_empty() {
+            close_handle(session, handle).await;
+        }
+    }
+    Ok(())
 }
 
 async fn read_page(
@@ -952,6 +977,11 @@ async fn read_page(
     let mut page = Vec::with_capacity(MAX_PAGE_ENTRIES);
     while page.len() < MAX_PAGE_ENTRIES && !cursor.done {
         if cursor.pending.is_empty() {
+            // A server may return much less than 250 entries per packet. Do
+            // not wait for another round trip before showing useful results.
+            if !page.is_empty() {
+                break;
+            }
             match timeout(REQUEST_TIMEOUT, session.readdir(cursor.handle.clone()))
                 .await
                 .context("SFTP read directory timed out")?
@@ -989,12 +1019,6 @@ async fn read_page(
         }
     }
 
-    if cursor.done {
-        let handle = std::mem::take(&mut cursor.handle);
-        if !handle.is_empty() {
-            close_handle(session, handle).await;
-        }
-    }
     Ok(page)
 }
 
@@ -1166,6 +1190,94 @@ mod tests {
         assert!(browser_transport_failed(&anyhow::Error::from(
             SftpClientError::UnexpectedBehavior("session closed".to_owned())
         )));
+    }
+
+    #[tokio::test]
+    async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
+        use russh_sftp::protocol::{Name, Status};
+
+        let (stream, mut peer) = tokio::io::duplex(4096);
+        let (allow_close, close_allowed) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            read_test_packet(&mut peer).await;
+            write_test_packet(&mut peer, &[2, 0, 0, 0, 3]).await;
+            let request = read_test_packet(&mut peer).await;
+            assert_eq!(request[0], 12);
+            let id = u32::from_be_bytes(request[1..5].try_into().expect("request id"));
+            let mut attrs = FileAttributes::empty();
+            attrs.set_regular(true);
+            let name = Name {
+                id,
+                files: vec![File::new("first.txt", attrs)],
+            };
+            let mut packet = vec![104];
+            packet.extend_from_slice(&russh_sftp::ser::to_bytes(&name).expect("name payload"));
+            write_test_packet(&mut peer, &packet).await;
+            // No EOF response is available until the caller requests More.
+            let request = read_test_packet(&mut peer).await;
+            assert_eq!(request[0], 12);
+            let id = u32::from_be_bytes(request[1..5].try_into().expect("request id"));
+            let mut packet = vec![101];
+            packet.extend_from_slice(
+                &russh_sftp::ser::to_bytes(&Status {
+                    id,
+                    status_code: StatusCode::Eof,
+                    error_message: String::new(),
+                    language_tag: String::new(),
+                })
+                .expect("EOF payload"),
+            );
+            write_test_packet(&mut peer, &packet).await;
+            let request = read_test_packet(&mut peer).await;
+            assert_eq!(request[0], 4);
+            close_allowed.await.expect("test permits CLOSE response");
+            let mut packet = vec![101];
+            packet.extend_from_slice(&request[1..5]);
+            packet.extend_from_slice(&0_u32.to_be_bytes());
+            push_test_string(&mut packet, "");
+            push_test_string(&mut packet, "");
+            write_test_packet(&mut peer, &packet).await;
+            let mut byte = [0];
+            assert_eq!(peer.read(&mut byte).await.expect("session EOF"), 0);
+        });
+        let session = RawSftpSession::new(stream);
+        session.init().await.expect("handshake");
+        let mut cursor = DirectoryCursor {
+            path: "/srv".into(),
+            handle: "directory".into(),
+            pending: VecDeque::new(),
+            total_text_bytes: 0,
+            done: false,
+            truncated: false,
+        };
+        let page = timeout(Duration::from_secs(1), read_page(&session, &mut cursor))
+            .await
+            .expect("first page before EOF")
+            .expect("page");
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].name, "first.txt");
+        assert!(!cursor.done);
+        let (events, mut receiver) = mpsc::channel(2);
+        let emitter = tokio::spawn(async move {
+            emit_page(&session, &mut cursor, Some(1), true, &events)
+                .await
+                .expect("final page");
+            session.close_session().expect("close session");
+        });
+        let event = timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .expect("page before CLOSE ack")
+            .expect("event");
+        assert!(matches!(
+            event,
+            SftpBrowserEvent::DirectoryPage {
+                has_more: false,
+                ..
+            }
+        ));
+        allow_close.send(()).expect("release server");
+        emitter.await.expect("emitter joined");
+        server.await.expect("server joined");
     }
 
     #[tokio::test]

@@ -9,7 +9,7 @@ const LOCAL_DIRECTORY_NAME_LIMIT: usize = 256;
 const LOCAL_DIRECTORY_TEXT_BUDGET: usize = 2 * 1024 * 1024;
 pub(super) const LOCAL_DIRECTORY_PATH_LIMIT: usize = 4 * 1024;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct LocalDirectoryEntry {
     pub(super) name: String,
     pub(super) path: String,
@@ -21,7 +21,7 @@ pub(super) struct LocalDirectoryEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct LocalFileFingerprint {
+pub(super) struct LocalFileFingerprint {
     length: u64,
     modified: Option<SystemTime>,
     created: Option<SystemTime>,
@@ -216,7 +216,7 @@ pub(super) fn validate_local_file_for_open(
     })
 }
 
-fn local_file_fingerprint(file: &File) -> Result<LocalFileFingerprint> {
+pub(super) fn local_file_fingerprint(file: &File) -> Result<LocalFileFingerprint> {
     let metadata = file
         .metadata()
         .context("cannot inspect local file metadata")?;

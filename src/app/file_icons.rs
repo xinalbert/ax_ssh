@@ -3,6 +3,7 @@
 mod platform;
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::runtime::Handle;
 
@@ -52,6 +53,12 @@ pub(super) struct FileIcon {
 }
 
 impl FileIcon {
+    pub(super) fn shares_pixels(&self, other: &Self) -> bool {
+        self.width == other.width
+            && self.height == other.height
+            && Arc::ptr_eq(&self.rgba, &other.rgba)
+    }
+
     pub(super) fn width(&self) -> u32 {
         self.width
     }
@@ -103,6 +110,7 @@ pub(super) struct FileIconProvider {
     fallbacks: FallbackIcons,
     cache: Mutex<IconCache>,
     prewarm_gate: Mutex<()>,
+    revision: AtomicU64,
 }
 
 static GLOBAL_FILE_ICON_PROVIDER: OnceLock<Arc<FileIconProvider>> = OnceLock::new();
@@ -128,6 +136,9 @@ pub(super) fn prewarm_async(
 }
 
 impl FileIconProvider {
+    pub(super) fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Acquire)
+    }
     pub(super) fn new() -> Self {
         Self::with_boxed_resolver(Arc::new(platform::Resolver::default()))
     }
@@ -167,6 +178,7 @@ impl FileIconProvider {
             };
             if cache.identity != identity {
                 *cache = IconCache::new(identity.clone(), &self.fallbacks);
+                self.revision.fetch_add(1, Ordering::Release);
                 report.identity_changed = true;
             }
         }
@@ -189,6 +201,7 @@ impl FileIconProvider {
             match self.cache.lock() {
                 Ok(mut cache) if cache.identity == identity => {
                     cache.store(key, resolved, &self.fallbacks);
+                    self.revision.fetch_add(1, Ordering::Release);
                     if system_resolved {
                         report.system_resolved += 1;
                     } else {
@@ -214,6 +227,7 @@ impl FileIconProvider {
         if let Ok(mut cache) = self.cache.lock() {
             let released = cache.extension_lru.len();
             *cache = IconCache::new(CacheIdentity::new("uninitialized"), &self.fallbacks);
+            self.revision.fetch_add(1, Ordering::Release);
             released
         } else {
             0
@@ -230,6 +244,7 @@ impl FileIconProvider {
             )),
             fallbacks,
             prewarm_gate: Mutex::new(()),
+            revision: AtomicU64::new(0),
         }
     }
 

@@ -1,6 +1,109 @@
 use super::*;
 use slint::Model;
 
+#[test]
+fn sftp_unchanged_sources_skip_row_formatting_and_icons() {
+    let builds = std::cell::Cell::new(0);
+    let build = |entries: Vec<u8>, _: &HashSet<String>| {
+        builds.set(builds.get() + 1);
+        entries
+            .into_iter()
+            .map(|size| SftpEntryRow {
+                path: "/file".into(),
+                size: size.to_string().into(),
+                ..Default::default()
+            })
+            .collect()
+    };
+    let selection = HashSet::new();
+    let current = update_file_rows(ModelRc::default(), vec![1], &selection, 0, build);
+    let unchanged = update_file_rows(current.clone(), vec![1], &selection, 0, build);
+    assert_eq!(
+        builds.get(),
+        1,
+        "progress must skip file formatting and icon conversion"
+    );
+    assert!(current == unchanged);
+    let changed_icon = update_file_rows(unchanged, vec![1], &selection, 1, build);
+    assert_eq!(builds.get(), 2);
+    assert!(current == changed_icon);
+    let changed_entry = update_file_rows(changed_icon, vec![2], &selection, 1, build);
+    assert_eq!(builds.get(), 3);
+    assert!(current == changed_entry);
+    assert_eq!(changed_entry.row_data(0).expect("row").size.as_str(), "2");
+}
+
+#[test]
+fn sftp_progress_keeps_file_and_transfer_models_stable() {
+    let entries = vec![SftpEntry {
+        name: "file.txt".into(),
+        path: "/file.txt".into(),
+        is_dir: false,
+        is_symlink: false,
+        size: 42,
+        modified: Some(1234),
+    }];
+    let rows = sftp_entry_rows(entries.clone(), &HashSet::new());
+    let current = ModelRc::new(VecModel::from(rows.clone()));
+    let refreshed = update_sftp_rows(
+        current.clone(),
+        sftp_entry_rows(entries.clone(), &HashSet::new()),
+        |a, b| a.path == b.path,
+    );
+    assert!(current == refreshed);
+    assert_eq!(rows, refreshed.iter().collect::<Vec<_>>());
+    let selected = HashSet::from(["/file.txt".to_owned()]);
+    let refreshed = update_sftp_rows(refreshed, sftp_entry_rows(entries, &selected), |a, b| {
+        a.path == b.path
+    });
+    assert!(current == refreshed);
+    assert!(refreshed.row_data(0).expect("row").selected);
+
+    let transfer = SftpTransferRow {
+        id: "transfer".into(),
+        progress: 0.1,
+        ..Default::default()
+    };
+    let current = ModelRc::new(VecModel::from(vec![transfer.clone()]));
+    let updated = SftpTransferRow {
+        progress: 0.5,
+        ..transfer
+    };
+    let refreshed = update_sftp_rows(current.clone(), vec![updated], |a, b| a.id == b.id);
+    assert!(current == refreshed);
+    assert_eq!(refreshed.row_data(0).expect("transfer").progress, 0.5);
+}
+
+#[test]
+fn sftp_pages_append_in_place_and_navigation_replaces_the_model() {
+    let first = SftpEntryRow {
+        path: "/first".into(),
+        ..Default::default()
+    };
+    let second = SftpEntryRow {
+        path: "/second".into(),
+        ..Default::default()
+    };
+    let current = ModelRc::new(VecModel::from(vec![first.clone()]));
+    let appended = update_sftp_rows(current.clone(), vec![first.clone(), second], |a, b| {
+        a.path == b.path
+    });
+    assert!(current == appended);
+    assert_eq!(appended.row_count(), 2);
+    let shrunk = update_sftp_rows(appended, vec![first], |a, b| a.path == b.path);
+    assert!(current == shrunk);
+    assert_eq!(shrunk.row_count(), 1);
+    let moved = update_sftp_rows(
+        shrunk.clone(),
+        vec![SftpEntryRow {
+            path: "/other/directory".into(),
+            ..Default::default()
+        }],
+        |a, b| a.path == b.path,
+    );
+    assert!(shrunk != moved);
+}
+
 fn terminal_pane_view(tab_id: Uuid, x: f32, width: f32) -> TerminalPaneView {
     TerminalPaneView {
         terminal: TerminalViewState {

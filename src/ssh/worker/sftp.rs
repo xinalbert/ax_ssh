@@ -1,3 +1,6 @@
+mod operations;
+
+use operations::SftpWriteWorker;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -35,8 +38,6 @@ const MAX_PENDING_UPLOADS: usize = 512;
 struct SftpUploadStartContext<'a> {
     connection: &'a SshConnection,
     transfer_event_tx: &'a mpsc::Sender<SftpTransferEvent>,
-    event_tx: &'a mpsc::Sender<SshSessionEvent>,
-    session_id: Uuid,
     rate_limiter: Arc<TransferRateLimiter>,
 }
 enum ActiveSftpTransfer {
@@ -155,6 +156,7 @@ pub(super) async fn run_sftp_session(
         }
     };
     let mut latency = None::<LatencyMonitor>;
+    let writes = SftpWriteWorker::spawn(connection.clone(), session_id, event_tx.clone());
     let mut latency_foreground_rx = Some(latency_foreground_rx);
     let mut connected = false;
     let mut failed = false;
@@ -171,8 +173,6 @@ pub(super) async fn run_sftp_session(
     let upload_start_context = SftpUploadStartContext {
         connection: &connection,
         transfer_event_tx: &transfer_event_tx,
-        event_tx: &event_tx,
-        session_id,
         rate_limiter: rate_limiter.clone(),
     };
     let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
@@ -354,7 +354,7 @@ pub(super) async fn run_sftp_session(
                 start_queued_uploads(
                     &mut queued_uploads, &mut active_upload_requests, &mut transfers,
                     &pending_by_transfer, &upload_start_context, per_tab_limit,
-                ).await;
+                );
             }
             command = command_rx.recv() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
@@ -486,7 +486,7 @@ pub(super) async fn run_sftp_session(
                         start_queued_uploads(
                             &mut queued_uploads, &mut active_upload_requests, &mut transfers,
                             &pending_by_transfer, &upload_start_context, per_tab_limit,
-                        ).await;
+                        );
                         Ok(())
                     }
                     Some(SshCommand::ResolveSftpUploadConflict { transfer_id, choice, apply_to_batch }) => {
@@ -524,7 +524,7 @@ pub(super) async fn run_sftp_session(
                             start_queued_uploads(
                                 &mut queued_uploads, &mut active_upload_requests, &mut transfers,
                                 &pending_by_transfer, &upload_start_context, per_tab_limit,
-                            ).await;
+                            );
                         }
                         Ok(())
                     }
@@ -612,82 +612,11 @@ pub(super) async fn run_sftp_session(
                         Ok(())
                     }
                     Some(SshCommand::SftpWrite { operation_id, operation }) => {
-                        let result = match connection.open_sftp_stream().await {
-                            Ok(stream) => execute_sftp_write(stream, operation).await,
-                            Err(error) => Err(error).context("cannot open SFTP write subsystem"),
-                        };
-                        match result {
-                            Ok(crate::sftp::SftpWriteResult::Completed { path }) => {
-                                send_event(
-                                    &event_tx,
-                                    SshSessionEvent::SftpWrite(SftpWriteEvent::Completed {
-                                        operation_id,
-                                        path,
-                                    }),
-                                    session_id,
-                                )
-                                .await;
-                            }
-                            Ok(crate::sftp::SftpWriteResult::Updated {
-                                path,
-                                size,
-                                modified,
-                            }) => {
-                                send_event(
-                                    &event_tx,
-                                    SshSessionEvent::SftpWrite(SftpWriteEvent::Updated {
-                                        operation_id,
-                                        path,
-                                        size,
-                                        modified,
-                                    }),
-                                    session_id,
-                                )
-                                .await;
-                            }
-                            Ok(crate::sftp::SftpWriteResult::Text {
-                                path,
-                                data,
-                                expected_size,
-                                expected_modified,
-                            }) => {
-                                send_event(
-                                    &event_tx,
-                                    SshSessionEvent::SftpWrite(SftpWriteEvent::Text {
-                                        operation_id,
-                                        path,
-                                        data,
-                                        expected_size,
-                                        expected_modified,
-                                    }),
-                                    session_id,
-                                )
-                                .await;
-                            }
-                            Ok(crate::sftp::SftpWriteResult::Metadata { path, size, modified }) => {
-                                send_event(
-                                    &event_tx,
-                                    SshSessionEvent::SftpWrite(SftpWriteEvent::Metadata {
-                                        operation_id,
-                                        path,
-                                        size,
-                                        modified,
-                                    }),
-                                    session_id,
-                                )
-                                .await;
-                            }
-                            Err(error) => {
-                                send_event(
-                                    &event_tx,
-                                    SshSessionEvent::SftpWrite(SftpWriteEvent::Failed {
-                                        operation_id,
-                                        message: bounded_error_message(&error),
-                                    }),
-                                    session_id,
-                                )
-                                .await;
-                            }
+                        if let Err(error) = writes.request(operation_id, operation) {
+                            send_event(&event_tx, SshSessionEvent::SftpWrite(SftpWriteEvent::Failed {
+                                operation_id,
+                                message: bounded_error_message(&error),
+                            }), session_id).await;
                         }
                         Ok(())
                     }
@@ -778,7 +707,7 @@ pub(super) async fn run_sftp_session(
                 start_queued_uploads(
                     &mut queued_uploads, &mut active_upload_requests, &mut transfers,
                     &pending_by_transfer, &upload_start_context, per_tab_limit,
-                ).await;
+                );
             }
             event = browser_events.recv() => {
                 let Some(event) = event else {
@@ -828,6 +757,9 @@ pub(super) async fn run_sftp_session(
     release_probes.abort_all();
     while release_probes.join_next().await.is_some() {}
     shutdown_pending_sftp_opens(&mut pending_openings, &mut pending_by_transfer, session_id).await;
+    if let Err(error) = writes.shutdown().await {
+        warn!(%session_id, %error, "SFTP write worker shutdown failed");
+    }
     shutdown_sftp_transfers(transfers, session_id).await;
     if let Err(error) = browser.shutdown().await {
         warn!(session_id = %session_id, %error, "failed to shut down SFTP-only browser");
@@ -1005,7 +937,7 @@ fn upload_queued_event(request: &SftpUploadRequest) -> SftpTransferEvent {
     }
 }
 
-async fn start_queued_uploads(
+fn start_queued_uploads(
     queued_uploads: &mut VecDeque<SftpUploadRequest>,
     active_upload_requests: &mut HashMap<Uuid, SftpUploadRequest>,
     transfers: &mut Vec<ActiveSftpTransfer>,
@@ -1025,30 +957,16 @@ async fn start_queued_uploads(
                 break;
             }
         };
-        match context.connection.open_sftp_stream().await {
-            Ok(stream) => {
-                active_upload_requests.insert(transfer_id, request.clone());
-                transfers.push(ActiveSftpTransfer::Upload(SftpUploadHandle::spawn(
-                    &Handle::current(),
-                    stream,
-                    request,
-                    context.transfer_event_tx.clone(),
-                    slot,
-                    context.rate_limiter.clone(),
-                )));
-            }
-            Err(error) => {
-                let _ = send_sftp_transfer_event(
-                    context.event_tx,
-                    SftpTransferEvent::Failed {
-                        transfer_id,
-                        message: bounded_error_message(&error),
-                    },
-                    context.session_id,
-                )
-                .await;
-            }
-        }
+        let connection = context.connection.clone();
+        active_upload_requests.insert(transfer_id, request.clone());
+        transfers.push(ActiveSftpTransfer::Upload(SftpUploadHandle::spawn(
+            &Handle::current(),
+            async move { connection.open_sftp_stream().await },
+            request,
+            context.transfer_event_tx.clone(),
+            slot,
+            context.rate_limiter.clone(),
+        )));
     }
 }
 

@@ -1,5 +1,120 @@
 use super::*;
 
+const SLINT_ICON_CACHE_CAPACITY: usize = 128;
+type SlintIconCache =
+    std::collections::HashMap<FileIconKey, (super::super::file_icons::FileIcon, slint::Image)>;
+
+thread_local! {
+    static SLINT_FILE_ICONS: std::cell::RefCell<SlintIconCache> = std::cell::RefCell::new(SlintIconCache::new());
+}
+
+struct FileRowSource<E> {
+    entries: Vec<E>,
+    selected: HashSet<String>,
+    icon_revision: u64,
+}
+
+struct FileRowModel<E> {
+    rows: VecModel<SftpEntryRow>,
+    source: std::cell::RefCell<FileRowSource<E>>,
+}
+
+impl<E: 'static> slint::Model for FileRowModel<E> {
+    type Data = SftpEntryRow;
+    fn row_count(&self) -> usize {
+        self.rows.row_count()
+    }
+    fn row_data(&self, row: usize) -> Option<Self::Data> {
+        self.rows.row_data(row)
+    }
+    fn set_row_data(&self, row: usize, data: Self::Data) {
+        self.rows.set_row_data(row, data);
+    }
+    fn model_tracker(&self) -> &dyn slint::ModelTracker {
+        self.rows.model_tracker()
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+pub(super) fn update_file_rows<E: Clone + PartialEq + 'static>(
+    current: ModelRc<SftpEntryRow>,
+    entries: Vec<E>,
+    selected: &HashSet<String>,
+    icon_revision: u64,
+    build: impl FnOnce(Vec<E>, &HashSet<String>) -> Vec<SftpEntryRow>,
+) -> ModelRc<SftpEntryRow> {
+    let existing = current.as_any().downcast_ref::<FileRowModel<E>>();
+    if let Some(model) = existing {
+        let source = model.source.borrow();
+        if source.entries == entries
+            && source.selected == *selected
+            && source.icon_revision == icon_revision
+        {
+            return current.clone();
+        }
+    }
+    let rows = build(entries.clone(), selected);
+    let source = FileRowSource {
+        entries,
+        selected: selected.clone(),
+        icon_revision,
+    };
+    if let Some(model) = existing
+        && row_ids_match(&model.rows, &rows, |old, new| old.path == new.path)
+    {
+        sync_rows(&model.rows, rows);
+        *model.source.borrow_mut() = source;
+        return current;
+    }
+    ModelRc::new(FileRowModel {
+        rows: VecModel::from(rows),
+        source: std::cell::RefCell::new(source),
+    })
+}
+
+fn row_ids_match<T: Clone + 'static>(
+    model: &VecModel<T>,
+    rows: &[T],
+    same_identity: impl Fn(&T, &T) -> bool,
+) -> bool {
+    let common = model.row_count().min(rows.len());
+    (0..common).all(|index| {
+        model
+            .row_data(index)
+            .is_some_and(|row| same_identity(&row, &rows[index]))
+    })
+}
+
+fn sync_rows<T: Clone + PartialEq + 'static>(model: &VecModel<T>, rows: Vec<T>) {
+    for index in (rows.len()..model.row_count()).rev() {
+        model.remove(index);
+    }
+    for (index, row) in rows.into_iter().enumerate() {
+        match model.row_data(index) {
+            Some(existing) if existing == row => {}
+            Some(_) => model.set_row_data(index, row),
+            None => model.push(row),
+        }
+    }
+}
+
+pub(super) fn update_sftp_rows<T: Clone + PartialEq + 'static>(
+    current: ModelRc<T>,
+    rows: Vec<T>,
+    same_identity: impl Fn(&T, &T) -> bool,
+) -> ModelRc<T> {
+    let Some(model) = current.as_any().downcast_ref::<VecModel<T>>() else {
+        return ModelRc::new(VecModel::from(rows));
+    };
+    if !row_ids_match(model, &rows, same_identity) {
+        return ModelRc::new(VecModel::from(rows));
+    }
+    sync_rows(model, rows);
+    current
+}
+
 pub(super) fn sftp_entry_rows(
     entries: Vec<SftpEntry>,
     selected: &std::collections::HashSet<String>,
@@ -74,12 +189,28 @@ pub(super) fn local_entry_rows(
 
 pub(super) fn slint_icon(key: &FileIconKey) -> slint::Image {
     let icon = global_provider().cached_icon(key);
-    let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
-        icon.rgba(),
-        icon.width(),
-        icon.height(),
-    );
-    slint::Image::from_rgba8(pixels)
+    SLINT_FILE_ICONS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some((cached, image)) = cache.get(key)
+            && cached.shares_pixels(&icon)
+        {
+            return image.clone();
+        }
+        let pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(
+            icon.rgba(),
+            icon.width(),
+            icon.height(),
+        );
+        let image = slint::Image::from_rgba8(pixels);
+        if cache.len() >= SLINT_ICON_CACHE_CAPACITY && !cache.contains_key(key) {
+            let oldest = cache.keys().next().cloned();
+            if let Some(oldest) = oldest {
+                cache.remove(&oldest);
+            }
+        }
+        cache.insert(key.clone(), (icon, image.clone()));
+        image
+    })
 }
 
 pub(in crate::app) fn prewarm_file_icons(
@@ -191,9 +322,13 @@ async fn run_icon_prewarm_worker(
         };
 
         let prewarm = prewarm_async(&runtime, keys);
-        if let Err(error) = prewarm.await {
-            tracing::debug!(%error, "file icon prewarm task stopped");
-        }
+        let changed = match prewarm.await {
+            Ok(report) => report.identity_changed || report.system_resolved > 0,
+            Err(error) => {
+                tracing::debug!(%error, "file icon prewarm task stopped");
+                false
+            }
+        };
         let still_current = coordinator
             .lock()
             .is_ok_and(|pending| pending.generation == generation);
@@ -201,7 +336,8 @@ async fn run_icon_prewarm_worker(
             clear_global_cache();
             continue;
         }
-        if let Some(target) = target
+        if changed
+            && let Some(target) = target
             && let Some(state) = target.state.upgrade()
         {
             dispatch_active_snapshot(&target.ui, &state);
@@ -210,6 +346,7 @@ async fn run_icon_prewarm_worker(
 }
 
 pub(in crate::app) fn clear_file_icon_cache() {
+    SLINT_FILE_ICONS.with(|cache| cache.borrow_mut().clear());
     if let Some(coordinator) = ICON_PREWARM_COORDINATOR.get()
         && let Ok(mut pending) = coordinator.lock()
     {

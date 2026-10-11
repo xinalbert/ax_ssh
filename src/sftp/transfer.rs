@@ -2,15 +2,17 @@
 
 mod cache;
 mod local;
+pub(super) mod pipeline;
 
 use self::cache::*;
 use self::local::*;
+use self::pipeline::{REQUEST_WINDOW, RequestWindow};
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::fs::{self, File as LocalFile, OpenOptions};
 use std::future::Future;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -37,7 +39,7 @@ pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
 
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
 const WRITER_QUEUE_CAPACITY: usize = 2;
-const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_CACHE_OPEN_BYTES: u64 = 512 * 1024 * 1024;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_FILES: usize = 512;
 pub(crate) const MAX_RECURSIVE_DOWNLOAD_DIRECTORIES: usize = 256;
@@ -423,21 +425,22 @@ impl SftpUploadHandle {
         global_upload_limiter().try_acquire()
     }
 
-    pub(crate) fn spawn<S>(
+    pub(crate) fn spawn<F, S>(
         runtime: &Handle,
-        stream: S,
+        opening: F,
         request: SftpUploadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
         global_slot: UploadPermit,
         rate_limiter: Arc<TransferRateLimiter>,
     ) -> Self
     where
+        F: Future<Output = Result<S>> + Send + 'static,
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
         let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task = runtime.spawn(run_upload(
-            stream,
+            opening,
             request,
             cancellation.clone(),
             event_tx,
@@ -745,13 +748,14 @@ async fn run_download<S>(
     }
 }
 
-async fn run_upload<S>(
-    stream: S,
+async fn run_upload<F, S>(
+    opening: F,
     request: SftpUploadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
     _global_slot: UploadPermit,
 ) where
+    F: Future<Output = Result<S>> + Send,
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let total_bytes = request.total_bytes;
@@ -761,10 +765,19 @@ async fn run_upload<S>(
         name: request.name.clone(),
         total_bytes,
     };
-    if send_transfer_state(&event_tx, event).await.is_err() {
-        return;
+    let result = async {
+        let stream = await_step(
+            &cancellation,
+            Instant::now() + DOWNLOAD_TIMEOUT,
+            REQUEST_TIMEOUT * 2,
+            "opening upload subsystem",
+            opening,
+        )
+        .await??;
+        send_transfer_state(&event_tx, event).await?;
+        upload_initialized(stream, &request, &cancellation, &event_tx).await
     }
-    let result = upload_initialized(stream, &request, &cancellation, &event_tx).await;
+    .await;
     let terminal = match result {
         Ok(UploadOutcome::Conflict(remote)) => SftpTransferEvent::UploadConflict {
             transfer_id: request.transfer_id,
@@ -985,39 +998,57 @@ where
     .await?
     .context("cannot open remote upload file")?
     .handle;
+    let (mut chunks, mut reader) = start_local_upload_reader(request, cancellation);
     let mut offset = 0_u64;
-    let mut next_progress = PROGRESS_STEP_BYTES.min(request.total_bytes);
+    let mut next_offset = 0_u64;
+    let mut last_progress = Instant::now();
     let result = async {
+        let mut requests = RequestWindow::new();
+        let remote = &session;
+        let remote_handle = handle.as_str();
         while offset < request.total_bytes {
             cancellation.wait_until_running().await?;
-            let requested = (request.total_bytes - offset).min(u64::from(DOWNLOAD_CHUNK_BYTES));
-            let chunk = await_step(
-                cancellation,
-                deadline,
-                REQUEST_TIMEOUT,
-                "reading local upload",
-                read_local_upload_chunk(
-                    &request.local_path,
-                    offset,
-                    requested as usize,
-                    request.total_bytes,
-                    &request.local_identity,
-                ),
-            )
-            .await??;
-            let chunk_bytes = chunk.len() as u64;
-            cancellation.limit(chunk_bytes).await?;
-            await_step(
-                cancellation,
-                deadline,
-                REQUEST_TIMEOUT,
-                "writing remote upload",
-                session.write(handle.clone(), offset, chunk),
-            )
-            .await?
-            .context("cannot write remote upload")?;
+            while requests.len() < REQUEST_WINDOW && next_offset < request.total_bytes {
+                let chunk = await_step(
+                    cancellation,
+                    deadline,
+                    REQUEST_TIMEOUT,
+                    "reading local upload",
+                    chunks.recv(),
+                )
+                .await?
+                .context("local upload reader stopped before the validated end")??;
+                let chunk_bytes = chunk.len() as u64;
+                if chunk_bytes == 0
+                    || chunk_bytes > u64::from(DOWNLOAD_CHUNK_BYTES)
+                    || chunk_bytes > request.total_bytes - next_offset
+                {
+                    anyhow::bail!("local upload reader returned an invalid chunk size");
+                }
+                let chunk_offset = next_offset;
+                requests
+                    .push(async move {
+                        cancellation.limit(chunk_bytes).await?;
+                        await_step(
+                            cancellation,
+                            deadline,
+                            REQUEST_TIMEOUT,
+                            "writing remote upload",
+                            remote.write(remote_handle.to_owned(), chunk_offset, chunk),
+                        )
+                        .await?
+                        .context("cannot write remote upload")?;
+                        Ok(chunk_bytes)
+                    })
+                    .await?;
+                next_offset += chunk_bytes;
+            }
+            let chunk_bytes = requests
+                .next()
+                .await
+                .context("SFTP write window ended unexpectedly")??;
             offset += chunk_bytes;
-            if offset >= next_progress || offset == request.total_bytes {
+            if last_progress.elapsed() >= PROGRESS_INTERVAL || offset == request.total_bytes {
                 send_progress(
                     event_tx,
                     SftpTransferEvent::Progress {
@@ -1026,12 +1057,21 @@ where
                         total_bytes: request.total_bytes,
                     },
                 )?;
-                next_progress = offset.saturating_add(PROGRESS_STEP_BYTES);
+                last_progress = Instant::now();
             }
         }
         Ok::<_, anyhow::Error>(())
     }
     .await;
+    // Dropping the receiver releases a blocked local reader on every error.
+    drop(chunks);
+    let reader_result = match timeout(WRITER_CLEANUP_TIMEOUT, &mut reader).await {
+        Ok(joined) => joined
+            .context("local upload reader task failed")
+            .and_then(|result| result),
+        Err(_) => Err(anyhow::anyhow!("local upload reader cleanup timed out")),
+    };
+    let result = result.and(reader_result);
     let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
     if result.is_ok() && !cancellation.is_cancelled() {
         let published = async {
@@ -1068,45 +1108,75 @@ where
     result.map(|()| UploadOutcome::Published)
 }
 
-async fn read_local_upload_chunk(
-    path: &Path,
-    offset: u64,
-    length: usize,
-    expected_size: u64,
-    expected_identity: &Arc<LocalUploadIdentity>,
-) -> Result<Vec<u8>> {
-    let path = path.to_owned();
-    let expected_identity = expected_identity.clone();
-    tokio::task::spawn_blocking(move || {
-        let metadata = fs::symlink_metadata(&path)
-            .with_context(|| format!("cannot inspect local upload file {path:?}"))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            anyhow::bail!("local upload source is not a regular file");
-        }
-        if metadata.len() != expected_size
-            || local_upload_identity(&metadata) != *expected_identity.as_ref()
+fn start_local_upload_reader(
+    request: &SftpUploadRequest,
+    cancellation: &TransferCancellation,
+) -> (mpsc::Receiver<Result<Vec<u8>>>, JoinHandle<Result<()>>) {
+    let request = request.clone();
+    let cancellation = cancellation.clone();
+    let (sender, receiver) = mpsc::channel(WRITER_QUEUE_CAPACITY);
+    let task = tokio::task::spawn_blocking(move || {
+        let result = read_local_upload_chunks(&request, &cancellation, &sender);
+        if let Err(error) = &result
+            && sender
+                .blocking_send(Err(anyhow::anyhow!("{error:#}")))
+                .is_err()
         {
-            anyhow::bail!("local upload file changed while it was being uploaded");
+            debug!("local upload reader stopped after its consumer closed");
         }
-        let mut file = LocalFile::open(&path)
-            .with_context(|| format!("cannot open local upload file {path:?}"))?;
-        let opened_metadata = file
-            .metadata()
-            .with_context(|| format!("cannot inspect opened local upload file {path:?}"))?;
-        if opened_metadata.len() != expected_size
-            || local_upload_identity(&opened_metadata) != *expected_identity.as_ref()
-        {
-            anyhow::bail!("local upload file changed while it was being uploaded");
+        result
+    });
+    (receiver, task)
+}
+
+fn validate_local_upload_file(request: &SftpUploadRequest, file: &LocalFile) -> Result<()> {
+    let metadata =
+        fs::symlink_metadata(&request.local_path).context("cannot inspect local upload path")?;
+    let opened = file
+        .metadata()
+        .context("cannot inspect opened local upload file")?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        anyhow::bail!("local upload source is not a regular file");
+    }
+    if local_upload_identity(&metadata) != *request.local_identity
+        || local_upload_identity(&opened) != *request.local_identity
+    {
+        anyhow::bail!("local upload file changed while it was being uploaded");
+    }
+    Ok(())
+}
+
+fn read_local_upload_chunks(
+    request: &SftpUploadRequest,
+    cancellation: &TransferCancellation,
+    sender: &mpsc::Sender<Result<Vec<u8>>>,
+) -> Result<()> {
+    let metadata =
+        fs::symlink_metadata(&request.local_path).context("cannot inspect local upload source")?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || local_upload_identity(&metadata) != *request.local_identity
+    {
+        anyhow::bail!("local upload file changed before it was opened");
+    }
+    let mut file =
+        LocalFile::open(&request.local_path).context("cannot open local upload source")?;
+    let mut offset = 0;
+    while offset < request.total_bytes {
+        if cancellation.is_cancelled() {
+            return Err(cancelled_error());
         }
-        file.seek(SeekFrom::Start(offset))
-            .context("cannot seek local upload file")?;
-        let mut chunk = vec![0_u8; length];
+        validate_local_upload_file(request, &file)?;
+        let length = (request.total_bytes - offset).min(u64::from(DOWNLOAD_CHUNK_BYTES)) as usize;
+        let mut chunk = vec![0; length];
         file.read_exact(&mut chunk)
-            .context("cannot read local upload file")?;
-        Ok::<_, anyhow::Error>(chunk)
-    })
-    .await
-    .context("local upload read task failed")?
+            .context("cannot read local upload source")?;
+        sender
+            .blocking_send(Ok(chunk))
+            .context("local upload consumer closed")?;
+        offset += length as u64;
+    }
+    validate_local_upload_file(request, &file)
 }
 
 fn local_upload_identity(metadata: &fs::Metadata) -> LocalUploadIdentity {
@@ -1368,6 +1438,11 @@ async fn download_open_local_handle(
         deadline,
     )
     .await;
+    if stream_result.is_err() {
+        // A full byte count is insufficient: EOF and metadata validation must
+        // also succeed before the writer is allowed to publish its part file.
+        cancellation.cancel();
+    }
     drop(chunk_tx);
 
     match stream_result {
@@ -1552,6 +1627,9 @@ async fn download_open_handle(
         deadline,
     )
     .await;
+    if stream_result.is_err() {
+        cancellation.cancel();
+    }
     drop(chunk_tx);
 
     match stream_result {
@@ -1587,7 +1665,9 @@ async fn stream_remote_file(
     deadline: Instant,
 ) -> Result<()> {
     let mut downloaded_bytes = 0_u64;
-    let mut next_progress = PROGRESS_STEP_BYTES.min(expected.size);
+    let mut next_offset = 0_u64;
+    let mut requests = RequestWindow::new();
+    let mut last_progress = Instant::now();
     while downloaded_bytes < expected.size {
         if cancellation.is_paused() {
             send_transfer_state(
@@ -1610,39 +1690,25 @@ async fn stream_remote_file(
             )
             .await?;
         }
-        let remaining = expected.size - downloaded_bytes;
-        let requested = remaining.min(u64::from(DOWNLOAD_CHUNK_BYTES)) as u32;
-        cancellation.limit(u64::from(requested)).await?;
-        let response = await_step(
-            cancellation,
-            deadline,
-            REQUEST_TIMEOUT,
-            "reading remote file",
-            session.read(handle.to_owned(), downloaded_bytes, requested),
-        )
-        .await?;
-        let data = match response {
-            Ok(data) => data.data,
-            Err(russh_sftp::client::error::Error::Status(status))
-                if status.status_code == StatusCode::Eof =>
-            {
-                anyhow::bail!(
-                    "remote file ended after {downloaded_bytes} of {} bytes",
-                    expected.size
-                );
-            }
-            Err(error) => return Err(error).context("cannot read remote file"),
-        };
-        if data.is_empty() {
-            anyhow::bail!(
-                "remote file returned an empty data packet after {downloaded_bytes} of {} bytes",
-                expected.size
-            );
+        while requests.len() < REQUEST_WINDOW && next_offset < expected.size {
+            let length = (expected.size - next_offset).min(u64::from(DOWNLOAD_CHUNK_BYTES)) as u32;
+            requests
+                .push(read_remote_chunk(
+                    session,
+                    handle,
+                    next_offset,
+                    length,
+                    expected.size,
+                    cancellation,
+                    deadline,
+                ))
+                .await?;
+            next_offset += u64::from(length);
         }
-        if data.len() > requested as usize || data.len() as u64 > remaining {
-            anyhow::bail!("remote file returned more bytes than requested");
-        }
-
+        let data = requests
+            .next()
+            .await
+            .context("SFTP read window ended unexpectedly")??;
         let chunk_bytes = data.len() as u64;
         await_step(
             cancellation,
@@ -1655,7 +1721,7 @@ async fn stream_remote_file(
         .map_err(|_| CacheWriterStopped)?;
         downloaded_bytes += chunk_bytes;
 
-        if downloaded_bytes >= next_progress || downloaded_bytes == expected.size {
+        if last_progress.elapsed() >= PROGRESS_INTERVAL || downloaded_bytes == expected.size {
             send_progress(
                 event_tx,
                 SftpTransferEvent::Progress {
@@ -1664,9 +1730,7 @@ async fn stream_remote_file(
                     total_bytes: expected.size,
                 },
             )?;
-            next_progress = downloaded_bytes
-                .saturating_add(PROGRESS_STEP_BYTES)
-                .min(expected.size);
+            last_progress = Instant::now();
         }
     }
 
@@ -1701,6 +1765,58 @@ async fn stream_remote_file(
     let final_path = lstat_regular_file(session, remote_path, cancellation, deadline).await?;
     ensure_same_remote_file(expected, final_path)?;
     Ok(())
+}
+
+async fn read_remote_chunk(
+    session: &RawSftpSession,
+    handle: &str,
+    offset: u64,
+    length: u32,
+    total_bytes: u64,
+    cancellation: &TransferCancellation,
+    deadline: Instant,
+) -> Result<Vec<u8>> {
+    cancellation.limit(u64::from(length)).await?;
+    let mut chunk = Vec::new();
+    while chunk.len() < length as usize {
+        let remaining = length - chunk.len() as u32;
+        let response = await_step(
+            cancellation,
+            deadline,
+            REQUEST_TIMEOUT,
+            "reading remote file",
+            session.read(handle.to_owned(), offset + chunk.len() as u64, remaining),
+        )
+        .await?;
+        let data = match response {
+            Ok(data) => data.data,
+            Err(russh_sftp::client::error::Error::Status(status))
+                if status.status_code == StatusCode::Eof =>
+            {
+                anyhow::bail!(
+                    "remote file ended after {} of {total_bytes} bytes",
+                    offset + chunk.len() as u64
+                );
+            }
+            Err(error) => return Err(error).context("cannot read complete remote file chunk"),
+        };
+        if data.is_empty() {
+            anyhow::bail!("remote file returned an empty data packet before its validated end");
+        }
+        if data.len() > remaining as usize {
+            anyhow::bail!("remote file returned more bytes than requested");
+        }
+        // Short replies leave a gap in this slot, never in another slot's
+        // offset range. Keep repairing it before emitting the ordered chunk.
+        if chunk.is_empty() {
+            // Keep full replies in their original allocation. In particular,
+            // do not preallocate another chunk while its reply is pending.
+            chunk = data;
+        } else {
+            chunk.extend_from_slice(&data);
+        }
+    }
+    Ok(chunk)
 }
 
 async fn lstat_regular_file(
@@ -2245,6 +2361,8 @@ mod tests {
 
     use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status, Version};
 
+    mod performance;
+
     #[tokio::test(start_paused = true)]
     async fn connection_rate_limiter_spaces_upload_and_download_chunks() {
         let limiter = Arc::new(TransferRateLimiter::new(Some(1024 * 1024)));
@@ -2313,34 +2431,111 @@ mod tests {
         let path = std::env::temp_dir().join(format!("ax-ssh-upload-{}.bin", Uuid::new_v4()));
         let contents = vec![0x5a; (DOWNLOAD_CHUNK_BYTES as usize) + 17];
         fs::write(&path, &contents).expect("upload fixture should write");
-        let identity = Arc::new(local_upload_identity(
-            &fs::symlink_metadata(&path).expect("upload fixture metadata should be readable"),
-        ));
-
-        let first = read_local_upload_chunk(
-            &path,
-            0,
-            DOWNLOAD_CHUNK_BYTES as usize,
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "/srv/file.bin".into(),
+            path.clone(),
             contents.len() as u64,
-            &identity,
+            Vec::new(),
         )
-        .await
-        .expect("first upload chunk should read");
+        .expect("request");
+        let cancellation = TransferCancellation::new();
+        let (mut chunks, reader) = start_local_upload_reader(&request, &cancellation);
+        let first = chunks
+            .recv()
+            .await
+            .expect("first chunk")
+            .expect("read success");
         assert_eq!(first.len(), DOWNLOAD_CHUNK_BYTES as usize);
+        let last = chunks
+            .recv()
+            .await
+            .expect("last chunk")
+            .expect("read success");
+        assert_eq!(last.len(), 17);
+        assert!(chunks.recv().await.is_none());
+        reader
+            .await
+            .expect("reader joined")
+            .expect("reader success");
 
         fs::write(&path, b"changed").expect("changed upload fixture should write");
-        let error = read_local_upload_chunk(
-            &path,
-            0,
-            DOWNLOAD_CHUNK_BYTES as usize,
-            contents.len() as u64,
-            &identity,
-        )
-        .await
-        .expect_err("changed upload source should be rejected");
+        let (mut chunks, reader) = start_local_upload_reader(&request, &cancellation);
+        let error = chunks
+            .recv()
+            .await
+            .expect("error event")
+            .expect_err("changed source rejected");
         assert!(error.to_string().contains("changed"));
+        assert!(reader.await.expect("reader joined").is_err());
 
         fs::remove_file(path).expect("upload fixture should be removed");
+    }
+
+    #[tokio::test]
+    async fn dropping_upload_consumer_releases_a_blocked_reader() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-reader-{}.bin", Uuid::new_v4()));
+        fs::write(&path, vec![7; DOWNLOAD_CHUNK_BYTES as usize * 8]).expect("fixture");
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "/srv/file.bin".into(),
+            path.clone(),
+            u64::from(DOWNLOAD_CHUNK_BYTES) * 8,
+            Vec::new(),
+        )
+        .expect("request");
+        let (mut chunks, reader) =
+            start_local_upload_reader(&request, &TransferCancellation::new());
+        chunks
+            .recv()
+            .await
+            .expect("first chunk")
+            .expect("read success");
+        drop(chunks);
+        assert!(
+            timeout(Duration::from_secs(1), reader)
+                .await
+                .expect("reader stopped")
+                .expect("reader joined")
+                .is_err()
+        );
+        fs::remove_file(path).expect("cleanup");
+    }
+
+    #[tokio::test]
+    async fn cancelling_upload_while_opening_a_channel_releases_its_slot() {
+        let path = std::env::temp_dir().join(format!("ax-ssh-opening-{}.bin", Uuid::new_v4()));
+        fs::write(&path, b"content").expect("fixture");
+        let request = SftpUploadRequest::from_local_file(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            "/srv/file.bin".into(),
+            path.clone(),
+            7,
+            Vec::new(),
+        )
+        .expect("request");
+        let (events, mut receiver) = mpsc::channel(4);
+        let worker = SftpUploadHandle::spawn(
+            &Handle::current(),
+            std::future::pending::<Result<tokio::io::DuplexStream>>(),
+            request,
+            events,
+            SftpUploadHandle::reserve_global_slot().expect("slot"),
+            Arc::new(TransferRateLimiter::new(None)),
+        );
+        worker.cancel();
+        timeout(Duration::from_secs(1), worker.shutdown())
+            .await
+            .expect("prompt cancellation")
+            .expect("join");
+        assert!(matches!(
+            receiver.recv().await,
+            Some(SftpTransferEvent::Cancelled { .. })
+        ));
+        fs::remove_file(path).expect("cleanup");
     }
 
     #[test]
