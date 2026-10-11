@@ -1,4 +1,3 @@
-import { FlatTextEdit } from "components/flat-text-edit.slint";
 import { CheckBox, ListView } from "std-widgets.slint";
 import { ActionMenuItem, FlatActionMenu } from "components/flat-action-menu.slint";
 import { ElidedLabel } from "components/elided-controls.slint";
@@ -89,11 +88,11 @@ export struct SftpViewState {
     transfer_selected_pausable_count: int,
     transfer_selected_resumable_count: int,
     editor_path: string,
-    editor_text: string,
+    editor_local_path: string,
+    editor_status: string,
+    editor_can_upload: bool,
     rename_name: string,
-    editor_remote_changed: bool,
     editor_auto_upload: bool,
-    editor_revision: int,
 }
 
 
@@ -1557,8 +1556,9 @@ export component SftpPane inherits Rectangle {
     callback upload-selected-local();
     callback rename-remote(string);
     callback edit-remote();
-    callback save-remote-file(string, string);
-    callback editor-text-changed(string);
+    callback upload-edited-file();
+    callback stop-editing-file();
+    callback reveal-edit-copy();
     callback toggle-editor-auto-upload(bool);
     callback dropped-local-files(data-transfer);
     callback dropped-remote-files(data-transfer);
@@ -1568,8 +1568,6 @@ export component SftpPane inherits Rectangle {
     callback drag-diagnostic(string, bool);
     callback native-remote-drop-region-changed(SftpNativeDropRegion);
     callback native-local-drop-region-changed(SftpNativeDropRegion);
-    private property <string> editor-path-draft: root.view.editor_path;
-    private property <string> editor-text-draft: root.view.editor_text;
     private property <string> rename-name-draft: root.view.rename_name;
 
     // Native file events have no Slint DropArea target. Publish the live,
@@ -1602,8 +1600,6 @@ export component SftpPane inherits Rectangle {
         root.native-local-drop-region-changed(root.native-local-drop-region);
     }
     changed view => {
-        root.editor-text-draft = root.view.editor_text;
-        root.editor-path-draft = root.view.editor_path;
         root.rename-name-draft = root.view.rename_name;
     }
 
@@ -1649,7 +1645,10 @@ export component SftpPane inherits Rectangle {
     private property <bool> effective-transfers-collapsed:
         root.transfers-collapsed
             || (root.transfer-content-empty && !root.transfer-layout-touched);
-    private property <length> editor-height: root.view.editor_path.is-empty ? 0px : 180px;
+    private property <length> editor-height: root.view.editor_path.is-empty ? 0px : max(
+        Theme.settings-control-height,
+        Theme.sftp-control-font-size * 1.5 + Theme.sftp-control-padding-y * 2,
+    ) + Theme.space-sm * 2;
     private property <length> expanded-vertical-available-height:
         max(0px, root.height - root.transfer-splitter-size - root.editor-height);
     private property <length> files-area-floor: min(
@@ -1841,36 +1840,37 @@ export component SftpPane inherits Rectangle {
         if !root.view.editor_path.is-empty : Rectangle {
             height: root.editor-height;
             background: Theme.panel-alt;
-            VerticalLayout {
+            HorizontalLayout {
                 padding: Theme.space-sm;
                 spacing: Theme.space-xs;
-                HorizontalLayout {
-                    FlatTextInput {
-                        width: 260px;
-                        text <=> editor-path-draft;
-                        accessible-label: @tr("Save As remote path");
-                    }
-                    SftpActionButton {
-                        text: @tr("Save");
-                        enabled: !root.view.editor_remote_changed;
-                        clicked => { root.save-remote-file(editor-path-draft, editor.text); }
-                    }
-                    CheckBox {
-                        text: @tr("Auto upload");
-                        checked: root.view.editor_auto_upload;
-                        toggled => { root.toggle-editor-auto-upload(self.checked); }
-                    }
-                    Text {
-                        text: root.view.editor_remote_changed ? @tr("Remote changed") : @tr("Monitoring");
-                        color: root.view.editor_remote_changed ? Theme.danger : Theme.muted;
-                        vertical-alignment: center;
-                    }
+                ElidedLabel {
+                    text: root.view.editor_path;
+                    tooltip-text: root.view.editor_local_path;
+                    horizontal-stretch: 1;
                 }
-                editor := FlatTextEdit {
-                    vertical-stretch: 1;
-                    text <=> editor-text-draft;
-                    accessible-label: @tr("Remote text editor");
-                    edited => { root.editor-text-changed(editor.text); }
+                SftpActionButton {
+                    text: @tr("Upload changes");
+                    enabled: root.view.editor_can_upload;
+                    clicked => { root.upload-edited-file(); }
+                }
+                SftpActionButton {
+                    text: @tr("Show local copy");
+                    enabled: !root.view.editor_local_path.is-empty;
+                    clicked => { root.reveal-edit-copy(); }
+                }
+                CheckBox {
+                    text: @tr("Auto upload");
+                    checked: root.view.editor_auto_upload;
+                    toggled => { root.toggle-editor-auto-upload(self.checked); }
+                }
+                ElidedLabel {
+                    text: root.view.editor_status;
+                    horizontal-stretch: 1;
+                }
+                SftpActionButton {
+                    text: @tr("Stop editing");
+                    enabled: root.view.editor_can_upload;
+                    clicked => { root.stop-editing-file(); }
                 }
             }
         }

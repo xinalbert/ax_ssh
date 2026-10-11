@@ -111,6 +111,7 @@ export struct SettingsViewState {
     sftp_max_file_gib: int,
     sftp_rate_limit_mib_per_second: int,
     sftp_local_open_max_file_mib: int,
+    sftp_remote_edit_max_file_mib: int,
     sidebar_width: int,
     tab_width: int,
     session_mask_character: string,
@@ -234,6 +235,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> sftp-max-file-gib: root.source.sftp_max_file_gib;
     private property <int> sftp-rate-limit-mib-per-second: root.source.sftp_rate_limit_mib_per_second;
     private property <int> sftp-local-open-max-file-mib: root.source.sftp_local_open_max_file_mib;
+    private property <int> sftp-remote-edit-max-file-mib: root.source.sftp_remote_edit_max_file_mib;
     private property <int> sidebar-width: root.source.sidebar_width;
     private property <int> tab-width: root.source.tab_width;
     private property <string> session-mask-character: root.source.session_mask_character;
@@ -261,7 +263,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -364,6 +366,7 @@ export component SettingsPane inherits Rectangle {
     private property <int> draft-sftp-max-file-gib: root.sftp-max-file-gib;
     private property <int> draft-sftp-rate-limit-mib-per-second: root.sftp-rate-limit-mib-per-second;
     private property <int> draft-sftp-local-open-max-file-mib: root.sftp-local-open-max-file-mib;
+    private property <int> draft-sftp-remote-edit-max-file-mib: root.sftp-remote-edit-max-file-mib;
     private property <int> draft-sidebar-width: root.sidebar-width;
     private property <int> draft-tab-width: root.tab-width;
     private property <string> draft-session-mask-character: root.session-mask-character;
@@ -508,6 +511,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-max-file-gib,
             root.draft-sftp-rate-limit-mib-per-second,
             root.draft-sftp-local-open-max-file-mib,
+            root.draft-sftp-remote-edit-max-file-mib,
             tab-id,
             close-after-save,
         );
@@ -585,6 +589,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-sftp-max-file-gib => { root.schedule-preview(); }
     changed draft-sftp-rate-limit-mib-per-second => { root.schedule-preview(); }
     changed draft-sftp-local-open-max-file-mib => { root.schedule-preview(); }
+    changed draft-sftp-remote-edit-max-file-mib => { root.schedule-preview(); }
     changed draft-sidebar-width => { root.schedule-preview(); }
     changed draft-tab-width => { root.schedule-preview(); }
     changed draft-session-mask-character => { root.schedule-preview(); }
@@ -798,6 +803,7 @@ export component SettingsPane inherits Rectangle {
                         draft-sftp-max-file-gib <=> root.draft-sftp-max-file-gib;
                         draft-sftp-rate-limit-mib-per-second <=> root.draft-sftp-rate-limit-mib-per-second;
                         draft-sftp-local-open-max-file-mib <=> root.draft-sftp-local-open-max-file-mib;
+                        draft-sftp-remote-edit-max-file-mib <=> root.draft-sftp-remote-edit-max-file-mib;
                         sftp-filter-platform-defaults: root.sftp-filter-platform-defaults;
                         restore-sftp-filter-defaults => {
                             root.draft-sftp-filter-enabled = true;

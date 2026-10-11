@@ -20,6 +20,8 @@ impl SftpBrowserState {
     }
 
     pub(super) fn snapshot(&self, available: bool) -> SftpBrowserSnapshot {
+        let (editor_path, editor_local_path, editor_status, editor_can_upload) =
+            self.external_edits.presentation();
         let transfer_selected_active_count =
             self.selected_transfer_ids(SftpTransferPhase::active).len();
         let transfer_selected_pausable_count = self
@@ -68,12 +70,12 @@ impl SftpBrowserState {
             transfer_selected_active_count,
             transfer_selected_pausable_count,
             transfer_selected_resumable_count,
-            editor_path: self.editor_path.clone(),
-            editor_text: self.editor_text.clone(),
+            editor_path,
+            editor_local_path,
+            editor_status,
+            editor_can_upload,
             rename_name: self.rename_name.clone(),
-            editor_remote_changed: self.editor_remote_changed,
-            editor_auto_upload: self.editor_auto_upload,
-            editor_revision: self.editor_revision,
+            editor_auto_upload: self.external_edits.auto_upload,
         }
     }
 
@@ -710,14 +712,8 @@ impl SftpBrowserState {
         self.has_more = false;
         self.truncated = false;
         self.selected.clear();
-        self.editor_path = None;
-        self.editor_text.clear();
+        self.external_edits = super::super::remote_edit::RemoteEdits::default();
         self.rename_name.clear();
-        self.editor_expected_size = None;
-        self.editor_expected_modified = None;
-        self.editor_remote_changed = false;
-        self.editor_revision = self.editor_revision.wrapping_add(1);
-        self.editor_monitor_generation = self.editor_monitor_generation.wrapping_add(1);
         self.back_history.clear();
         self.forward_history.clear();
         self.pending_navigation = None;
@@ -803,25 +799,6 @@ impl SftpBrowserState {
         }
         *self = Self::default();
         self.local = local;
-    }
-
-    pub(in crate::app) fn set_editor_text(&mut self, text: String) -> Option<(String, u64)> {
-        if self.editor_path.is_none() || self.editor_text == text {
-            return None;
-        }
-        self.editor_text = text;
-        self.editor_revision = self.editor_revision.wrapping_add(1);
-        self.editor_path
-            .clone()
-            .map(|path| (path, self.editor_revision))
-    }
-
-    pub(in crate::app) fn set_editor_auto_upload(&mut self, enabled: bool) {
-        self.editor_auto_upload = enabled;
-    }
-
-    pub(in crate::app) fn editor_is_current(&self, path: &str, revision: u64) -> bool {
-        self.editor_path.as_deref() == Some(path) && self.editor_revision == revision
     }
 }
 

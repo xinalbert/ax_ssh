@@ -170,6 +170,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_sftp_max_file_gib(settings.sftp_transfers.max_file_gib as i32);
     ui.set_sftp_rate_limit_mib_per_second(settings.sftp_transfers.rate_limit_mib_per_second as i32);
     ui.set_sftp_local_open_max_file_mib(settings.sftp_transfers.local_open_max_file_mib as i32);
+    ui.set_sftp_remote_edit_max_file_mib(settings.sftp_transfers.remote_edit_max_file_mib as i32);
     ui.set_sidebar_width(i32::from(settings.workspace.sidebar_width));
     ui.set_tab_width(i32::from(settings.workspace.tab_width));
     ui.set_session_mask_character(settings.workspace.session_mask_character.clone().into());

@@ -504,11 +504,14 @@ pub(super) fn spawn_session_monitor(
                         | ax_ssh::sftp::SftpWriteEvent::Updated { path, .. } => Some(path.clone()),
                         _ => None,
                     };
-                    let monitor_path = match &event {
-                        ax_ssh::sftp::SftpWriteEvent::Text { path, .. } => Some(path.clone()),
-                        ax_ssh::sftp::SftpWriteEvent::Updated { path, .. } => Some(path.clone()),
-                        _ => None,
-                    };
+                    if matches!(&event, ax_ssh::sftp::SftpWriteEvent::EditFile { .. }) {
+                        if session_attempt_is_active(&state, tab_id, profile.id, attempt_id) {
+                            super::remote_edit::finish_download(
+                                &runtime_for_monitor, state.clone(), ui.clone(), tab_id, attempt_id, event,
+                            );
+                        }
+                        continue;
+                    }
                     let mut refresh_error = None;
                     let Some(active) = mutate_terminal_attempt(
                         &state,
@@ -520,57 +523,14 @@ pub(super) fn spawn_session_monitor(
                             ax_ssh::sftp::SftpWriteEvent::Completed { path, .. } => {
                                 terminal.sftp.status = format!("Updated {path}");
                             }
-                            ax_ssh::sftp::SftpWriteEvent::Updated {
-                                path,
-                                size,
-                                modified,
-                                ..
-                            } => {
+                            ax_ssh::sftp::SftpWriteEvent::Updated { ref path, .. } => {
+                                terminal.sftp.external_edits.apply_result(&event);
                                 terminal.sftp.status = format!("Updated {path}");
-                                terminal.sftp.editor_path = Some(path);
-                                terminal.sftp.editor_expected_size = Some(size);
-                                terminal.sftp.editor_expected_modified = modified;
-                                terminal.sftp.editor_remote_changed = false;
-                                terminal.sftp.editor_monitor_generation = terminal
-                                    .sftp
-                                    .editor_monitor_generation
-                                    .wrapping_add(1);
                             }
-                            ax_ssh::sftp::SftpWriteEvent::Text {
-                                path,
-                                data,
-                                expected_size,
-                                expected_modified,
-                                ..
-                            } => {
-                                terminal.sftp.status = format!("Loaded {path}");
-                                terminal.sftp.editor_path = Some(path);
-                                terminal.sftp.editor_text = String::from_utf8_lossy(&data).into_owned();
-                                terminal.sftp.editor_expected_size = Some(expected_size);
-                                terminal.sftp.editor_expected_modified = expected_modified;
-                                terminal.sftp.editor_remote_changed = false;
-                                terminal.sftp.editor_revision = terminal.sftp.editor_revision.wrapping_add(1);
-                                terminal.sftp.editor_monitor_generation = terminal
-                                    .sftp
-                                    .editor_monitor_generation
-                                    .wrapping_add(1);
-                            }
-                            ax_ssh::sftp::SftpWriteEvent::Metadata {
-                                path,
-                                size,
-                                modified,
-                                ..
-                            } => {
-                                let changed = terminal.sftp.editor_expected_size != Some(size)
-                                    || terminal.sftp.editor_expected_modified != modified;
-                                terminal.sftp.editor_remote_changed = changed;
-                                terminal.sftp.status = if changed {
-                                    format!("Remote file changed: {path}")
-                                } else {
-                                    format!("Remote file unchanged: {path}")
-                                };
-                            }
-                            ax_ssh::sftp::SftpWriteEvent::Failed { message, .. } => {
+                            ax_ssh::sftp::SftpWriteEvent::Metadata { .. }
+                            | ax_ssh::sftp::SftpWriteEvent::EditFile { .. } => {}
+                            ax_ssh::sftp::SftpWriteEvent::Failed { ref message, .. } => {
+                                terminal.sftp.external_edits.apply_result(&event);
                                 terminal.sftp.status = format!("SFTP write failed: {message}");
                             }
                             }
@@ -596,17 +556,6 @@ pub(super) fn spawn_session_monitor(
                     }
                     if let Some(error) = refresh_error {
                         warn!(tab_id = %tab_id, session_id = %profile.id, %error, "could not refresh remote directory after SFTP write");
-                    }
-                    if let Some(path) = monitor_path {
-                        spawn_remote_editor_monitor(
-                            &runtime_for_monitor,
-                            state.clone(),
-                            ui.clone(),
-                            tab_id,
-                            profile.id,
-                            attempt_id,
-                            path,
-                        );
                     }
                 }
                 SshSessionEvent::X11ForwardingEnabled => {
@@ -921,62 +870,6 @@ pub(super) fn spawn_session_monitor(
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "SSH event monitor stopped");
-    });
-}
-
-fn spawn_remote_editor_monitor(
-    runtime: &Handle,
-    state: Arc<Mutex<AppState>>,
-    ui: slint::Weak<AppWindow>,
-    tab_id: Uuid,
-    profile_id: Uuid,
-    attempt_id: Uuid,
-    path: String,
-) {
-    runtime.spawn(async move {
-        let generation = state.lock().ok().and_then(|app| {
-            app.terminal(tab_id)
-                .and_then(|terminal| {
-                    terminal
-                        .sftp
-                        .editor_path
-                        .as_deref()
-                        .filter(|current| *current == path.as_str())
-                })
-                .and_then(|_| {
-                    app.terminal(tab_id)
-                        .map(|terminal| terminal.sftp.editor_monitor_generation)
-                })
-        });
-        let Some(generation) = generation else {
-            return;
-        };
-        loop {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            if !session_attempt_is_active(&state, tab_id, profile_id, attempt_id) {
-                break;
-            }
-            let queued = state.lock().ok().and_then(|mut app| {
-                let terminal = app.terminal_mut(tab_id)?;
-                if terminal.sftp.editor_path.as_deref() != Some(path.as_str())
-                    || terminal.sftp.editor_monitor_generation != generation
-                {
-                    return None;
-                }
-                terminal.worker.as_ref().and_then(|worker| {
-                    worker
-                        .request_sftp_write(
-                            Uuid::new_v4(),
-                            ax_ssh::sftp::SftpWriteOperation::CheckMetadata { path: path.clone() },
-                        )
-                        .ok()
-                })
-            });
-            if queued.is_none() {
-                break;
-            }
-            dispatch_active_snapshot(&ui, &state);
-        }
     });
 }
 

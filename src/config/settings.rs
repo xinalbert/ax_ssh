@@ -5,13 +5,14 @@ use super::{
     CredentialStorage, DEFAULT_APPLICATION_FONT_FAMILY, DEFAULT_COLLAPSED_GROUP_LABEL_CHARS,
     DEFAULT_FOCUSED_TERMINAL_REFRESH_FPS, DEFAULT_SCROLLBACK_LINES, DEFAULT_SESSION_MASK_CHARACTER,
     DEFAULT_SFTP_GLOBAL_UPLOADS, DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB, DEFAULT_SFTP_MAX_FILE_GIB,
-    DEFAULT_SFTP_PER_TAB_TRANSFERS, DEFAULT_SIDEBAR_WIDTH, DEFAULT_TAB_WIDTH,
-    DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_FONT_SIZE,
-    DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS, DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS,
-    DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS,
-    MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS, MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES,
-    MAX_SFTP_GLOBAL_UPLOADS, MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB, MAX_SFTP_MAX_FILE_GIB,
-    MAX_SFTP_PER_TAB_TRANSFERS, MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND, MAX_SHELL_NAME_CHARS,
+    DEFAULT_SFTP_PER_TAB_TRANSFERS, DEFAULT_SFTP_REMOTE_EDIT_MAX_FILE_MIB, DEFAULT_SIDEBAR_WIDTH,
+    DEFAULT_TAB_WIDTH, DEFAULT_TERMINAL_COLUMNS, DEFAULT_TERMINAL_FONT_FAMILY,
+    DEFAULT_TERMINAL_FONT_SIZE, DEFAULT_TERMINAL_LINE_HEIGHT, DEFAULT_TERMINAL_ROWS,
+    DEFAULT_TERMINAL_SOFTWARE_BLOCK_ROWS, DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
+    DEFAULT_UNFOCUSED_TERMINAL_REFRESH_FPS, MAX_COLLAPSED_GROUP_LABEL_CHARS, MAX_FONT_FAMILY_CHARS,
+    MAX_KNOWN_SHELLS, MAX_SCROLLBACK_LINES, MAX_SFTP_GLOBAL_UPLOADS,
+    MAX_SFTP_LOCAL_OPEN_MAX_FILE_MIB, MAX_SFTP_MAX_FILE_GIB, MAX_SFTP_PER_TAB_TRANSFERS,
+    MAX_SFTP_RATE_LIMIT_MIB_PER_SECOND, MAX_SFTP_REMOTE_EDIT_MAX_FILE_MIB, MAX_SHELL_NAME_CHARS,
     MAX_SHORTCUT_CHARS, MAX_SIDEBAR_WIDTH, MAX_TAB_WIDTH, MAX_TERMINAL_COLUMNS,
     MAX_TERMINAL_FONT_SIZE, MAX_TERMINAL_LINE_HEIGHT, MAX_TERMINAL_REFRESH_FPS, MAX_TERMINAL_ROWS,
     MAX_TERMINAL_SOFTWARE_BLOCK_ROWS, MAX_TERMINAL_TEXT_BRIGHTNESS_PERCENT,
@@ -990,6 +991,7 @@ pub struct AppSettingsInput<'a> {
     pub sftp_max_file_gib: i32,
     pub sftp_rate_limit_mib_per_second: i32,
     pub sftp_local_open_max_file_mib: i32,
+    pub sftp_remote_edit_max_file_mib: i32,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -1008,6 +1010,9 @@ pub struct SftpTransferSettings {
     /// Zero disables both the per-file cap and the private cache byte quota.
     #[serde(default = "default_sftp_local_open_max_file_mib")]
     pub local_open_max_file_mib: u32,
+    /// Maximum bytes buffered for a remote external edit, configured in MiB.
+    #[serde(default = "default_sftp_remote_edit_max_file_mib")]
+    pub remote_edit_max_file_mib: u32,
 }
 
 impl SftpTransferSettings {
@@ -1017,6 +1022,7 @@ impl SftpTransferSettings {
         max_file_gib: i32,
         rate_limit_mib_per_second: i32,
         local_open_max_file_mib: i32,
+        remote_edit_max_file_mib: i32,
     ) -> Self {
         Self {
             per_tab_transfers: per_tab_transfers.clamp(
@@ -1034,7 +1040,18 @@ impl SftpTransferSettings {
             local_open_max_file_mib: normalize_sftp_local_open_max_file_mib(
                 local_open_max_file_mib,
             ),
+            remote_edit_max_file_mib: remote_edit_max_file_mib
+                .clamp(1, MAX_SFTP_REMOTE_EDIT_MAX_FILE_MIB as i32)
+                as u32,
         }
+    }
+
+    pub fn remote_edit_max_file_bytes(&self) -> u64 {
+        u64::from(
+            self.remote_edit_max_file_mib
+                .clamp(1, MAX_SFTP_REMOTE_EDIT_MAX_FILE_MIB),
+        ) * 1024
+            * 1024
     }
 
     pub fn local_open_max_file_bytes(&self) -> u64 {
@@ -1110,6 +1127,7 @@ impl Default for SftpTransferSettings {
             max_file_gib: default_sftp_max_file_gib(),
             rate_limit_mib_per_second: 0,
             local_open_max_file_mib: default_sftp_local_open_max_file_mib(),
+            remote_edit_max_file_mib: default_sftp_remote_edit_max_file_mib(),
         }
     }
 }
@@ -1128,6 +1146,10 @@ fn default_sftp_max_file_gib() -> u32 {
 
 fn default_sftp_local_open_max_file_mib() -> u32 {
     DEFAULT_SFTP_LOCAL_OPEN_MAX_FILE_MIB
+}
+
+fn default_sftp_remote_edit_max_file_mib() -> u32 {
+    DEFAULT_SFTP_REMOTE_EDIT_MAX_FILE_MIB
 }
 
 fn normalize_sftp_max_file_gib(value: i32) -> u32 {
@@ -1189,6 +1211,7 @@ impl AppSettings {
                 input.sftp_max_file_gib,
                 input.sftp_rate_limit_mib_per_second,
                 input.sftp_local_open_max_file_mib,
+                input.sftp_remote_edit_max_file_mib,
             ),
         }
     }
@@ -1223,6 +1246,7 @@ impl AppSettings {
             i32::try_from(self.sftp_transfers.max_file_gib).unwrap_or(i32::MAX),
             i32::try_from(self.sftp_transfers.rate_limit_mib_per_second).unwrap_or(i32::MAX),
             i32::try_from(self.sftp_transfers.local_open_max_file_mib).unwrap_or(i32::MAX),
+            i32::try_from(self.sftp_transfers.remote_edit_max_file_mib).unwrap_or(i32::MAX),
         );
     }
 }

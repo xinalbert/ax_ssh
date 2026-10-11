@@ -114,12 +114,12 @@ fn write_event(operation_id: Uuid, result: Result<SftpWriteResult>) -> SftpWrite
             size,
             modified,
         },
-        Ok(SftpWriteResult::Text {
+        Ok(SftpWriteResult::EditFile {
             path,
             data,
             expected_size,
             expected_modified,
-        }) => SftpWriteEvent::Text {
+        }) => SftpWriteEvent::EditFile {
             operation_id,
             path,
             data,

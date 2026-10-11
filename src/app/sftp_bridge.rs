@@ -1293,119 +1293,53 @@ pub(super) fn wire_sftp(
     let ui_for_save = ui.as_weak();
     let state_for_save = state.clone();
     let router_for_save = window_router.clone();
-    ui.on_save_remote_sftp_file(move |path, text| {
-        log_ui_action("sftp.save-remote-file");
+    ui.on_upload_edited_sftp_file(move || {
+        log_ui_action("sftp.upload-edited-file");
         sync_window_active(&router_for_save, window_id, &state_for_save);
-        let result =
-            with_window_sftp_terminal(&state_for_save, &router_for_save, window_id, |terminal| {
-                let is_current_editor_path =
-                    terminal.sftp.editor_path.as_deref() == Some(path.as_str());
-                let expected_size = is_current_editor_path
-                    .then(|| {
-                        terminal.sftp.editor_expected_size.or_else(|| {
-                            terminal
-                                .sftp
-                                .entries
-                                .iter()
-                                .find(|entry| entry.path == path.as_str())
-                                .map(|entry| entry.size)
-                        })
-                    })
-                    .flatten();
-                let expected_modified = is_current_editor_path
-                    .then_some(terminal.sftp.editor_expected_modified)
-                    .flatten();
-                terminal
-                    .worker
-                    .as_ref()
-                    .context("active SFTP tab has no worker")?
-                    .request_sftp_write(
-                        Uuid::new_v4(),
-                        ax_ssh::sftp::SftpWriteOperation::WriteText {
-                            path: path.to_string(),
-                            data: text.as_bytes().to_vec(),
-                            expected_size,
-                            expected_modified,
-                        },
-                    )
-            });
-        match result {
+        match with_window_sftp_terminal(&state_for_save, &router_for_save, window_id, |terminal| {
+            terminal.sftp.external_edits.request_upload()
+        }) {
             Ok(()) => dispatch_active_snapshot(&ui_for_save, &state_for_save),
-            Err(error) => set_status(&ui_for_save, &format!("Cannot save remote file: {error}")),
+            Err(error) => set_status(&ui_for_save, &format!("Cannot upload edited file: {error}")),
         }
     });
 
-    let ui_for_editor_text = ui.as_weak();
-    let state_for_editor_text = state.clone();
-    let router_for_editor_text = window_router.clone();
-    let runtime_for_editor_text = runtime.clone();
-    ui.on_editor_text_changed_sftp(move |text| {
-        log_ui_action("sftp.editor-text-changed");
-        sync_window_active(&router_for_editor_text, window_id, &state_for_editor_text);
-        let tab_id = match router_for_editor_text.active_tab(window_id) {
-            Some(tab_id) => tab_id,
-            None => {
-                set_status(&ui_for_editor_text, "No active SFTP tab");
-                return;
-            }
-        };
-        let result = with_sftp_terminal_for_tab(&state_for_editor_text, tab_id, |terminal| {
-            Ok(terminal.sftp.set_editor_text(text.to_string()))
-        });
-        let changed = match result {
-            Ok(changed) => changed,
-            Err(error) => {
-                set_status(
-                    &ui_for_editor_text,
-                    &format!("Cannot update editor state: {error}"),
-                );
-                return;
-            }
-        };
-        dispatch_active_snapshot(&ui_for_editor_text, &state_for_editor_text);
-        let Some((path, revision)) = changed else {
-            return;
-        };
-        let should_upload = state_for_editor_text
-            .lock()
-            .ok()
-            .and_then(|app| {
-                app.terminal(tab_id)
-                    .filter(|terminal| terminal.is_sftp())
-                    .map(|terminal| terminal.sftp.editor_auto_upload)
-            })
-            .unwrap_or(false);
-        if !should_upload {
-            return;
+    let ui_for_stop = ui.as_weak();
+    let state_for_stop = state.clone();
+    let router_for_stop = window_router.clone();
+    ui.on_stop_editing_sftp_file(move || {
+        sync_window_active(&router_for_stop, window_id, &state_for_stop);
+        match with_window_sftp_terminal(&state_for_stop, &router_for_stop, window_id, |terminal| {
+            terminal.sftp.external_edits.stop_current();
+            terminal.sftp.status = "External editing stopped; local copy retained".into();
+            Ok(())
+        }) {
+            Ok(()) => dispatch_active_snapshot(&ui_for_stop, &state_for_stop),
+            Err(error) => set_status(&ui_for_stop, &format!("Cannot stop editing: {error}")),
         }
-        let state_for_task = state_for_editor_text.clone();
-        let ui_for_task = ui_for_editor_text.clone();
-        runtime_for_editor_text.spawn(async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            let queued = with_sftp_terminal_for_tab(&state_for_task, tab_id, |terminal| {
-                if !terminal.sftp.editor_is_current(&path, revision)
-                    || terminal.sftp.editor_remote_changed
-                {
-                    anyhow::bail!("remote file changed; automatic upload was skipped");
+    });
+
+    let ui_for_reveal = ui.as_weak();
+    let state_for_reveal = state.clone();
+    let router_for_reveal = window_router.clone();
+    let runtime_for_reveal = runtime.clone();
+    ui.on_reveal_sftp_edit_copy(move || {
+        let path = with_window_sftp_terminal(
+            &state_for_reveal,
+            &router_for_reveal,
+            window_id,
+            |terminal| {
+                let (_, path, _, _) = terminal.sftp.external_edits.presentation();
+                if path.is_empty() {
+                    anyhow::bail!("edit copy is not ready");
                 }
-                terminal
-                    .worker
-                    .as_ref()
-                    .context("active SFTP tab has no worker")?
-                    .request_sftp_write(
-                        Uuid::new_v4(),
-                        ax_ssh::sftp::SftpWriteOperation::WriteText {
-                            path: path.clone(),
-                            data: terminal.sftp.editor_text.as_bytes().to_vec(),
-                            expected_size: terminal.sftp.editor_expected_size,
-                            expected_modified: terminal.sftp.editor_expected_modified,
-                        },
-                    )
-            });
-            if let Err(error) = queued {
-                set_status(&ui_for_task, &format!("Automatic upload skipped: {error}"));
-            }
-        });
+                Ok(PathBuf::from(path))
+            },
+        );
+        match path {
+            Ok(path) => reveal_local_path(&runtime_for_reveal, ui_for_reveal.clone(), path),
+            Err(error) => set_status(&ui_for_reveal, &format!("Cannot show edit copy: {error}")),
+        }
     });
 
     let ui_for_auto = ui.as_weak();
@@ -1415,7 +1349,7 @@ pub(super) fn wire_sftp(
         log_ui_action("sftp.toggle-editor-auto-upload");
         sync_window_active(&router_for_auto, window_id, &state_for_auto);
         match with_window_sftp_terminal(&state_for_auto, &router_for_auto, window_id, |terminal| {
-            terminal.sftp.set_editor_auto_upload(enabled);
+            terminal.sftp.external_edits.auto_upload = enabled;
             Ok(())
         }) {
             Ok(()) => dispatch_active_snapshot(&ui_for_auto, &state_for_auto),
@@ -1681,34 +1615,73 @@ pub(super) fn wire_sftp(
     let ui_for_edit = ui.as_weak();
     let state_for_edit = state.clone();
     let router_for_edit = window_router.clone();
+    let runtime_for_edit = runtime.clone();
     ui.on_edit_remote_sftp(move || {
         log_ui_action("sftp.edit-remote");
         sync_window_active(&router_for_edit, window_id, &state_for_edit);
+        let max_bytes = match state_for_edit.lock() {
+            Ok(app) => app
+                .sessions
+                .settings
+                .sftp_transfers
+                .remote_edit_max_file_bytes(),
+            Err(_) => {
+                set_status(
+                    &ui_for_edit,
+                    "Cannot edit remote file: application state lock poisoned",
+                );
+                return;
+            }
+        };
         let result =
             with_window_sftp_terminal(&state_for_edit, &router_for_edit, window_id, |terminal| {
-                let entry = terminal
+                let entries: Vec<_> = terminal
                     .sftp
                     .entries
                     .iter()
                     .filter(|entry| terminal.sftp.selected.contains(&entry.path))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if entry.len() != 1 || entry[0].is_dir || entry[0].is_symlink {
+                    .collect();
+                if entries.len() != 1 || entries[0].is_dir || entries[0].is_symlink {
                     anyhow::bail!("select exactly one regular remote file to edit");
                 }
-                terminal
-                    .worker
-                    .as_ref()
-                    .context("active SFTP tab has no worker")?
-                    .request_sftp_write(
-                        Uuid::new_v4(),
-                        ax_ssh::sftp::SftpWriteOperation::ReadText {
-                            path: entry[0].path.clone(),
-                        },
-                    )
+                let path = entries[0].path.clone();
+                let (id, local, download) = terminal.sftp.external_edits.open(path.clone())?;
+                if download {
+                    let queued = terminal
+                        .worker
+                        .as_ref()
+                        .context("active SFTP tab has no worker")?
+                        .request_sftp_write(
+                            id,
+                            ax_ssh::sftp::SftpWriteOperation::ReadEditFile { path, max_bytes },
+                        );
+                    if let Err(error) = queued {
+                        terminal.sftp.external_edits.apply_result(
+                            &ax_ssh::sftp::SftpWriteEvent::Failed {
+                                operation_id: id,
+                                message: format!("{error:#}"),
+                            },
+                        );
+                        return Err(error);
+                    }
+                }
+                Ok(local.is_some())
             });
         match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_edit, &state_for_edit),
+            Ok(reopen) => {
+                if reopen
+                    && let Some(tab_id) = router_for_edit.active_tab(window_id)
+                    && let Err(error) = super::remote_edit::reopen_current(
+                        &runtime_for_edit,
+                        state_for_edit.clone(),
+                        ui_for_edit.clone(),
+                        tab_id,
+                    )
+                {
+                    set_status(&ui_for_edit, &format!("Cannot reopen edit copy: {error}"));
+                }
+                dispatch_active_snapshot(&ui_for_edit, &state_for_edit);
+            }
             Err(error) => set_status(&ui_for_edit, &format!("Cannot edit remote file: {error}")),
         }
     });

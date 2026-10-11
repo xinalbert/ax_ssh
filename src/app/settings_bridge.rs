@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 58] = [
+const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 59] = [
     (
         "General",
         "Local shell icon",
@@ -61,6 +61,11 @@ const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 58] = [
         "SFTP",
         "Local file open snapshot (MiB)",
         "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
+    ),
+    (
+        "SFTP",
+        "Remote edit file limit (MiB)",
+        "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB",
     ),
     (
         "SFTP",
@@ -329,7 +334,7 @@ fn localized_settings_section(section: &str) -> &str {
     }
 }
 
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 58] = [
+const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 59] = [
     (
         "Local shell icon",
         "Uses the host system by default. Changes are saved immediately.",
@@ -401,6 +406,12 @@ const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 58] = [
         "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
         "本地文件打开快照（MiB）",
         "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间",
+    ),
+    (
+        "Remote edit file limit (MiB)",
+        "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB",
+        "远程编辑文件大小上限（MiB）",
+        "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围 1–64 MiB",
     ),
     (
         "Bandwidth limit (MiB/s)",
@@ -866,6 +877,7 @@ pub(super) fn wire_settings(
               sftp_max_file_gib,
               sftp_rate_limit_mib_per_second,
               sftp_local_open_max_file_mib,
+              sftp_remote_edit_max_file_mib,
               settings_tab_id,
               close_after_save| {
             let is_preview = !close_after_save && settings_tab_id.is_empty();
@@ -972,6 +984,7 @@ pub(super) fn wire_settings(
                 sftp_max_file_gib,
                 sftp_rate_limit_mib_per_second,
                 sftp_local_open_max_file_mib,
+                sftp_remote_edit_max_file_mib,
             });
             let mut settings = settings;
             if let Ok(app) = state.lock() {
@@ -1583,6 +1596,10 @@ mod tests {
             "Keep cursor at line start while scrolling"
         );
 
+        let edit_matches = settings_search_results("remote edit file", "english");
+        assert_eq!(edit_matches.len(), 1);
+        assert_eq!(edit_matches[0].section, "SFTP");
+        assert_eq!(edit_matches[0].title, "Remote edit file limit (MiB)");
         let sftp_matches = settings_search_results("bandwidth limit", "english");
         assert_eq!(sftp_matches.len(), 1);
         assert_eq!(sftp_matches[0].section, "SFTP");
@@ -1648,6 +1665,10 @@ mod tests {
         assert_eq!(blink_matches[0].section, "Appearance");
         assert_eq!(blink_matches[0].title, "终端光标闪烁");
 
+        let edit_matches = settings_search_results("远程编辑", "simplified-chinese");
+        assert_eq!(edit_matches.len(), 1);
+        assert_eq!(edit_matches[0].section, "SFTP");
+        assert_eq!(edit_matches[0].title, "远程编辑文件大小上限（MiB）");
         let sftp_matches = settings_search_results("单文件大小上限", "simplified-chinese");
         assert!(sftp_matches.iter().any(|entry| {
             entry.section == "SFTP" && entry.title == "单文件大小上限（GiB）"

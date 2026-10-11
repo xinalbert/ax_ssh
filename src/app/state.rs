@@ -322,15 +322,8 @@ pub(super) struct SftpBrowserState {
     pub(super) transfers: VecDeque<SftpTransferState>,
     pub(super) upload_conflicts: VecDeque<PendingUploadConflict>,
     pub(super) selected_transfers: HashSet<Uuid>,
-    pub(super) editor_path: Option<String>,
-    pub(super) editor_text: String,
     pub(super) rename_name: String,
-    pub(super) editor_expected_size: Option<u64>,
-    pub(super) editor_expected_modified: Option<u32>,
-    pub(super) editor_remote_changed: bool,
-    pub(super) editor_auto_upload: bool,
-    pub(super) editor_revision: u64,
-    pub(super) editor_monitor_generation: u64,
+    pub(super) external_edits: super::remote_edit::RemoteEdits,
 }
 
 #[derive(Default)]
@@ -380,11 +373,11 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) transfer_selected_pausable_count: usize,
     pub(super) transfer_selected_resumable_count: usize,
     pub(super) editor_path: Option<String>,
-    pub(super) editor_text: String,
+    pub(super) editor_local_path: String,
+    pub(super) editor_status: String,
+    pub(super) editor_can_upload: bool,
     pub(super) rename_name: String,
-    pub(super) editor_remote_changed: bool,
     pub(super) editor_auto_upload: bool,
-    pub(super) editor_revision: u64,
 }
 
 #[derive(Clone, Default)]

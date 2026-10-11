@@ -736,9 +736,6 @@ msgstr "最小化窗口"
 msgid "Modified"
 msgstr "修改时间"
 
-msgid "Monitoring"
-msgstr "监控中"
-
 msgid "Mono (1)"
 msgstr "单声道 (1)"
 
@@ -997,9 +994,6 @@ msgstr "已记住密码的存储位置"
 msgid "Remote and local file pane sizes"
 msgstr "远端和本地文件窗格大小"
 
-msgid "Remote changed"
-msgstr "远端已更改"
-
 msgid "Remote channels"
 msgstr "远端声道"
 
@@ -1020,9 +1014,6 @@ msgstr "远端麦克风"
 
 msgid "Remote sample rate"
 msgstr "远端采样率"
-
-msgid "Remote text editor"
-msgstr "远端文本编辑器"
 
 msgid "Remove"
 msgstr "移除"
@@ -1167,9 +1158,6 @@ msgstr "保存"
 
 msgid "Save & connect"
 msgstr "保存并连接"
-
-msgid "Save As remote path"
-msgstr "另存为远端路径"
 
 msgid "Save SSH password for future connections"
 msgstr "保存 SSH 密码供以后连接使用"
@@ -1689,3 +1677,21 @@ msgstr "~"
 
 msgid "~/.ssh/id_ed25519"
 msgstr "~/.ssh/id_ed25519"
+
+msgid "Upload changes"
+msgstr "上传修改"
+
+msgid "Show local copy"
+msgstr "显示本地副本"
+
+msgid "Stop editing"
+msgstr "停止编辑"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "远程编辑文件大小上限（MiB）"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围 1–64 MiB"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "远程编辑文件大小上限，单位 MiB"

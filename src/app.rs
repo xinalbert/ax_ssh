@@ -89,6 +89,7 @@ mod macos_window;
 mod native_file_drop;
 mod panes;
 mod platform_support;
+mod remote_edit;
 mod runtime;
 mod serial_bridge;
 mod session_groups;

@@ -408,8 +408,9 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback save-remote-sftp-file(string, string);
-    callback editor-text-changed-sftp(string);
+    callback upload-edited-sftp-file();
+    callback stop-editing-sftp-file();
+    callback reveal-sftp-edit-copy();
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
     callback dropped-remote-files-sftp(data-transfer);
@@ -590,8 +591,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             upload-selected-local => { root.upload-selected-local-sftp(); }
             rename-remote(name) => { root.rename-remote-sftp(name); }
             edit-remote => { root.edit-remote-sftp(); }
-            save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
-            editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
+            upload-edited-file => { root.upload-edited-sftp-file(); }
+            stop-editing-file => { root.stop-editing-sftp-file(); }
+            reveal-edit-copy => { root.reveal-sftp-edit-copy(); }
             toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
             dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
             dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
@@ -656,7 +658,7 @@ export component WorkspaceShell inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -702,8 +704,9 @@ export component WorkspaceShell inherits Rectangle {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback save-remote-sftp-file(string, string);
-    callback editor-text-changed-sftp(string);
+    callback upload-edited-sftp-file();
+    callback stop-editing-sftp-file();
+    callback reveal-sftp-edit-copy();
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
     callback dropped-remote-files-sftp(data-transfer);
@@ -896,8 +899,9 @@ export component WorkspaceShell inherits Rectangle {
         upload-selected-local-sftp => { root.upload-selected-local-sftp(); }
         rename-remote-sftp(name) => { root.rename-remote-sftp(name); }
         edit-remote-sftp => { root.edit-remote-sftp(); }
-        save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
-        editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
+        upload-edited-sftp-file => { root.upload-edited-sftp-file(); }
+            stop-editing-sftp-file => { root.stop-editing-sftp-file(); }
+            reveal-sftp-edit-copy => { root.reveal-sftp-edit-copy(); }
         toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
         dropped-local-files-sftp(data) => { root.dropped-local-files-sftp(data); }
         dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
@@ -1187,8 +1191,9 @@ export component WorkspaceShell inherits Rectangle {
                         upload-selected-local => { root.upload-selected-local-sftp(); }
                         rename-remote(name) => { root.rename-remote-sftp(name); }
                         edit-remote => { root.edit-remote-sftp(); }
-                        save-remote-file(path, text) => { root.save-remote-sftp-file(path, text); }
-                        editor-text-changed(text) => { root.editor-text-changed-sftp(text); }
+                        upload-edited-file => { root.upload-edited-sftp-file(); }
+            stop-editing-file => { root.stop-editing-sftp-file(); }
+            reveal-edit-copy => { root.reveal-sftp-edit-copy(); }
                         toggle-editor-auto-upload(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
                         dropped-local-files(data) => { root.dropped-local-files-sftp(data); }
                         dropped-remote-files(data) => { root.dropped-remote-files-sftp(data); }
@@ -1226,7 +1231,7 @@ export component WorkspaceShell inherits Rectangle {
                              scrollback, columns, rows, sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key,
                              new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                              sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
-                             sftp-per-tab-transfers, sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib,
+                             sftp-per-tab-transfers, sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib,
                              settings-tab-id, close-after-save) => {
                             root.save-settings(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                                 semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
@@ -1243,7 +1248,7 @@ export component WorkspaceShell inherits Rectangle {
                                 sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                                 toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
                                 sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
-                                sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
+                                sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib, settings-tab-id, close-after-save);
                         }
                         save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
                         save-ui-language(index) => { root.save-ui-language(index); }

@@ -354,11 +354,11 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_sftp_transfer_selected_pausable_count(0);
     ui.set_sftp_transfer_selected_resumable_count(0);
     ui.set_sftp_editor_path("".into());
-    ui.set_sftp_editor_text("".into());
+    ui.set_sftp_editor_local_path("".into());
+    ui.set_sftp_editor_status("".into());
+    ui.set_sftp_editor_can_upload(false);
     ui.set_sftp_rename_name("".into());
-    ui.set_sftp_editor_remote_changed(false);
     ui.set_sftp_editor_auto_upload(false);
-    ui.set_sftp_editor_revision(0);
 
     ui.set_application_font_family("".into());
     ui.set_terminal_font_family("".into());

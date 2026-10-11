@@ -1046,11 +1046,11 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
         snapshot.transfer_selected_resumable_count as i32,
     );
     ui.set_sftp_editor_path(snapshot.editor_path.unwrap_or_default().into());
-    ui.set_sftp_editor_text(snapshot.editor_text.into());
+    ui.set_sftp_editor_local_path(snapshot.editor_local_path.into());
+    ui.set_sftp_editor_status(snapshot.editor_status.into());
+    ui.set_sftp_editor_can_upload(snapshot.editor_can_upload);
     ui.set_sftp_rename_name(snapshot.rename_name.into());
-    ui.set_sftp_editor_remote_changed(snapshot.editor_remote_changed);
     ui.set_sftp_editor_auto_upload(snapshot.editor_auto_upload);
-    ui.set_sftp_editor_revision(snapshot.editor_revision as i32);
 }
 
 pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt) {

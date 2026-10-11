@@ -1,5 +1,6 @@
 //! Bounded SFTP v3 browsing, transfers, and guarded write operations over authenticated SSH.
 
+mod edit;
 mod transfer;
 
 pub(crate) use transfer::{
@@ -36,7 +37,6 @@ const MAX_NAME_CHARS: usize = 512;
 const MAX_PAGE_ENTRIES: usize = 250;
 const MAX_DIRECTORY_TEXT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PACKET_BYTES: u32 = 256 * 1024;
-pub(crate) const MAX_EDIT_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_UPLOAD_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,13 +79,15 @@ pub enum SftpWriteOperation {
         old_path: String,
         new_path: String,
     },
-    ReadText {
+    ReadEditFile {
         path: String,
+        max_bytes: u64,
     },
-    WriteText {
+    WriteEditFile {
         path: String,
+        max_bytes: u64,
         data: Vec<u8>,
-        expected_size: Option<u64>,
+        expected_size: u64,
         expected_modified: Option<u32>,
     },
     Upload {
@@ -107,7 +109,7 @@ pub(crate) enum SftpWriteResult {
         size: u64,
         modified: Option<u32>,
     },
-    Text {
+    EditFile {
         path: String,
         data: Vec<u8>,
         expected_size: u64,
@@ -132,7 +134,7 @@ pub enum SftpWriteEvent {
         size: u64,
         modified: Option<u32>,
     },
-    Text {
+    EditFile {
         operation_id: uuid::Uuid,
         path: String,
         data: Vec<u8>,
@@ -184,230 +186,146 @@ where
             request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
         },
     );
-    timeout(REQUEST_TIMEOUT, session.init())
+    let version = timeout(REQUEST_TIMEOUT, session.init())
         .await
         .context("SFTP handshake timed out")?
         .context("SFTP handshake failed")?;
-    let result = match operation {
-        SftpWriteOperation::Remove { path, directory } => {
-            validate_remote_path(&path)?;
-            let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
-                .await
-                .context("SFTP delete type check timed out")??
-                .attrs;
-            if attrs.is_symlink() {
-                anyhow::bail!("symbolic links cannot be deleted through this SFTP action");
-            }
-            if attrs.is_dir() != directory {
-                anyhow::bail!("remote entry type changed; delete was rejected");
-            }
-            if !attrs.is_dir() && !attrs.is_regular() {
-                anyhow::bail!("only regular files and directories can be deleted");
-            }
-            if directory {
-                timeout(REQUEST_TIMEOUT, session.rmdir(path.clone()))
+    let result = async {
+        Ok::<_, anyhow::Error>(match operation {
+            SftpWriteOperation::Remove { path, directory } => {
+                validate_remote_path(&path)?;
+                let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
                     .await
-                    .context("SFTP directory removal timed out")??;
-            } else {
-                timeout(REQUEST_TIMEOUT, session.remove(path.clone()))
-                    .await
-                    .context("SFTP file removal timed out")??;
-            }
-            SftpWriteResult::Completed { path }
-        }
-        SftpWriteOperation::Rename { old_path, new_path } => {
-            validate_remote_path(&old_path)?;
-            validate_remote_path(&new_path)?;
-            if old_path == new_path {
-                anyhow::bail!("old and new remote paths are identical");
-            }
-            let old_attrs = timeout(REQUEST_TIMEOUT, session.lstat(old_path.clone()))
-                .await
-                .context("SFTP rename source check timed out")??
-                .attrs;
-            if old_attrs.is_symlink() || (!old_attrs.is_dir() && !old_attrs.is_regular()) {
-                anyhow::bail!("remote rename source must be a regular file or directory");
-            }
-            ensure_remote_target_absent(&session, &new_path, "rename").await?;
-            timeout(REQUEST_TIMEOUT, session.rename(old_path, new_path.clone()))
-                .await
-                .context("SFTP rename timed out")??;
-            SftpWriteResult::Completed { path: new_path }
-        }
-        SftpWriteOperation::ReadText { path } => {
-            validate_remote_path(&path)?;
-            let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
-                .await
-                .context("SFTP text file stat timed out")??
-                .attrs;
-            if attrs.is_symlink() || !attrs.is_regular() {
-                anyhow::bail!("remote editor accepts regular files only");
-            }
-            let size = attrs.size.unwrap_or(0);
-            if size > MAX_EDIT_BYTES {
-                anyhow::bail!("remote text file exceeds the {MAX_EDIT_BYTES}-byte edit limit");
-            }
-            let handle = timeout(
-                REQUEST_TIMEOUT,
-                session.open(path.clone(), OpenFlags::READ, FileAttributes::default()),
-            )
-            .await
-            .context("SFTP text file open timed out")??
-            .handle;
-            let mut data = Vec::with_capacity(size as usize);
-            let mut offset = 0_u64;
-            let read_result = async {
-                while offset < size || (size == 0 && offset == 0) {
-                    let len = (64 * 1024).min(size.saturating_sub(offset)) as u32;
-                    if size == 0 {
-                        break;
-                    }
-                    let data_packet =
-                        timeout(REQUEST_TIMEOUT, session.read(handle.clone(), offset, len))
-                            .await
-                            .context("SFTP text file read timed out")??;
-                    if data_packet.data.is_empty() {
-                        break;
-                    }
-                    offset = offset.saturating_add(data_packet.data.len() as u64);
-                    data.extend_from_slice(&data_packet.data);
-                    if data.len() as u64 > MAX_EDIT_BYTES {
-                        anyhow::bail!("remote text file exceeded the edit limit");
-                    }
-                }
-                Ok::<_, anyhow::Error>(())
-            }
-            .await;
-            let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
-            read_result?;
-            if std::str::from_utf8(&data).is_err() {
-                anyhow::bail!("remote file is not valid UTF-8 text");
-            }
-            SftpWriteResult::Text {
-                path,
-                data,
-                expected_size: size,
-                expected_modified: attrs.mtime,
-            }
-        }
-        SftpWriteOperation::WriteText {
-            path,
-            data,
-            expected_size,
-            expected_modified,
-        } => {
-            validate_remote_path(&path)?;
-            let limit = MAX_EDIT_BYTES;
-            if data.len() as u64 > limit {
-                anyhow::bail!("upload content exceeds the {limit}-byte limit");
-            }
-            if let Some(expected_size) = expected_size {
-                let current_attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
-                    .await
-                    .context("SFTP edit conflict check timed out")??
+                    .context("SFTP delete type check timed out")??
                     .attrs;
-                if current_attrs.is_symlink() || !current_attrs.is_regular() {
-                    anyhow::bail!("remote editor target changed type; save was rejected");
+                if attrs.is_symlink() {
+                    anyhow::bail!("symbolic links cannot be deleted through this SFTP action");
                 }
-                let current_size = current_attrs.size.unwrap_or(0);
-                if current_size != expected_size || current_attrs.mtime != expected_modified {
-                    anyhow::bail!("remote file changed since it was opened; save was rejected");
+                if attrs.is_dir() != directory {
+                    anyhow::bail!("remote entry type changed; delete was rejected");
                 }
-            } else {
-                ensure_remote_target_absent(&session, &path, "Save As").await?;
+                if !attrs.is_dir() && !attrs.is_regular() {
+                    anyhow::bail!("only regular files and directories can be deleted");
+                }
+                if directory {
+                    timeout(REQUEST_TIMEOUT, session.rmdir(path.clone()))
+                        .await
+                        .context("SFTP directory removal timed out")??;
+                } else {
+                    timeout(REQUEST_TIMEOUT, session.remove(path.clone()))
+                        .await
+                        .context("SFTP file removal timed out")??;
+                }
+                SftpWriteResult::Completed { path }
             }
-            let open_flags = if expected_size.is_some() {
-                OpenFlags::WRITE | OpenFlags::TRUNCATE
-            } else {
-                OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE
-            };
-            let handle = timeout(
-                REQUEST_TIMEOUT,
-                session.open(path.clone(), open_flags, FileAttributes::default()),
-            )
-            .await
-            .context("SFTP write open timed out")??
-            .handle;
-            let write_result = write_remote_bytes(&session, &handle, &data).await;
-            let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
-            write_result?;
-            let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
-                .await
-                .context("SFTP saved file stat timed out")??
-                .attrs;
-            if attrs.is_symlink() || !attrs.is_regular() {
-                anyhow::bail!("saved remote file is no longer a regular file");
+            SftpWriteOperation::Rename { old_path, new_path } => {
+                validate_remote_path(&old_path)?;
+                validate_remote_path(&new_path)?;
+                if old_path == new_path {
+                    anyhow::bail!("old and new remote paths are identical");
+                }
+                let old_attrs = timeout(REQUEST_TIMEOUT, session.lstat(old_path.clone()))
+                    .await
+                    .context("SFTP rename source check timed out")??
+                    .attrs;
+                if old_attrs.is_symlink() || (!old_attrs.is_dir() && !old_attrs.is_regular()) {
+                    anyhow::bail!("remote rename source must be a regular file or directory");
+                }
+                ensure_remote_target_absent(&session, &new_path, "rename").await?;
+                timeout(REQUEST_TIMEOUT, session.rename(old_path, new_path.clone()))
+                    .await
+                    .context("SFTP rename timed out")??;
+                SftpWriteResult::Completed { path: new_path }
             }
-            SftpWriteResult::Updated {
+            SftpWriteOperation::ReadEditFile { path, max_bytes } => {
+                edit::read_edit_file(&session, path, max_bytes).await?
+            }
+            SftpWriteOperation::WriteEditFile {
                 path,
-                size: attrs.size.unwrap_or(0),
-                modified: attrs.mtime,
+                max_bytes,
+                data,
+                expected_size,
+                expected_modified,
+            } => {
+                edit::write_edit_file(
+                    &session,
+                    &version,
+                    path,
+                    data,
+                    max_bytes,
+                    expected_size,
+                    expected_modified,
+                )
+                .await?
             }
-        }
-        SftpWriteOperation::CheckMetadata { path } => {
-            validate_remote_path(&path)?;
-            let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
+            SftpWriteOperation::CheckMetadata { path } => {
+                validate_remote_path(&path)?;
+                let attrs = timeout(REQUEST_TIMEOUT, session.lstat(path.clone()))
+                    .await
+                    .context("SFTP metadata check timed out")??
+                    .attrs;
+                if attrs.is_symlink() || !attrs.is_regular() {
+                    anyhow::bail!("remote monitored file is no longer a regular file");
+                }
+                SftpWriteResult::Metadata {
+                    path,
+                    size: attrs.size.unwrap_or(0),
+                    modified: attrs.mtime,
+                }
+            }
+            SftpWriteOperation::Upload { path, data } => {
+                validate_remote_path(&path)?;
+                let limit = MAX_UPLOAD_BYTES;
+                if data.len() as u64 > limit {
+                    anyhow::bail!("upload content exceeds the {limit}-byte limit");
+                }
+                let name = path
+                    .rsplit('/')
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .context("remote upload target is missing a file name")?;
+                if name.starts_with('.') || name.chars().any(char::is_control) {
+                    anyhow::bail!("remote upload target name is invalid");
+                }
+                ensure_remote_target_absent(&session, &path, "upload").await?;
+                let parent = path.strip_suffix(name).unwrap_or("").trim_end_matches('/');
+                let temporary = format!("{parent}/.{name}.axssh-upload-{}", Uuid::new_v4());
+                let handle = timeout(
+                    REQUEST_TIMEOUT,
+                    session.open(
+                        temporary.clone(),
+                        OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+                        FileAttributes::default(),
+                    ),
+                )
                 .await
-                .context("SFTP metadata check timed out")??
-                .attrs;
-            if attrs.is_symlink() || !attrs.is_regular() {
-                anyhow::bail!("remote monitored file is no longer a regular file");
+                .context("SFTP upload temp open timed out")??
+                .handle;
+                let write_result = write_remote_bytes(&session, &handle, &data).await;
+                let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
+                if let Err(error) = write_result {
+                    let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
+                    return Err(error);
+                }
+                if let Err(error) = timeout(
+                    REQUEST_TIMEOUT,
+                    session.rename(temporary.clone(), path.clone()),
+                )
+                .await
+                .context("SFTP upload publish timed out")?
+                {
+                    let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary)).await;
+                    return Err(error.into());
+                }
+                SftpWriteResult::Completed { path }
             }
-            SftpWriteResult::Metadata {
-                path,
-                size: attrs.size.unwrap_or(0),
-                modified: attrs.mtime,
-            }
-        }
-        SftpWriteOperation::Upload { path, data } => {
-            validate_remote_path(&path)?;
-            let limit = MAX_UPLOAD_BYTES;
-            if data.len() as u64 > limit {
-                anyhow::bail!("upload content exceeds the {limit}-byte limit");
-            }
-            let name = path
-                .rsplit('/')
-                .next()
-                .filter(|name| !name.is_empty())
-                .context("remote upload target is missing a file name")?;
-            if name.starts_with('.') || name.chars().any(char::is_control) {
-                anyhow::bail!("remote upload target name is invalid");
-            }
-            ensure_remote_target_absent(&session, &path, "upload").await?;
-            let parent = path.strip_suffix(name).unwrap_or("").trim_end_matches('/');
-            let temporary = format!("{parent}/.{name}.axssh-upload-{}", Uuid::new_v4());
-            let handle = timeout(
-                REQUEST_TIMEOUT,
-                session.open(
-                    temporary.clone(),
-                    OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
-                    FileAttributes::default(),
-                ),
-            )
-            .await
-            .context("SFTP upload temp open timed out")??
-            .handle;
-            let write_result = write_remote_bytes(&session, &handle, &data).await;
-            let _ = timeout(REQUEST_TIMEOUT, session.close(handle)).await;
-            if let Err(error) = write_result {
-                let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary.clone())).await;
-                return Err(error);
-            }
-            if let Err(error) = timeout(
-                REQUEST_TIMEOUT,
-                session.rename(temporary.clone(), path.clone()),
-            )
-            .await
-            .context("SFTP upload publish timed out")?
-            {
-                let _ = timeout(REQUEST_TIMEOUT, session.remove(temporary)).await;
-                return Err(error.into());
-            }
-            SftpWriteResult::Completed { path }
-        }
-    };
-    let _ = session.close_session();
-    Ok(result)
+        })
+    }
+    .await;
+    if let Err(error) = session.close_session() {
+        debug!(%error, "failed to close SFTP operation session");
+    }
+    result
 }
 
 async fn ensure_remote_target_absent(

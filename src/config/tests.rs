@@ -515,6 +515,7 @@ fn terminal_refresh_rates_are_clamped_to_supported_fps_range() {
         sftp_max_file_gib: 20,
         sftp_rate_limit_mib_per_second: 0,
         sftp_local_open_max_file_mib: 512,
+        sftp_remote_edit_max_file_mib: 4,
     });
 
     assert_eq!(
@@ -1070,6 +1071,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
         sftp_max_file_gib: 20,
         sftp_rate_limit_mib_per_second: 0,
         sftp_local_open_max_file_mib: 999_999,
+        sftp_remote_edit_max_file_mib: 4,
     });
 
     assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
@@ -1135,14 +1137,14 @@ fn app_settings_clamp_all_persisted_dimensions() {
 
 #[test]
 fn sftp_transfer_limits_are_clamped() {
-    let settings = SftpTransferSettings::normalized(-5, 999, 20, 0, -1);
+    let settings = SftpTransferSettings::normalized(-5, 999, 20, 0, -1, 4);
     assert_eq!(settings.per_tab_transfers, MIN_SFTP_PER_TAB_TRANSFERS);
     assert_eq!(settings.global_uploads, MAX_SFTP_GLOBAL_UPLOADS);
     assert_eq!(settings.max_file_gib, DEFAULT_SFTP_MAX_FILE_GIB);
     assert_eq!(settings.policy(None).rate_bytes_per_second(), None);
     assert_eq!(settings.local_open_max_file_mib, 1);
 
-    let unlimited = SftpTransferSettings::normalized(2, 8, 0, 0, 2048);
+    let unlimited = SftpTransferSettings::normalized(2, 8, 0, 0, 2048, 4);
     assert_eq!(unlimited.max_file_gib, 0);
     assert_eq!(unlimited.policy(None).max_file_bytes(), u64::MAX);
     let persisted_settings = AppSettings {
@@ -1159,7 +1161,7 @@ fn sftp_transfer_limits_are_clamped() {
         restored.sftp_transfers.local_open_max_file_bytes(),
         2048 * 1024 * 1024
     );
-    let no_cache_byte_limit = SftpTransferSettings::normalized(2, 8, 20, 0, 0);
+    let no_cache_byte_limit = SftpTransferSettings::normalized(2, 8, 20, 0, 0, 4);
     assert_eq!(no_cache_byte_limit.local_open_max_file_mib, 0);
     assert_eq!(no_cache_byte_limit.local_open_max_file_bytes(), u64::MAX);
     let persisted_unlimited = AppSettings {
@@ -1178,7 +1180,7 @@ fn sftp_transfer_limits_are_clamped() {
         u64::MAX
     );
     assert_eq!(
-        SftpTransferSettings::normalized(2, 8, -1, 0, 512).max_file_gib,
+        SftpTransferSettings::normalized(2, 8, -1, 0, 512, 4).max_file_gib,
         1
     );
     assert_eq!(
@@ -2015,5 +2017,56 @@ fn telnet_and_serial_profiles_round_trip_without_ssh_security_fields() {
         let decoded: SessionProfile =
             serde_json::from_str(&encoded).expect("profile should deserialize");
         assert_eq!(decoded, profile);
+    }
+}
+
+#[test]
+fn sftp_remote_edit_limit_migrates_and_survives_private_store_round_trip() {
+    let mut legacy: SessionStore = serde_json::from_str(
+        r#"{"version":35,"settings":{"sftp_transfers":{"local_open_max_file_mib":512}}}"#,
+    )
+    .unwrap();
+    assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
+    assert_eq!(legacy.settings.sftp_transfers.remote_edit_max_file_mib, 4);
+    assert_eq!(
+        legacy.settings.sftp_transfers.remote_edit_max_file_bytes(),
+        4 * 1024 * 1024
+    );
+    let directory = std::env::temp_dir().join(format!("axssh-edit-limit-{}", Uuid::new_v4()));
+    let config = ConfigStore::new(directory.join("sessions.json"));
+    legacy.settings.sftp_transfers.remote_edit_max_file_mib = 12;
+    config.save(&legacy).unwrap();
+    let loaded = config.load().unwrap();
+    assert_eq!(loaded.settings.sftp_transfers.remote_edit_max_file_mib, 12);
+    assert_eq!(
+        loaded.settings.sftp_transfers.remote_edit_max_file_bytes(),
+        12 * 1024 * 1024
+    );
+    assert_eq!(loaded.settings.sftp_transfers.local_open_max_file_mib, 512);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn sftp_remote_edit_limit_normalizes_ui_and_persisted_out_of_range_values() {
+    for (input, expected) in [(-1, 1), (0, 1), (4, 4), (12, 12), (999_999, 64)] {
+        let settings = SftpTransferSettings::normalized(2, 8, 20, 0, 512, input);
+        assert_eq!(settings.remote_edit_max_file_mib, expected);
+        assert_eq!(
+            settings.remote_edit_max_file_bytes(),
+            u64::from(expected) * 1024 * 1024
+        );
+    }
+    for (value, expected) in [(0, 1), (u32::MAX, 64)] {
+        let mut settings: AppSettings = serde_json::from_value(serde_json::json!({
+            "sftp_transfers": {"remote_edit_max_file_mib": value}
+        }))
+        .unwrap();
+        // Even before normalization, consumers receive a bounded byte limit.
+        assert_eq!(
+            settings.sftp_transfers.remote_edit_max_file_bytes(),
+            u64::from(expected) * 1024 * 1024
+        );
+        settings.normalize_in_place();
+        assert_eq!(settings.sftp_transfers.remote_edit_max_file_mib, expected);
     }
 }

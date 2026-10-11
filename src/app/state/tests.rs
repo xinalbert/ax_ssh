@@ -1762,26 +1762,6 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
 }
 
 #[test]
-fn sftp_editor_tracks_remote_fingerprint_and_debounced_revision() {
-    let mut sftp = SftpBrowserState {
-        editor_path: Some("/home/alice/readme.txt".to_owned()),
-        editor_text: "old".to_owned(),
-        editor_expected_size: Some(3),
-        editor_expected_modified: Some(10),
-        ..SftpBrowserState::default()
-    };
-    let revision = sftp.editor_revision;
-    assert!(sftp.set_editor_text("new".to_owned()).is_some());
-    assert!(!sftp.editor_is_current("/home/alice/readme.txt", revision));
-    sftp.editor_remote_changed = true;
-    sftp.set_editor_auto_upload(true);
-    let snapshot = sftp.snapshot(true);
-    assert!(snapshot.editor_remote_changed);
-    assert!(snapshot.editor_auto_upload);
-    assert!(snapshot.editor_revision > revision);
-}
-
-#[test]
 fn sftp_transfer_selection_counts_only_actionable_active_rows() {
     let mut sftp = SftpBrowserState::default();
     let downloading = Uuid::new_v4();

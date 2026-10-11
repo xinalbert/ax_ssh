@@ -13,6 +13,7 @@ export component SftpSettingsPage inherits SettingsPage {
     in-out property <int> draft-sftp-max-file-gib;
     in-out property <int> draft-sftp-rate-limit-mib-per-second;
     in-out property <int> draft-sftp-local-open-max-file-mib;
+    in-out property <int> draft-sftp-remote-edit-max-file-mib;
     in property <string> sftp-filter-platform-defaults;
     callback restore-sftp-filter-defaults();
 
@@ -56,6 +57,20 @@ export component SftpSettingsPage inherits SettingsPage {
                 maximum: 20480;
                 value <=> root.draft-sftp-local-open-max-file-mib;
                 accessible-label: @tr("Local SFTP file open snapshot limit in MiB");
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Remote edit file limit (MiB)");
+        description: @tr("Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB");
+        SettingsField {
+            SpinBox {
+                width: Theme.settings-wide-number-width;
+                height: Theme.settings-control-height;
+                minimum: 1;
+                maximum: 64;
+                value <=> root.draft-sftp-remote-edit-max-file-mib;
+                accessible-label: @tr("Remote edit file size limit in MiB");
             }
         }
     }

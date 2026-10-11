@@ -170,11 +170,11 @@ export component AppWindow inherits Window {
     in property <int> sftp-transfer-selected-pausable-count: 0;
     in property <int> sftp-transfer-selected-resumable-count: 0;
     in property <string> sftp-editor-path: "";
-    in property <string> sftp-editor-text: "";
+    in property <string> sftp-editor-local-path: "";
+    in property <string> sftp-editor-status: "";
+    in property <bool> sftp-editor-can-upload: false;
     in property <string> sftp-rename-name: "";
-    in property <bool> sftp-editor-remote-changed: false;
     in property <bool> sftp-editor-auto-upload: false;
-    in property <int> sftp-editor-revision: 0;
     in property <[TerminalPaneView]> terminal-panes;
     in property <[TerminalPaneDividerView]> terminal-dividers;
     in property <bool> terminal-mouse-local-selection-priority: false;
@@ -272,6 +272,7 @@ export component AppWindow inherits Window {
     in property <int> sftp-max-file-gib: 20;
     in property <int> sftp-rate-limit-mib-per-second: 0;
     in property <int> sftp-local-open-max-file-mib: 512;
+    in property <int> sftp-remote-edit-max-file-mib: 4;
     in property <string> ui-language: "english";
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
@@ -368,11 +369,11 @@ export component AppWindow inherits Window {
             transfer_selected_pausable_count: root.sftp-transfer-selected-pausable-count,
             transfer_selected_resumable_count: root.sftp-transfer-selected-resumable-count,
             editor_path: root.sftp-editor-path,
-            editor_text: root.sftp-editor-text,
+            editor_local_path: root.sftp-editor-local-path,
+            editor_status: root.sftp-editor-status,
+            editor_can_upload: root.sftp-editor-can-upload,
             rename_name: root.sftp-rename-name,
-            editor_remote_changed: root.sftp-editor-remote-changed,
             editor_auto_upload: root.sftp-editor-auto-upload,
-            editor_revision: root.sftp-editor-revision,
         },
         settings: {
             ui_language: root.ui-language,
@@ -447,6 +448,7 @@ export component AppWindow inherits Window {
             sftp_max_file_gib: root.sftp-max-file-gib,
             sftp_rate_limit_mib_per_second: root.sftp-rate-limit-mib-per-second,
             sftp_local_open_max_file_mib: root.sftp-local-open-max-file-mib,
+            sftp_remote_edit_max_file_mib: root.sftp-remote-edit-max-file-mib,
             sidebar_width: root.sidebar-width,
             tab_width: root.tab-width, session_mask_character: root.session-mask-character,
             collapsed_group_label_chars: root.collapsed-group-label-chars,
@@ -532,7 +534,7 @@ export component AppWindow inherits Window {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -583,8 +585,9 @@ export component AppWindow inherits Window {
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
-    callback save-remote-sftp-file(string, string);
-    callback editor-text-changed-sftp(string);
+    callback upload-edited-sftp-file();
+    callback stop-editing-sftp-file();
+    callback reveal-sftp-edit-copy();
     callback toggle-editor-auto-upload-sftp(bool);
     callback dropped-local-files-sftp(data-transfer);
     callback dropped-remote-files-sftp(data-transfer);
@@ -1005,7 +1008,7 @@ export component AppWindow inherits Window {
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
-                          sftp-per-tab-transfers, sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib,
+                          sftp-per-tab-transfers, sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib,
                           settings-tab-id, close-after-save) => {
                 root.save-settings(application-font, renderer-preference, terminal-drawing-preference, software-presentation, terminal-font, size, line-height, software-block-rows, text-brightness, bright-bold, semantic-highlighting, compact-rendering, row-render-cache, cursor-blink, focused-refresh-fps, unfocused-refresh-fps,
                     semantic-link-color, semantic-success-color, semantic-info-color, semantic-warning-color, semantic-error-color,
@@ -1022,7 +1025,7 @@ export component AppWindow inherits Window {
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
                     sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
-                    sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, settings-tab-id, close-after-save);
+                    sftp-global-uploads, sftp-max-file-gib, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib, settings-tab-id, close-after-save);
             }
             save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
             save-ui-language(index) => { root.save-ui-language(index); }
@@ -1081,8 +1084,9 @@ export component AppWindow inherits Window {
             reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
             remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
-            save-remote-sftp-file(path, text) => { root.save-remote-sftp-file(path, text); }
-            editor-text-changed-sftp(text) => { root.editor-text-changed-sftp(text); }
+            upload-edited-sftp-file => { root.upload-edited-sftp-file(); }
+            stop-editing-sftp-file => { root.stop-editing-sftp-file(); }
+            reveal-sftp-edit-copy => { root.reveal-sftp-edit-copy(); }
             toggle-editor-auto-upload-sftp(enabled) => { root.toggle-editor-auto-upload-sftp(enabled); }
             dropped-local-files-sftp(data) => { root.dropped-local-files-sftp(data); }
             dropped-remote-files-sftp(data) => { root.dropped-remote-files-sftp(data); }
