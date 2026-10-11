@@ -698,13 +698,37 @@ directory when an already-open companion is available. If the companion is
 still completing host-key confirmation, authentication, or browser startup,
 the path is held only on that runtime Tab and applied when the normal flow is
 ready.
-Optional semantic highlighting can color HTTP response classes and familiar
-success, informational, warning, and error words. It is disabled by default.
+Textual URLs use the same range for double-click selection and modifier-key
+activation. Chinese sentence punctuation and quotation marks end that range:
+`https://www.rfc-editor.org/rfc/rfc9110.html#section-15)。HTTP` selects only the
+URL through `#section-15`. Balanced ASCII parentheses, IPv6 brackets, Unicode
+hosts/paths, query parameters, and fragments remain supported. If a URL needs
+literal Chinese prose punctuation, percent-encode it. Explicit OSC 8 links keep
+the URI supplied by the program.
+Optional semantic highlighting uses regex rules for standard log severity names
+and HTTP status codes with explicit context. It is disabled by default.
+`TRACE`, `DEBUG`, `INFO`, `NOTICE`, and `INFORMATIONAL` use Information;
+`WARN`/`WARNING` use Warning; `ERROR`, `FATAL`, `CRITICAL`, `ALERT`, and
+`EMERGENCY` use Error. Names match complete ASCII words without case sensitivity.
+These names follow [OpenTelemetry log levels](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)
+and the [syslog severity table](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1).
+HTTP codes are recognized in response summaries such as `HTTP/1.1 200 OK` or
+`HTTP/2 200`, Common/Combined access-log request fields such as
+`"GET / HTTP/1.1" 404`, and explicit attributes such as
+`http.response.status_code=503`, `http.status_code=503`, or `http_status=503`
+(`http_status_code` also works). HTTP `1xx`/`3xx` use Information, `2xx` Success,
+`4xx` Warning, and `5xx` Error. The categories follow
+[HTTP semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15);
+the color mapping is an AxSSH preference. Bare numbers, IP octets, and ordinary
+state words such as `OK`, `connected`, `pending`, and `timed out` are not colored.
+Recognition is bounded to plain ASCII text runs of at most 512 bytes, without
+joining different style runs or wrapped screen rows.
 URLs and paths use the separate Cmd/Ctrl target interaction above: they stay at
 their normal foreground and receive only a temporary underline while the
 platform primary modifier is held. When semantic highlighting is enabled, its
 status colors follow the selected terminal palette unless Settings overrides a
-category; explicit ANSI or true-color foregrounds are never replaced.
+category; explicit ANSI or true-color foregrounds are never replaced. Non-default
+backgrounds, inverse, dim, and hidden styles also keep the program's styling.
 In **Settings > Terminal**, **Local selection priority** is an opt-in
 selection-first interaction; standard xterm mouse routing remains the default.
 **Copy selection on select** is disabled by default.

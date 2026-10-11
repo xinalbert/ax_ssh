@@ -171,13 +171,13 @@ export component TerminalSettingsPage inherits Rectangle {
                 SettingsSectionHeading { label: @tr("SEMANTIC HIGHLIGHTING"); }
                 SettingsToggleRow {
                     label: @tr("Enable semantic highlighting");
-                    description: @tr("Highlight statuses and log levels");
+                    description: @tr("Log levels and HTTP status codes");
                     checked <=> root.draft-semantic-highlighting;
                     show-divider: root.draft-semantic-highlighting;
                 }
                 if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Success");
-                    description: @tr("Successful status words and HTTP 2xx");
+                    description: @tr("HTTP 2xx responses");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-success-color;
@@ -189,7 +189,7 @@ export component TerminalSettingsPage inherits Rectangle {
                 }
                 if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Information");
-                    description: @tr("Informational status words");
+                    description: @tr("Log levels and HTTP 1xx/3xx");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-info-color;
@@ -201,7 +201,7 @@ export component TerminalSettingsPage inherits Rectangle {
                 }
                 if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Warning");
-                    description: @tr("Warnings and HTTP 4xx");
+                    description: @tr("Warning levels and HTTP 4xx");
                     SettingsField {
                         FlatTextInput {
                             text <=> root.draft-semantic-warning-color;
@@ -213,7 +213,7 @@ export component TerminalSettingsPage inherits Rectangle {
                 }
                 if root.draft-semantic-highlighting : SettingsRow {
                     label: @tr("Error");
-                    description: @tr("Errors and HTTP 5xx");
+                    description: @tr("Error levels and HTTP 5xx");
                     show-divider: false;
                     SettingsField {
                         FlatTextInput {

@@ -478,7 +478,17 @@ primary-modifier click revalidates the pane UUID and reads that single row from
 the terminal model before parsing it. The private parser accepts only
 `http://`/`https://` URLs and Unix-style remote paths beginning with `/`, `./`,
 or `../`, removes terminal punctuation and `:line[:column]` diagnostics, and
-rejects controls and overlong text. URLs are handed to the local default opener
+rejects controls and overlong text. Textual URL extraction uses a startup-compiled
+`regex` followed by balanced ASCII bracket/trailing-punctuation processing and
+[rust-url's WHATWG parser](https://docs.rs/url/2.5.8/url/). The matcher stops at
+Chinese prose punctuation and quotation marks even without whitespace, so
+`#section-15)。HTTP` ends at `#section-15`. This is an AxSSH text extraction
+policy, separate from URL validity; percent-encoded punctuation remains valid.
+Unicode paths/hosts, IPv6, query strings and fragments are supported, and the
+original spelling is retained instead of replacing it with a normalized URL.
+The same character span drives double-click selection and Cmd/Ctrl target
+interaction, mapped through the terminal's existing wide-cell/soft-wrap logic.
+Explicit OSC 8 metadata is not trimmed. URLs are handed to the local default opener
 on a blocking worker, never fetched by AxSSH. A remote path stays within
 the existing SSH/SFTP companion route: an available companion is activated and
 navigated, while a companion still in trust, authentication, or SFTP-browser
@@ -487,9 +497,30 @@ ready. A new SFTP Tab carries the path as tab-local initial state until its
 normal, independent SSH authentication starts. Neither target text nor that
 initial path is persisted, logged, or sent through Slint as a terminal buffer.
 The private terminal render mapper can add bounded semantic color to plain
-visible cells only when that option is enabled: HTTP `2xx`/`3xx`/`4xx`/`5xx` and
-common success, informational, warning, and error tokens use their corresponding
-semantic colors. URLs and actionable Unix paths are intentionally excluded from
+visible cells only when that option is enabled. Its private
+`src/app/terminal_render/highlighting.rs` uses one `regex` matcher with named
+captures, compiled once before the first window is created; captures supply
+ordered, disjoint byte spans instead of a per-byte classification array.
+Log names follow [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)
+and the [RFC 5424 severity table](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1):
+TRACE/DEBUG/INFO/NOTICE/INFORMATIONAL map to Information, WARN/WARNING to Warning,
+and ERROR/FATAL/CRITICAL/ALERT/EMERGENCY to Error, using ASCII whole-word,
+case-insensitive matching. The table informs the vocabulary; this overlay does
+not parse syslog PRI or infer a record's actual severity.
+HTTP captures require a protocol/version response prefix, a quoted request in
+[Common/Combined access logs](https://httpd.apache.org/docs/2.4/logs.html#common),
+or an explicit `http.response.status_code`, legacy `http.status_code`,
+`http_status`, or `http_status_code` attribute. HTTP/1 response syntax follows
+[RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html#section-4); HTTP/2 and HTTP/3
+prefixes are accepted as diagnostic text summaries, not wire status lines.
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-15) defines classes
+1xx–5xx; AxSSH maps 1xx/3xx to Information, 2xx to Success, 4xx to Warning, and
+5xx to Error. Only the status capture is colored, not its context. Naked numbers
+and the previous ordinary-word/phrase vocabulary have no fallback matcher.
+Eligibility remains an ASCII run of at most 512 bytes with one byte per cell,
+default foreground/background, and no inverse/dim/hidden style. Runs and wrapped
+rows are not joined. Compilation failure is reported once and disables the
+optional overlay; no terminal contents are logged. URLs and actionable Unix paths are intentionally excluded from
 this persistent overlay; the separate Cmd/Ctrl target interaction owns their
 temporary accent underline. Each status category uses the selected terminal
 palette by default; an optional normalized `#RRGGBB` Settings override can

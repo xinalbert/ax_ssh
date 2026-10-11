@@ -396,10 +396,25 @@ Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入�
 没有 companion 时，AxSSH 会以该位置作为初始目录新建独立 SFTP Tab，仍执行常规 SSH host-key 与
 认证流程。已有 companion 时，相对路径相对于当前 SFTP 目录解释；如果 companion 仍在主机密钥确认、
 认证或 browser 启动阶段，路径只保留在该运行时 Tab，正常流程就绪后再处理。
-可选语义高亮可为 HTTP 响应类别，以及常见成功、信息、警告和错误状态词使用不同颜色；该功能默认
-关闭。URL 和路径仍由上面的 Cmd/Ctrl 目标交互处理：它们保持原有前景色，仅在按住平台主修饰键时
+文字 URL 的双击选区和修饰键激活共用同一范围，中文句号、逗号和引号等行文标点会结束该范围：
+`https://www.rfc-editor.org/rfc/rfc9110.html#section-15)。HTTP` 只选中截至 `#section-15` 的 URL。
+支持平衡的 ASCII 括号、IPv6 方括号、Unicode 主机/路径、查询参数及片段；需要在 URL 中使用中文行文
+标点时可采用 percent encoding。显式 OSC 8 链接继续使用程序提供的 URI。
+可选语义高亮使用 regex 规则识别标准日志等级词和有明确上下文的 HTTP 状态码；该功能默认关闭。
+`TRACE`、`DEBUG`、`INFO`、`NOTICE`、`INFORMATIONAL` 使用 Information；`WARN`/`WARNING` 使用
+Warning；`ERROR`、`FATAL`、`CRITICAL`、`ALERT`、`EMERGENCY` 使用 Error。识别完整 ASCII 单词，
+不区分大小写，等级名称依据 [OpenTelemetry 日志等级](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)
+和 [syslog 等级表](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1)。
+HTTP 状态码可出现在 `HTTP/1.1 200 OK`、`HTTP/2 200` 等响应摘要、Common/Combined 访问日志的
+`"GET / HTTP/1.1" 404` 请求字段之后，以及 `http.response.status_code=503`、`http.status_code=503`
+或 `http_status=503` 等明确 HTTP 属性中（也支持 `http_status_code`）。`1xx`/`3xx` 使用 Information，
+`2xx` 使用 Success，`4xx` 使用 Warning，`5xx` 使用 Error。类别依据
+[HTTP 语义](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)，颜色映射由 AxSSH 定义。
+裸数字、IP 分段及 `OK`、`connected`、`pending`、`timed out` 等普通状态词不再着色。
+识别仅限不超过 512 字节的默认样式 ASCII 文本段，不跨不同样式段或软换行屏幕行拼接。
+URL 和路径仍由上面的 Cmd/Ctrl 目标交互处理：它们保持原有前景色，仅在按住平台主修饰键时
 短暂显示下划线。开启语义高亮后，状态颜色默认跟随所选 Terminal 色表，Settings 可分别覆盖各类颜色；
-已经指定 ANSI 或真彩色前景的输出不会被语义高亮替换。
+已经指定 ANSI 或真彩色前景的输出不会被语义高亮替换；非默认背景、反色、dim 和 hidden 样式也保留程序样式。
 **Settings > Terminal** 的 **Local selection priority** 是可选的本地选区优先交互；标准 xterm
 鼠标路由保持默认。**Copy selection on select** 默认关闭。开启后，完成鼠标选区和
 **Select All** 会立即复制，直接右击始终粘贴。

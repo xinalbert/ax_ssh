@@ -195,6 +195,8 @@ fn load_startup_workspace(
 }
 
 pub fn run(log_directory: PathBuf) -> Result<()> {
+    terminal_render::prepare_semantic_highlighting();
+    terminal_targets::prepare();
     let config_path = ConfigStore::default_path()?;
     let config = ConfigStore::new(config_path);
     let mut sessions = config.load().context("failed to load session profiles")?;

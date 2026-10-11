@@ -463,8 +463,8 @@ msgstr "错误"
 msgid "Error and destructive indicators"
 msgstr "错误和破坏性操作指示"
 
-msgid "Errors and HTTP 5xx"
-msgstr "错误和 HTTP 5xx"
+msgid "Error levels and HTTP 5xx"
+msgstr "错误等级和 HTTP 5xx"
 
 msgid "Executable path"
 msgstr "可执行文件路径"
@@ -553,14 +553,14 @@ msgstr "组"
 msgid "Group name"
 msgstr "组名"
 
+msgid "HTTP 2xx responses"
+msgstr "HTTP 2xx 响应"
+
 msgid "Help"
 msgstr "帮助"
 
 msgid "Hidden"
 msgstr "隐藏"
-
-msgid "Highlight statuses and log levels"
-msgstr "高亮状态和日志级别"
 
 msgid "Host"
 msgstr "主机"
@@ -582,9 +582,6 @@ msgstr "从剪贴板导入快捷键"
 
 msgid "Information"
 msgstr "信息"
-
-msgid "Informational status words"
-msgstr "信息状态词"
 
 msgid "Interface"
 msgstr "界面"
@@ -675,6 +672,12 @@ msgstr "本地 Shell"
 
 msgid "Local shell icon"
 msgstr "本地终端图标"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "日志等级和 HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "日志等级和 HTTP 状态码"
 
 msgid "Loopback only; required by MacXServer and -ac Windows servers"
 msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
@@ -1342,9 +1345,6 @@ msgstr "成功"
 msgid "Success ({0})"
 msgstr "成功 ({0})"
 
-msgid "Successful status words and HTTP 2xx"
-msgstr "成功状态词和 HTTP 2xx"
-
 msgid "Switch SSH/SFTP Tab"
 msgstr "切换 SSH/SFTP 标签页"
 
@@ -1528,8 +1528,8 @@ msgstr "工作区"
 msgid "Warning"
 msgstr "警告"
 
-msgid "Warnings and HTTP 4xx"
-msgstr "警告和 HTTP 4xx"
+msgid "Warning levels and HTTP 4xx"
+msgstr "警告等级和 HTTP 4xx"
 
 msgid "Window"
 msgstr "窗口"

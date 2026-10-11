@@ -306,13 +306,33 @@ resize 生命周期仍由 `TerminalPane` 保留。指针 callback 同时携带�
 修饰键、指针离开、开始文本选择或滚动时会清除提示。主修饰键点击仍会再次校验 pane UUID，并从
 终端模型读取这一行后解析。私有 parser 只接受 `http://`/`https://` URL，以及以 `/`、`./` 或
 `../` 开头的 Unix 风格远端路径；会移除终端常见尾随标点和 `:line[:column]` 诊断后缀，并拒绝
-控制字符和过长文本。URL 只在 blocking worker 中交给本机默认程序，AxSSH 不会请求该 URL。
+控制字符和过长文本。文字 URL 使用启动预编译的 `regex` 提取候选，经平衡 ASCII 括号/尾随标点处理后，
+交给 [rust-url 的 WHATWG parser](https://docs.rs/url/2.5.8/url/) 校验。中文行文标点和引号即使没有空格
+也会结束候选，因此 `#section-15)。HTTP` 截止于 `#section-15`；这是 AxSSH 文字提取策略，独立于 URL
+语法有效性，percent-encoded 标点仍可保留。支持 Unicode 路径/主机、IPv6、查询及片段，返回原文而非
+规范化 URL。同一字符范围供双击选区和 Cmd/Ctrl 目标交互使用，继续由终端已有的宽字符/软换行逻辑映射
+到 cell。显式 OSC 8 metadata 不执行文字裁剪。URL 只在 blocking worker 中交给本机默认程序，AxSSH 不会请求该 URL。
 远端路径始终复用现有 SSH/SFTP companion 路由：可用 companion 会被激活并导航；仍在主机信任、认证或
 SFTP browser 启动阶段的 companion 会把有界路径保留在该运行时 Tab，待正常流程就绪后处理；没有
 companion 时，新 SFTP Tab 只在运行期保存初始路径，随后仍执行独立且正常的 SSH 认证。目标文本和该
 初始路径都不会持久化、写日志，或作为完整终端缓冲传给 Slint。
-私有终端渲染映射只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色：HTTP
-`2xx`/`3xx`/`4xx`/`5xx` 及常见的成功、信息、警告和错误状态词使用对应语义色。URL 和可操作的 Unix
+私有终端渲染映射只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色。
+私有 `src/app/terminal_render/highlighting.rs` 使用带命名捕获的单个 `regex` matcher，首次创建窗口前
+预编译一次；有序、不重叠的字节 span 替代逐字节分类数组。
+等级名称依据 [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)
+和 [RFC 5424 等级表](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1)：
+TRACE/DEBUG/INFO/NOTICE/INFORMATIONAL 映射为 Information，WARN/WARNING 为 Warning，
+ERROR/FATAL/CRITICAL/ALERT/EMERGENCY 为 Error，使用 ASCII 完整词边界、不区分大小写。
+该表仅作为词汇来源；此覆盖层不解析 syslog PRI，也不推断整条日志的实际等级。
+HTTP 捕获要求响应协议/版本前缀、[Common/Combined 访问日志](https://httpd.apache.org/docs/2.4/logs.html#common)
+中的带引号请求字段，或明确的 `http.response.status_code`、旧 `http.status_code`、`http_status`、
+`http_status_code` 属性。HTTP/1 响应语法依据 [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html#section-4)；
+HTTP/2、HTTP/3 前缀仅作为诊断文字摘要识别，不视为线上状态行。
+[RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-15) 定义 1xx–5xx 类别；AxSSH 将
+1xx/3xx 映射为 Information，2xx 为 Success，4xx 为 Warning，5xx 为 Error。仅状态码捕获区间着色，
+上下文保留原色；裸数字和旧普通状态词/短语没有回退识别器。
+识别条件仍是不超过 512 字节、每字节对应一格的 ASCII run，默认前景/背景且无 inverse/dim/hidden 样式，
+不拼接不同 run 或软换行行。编译失败只报告一次并关闭可选覆盖，不记录终端内容。URL 和可操作的 Unix
 路径不参与常驻覆盖，而由独立的 Cmd/Ctrl 目标交互负责短暂 accent 下划线。默认颜色从当前 Terminal
 色表派生；Settings 中的规范化 `#RRGGBB` 可按状态类别覆盖。语义高亮不会替换显式 ANSI 16/256/真彩色前景。
 渲染器先解析程序颜色和反色，再选择可选语义前景，最后只对最终可见前景执行一次 HSL lightness 调整；

@@ -2380,6 +2380,54 @@ mod tests {
     }
 
     #[test]
+    fn url_selection_excludes_user_reported_chinese_punctuation_and_http_suffix() {
+        let url = "https://www.rfc-editor.org/rfc/rfc9110.html#section-15";
+        for columns in [40, 60, 80, 100, 120] {
+            let mut terminal = TerminalModel::new(columns, 8, 10);
+            terminal.process(
+                format!("规则依据 HTTP 状态类别（{url})。HTTP 状态码必须有明确上下文").as_bytes(),
+            );
+            let mut matched_cells = 0;
+            for row in 0..8 {
+                for column in 0..columns {
+                    let Some(range) = terminal_url_selection_range(&terminal, row, column) else {
+                        continue;
+                    };
+                    assert_eq!(
+                        terminal.selection_text(
+                            range.start_row,
+                            range.start_column,
+                            range.end_row,
+                            range.end_column,
+                        ),
+                        url,
+                        "columns={columns}, row={row}, column={column}"
+                    );
+                    matched_cells += 1;
+                }
+            }
+            assert_eq!(matched_cells, url.len(), "columns={columns}");
+        }
+    }
+
+    #[test]
+    fn url_selection_maps_unicode_characters_back_to_terminal_cells() {
+        let url = "HTTPS://例子.测试/中文路径?q=测试#片段";
+        let mut terminal = TerminalModel::new(28, 8, 10);
+        terminal.process(format!("链接：{url}。后文").as_bytes());
+        let range = terminal_url_selection_range(&terminal, 0, 8).expect("Unicode URL selection");
+        assert_eq!(
+            terminal.selection_text(
+                range.start_row,
+                range.start_column,
+                range.end_row,
+                range.end_column,
+            ),
+            url
+        );
+    }
+
+    #[test]
     fn terminal_geometry_quantization_is_stable_for_diagnostics() {
         assert_eq!(quantize_logical(12.34), 123);
         assert_eq!(quantize_logical(12.36), 124);

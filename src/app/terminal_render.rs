@@ -1,5 +1,7 @@
 //! UI-independent terminal palette resolution.
 
+use std::ops::Range;
+
 use ax_ssh::config::TerminalColorScheme;
 #[cfg(test)]
 use ax_ssh::terminal::TerminalSnapshot;
@@ -8,80 +10,18 @@ use ax_ssh::terminal::{
     TerminalStyledRun, TerminalUnderlineStyle,
 };
 
-const MAX_SEMANTIC_HIGHLIGHT_CHARS: usize = 512;
+mod highlighting;
+
+use self::highlighting::HighlightSpan;
+
+const MAX_SEMANTIC_HIGHLIGHT_BYTES: usize = 512;
 const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
 const MAX_TEXT_BRIGHTNESS: f64 = 1.20;
 const DIM_TEXT_BRIGHTNESS_FACTOR: f64 = 0.70;
-const ERROR_KEYWORDS: &[&[u8]] = &[
-    b"error",
-    b"err",
-    b"fatal",
-    b"panic",
-    b"fail",
-    b"failed",
-    b"failure",
-    b"exception",
-    b"traceback",
-    b"critical",
-    b"crash",
-    b"crashed",
-    b"sigsegv",
-];
-const WARNING_KEYWORDS: &[&[u8]] = &[
-    b"warn",
-    b"warning",
-    b"deprecated",
-    b"todo",
-    b"fixme",
-    b"timeout",
-    b"refused",
-    b"denied",
-    b"rejected",
-    b"unreachable",
-    b"offline",
-    b"pending",
-    b"waiting",
-    b"processing",
-];
-const SUCCESS_KEYWORDS: &[&[u8]] = &[
-    b"ok",
-    b"success",
-    b"pass",
-    b"passed",
-    b"done",
-    b"completed",
-    b"ready",
-    b"connected",
-    b"online",
-    b"up",
-    b"running",
-    b"deployed",
-    b"authenticated",
-    b"authorized",
-];
-const INFO_KEYWORDS: &[&[u8]] = &[
-    b"info",
-    b"notice",
-    b"debug",
-    b"trace",
-    b"dbg",
-    b"ssh",
-    b"ssl",
-    b"tls",
-    b"certificate",
-    b"auth",
-    b"login",
-    b"start",
-    b"started",
-    b"starting",
-    b"boot",
-    b"restart",
-    b"restarting",
-    b"deploy",
-    b"deploying",
-    b"active",
-    b"executing",
-];
+
+pub(super) fn prepare_semantic_highlighting() {
+    highlighting::prepare();
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RgbColor {
@@ -396,7 +336,9 @@ fn render_run(
     let column = run.column;
     let cells = run.cells;
     let style = run.style;
-    let highlights = semantic_palette.and_then(|_| semantic_highlights(&text, cells, style));
+    let highlights = semantic_palette
+        .map(|_| semantic_highlight_spans(&text, cells, style))
+        .unwrap_or_default();
     let (foreground, background) = resolve_style_colors(style, palette, settings);
     let hyperlink = run.hyperlink.clone();
     let hyperlink_underline = hyperlink.is_some()
@@ -425,7 +367,7 @@ fn render_run(
         strikethrough: style.strikethrough,
     };
     let mut rendered_runs =
-        if let (Some(highlights), Some(semantic_palette)) = (highlights, semantic_palette) {
+        if let Some(semantic_palette) = semantic_palette.filter(|_| !highlights.is_empty()) {
             split_semantic_run(rendered, highlights, semantic_palette)
         } else {
             vec![rendered]
@@ -507,17 +449,13 @@ fn terminal_render_cache_key(
     hash
 }
 
-fn semantic_highlights(
-    text: &str,
-    cells: usize,
-    style: TerminalStyle,
-) -> Option<Vec<Option<SemanticHighlight>>> {
+fn semantic_highlight_spans(text: &str, cells: usize, style: TerminalStyle) -> Vec<HighlightSpan> {
     // An ASCII run with one terminal cell per byte can be split without
     // changing its cell geometry. Wide and combining text keeps its original
     // terminal styling; Cmd/Ctrl target feedback remains available for it.
     if !text.is_ascii()
         || text.is_empty()
-        || text.len() > MAX_SEMANTIC_HIGHLIGHT_CHARS
+        || text.len() > MAX_SEMANTIC_HIGHLIGHT_BYTES
         || cells != text.len()
         || style.foreground != TerminalColor::Default
         || style.background != TerminalColor::Default
@@ -525,157 +463,45 @@ fn semantic_highlights(
         || style.dim
         || style.hidden
     {
-        return None;
+        return Vec::new();
     }
 
-    let mut highlights = vec![None; text.len()];
-    highlight_http_statuses(text, &mut highlights);
-    highlight_keyword_tokens(text, &mut highlights);
-    highlight_phrase(
-        text,
-        &mut highlights,
-        SemanticHighlight::Warning,
-        b"timed out",
-    );
-    highlights.iter().any(Option::is_some).then_some(highlights)
-}
-
-fn highlight_http_statuses(text: &str, highlights: &mut [Option<SemanticHighlight>]) {
-    let bytes = text.as_bytes();
-    for start in 0..bytes.len().saturating_sub(2) {
-        let end = start + 3;
-        if !bytes[start..end].iter().all(u8::is_ascii_digit)
-            || (start > 0 && bytes[start - 1].is_ascii_digit())
-            || (end < bytes.len() && bytes[end].is_ascii_digit())
-        {
-            continue;
-        }
-        let status = (u16::from(bytes[start] - b'0') * 100)
-            + (u16::from(bytes[start + 1] - b'0') * 10)
-            + u16::from(bytes[start + 2] - b'0');
-        let highlight = match status {
-            200..=299 => SemanticHighlight::Success,
-            300..=399 => SemanticHighlight::Info,
-            400..=499 => SemanticHighlight::Warning,
-            500..=599 => SemanticHighlight::Error,
-            _ => continue,
-        };
-        mark_highlight(highlights, start, end, highlight);
-    }
-}
-
-fn highlight_keyword_tokens(text: &str, highlights: &mut [Option<SemanticHighlight>]) {
-    let bytes = text.as_bytes();
-    let mut start = 0usize;
-    while start < bytes.len() {
-        while start < bytes.len() && !is_semantic_token_byte(bytes[start]) {
-            start += 1;
-        }
-        let mut end = start;
-        while end < bytes.len() && is_semantic_token_byte(bytes[end]) {
-            end += 1;
-        }
-        if start == end {
-            break;
-        }
-        let token = &bytes[start..end];
-        let highlight = if keyword_matches(token, ERROR_KEYWORDS) {
-            Some(SemanticHighlight::Error)
-        } else if keyword_matches(token, WARNING_KEYWORDS) {
-            Some(SemanticHighlight::Warning)
-        } else if keyword_matches(token, SUCCESS_KEYWORDS) {
-            Some(SemanticHighlight::Success)
-        } else if keyword_matches(token, INFO_KEYWORDS) {
-            Some(SemanticHighlight::Info)
-        } else {
-            None
-        };
-        if let Some(highlight) = highlight {
-            mark_highlight(highlights, start, end, highlight);
-        }
-        start = end;
-    }
-}
-
-fn keyword_matches(token: &[u8], keywords: &[&[u8]]) -> bool {
-    keywords
-        .iter()
-        .any(|keyword| token.eq_ignore_ascii_case(keyword))
-}
-
-fn highlight_phrase(
-    text: &str,
-    highlights: &mut [Option<SemanticHighlight>],
-    highlight: SemanticHighlight,
-    phrase: &[u8],
-) {
-    let bytes = text.as_bytes();
-    if phrase.len() > bytes.len() {
-        return;
-    }
-    for start in 0..=bytes.len() - phrase.len() {
-        let end = start + phrase.len();
-        if bytes[start..end].eq_ignore_ascii_case(phrase)
-            && semantic_token_boundaries(bytes, start, end)
-        {
-            mark_highlight(highlights, start, end, highlight);
-        }
-    }
-}
-
-fn semantic_token_boundaries(text: &[u8], start: usize, end: usize) -> bool {
-    (start == 0 || !is_semantic_token_byte(text[start - 1]))
-        && (end == text.len() || !is_semantic_token_byte(text[end]))
-}
-
-fn is_semantic_token_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
-
-fn mark_highlight(
-    highlights: &mut [Option<SemanticHighlight>],
-    start: usize,
-    end: usize,
-    highlight: SemanticHighlight,
-) {
-    if start >= end || end > highlights.len() {
-        return;
-    }
-    for cell in &mut highlights[start..end] {
-        if cell.is_none() {
-            *cell = Some(highlight);
-        }
-    }
+    highlighting::spans(text)
 }
 
 fn split_semantic_run(
     run: RenderedTerminalRun,
-    highlights: Vec<Option<SemanticHighlight>>,
+    highlights: Vec<HighlightSpan>,
     palette: &SemanticPalette,
 ) -> Vec<RenderedTerminalRun> {
-    let mut runs = Vec::new();
+    let slice = |range: Range<usize>, highlight: Option<SemanticHighlight>| RenderedTerminalRun {
+        text: run.text[range.clone()].to_owned(),
+        hyperlink: run.hyperlink.clone(),
+        column: run.column + range.start,
+        cells: range.len(),
+        foreground: highlight.map_or(run.foreground, |value| palette.color_for(value)),
+        background: run.background,
+        decoration_foreground: run.decoration_foreground,
+        bold: run.bold,
+        italic: run.italic,
+        underline: run.underline,
+        underline_style: run.underline_style,
+        strikethrough: run.strikethrough,
+    };
+    let mut runs = Vec::with_capacity(highlights.len() * 2 + 1);
     let mut start = 0;
-    while start < run.text.len() {
-        let highlight = highlights[start];
-        let mut end = start + 1;
-        while end < run.text.len() && highlights[end] == highlight {
-            end += 1;
+    // Regex captures are ordered, disjoint byte ranges; eligibility above
+    // guarantees that each byte is one terminal cell.
+    for span in highlights {
+        if start < span.range.start {
+            runs.push(slice(start..span.range.start, None));
         }
-        runs.push(RenderedTerminalRun {
-            text: run.text[start..end].to_owned(),
-            hyperlink: run.hyperlink.clone(),
-            column: run.column + start,
-            cells: end - start,
-            foreground: highlight.map_or(run.foreground, |value| palette.color_for(value)),
-            background: run.background,
-            decoration_foreground: run.decoration_foreground,
-            bold: run.bold,
-            italic: run.italic,
-            underline: run.underline,
-            underline_style: run.underline_style,
-            strikethrough: run.strikethrough,
-        });
+        let end = span.range.end;
+        runs.push(slice(span.range, Some(span.highlight)));
         start = end;
+    }
+    if start < run.text.len() {
+        runs.push(slice(start..run.text.len(), None));
     }
     runs
 }
@@ -1120,8 +946,8 @@ mod tests {
     }
 
     #[test]
-    fn semantic_highlights_cover_statuses_and_bounded_keywords() {
-        let text = "INFO 200 OK https://example.test 302 404 WARN 503 ERROR /srv/log";
+    fn semantic_highlights_cover_standard_severities_and_contextual_http() {
+        let text = "INFO HTTP/1.1 200 OK https://example.test HTTP/2 302 http_status=404 WARN HTTP/3 503 ERROR /srv/log";
         let rendered =
             render_terminal(snapshot_line(vec![plain_run(text, 0)]), semantic_settings());
         let runs = &rendered.lines[0].runs;
@@ -1150,7 +976,10 @@ mod tests {
         );
         assert_eq!(run_for("INFO").foreground, palette.info);
         assert_eq!(run_for("200").foreground, palette.success);
-        assert_eq!(run_for("OK").foreground, palette.success);
+        assert_eq!(
+            run_containing("OK").foreground,
+            settings().default_foreground
+        );
         assert_eq!(run_for("302").foreground, palette.info);
         assert_eq!(run_for("404").foreground, palette.warning);
         assert_eq!(run_for("WARN").foreground, palette.warning);
@@ -1161,7 +990,7 @@ mod tests {
     #[test]
     fn semantic_highlights_apply_to_real_default_terminal_cells() {
         let mut terminal = ax_ssh::terminal::TerminalModel::new(128, 3, 10);
-        terminal.process(b"INFO 200 OK ERROR https://example.test /srv/log");
+        terminal.process(b"INFO HTTP/1.1 200 OK ERROR https://example.test /srv/log");
         let snapshot = terminal.snapshot();
         let source_runs = &snapshot.lines[0].runs;
         assert_eq!(source_runs.len(), 1);
@@ -1186,7 +1015,10 @@ mod tests {
 
         assert_eq!(run_for("INFO").foreground, palette.info);
         assert_eq!(run_for("200").foreground, palette.success);
-        assert_eq!(run_for("OK").foreground, palette.success);
+        assert_eq!(
+            run_containing("OK").foreground,
+            settings().default_foreground
+        );
         assert_eq!(run_for("ERROR").foreground, palette.error);
         assert_eq!(
             run_containing("https://example.test").foreground,
@@ -1200,16 +1032,17 @@ mod tests {
 
     #[test]
     fn semantic_highlights_are_boundary_aware_and_preserve_ansi_runs() {
+        let text = "terror error 2000 200 HTTP/1.1 200";
         let ansi_style = TerminalStyle {
             foreground: TerminalColor::Indexed(4),
             ..TerminalStyle::default()
         };
         let rendered = render_terminal(
             snapshot_line(vec![
-                plain_run("terror error 2000 200", 0),
+                plain_run(text, 0),
                 TerminalStyledRun {
                     text: " ERROR".to_owned(),
-                    column: 24,
+                    column: text.len(),
                     cells: 6,
                     style: ansi_style,
                     hyperlink: None,
@@ -1223,7 +1056,10 @@ mod tests {
             .find(|run| run.text.starts_with("terror"))
             .unwrap();
         let error = runs.iter().find(|run| run.text == "error").unwrap();
-        let number = runs.iter().find(|run| run.text.contains("2000")).unwrap();
+        let number = runs
+            .iter()
+            .find(|run| run.text.contains("2000 200"))
+            .unwrap();
         let status = runs.iter().find(|run| run.text == "200").unwrap();
         let ansi = runs.iter().find(|run| run.text == " ERROR").unwrap();
 
@@ -1271,6 +1107,91 @@ mod tests {
     }
 
     #[test]
+    fn semantic_highlighting_preserves_explicit_and_special_terminal_styles() {
+        for style in [
+            TerminalStyle {
+                foreground: TerminalColor::Indexed(1),
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                foreground: TerminalColor::Indexed(196),
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                foreground: TerminalColor::Rgb {
+                    red: 12,
+                    green: 34,
+                    blue: 56,
+                },
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                background: TerminalColor::Indexed(4),
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                inverse: true,
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                dim: true,
+                ..TerminalStyle::default()
+            },
+            TerminalStyle {
+                hidden: true,
+                ..TerminalStyle::default()
+            },
+        ] {
+            let source = TerminalStyledRun {
+                style,
+                ..plain_run("ERROR HTTP/1.1 200", 7)
+            };
+            let baseline = render_terminal(snapshot_line(vec![source.clone()]), settings());
+            let rendered = render_terminal(snapshot_line(vec![source]), semantic_settings());
+            assert_eq!(rendered.lines[0].runs.len(), 1, "{style:?}");
+            assert_eq!(
+                rendered.lines[0].runs[0].foreground, baseline.lines[0].runs[0].foreground,
+                "{style:?}"
+            );
+            assert_eq!(
+                rendered.lines[0].runs[0].background, baseline.lines[0].runs[0].background,
+                "{style:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_highlighting_keeps_bounded_ascii_cell_geometry() {
+        let text = "prefix ERROR HTTP/1.1 200 suffix";
+        let rendered =
+            render_terminal(snapshot_line(vec![plain_run(text, 7)]), semantic_settings());
+        let runs = &rendered.lines[0].runs;
+        assert_eq!(
+            runs.iter().map(|run| run.text.as_str()).collect::<String>(),
+            text
+        );
+        assert_eq!(runs.iter().map(|run| run.cells).sum::<usize>(), text.len());
+        let mut column = 7;
+        for run in runs {
+            assert_eq!(run.column, column);
+            column += run.cells;
+        }
+
+        let within_limit = format!("{} ERROR", "x".repeat(MAX_SEMANTIC_HIGHLIGHT_BYTES - 6));
+        assert!(
+            !semantic_highlight_spans(&within_limit, within_limit.len(), TerminalStyle::default())
+                .is_empty()
+        );
+        let beyond_limit = format!("{within_limit} ");
+        assert!(
+            semantic_highlight_spans(&beyond_limit, beyond_limit.len(), TerminalStyle::default())
+                .is_empty()
+        );
+        assert!(semantic_highlight_spans("中文 ERROR", 9, TerminalStyle::default()).is_empty());
+        assert!(semantic_highlight_spans("ERROR", 4, TerminalStyle::default()).is_empty());
+    }
+
+    #[test]
     fn configured_semantic_colors_are_brightened_after_selection() {
         let overrides = SemanticColorOverrides {
             success: Some(RgbColor::new(37, 211, 139)),
@@ -1280,7 +1201,7 @@ mod tests {
         };
         let rendered = render_terminal(
             snapshot_line(vec![plain_run(
-                "INFO 200 OK https://example.test 302 404 WARN 503 ERROR /srv/log",
+                "INFO HTTP/1.1 200 OK https://example.test HTTP/2 302 http_status=404 WARN HTTP/3 503 ERROR /srv/log",
                 0,
             )]),
             TerminalRenderSettings {

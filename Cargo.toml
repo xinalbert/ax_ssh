@@ -26,6 +26,7 @@ libmudtelnet-rs = "2.0.10"
 notify = "=8.2.0"
 portable-pty = "0.9.0"
 rand = "0.10"
+regex = "1.13.1"
 # RSA is enabled for compatibility with existing SSH servers. The pinned RSA
 # implementation remains covered by the explicitly accepted RustSec exception
 # in the CI audit workflow until an upstream patched release is available.
@@ -42,6 +43,7 @@ tokio-serial = "5.5.0"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2.5.8"
 uuid = { version = "1", features = ["serde", "v4"] }
 zeroize = "1"
 

@@ -4,10 +4,33 @@
 //! context. It must not retain terminal content, make network requests, or
 //! inspect a worker-owned terminal buffer.
 
+use std::sync::LazyLock;
+
 use ax_ssh::terminal::TerminalTargetContext;
+use regex::Regex;
+use url::Url;
 
 const MAX_TARGET_LINE_CHARS: usize = 2_048;
 const MAX_TARGET_CHARS: usize = 1_024;
+
+// URL syntax validation and extraction from prose are separate operations.
+// Chinese sentence punctuation and quotation marks end a textual candidate;
+// literal occurrences in a URL can be percent-encoded. ASCII parentheses and
+// brackets stay available for balanced paths, queries, and IPv6 authorities.
+const URL_PATTERN: &str = r#"(?i:https?://)[^\s\x00-\x1f\x7f-\x9f<>"'`{}|\\^⟨⟩「」『』（）［］｛｝〈〉《》【】、。，；：！？“”‘’«»‹›]+"#;
+
+static URL_RULES: LazyLock<Option<Regex>> = LazyLock::new(|| match Regex::new(URL_PATTERN) {
+    Ok(rules) => Some(rules),
+    Err(error) => {
+        tracing::error!(%error, "Terminal URL rules could not compile; textual URL recognition disabled");
+        None
+    }
+});
+
+/// Precompile textual URL recognition before creating the first window.
+pub(super) fn prepare() {
+    LazyLock::force(&URL_RULES);
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum TerminalTarget {
@@ -47,11 +70,11 @@ pub(super) fn terminal_target_span_at_cell(
         return None;
     }
 
-    let (start, end) = token_bounds(&characters, column)?;
-    let token = characters[start..end].iter().collect::<String>();
-
-    find_url_target(&token, start, column)
-        .or_else(|| find_remote_path_target(&token, start, column))
+    find_url_target(text, column).or_else(|| {
+        let (start, end) = token_bounds(&characters, column)?;
+        let token = characters[start..end].iter().collect::<String>();
+        find_remote_path_target(&token, start, column)
+    })
 }
 
 pub(super) fn terminal_target_match_at_context(
@@ -124,48 +147,45 @@ fn is_token_boundary(character: char) -> bool {
         )
 }
 
-fn find_url_target(token: &str, token_start: usize, column: usize) -> Option<TerminalTargetSpan> {
-    for prefix in ["https://", "http://"] {
-        let mut offset = 0;
-        while let Some(found) = token[offset..].find(prefix) {
-            let start_byte = offset + found;
-            let candidate = trim_terminal_punctuation(&token[start_byte..]);
-            let candidate_chars = candidate.chars().count();
-            let start_column = token_start + token[..start_byte].chars().count();
-            let end_column = start_column + candidate_chars;
-            if column >= start_column
-                && column < end_column
-                && valid_web_url(candidate)
-                && candidate_chars <= MAX_TARGET_CHARS
-            {
-                return Some(TerminalTargetSpan {
-                    target: TerminalTarget::Url(candidate.to_owned()),
-                    start: start_column,
-                    end: end_column,
-                });
-            }
-            offset = start_byte + prefix.len();
+fn find_url_target(text: &str, column: usize) -> Option<TerminalTargetSpan> {
+    let rules = URL_RULES.as_ref()?;
+    for matched in rules.find_iter(text) {
+        let candidate = trim_url_candidate(matched.as_str());
+        let candidate_chars = candidate.chars().count();
+        let start = text[..matched.start()].chars().count();
+        let end = start + candidate_chars;
+        if candidate_chars > MAX_TARGET_CHARS || !(start..end).contains(&column) {
+            continue;
+        }
+        let Ok(url) = Url::parse(candidate) else {
+            continue;
+        };
+        if matches!(url.scheme(), "http" | "https") && url.host().is_some() {
+            return Some(TerminalTargetSpan {
+                target: TerminalTarget::Url(candidate.to_owned()),
+                start,
+                end,
+            });
         }
     }
     None
 }
 
-fn valid_web_url(candidate: &str) -> bool {
-    let Some((scheme, authority_and_path)) = candidate.split_once("://") else {
-        return false;
-    };
-    if !matches!(scheme, "http" | "https") {
-        return false;
+fn trim_url_candidate(candidate: &str) -> &str {
+    let mut parentheses = 0usize;
+    let mut brackets = 0usize;
+    for (offset, character) in candidate.char_indices() {
+        match character {
+            '(' => parentheses += 1,
+            '[' => brackets += 1,
+            ')' if parentheses == 0 => return trim_terminal_punctuation(&candidate[..offset]),
+            ']' if brackets == 0 => return trim_terminal_punctuation(&candidate[..offset]),
+            ')' => parentheses -= 1,
+            ']' => brackets -= 1,
+            _ => {}
+        }
     }
-    let authority = authority_and_path
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or_default();
-    !authority.is_empty()
-        && !authority.starts_with('.')
-        && authority
-            .chars()
-            .all(|character| !character.is_control() && !character.is_whitespace())
+    trim_terminal_punctuation(candidate)
 }
 
 fn find_remote_path_target(
@@ -240,6 +260,110 @@ fn unmatched_closing(candidate: &str, opening: char, closing: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn url_span_stops_before_chinese_prose_without_spaces() {
+        prepare();
+        assert!(URL_RULES.is_some(), "built-in URL regex must compile");
+        let url = "https://www.rfc-editor.org/rfc/rfc9110.html#section-15";
+        for suffix in [
+            ")。HTTP",
+            "）。HTTP",
+            "。继续",
+            "，后文",
+            "；后文",
+            "：后文",
+            "！后文",
+            "？后文",
+            "”后文",
+            "」后文",
+            "》后文",
+            "】后文",
+        ] {
+            let text = format!("参考（{url}{suffix}");
+            let expected = TerminalTargetSpan {
+                target: TerminalTarget::Url(url.to_owned()),
+                start: 3,
+                end: 3 + url.len(),
+            };
+            for column in expected.start..expected.end {
+                assert_eq!(
+                    terminal_target_span_at_cell(&text, column),
+                    Some(expected.clone()),
+                    "suffix={suffix}, column={column}"
+                );
+            }
+            for column in expected.end..text.chars().count() {
+                assert_eq!(terminal_target_span_at_cell(&text, column), None);
+            }
+        }
+    }
+
+    #[test]
+    fn url_matching_preserves_balanced_parentheses_and_ipv6_brackets() {
+        for url in [
+            "https://example.test/wiki/Function_(mathematics)",
+            "https://[2001:db8::1]:8443/path?q=a[0]#fragment",
+        ] {
+            let text = format!("({url})。HTTP");
+            assert_eq!(
+                terminal_target_span_at_cell(&text, 10),
+                Some(TerminalTargetSpan {
+                    target: TerminalTarget::Url(url.to_owned()),
+                    start: 1,
+                    end: 1 + url.len(),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn url_matching_preserves_unicode_and_original_scheme_spelling() {
+        let url = "HTTPS://例子.测试/中文路径?q=测试#片段";
+        let text = format!("链接：{url}。后文");
+        assert_eq!(
+            terminal_target_span_at_cell(&text, 4),
+            Some(TerminalTargetSpan {
+                target: TerminalTarget::Url(url.to_owned()),
+                start: 3,
+                end: 3 + url.chars().count(),
+            })
+        );
+        let encoded = "https://example.test/path%E3%80%82?q=1&value=2#part";
+        assert_eq!(
+            terminal_target_span_at_cell(encoded, 12).map(|span| span.target),
+            Some(TerminalTarget::Url(encoded.to_owned()))
+        );
+    }
+
+    #[test]
+    fn url_parser_rejects_invalid_hosts_and_ports() {
+        for text in [
+            "http://[:::1]/path",
+            "https://example.test:99999/path",
+            "https://bad%2fhost/path",
+            "https://:443/path",
+        ] {
+            assert_eq!(terminal_target_span_at_cell(text, 4), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn url_span_stops_at_unmatched_closing_bracket_before_following_text() {
+        for suffix in [")HTTP", "]HTTP"] {
+            let url = "https://example.test/path";
+            let text = format!("{url}{suffix}");
+            assert_eq!(
+                terminal_target_span_at_cell(&text, 10),
+                Some(TerminalTargetSpan {
+                    target: TerminalTarget::Url(url.to_owned()),
+                    start: 0,
+                    end: url.len(),
+                })
+            );
+            assert_eq!(terminal_target_span_at_cell(&text, url.len() + 1), None);
+        }
+    }
 
     #[test]
     fn identifies_web_urls_and_omits_terminal_punctuation() {
