@@ -689,7 +689,7 @@ fn schedule_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_action
         let ui_for_return = ui.as_weak();
         if let Err(error) = macos_window::configure_detached_titlebar_buttons(
             ui.window(),
-            detached_titlebar_background(&ui),
+            &detached_titlebar_style(&ui),
             show_terminal_actions,
             move || {
                 if let Some(ui) = ui_for_split_right.upgrade() {
@@ -734,11 +734,27 @@ pub(super) fn update_macos_detached_system_icon(ui: &AppWindow) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn detached_titlebar_background(ui: &AppWindow) -> Color {
+fn detached_titlebar_background(ui: &AppWindow) -> Color {
     if ui.get_active_tab_kind().as_str() == "terminal" {
         ui.get_theme_terminal_background()
     } else {
         ui.global::<Theme>().get_background()
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn detached_titlebar_style(ui: &AppWindow) -> macos_window::DetachedTitlebarStyle {
+    let theme = ui.global::<Theme>();
+    macos_window::DetachedTitlebarStyle {
+        background: detached_titlebar_background(ui),
+        icon_color: theme.get_muted(),
+        button_size: f64::from(theme.get_terminal_split_button_size()),
+        button_spacing: f64::from(theme.get_terminal_split_button_spacing()),
+        split_icon_size: f64::from(theme.get_terminal_split_glyph_size()),
+        transfer_icon_size: f64::from(theme.get_workspace_transfer_glyph_size()),
+        split_right_icon: theme.get_terminal_split_right_icon(),
+        split_down_icon: theme.get_terminal_split_down_icon(),
+        return_icon: theme.get_workspace_return_icon(),
     }
 }
 

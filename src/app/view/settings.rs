@@ -290,11 +290,11 @@ pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &
             settings.appearance.terminal_software_block_rows,
         );
         #[cfg(target_os = "macos")]
-        if let Err(error) = macos_window::update_detached_titlebar_background(
+        if let Err(error) = macos_window::update_detached_titlebar_style(
             detached_ui.window(),
-            detached_titlebar_background(&detached_ui),
+            &detached_titlebar_style(&detached_ui),
         ) {
-            warn!(%error, "failed to update detached macOS title-bar background");
+            warn!(%error, "failed to update detached macOS title-bar style");
         }
         #[cfg(target_os = "macos")]
         if let Err(error) = update_macos_detached_system_icon(&detached_ui) {

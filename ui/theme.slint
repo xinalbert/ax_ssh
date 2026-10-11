@@ -303,6 +303,11 @@ export global Theme {
     out property <length> session-management-dialog-height: 220px;
     out property <length> terminal-underline-offset: 2px;
     out property <length> workspace-transfer-glyph-size: 14px;
+    // Main Slint controls and detached AppKit buttons consume these same images.
+    out property <image> workspace-move-icon: @image-url("icons/workspace-move.svg");
+    out property <image> workspace-return-icon: @image-url("icons/workspace-return.svg");
+    out property <image> terminal-split-right-icon: @image-url("icons/terminal-split-right.svg");
+    out property <image> terminal-split-down-icon: @image-url("icons/terminal-split-down.svg");
     out property <length> terminal-split-button-size: 26px;
     out property <length> terminal-split-glyph-size: 16px;
     out property <length> terminal-split-button-spacing: 4px;

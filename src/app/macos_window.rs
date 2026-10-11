@@ -8,10 +8,10 @@ use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSColor,
     NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags,
-    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageNameMultipleDocuments, NSImageScaling,
-    NSImageView, NSInsertFunctionKey, NSLeftArrowFunctionKey, NSMenu, NSMenuItem,
-    NSPageDownFunctionKey, NSPageUpFunctionKey, NSRightArrowFunctionKey, NSUpArrowFunctionKey,
-    NSView, NSWindow, NSWindowButton, NSWindowStyleMask, NSWindowTitleVisibility,
+    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageScaling, NSImageView, NSInsertFunctionKey,
+    NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
+    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
+    NSWindowStyleMask, NSWindowTitleVisibility,
 };
 use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -69,9 +69,6 @@ impl NativeMenuTarget {
     }
 }
 
-const TITLE_BAR_BUTTON_WIDTH: f64 = 28.0;
-const TITLE_BAR_BUTTON_HEIGHT: f64 = 20.0;
-const TITLE_BAR_BUTTON_SPACING: f64 = 2.0;
 const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
 // Matches Theme.macos-titlebar-leading-clearance. Keep native drag hit testing
 // aligned with the visual gap before the first workspace Tab.
@@ -81,6 +78,20 @@ const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
 // Matches Theme.tab-platform-icon-size; the larger raster supports HiDPI.
 const TITLE_BAR_SYSTEM_ICON_SIZE: f64 = 16.0;
 const TITLE_BAR_SYSTEM_ICON_RASTER_SIZE: u32 = 64;
+
+/// Resolved UI appearance only; the bridge supplies Theme's shared assets and
+/// logical dimensions without exposing generated component types to AppKit.
+pub(super) struct DetachedTitlebarStyle {
+    pub(super) background: slint::Color,
+    pub(super) icon_color: slint::Color,
+    pub(super) button_size: f64,
+    pub(super) button_spacing: f64,
+    pub(super) split_icon_size: f64,
+    pub(super) transfer_icon_size: f64,
+    pub(super) split_right_icon: slint::Image,
+    pub(super) split_down_icon: slint::Image,
+    pub(super) return_icon: slint::Image,
+}
 
 fn in_native_drag_clearance(x: f64, y_from_top: f64) -> bool {
     (0.0..TITLE_BAR_LEADING_CLEARANCE).contains(&x)
@@ -162,7 +173,7 @@ define_class!(
 );
 
 impl NativeTitleBarButton {
-    fn new(mtm: MainThreadMarker, activate: impl Fn() + 'static) -> Retained<Self> {
+    fn new(mtm: MainThreadMarker, size: f64, activate: impl Fn() + 'static) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(NativeTitleBarButtonIvars {
             activate: Box::new(activate),
         });
@@ -171,7 +182,7 @@ impl NativeTitleBarButton {
         unsafe {
             msg_send![super(this), initWithFrame: NSRect::new(
                 NSPoint::new(0.0, 0.0),
-                NSSize::new(TITLE_BAR_BUTTON_WIDTH, TITLE_BAR_BUTTON_HEIGHT),
+                NSSize::new(size, size),
             )]
         }
     }
@@ -220,7 +231,7 @@ pub(super) fn configure(window: &slint::Window) -> Result<()> {
 
 pub(super) fn configure_detached_titlebar_buttons(
     window: &slint::Window,
-    terminal_background: slint::Color,
+    style: &DetachedTitlebarStyle,
     show_terminal_actions: bool,
     split_right: impl Fn() + 'static,
     split_down: impl Fn() + 'static,
@@ -230,40 +241,35 @@ pub(super) fn configure_detached_titlebar_buttons(
         MainThreadMarker::new().context("macOS title-bar setup must run on the main thread")?;
     let mut buttons = Vec::with_capacity(if show_terminal_actions { 3 } else { 1 });
     if show_terminal_actions {
-        if let Some(button) = configure_titlebar_button(
+        buttons.push(configure_titlebar_button(
             mtm,
-            "rectangle.split.2x1",
+            style,
+            &style.split_right_icon,
+            style.split_icon_size,
             "Split active terminal vertically",
-            None,
             split_right,
-        ) {
-            buttons.push(button);
-        }
-        if let Some(button) = configure_titlebar_button(
+        )?);
+        buttons.push(configure_titlebar_button(
             mtm,
-            "rectangle.split.1x2",
+            style,
+            &style.split_down_icon,
+            style.split_icon_size,
             "Split active terminal horizontally",
-            None,
             split_down,
-        ) {
-            buttons.push(button);
-        }
+        )?);
     }
-    // SAFETY: AppKit exports this process-lifetime NSImageName constant on
-    // every supported macOS version; this code only reads its shared value.
-    let fallback_name = unsafe { NSImageNameMultipleDocuments };
     let return_button = configure_titlebar_button(
         mtm,
-        "rectangle.on.rectangle",
+        style,
+        &style.return_icon,
+        style.transfer_icon_size,
         "Return workspace to main window",
-        NSImage::imageNamed(fallback_name),
         return_workspace,
-    )
-    .context("AppKit could not load the detached workspace return icon")?;
+    )?;
     buttons.push(return_button);
 
     with_native_window(window, |native_window| {
-        configure_detached_titlebar_appearance(native_window, terminal_background);
+        configure_detached_titlebar_appearance(native_window, style.background);
         let zoom_button = native_window
             .standardWindowButton(NSWindowButton::ZoomButton)
             .context("AppKit window has no standard zoom button")?;
@@ -272,17 +278,18 @@ pub(super) fn configure_detached_titlebar_buttons(
         let title_bar = unsafe { zoom_button.superview() }
             .context("AppKit standard zoom button has no title-bar view")?;
         let bounds = title_bar.bounds();
-        let control_width = TITLE_BAR_BUTTON_WIDTH * buttons.len() as f64
-            + TITLE_BAR_BUTTON_SPACING * buttons.len().saturating_sub(1) as f64;
+        // Keep the shared width while fitting AppKit's native title-bar height.
+        let button_height = style.button_size.min(bounds.size.height);
+        let control_width = style.button_size * buttons.len() as f64
+            + style.button_spacing * buttons.len().saturating_sub(1) as f64;
         let origin_x =
             (bounds.size.width - control_width - TITLE_BAR_BUTTON_TRAILING_MARGIN).max(0.0);
-        let origin_y = ((bounds.size.height - TITLE_BAR_BUTTON_HEIGHT) / 2.0).max(0.0);
+        let origin_y = ((bounds.size.height - button_height) / 2.0).max(0.0);
         for (index, button) in buttons.into_iter().enumerate() {
-            let origin_x =
-                origin_x + index as f64 * (TITLE_BAR_BUTTON_WIDTH + TITLE_BAR_BUTTON_SPACING);
+            let origin_x = origin_x + index as f64 * (style.button_size + style.button_spacing);
             button.setFrame(NSRect::new(
                 NSPoint::new(origin_x, origin_y),
-                NSSize::new(TITLE_BAR_BUTTON_WIDTH, TITLE_BAR_BUTTON_HEIGHT),
+                NSSize::new(style.button_size, button_height),
             ));
             button.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
             title_bar.addSubview(&button);
@@ -291,12 +298,24 @@ pub(super) fn configure_detached_titlebar_buttons(
     })
 }
 
-pub(super) fn update_detached_titlebar_background(
+pub(super) fn update_detached_titlebar_style(
     window: &slint::Window,
-    terminal_background: slint::Color,
+    style: &DetachedTitlebarStyle,
 ) -> Result<()> {
     with_native_window(window, |native_window| {
-        configure_detached_titlebar_appearance(native_window, terminal_background);
+        configure_detached_titlebar_appearance(native_window, style.background);
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: This live window owns its standard button and title-bar view.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit standard zoom button has no title-bar view")?;
+        let tint = ns_color(style.icon_color);
+        for view in title_bar.subviews().iter() {
+            if let Ok(button) = view.downcast::<NativeTitleBarButton>() {
+                button.setContentTintColor(Some(&tint));
+            }
+        }
         Ok(())
     })
 }
@@ -409,22 +428,26 @@ fn ns_color(color: slint::Color) -> Retained<NSColor> {
 
 fn configure_titlebar_button(
     mtm: MainThreadMarker,
-    system_symbol_name: &str,
+    style: &DetachedTitlebarStyle,
+    source: &slint::Image,
+    icon_size: f64,
     accessibility_description: &str,
-    fallback_image: Option<Retained<NSImage>>,
     activate: impl Fn() + 'static,
-) -> Option<Retained<NativeTitleBarButton>> {
-    let button = NativeTitleBarButton::new(mtm, activate);
+) -> Result<Retained<NativeTitleBarButton>> {
+    let button = NativeTitleBarButton::new(mtm, style.button_size, activate);
     let accessibility_description = NSString::from_str(accessibility_description);
-    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
-        &NSString::from_str(system_symbol_name),
-        Some(&accessibility_description),
-    )
-    .or(fallback_image)?;
+    let data = NSData::with_bytes(&titlebar_icon_png(source)?);
+    let image = NSImage::initWithData(NSImage::alloc(), &data)
+        .context("AppKit could not decode the shared title-bar action icon")?;
+    image.setSize(NSSize::new(icon_size, icon_size));
+    image.setTemplate(true);
     image.setAccessibilityDescription(Some(&accessibility_description));
     button.setTitle(&NSString::new());
     button.setImage(Some(&image));
     button.setImagePosition(NSCellImagePosition::ImageOnly);
+    button.setImageScaling(NSImageScaling::ScaleNone);
+    button.setBordered(false);
+    button.setContentTintColor(Some(&ns_color(style.icon_color)));
     button.setToolTip(Some(&accessibility_description));
     // SAFETY: `activate:` is implemented by NativeTitleBarButton. NSControl
     // keeps targets weakly, while the title-bar view retains the button itself.
@@ -432,7 +455,7 @@ fn configure_titlebar_button(
         button.setTarget(Some(&button));
         button.setAction(Some(sel!(activate:)));
     }
-    Some(button)
+    Ok(button)
 }
 
 pub(super) fn configure_application_icon() -> Result<()> {

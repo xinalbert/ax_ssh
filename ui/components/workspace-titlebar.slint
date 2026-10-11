@@ -23,48 +23,15 @@ export struct ConnectableSessionRow {
     system_platform: string,
 }
 
-component WindowFrameGlyph inherits Rectangle {
-    in property <color> glyph-color: Theme.text;
-
-    background: transparent;
-
-    Rectangle {
-        x: Theme.hairline;
-        y: Theme.hairline;
-        width: parent.width - 2 * Theme.hairline;
-        height: parent.height - 2 * Theme.hairline;
-        background: transparent;
-        border-width: Theme.hairline;
-        border-color: root.glyph-color;
-        border-radius: Theme.radius-small;
-    }
-}
-
-component WorkspaceTransferGlyph inherits Rectangle {
+component WorkspaceTransferGlyph inherits Image {
     in property <bool> returning;
     in property <color> glyph-color: Theme.text;
 
-    private property <length> frame-offset: 3 * Theme.hairline;
-    private property <length> frame-size: root.width - root.frame-offset - Theme.hairline;
-
     width: Theme.workspace-transfer-glyph-size;
     height: Theme.workspace-transfer-glyph-size;
-    background: transparent;
-
-    WindowFrameGlyph {
-        x: root.returning ? root.frame-offset : Theme.hairline;
-        y: root.returning ? Theme.hairline : root.frame-offset;
-        width: root.frame-size;
-        height: root.frame-size;
-        glyph-color: root.glyph-color.with-alpha(0.52);
-    }
-    WindowFrameGlyph {
-        x: root.returning ? Theme.hairline : root.frame-offset;
-        y: root.returning ? root.frame-offset : Theme.hairline;
-        width: root.frame-size;
-        height: root.frame-size;
-        glyph-color: root.glyph-color;
-    }
+    source: root.returning ? Theme.workspace-return-icon : Theme.workspace-move-icon;
+    colorize: root.glyph-color;
+    image-fit: contain;
 }
 
 component TabKindGlyph inherits Rectangle {
@@ -411,33 +378,15 @@ export component ConnectionPicker inherits FocusScope {
     }
 }
 
-component TerminalSplitGlyph inherits Rectangle {
+component TerminalSplitGlyph inherits Image {
     in property <bool> vertical;
     in property <color> glyph-color: Theme.text;
 
     width: Theme.terminal-split-glyph-size;
     height: Theme.terminal-split-glyph-size;
-    background: transparent;
-
-    WindowFrameGlyph {
-        width: parent.width;
-        height: parent.height;
-        glyph-color: root.glyph-color;
-    }
-    if root.vertical : Rectangle {
-        x: parent.width / 2 - Theme.hairline;
-        y: 2 * Theme.hairline;
-        width: Theme.hairline;
-        height: parent.height - 4 * Theme.hairline;
-        background: root.glyph-color;
-    }
-    if !root.vertical : Rectangle {
-        x: 2 * Theme.hairline;
-        y: parent.height / 2 - Theme.hairline;
-        width: parent.width - 4 * Theme.hairline;
-        height: Theme.hairline;
-        background: root.glyph-color;
-    }
+    source: root.vertical ? Theme.terminal-split-right-icon : Theme.terminal-split-down-icon;
+    colorize: root.glyph-color;
+    image-fit: contain;
 }
 
 export component TerminalSplitButton inherits FocusScope {

@@ -61,7 +61,7 @@ component WindowControlGlyph inherits Path {
         : root.icon == WindowControlIcon.Restore
             ? "M 5.5 5.5 V 2.5 H 13.5 V 10.5 H 10.5 M 2.5 5.5 H 10.5 V 13.5 H 2.5 Z"
         : root.icon == WindowControlIcon.Close ? "M 3 3 L 13 13 M 13 3 L 3 13"
-        : "M 13 8 H 3 M 3 8 L 8 3 M 3 8 L 8 13";
+        : "";
     fill: transparent;
     stroke: root.glyph-color;
     stroke-width: Theme.hairline;
@@ -98,12 +98,21 @@ component WindowControl inherits FocusScope {
         return EventResult.reject;
     }
 
-    WindowControlGlyph {
+    if root.icon != WindowControlIcon.Return : WindowControlGlyph {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         icon: root.icon;
         glyph-color: root.destructive && (touch.has-hover || root.has-focus)
             ? Theme.background : Theme.text;
+    }
+    if root.icon == WindowControlIcon.Return : Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: Theme.workspace-transfer-glyph-size;
+        height: Theme.workspace-transfer-glyph-size;
+        source: Theme.workspace-return-icon;
+        colorize: touch.has-hover || root.has-focus ? Theme.text : Theme.muted;
+        image-fit: contain;
     }
     if root.has-focus : Rectangle {
         x: Theme.space-xxs;
