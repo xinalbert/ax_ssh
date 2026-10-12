@@ -2,6 +2,7 @@ use std::path::Path;
 
 #[cfg(target_os = "macos")]
 use anyhow::{Context, Result};
+#[cfg(target_os = "macos")]
 use slint::ComponentHandle;
 use std::cell::RefCell;
 #[cfg(target_os = "macos")]
