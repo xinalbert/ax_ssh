@@ -538,8 +538,8 @@ mod tests {
                 }
                 let last = last.expect("resampler should produce PCM");
                 let tail = &last[last.len() - channels as usize * 2..];
-                for (channel, bytes) in tail.chunks_exact(2).enumerate() {
-                    let sample = i16::from_le_bytes([bytes[0], bytes[1]]);
+                for (channel, bytes) in tail.as_chunks::<2>().0.iter().enumerate() {
+                    let sample = i16::from_le_bytes(*bytes);
                     let expected = ((0.1 + channel as f32 * 0.05) * 32767.0).round() as i16;
                     assert!(
                         (sample - expected).abs() < 10,

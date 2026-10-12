@@ -36,8 +36,8 @@ async fn transcribe_with_timeout(
                 sample_format: hound::SampleFormat::Int,
             },
         )?;
-        for bytes in recorded.chunks_exact(2) {
-            writer.write_sample(i16::from_le_bytes([bytes[0], bytes[1]]))?;
+        for bytes in recorded.as_chunks::<2>().0 {
+            writer.write_sample(i16::from_le_bytes(*bytes))?;
         }
         writer.finalize()?;
         Ok::<_, anyhow::Error>(owner)
