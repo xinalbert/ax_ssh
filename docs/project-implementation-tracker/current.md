@@ -2,17 +2,17 @@
 
 ## 当前目标
 
-- 目标 ID：20261011-workspace-action-icons
-- 目标：接续用户指定 Codex 会话，统一主窗口和子窗口的分屏、移出/返回图标，并把 SFTP 重命名移入远端文件行右键菜单。
-- 交付物：共用 SVG 源与 Theme 尺寸/颜色、macOS 无常驻底框的原生按钮、主题同步、单项右键重命名对话框、双语文档与验证记录及分项本地提交。
+- 目标 ID：20261012-terminal-media-on-demand
+- 目标：移除终端媒体手动入口，按系统录音接口自动接入；本地 CLI 走原生音频，Linux SSH CLI 走 PulseAudio/pipewire-pulse 音源与按需采集。
+- 交付物：空闲终端空间恢复、标准录音流驱动的 SSH 音频桥接、共享采集互斥/有界流/清理、标准接口回归、双语文档与验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/theme.slint`、`ui/components/` 标题栏与覆盖层、`ui/icons/`、`ui/sftp-pane.slint`、`ui/workspace-shell.slint`、`ui/app.slint`、`src/app/macos_window.rs`、`src/app/window_bridge.rs`、`src/app/view/settings.rs`、`src/app/sftp_bridge.rs`、双语架构/使用文档与实施记录。
-- 不在本轮范围内：依赖/工具链/CI 升级、SSH/SFTP transport/凭据/配置 schema、工作区转移和 worker 生命周期、推送/发布。
-- 所有权：Slint 的 Theme 提供唯一图像源、尺寸和调色板；覆盖层保存重命名草稿并转发用户意图；应用层校验原始 Tab/路径与单项选择，复用既有 worker 操作；macOS bridge 只配置原生按钮与有限 raster。
-- 安全边界：原生回调继续捕获 Weak AppWindow；重命名保留名称校验与单项限制，拒绝已切换的目标；不传递网络 handle、凭据或终端内容，不新增队列或文件 I/O。
+- 当前范围：`ui/terminal-pane.slint`、`ui/settings/terminal.slint`、翻译目录/生成脚本、`packaging/macos/Info.plist` 麦克风用途文案、`src/audio.rs`、`src/ssh.rs`、`src/ssh/worker.rs`、`src/ssh/worker/{shell,media}.rs`、新标准音源 bridge、`src/app/connection/worker_start.rs`、`src/app/connection_monitor.rs`、`src/app/terminal_media.rs`、`src/app/view/tests.rs`、双语使用/架构文档及项目记录。
+- 不在本轮范围内：CLI 名称/命令/终端文本适配、云转写、录音驱动替换、SSH trust/凭据/配置 schema、依赖/CI 升级、推送/发布。
+- 所有权：Slint 只保留终端网格及分屏关闭布局；SSH worker 发布标准虚拟音源并监听其非暂停录音流，音频领域持有共享设备租约和有界 PCM，worker 所有的辅助通道负责转发/清理；应用层只传 owned 音频配置，不传 Slint/设备/网络 handle。
+- 安全边界：只有已验证并认证的 SSH 会话可以准备虚拟音源；仅该音源的非暂停录音流触发采集，空闲不打开麦克风；关闭流/会话时停止并清理；共享设备仅允许一个采集 owner，PCM 有界，录音权限由系统处理。
 
 ## 当前状态
 
@@ -25,40 +25,39 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| WI1 | completed | 共用图标资产与 Slint/原生呈现映射 | Slint 重编、既有图像编码和窗口回归、静态 diff | 用户四张截图作为差异来源 |
-| WI2 | completed | SFTP 右键重命名、双语文档、地图及自动门禁 | 重命名目标回归、fmt/check/严格 Clippy/test、两个 macOS target check/Clippy/build、链接/skill/tracker/diff | Intel 使用同版本/架构/特性的已验证本地 Skia 归档；未运行非原生测试 |
-| GC2 | completed | 图标、右键重命名、双语文档与记录三项本地提交 | 分项暂存审查、ignore/链接/tracker/diff、提交后状态 | 代码提交 0f1bea4/4b89c9b；文档提交以包含本记录的 commit 为准 |
-| WI3 | pending | 用户视觉与真实平台操作验收 | 主/子窗口分屏、移出/返回、主题切换、重命名与键盘焦点 | 不自行捕获或检查应用截图 |
+| MO1 | completed | 标准录音流驱动的音频桥接与手动 UI 撤除 | 空闲无设备访问、non-corked/所属 source 判定、状态分片/队列/取消/清理与布局回归 | 用户选择 CLI 自动调用并要求标准化；已撤下未提交的手动菜单方案 |
+| MO2 | completed | 双语文档、地图和自动门禁 | Slint 重编、fmt/check/严格 Clippy/test/build、translation/链接/skill/tracker/diff | 不改依赖、工具链或 CI |
+| MO4 | completed | 标准录音功能分项本地提交 | 显式暂存/index 复核、提交后状态与历史检查 | 用户授权；功能、翻译生成脚本、双语文档分别提交，不推送/发布 |
+| MO3 | pending | 用户真实 GUI/录音验收 | 主/独立窗口、空闲空间、标准录音流启停、权限与虚拟音源清理 | 不自行截图或验收视觉 |
 
 ## 已完成
 
-- 已找到指定会话及其前序会话，确认 SFTP 工作已提交；未完成目标为主/子窗口图标统一。
-- 已读取用户四张截图，定位主窗口 Slint glyph 与 macOS 子窗口系统符号/默认按钮底框的差异。
-- 已读取工程技能、完整 Rust/Slint references、项目地图、架构、环境记忆及 Cargo/CI；本机 Rust/Cargo 1.97.1、两个 macOS target 可用，MSRV 1.92.0 与 Slint 1.18.1 保持。
-- 工作区初始干净；先写计划再改代码，没有创建 Worker 记录。
-- 用户明确指定在本会话执行并授权中断原会话；已通过原会话控制接口中断其 active turn，状态变为 idle，并停止遗留的本项目构建进程。保留已落盘的代码与文档。
-- 已复核 shared SVG/Theme、Windows/Linux Return、macOS 无底座按钮、弱引用动作和主题 tint；补齐原生按钮按标题栏高度居中，缩小仅在本模块调用的 helper 可见性。
-- 已移除 SFTP 顶部 Rename/新名称输入；远端行菜单在唯一选择时提供 Rename，未选中命中行先替换选择；共享覆盖层预填名称并支持 Enter/Escape，应用层重新校验原始 Tab/路径、目录 readiness、可见性和唯一选择。
-- 已同步双语 SFTP 使用/架构说明与项目地图；名称/路径及 worker 校验继续沿用，不改 SSH trust、配置 schema 或依赖。
-- 最终源码已通过完整 Cargo 门禁与 ARM64/Intel macOS 的 CI 同款 check/严格 all-target Clippy/build；默认及两个 target 程序的 Mach-O 架构已核对。
-- 已按用户要求整理本地提交：窗口动作图标 0f1bea4、SFTP 右键重命名 4b89c9b；双语文档、项目地图、研究来源及环境/验证记录随包含本记录的文档提交保存。没有推送或发布。
+- 已查看用户截图并读取媒体/UI/终端菜单、所有权文档和项目地图；无条件的 32px 媒体行及任务结束保留状态造成常驻显示。
+- 工作区初始干净，HEAD 为前轮文档提交 70736a7；前轮窗口图标与 SFTP 重命名已分别提交，GUI/真实平台验收保留在历史。
+- 已核对 Cargo/lock/build.rs/CI、本机 Rust/Cargo 1.97.1、两个 macOS target；Rust 2024/MSRV 1.92.0 和 Slint 1.18.1 保持。
+- 已先写实施计划与环境预检，不使用多 agent、不创建 Worker 记录。
+- 用户选择 CLI 自动接入并要求避免个别 CLI 适配；已撤下本轮未提交的手动菜单源码，刷新标准音频边界与计划。
+- 已核对 PulseAudio 官方客户端录音/暂停语义、pactl 输出和 PipeWire pipe-source 选项；不解析 CLI 名称或终端文本。
+- MO1 已完成：按自有音源非暂停录音流启停，设备租约保持至实际 stream 关闭，停止清队列，EOF/TERM 回收 helper；去掉终端常驻媒体行和设置页 whisper 字段，历史配置内部兼容。
+- 已添加拒绝辅助 exec 的 SSH fixture 行为；不支持音频仍保持正常 shell，实际录音后失败走原连接代次状态，不显示空闲错误行。
+- MO2 自动门禁完成；音频/布局/翻译生成均有回归，权限用途文案与标准录音方式一致。未启动 GUI/真实麦克风、未连接真实远端；不推送或发布。
+- MO4 分项本地提交交付：录音桥接与界面 b957d27，翻译生成脚本 ffd6f5a；双语说明、地图、研究和验证/提交记录随包含本记录的文档提交保存。逐次显式暂存并复核 index，未纳入构建物/缓存。
 
 ## 验证
 
-- 已完成：环境和源码预检、用户截图差异定位；最终 Slint 重编、2 项重命名目标回归、fmt/check/严格 all-target Clippy、库/应用全量测试（应用 396 项）、默认及两个 macOS target 的 check/严格 Clippy/build、562 条翻译、10 条相对链接与 skill/tracker/diff 校验通过；5 项原生窗口专项包含在全量测试中。
-- Intel 首次检查因 Skia 下载 HTTP/2 错误和 googlesource 超时失败；验证本机完整归档的 tag 0.153.3、x86_64/ganesh-gl-jpegd-jpege-metal-pdf key 后，使用临时 SKIA_BINARIES_URL=file URL 完成三个门禁。未改依赖、Cargo 配置或 CI。
-- 未完成：用户视觉/交互与真实 SFTP 验收，以及 Windows/Linux 原生验证；未运行非原生 Intel 测试。
+- 已完成：环境预检、Slint 重编、7 项标准录音回归（含无读者 FIFO 的 TERM 清理）、主/独立窗口 2 项数值布局回归；fmt/check/严格 Clippy、完整 754 项测试及两个 macOS 架构 CI 同款 check/Clippy/build；549 条翻译及隔离生成一致、相对链接、skill/tracker/diff。默认 debug 和两个 macOS target 程序已构建；ARM64 app 已打包并验证用途文案/签名。
+- 未完成：用户 GUI/真实设备/远端与 Windows/Linux 原生验收。
 
 ## 风险与阻塞
 
-- macOS 子窗口保留原生标题栏；按钮交互和高度受 AppKit 控制，图形、图标尺寸、间距和静态颜色使用共同来源。
-- Windows/Linux SDK 不可用，原生 CI 与用户验收保留。
-- 主题设置预览/保存须同步原生按钮颜色；系统色彩模式变化沿用既有同步边界。
+- 修改头部高度会改变实际 terminal rows；须以既有数值布局回归验证，不把自截图当视觉验收。
+- 虚拟音源使用远端系统音频接口，直接读取硬件设备的程序不走该接口；当前远端桥接能力仅 Linux PulseAudio/pipewire-pulse，不宣称跨平台驱动能力。
+- 真实录音权限、设备和 Linux 音源链路仍由目标环境验收；本机缺少 Windows/Linux SDK。
 
 ## 下一步
 
-- 重启新版 `target/debug/ax_ssh`；WI3 由用户确认主/独立窗口图标、主题与焦点，及右键 Rename 的单项、多选禁用、确认/取消和真实远端操作。
+- 使用 `target/automatic-audio-preview/AxSSH.app` 验收主/独立窗口、系统录音权限和 Linux 标准音源启停/清理；默认 debug 程序为 `target/debug/ax_ssh`。MO3 保留用户实机验收。
 
 ## 最后更新时间
 
-- 2026-10-12 +0800：按用户要求完成分项本地提交交付。
+- 2026-10-12 +0800

@@ -1430,12 +1430,16 @@ secret 提示保留为覆盖层。
 
 `src/app/platform_support.rs` 在 UI 线程串行使用常驻 arboard 剪贴板 owner，保留 Linux 剪贴板内容并在事件循环退出后释放，错误可见。OSC 52 撤销同时清除模型/应用待确认项，Base64 格式化前检查读取大小；完整协议响应借已有有界 raw-data paste 队列原子排队，不添加 paste 标记。排队的写操作重新核对原连接代次和权限代次，关闭后再开启也不复用旧授权。
 
-`src/media.rs` 拥有有界 PNG 编码与私有临时文件。`src/app/terminal_media.rs` 拥有显式用户意图、工作区唯一媒体任务、会话/代次 token、可确认转写与小型 `MediaSnapshot`；后台完成 PNG、文件读写/删除、配置持久化和转写。Slint 只传意图及有界字符串，不传设备或 stream handle。音频设置为 serde 默认兼容的独立 domain value，普通设置预览/保存保留其最新值。
+`src/media.rs` 拥有有界 PNG 编码与私有临时文件。`src/app/terminal_media.rs` 拥有剪贴板附件意图、会话/代次 token、音频设置持久化和小型 `MediaSnapshot`。旧转写/配置保留内部兼容，终端和设置页不提供手动录音/转写入口，语音识别由 CLI 处理。后台完成 PNG、文件读写/删除和持久化；Slint 不接收设备或 stream handle。音频设置保持 serde 默认兼容，并保留旧存储的转写字段。
 
-`src/audio.rs` 持有 CPAL 输入生命周期。固定原生 block 与有界回调队列使回调无堆分配、等待、日志或文件操作；后台 rubato FFT 抗混叠重采样和声道转换生成约 20 ms s16le 包，PCM 队列为 8 包。溢出终止采集，不积累无限音频。正常停止排空尾部输入/重采样帧，移除滤波延迟，仅补齐最后一包；优先匹配硬件格式。macOS AVFoundation 通过 oneshot 返回授权，unsafe 仅涉及系统常量与 block 生命周期。固定 CPAL 0.17.3 保持已有 macOS 部署下限。
+`src/audio.rs` 持有 CPAL 输入生命周期。自有录音请求必须先于权限和设备访问；共享 semaphore 租约由实际采集 worker 持有至 stream 关闭，异步取消也不提前释放。固定原生 block 与有界回调队列使回调无堆分配、等待、日志或文件操作；后台 rubato FFT 抗混叠重采样和声道转换生成约 20 ms s16le 包，PCM 队列为 8 包。溢出终止采集，不积累无限音频。正常停止排空尾部输入/重采样帧，移除滤波延迟，仅补齐最后一包；优先匹配硬件格式。macOS AVFoundation 通过 oneshot 返回授权，unsafe 仅涉及系统常量与 block 生命周期。固定 CPAL 0.17.3 保持已有 macOS 部署下限。
 
-`src/audio/transcription.rs` 用 owned argv 直接启动配置的 whisper-cli，不经 shell；最多 60 秒私有 mono WAV、64 KiB 结果和 120 秒超时，取消会杀死子进程。转写插入先将 CR/LF 转为空格，再使用正常粘贴编码，避免无 bracketed paste 的终端提交输入；不添加 Enter，该适配不向云端发送音频。
+`src/audio/transcription.rs` 保留旧有界本机转写 API 和取消回归，与自动录音独立，终端无调用入口。自动桥接不调用识别器，也不匹配 CLI 名称、命令、版本或终端输出；本地 Shell 程序直接使用操作系统原生录音。
 
-`src/ssh/worker/media.rs` 打开独立的已认证 SFTP/exec 通道，不向 PTY 写 PNG/PCM。附件使用 UUID 目录、独占创建和私有权限，每块确认后才返回路径；worker 在 transport 关闭前清理所拥有目录。Linux helper 的私有 FIFO 接入 module-pipe-source，临时更改默认 Pulse 输入，并在 EOF/信号时有条件恢复。固定 POSIX helper 只插入已校验的数值格式与随机音源名称。辅助任务显式取消、限时 join，超时 abort 后回收 transport；worker 总 shutdown 上限 20 秒，应用退出预算为 25 秒。连接丢失后不能保证远端清理。没有引入第二套 SSH、音频监听端口、远端安装器、凭据持久化或参考项目耦合。
+`src/ssh/worker/media.rs` 打开独立的已认证 SFTP/exec 通道，不向 PTY 写 PNG/PCM。附件使用 UUID 目录、独占创建和私有权限，每块确认后才返回路径；worker 在 transport 关闭前清理所拥有目录。
 
-Linux 原生 CI/release 增加 libasound2-dev；Windows 桌面麦克风权限及 macOS 打包 app TCC 由平台处理。FIFO/模块、真实设备和 CLI 音源选择仍须验收；文件路径或音源可用不等于上游 CLI 已开放附件/实验语音功能。
+`src/ssh/worker/media/automatic.rs` 拥有标准录音桥接。Terminal worker 在主机密钥校验和认证完成后、打开 shell 前准备 Linux PulseAudio/pipewire-pulse 私有 FIFO 音源；准备限时五秒并响应断开，不可用时仍可使用普通 SSH。`SshTerminalSettings` 只传 owned X11/音频配置；shell 请求 `PULSE_SOURCE`，helper 同时选为用户默认输入，兼容拒绝环境变量请求的服务器，因此也影响其他默认输入客户端。helper 订阅标准 source-output 事件，并查询所属 source 与 `Corked: no`；音源设备处于运行状态本身不触发采集。只有自有音源的非暂停录音流启动 CPAL；空闲、暂停或关闭时停止，并丢弃已排队 PCM。准备失败不显示空闲提示；录音请求后失败发送有界 MicrophoneUnavailable 事件，应用校验原连接代次后更新状态，SSH 保持可用。[PulseAudio 录音语义](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/def.h)、[pactl 接口](https://github.com/pulseaudio/pulseaudio/blob/master/src/utils/pactl.c)
+
+固定 POSIX helper 只插入已校验的数值格式与随机音源名称；控制解析有界，附件任务另有限额，本机麦克风同时只允许一个桥接 owner。EOF/TERM 回收自有子进程、模块及 FIFO，仅在默认输入仍属自有时恢复旧值。辅助任务显式取消、限时 join 后再回收 transport；worker 总 shutdown 上限 20 秒，应用退出预算为 25 秒。连接丢失后不能保证远端清理。没有引入第二套 SSH、音频监听端口、远端安装器、凭据持久化或参考项目耦合。
+
+Linux 原生 CI/release 增加 libasound2-dev；Windows 桌面麦克风权限及 macOS 打包 app TCC 由平台处理。远端自动转发当前支持 Linux PulseAudio/pipewire-pulse 客户端，包括路由至 Pulse 的 ALSA 默认输入；直读硬件与其他远端系统需对应系统音频支持。FIFO/模块、权限和真实设备选择仍须验收。

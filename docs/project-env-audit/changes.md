@@ -1137,3 +1137,27 @@
 - 验证结果：2 项重命名目标专项、fmt、locked/offline check、严格 all-target Clippy、库/应用完整测试（应用 396 项）、默认 build 和 ARM64/Intel 的 CI 同款 check/严格 Clippy/build 全部通过；三份 Mach-O 架构正确。562 条翻译、10 条相对文档链接与 skill/tracker/diff 通过。
 - 验证缺口：不运行非原生 Intel 测试；Windows/Linux 原生平台、GUI 视觉/焦点与真实 SFTP 由 CI/用户验收。
 - 交付：新版程序为 `target/debug/ax_ssh`，目标程序为 `target/<macOS-target>/debug/ax_ssh`；不自行截图、不推送或发布。
+
+## 2026-10-12 终端媒体按需显示环境预检
+
+- 项目边界：独立 Rust 2024/Slint 桌面应用；本轮仅终端菜单/状态布局、反馈清理与回归，不改设备、transport、配置、依赖或 CI。
+- 环境记忆状态：已读取 current/changes，核对 Cargo/lock/build.rs/CI；工具链、锁定依赖、Slint 入口与前轮一致。
+- 运行环境：本机 Rust/Cargo 1.97.1，MSRV 1.92.0、Slint 1.18.1，已安装两个 macOS target。
+- 测试环境：复用现有 Slint MinimalSoftwareWindow 数值/事件 harness 和媒体生命周期专项，再运行 fmt、locked/offline check、严格 Clippy、完整 test/build 和文档 validators；不保存或检视应用截图。
+- 风险/待办：GUI、真实设备/录音授权/whisper-cli/远端音源及 Windows/Linux 原生验收保留。
+- 开工判定：允许开工。
+
+## 2026-10-12 标准录音自动桥接范围复核
+
+- 范围：用户选择 CLI 自行录音并要求标准化；从手动菜单收口改为标准 source-output/non-corked 自动启停，增加 worker/audio owned 配置与设备租约。
+- 环境：沿用 Rust 2024/MSRV 1.92.0、Slint 1.18.1、CPAL 0.17.3、Tokio/russh 锁定依赖，manifest/lock/toolchain/CI 不变。
+- 证据：6 项标准录音与真实 POSIX helper fixture、2 项主/独立数值布局回归通过；完整 Cargo 与平台门禁进行中。
+- 缺口：远端 Linux 需要用户级 PulseAudio/pipewire-pulse 与 pactl，Windows/Linux 原生 SDK 和真实麦克风/GUI 由目标环境验收。
+
+## 2026-10-12 标准录音自动桥接环境验证完成
+
+- 运行环境：Rust 2024/MSRV 1.92.0、锁定 Slint/CPAL/Tokio/russh 和现有 CI 保持；本机 Rust/Cargo 1.97.1 验证完成。
+- 验证：fmt、locked/offline check、严格 all-target Clippy、完整 754 项测试、默认 build；两个 macOS target 的 CI 同款 check/严格 Clippy/build 和架构检查通过，Intel 沿用已核对的本地 Skia file URL。未运行非原生 Intel 测试。
+- 文档/打包：549 条译文及隔离生成一致、10 条相对链接、plist、skill/tracker/diff 通过；`target/automatic-audio-preview/AxSSH.app` 用途文案/ad-hoc 严格签名通过，默认程序为 `target/debug/ax_ssh`。
+- 缺口：未启动 GUI 或真实麦克风、未连接真实远端；Linux 远端需标准 PulseAudio/pipewire-pulse/pactl，Windows/Linux 原生 SDK 与实际设备链路仍由目标环境验收。
+- 开工判定：施工与自动门禁完成，用户实机验收保留。

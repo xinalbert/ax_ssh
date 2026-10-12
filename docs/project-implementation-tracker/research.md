@@ -545,3 +545,12 @@
 - 关键结论：Unix socket 使用 WebSocket HTTP Upgrade；初始化后可按 threadId 和 turnId 发送 turn/interrupt，thread/read 的 runtime status 可确认是否 idle。实际中断请求成功，原会话由 active 变为 idle；其遗留本项目构建进程另行按已核实的 PID 和 cwd 停止。
 - 对实施计划的影响：WI2 的最终验证由本会话独立执行，保留既有已落盘源码。工程实现本身不依赖外部资料，不改变依赖或平台接口版本。
 - 未解决问题：无；用户视觉与 Windows/Linux 原生验收仍按 WI3 保留。
+
+## 2026-10-12 标准系统录音请求与按需 SSH 音频
+
+- 检索问题：如何让任意使用系统音频接口的 CLI 触发采集，避免匹配某个 CLI 的命令或显示文本。
+- 检索原因：用户明确要求 CLI 自动调用及标准化，现有手动媒体行和连续采集不符合该要求。
+- 来源列表：[PulseAudio FAQ](https://wiki.freedesktop.org/www/Software/PulseAudio/FAQ/)；[PulseAudio stream/source 定义](https://github.com/pulseaudio/pulseaudio/blob/master/src/pulse/def.h)；[pactl 官方实现](https://github.com/pulseaudio/pulseaudio/blob/master/src/utils/pactl.c)；[PipeWire Pipe Source](https://pipewire.pages.freedesktop.org/pipewire/page_pulse_module_pipe_source.html)。
+- 关键结论：Pulse 客户端使用 PULSE_SOURCE 或默认系统音源；录音流有 source 与 corked 状态；pipe-source 支持固定 PCM/FIFO。以所属音源的非暂停录音流为需求边界，避免用整个设备 RUNNING 状态推断用户录音。音频接口能力不等于某个 CLI 已实现转写。
+- 对实施计划的影响：Slint 移除媒体手动入口；本地 CLI 使用原生 OS 输入，Linux SSH 会话准备标准虚拟音源并监听录音需求，只有请求期间采集，有界 PCM 与可观察清理继续由 worker 所有。
+- 未解决问题：真实 OS 录音权限、远端 Pulse/PipeWire、ALSA default 路由和多平台设备验收需用户环境；直接使用硬件设备或不支持音频接口的 CLI 不属于虚拟音源能力。

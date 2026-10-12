@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：主窗口/独立窗口共用图标、macOS 原生标题栏外观桥接与 SFTP 右键重命名；复用现有 Slint/AppKit、覆盖层和 SFTP worker 架构，无依赖或 CI 变化。
+- 当前环境范围：终端手动媒体入口撤除、标准录音流按需 SSH 音频桥接及空闲网格布局；复用 CPAL/Tokio/russh，无依赖、工具链或 CI 变化。
 
 ## 运行环境
 
@@ -13,7 +13,9 @@
 
 ## 测试环境
 
-- 本轮窗口图标与右键重命名的最终 Slint 重编、2 项重命名目标回归、fmt、locked/offline check、严格 all-target Clippy、库/应用全量测试（应用 396 项）和默认 build 全部通过。ARM64/Intel macOS 的 CI 同款 check/严格 Clippy/build 及 Mach-O 架构核对通过；562 条翻译、10 条相对链接与 skill/tracker/diff 通过。当前程序为 `target/debug/ax_ssh`，两个架构分别位于 `target/<macOS-target>/debug/ax_ssh`。
+- 当前标准录音自动桥接：fmt、locked/offline check、严格 all-target Clippy、完整测试 754 项（356 library + 398 binary，Doc tests 0）通过；含 7 项标准音频回归、主/独立窗口 2 项数值布局回归。两个 macOS target 的 CI 同款 check/严格 Clippy/build 完成，未运行非原生 Intel 测试；默认 debug 程序 `target/debug/ax_ssh` 及两个目标程序已构建。
+- 当前 ARM64 预览：`target/automatic-audio-preview/AxSSH.app`，原生 Mach-O 架构、麦克风用途声明、ad-hoc 签名及严格签名验证通过；未启动 GUI、未打开真实麦克风、未连接真实远端。549 条翻译与隔离重建一致，skill/tracker/相对链接/diff 已通过。
+- 前轮窗口图标与右键重命名的最终 Slint 重编、2 项重命名目标回归、fmt、locked/offline check、严格 all-target Clippy、库/应用全量测试（应用 396 项）和默认 build 全部通过。ARM64/Intel macOS 的 CI 同款 check/严格 Clippy/build 及 Mach-O 架构核对通过；562 条翻译、10 条相对链接与 skill/tracker/diff 通过。当前程序为 `target/debug/ax_ssh`，两个架构分别位于 `target/<macOS-target>/debug/ax_ssh`。
 - 本轮 Intel Skia 下载 HTTP/2 失败及 googlesource 超时后，已核对完整本机归档的 tag 0.153.3 与 x86_64/ganesh-gl-jpegd-jpege-metal-pdf key，使用临时 SKIA_BINARIES_URL=file URL 完成目标门禁；不修改依赖、工具链或 CI。没有运行非原生 Intel 测试，Windows/Linux 与 GUI/真实远端仍待验收。
 - 前轮大小设置代码已通过 743 项全量测试（349 library + 394 binary，24 项专项）、fmt、locked/offline check、严格 all-target Clippy 和 native ARM64 build，Slint 已重编；562 条翻译、30 条相对链接、skill/tracker/diff 通过。该轮 Intel/Windows/Linux 原生构建和 GUI/真实远端未运行。
 - 前轮系统关联外部编辑代码已通过 737 项全量测试（345 library + 392 binary，18 项专项）、格式、locked/offline check、严格 all-target Clippy，Slint 已重编译；559 条翻译、30 条相对文档链接与 skill/tracker/diff 检查通过。两个 macOS target 的 CI 同款 check/严格 all-target Clippy/build 和 Mach-O 检查全部通过；真实系统关联/GUI/远端及 Windows/Linux 原生验证仍待完成。
@@ -44,7 +46,7 @@ git diff --check
 ## 外部依赖
 
 - Slint 1.18.1、Tokio 1、russh 0.64.1、russh-sftp 3.0.1、`libmudtelnet-rs` 2.0.10 等由 `Cargo.toml`/`Cargo.lock` 约束；`russh` 的 RSA feature 仍固定 `rsa 0.10.0-rc.18`。
-- 媒体依赖：arboard 3.6.1、固定 CPAL 0.17.3（保持 macOS 11 部署范围）、rubato 0.16.2、hound 3.5.1；复用 image PNG。Linux 构建需要 `libasound2-dev`，CI/release 和双语开发说明已补齐。远端需用户级 PulseAudio/pipewire-pulse 与 pactl；本机 whisper-cli/模型需配置。
+- 媒体依赖：arboard 3.6.1、固定 CPAL 0.17.3（保持 macOS 11 部署范围）、rubato 0.16.2、hound 3.5.1；复用 image PNG。Linux 构建需要 `libasound2-dev`，CI/release 和双语开发说明已补齐。远端自动桥接需用户级 PulseAudio/pipewire-pulse 与 pactl；CLI 自行处理转写，无需 AxSSH 的 whisper-cli/模型。
 - Linux Release runner 固定安装 cargo-deb 3.7.0 和 dpkg-dev；Cargo metadata 是 Debian 安装清单的唯一来源，保留自动运行库依赖发现。
 - 本机 cargo-deb 3.7.0 已安装；默认 Python 3.10.20 运行仓库脚本，打包 fixture 使用本机 Python 3.13 的 tomllib。
 - 已锁定的 regex 1.13.1 和 url 2.5.8 已提升为直接依赖，url 声明 MSRV 1.63；不升级 crate 或工具链。已核对官方 regex API、rust-url、OpenTelemetry/syslog 等级及 HTTP 标准与访问日志格式。
@@ -58,6 +60,7 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-10-12：终端媒体按需显示施工预检通过；已核对 Cargo/lock/build.rs/CI、Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0 与 Slint 1.18.1。最终数值回归与 Cargo 门禁待实现后执行。
 - 2026-10-12 00:01 +0800：窗口图标与右键重命名施工及本机门禁完成，两个 macOS 架构检查/严格 Clippy/构建通过；Intel 使用匹配本机 Skia 归档恢复下载失败，不运行其非原生测试。未改依赖、工具链或 CI，GUI/真实远端和 Windows/Linux 验收保留。
 - 2026-10-11 23:07 +0800：窗口动作图标施工预检通过；已核对 Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1 与原生 CI 命令，允许开工。本轮自动门禁待实现后执行。
 - 2026-10-11 19:23 +0800：远程编辑上限改为 Settings > SFTP 可配置（1–64 MiB/default 4，schema v36）；743 项测试及完整本机 Cargo 门禁通过，当前新程序为 `target/debug/ax_ssh`。
