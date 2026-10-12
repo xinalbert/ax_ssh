@@ -71,6 +71,32 @@ jobs:
       - name: Test release helper scripts
         run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
 
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage report
+        run: cargo llvm-cov --locked --workspace --lcov --output-path lcov.info
+      - name: Upload coverage reports to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
+
   msrv:
     name: MSRV
     runs-on: ubuntu-22.04

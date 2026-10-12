@@ -34,6 +34,14 @@ Offline commands require the dependencies in `Cargo.lock` to be present in the
 local Cargo cache. Remove `--offline` when the cache must be populated from the
 registry.
 
+The CI coverage job runs an instrumented test suite on Ubuntu with
+`cargo-llvm-cov` and uploads the resulting `lcov.info` report to Codecov when the
+`CODECOV_TOKEN` secret is configured. Add the repository's Codecov token as a
+GitHub Actions secret under Settings > Secrets and variables > Actions. Upload
+is skipped when the secret is unavailable, as on pull requests from forks; the
+coverage report is still generated. This job is separate from the cross-platform
+build matrix and creates one coverage upload.
+
 ## Renderer selection
 
 AxSSH enables Slint's Skia and software renderers. **Settings > Appearance >

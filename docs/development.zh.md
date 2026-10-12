@@ -32,6 +32,12 @@ git diff --check
 离线命令要求本机 Cargo 缓存中已有 `Cargo.lock` 锁定的依赖；需要从 registry 填充
 缓存时移除 `--offline`。
 
+CI 的 coverage job 在 Ubuntu 上运行插桩测试，并使用 `cargo-llvm-cov` 生成
+`lcov.info`；配置了 `CODECOV_TOKEN` secret 时才上传到 Codecov。在仓库 Settings > Secrets and
+variables > Actions 中添加名为 `CODECOV_TOKEN` 的 Codecov repository token。fork 发起的 PR
+拿不到该 secret，因此会跳过上传，但仍会生成覆盖率报告。该 job 与跨平台构建矩阵分开，每次 CI
+只上传一份覆盖率报告。
+
 ## Renderer 选择
 
 AxSSH 同时启用 Slint 的 Skia 和 software renderer。**Settings > Appearance >
