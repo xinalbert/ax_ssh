@@ -3,6 +3,7 @@
 # AxSSH
 
 [![CI](https://img.shields.io/github/actions/workflow/status/xinalbert/ax_ssh/ci.yml?branch=master&label=CI)](https://github.com/xinalbert/ax_ssh/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/xinalbert/ax_ssh/branch/master/graph/badge.svg)](https://app.codecov.io/gh/xinalbert/ax_ssh)
 [![Latest release](https://img.shields.io/github/v/release/xinalbert/ax_ssh)](https://github.com/xinalbert/ax_ssh/releases/latest)
 [![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
