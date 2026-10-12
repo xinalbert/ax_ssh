@@ -554,3 +554,13 @@
 - 关键结论：Pulse 客户端使用 PULSE_SOURCE 或默认系统音源；录音流有 source 与 corked 状态；pipe-source 支持固定 PCM/FIFO。以所属音源的非暂停录音流为需求边界，避免用整个设备 RUNNING 状态推断用户录音。音频接口能力不等于某个 CLI 已实现转写。
 - 对实施计划的影响：Slint 移除媒体手动入口；本地 CLI 使用原生 OS 输入，Linux SSH 会话准备标准虚拟音源并监听录音需求，只有请求期间采集，有界 PCM 与可观察清理继续由 worker 所有。
 - 未解决问题：真实 OS 录音权限、远端 Pulse/PipeWire、ALSA default 路由和多平台设备验收需用户环境；直接使用硬件设备或不支持音频接口的 CLI 不属于虚拟音源能力。
+
+## 2026-10-12 内嵌多语言与类似工具标准
+
+- 时间：2026-10-12 14:14 +0800
+- 检索问题：如何新增界面语言而尽量不增加运行时加载、解析或常驻任务？类似桌面工具如何分发翻译？
+- 检索原因：用户明确要求低运行负担并对照同类工具，再授权实施。
+- 来源列表：[Slint 翻译指南](https://docs.slint.dev/latest/docs/slint/guide/development/translations/)；[Slint 语言选择](https://docs.slint.dev/latest/docs/rust/slint/fn.select_bundled_translation)；锁定 Slint 1.18.1 的 compiler/core translations.rs；[GNOME Console Gettext](https://github.com/GNOME/console/blob/main/po/meson.build)；[Qt 翻译](https://doc.qt.io/qt-6/i18n-source-translation.html)；[VS Code language packs](https://code.visualstudio.com/docs/configure/locales)。
+- 关键结论：Slint 官方内嵌在构建期解析 PO 并生成静态数组，运行时按 language index 读取；GNOME 使用 Gettext 目录，Qt 加载 QTranslator，VS Code 安装语言扩展。无可直接比较的统一性能 benchmark，不声称零 RSS 或跨工具速度排名。
+- 对实施计划的影响：沿用 bundled translations、不启用 Gettext feature；PO 译文统一来源，维护期生成 search arrays；新增 ja，保留事务/locale 同步与静态 UI 边界，并测量 binary 增量。
+- 未解决问题：用户的日语用词、实际字体/窄窗口和 GUI 焦点验收；Windows/Linux 原生 CI；二进制分段实际驻留内存没有测量。

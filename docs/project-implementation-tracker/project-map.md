@@ -8,7 +8,7 @@
 ## 索引范围
 
 - 根目录：`<repo-root>`
-- 覆盖：`AGENTS.md`、`.agents/`、`LICENSE`、`THIRD_PARTY_NOTICES.md`、`Cargo.toml`、`Cargo.lock`、`vendor/`、`build.rs`、`src/`、`ui/`、`translations/`、`assets/`、`packaging/`、`scripts/`、`docs/`、`.github/workflows/`、根 README 和 `.gitmodules`。
+- 覆盖：`AGENTS.md`、`.agents/`、`LICENSE`、`THIRD_PARTY_NOTICES.md`、`Cargo.toml`、`Cargo.lock`、`vendor/`、`build.rs`、`build/`、`src/`、`ui/`、`translations/`、`assets/`、`packaging/`、`scripts/`、`docs/`、`.github/workflows/`、根 README 和 `.gitmodules`。
 - 排除：`.git/`、`target/`、`third_package/axshell` 内部文件和本机 Cargo 缓存。
 
 ## 目录地图
@@ -18,7 +18,7 @@
 | `LICENSE`、`THIRD_PARTY_NOTICES.md` | AxSSH GPL 主许可证与独立第三方许可边界 | 修改授权、分发或打包声明时 | 原创软件使用 GPL-3.0-only；Slint/OFL 字体/MIT vendor/平台文件图标依赖保留各自声明 |
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 audio/media/config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token（含 icons 共用 SVG） | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
-| `translations/` | 构建时内嵌的 Slint 界面翻译目录 | 增加或修改静态用户可见文案、locale 或语言选择时 | 当前完整目录为 `zh-CN`，`scripts/build_zh_catalog.py` 保留与现行 UI/目录一致的审核译文，`scripts/check_translations.py` 检查缺失/过期/占位符；远端内容、用户值、日志与运行时技术错误详情不进入翻译键 |
+| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 665 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 328 个系统图标、178 个系统/平台条目；`ui/folder/` 另存连接分组的 Iconify 文件夹 UI 资源，不计入系统图标清单 |
@@ -48,7 +48,7 @@
 | `scripts/generate_release_highlights.py` 与 `scripts/test_generate_release_highlights.py` | Git-backed Release Highlights 生成和回归 | `generate_release_body`、`render_release_body`、临时 annotated tags | 修改发布描述分类、比较/commit 链接、tag range 或跟踪提交排除时；只依赖 Python 标准库和已检出 Git 历史 |
 | `assets/ion/terminal_icon.svg` | AxSSH Terminal 图标的 canonical 矢量源副本 | 更换或重新生成各平台位图/容器时 | 所有 PNG、ICO、ICNS 从此 SVG 生成，保持 RGBA 透明背景 |
 | `assets/os-icons/{README.md,README.zh.md,manifest.json,search-coverage.json,preview.html,validation.json}` | 系统/平台图标目录、来源、检索覆盖/缺口和离线预览/检查 | kind、preferred_asset、source_class、variant、text_kind、SHA-256 | 选图时核对官方/社区来源、专用系统/通用品牌和许可；selfh.st 按图形明暗，Skill Icons 按徽章背景，官网原生变体另有说明 |
-| `build.rs` | Slint 编译入口 | `slint_build::compile` | UI build 失败或新增入口 |
+| `build.rs`、`build/languages.rs` | 单一 Slint 编译入口与语言注册表生成 | `slint_build::compile_with_config`、`languages::generate` | UI build 或语言元数据失败、新增内嵌语言；目录元数据只在构建期读取 |
 | `src/main.rs` | 进程入口 | `LoggingGuard`、`app::run` | 启动、退出和进程级生命周期 |
 | `src/audio.rs` / `src/audio/transcription.rs` | 跨平台音频采集、格式与本机转写 | `AudioFormat`、`capture`、`PcmConverter`、`transcribe_pcm` | 录音需求先于设备访问、共享物理采集租约、固定回调 block/有界队列、rubato 抗混叠/尾部排空、TCC；旧 hound WAV + whisper-cli argv/超时/取消，无 Slint/SSH handles |
 | `src/media.rs` | 剪贴板图片与私有临时媒体 | `encode_clipboard_png`、`PrivateMediaFile` | 4096² / 16 MiB PNG，独占创建、权限与只清理自有文件 |
@@ -107,6 +107,7 @@
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/source-tracking.md` | 该主题的来源登记 | source/status/evidence use 表 | 记录官方来源、本机锁定 API 和 AxShell 参考边界 |
 | `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SessionProfile::validate`、`RendererPreference`、`SoftwarePresentationMode`、`TerminalSemanticColors`、`SessionStore::validate`、`ConfigStore`、`MAX_CONFIG_FILE_BYTES`、profile/store 共享上限 | schema v36 增加远程编辑上限 remote_edit_max_file_mib（默认 4 MiB，1–64 MiB）；schema v34 增加配置文件专用的 `settings.appearance.system_icons_follow_theme`，默认 false 保留系统图标原色，Settings 预览/保存保留该值；schema v30 增加最多 8 条经过校验的 workspace 路径 MRU；旧 `sessions.json` 通过默认空列表兼容，历史只保存非敏感路径，不保存 snapshot/凭据；schema v29 保存默认 `encrypted-vault` 和应用私有自动解锁标记（兼容旧 keyring 字段名）；schema v27 保存 macOS CPU `layer-images`/`damage-backing-store` 呈现偏好，缺失/无效值默认使用 damage backing store，显式 `layer-images` 为兼容性回退；schema v25/v26 保存紧凑渲染、行 cache 和刷新上限；旧 `terminal_partition_strategy` JSON 字段作为未知字段忽略；schema v24 保存 `automatic`/`gpu`/`software` renderer 偏好；两个启动偏好只在首个 Slint window/surface 前应用；profile/store 上限、私有原子写入和 SSH-only 安全字段隔离不变 |
 | `src/config/workspace.rs` | 版本化、有界 workspace snapshot DTO 与 Tab/window/PaneTree 引用校验 | `WorkspaceSnapshot`、`WorkspaceTabSnapshot`、`WorkspaceWindowSnapshot`、`PaneNodeSnapshot`、`WindowPlacement` | 独立 `workspace.json` 或用户选定文件的运行时布局/文本路径边界；不保存 worker、live handle、凭据或临时 host-key 状态 |
+| `src/config/language.rs`、`src/config/language/tests.rs` | 静态语言策略与无 UI 的 locale 回归 | `UiLanguage`、`resolve_locale_in`、构建期注册表 include | 稳定 locale 配置、旧值兼容、精确/script/region/语言/英文回退；无 Slint、目录扫描、PO 解析或 worker |
 | `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | 显式选择时访问 Keychain/Credential Manager/Secret Service；默认自动解锁使用权限受限的应用私有文件，并兼容一次性旧 keyring 迁移；另含 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs`、`src/terminal/model.rs`、`src/terminal/render.rs`、`src/terminal/selection.rs` 与 `src/terminal/input.rs` | 有界终端 DTO、模型生命周期/scrollback、增量可见行 snapshot、cell 样式/光标、选区映射、按键与 mouse/focus reporting 编码 | `TerminalModel`、`TerminalSnapshot`、`TerminalStyledLine`、`TermDamage`、`selection_text`、`size`、`resize`、`encode_focus_event`、`TerminalMouseEvent`、`TerminalMouseReporting` | shell 输出原样解析、主屏 reflow、soft-wrap/hard-break 选区提取、规范化尺寸比较、光标和宽字符安全映射；`cursor_visibility_requested` 无损读取 `CSI ?25l/h` 可见性供 application 合并，不触发 parser 缓冲；`CSI ?2026h/l` 才在结束或上游 deadline 前进行协议级同步输出，首帧也不发布局部内容；协议应答经单个有界队列回写原 transport，覆盖 DSR、动态 OSC 颜色、`CSI 14 t` 文本区像素和 `CSI 16 t` 单元像素查询；鼠标按程序选择默认 X10、1005、1015、1006 或 1016 格式，1016 使用实测物理文本区坐标；DEC 1004 仅在实际启用时生成固定 `CSI I`/`CSI O`。快照解析终端局部 OSC 颜色、光标形状/闪烁及 SGR 隐藏/单/双/曲/点/虚线样式，并复用稳定 `Arc` 行 identity，以 64-bit revision 标记变更；application-keypad 不再作为当前输入能力。 |
 | `src/terminal_input.rs` | 跨 transport 的有界 motion 入队策略 | `try_queue_tokio_motion`、`try_queue_sync_motion` | motion 队列满时静默丢弃中间帧，closed/disconnected 仍返回错误；Tokio command queue 为 press/release 等可靠事件保留一个槽位 |
@@ -180,7 +181,7 @@
 - 修改平台顶部菜单：隐藏快捷键菜单和统一动作路由在 `ui/app.slint`，Windows/Linux 可见菜单与窗口控件在 `ui/components/desktop-menu-titlebar.slint`；配置字符串到 `slint::Keys` 的唯一转换在 `src/app/input.rs`，macOS 标准应用菜单 action/key equivalent 在 `src/app/macos_window.rs`。File Import/Export 和 Terminal Edit command 通过 `WorkspaceShell` 公开函数进入局部 owner；Terminal Edit 只在 Terminal Tab 启用并由 focused `TerminalPane` 执行。快捷键、安全状态或工作区 Tab model 重建后必须扫描当前 AppKit menu tree 并幂等重绑 Settings/About，必要时短暂重试。
 - 修改会话管理：`src/config.rs` 持久化 Group/profile，`src/app/workspace.rs` 执行 CRUD、Duplicate、脱敏 clipboard JSON 复制/导入与凭据事务，`src/app/state.rs` 只持有编辑 draft identity，`src/app/view.rs::session_group_rows` 生成嵌套的 Group/遮蔽服务器 model；Group 展开与当前 Group/Server 选择身份留在 `ui/components/session-navigation.slint`，不持久化或发送 transport。Slint 入口在 `ui/workspace-shell.slint`、`ui/components/{flat-action-menu,flat-text-input,session-navigation,session-management-dialog,overlay-host}.slint` 和 `ui/session-editor.slint`。导入上限、UUID 重分配和凭据/主机指纹清除不得下放到 Slint。
 - 修改主题：先改 `src/config.rs` 的领域/迁移/对比度保护，再同步 `src/app/{settings_bridge,view,terminal_bridge}.rs`、`ui/{app,settings,theme}.slint` 和 Appearance 的共享 `ThemePaletteEditor`；系统跟随只能留在 Slint，不能把平台配色写进配置。需要精确弹层配色的选择控件统一使用 `ui/components/themed-combo-box.slint`，边框/分隔线/焦点/hover/selected 使用 `Theme` 状态 token。
-- 修改界面语言：先改 `src/config/settings.rs` 的稳定 `UiLanguage` 与迁移，再同步 `src/app/{settings_bridge,view/settings}.rs`、`ui/` 的 `@tr`/稳定 selector index、`translations/zh-CN/` 和 `scripts/{build_zh_catalog,check_translations}.py`；语言必须先持久化再在 UI 线程切换，普通 Settings preview/save 不得覆盖已提交语言。
+- 新增界面语言：先读 `translations/README.zh.md`，加入 `<locale>/language.json` 与 `LC_MESSAGES/ax_ssh.po`，补全 UI/search 译文并运行维护脚本。`build/languages.rs` 自动生成注册表，`src/config/language.rs` 负责稳定 locale/旧值兼容与 script/region 匹配，`src/app/{settings_bridge,view/settings}.rs` 将静态清单映射到 `ui/` model 和临时索引；无需逐语言改 Rust/Slint。语言必须先持久化再在 UI 线程切换，普通 Settings preview/save 不得覆盖已提交语言。
 - 修改应用图标资源：先检查 `assets/ion/terminal_icon.svg`，再从该源生成 `assets/ion/terminal_icon_all_formats/` 中的 PNG、ICO 和 ICNS；窗口入口在 `ui/app.slint`，Windows resource 在 `packaging/windows/axssh.rc`，macOS Dock/Bundle 在 `src/app/macos_window.rs` 与 `packaging/macos/`，Linux desktop/deb 安装表在 `packaging/linux/axssh.desktop` 与 `Cargo.toml`。
 - 修改 GitHub 发布或版本：先检查 `Cargo.{toml,lock}`、`packaging/macos/Info.plist`、`scripts/{release_version,generate_release_highlights}.py`、对应 Python 回归和 `.github/workflows/{ci,release}.yml`；发布者先用版本脚本同步并提交元数据，再推送 annotated `YYYY-MM-DD[-N]` tag，Release 在 build 前再次校验 tag 和三种包元数据一致。保持 CI 仅在默认分支按 target 写 cache、Release 仅读对应 cache 的边界，发布 job 始终重新执行 `cargo build --release --locked`，并保留字体、图标和独立许可证声明。Highlights 只读已检出 tag 历史、作为 `body_path` 前缀，必须继续保留 GitHub 自动说明。不得把 `third_package/axshell` 加入 checkout、缓存、构建或发行物。
 - 修改许可证或发行声明：先检查 `LICENSE`、`THIRD_PARTY_NOTICES.md` 和 `Cargo.toml` 的 SPDX/安装表，再同步 `ui/settings/about.slint`、根 README、`docs/{architecture,development}*.md` 与平台打包脚本；不得用根 GPL 覆盖 OFL 字体或 MIT vendor 的独立声明。
@@ -350,3 +351,6 @@
 
 - 2026-10-11：新增外部编辑副本/监听与 guarded 字节下载/原子发布模块及回归；移除内置 SFTP 文本框和文本回调，Slint 只发布路径/状态。
 - 2026-10-11：主/独立窗口动作图标改用 `ui/icons/` 与 Theme 共用源；SFTP 重命名从顶部迁入远端行菜单，经 `SftpRenameDialog`/OverlayHost 捕获原始 Tab/路径和名称草稿，应用层复核目标后发送既有 worker 操作。
+- 2026-10-12：增加 build/languages.rs 和 config/language.rs 路由；目录元数据自动生成语言清单，Settings 使用临时索引，配置保存稳定 locale，系统匹配支持 script/region 和繁体回退。
+- 2026-10-12：新增 de/es/fr/ko/pt-BR/zh-TW 六种语言，各 547 UI + 118 search keys；繁体地区匹配 zh-TW，葡萄牙语跨地区默认巴西目录；搜索表与 headless 选取测试覆盖全部注册语言。
+- 2026-10-12：新增 ru/uk/en-GB 完整目录；uk 为乌克兰语，英国使用 en-GB；英式显示拼写保持稳定英文路由，en-US/en-AU 等仍选择源英文。
