@@ -1161,3 +1161,27 @@
 - 文档/打包：549 条译文及隔离生成一致、10 条相对链接、plist、skill/tracker/diff 通过；`target/automatic-audio-preview/AxSSH.app` 用途文案/ad-hoc 严格签名通过，默认程序为 `target/debug/ax_ssh`。
 - 缺口：未启动 GUI 或真实麦克风、未连接真实远端；Linux 远端需标准 PulseAudio/pipewire-pulse/pactl，Windows/Linux 原生 SDK 与实际设备链路仍由目标环境验收。
 - 开工判定：施工与自动门禁完成，用户实机验收保留。
+
+## 2026-10-12 22:15 +0800 覆盖率测量施工预检
+
+- 日期：2026-10-12
+- 变化摘要：刷新当前范围到实际控制器/worker 覆盖率；核实两个 macOS target 均已安装，识别缺失的 coverage 测量工具。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/project-implementation-tracker/current.md`。
+- 更新后的命令或环境：继续 Rust 2024/MSRV 1.92.0、Slint 1.18.1、russh 0.64.1 和 locked/offline；拟补齐 cargo-llvm-cov/llvm-tools-preview，不变更项目依赖。
+- 验证结果：本机 Rust/Cargo 1.97.1、fmt 1.9.0、Clippy 0.1.97、Python 3.10.20 和两个 macOS target 可用；真实设备/系统凭据不访问，覆盖率与全量测试待执行。
+
+## 2026-10-12 23:25 +0800 覆盖率工具与隔离测试环境
+
+- 日期：2026-10-12
+- 变化摘要：cargo-llvm-cov 0.9.1 与匹配 LLVM tools 安装完成；Skia 使用本机匹配归档，原始 770 项默认并发基线通过。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/coverage.md`、`docs/coverage.zh.md`、`docs/development.md`、`docs/development.zh.md`。
+- 更新后的命令或环境：cargo llvm-cov --locked --offline --workspace --lcov；Slint event-loop proxy 与 logger/panic hook 测试用子进程隔离，profile 由子进程继承；不更改 Rust/MSRV/依赖/CI。
+- 验证结果：工具归档已核对工具链 manifest SHA-256；初始 check、基线和设备/凭据/日志回归通过，严格 Clippy 与文档校验通过；最终全量/coverage 和原生 CI 参数验证正在执行。
+
+## 2026-10-12 23:52 +0800 覆盖率最终环境与验证
+
+- 日期：2026-10-12
+- 变化摘要：本轮无依赖/MSRV/工具链/CI 变更；本机 coverage 测量与隔离测试工具已配置并验证。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/coverage.md`、`docs/coverage.zh.md`、`docs/project-implementation-tracker/current.md`。
+- 更新后的命令或环境：同一 Rust 1.97.1/cargo-llvm-cov 0.9.1/native ARM64；匹配的本机 Skia 归档仅通过临时环境变量使用；保留 locked/offline 和 CI 原有 target 矩阵。
+- 验证结果：普通/插桩均默认并发 799 项、fmt/check/严格 all-target Clippy、ARM64 CI 同款 check/Clippy、Markdown/skill/tracker/diff 全通过；canonical src 覆盖率 57.96% -> 65.78%，HTML/LCOV/JSON 已生成。Intel/Windows/Linux 和线上 Codecov 待原生 CI；真实设备、系统凭据和 GUI 未访问。

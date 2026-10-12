@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：终端手动媒体入口撤除、标准录音流按需 SSH 音频桥接及空闲网格布局；复用 CPAL/Tokio/russh，无依赖、工具链或 CI 变化。
+- 当前环境范围：应用控制器与 transport worker 的行为覆盖率提升；文件/设备/凭据边界隔离，保持 CPAL/Tokio/russh 和 CI target 矩阵。
 
 ## 运行环境
 
@@ -13,6 +13,8 @@
 
 ## 测试环境
 
+- 2026-10-12 覆盖率环境：本机 rustc/Cargo 1.97.1、rustfmt 1.9.0、Clippy 0.1.97、Python 3.10.20，ARM64/Intel macOS target 均可用；已安装 cargo-llvm-cov 0.9.1 与匹配 LLVM tools，后者归档 SHA-256 与工具链 manifest 一致。原生基线默认并发 770 项通过，最终普通/插桩 799 项通过。Skia 下载失败使用经核验的同版本/架构/特性本机归档恢复；项目依赖/工具链/CI 未改。
+- 最终覆盖率验证：386 library + 413 binary（799）在普通/插桩模式均默认并发通过；fmt、locked/offline check、严格 all-target Clippy、CI 同款 ARM64 check/Clippy 通过。canonical src 从 57.96% 升至 65.78%；报告在 `target/coverage/`。Intel/Windows/Linux 本轮未验证，线上 Codecov 待原生 CI，真实设备/keyring/GUI 未访问。
 - 当前标准录音自动桥接：fmt、locked/offline check、严格 all-target Clippy、完整测试 754 项（356 library + 398 binary，Doc tests 0）通过；含 7 项标准音频回归、主/独立窗口 2 项数值布局回归。两个 macOS target 的 CI 同款 check/严格 Clippy/build 完成，未运行非原生 Intel 测试；默认 debug 程序 `target/debug/ax_ssh` 及两个目标程序已构建。
 - 当前 ARM64 预览：`target/automatic-audio-preview/AxSSH.app`，原生 Mach-O 架构、麦克风用途声明、ad-hoc 签名及严格签名验证通过；未启动 GUI、未打开真实麦克风、未连接真实远端。549 条翻译与隔离重建一致，skill/tracker/相对链接/diff 已通过。
 - 前轮窗口图标与右键重命名的最终 Slint 重编、2 项重命名目标回归、fmt、locked/offline check、严格 all-target Clippy、库/应用全量测试（应用 396 项）和默认 build 全部通过。ARM64/Intel macOS 的 CI 同款 check/严格 Clippy/build 及 Mach-O 架构核对通过；562 条翻译、10 条相对链接与 skill/tracker/diff 通过。当前程序为 `target/debug/ax_ssh`，两个架构分别位于 `target/<macOS-target>/debug/ax_ssh`。
@@ -60,6 +62,8 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-10-12 23:52 +0800：行为覆盖率施工完成；最终普通/插桩 799 默认并发、locked/offline Cargo 门禁和 ARM64 CI 参数通过，canonical src 57.96% -> 65.78%；报告、地图、双语说明与实施记录已同步，Linux Codecov 及真实平台/设备验收保留。
+- 2026-10-12 22:15 +0800：核对 manifest/lock/build.rs/CI/工具链和两个 macOS target；允许按 plan-first 开工。未知/不匹配主机密钥默认拒绝，测试不访问真实设备/keyring，不保存明文凭据；本机 coverage 与 Linux Codecov 分开报告。
 - 2026-10-12：终端媒体按需显示施工预检通过；已核对 Cargo/lock/build.rs/CI、Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0 与 Slint 1.18.1。最终数值回归与 Cargo 门禁待实现后执行。
 - 2026-10-12 00:01 +0800：窗口图标与右键重命名施工及本机门禁完成，两个 macOS 架构检查/严格 Clippy/构建通过；Intel 使用匹配本机 Skia 归档恢复下载失败，不运行其非原生测试。未改依赖、工具链或 CI，GUI/真实远端和 Windows/Linux 验收保留。
 - 2026-10-11 23:07 +0800：窗口动作图标施工预检通过；已核对 Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1 与原生 CI 命令，允许开工。本轮自动门禁待实现后执行。

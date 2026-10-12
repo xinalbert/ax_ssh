@@ -35,6 +35,12 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
+| `src/app/behavior_tests.rs` | 无窗口 callback 到控制器/真实 Telnet worker 回归 | `Harness`、`isolated` | 进程级 Slint proxy 隔离、UI 状态和终端字节链路；不截图 |
+| `src/app/connection_monitor/behavior_tests.rs`、`src/app/connection/direct/behavior_tests.rs` | 实际 monitor 事件流与 completion 回归 | `Fixture`、`spawn_session_monitor`、`spawn_direct_monitor` | 安全重试、SFTP/延迟、旧 attempt 和断线/重连 |
+| `src/ssh/worker/behavior_tests.rs` | loopback SSH/SFTP 协议 peer 与 worker 回归 | `Peer`、`FilePeer`、`Fixture` | 显式信任快照、冲突/编辑/取消、真实 Handler 的默认拒绝 |
+| `src/audio/worker_tests.rs`、`src/serial/worker_tests.rs` | 注入设备边界的实际 worker | `CaptureSource`、`DeviceLease`、`BrokenPort` | 音频租约/取消/错误，串口背压/输入/EOF/关闭 |
+| `src/credentials/behavior_tests.rs`、`src/logging/behavior_tests.rs` | 内存凭据与隔离日志生命周期 | `MemoryKeyring`、`LoggingGuard::init_in` | 无真实 keyring、密文备份/AAD、子进程 panic/flush |
+| `docs/coverage.md`、`docs/coverage.zh.md` | 双语 coverage 复现与边界说明 | 测试边界、测量记录 | 同平台 LCOV、原生未覆盖项与 artifact 位置 |
 | `src/app/remote_edit.rs`、`src/sftp/edit.rs` 及各自 `tests.rs` | 外部编辑副本/监听和 guarded 字节回传；大小上限由 Settings > SFTP 的 remote_edit_max_file_mib 控制 | `RemoteEdit`、`read_edit_file`、`write_edit_file` | 系统关联程序、原子保存、迟到结果、冲突及副本保留 |
 | `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
 | `src/sftp/transfer/pipeline.rs` 与 `src/sftp/transfer/tests/performance.rs` | 有序分块请求窗口及模拟协议回归 | `RequestWindow`、`REQUEST_WINDOW`、`delayed_peer` | 16 × 64 KiB、短读/乱序、完整性和有界取消 |
@@ -196,6 +202,7 @@
 
 ## 刷新规则
 
+- 最近依据：2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
 - 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
@@ -257,6 +264,7 @@
 
 ## 最后更新时间
 
+- 2026-10-12 23:20 +0800：刷新 Codecov 行为覆盖测试与双语测量入口；生成报告只位于 ignored target。
 - 2026-10-12 +0800：标准录音需求驱动音频桥接、共享设备租约、取消/源清理回归与无手动媒体行路由；翻译维护脚本与当前目录一致。
 - 2026-10-11 22:58 +0800：统一主/子窗口动作图标、Theme 外观与原生标题栏映射路由。
 - 2026-10-11 19:23 +0800：schema v36、远程编辑大小设置和动态检查已完成；743 项测试及本机 ARM64 门禁通过。

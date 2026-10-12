@@ -564,3 +564,13 @@
 - 关键结论：Slint 官方内嵌在构建期解析 PO 并生成静态数组，运行时按 language index 读取；GNOME 使用 Gettext 目录，Qt 加载 QTranslator，VS Code 安装语言扩展。无可直接比较的统一性能 benchmark，不声称零 RSS 或跨工具速度排名。
 - 对实施计划的影响：沿用 bundled translations、不启用 Gettext feature；PO 译文统一来源，维护期生成 search arrays；新增 ja，保留事务/locale 同步与静态 UI 边界，并测量 binary 增量。
 - 未解决问题：用户的日语用词、实际字体/窄窗口和 GUI 焦点验收；Windows/Linux 原生 CI；二进制分段实际驻留内存没有测量。
+
+## 2026-10-12 22:15 +0800 LLVM coverage 本机复现
+
+- 时间：2026-10-12 22:15 +0800
+- 检索问题：如何复现 CI 的 LLVM/LCOV 测量并生成同平台前后报告？
+- 检索原因：本机没有 cargo-llvm-cov，测量工具及独立 target/cache 管理影响验证路径。
+- 来源列表：[cargo-llvm-cov 官方项目](https://github.com/taiki-e/cargo-llvm-cov)。
+- 关键结论：使用 cargo install cargo-llvm-cov --locked；工具依赖匹配 Rust 的 llvm-tools-preview；支持 LCOV/JSON/report 和独立 coverage target directory；no-run/report 时须防止旧 profraw 混入。
+- 对实施计划的影响：补齐工具，先测未修改源码基线，最终清理 profile 后同命令重测，输出至 target，不排除业务源码来提高比例。
+- 未解决问题：本机与 Linux Codecov 平台不同；最终 Linux 指标仍需原生 CI。
