@@ -1,5 +1,7 @@
 //! Bounded command/event worker for one authenticated SSH transport.
 
+#[cfg(test)]
+mod behavior_tests;
 mod latency;
 mod media;
 mod sftp;

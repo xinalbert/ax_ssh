@@ -1,4 +1,5 @@
 use super::*;
+use tokio::task::JoinHandle;
 
 const SERIAL_RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -38,7 +39,7 @@ pub(super) fn start_telnet_connection(
         events
     };
     refresh_workspace(&ui, &state);
-    spawn_direct_monitor(
+    let _monitor = spawn_direct_monitor(
         runtime,
         state,
         ui,
@@ -246,7 +247,7 @@ pub(super) fn start_serial_connection(
             ui.set_serial_port_options(ModelRc::new(VecModel::from(port_names)));
         });
         refresh_workspace(&ui, &state);
-        spawn_direct_monitor(
+        let _monitor = spawn_direct_monitor(
             &runtime_for_monitor,
             state,
             ui,
@@ -304,7 +305,8 @@ fn spawn_direct_monitor<E>(
     ui: slint::Weak<AppWindow>,
     attempt: DirectAttempt,
     mut events: mpsc::Receiver<E>,
-) where
+) -> JoinHandle<()>
+where
     E: Into<DirectMonitorEvent> + Send + 'static,
 {
     let DirectAttempt {
@@ -468,7 +470,7 @@ fn spawn_direct_monitor<E>(
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, protocol = protocol.source(), "direct event monitor stopped");
-    });
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -588,6 +590,9 @@ fn finish_direct_attempt(
     terminal.status = status.to_owned();
     true
 }
+
+#[cfg(test)]
+mod behavior_tests;
 
 #[cfg(test)]
 mod tests {

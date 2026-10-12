@@ -1,4 +1,5 @@
 use super::*;
+use tokio::task::JoinHandle;
 
 fn update_latency_foreground(
     state: &Arc<Mutex<AppState>>,
@@ -72,13 +73,13 @@ pub(super) fn spawn_session_monitor(
     mut credential_to_store: Option<PendingCredentialStore>,
     used_stored_credential: bool,
     target: ConnectionTarget,
-) {
+) -> Option<JoinHandle<()>> {
     let Some(ssh) = profile.ssh().cloned() else {
         error!(session_id = %profile.id, "SSH monitor received a non-SSH profile");
-        return;
+        return None;
     };
     let runtime_for_monitor = runtime.clone();
-    runtime.spawn(async move {
+    Some(runtime.spawn(async move {
         let mut terminal_event = false;
         let mut presentation =
             crate::app::terminal_presentation::TerminalPresentation::new();
@@ -889,7 +890,7 @@ pub(super) fn spawn_session_monitor(
             refresh_workspace(&ui, &state);
         }
         debug!(tab_id = %tab_id, session_id = %profile.id, "SSH event monitor stopped");
-    });
+    }))
 }
 
 fn send_remote_directory_request(
@@ -1126,6 +1127,9 @@ fn session_is_loading_stored_credential(
 }
 
 #[cfg(test)]
+mod behavior_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::app::state::SftpBrowserState;
@@ -1278,7 +1282,7 @@ mod tests {
             (exited_tab_id, following_tab_id)
         };
         let (events_tx, events_rx) = tokio::sync::mpsc::channel(1);
-        spawn_session_monitor(
+        let _monitor = spawn_session_monitor(
             &Handle::current(),
             state.clone(),
             slint::Weak::<AppWindow>::default(),

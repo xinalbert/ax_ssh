@@ -103,7 +103,7 @@ pub(super) fn start_session_worker(
     };
 
     refresh_workspace(&ui, &state);
-    spawn_session_monitor(
+    let _monitor = spawn_session_monitor(
         runtime,
         state,
         ui,

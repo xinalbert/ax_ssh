@@ -72,6 +72,8 @@ use self::terminal_render::{
     TerminalRenderSettings, TerminalRenderer,
 };
 
+#[cfg(test)]
+mod behavior_tests;
 mod connection;
 mod connection_monitor;
 mod credential_tasks;
