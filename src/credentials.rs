@@ -10,6 +10,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -35,9 +36,39 @@ const MAX_VAULT_PASSWORD_BYTES: usize = 1024;
 const VAULT_AAD_PREFIX: &[u8] = b"axssh-credential-vault:v1:";
 const VAULT_UNLOCK_FILE_BYTES: u64 = MAX_VAULT_PASSWORD_BYTES as u64;
 
-#[derive(Clone, Debug)]
+trait PasswordEntry: Send + Sync {
+    fn get_password(&self) -> keyring::Result<String>;
+    fn set_password(&self, password: &str) -> keyring::Result<()>;
+    fn delete_credential(&self) -> keyring::Result<()>;
+}
+
+impl PasswordEntry for Entry {
+    fn get_password(&self) -> keyring::Result<String> {
+        Entry::get_password(self)
+    }
+    fn set_password(&self, password: &str) -> keyring::Result<()> {
+        Entry::set_password(self, password)
+    }
+    fn delete_credential(&self) -> keyring::Result<()> {
+        Entry::delete_credential(self)
+    }
+}
+
+type EntryFactory = dyn Fn(&str) -> Result<Box<dyn PasswordEntry>> + Send + Sync;
+
+#[derive(Clone)]
 pub struct CredentialStore {
     vault_dir: PathBuf,
+    entries: Arc<EntryFactory>,
+}
+
+impl std::fmt::Debug for CredentialStore {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CredentialStore")
+            .field("vault_dir", &self.vault_dir)
+            .finish_non_exhaustive()
+    }
 }
 
 pub enum CredentialBackup {
@@ -49,6 +80,7 @@ impl CredentialStore {
     pub fn new(vault_dir: impl Into<PathBuf>) -> Self {
         Self {
             vault_dir: vault_dir.into(),
+            entries: Arc::new(|account| Ok(Box::new(Entry::new(CREDENTIAL_SERVICE, account)?))),
         }
     }
 
@@ -63,7 +95,7 @@ impl CredentialStore {
     }
 
     pub fn load_system_password(&self, session_id: Uuid) -> Result<Option<String>> {
-        let entry = system_entry(session_id)?;
+        let entry = self.system_entry(session_id)?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(Error::NoEntry) => Ok(None),
@@ -75,13 +107,13 @@ impl CredentialStore {
 
     pub fn save_system_password(&self, session_id: Uuid, password: &str) -> Result<()> {
         validate_password(password, "password")?;
-        system_entry(session_id)?
+        self.system_entry(session_id)?
             .set_password(password)
             .context("failed to save password in system credential store")
     }
 
     pub fn delete_system_password(&self, session_id: Uuid) -> Result<()> {
-        match system_entry(session_id)?.delete_credential() {
+        match self.system_entry(session_id)?.delete_credential() {
             Ok(()) | Err(Error::NoEntry) => Ok(()),
             Err(error) => {
                 Err(error).context("failed to delete password from system credential store")
@@ -259,7 +291,7 @@ impl CredentialStore {
     /// Load a pre-1.0 unlock key from the system keyring for one-time migration.
     /// New records never call this path.
     pub fn load_legacy_vault_unlock_password(&self, session_id: Uuid) -> Result<Option<String>> {
-        let entry = vault_unlock_entry(session_id)?;
+        let entry = self.vault_unlock_entry(session_id)?;
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
             Err(Error::NoEntry) => Ok(None),
@@ -269,7 +301,7 @@ impl CredentialStore {
 
     /// Remove a pre-1.0 unlock key after it has been copied to the private file.
     pub fn delete_legacy_vault_unlock_password(&self, session_id: Uuid) -> Result<()> {
-        match vault_unlock_entry(session_id)?.delete_credential() {
+        match self.vault_unlock_entry(session_id)?.delete_credential() {
             Ok(()) | Err(Error::NoEntry) => Ok(()),
             Err(error) => Err(error).context("failed to delete legacy encrypted vault unlock key"),
         }
@@ -349,6 +381,16 @@ impl CredentialStore {
             .with_context(|| format!("failed to read encrypted credential {}", path.display()))
             .map(Some)
     }
+
+    fn system_entry(&self, session_id: Uuid) -> Result<Box<dyn PasswordEntry>> {
+        (self.entries)(&format!("session:{session_id}"))
+            .context("failed to open system credential entry")
+    }
+
+    fn vault_unlock_entry(&self, session_id: Uuid) -> Result<Box<dyn PasswordEntry>> {
+        (self.entries)(&format!("{VAULT_UNLOCK_ACCOUNT_PREFIX}{session_id}"))
+            .context("failed to open encrypted vault unlock entry")
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -357,19 +399,6 @@ struct VaultRecord {
     salt: String,
     nonce: String,
     ciphertext: String,
-}
-
-fn system_entry(session_id: Uuid) -> Result<Entry> {
-    Entry::new(CREDENTIAL_SERVICE, &format!("session:{session_id}"))
-        .context("failed to open system credential entry")
-}
-
-fn vault_unlock_entry(session_id: Uuid) -> Result<Entry> {
-    Entry::new(
-        CREDENTIAL_SERVICE,
-        &format!("{VAULT_UNLOCK_ACCOUNT_PREFIX}{session_id}"),
-    )
-    .context("failed to open encrypted vault unlock entry")
 }
 
 fn validate_password(value: &str, label: &str) -> Result<()> {
@@ -409,6 +438,9 @@ fn vault_aad(session_id: Uuid) -> Vec<u8> {
     aad.extend_from_slice(session_id.as_bytes());
     aad
 }
+
+#[cfg(test)]
+mod behavior_tests;
 
 #[cfg(test)]
 mod tests {

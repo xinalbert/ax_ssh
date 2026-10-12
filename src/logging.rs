@@ -34,6 +34,10 @@ impl LoggingGuard {
     /// Installs the process-wide tracing subscriber and opens the rolling log.
     pub fn init() -> Result<Self> {
         let directory = default_log_directory()?;
+        Self::init_in(directory)
+    }
+
+    fn init_in(directory: PathBuf) -> Result<Self> {
         prepare_log_directory(&directory)?;
 
         let (crash_log_path, crash_file) = build_crash_writer(&directory)?;
@@ -246,6 +250,9 @@ fn set_private_file_permissions(_: &Path) -> Result<()> {
 fn set_private_directory_permissions(_: &Path) -> Result<()> {
     Ok(())
 }
+
+#[cfg(test)]
+mod behavior_tests;
 
 #[cfg(test)]
 mod tests {

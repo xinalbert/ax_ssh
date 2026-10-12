@@ -143,9 +143,25 @@ impl SerialSessionHandle {
         session_id: Uuid,
         config: SerialConfig,
     ) -> (Self, mpsc::Receiver<SerialSessionEvent>) {
+        Self::spawn_with_port(runtime, session_id, config, open_serial_port)
+    }
+
+    // Inject only device acquisition; commands, I/O and shutdown retain one worker.
+    fn spawn_with_port<S, F>(
+        runtime: &Handle,
+        session_id: Uuid,
+        config: SerialConfig,
+        open: F,
+    ) -> (Self, mpsc::Receiver<SerialSessionEvent>)
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        F: FnOnce(&SerialConfig) -> Result<S> + Send + 'static,
+    {
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
-        let task = runtime.spawn(run_serial_session(session_id, config, command_rx, event_tx));
+        let task = runtime.spawn(run_serial_session(
+            session_id, config, command_rx, event_tx, open,
+        ));
         (Self { command_tx, task }, event_rx)
     }
 
@@ -223,18 +239,36 @@ fn queue_disconnect(
     command_tx.try_send(SerialCommand::Disconnect)
 }
 
-async fn run_serial_session(
-    session_id: Uuid,
-    config: SerialConfig,
-    mut command_rx: mpsc::Receiver<SerialCommand>,
-    event_tx: mpsc::Sender<SerialSessionEvent>,
-) {
+fn open_serial_port(config: &SerialConfig) -> Result<tokio_serial::SerialStream> {
     let builder = tokio_serial::new(&config.port_name, config.baud_rate)
         .data_bits(data_bits(config.data_bits))
         .stop_bits(stop_bits(config.stop_bits))
         .parity(parity(config.parity))
         .flow_control(flow_control(config.flow_control));
-    let mut port = match builder.open_native_async() {
+    let port = builder
+        .open_native_async()
+        .context("failed to open serial port")?;
+    #[cfg(unix)]
+    let port = {
+        let mut port = port;
+        port.set_exclusive(true)
+            .context("failed to claim serial port exclusively")?;
+        port
+    };
+    Ok(port)
+}
+
+async fn run_serial_session<S, F>(
+    session_id: Uuid,
+    config: SerialConfig,
+    mut command_rx: mpsc::Receiver<SerialCommand>,
+    event_tx: mpsc::Sender<SerialSessionEvent>,
+    open: F,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    F: FnOnce(&SerialConfig) -> Result<S>,
+{
+    let mut port = match open(&config) {
         Ok(port) => port,
         Err(error) => {
             send_serial_event(
@@ -246,16 +280,6 @@ async fn run_serial_session(
             return;
         }
     };
-    #[cfg(unix)]
-    if let Err(error) = port.set_exclusive(true) {
-        send_serial_event(
-            &event_tx,
-            SerialSessionEvent::Failed(bounded_error(&error)),
-            session_id,
-        )
-        .await;
-        return;
-    }
     if !send_serial_event(
         &event_tx,
         SerialSessionEvent::Connected {
@@ -323,7 +347,9 @@ async fn run_serial_session(
             }
         }
     }
-    let _ = port.shutdown().await;
+    if let Err(error) = port.shutdown().await {
+        debug!(session_id = %session_id, %error, "serial port shutdown failed");
+    }
     if !failed {
         send_serial_event(&event_tx, SerialSessionEvent::Disconnected, session_id).await;
     }
@@ -377,6 +403,9 @@ const fn flow_control(value: SerialFlowControl) -> FlowControl {
 fn bounded_error(error: &impl std::fmt::Display) -> String {
     error.to_string().chars().take(MAX_ERROR_CHARS).collect()
 }
+
+#[cfg(test)]
+mod worker_tests;
 
 #[cfg(test)]
 mod tests {

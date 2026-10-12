@@ -61,22 +61,48 @@ impl Drop for CaptureGuard {
 /// Call only for an owned recording request or explicit user intent. Cancellation
 /// also stops the device when the future is dropped; no stream handle crosses UI.
 pub async fn capture(
-    mut stop: watch::Receiver<bool>,
+    stop: watch::Receiver<bool>,
     format: AudioFormat,
     pcm: mpsc::Sender<Vec<u8>>,
     ready: oneshot::Sender<Result<()>>,
 ) -> Result<()> {
+    static MICROPHONE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    capture_with(
+        stop,
+        format,
+        pcm,
+        ready,
+        MICROPHONE
+            .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(1)))
+            .clone(),
+        request_permission(),
+        open_capture_source,
+    )
+    .await
+}
+
+async fn capture_with<S, P, F>(
+    mut stop: watch::Receiver<bool>,
+    format: AudioFormat,
+    pcm: mpsc::Sender<Vec<u8>>,
+    ready: oneshot::Sender<Result<()>>,
+    microphone: Arc<tokio::sync::Semaphore>,
+    permission: P,
+    open: F,
+) -> Result<()>
+where
+    P: std::future::Future<Output = Result<()>>,
+    F: FnOnce(&AtomicBool, AudioFormat) -> Result<CaptureSource<S>> + Send + 'static,
+{
     format.validate()?;
     if *stop.borrow() {
         return Ok(());
     }
-    static MICROPHONE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
-    let permit = MICROPHONE
-        .get_or_init(|| tokio::sync::Semaphore::new(1))
-        .try_acquire()
+    let permit = microphone
+        .try_acquire_owned()
         .context("microphone is already in use by another session")?;
     tokio::select! {
-        result = request_permission() => { result?; }
+        result = permission => { result?; }
         _ = wait_for_stop(&mut stop) => { return Ok(()); }
     }
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -85,7 +111,7 @@ pub async fn capture(
         // The lease outlives a cancelled async caller until the device really
         // closes in this worker. A new session cannot overlap the old stream.
         let _permit = permit;
-        capture_worker(cancelled, format, pcm, ready)
+        capture_worker(cancelled, format, pcm, ready, open)
     });
     tokio::pin!(task);
     let result = tokio::select! {
@@ -106,141 +132,30 @@ pub async fn wait_for_stop(stop: &mut watch::Receiver<bool>) {
     }
 }
 
-fn capture_worker(
+struct CaptureSource<S> {
+    stream: S,
+    native_rx: sync::Receiver<NativeBlock>,
+    failed: Arc<AtomicBool>,
+    converter: PcmConverter,
+}
+
+fn capture_worker<S>(
     cancel: Arc<AtomicBool>,
     format: AudioFormat,
     pcm: mpsc::Sender<Vec<u8>>,
     ready: oneshot::Sender<Result<()>>,
+    open: impl FnOnce(&AtomicBool, AudioFormat) -> Result<CaptureSource<S>>,
 ) -> Result<()> {
     if cancel.load(Ordering::Acquire) {
         return Ok(());
     }
-    let started = (|| {
-        let device = cpal::default_host()
-            .default_input_device()
-            .context("no microphone is available")?;
-        let default = device
-            .default_input_config()
-            .context("cannot read microphone configuration")?;
-        let config = match device.supported_input_configs() {
-            Ok(mut configurations) => configurations
-                .find(|config| {
-                    config.channels() == format.channels
-                        && config.min_sample_rate() <= format.sample_rate
-                        && config.max_sample_rate() >= format.sample_rate
-                })
-                .map(|config| config.with_sample_rate(format.sample_rate))
-                .unwrap_or(default),
-            Err(error) => {
-                tracing::debug!(%error, "cannot enumerate microphone formats; using default input");
-                default
-            }
-        };
-        ensure!(
-            (8_000..=192_000).contains(&config.sample_rate())
-                && (1..=32).contains(&config.channels()),
-            "unsupported microphone configuration"
-        );
-        let (native_tx, native_rx) = sync::sync_channel(8);
-        let failed = Arc::new(AtomicBool::new(false));
-        let stream_config = config.clone().into();
-        let stream = match config.sample_format() {
-            cpal::SampleFormat::F32 => input_stream::<f32>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::I16 => input_stream::<i16>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::U16 => input_stream::<u16>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::I32 => input_stream::<i32>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::I8 => input_stream::<i8>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::I24 => input_stream::<cpal::I24>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::I64 => input_stream::<i64>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::U8 => input_stream::<u8>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::U24 => input_stream::<cpal::U24>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::U32 => input_stream::<u32>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::U64 => input_stream::<u64>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            cpal::SampleFormat::F64 => input_stream::<f64>(
-                &device,
-                &stream_config,
-                format.channels,
-                native_tx,
-                failed.clone(),
-            )?,
-            format => anyhow::bail!("unsupported microphone sample format: {format}"),
-        };
-        let converter = PcmConverter::new(config.sample_rate(), format)?;
-        if cancel.load(Ordering::Acquire) {
-            return Ok((stream, native_rx, failed, converter));
-        }
-        stream
-            .play()
-            .context("cannot start microphone (check system microphone permission)")?;
-        Ok((stream, native_rx, failed, converter))
-    })();
-    let (stream, native_rx, failed, mut converter) = match started {
+    let started = open(&cancel, format);
+    let CaptureSource {
+        stream,
+        native_rx,
+        failed,
+        mut converter,
+    } = match started {
         Ok(started) => {
             if ready.send(Ok(())).is_err() {
                 return Ok(());
@@ -274,6 +189,145 @@ fn capture_worker(
         converter.finish(&pcm)?;
     }
     Ok(())
+}
+
+// Device and permission boundaries stay separate from the actual capture worker.
+fn open_capture_source(
+    cancel: &AtomicBool,
+    format: AudioFormat,
+) -> Result<CaptureSource<cpal::Stream>> {
+    let device = cpal::default_host()
+        .default_input_device()
+        .context("no microphone is available")?;
+    let default = device
+        .default_input_config()
+        .context("cannot read microphone configuration")?;
+    let config = match device.supported_input_configs() {
+        Ok(mut configurations) => configurations
+            .find(|config| {
+                config.channels() == format.channels
+                    && config.min_sample_rate() <= format.sample_rate
+                    && config.max_sample_rate() >= format.sample_rate
+            })
+            .map(|config| config.with_sample_rate(format.sample_rate))
+            .unwrap_or(default),
+        Err(error) => {
+            tracing::debug!(%error, "cannot enumerate microphone formats; using default input");
+            default
+        }
+    };
+    ensure!(
+        (8_000..=192_000).contains(&config.sample_rate()) && (1..=32).contains(&config.channels()),
+        "unsupported microphone configuration"
+    );
+    let (native_tx, native_rx) = sync::sync_channel(8);
+    let failed = Arc::new(AtomicBool::new(false));
+    let stream_config = config.clone().into();
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => input_stream::<f32>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::I16 => input_stream::<i16>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::U16 => input_stream::<u16>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::I32 => input_stream::<i32>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::I8 => input_stream::<i8>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::I24 => input_stream::<cpal::I24>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::I64 => input_stream::<i64>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::U8 => input_stream::<u8>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::U24 => input_stream::<cpal::U24>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::U32 => input_stream::<u32>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::U64 => input_stream::<u64>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        cpal::SampleFormat::F64 => input_stream::<f64>(
+            &device,
+            &stream_config,
+            format.channels,
+            native_tx,
+            failed.clone(),
+        )?,
+        format => anyhow::bail!("unsupported microphone sample format: {format}"),
+    };
+    let converter = PcmConverter::new(config.sample_rate(), format)?;
+    if cancel.load(Ordering::Acquire) {
+        return Ok(CaptureSource {
+            stream,
+            native_rx,
+            failed,
+            converter,
+        });
+    }
+    stream
+        .play()
+        .context("cannot start microphone (check system microphone permission)")?;
+    Ok(CaptureSource {
+        stream,
+        native_rx,
+        failed,
+        converter,
+    })
 }
 
 fn input_stream<T>(
@@ -471,6 +525,9 @@ async fn request_permission() -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod worker_tests;
 
 #[cfg(test)]
 mod tests {
