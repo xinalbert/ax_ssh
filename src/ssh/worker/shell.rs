@@ -15,6 +15,7 @@ pub(super) struct TerminalSessionTask {
     pub(super) session_id: Uuid,
     pub(super) x11_mode: Option<crate::config::X11ForwardingMode>,
     pub(super) x11_settings: crate::config::X11Settings,
+    pub(super) audio_format: crate::audio::AudioFormat,
     pub(super) x11_dispatcher: Option<X11Dispatcher>,
     pub(super) x11_requests: Option<mpsc::Receiver<X11ChannelRequest>>,
     pub(super) command_rx: mpsc::Receiver<SshCommand>,
@@ -29,6 +30,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         session_id,
         x11_mode,
         x11_settings,
+        audio_format,
         x11_dispatcher,
         mut x11_requests,
         mut command_rx,
@@ -49,10 +51,64 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     if x11_forwarding.is_none() {
         x11_requests = None;
     }
+    let mut media_tasks = JoinSet::new();
+    let (media_stop, media_shutdown) = watch::channel(false);
+    let (automatic_stop, automatic_shutdown) = watch::channel(false);
+    let (audio_ready, source_ready) = oneshot::channel();
+    let audio_connection = connection.clone();
+    let stop_on_shutdown = automatic_stop.clone();
+    let mut shutdown = media_shutdown.clone();
+    let audio_events = event_tx.clone();
+    media_tasks.spawn(async move {
+        let forwarding = super::media::forward_automatic_microphone(
+            audio_connection,
+            audio_format,
+            automatic_shutdown,
+            audio_ready,
+            audio_events,
+        );
+        tokio::pin!(forwarding);
+        let result = tokio::select! {
+            result = &mut forwarding => result,
+            _ = crate::audio::wait_for_stop(&mut shutdown) => {
+                stop_on_shutdown.send_replace(true);
+                forwarding.await
+            }
+        };
+        if let Err(error) = result {
+            debug!(%error, "standard remote microphone bridge unavailable");
+        }
+    });
+    let setup = timeout(Duration::from_secs(5), source_ready);
+    tokio::pin!(setup);
+    let audio_source = loop {
+        tokio::select! {
+            result = &mut setup => {
+                match result {
+                    Ok(Ok(Ok(source))) => break Some(source),
+                    _ => { automatic_stop.send_replace(true); break None; }
+                }
+            }
+            command = command_rx.recv() => {
+                if matches!(command, None | Some(SshCommand::Disconnect)) {
+                    shutdown_media_tasks(&media_stop, &mut media_tasks).await;
+                    if let Err(error) = connection.disconnect().await {
+                        warn!(%error, "cannot disconnect during audio source setup");
+                    }
+                    send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
+                    return;
+                }
+            }
+        }
+    };
     let x11_requested = x11_forwarding.is_some();
     let initial_size = *resize_rx.borrow_and_update();
     let (mut shell, x11_request_status) = match connection
-        .open_shell(initial_size, x11_forwarding.as_ref())
+        .open_shell(
+            initial_size,
+            x11_forwarding.as_ref(),
+            audio_source.as_deref(),
+        )
         .await
     {
         Ok(shell) => shell,
@@ -64,6 +120,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                 session_id,
             )
             .await;
+            shutdown_media_tasks(&media_stop, &mut media_tasks).await;
             return;
         }
     };
@@ -85,6 +142,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     }
 
     if !send_event(&event_tx, SshSessionEvent::Connected, session_id).await {
+        shutdown_media_tasks(&media_stop, &mut media_tasks).await;
         close_shell(&shell, session_id).await;
         return;
     }
@@ -96,11 +154,13 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         )
         .await
         {
+            shutdown_media_tasks(&media_stop, &mut media_tasks).await;
             close_shell(&shell, session_id).await;
             return;
         }
     } else if x11_request_status == X11RequestStatus::Enabled {
         if !send_event(&event_tx, SshSessionEvent::X11ForwardingEnabled, session_id).await {
+            shutdown_media_tasks(&media_stop, &mut media_tasks).await;
             close_shell(&shell, session_id).await;
             return;
         }
@@ -113,6 +173,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         )
         .await
         {
+            shutdown_media_tasks(&media_stop, &mut media_tasks).await;
             close_shell(&shell, session_id).await;
             return;
         }
@@ -126,9 +187,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut awaiting_output_after_input = None;
     let mut x11_relays = JoinSet::new();
     let mut release_probes = JoinSet::new();
-    let mut media_tasks = JoinSet::new();
     let attachment_directories = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
-    let (media_stop, media_shutdown) = watch::channel(false);
     let mut microphone_task = None;
     let mut release_probe_started = false;
     let mut x11_unavailable_reported = false;
@@ -195,7 +254,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         continue;
                     }
                     Some(SshCommand::ClipboardImage { png, reply }) => {
-                        if media_tasks.len() >= 2 {
+                        if media_tasks.len() >= 3 {
                             if reply.send(Err(anyhow::anyhow!("another media operation is busy"))).is_err() { debug!("attachment requester cancelled"); }
                         } else {
                             let connection = connection.clone();
@@ -470,17 +529,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     shutdown_x11_relays(&mut x11_relays, session_id).await;
     release_probes.abort_all();
     while release_probes.join_next().await.is_some() {}
-    media_stop.send_replace(true);
-    if timeout(Duration::from_secs(5), async {
-        while media_tasks.join_next().await.is_some() {}
-    })
-    .await
-    .is_err()
-    {
-        media_tasks.abort_all();
-        while media_tasks.join_next().await.is_some() {}
-        warn!("SSH media shutdown timed out");
-    }
+    shutdown_media_tasks(&media_stop, &mut media_tasks).await;
     if let Err(error) =
         super::media::cleanup_attachments(&connection, &attachment_directories).await
     {
@@ -508,6 +557,26 @@ pub(super) fn x11_mode_for(
         .then(|| profile.ssh().map(|config| config.x11_forwarding))
         .flatten()
         .filter(|mode| mode.enabled())
+}
+
+async fn shutdown_media_tasks(stop: &watch::Sender<bool>, tasks: &mut JoinSet<()>) {
+    stop.send_replace(true);
+    if timeout(Duration::from_secs(5), async {
+        while let Some(result) = tasks.join_next().await {
+            if let Err(error) = result
+                && !error.is_cancelled()
+            {
+                warn!(%error, "SSH media shutdown failed");
+            }
+        }
+    })
+    .await
+    .is_err()
+    {
+        tasks.abort_all();
+        while tasks.join_next().await.is_some() {}
+        warn!("SSH media shutdown timed out");
+    }
 }
 
 async fn receive_x11_request(

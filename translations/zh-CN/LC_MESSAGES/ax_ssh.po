@@ -109,9 +109,6 @@ msgstr "应用字体系列"
 msgid "Application interface font"
 msgstr "应用界面字体"
 
-msgid "Applies to the next recording; dictation uses 16 kHz mono"
-msgstr "下次录音生效；本机转写使用 16 kHz 单声道"
-
 msgid "Apply one color family to both display modes"
 msgstr "为两种显示模式应用同一配色系列"
 
@@ -415,12 +412,6 @@ msgstr "诊断信息"
 msgid "Dialog and transient overlay tint"
 msgstr "对话框和临时遮罩色"
 
-msgid "Dictate"
-msgstr "语音输入"
-
-msgid "Discard"
-msgstr "丢弃"
-
 msgid "Display mode"
 msgstr "显示模式"
 
@@ -547,9 +538,6 @@ msgstr "前景"
 msgid "Forward"
 msgstr "前进"
 
-msgid "Forward your microphone to this Linux SSH session"
-msgstr "将本机麦克风转发到此 Linux SSH 会话"
-
 msgid "GPU"
 msgstr "GPU"
 
@@ -594,9 +582,6 @@ msgstr "从剪贴板导入快捷键"
 
 msgid "Information"
 msgstr "信息"
-
-msgid "Insert text"
-msgstr "插入文字"
 
 msgid "Interface"
 msgstr "界面"
@@ -688,9 +673,6 @@ msgstr "本地 Shell"
 msgid "Local shell icon"
 msgstr "本地终端图标"
 
-msgid "Local whisper.cpp executable for dictation"
-msgstr "用于语音输入的本机 whisper.cpp 程序"
-
 msgid "Log levels and HTTP 1xx/3xx"
 msgstr "日志等级和 HTTP 1xx/3xx"
 
@@ -699,9 +681,6 @@ msgstr "日志等级和 HTTP 状态码"
 
 msgid "Loopback only; required by MacXServer and -ac Windows servers"
 msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
-
-msgid "MICROPHONE & DICTATION"
-msgstr "麦克风与语音输入"
 
 msgid "MOUSE"
 msgstr "鼠标"
@@ -919,9 +898,6 @@ msgstr "粘贴到终端快捷键"
 msgid "Path"
 msgstr "路径"
 
-msgid "Path to a local multilingual whisper.cpp model"
-msgstr "本机多语言 whisper.cpp 模型路径"
-
 msgid "Pause"
 msgstr "暂停"
 
@@ -1008,9 +984,6 @@ msgstr "远端文件：{0} - 修改时间：{1}"
 
 msgid "Remote files"
 msgstr "远端文件"
-
-msgid "Remote mic"
-msgstr "远端麦克风"
 
 msgid "Remote sample rate"
 msgstr "远端采样率"
@@ -1375,12 +1348,6 @@ msgstr "立体声 (2)"
 msgid "Stop bits"
 msgstr "停止位"
 
-msgid "Stop mic"
-msgstr "停止麦克风"
-
-msgid "Stop voice"
-msgstr "停止录音"
-
 msgid "Success"
 msgstr "成功"
 
@@ -1492,9 +1459,6 @@ msgstr "切换会话侧栏"
 msgid "Toggle Session Sidebar shortcut"
 msgstr "切换会话侧栏快捷键"
 
-msgid "Transcribe locally, then review and insert text"
-msgstr "本机转写，确认后插入文字"
-
 msgid "Transferring ({0})"
 msgstr "传输中 ({0})"
 
@@ -1567,9 +1531,6 @@ msgstr "视图"
 msgid "Visible terminal updates while another pane is focused"
 msgstr "其他窗格聚焦时可见终端的刷新帧率"
 
-msgid "Voice transcript"
-msgstr "语音转写结果"
-
 msgid "WORKSPACE"
 msgstr "工作区"
 
@@ -1578,9 +1539,6 @@ msgstr "警告"
 
 msgid "Warning levels and HTTP 4xx"
 msgstr "警告等级和 HTTP 4xx"
-
-msgid "Whisper model"
-msgstr "Whisper 模型"
 
 msgid "Window"
 msgstr "窗口"
@@ -1623,9 +1581,6 @@ msgstr "行"
 
 msgid "server.example.com"
 msgstr "server.example.com"
-
-msgid "whisper-cli executable"
-msgstr "whisper-cli 程序"
 
 msgid "x"
 msgstr "x"
@@ -1695,3 +1650,9 @@ msgstr "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围
 
 msgid "Remote edit file size limit in MiB"
 msgstr "远程编辑文件大小上限，单位 MiB"
+
+msgid "MICROPHONE"
+msgstr "麦克风"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "新 SSH 连接生效；录音自动接入"

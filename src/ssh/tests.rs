@@ -405,6 +405,19 @@ impl server::Handler for TestServer {
         Ok(())
     }
 
+    async fn exec_request(
+        &mut self,
+        channel: russh::ChannelId,
+        _data: &[u8],
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        // This fixture has no system audio/exec service. Reject it explicitly,
+        // as an SSH server does, while keeping the interactive shell usable.
+        session.channel_failure(channel)?;
+        session.close(channel)?;
+        Ok(())
+    }
+
     async fn pty_request(
         &mut self,
         channel: russh::ChannelId,

@@ -78,6 +78,7 @@ pub enum SshSessionEvent {
     SftpWrite(SftpWriteEvent),
     X11ForwardingEnabled,
     X11ForwardingUnavailable(String),
+    MicrophoneUnavailable(String),
     ShellExited,
     Disconnected,
     AuthenticationFailed,
@@ -92,6 +93,25 @@ pub enum SshSessionEvent {
         public_key: Option<String>,
     },
     Failed(String),
+}
+
+/// Owned connection options, independent of UI components and live devices.
+#[derive(Clone)]
+pub struct SshTerminalSettings {
+    pub x11: X11Settings,
+    pub audio_format: crate::audio::AudioFormat,
+}
+
+impl Default for SshTerminalSettings {
+    fn default() -> Self {
+        Self {
+            x11: X11Settings {
+                launch_on_connect: false,
+                ..X11Settings::default()
+            },
+            audio_format: crate::config::AudioSettings::default().format(),
+        }
+    }
 }
 
 pub(crate) enum SshCommand {
@@ -156,6 +176,7 @@ struct SshSessionLaunch {
     initial_size: TerminalSize,
     mode: SshSessionMode,
     x11_settings: X11Settings,
+    audio_format: crate::audio::AudioFormat,
     sftp_policy: crate::config::SftpTransferPolicy,
 }
 
@@ -165,6 +186,7 @@ struct SshSessionTask {
     secret: Zeroizing<String>,
     mode: SshSessionMode,
     x11_settings: X11Settings,
+    audio_format: crate::audio::AudioFormat,
     sftp_policy: crate::config::SftpTransferPolicy,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
@@ -256,6 +278,29 @@ impl SshSessionHandle {
         rows: u32,
         x11_settings: X11Settings,
     ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
+        Self::spawn_with_terminal_settings(
+            runtime,
+            session_id,
+            profile,
+            secret,
+            columns,
+            rows,
+            SshTerminalSettings {
+                x11: x11_settings,
+                ..SshTerminalSettings::default()
+            },
+        )
+    }
+
+    pub fn spawn_with_terminal_settings(
+        runtime: &Handle,
+        session_id: Uuid,
+        profile: SessionProfile,
+        secret: Zeroizing<String>,
+        columns: u32,
+        rows: u32,
+        settings: SshTerminalSettings,
+    ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
         Self::spawn_with_mode(
             runtime,
             SshSessionLaunch {
@@ -264,7 +309,8 @@ impl SshSessionHandle {
                 secret,
                 initial_size: TerminalSize::backend(columns, rows),
                 mode: SshSessionMode::Terminal,
-                x11_settings,
+                x11_settings: settings.x11,
+                audio_format: settings.audio_format,
                 sftp_policy: crate::config::SftpTransferSettings::default().policy(None),
             },
         )
@@ -286,6 +332,7 @@ impl SshSessionHandle {
                 initial_size: TerminalSize::backend(1, 1),
                 mode: SshSessionMode::Sftp,
                 x11_settings: X11Settings::default(),
+                audio_format: SshTerminalSettings::default().audio_format,
                 sftp_policy,
             },
         )
@@ -302,6 +349,7 @@ impl SshSessionHandle {
             initial_size,
             mode,
             x11_settings,
+            audio_format,
             sftp_policy,
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
@@ -314,6 +362,7 @@ impl SshSessionHandle {
             secret,
             mode,
             x11_settings,
+            audio_format,
             sftp_policy,
             command_rx,
             resize_rx,
@@ -657,6 +706,7 @@ async fn run_session(task: SshSessionTask) {
         secret,
         mode,
         x11_settings,
+        audio_format,
         sftp_policy,
         mut command_rx,
         resize_rx,
@@ -793,6 +843,7 @@ async fn run_session(task: SshSessionTask) {
         session_id,
         x11_mode,
         x11_settings,
+        audio_format,
         x11_dispatcher,
         x11_requests,
         command_rx,

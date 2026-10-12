@@ -9,6 +9,9 @@ use russh_sftp::{
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod automatic;
+pub(super) use automatic::forward_automatic_microphone;
+
 pub(super) type AttachmentDirectories = Arc<Mutex<Vec<String>>>;
 
 pub(super) async fn upload_image(
@@ -290,6 +293,13 @@ fn extend_error(output: &mut Vec<u8>, data: &[u8]) {
 async fn close_audio_channel(channel: &mut russh::Channel<russh::client::Msg>) {
     if let Err(error) = channel.eof().await {
         tracing::warn!(%error, "cannot send microphone EOF");
+    }
+    // An idle pipe-source writer may be waiting for its FIFO reader. TERM
+    // lets the owned helper's trap stop its children and unload the source.
+    match timeout(Duration::from_secs(1), channel.signal(russh::Sig::TERM)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::debug!(%error, "cannot signal microphone helper shutdown"),
+        Err(_) => tracing::debug!("microphone helper signal timed out"),
     }
     let exited = timeout(Duration::from_secs(3), async {
         while let Some(message) = channel.wait().await {

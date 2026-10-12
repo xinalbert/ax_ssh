@@ -63,14 +63,17 @@ pub(super) fn start_session_worker(
         let rows = u32::from(app.sessions.settings.terminal.default_rows);
         let x11_settings = app.sessions.settings.x11.clone();
         let (worker, events) = match target {
-            ConnectionTarget::Terminal => SshSessionHandle::spawn_with_x11_settings(
+            ConnectionTarget::Terminal => SshSessionHandle::spawn_with_terminal_settings(
                 runtime,
                 tab_id,
                 profile.clone(),
                 secret,
                 columns,
                 rows,
-                x11_settings,
+                ax_ssh::ssh::SshTerminalSettings {
+                    x11: x11_settings,
+                    audio_format: app.sessions.settings.audio.format(),
+                },
             ),
             ConnectionTarget::Sftp => {
                 let policy = app

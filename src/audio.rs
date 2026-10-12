@@ -1,11 +1,10 @@
-//! Explicitly started microphone capture: bounded callbacks, worker resampling,
-//! and 16 kHz mono signed little-endian PCM for speech tools.
+//! Demand-driven microphone capture with bounded callbacks and worker resampling.
 
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rubato::Resampler;
 use std::sync::{
-    Arc,
+    Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
     mpsc as sync,
 };
@@ -59,8 +58,8 @@ impl Drop for CaptureGuard {
     }
 }
 
-/// User intent must precede this call. Cancellation also stops the device when
-/// the caller's future is dropped; no stream handle crosses the UI boundary.
+/// Call only for an owned recording request or explicit user intent. Cancellation
+/// also stops the device when the future is dropped; no stream handle crosses UI.
 pub async fn capture(
     mut stop: watch::Receiver<bool>,
     format: AudioFormat,
@@ -71,13 +70,23 @@ pub async fn capture(
     if *stop.borrow() {
         return Ok(());
     }
+    static MICROPHONE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    let permit = MICROPHONE
+        .get_or_init(|| tokio::sync::Semaphore::new(1))
+        .try_acquire()
+        .context("microphone is already in use by another session")?;
     tokio::select! {
         result = request_permission() => { result?; }
         _ = wait_for_stop(&mut stop) => { return Ok(()); }
     }
     let cancelled = Arc::new(AtomicBool::new(false));
     let guard = CaptureGuard(cancelled.clone());
-    let task = tokio::task::spawn_blocking(move || capture_worker(cancelled, format, pcm, ready));
+    let task = tokio::task::spawn_blocking(move || {
+        // The lease outlives a cancelled async caller until the device really
+        // closes in this worker. A new session cannot overlap the old stream.
+        let _permit = permit;
+        capture_worker(cancelled, format, pcm, ready)
+    });
     tokio::pin!(task);
     let result = tokio::select! {
         result = &mut task => result.context("microphone worker failed")?,

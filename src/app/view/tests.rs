@@ -607,6 +607,74 @@ fn detached_sftp_geometry_ignores_the_hidden_main_sidebar() {
 }
 
 #[test]
+fn main_terminal_has_no_manual_media_row() {
+    terminal_has_no_manual_media_row(false);
+}
+
+#[test]
+fn detached_terminal_has_no_manual_media_row() {
+    terminal_has_no_manual_media_row(true);
+}
+
+fn terminal_has_no_manual_media_row(detached: bool) {
+    std::thread::spawn(move || {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_detached_window(detached);
+        ui.set_active_tab_kind("terminal".into());
+        let mut pane = terminal_pane_view(Uuid::from_u128(1), 0.0, 1.0);
+        pane.terminal.connected = true;
+        pane.terminal.font_family = "JetBrains Mono".into();
+        pane.terminal.font_size = 17.0;
+        pane.terminal.line_height_percent = 100;
+        let panes = Rc::new(VecModel::from(vec![pane.clone()]));
+        ui.set_terminal_panes(ModelRc::from(panes.clone()));
+        let geometry = Rc::new(RefCell::new(None));
+        let callback_geometry = geometry.clone();
+        ui.on_terminal_geometry(
+            move |_, _, pane_y, _, _, _, grid_y, _, grid_height, _, _, _, rows| {
+                *callback_geometry.borrow_mut() = Some((grid_y - pane_y, grid_height, rows));
+            },
+        );
+        ui.show().expect("headless window should show");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+        let idle = geometry.borrow().expect("terminal should report geometry");
+        assert!(
+            idle.0.abs() < 0.01,
+            "idle terminal must start at pane top: {idle:?}"
+        );
+
+        // Historical media snapshots must not recreate buttons, errors, or a
+        // transcript editor in a CLI-owned recording workflow.
+        pane.terminal.media_mode = "transcribing".into();
+        pane.terminal.media_status = "Microphone failed: configure whisper-cli".into();
+        pane.terminal.transcript = "old transcript".into();
+        panes.set_row_data(0, pane.clone());
+        harness.settle();
+        assert_eq!(*geometry.borrow(), Some(idle));
+
+        pane.closable = true;
+        panes.set_row_data(0, pane);
+        harness.settle();
+        let split = geometry
+            .borrow()
+            .expect("split pane should report geometry");
+        assert!(
+            (split.0 - 24.0).abs() < 0.01,
+            "split close header must remain: {split:?}"
+        );
+        assert!(split.1 < idle.1 && split.2 < idle.2);
+        ui.hide().expect("headless window should hide");
+    })
+    .join()
+    .expect("terminal media layout assertions should pass");
+}
+
+#[test]
 fn detached_terminal_has_one_resize_source_and_ignores_main_sidebar_width() {
     // A dedicated thread isolates Slint's thread-local platform from other tests.
     std::thread::spawn(|| {

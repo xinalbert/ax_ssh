@@ -1,4 +1,4 @@
-import { ScrollView, TextEdit } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import {
     ElidedButton,
@@ -1067,33 +1067,7 @@ export component TerminalPane inherits Rectangle {
         padding-bottom: 0px;
 
         Rectangle {
-            height: max(32px, Theme.terminal-pane-header-height);
-            HorizontalLayout {
-                width: parent.width - (root.closable ? Theme.terminal-pane-close-size : 0px);
-                spacing: Theme.space-xs;
-                ElidedButton {
-                    text: root.view.media_mode == "microphone" ? @tr("Stop mic") : @tr("Remote mic");
-                    tooltip-text: @tr("Forward your microphone to this Linux SSH session");
-                    enabled: root.connected && root.view.media_mode != "dictation" && root.view.media_mode != "transcribing";
-                    clicked => { root.pane-command(root.terminal-id, "microphone"); }
-                }
-                ElidedButton {
-                    text: root.view.media_mode == "transcribing" ? @tr("Cancel") : (root.view.media_mode == "dictation" ? @tr("Stop voice") : @tr("Dictate"));
-                    tooltip-text: @tr("Transcribe locally, then review and insert text");
-                    enabled: root.connected && root.view.media_mode != "microphone";
-                    clicked => { root.pane-command(root.terminal-id, "dictation"); }
-                }
-                Text {
-                    text: root.view.media_status;
-                    color: Theme.text;
-                    font-size: Theme.font-caption;
-                    overflow: elide;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                    min-width: 0px;
-                }
-            }
-
+            height: root.closable ? Theme.terminal-pane-header-height : 0px;
             if root.closable : TerminalPaneCloseButton {
                 x: parent.width - self.width;
                 y: (parent.height - self.height) / 2;
@@ -1101,20 +1075,6 @@ export component TerminalPane inherits Rectangle {
             }
         }
 
-        if !root.view.transcript.is-empty : Rectangle {
-            height: 120px;
-            VerticalLayout {
-                transcript-editor := TextEdit {
-                    text: root.view.transcript;
-                    accessible-label: @tr("Voice transcript");
-                    wrap: word-wrap;
-                }
-                HorizontalLayout {
-                    ElidedButton { text: @tr("Insert text"); enabled: root.connected; clicked => { root.pane-command(root.terminal-id, "insert-transcript\n" + transcript-editor.text); ime-input.focus(); } }
-                    ElidedButton { text: @tr("Discard"); clicked => { root.pane-command(root.terminal-id, "discard-transcript"); ime-input.focus(); } }
-                }
-            }
-        }
         grid-clip := Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;

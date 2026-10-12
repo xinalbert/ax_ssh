@@ -596,6 +596,25 @@ pub(super) fn spawn_session_monitor(
                         refresh_workspace(&ui, &state);
                     }
                 }
+                SshSessionEvent::MicrophoneUnavailable(message) => {
+                    if let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            terminal.status = format!(
+                                "Connected to {}; microphone unavailable: {message}",
+                                profile_endpoint(&profile)
+                            );
+                        },
+                    ) {
+                        if active {
+                            dispatch_active_snapshot(&ui, &state);
+                        }
+                        refresh_workspace(&ui, &state);
+                    }
+                }
                 // The resize callback updates the active model immediately after its request is
                 // accepted. A delayed worker acknowledgement must not restore an older grid.
                 SshSessionEvent::Resized { .. } => {}

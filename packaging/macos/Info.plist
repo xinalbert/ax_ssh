@@ -27,7 +27,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>AxSSH uses the microphone only when you start dictation or forward audio to your SSH session.</string>
+	<string>AxSSH provides microphone access when an application running in your terminal starts recording.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

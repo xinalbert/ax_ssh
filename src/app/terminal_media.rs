@@ -364,12 +364,18 @@ fn paste_clipboard(
                 }
             }
             Err(error) => {
-                if let Ok(mut app) = state.lock()
+                let current = if let Ok(mut app) = state.lock()
                     && let Some(terminal) = app.terminal_mut(tab_id)
                     && terminal.media.image_token == Some(token)
                 {
                     terminal.media.image_token = None;
                     terminal.media.status = format!("Image failed: {error}");
+                    true
+                } else {
+                    false
+                };
+                if current {
+                    report(&ui, Err(error));
                 }
             }
         }

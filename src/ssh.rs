@@ -17,7 +17,7 @@ use crate::config::{AuthMethod, SessionProfile};
 
 pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
-pub use self::worker::{SshSessionEvent, SshSessionHandle};
+pub use self::worker::{SshSessionEvent, SshSessionHandle, SshTerminalSettings};
 
 /// Startup and final results for a worker-owned remote audio channel.
 pub struct MicrophoneRequest {
@@ -774,6 +774,7 @@ impl SshConnection {
         &self,
         size: crate::terminal_dimensions::TerminalSize,
         x11: Option<&x11::X11Forwarding>,
+        audio_source: Option<&str>,
     ) -> Result<(SshShell, X11RequestStatus)> {
         let channel = self.handle.channel_open_session().await?;
         channel
@@ -815,6 +816,13 @@ impl SshConnection {
             }
             None => X11RequestStatus::NotRequested,
         };
+        if let Some(source) = audio_source {
+            // PULSE_SOURCE is the standard client selector. Servers may deny
+            // this env request; the helper also publishes the default source.
+            if let Err(error) = channel.set_env(false, "PULSE_SOURCE", source).await {
+                debug!(%error, "cannot publish the session audio source environment");
+            }
+        }
         channel.request_shell(true).await?;
         Ok((SshShell { channel }, x11_status))
     }

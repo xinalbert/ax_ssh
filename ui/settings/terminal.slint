@@ -262,7 +262,7 @@ export component TerminalSettingsPage inherits Rectangle {
                     show-divider: false;
                 }
 
-                SettingsSectionHeading { label: @tr("MICROPHONE & DICTATION"); }
+                SettingsSectionHeading { label: @tr("MICROPHONE"); }
                 SettingsRow {
                     label: @tr("Remote sample rate");
                     description: @tr("PCM audio forwarded to the Linux SSH session");
@@ -280,18 +280,8 @@ export component TerminalSettingsPage inherits Rectangle {
                     } }
                 }
                 SettingsRow {
-                    label: @tr("whisper-cli executable");
-                    description: @tr("Local whisper.cpp executable for dictation");
-                    SettingsField { FlatTextInput { text <=> root.draft-whisper-executable; } }
-                }
-                SettingsRow {
-                    label: @tr("Whisper model");
-                    description: @tr("Path to a local multilingual whisper.cpp model");
-                    SettingsField { FlatTextInput { text <=> root.draft-whisper-model; } }
-                }
-                SettingsRow {
                     label: @tr("Save audio settings");
-                    description: @tr("Applies to the next recording; dictation uses 16 kHz mono");
+                    description: @tr("Applies to new SSH connections; recording starts automatically");
                     show-divider: false;
                     SettingsField { Button { text: @tr("Save audio settings"); clicked => { root.save-audio-settings(); } } }
                 }
