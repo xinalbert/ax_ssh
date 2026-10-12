@@ -482,6 +482,11 @@ benchmark result.
 
 ## Verification boundaries
 
+See [behavior coverage](coverage.md) for repeatable LCOV measurement and the
+controller/worker integration fixtures. Device acquisition, permission requests
+and credential entries have private injection points; production code keeps
+the native adapters. Tests do not access real system credentials or devices.
+
 Automated checks cover profile validation, JSON round-trip, Slint compilation,
 save-and-connect routing and authentication storage-selection mapping,
 log flush behavior, and a loopback russh server that verifies rejected host-key
@@ -503,10 +508,8 @@ pending subsystem cancellation, and Tab-shutdown joins. File-icon tests cover
 bounded normalized keys, cache identity, LRU capacity, prewarm limits, and
 fallback behavior; local-open tests cover snapshot ownership and symlink
 replacement rejection.
-The ignored `platform_credential_store_round_trips_and_deletes` test performs a
-real platform credential write/read/delete and may trigger an OS authorization
-prompt. Run it deliberately on each supported credential backend. Manual
-follow-up is also required for window rendering, horizontal tab scrolling,
+Manual follow-up is required for the real platform credential backends, which
+may trigger an OS authorization prompt, and for window rendering, horizontal tab scrolling,
 native title-bar drag hit testing, keyboard/focus input, the visible
 group/host-key/authentication flows, concurrent login against real SSH servers,
 runtime SSH-agent selection, unlock/confirmation, multiple-identity and failure

@@ -31,6 +31,7 @@ languages have quick guides matching the README language badges.
   security contracts, and staged scope
 - [Development](development.md): toolchain, commands, change rules, and
   verification boundaries
+- [Behavior coverage](coverage.md): reproducible LCOV reports and controller/worker test boundaries
 
 ## Project records
 

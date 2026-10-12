@@ -362,6 +362,9 @@ event-loop queue、应用和客户端输出总耗时，不包含终端内容或�
 
 ## 验证边界
 
+可重复的 LCOV 测量和控制器/worker 集成 fixture 见[行为覆盖率](coverage.zh.md)。
+设备获取、权限请求和凭据条目提供私有注入点，生产代码保持原生适配；测试不访问真实系统凭据或设备。
+
 自动检查覆盖 profile 校验、JSON round-trip、Slint 编译、保存并连接路由、认证存储选择映射、日志退出刷新，以及
 loopback russh 测试服务器上的拒绝式主机密钥探测、受信密码/私钥认证、只有精确主机密钥匹配后
 才执行外部签名的内存 agent protocol、PTY shell
@@ -374,9 +377,8 @@ Shift 可打印键后备转换、原始 C0 控制字节事件、Apple 修饰键�
 路径/名称校验、分片与超大 packet frame、逐 Tab 快照隔离、浏览事件恢复、regular file
 元数据/路径检查、有界分块下载、截断、取消、私有缓存发布/权限/清理、transfer 状态、pending
 subsystem 取消和 Tab shutdown join。文件图标测试覆盖有界规范化 key、cache identity、LRU
-容量、预热上限和 fallback；本地打开测试覆盖快照归属与 symlink 替换拒绝。忽略测试
-`platform_credential_store_round_trips_and_deletes` 会执行真实平台凭据
-写入、读取和删除，并可能触发系统授权提示；应在每个受支持的凭据后端上主动运行。
+容量、预热上限和 fallback；本地打开测试覆盖快照归属与 symlink 替换拒绝。
+真实平台凭据后端仍需人工验证，并可能触发系统授权提示。
 窗口渲染、键盘/焦点、可见的分组/主机密钥/认证弹窗、全屏终端程序，以及真实 SSH/Telnet
 服务器仍需 GUI/联机手工验收；其中还包括横向 Tab 滚动、多个真实连接并发、目标平台运行时
 SSH agent 选择、解锁/确认、多 identity 与失败行为，以及目标平台
