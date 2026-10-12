@@ -450,11 +450,18 @@ About 标明 AxSSH 使用 `GPL-3.0-only`，并包含 Slint 标准的可点击署
 About 还提供 **Report a bug**、**Open log folder** 和 **Copy diagnostics**：前者打开 AxSSH
 issue tracker，中者打开本机滚动日志目录，后者只复制版本、构建 revision、系统、架构和构建类型。
 这些操作不会上传数据。
-**Settings > General** 可为 AxSSH 界面选择 **Follow system**、**English** 或
-**Simplified Chinese**，并负责选择以后连接时主动记住密码的默认后端。语言设置先成功持久化，
-再即时同步到主窗口和独立窗口；保存失败时保持原选择。**Follow system** 在中文系统 locale 下
-使用简体中文，其它 locale 使用英文。AxSSH 会翻译应用自有的 Slint 界面；远端终端内容、用户提供的
-名称/路径、日志和运行时技术错误详情保持原文。
+**Settings > General** 可为 AxSSH 界面选择 **Follow system**、**English**、**Deutsch**、
+**Español**、**Français**、**日本語**、**한국어**、**Português (Brasil)**、**Русский**、
+**Українська**、**English (United Kingdom)**、**简体中文** 或 **繁體中文**，并负责选择以后
+连接时主动记住密码的默认后端。语言设置先成功持久化，
+再即时同步到主窗口和独立窗口；保存失败时保持原选择。**Follow system** 在 `zh`、`zh-CN`、
+`zh-SG`、`zh-Hans` 下使用简体中文，`zh-TW`、`zh-HK`、`zh-MO`、`zh-Hant` 使用繁体中文。
+其它已支持系统 locale 匹配对应内嵌语言，包括法语、西语、德语、日语、韩语和葡萄牙语的地区
+变体；葡萄牙语使用巴西版本。未支持语言回退英文。
+俄语系统和乌克兰语系统分别选择 **Русский** 与 **Українська**；英国 `en-GB` 使用英式英语，
+其它英语地区保留原英文选项。选项按语言及地区版本组织；`uk` 是乌克兰语代码，英国使用 `en-GB`。
+AxSSH 会翻译应用自有的
+Slint 界面；远端终端内容、用户提供的名称/路径、日志和运行时技术错误详情保持原文。
 SFTP 传输过滤规则在独立的 **Settings > SFTP** 页面配置。这里还可设置单文件上限
 （0 表示不施加客户端文件大小上限，有限上限为 1-1024 GiB，默认 20 GiB）、
 每个 SFTP 连接上传与下载共享的带宽上限

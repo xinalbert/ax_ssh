@@ -2106,19 +2106,48 @@ reliable unload API and remain process-wide; platform font/application/icon
 databases and the allocator may also retain their own caches after AxSSH drops
 its references, so process RSS is not expected to fall immediately.
 
-`UiLanguage` is a config-owned policy with stable `system`, `english`, and
-`simplified-chinese` persisted values. Schema version 21 defaults older or
-unknown values to System. System resolves Chinese locale families to the
-bundled `zh-CN` catalog and every other locale to English. `build.rs` embeds the
-reviewed PO catalog; the translation validator requires every static Slint
-`@tr` message to have a non-empty translation with the same numbered
-placeholders. Slint sends only a stable selector index. The application bridge
-persists that language in a dedicated blocking transaction before selecting the
-process-wide bundled locale on the UI thread and updating all live main and
-detached components. Ordinary Settings preview/save preserves the last committed
-language so concurrent preview work cannot overwrite it. Remote terminal
-content, user values, logs, and runtime technical error details are not
-translated or used as translation keys.
+`UiLanguage` is a config-owned policy storing `system` or a canonical bundled
+locale (such as `en`, `fr`, `zh-CN`, or `zh-TW`). Schema v36 is unchanged; legacy `english`,
+`simplified-chinese`, and `japanese` aliases still load, while unknown values
+normalize to System. `build/languages.rs`, called by `build.rs`, discovers PO
+directories and validates their `language.json` metadata, then generates a
+static registry into `OUT_DIR`. English source has metadata without a PO.
+The config layer owns locale matching, and the application bridge maps registry
+names and transient indices to the Slint model; neither enumerates languages.
+
+System selection tries exact locale/alias, script (explicit or inferred from
+region), region, language, then English. Script incompatibility prevents a
+Traditional Chinese system locale from selecting Simplified Chinese. `zh-TW`,
+`zh-HK`, `zh-MO`, and `zh-Hant` select the bundled `zh-TW` catalog; `zh` defaults
+to `zh-CN`. French, Spanish, German, and Korean use a language catalog across
+regions; Portuguese defaults to `pt-BR`. A missing compatible script or language
+still falls back to English. Russian and Ukrainian use separate `ru` and `uk`
+catalogs. `en-GB` selects British display spelling; other English regions keep
+the default `en` source catalog. Country and language identifiers are distinct:
+`uk` denotes Ukrainian, while the United Kingdom uses `en-GB`.
+Adding a catalog and metadata needs no language-specific Rust or
+Slint branches. Language names stay in their native form; Follow system remains
+a reactive Slint translation.
+
+`build.rs` embeds the PO catalogs through Slint's bundled-translations compiler;
+no runtime PO parser, directory scan, external language pack, or translation
+worker is added. The catalogs also own `settings-search` context entries for
+`translations/settings-search.json`. `scripts/build_translations.py` generates
+checked-in static search arrays indexed by the source row, so localized search
+keeps stable English route IDs and avoids a per-row translation-table scan.
+`build_zh_catalog.py` is retained as a compatibility command. The common validator
+checks every bundled locale for missing/stale/empty/fuzzy entries, duplicate
+keys, locale/plural metadata, and argument identities/counts; CI and release
+preflight verify both catalogs and generated arrays. See the
+[translation workflow](../translations/README.md).
+
+Slint sends only a transient selector index for the current registry. The application bridge persists that
+language in a dedicated blocking transaction before selecting the process-wide
+bundled locale on the UI thread and updating all live main and detached
+components. Ordinary Settings preview/save preserves the last committed language
+so concurrent preview work cannot overwrite it. Remote terminal content, user
+values, logs, and runtime technical error details are not translated or used as
+translation keys.
 
 Release automation owns distribution metadata, not application runtime state.
 The release author creates an annotated date tag on the default branch. Its

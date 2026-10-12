@@ -804,13 +804,23 @@ the local rolling-log directory, and the third copies only version, build
 revision, operating system, architecture, and build profile. No diagnostic
 action uploads data.
 **Settings > General**
-selects **Follow system**, **English**, or **Simplified Chinese** for the AxSSH
+selects **Follow system**, **English**, **Deutsch**, **Español**, **Français**,
+**English (United Kingdom)**, **日本語**, **한국어**, **Português (Brasil)**,
+**Русский**, **Українська**, **简体中文**, or **繁體中文** for the AxSSH
 interface, and also selects the default backend for a password you choose to
 remember on a future connection. Language changes are persisted before they are
 applied and update the main and detached windows immediately; a failed save
-keeps the previous selection. **Follow system** uses Simplified Chinese for a
-Chinese system locale and English for every other locale. AxSSH translates its
-application-owned Slint interface; remote terminal content, user-provided
+keeps the previous selection. **Follow system** uses Simplified Chinese for
+`zh`, `zh-CN`, `zh-SG`, and `zh-Hans`, and Traditional Chinese for `zh-TW`,
+`zh-HK`, `zh-MO`, and `zh-Hant`. It selects the matching bundled language for
+other supported system locales, including regional French, Spanish, German,
+Japanese, Korean, and Portuguese locales. Portuguese uses the Brazilian variant;
+unsupported languages fall back to English.
+Russian and Ukrainian systems select **Русский** and **Українська** respectively.
+`en-GB` selects British English, while other English regions keep the original
+English option. Interface options represent languages and regional variants;
+`uk` is the Ukrainian language code, not the British English locale.
+AxSSH translates its application-owned Slint interface; remote terminal content, user-provided
 names/paths, logs, and runtime technical error details remain unchanged.
 The SFTP page owns the transfer filter described above, the single-file maximum
 (0 for no client-side file-size cap, or 1-1024 GiB; default 20 GiB), and a

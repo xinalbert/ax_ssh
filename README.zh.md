@@ -8,6 +8,21 @@
 [![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f6feb)](https://github.com/xinalbert/ax_ssh/releases/latest)
+[![English](https://img.shields.io/badge/English-Click-1f6feb)](docs/usage.md)
+[![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-%E7%82%B9%E5%87%BB-dea584)](docs/usage.zh.md)
+[![繁體中文](https://img.shields.io/badge/%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87-%E9%BB%9E%E6%93%8A-dea584)](docs/usage.zh-TW.md)
+[![日本語](https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E3%82%AF%E3%83%AA%E3%83%83%E3%82%AF-blue)](docs/usage.ja.md)
+[![한국어](https://img.shields.io/badge/%ED%95%9C%EA%B5%AD%EC%96%B4-%EC%97%B4%EA%B8%B0-blue)](docs/usage.ko.md)
+[![Deutsch](https://img.shields.io/badge/Deutsch-Klicken-blue)](docs/usage.de.md)
+[![Español](https://img.shields.io/badge/Espa%C3%B1ol-Abrir-blue)](docs/usage.es.md)
+[![Français](https://img.shields.io/badge/Fran%C3%A7ais-Ouvrir-blue)](docs/usage.fr.md)
+[![Português (Brasil)](https://img.shields.io/badge/Portugu%C3%AAs%20%28Brasil%29-Abrir-blue)](docs/usage.pt-BR.md)
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-%D0%9E%D1%82%D0%BA%D1%80%D1%8B%D1%82%D1%8C-blue)](docs/usage.ru.md)
+[![Українська](https://img.shields.io/badge/%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0-%D0%92%D1%96%D0%B4%D0%BA%D1%80%D0%B8%D1%82%D0%B8-blue)](docs/usage.uk.md)
+[![English (United Kingdom)](https://img.shields.io/badge/English%20%28United%20Kingdom%29-Click-1f6feb)](docs/usage.en-GB.md)
+
+在 **Settings > General > Language** 选择界面语言。
+支持的 locale 与维护方式见[翻译说明](translations/README.zh.md)。
 
 AxSSH 是一个由 Rust、Slint 和 Tokio 构建的跨平台桌面终端工作区，在同一个原生应用中
 集中管理已保存的 SSH、Telnet、Serial 和本地 shell 会话，以及彼此独立的 Terminal/SFTP Tab。

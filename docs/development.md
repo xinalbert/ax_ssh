@@ -42,6 +42,26 @@ is skipped when the secret is unavailable, as on pull requests from forks; the
 coverage report is still generated. This job is separate from the cross-platform
 build matrix and creates one coverage upload.
 
+## Interface translations
+
+English is the source language; all registered PO catalogs under `translations/`
+are compiled into the executable by Slint. Edit PO files directly and regenerate
+the static settings-search tables:
+
+```bash
+python3 scripts/build_translations.py
+python3 scripts/check_translations.py
+python3 scripts/build_translations.py --check
+python3 -m unittest scripts/test_translations.py -v
+```
+
+These development tools need Python 3.10+ and `rustfmt`, with no Python packages.
+CI and release preflight run read-only translation validation. See the
+[translation workflow](../translations/README.md) for adding a language and
+preserving context, placeholders, native names, and stable locale identifiers.
+Catalog-local `language.json` metadata drives the build-generated registry and
+Settings options; adding a locale requires no language-specific Rust/Slint edits.
+
 ## Renderer selection
 
 AxSSH enables Slint's Skia and software renderers. **Settings > Appearance >

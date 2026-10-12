@@ -1201,13 +1201,31 @@ run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区�
 没有可靠卸载 API，会保持进程级可用；平台字体/应用/图标数据库和 allocator 也可能在 AxSSH 丢弃
 引用后继续持有自身缓存，因此不能预期进程 RSS 立即下降。
 
-`UiLanguage` 是 config 拥有的策略，持久化值稳定为 `system`、`english` 和
-`simplified-chinese`。schema 版本 21 将旧配置或未知值默认迁移为跟随系统；中文系统 locale
-解析为内嵌的 `zh-CN` 目录，其它 locale 解析为英文。`build.rs` 内嵌经过审阅的 PO 目录；翻译
-检查器要求每个静态 Slint `@tr` 文案都有非空翻译，并保持相同的编号占位符。Slint 只提交稳定的
-选择索引；应用 bridge 在 blocking 事务成功持久化语言后，才在 UI 线程切换进程级内嵌 locale，
-并同步所有存活的主窗口与独立窗口。普通 Settings 预览/保存始终保留最后提交的语言，避免并发预览
-覆盖语言选择。远端 Terminal 内容、用户值、日志和运行时技术错误详情不作为翻译键，也不会被翻译。
+`UiLanguage` 是 config 拥有的策略，保存 `system` 或规范的内嵌 locale（如 `en`、`fr`、`zh-CN`、`zh-TW`）。
+schema v36 保持，旧 `english`、`simplified-chinese`、`japanese` 别名仍可读取，未知值规范化为
+跟随系统。`build.rs` 调用 `build/languages.rs` 发现 PO 目录，校验各目录 `language.json`，并在
+`OUT_DIR` 生成静态注册表。英文源语言只有元数据，无需 PO。config 拥有匹配策略，应用 bridge
+将注册表本名和临时索引映射到 Slint model；两层都不再枚举各语言。
+
+系统匹配顺序为精确 locale/别名、明确或按地区推导的书写系统、地区、语言、英文。书写系统
+不兼容时，不会把繁体系统 locale 选成简体中文；`zh-TW`、`zh-HK`、`zh-MO`、`zh-Hant` 使用
+内嵌 `zh-TW`，只有 `zh` 时默认 `zh-CN`。法语、西语、德语和韩语跨地区使用对应语言目录，
+葡萄牙语默认 `pt-BR`；缺少兼容书写系统或语言时仍回退英文。
+俄语和乌克兰语分别使用 `ru` 和 `uk` 目录；`en-GB` 使用英式显示拼写，其它英语地区保留默认
+`en` 源目录。国家和语言标识不同：`uk` 表示乌克兰语，英国使用 `en-GB`。
+新增目录与元数据无需加入语言专属 Rust/Slint 分支。语言名使用本名，
+跟随系统标签仍使用 Slint 的响应式翻译。
+
+`build.rs` 通过 Slint 编译器内嵌 PO 目录；不新增运行时 PO 解析、目录扫描、外部语言包或翻译
+worker。目录也保存 `translations/settings-search.json` 的 `settings-search` context 译文。
+`scripts/build_translations.py` 生成签入仓库的静态搜索数组，按原始行索引读取译文，保留英文
+路由 ID 并避免逐行扫描翻译映射。`build_zh_catalog.py` 保留为兼容命令。通用校验器遍历所有
+目录，检查缺失/过期/空译文/fuzzy、重复键、locale/复数头部及参数身份/次数；CI 与发布预检
+验证翻译和生成数组。流程见[翻译维护说明](../translations/README.zh.md)。
+
+Slint 只提交当前注册表内的临时选择索引；应用 bridge 在 blocking 事务成功持久化 locale 后，才在 UI 线程切换
+进程级内嵌 locale，并同步所有存活主窗口与独立窗口。普通 Settings 预览/保存保留最后提交的
+语言，避免并发预览覆盖。远端 Terminal 内容、用户值、日志和运行时技术错误详情不进入翻译键。
 
 发行自动化只拥有发行元数据，不拥有应用运行时状态。发布者在默认分支创建 annotated 日期 tag：当天首发
 公开 tag 为 `YYYY-MM-DD`，正整数修订后缀形成 `YYYY-MM-DD-N`。基础日期映射为 Cargo/Debian 的

@@ -38,6 +38,22 @@ variables > Actions 中添加名为 `CODECOV_TOKEN` 的 Codecov repository token
 拿不到该 secret，因此会跳过上传，但仍会生成覆盖率报告。该 job 与跨平台构建矩阵分开，每次 CI
 只上传一份覆盖率报告。
 
+## 界面翻译
+
+英文为源语言；`translations/` 下所有已登记 PO 目录均由 Slint 编译进可执行文件。
+直接修改 PO 文件并生成静态设置搜索表：
+
+```bash
+python3 scripts/build_translations.py
+python3 scripts/check_translations.py
+python3 scripts/build_translations.py --check
+python3 -m unittest scripts/test_translations.py -v
+```
+
+维护工具需要 Python 3.10+ 和 `rustfmt`，不需要 Python 第三方包。CI 与发布预检执行只读校验。
+新增语言和 context、占位符、本名、稳定 locale 的规则见[翻译维护说明](../translations/README.zh.md)。
+各目录的 `language.json` 驱动构建期注册表与 Settings 选项，无需逐语言修改 Rust/Slint。
+
 ## Renderer 选择
 
 AxSSH 同时启用 Slint 的 Skia 和 software renderer。**Settings > Appearance >
