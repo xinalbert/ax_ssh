@@ -1,0 +1,8 @@
+{
+  "native_name": "Українська",
+  "aliases": [
+    "uk-UA"
+  ],
+  "script": "Cyrl",
+  "language_default": true
+}

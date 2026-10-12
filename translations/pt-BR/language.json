@@ -1,0 +1,10 @@
+{
+  "native_name": "Português (Brasil)",
+  "aliases": [
+    "pt",
+    "pt-Latn",
+    "pt-Latn-BR"
+  ],
+  "script": "Latn",
+  "language_default": true
+}

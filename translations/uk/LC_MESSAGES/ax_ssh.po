@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: uk\n"
+"PO-Revision-Date: 2026-10-12 18:08+0800\n"
+"Last-Translator: AxSSH contributors\n"
+"Language-Team: Українська\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial або COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "1–16 рядків термінала на блок програмного відображення"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 стовпців, 3–100 рядків"
+
+msgid "100-200 percent"
+msgstr "100–200 відсотків"
+
+msgid "100-50,000 retained lines"
+msgstr "100–50 000 збережених рядків"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px за наявності сеансів"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 відсотків; 100 зберігає кольори термінала"
+
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "Робоча область термінала для SSH, Telnet, послідовних портів і локальної оболонки."
+
+msgid "APPLICATION"
+msgstr "ПРОГРАМА"
+
+msgid "APPLICATION THEME"
+msgstr "ТЕМА ПРОГРАМИ"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "ШРИФТИ ПРОГРАМИ"
+
+msgid "About"
+msgstr "Про програму"
+
+msgid "About AxSSH"
+msgstr "Про AxSSH"
+
+msgid "Accent / focus"
+msgstr "Акцент / фокус"
+
+msgid "Add Server"
+msgstr "Додати сервер"
+
+msgid "Allow local connections without X authority"
+msgstr "Дозволити локальні з’єднання без авторизації X"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "Дозволити віддалений доступ до буфера обміну через OSC 52"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "Дозволити запис до основного буфера обміну; запитувати перед віддаленим читанням"
+
+msgid "Appearance"
+msgstr "Вигляд"
+
+msgid "Application color palette"
+msgstr "Палітра кольорів програми"
+
+msgid "Application command"
+msgstr "Команда програми"
+
+msgid "Application display mode"
+msgstr "Режим відображення програми"
+
+msgid "Application font family"
+msgstr "Родина шрифтів програми"
+
+msgid "Application interface font"
+msgstr "Шрифт інтерфейсу програми"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "Для нових з’єднань SSH; запис починається автоматично"
+
+msgid "Apply one color family to both display modes"
+msgstr "Застосувати одну колірну гаму до обох режимів відображення"
+
+msgid "Apply this choice to this upload batch"
+msgstr "Застосувати цей вибір до всієї групи завантажень на сервер"
+
+msgid "Async runtime"
+msgstr "Асинхронне середовище виконання"
+
+msgid "Authentication"
+msgstr "Автентифікація"
+
+msgid "Authentication method"
+msgstr "Спосіб автентифікації"
+
+msgid "Auto upload"
+msgstr "Автоматичне надсилання"
+
+msgid "Automatic"
+msgstr "Автоматично"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "БУФЕР"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Background"
+msgstr "Тло"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Обмеження пропускної здатності (MiB/s)"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "Обмеження пропускної здатності (MiB/s; 0 — без обмежень)"
+
+msgid "Baud rate"
+msgstr "Швидкість у бодах"
+
+msgid "Blink terminal cursor"
+msgstr "Миготливий курсор термінала"
+
+msgid "Border"
+msgstr "Межа"
+
+msgid "Bright colors for bold text"
+msgstr "Яскраві кольори для напівжирного тексту"
+
+msgid "Bug reports"
+msgstr "Повідомлення про помилки"
+
+msgid "CLIPBOARD"
+msgstr "БУФЕР ОБМІНУ"
+
+msgid "COMPATIBILITY"
+msgstr "СУМІСНІСТЬ"
+
+msgid "CONTENT AND STATES"
+msgstr "ВМІСТ І СТАНИ"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "ВЛАСНА ТЕМНА ПАЛІТРА"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "ВЛАСНА СВІТЛА ПАЛІТРА"
+
+msgid "Cache unchanged terminal rows"
+msgstr "Кешувати незмінені рядки термінала"
+
+msgid "Cancel"
+msgstr "Скасувати"
+
+msgid "Cancel selected"
+msgstr "Скасувати вибрані"
+
+msgid "Cancel {0}"
+msgstr "Скасувати {0}"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas (ще недоступний)"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Зміни набудуть чинності після перезапуску AxSSH"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "Виберіть «Власний», щоб запустити цей шлях без командної оболонки"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "Виберіть, як це з’єднання відображається в робочій області."
+
+msgid "Choose system, light, or dark appearance"
+msgstr "Вибрати системний, світлий або темний вигляд"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "Виберіть віддалені й локальні каталоги для нових вкладок SFTP."
+
+msgid "Clear"
+msgstr "Очистити"
+
+msgid "Clear Recent"
+msgstr "Очистити нещодавні"
+
+msgid "Clear saved password"
+msgstr "Видалити збережений пароль"
+
+msgid "Clear settings search"
+msgstr "Очистити пошук налаштувань"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "Видалити збережений пароль для {0} зараз? Зміна набуде чинності одразу. Інші зміни залишаться незбереженими."
+
+msgid "Close Current Tab"
+msgstr "Закрити поточну вкладку"
+
+msgid "Close Window"
+msgstr "Закрити вікно"
+
+msgid "Close tab"
+msgstr "Закрити вкладку"
+
+msgid "Close terminal pane"
+msgstr "Закрити панель термінала"
+
+msgid "Collapse session sidebar"
+msgstr "Згорнути бічну панель сеансів"
+
+msgid "Collapse transfers"
+msgstr "Згорнути передачі"
+
+msgid "Collapse {0} group"
+msgstr "Згорнути групу {0}"
+
+msgid "Color palette"
+msgstr "Палітра кольорів"
+
+msgid "Compact terminal rendering"
+msgstr "Компактне відтворення термінала"
+
+msgid "Connect"
+msgstr "Під’єднати"
+
+msgid "Connect to {0}"
+msgstr "Під’єднатися до {0}"
+
+msgid "Connected"
+msgstr "Під’єднано"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "Під’єднано · Вимірювання затримки SSH"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "Під’єднано · SSH RTT: {} ms\nОновлено: {}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "Під’єднано · Дані про затримку SSH застаріли"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "Під’єднано · Час перевірки затримки SSH вичерпано"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "Під’єднано · Затримка SSH недоступна"
+
+msgid "Connection protocol"
+msgstr "Протокол з’єднання"
+
+msgid "Copy"
+msgstr "Копіювати"
+
+msgid "Copy Address"
+msgstr "Копіювати адресу"
+
+msgid "Copy Group"
+msgstr "Копіювати групу"
+
+msgid "Copy Server"
+msgstr "Копіювати сервер"
+
+msgid "Copy Terminal Selection"
+msgstr "Копіювати виділення термінала"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "Сполучення клавіш для копіювання виділення термінала"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "Копіювати виділення; інакше вставити"
+
+msgid "Copy current path"
+msgstr "Копіювати поточний шлях"
+
+msgid "Copy diagnostics"
+msgstr "Копіювати діагностику"
+
+msgid "Copy selection on select"
+msgstr "Копіювати під час виділення"
+
+msgid "Copy version and build information without connection data"
+msgstr "Копіювати версію та відомості про збірку без даних з’єднання"
+
+msgid "Credential storage"
+msgstr "Зберігання облікових даних"
+
+msgid "Credential vault password"
+msgstr "Пароль сховища облікових даних"
+
+msgid "Credentials used for this SSH connection."
+msgstr "Облікові дані для цього з’єднання SSH."
+
+msgid "Custom"
+msgstr "Власний"
+
+msgid "Custom SFTP filename patterns"
+msgstr "Власні шаблони імен файлів SFTP"
+
+msgid "Custom executable"
+msgstr "Власний виконуваний файл"
+
+msgid "Custom filename patterns"
+msgstr "Власні шаблони імен файлів"
+
+msgid "Cut"
+msgstr "Вирізати"
+
+msgid "DEFAULTS"
+msgstr "ТИПОВІ ЗНАЧЕННЯ"
+
+msgid "DISPLAY"
+msgstr "ВІДОБРАЖЕННЯ"
+
+msgid "Damage backing store (default)"
+msgstr "Буфер змінених областей (типово)"
+
+msgid "Danger"
+msgstr "Небезпека"
+
+msgid "Dark"
+msgstr "Темний"
+
+msgid "Data bits"
+msgstr "Біти даних"
+
+msgid "Default terminal background color"
+msgstr "Типовий колір тла термінала"
+
+msgid "Default terminal columns"
+msgstr "Типова кількість стовпців термінала"
+
+msgid "Default terminal rows"
+msgstr "Типова кількість рядків термінала"
+
+msgid "Default terminal size"
+msgstr "Типовий розмір термінала"
+
+msgid "Default terminal text color"
+msgstr "Типовий колір тексту термінала"
+
+msgid "Delete"
+msgstr "Видалити"
+
+msgid "Delete Group"
+msgstr "Видалити групу"
+
+msgid "Delete Server"
+msgstr "Видалити сервер"
+
+msgid "Delete group"
+msgstr "Видалити групу"
+
+msgid "Delete server"
+msgstr "Видалити сервер"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "Видалити {0} і збережені облікові дані?"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "Видалити {0}? Сервери цієї групи буде переміщено до «Без групи»."
+
+msgid "Detect again on next connection"
+msgstr "Визначити знову під час наступного з’єднання"
+
+msgid "Detected key"
+msgstr "Виявлений ключ"
+
+msgid "Detected locations"
+msgstr "Виявлені розташування"
+
+msgid "Detected private keys"
+msgstr "Виявлені приватні ключі"
+
+msgid "Detected serial ports"
+msgstr "Виявлені послідовні порти"
+
+msgid "Detected system: {}"
+msgstr "Виявлена система: {}"
+
+msgid "Diagnostics"
+msgstr "Діагностика"
+
+msgid "Dialog and transient overlay tint"
+msgstr "Відтінок діалогів і тимчасових накладень"
+
+msgid "Display mode"
+msgstr "Режим відображення"
+
+msgid "Dividers and control outlines"
+msgstr "Розділювачі та межі елементів керування"
+
+msgid "Download"
+msgstr "Завантажити"
+
+msgid "Duplicate"
+msgstr "Дублювати"
+
+msgid "Duplicate Group"
+msgstr "Дублювати групу"
+
+msgid "Edit"
+msgstr "Редагувати"
+
+msgid "Edit Server"
+msgstr "Редагувати сервер"
+
+msgid "Edit selected remote file"
+msgstr "Редагувати вибраний віддалений файл"
+
+msgid "Enable semantic highlighting"
+msgstr "Увімкнути семантичне підсвічування"
+
+msgid "Encrypted application vault"
+msgstr "Зашифроване сховище програми"
+
+msgid "Endpoint"
+msgstr "Адреса з’єднання"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "Введіть #RRGGBB або #RRGGBBAA. Під час збереження недостатній контраст буде замінено читабельними кольорами."
+
+msgid "Enter the Telnet server address."
+msgstr "Введіть адресу сервера Telnet."
+
+msgid "Enter the host address and SSH account."
+msgstr "Введіть адресу вузла й обліковий запис SSH."
+
+msgid "Error"
+msgstr "Помилка"
+
+msgid "Error and destructive indicators"
+msgstr "Індикатори помилок і руйнівних дій"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "Рівні помилок і HTTP 5xx"
+
+msgid "Executable path"
+msgstr "Шлях до виконуваного файлу"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "Виконуваний файл для нових вкладок локального термінала"
+
+msgid "Existing session groups"
+msgstr "Наявні групи сеансів"
+
+msgid "Expand session sidebar"
+msgstr "Розгорнути бічну панель сеансів"
+
+msgid "Expand transfers"
+msgstr "Розгорнути передачі"
+
+msgid "Expand {0} group"
+msgstr "Розгорнути групу {0}"
+
+msgid "Export Selected"
+msgstr "Експортувати вибране"
+
+msgid "Export Selected shortcut"
+msgstr "Сполучення клавіш для експорту вибраного"
+
+msgid "Export Selected to Clipboard"
+msgstr "Експортувати вибране до буфера обміну"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "Помилка ({0})"
+
+msgid "File"
+msgstr "Файл"
+
+msgid "File transfers"
+msgstr "Передавання файлів"
+
+msgid "Files and transfers area sizes"
+msgstr "Розміри областей файлів і передач"
+
+msgid "Filter system files"
+msgstr "Фільтрувати системні файли"
+
+msgid "Flow control"
+msgstr "Керування потоком"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "Обводки фокуса, виділення й активні індикатори"
+
+msgid "Focused refresh rate"
+msgstr "Частота оновлення у фокусі"
+
+msgid "Focused terminal refresh rate"
+msgstr "Частота оновлення термінала у фокусі"
+
+msgid "Follow system"
+msgstr "Як у системі"
+
+msgid "Font family"
+msgstr "Родина шрифтів"
+
+msgid "Font size"
+msgstr "Розмір шрифту"
+
+msgid "Foreground"
+msgstr "Передній план"
+
+msgid "Forward"
+msgstr "Уперед"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "Загальні"
+
+msgid "Global simultaneous uploads"
+msgstr "Загальна кількість одночасних надсилань"
+
+msgid "Group"
+msgstr "Група"
+
+msgid "Group name"
+msgstr "Назва групи"
+
+msgid "HTTP 2xx responses"
+msgstr "Відповіді HTTP 2xx"
+
+msgid "Help"
+msgstr "Довідка"
+
+msgid "Hidden"
+msgstr "Приховано"
+
+msgid "Host"
+msgstr "Вузол"
+
+msgid "Hover and secondary surfaces"
+msgstr "Вторинні поверхні й наведення"
+
+msgid "INTERFACE"
+msgstr "ІНТЕРФЕЙС"
+
+msgid "Identity"
+msgstr "Ідентифікація"
+
+msgid "Import from Clipboard"
+msgstr "Імпортувати з буфера обміну"
+
+msgid "Import from Clipboard shortcut"
+msgstr "Сполучення клавіш для імпорту з буфера обміну"
+
+msgid "Information"
+msgstr "Інформація"
+
+msgid "Interface"
+msgstr "Інтерфейс"
+
+msgid "Interface language"
+msgstr "Мова інтерфейсу"
+
+msgid "Item tree (current)"
+msgstr "Дерево елементів (поточне)"
+
+msgid "KEYBOARD"
+msgstr "КЛАВІАТУРА"
+
+msgid "Keep both"
+msgstr "Зберегти обидва"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "Утримувати курсор на початку рядка під час прокручування"
+
+msgid "Keyboard Shortcuts"
+msgstr "Сполучення клавіш"
+
+msgid "LAYOUT"
+msgstr "КОМПОНУВАННЯ"
+
+msgid "LOCAL X SERVER"
+msgstr "ЛОКАЛЬНИЙ X-СЕРВЕР"
+
+msgid "Language"
+msgstr "Мова"
+
+msgid "Language used by the AxSSH interface"
+msgstr "Мова інтерфейсу AxSSH"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "Запускати вибраний X-сервер лише під час відкриття перенаправленої графічної програми"
+
+msgid "Layer images (fallback)"
+msgstr "Зображення шарів (резервний варіант)"
+
+msgid "Leave blank to keep saved password"
+msgstr "Залиште порожнім, щоб зберегти попередній пароль"
+
+msgid "License"
+msgstr "Ліцензія"
+
+msgid "Light"
+msgstr "Світлий"
+
+msgid "Line height"
+msgstr "Висота рядка"
+
+msgid "Loading"
+msgstr "Завантаження"
+
+msgid "Loading..."
+msgstr "Завантаження…"
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "Обмеження локальної копії перед відкриттям файлів SFTP у MiB"
+
+msgid "Local Shell"
+msgstr "Локальна оболонка"
+
+msgid "Local X server application path"
+msgstr "Шлях до програми локального X-сервера"
+
+msgid "Local X server provider"
+msgstr "Постачальник локального X-сервера"
+
+msgid "Local default directory"
+msgstr "Типовий локальний каталог"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Локальна копія перед відкриттям; типово 512 MiB. 0 знімає обмеження розміру файлів і кешу та може зайняти багато місця на диску"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "Локальна копія для відкриття (MiB)"
+
+msgid "Local files"
+msgstr "Локальні файли"
+
+msgid "Local selection priority"
+msgstr "Пріоритет локального виділення"
+
+msgid "Local shell"
+msgstr "Локальна оболонка"
+
+msgid "Local shell icon"
+msgstr "Піктограма локальної оболонки"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "Рівні журналювання та HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "Рівні журналювання та коди стану HTTP"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "Лише loopback; потрібно для MacXServer і серверів Windows із -ac"
+
+msgid "MICROPHONE"
+msgstr "МІКРОФОН"
+
+msgid "MOUSE"
+msgstr "МИША"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "Ручний вибір має пріоритет над автоматичним визначенням."
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "Маскувати імена користувачів і середні октети IPv4 на бічній панелі сеансів"
+
+msgid "Maximize Window"
+msgstr "Розгорнути вікно"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "Максимальний розмір файлу SFTP у GiB"
+
+msgid "Maximum file size (GiB)"
+msgstr "Максимальний розмір файлу (GiB)"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Максимальний розмір файлу для завантаження й надсилання під час зовнішнього редагування; типово 4 MiB, діапазон 1–64 MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Максимум одночасних надсилань і завантажень в одній вкладці SFTP"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Максимальний розмір одного надісланого або завантаженого файлу; 0 — без обмежень, типово 20 GiB"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Максимум надсилань для всіх вкладок SFTP"
+
+msgid "Minimize Window"
+msgstr "Згорнути вікно"
+
+msgid "Modified"
+msgstr "Змінено"
+
+msgid "Mono (1)"
+msgstr "Моно (1)"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "Моно, стерео або кілька каналів; адаптується до локального пристрою"
+
+msgid "More"
+msgstr "Ще"
+
+msgid "Move Current Workspace to New Window"
+msgstr "Перемістити поточну робочу область до нового вікна"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Переходити на початок рядка після кожного кроку коліщатка в програмах з альтернативним екраном"
+
+msgid "Move workspace to new window"
+msgstr "Перемістити робочу область до нового вікна"
+
+msgid "Muted text"
+msgstr "Приглушений текст"
+
+msgid "Name"
+msgstr "Назва"
+
+msgid "Navigation and title surfaces"
+msgstr "Поверхні навігації та заголовків"
+
+msgid "New Group"
+msgstr "Нова група"
+
+msgid "New Local Shell"
+msgstr "Нова локальна оболонка"
+
+msgid "New Server"
+msgstr "Новий сервер"
+
+msgid "New Server shortcut"
+msgstr "Сполучення клавіш для нового сервера"
+
+msgid "New group"
+msgstr "Нова група"
+
+msgid "New name"
+msgstr "Нова назва"
+
+msgid "Next Tab"
+msgstr "Наступна вкладка"
+
+msgid "No failed transfers"
+msgstr "Немає невдалих передач"
+
+msgid "No files"
+msgstr "Немає файлів"
+
+msgid "No known local X server was found"
+msgstr "Не знайдено відомого локального X-сервера"
+
+msgid "No matching system icons"
+msgstr "Немає відповідних системних піктограм"
+
+msgid "No saved connections"
+msgstr "Немає збережених з’єднань"
+
+msgid "No saved password"
+msgstr "Немає збереженого пароля"
+
+msgid "No saved servers"
+msgstr "Немає збережених серверів"
+
+msgid "No settings match this search."
+msgstr "Немає налаштувань, що відповідають пошуку."
+
+msgid "No successful transfers"
+msgstr "Немає успішних передач"
+
+msgid "No transfers in progress"
+msgstr "Немає активних передач"
+
+msgid "Off"
+msgstr "Вимкнено"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Увімкнено: Alt/Option надсилає жести миші; вимкнено: звичайний xterm із виділенням через Shift"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "Один шаблон на рядок; * відповідає будь-яким символам"
+
+msgid "Open"
+msgstr "Відкрити"
+
+msgid "Open Recent"
+msgstr "Відкрити нещодавні"
+
+msgid "Open SFTP"
+msgstr "Відкрити SFTP"
+
+msgid "Open Settings"
+msgstr "Відкрити налаштування"
+
+msgid "Open Settings shortcut"
+msgstr "Сполучення клавіш для відкриття налаштувань"
+
+msgid "Open Workspace"
+msgstr "Відкрити робочу область"
+
+msgid "Open a new local shell tab"
+msgstr "Відкрити нову вкладку локальної оболонки"
+
+msgid "Open a saved session or create a new tab."
+msgstr "Відкрийте збережений сеанс або створіть нову вкладку."
+
+msgid "Open folder"
+msgstr "Відкрити теку"
+
+msgid "Open local shell"
+msgstr "Відкрити локальну оболонку"
+
+msgid "Open log folder"
+msgstr "Відкрити теку журналів"
+
+msgid "Open saved connection"
+msgstr "Відкрити збережене з’єднання"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "Відкрити трекер помилок AxSSH"
+
+msgid "Option acts as Meta"
+msgstr "Option як Meta"
+
+msgid "Optional"
+msgstr "Необов’язково"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "Необов’язково; порожнє значення вмикає автоматичне локальне розблокування"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "Необов’язково; вводити лише під час з’єднання або збереження"
+
+msgid "Overlay"
+msgstr "Накладення"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "Перевизначити загальні налаштування SFTP для цього сервера; 0 GiB — без обмежень."
+
+msgid "Overwrite"
+msgstr "Перезаписати"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "Аудіо PCM, що передається до сеансу SSH Linux"
+
+msgid "Pane"
+msgstr "Панель"
+
+msgid "Panel"
+msgstr "Панель"
+
+msgid "Panel alternative"
+msgstr "Вторинна панель"
+
+msgid "Parent directory"
+msgstr "Батьківський каталог"
+
+msgid "Parity"
+msgstr "Контроль парності"
+
+msgid "Password"
+msgstr "Пароль"
+
+msgid "Password authentication"
+msgstr "Автентифікація за паролем"
+
+msgid "Paste"
+msgstr "Вставити"
+
+msgid "Paste Into Terminal"
+msgstr "Вставити в термінал"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "Сполучення клавіш для вставлення в термінал"
+
+msgid "Path"
+msgstr "Шлях"
+
+msgid "Pause"
+msgstr "Призупинити"
+
+msgid "Pause selected"
+msgstr "Призупинити вибрані"
+
+msgid "Pause {0}"
+msgstr "Призупинити {0}"
+
+msgid "Platform defaults"
+msgstr "Типові налаштування платформи"
+
+msgid "Platform home directory"
+msgstr "Домашній каталог платформи"
+
+msgid "Port"
+msgstr "Порт"
+
+msgid "Positive status indicators"
+msgstr "Індикатори успішного стану"
+
+msgid "Previous Tab"
+msgstr "Попередня вкладка"
+
+msgid "Primary readable text"
+msgstr "Основний читабельний текст"
+
+msgid "Primary workspace surface"
+msgstr "Основна поверхня робочої області"
+
+msgid "Private key"
+msgstr "Приватний ключ"
+
+msgid "Private key authentication"
+msgstr "Автентифікація за приватним ключем"
+
+msgid "Private key passphrase"
+msgstr "Парольна фраза приватного ключа"
+
+msgid "Private key passphrase (optional)"
+msgstr "Парольна фраза приватного ключа (необов’язково)"
+
+msgid "Private key path"
+msgstr "Шлях до приватного ключа"
+
+msgid "Production server"
+msgstr "Робочий сервер"
+
+msgid "Protocol"
+msgstr "Протокол"
+
+msgid "Provider"
+msgstr "Постачальник"
+
+msgid "RENDERING"
+msgstr "ВІДТВОРЕННЯ"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Зменшити кількість елементів термінала й не малювати прямокутники типового тла"
+
+msgid "Refresh"
+msgstr "Оновити"
+
+msgid "Refresh serial ports"
+msgstr "Оновити послідовні порти"
+
+msgid "Remembered password storage"
+msgstr "Зберігання збережених паролів"
+
+msgid "Remote and local file pane sizes"
+msgstr "Розміри панелей віддалених і локальних файлів"
+
+msgid "Remote channels"
+msgstr "Віддалені канали"
+
+msgid "Remote default directory"
+msgstr "Типовий віддалений каталог"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "Обмеження файлу для віддаленого редагування (MiB)"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "Обмеження розміру файлу для віддаленого редагування у MiB"
+
+msgid "Remote file already exists"
+msgstr "Віддалений файл уже існує"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "Віддалений файл: {0} - Змінено: {1}"
+
+msgid "Remote files"
+msgstr "Віддалені файли"
+
+msgid "Remote sample rate"
+msgstr "Віддалена частота дискретизації"
+
+msgid "Remove"
+msgstr "Прибрати"
+
+msgid "Remove revoked record"
+msgstr "Видалити відкликаний запис"
+
+msgid "Rename"
+msgstr "Перейменувати"
+
+msgid "Rename Group"
+msgstr "Перейменувати групу"
+
+msgid "Rename group"
+msgstr "Перейменувати групу"
+
+msgid "Rename selected remote entry"
+msgstr "Перейменувати вибраний віддалений елемент"
+
+msgid "Renderer"
+msgstr "Засіб відтворення"
+
+msgid "Rendering backend"
+msgstr "Механізм відтворення"
+
+msgid "Report a bug"
+msgstr "Повідомити про помилку"
+
+msgid "Reset defaults"
+msgstr "Відновити типові налаштування"
+
+msgid "Reset filters"
+msgstr "Скинути фільтри"
+
+msgid "Restore Window"
+msgstr "Відновити вікно"
+
+msgid "Restore platform defaults"
+msgstr "Відновити типові налаштування платформи"
+
+msgid "Restore the default filters for this platform"
+msgstr "Відновити типові фільтри для цієї платформи"
+
+msgid "Resume"
+msgstr "Продовжити"
+
+msgid "Resume selected"
+msgstr "Продовжити вибрані"
+
+msgid "Resume {0}"
+msgstr "Продовжити {0}"
+
+msgid "Return Workspace to Main Window"
+msgstr "Повернути робочу область до головного вікна"
+
+msgid "Return workspace to main window"
+msgstr "Повернути робочу область до головного вікна"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Повторно використовувати шари рядків GPU; може збільшити використання відеопам’яті"
+
+msgid "Review before sharing"
+msgstr "Перевірити перед надсиланням"
+
+msgid "Right-click always pastes"
+msgstr "Права кнопка завжди вставляє"
+
+msgid "Right-click copy or paste"
+msgstr "Копіювання або вставлення правою кнопкою"
+
+msgid "Runtime logs"
+msgstr "Журнали виконання"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "СЕМАНТИЧНЕ ПІДСВІЧУВАННЯ"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "ПЕРЕДАЧІ SFTP"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "Обмеження пропускної здатності SFTP у MiB за секунду"
+
+msgid "SFTP directories"
+msgstr "Каталоги SFTP"
+
+msgid "SFTP files"
+msgstr "Файли SFTP"
+
+msgid "SFTP local default directory"
+msgstr "Типовий локальний каталог SFTP"
+
+msgid "SFTP remote default directory"
+msgstr "Типовий віддалений каталог SFTP"
+
+msgid "SFTP transfer limits"
+msgstr "Обмеження передач SFTP"
+
+msgid "SHA-256 fingerprint"
+msgstr "Відбиток SHA-256"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "Режим перенаправлення X11 через SSH"
+
+msgid "SSH agent"
+msgstr "Агент SSH"
+
+msgid "SSH authentication method"
+msgstr "Спосіб автентифікації SSH"
+
+msgid "SSH host key changed"
+msgstr "Ключ вузла SSH змінено"
+
+msgid "SSH host key revoked"
+msgstr "Ключ вузла SSH відкликано"
+
+msgid "SSH password"
+msgstr "Пароль SSH"
+
+msgid "SSH transport"
+msgstr "Транспорт SSH"
+
+msgid "SSH username"
+msgstr "Ім’я користувача SSH"
+
+msgid "SUPPORT"
+msgstr "ПІДТРИМКА"
+
+msgid "SURFACES"
+msgstr "ПОВЕРХНІ"
+
+msgid "Save"
+msgstr "Зберегти"
+
+msgid "Save & connect"
+msgstr "Зберегти й під’єднатися"
+
+msgid "Save SSH password for future connections"
+msgstr "Зберегти пароль SSH для майбутніх з’єднань"
+
+msgid "Save Workspace"
+msgstr "Зберегти робочу область"
+
+msgid "Save audio settings"
+msgstr "Зберегти налаштування аудіо"
+
+msgid "Save password (optional)"
+msgstr "Зберегти пароль (необов’язково)"
+
+msgid "Save password in"
+msgstr "Зберігати пароль у"
+
+msgid "Save session"
+msgstr "Зберегти сеанс"
+
+msgid "Saved connections"
+msgstr "Збережені з’єднання"
+
+msgid "Saved in {0}."
+msgstr "Збережено в {0}."
+
+msgid "Saved password"
+msgstr "Збережений пароль"
+
+msgid "Scrollback"
+msgstr "Історія термінала"
+
+msgid "Search all settings"
+msgstr "Пошук у всіх налаштуваннях"
+
+msgid "Search connections"
+msgstr "Пошук з’єднань"
+
+msgid "Search connections..."
+msgstr "Пошук з’єднань…"
+
+msgid "Search results"
+msgstr "Результати пошуку"
+
+msgid "Search settings"
+msgstr "Пошук налаштувань"
+
+msgid "Search system icons"
+msgstr "Пошук системних піктограм"
+
+msgid "Secondary labels and metadata"
+msgstr "Вторинні підписи й метадані"
+
+msgid "Select All"
+msgstr "Виділити все"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "Виберіть виявлений пристрій або введіть назву порту вручну."
+
+msgid "Select all files"
+msgstr "Виділити всі файли"
+
+msgid "Select the transport used by this saved connection."
+msgstr "Виберіть транспорт для цього збереженого з’єднання."
+
+msgid "Select {0}"
+msgstr "Вибрати {0}"
+
+msgid "Selected"
+msgstr "Вибрано"
+
+msgid "Selection"
+msgstr "Виділення"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "Надсилати Option+клавішу як Meta з префіксом Escape"
+
+msgid "Serial"
+msgstr "Послідовний порт"
+
+msgid "Serial baud rate"
+msgstr "Швидкість послідовного порту в бодах"
+
+msgid "Serial data bits"
+msgstr "Біти даних послідовного порту"
+
+msgid "Serial flow control"
+msgstr "Керування потоком послідовного порту"
+
+msgid "Serial parity"
+msgstr "Контроль парності послідовного порту"
+
+msgid "Serial port"
+msgstr "Послідовний порт"
+
+msgid "Serial port name"
+msgstr "Назва послідовного порту"
+
+msgid "Serial stop bits"
+msgstr "Стопові біти послідовного порту"
+
+msgid "Serial transport"
+msgstr "Послідовний транспорт"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "Обмеження пропускної здатності SFTP сервера у MiB за секунду"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "Максимальний розмір файлу SFTP сервера у GiB"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "Одночасні передачі SFTP сервера"
+
+msgid "Session group"
+msgstr "Група сеансів"
+
+msgid "Session mask character"
+msgstr "Символ маскування сеансів"
+
+msgid "Session name"
+msgstr "Назва сеансу"
+
+msgid "Session sidebar width"
+msgstr "Ширина бічної панелі сеансів"
+
+msgid "Session transfer command"
+msgstr "Команда передавання сеансів"
+
+msgid "Sessions"
+msgstr "Сеанси"
+
+msgid "Settings"
+msgstr "Налаштування"
+
+msgid "Settings..."
+msgstr "Налаштування…"
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Спільне для надсилання й завантаження в кожній вкладці SFTP; 0 — без обмежень"
+
+msgid "Shortcuts"
+msgstr "Сполучення клавіш"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Показувати миготливий курсор, коли термінал у фокусі"
+
+msgid "Show in Folder"
+msgstr "Показати в теці"
+
+msgid "Show local copy"
+msgstr "Показати локальну копію"
+
+msgid "Simultaneous transfers"
+msgstr "Одночасні передачі"
+
+msgid "Size"
+msgstr "Розмір"
+
+msgid "Skip"
+msgstr "Пропустити"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Пропускати відповідні імена під час надсилання й завантаження SFTP"
+
+msgid "Skipped"
+msgstr "Пропущено"
+
+msgid "Software"
+msgstr "Програмне"
+
+msgid "Software block rows"
+msgstr "Рядки програмного блока"
+
+msgid "Software presentation"
+msgstr "Програмне відображення"
+
+msgid "Software presentation block rows"
+msgstr "Рядки блока програмного відображення"
+
+msgid "Software presentation path"
+msgstr "Спосіб програмного відображення"
+
+msgid "Sort by modified time"
+msgstr "Сортувати за часом зміни"
+
+msgid "Sort by name"
+msgstr "Сортувати за назвою"
+
+msgid "Sort by size"
+msgstr "Сортувати за розміром"
+
+msgid "Speed"
+msgstr "Швидкість"
+
+msgid "Split active terminal horizontally"
+msgstr "Розділити активний термінал горизонтально"
+
+msgid "Split active terminal vertically"
+msgstr "Розділити активний термінал вертикально"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "Розділити горизонтально (Alt+Shift+J)"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "Розділити вертикально (Alt+Shift+L)"
+
+msgid "Start for first X11 application"
+msgstr "Запустити для першої програми X11"
+
+msgid "Status"
+msgstr "Стан"
+
+msgid "Stereo (2)"
+msgstr "Стерео (2)"
+
+msgid "Stop bits"
+msgstr "Стопові біти"
+
+msgid "Stop editing"
+msgstr "Завершити редагування"
+
+msgid "Success"
+msgstr "Успіх"
+
+msgid "Success ({0})"
+msgstr "Успіх ({0})"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "Перемкнути вкладку SSH/SFTP"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "Сполучення клавіш для перемикання вкладки SSH/SFTP"
+
+msgid "System credential store"
+msgstr "Системне сховище облікових даних"
+
+msgid "System icon"
+msgstr "Піктограма системи"
+
+msgid "TERMINAL"
+msgstr "ТЕРМІНАЛ"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "ТИПОВІ НАЛАШТУВАННЯ ТЕРМІНАЛА"
+
+msgid "TRANSFER FILTERS"
+msgstr "ФІЛЬТРИ ПЕРЕДАЧ"
+
+msgid "TYPOGRAPHY"
+msgstr "ШРИФТИ"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Протокол Telnet"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet передає дані термінала без шифрування та перевірки справжності вузла."
+
+msgid "Terminal"
+msgstr "Термінал"
+
+msgid "Terminal character-cell font"
+msgstr "Шрифт символьних комірок термінала"
+
+msgid "Terminal command"
+msgstr "Команда термінала"
+
+msgid "Terminal drawing"
+msgstr "Відтворення термінала"
+
+msgid "Terminal drawing path"
+msgstr "Спосіб відтворення термінала"
+
+msgid "Terminal error highlight color"
+msgstr "Колір підсвічування помилок термінала"
+
+msgid "Terminal font family"
+msgstr "Родина шрифтів термінала"
+
+msgid "Terminal font size"
+msgstr "Розмір шрифту термінала"
+
+msgid "Terminal information highlight color"
+msgstr "Колір інформаційного підсвічування термінала"
+
+msgid "Terminal line height percentage"
+msgstr "Висота рядка термінала у відсотках"
+
+msgid "Terminal pane heights"
+msgstr "Висота панелей термінала"
+
+msgid "Terminal pane widths"
+msgstr "Ширина панелей термінала"
+
+msgid "Terminal scrollback lines"
+msgstr "Рядки історії термінала"
+
+msgid "Terminal success highlight color"
+msgstr "Колір підсвічування успіху в терміналі"
+
+msgid "Terminal text brightness"
+msgstr "Яскравість тексту термінала"
+
+msgid "Terminal text selection background"
+msgstr "Тло виділення тексту термінала"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "Оновлення термінала, коли панель у фокусі"
+
+msgid "Terminal warning highlight color"
+msgstr "Колір підсвічування попереджень термінала"
+
+msgid "Text"
+msgstr "Текст"
+
+msgid "Text brightness"
+msgstr "Яскравість тексту"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Спосіб відтворення Canvas зарезервовано для майбутнього механізму"
+
+msgid "Theme default"
+msgstr "Типово в темі"
+
+msgid "Toggle Session Sidebar"
+msgstr "Показати/приховати бічну панель сеансів"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "Сполучення клавіш для показу/приховування бічної панелі сеансів"
+
+msgid "Transferring ({0})"
+msgstr "Передавання ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "Передачі на вкладку SFTP"
+
+msgid "Trust and continue"
+msgstr "Довіряти й продовжити"
+
+msgid "Trust new key"
+msgstr "Довіряти новому ключу"
+
+msgid "Trusted (-Y)"
+msgstr "Довірений (-Y)"
+
+msgid "Unfocused refresh rate"
+msgstr "Частота оновлення без фокуса"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "Частота оновлення термінала без фокуса"
+
+msgid "Unknown SSH host key"
+msgstr "Невідомий ключ вузла SSH"
+
+msgid "Unlock encrypted credentials"
+msgstr "Розблокувати зашифровані облікові дані"
+
+msgid "Untrusted (-X)"
+msgstr "Недовірений (-X)"
+
+msgid "Update session"
+msgstr "Оновити сеанс"
+
+msgid "Upload"
+msgstr "Надіслати"
+
+msgid "Upload changes"
+msgstr "Надіслати зміни"
+
+msgid "Upload selected local files"
+msgstr "Надіслати вибрані локальні файли"
+
+msgid "Use platform default filters"
+msgstr "Використовувати типові фільтри платформи"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "Використовувати обмеження передач SFTP для цього сервера"
+
+msgid "Use server-specific limits"
+msgstr "Використовувати обмеження цього сервера"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Використовувати яскраву палітру ANSI для напівжирного тексту"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Для збережених паролів і нових паролів, введених у редакторі сеансів"
+
+msgid "Username"
+msgstr "Ім’я користувача"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "Типово використовується система вузла. Зміни зберігаються одразу."
+
+msgid "Vault password"
+msgstr "Пароль сховища"
+
+msgid "Version {0}"
+msgstr "Версія {0}"
+
+msgid "View"
+msgstr "Вигляд"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Оновлення видимого термінала, коли інша панель у фокусі"
+
+msgid "WORKSPACE"
+msgstr "РОБОЧА ОБЛАСТЬ"
+
+msgid "Warning"
+msgstr "Попередження"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "Рівні попереджень і HTTP 4xx"
+
+msgid "Window"
+msgstr "Вікно"
+
+msgid "Workspace"
+msgstr "Робоча область"
+
+msgid "Workspace command"
+msgstr "Команда робочої області"
+
+msgid "Workspace file path"
+msgstr "Шлях до файлу робочої області"
+
+msgid "Workspace tab width"
+msgstr "Ширина вкладки робочої області"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "X-сервер для перенаправлених графічних програм"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "Перенаправлення X11"
+
+msgid "lines"
+msgstr "рядків"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Спосіб відображення CPU у macOS; зміни набудуть чинності після перезапуску AxSSH"
+
+msgid "px"
+msgstr "px"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "рядків"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "Акцентний колір {0}"
+
+msgid "{0} background color"
+msgstr "Колір тла {0}"
+
+msgid "{0} border color"
+msgstr "Колір меж {0}"
+
+msgid "{0} danger color"
+msgstr "Колір небезпеки {0}"
+
+msgid "{0} muted text color"
+msgstr "Колір приглушеного тексту {0}"
+
+msgid "{0} overlay color"
+msgstr "Колір накладення {0}"
+
+msgid "{0} panel color"
+msgstr "Колір панелі {0}"
+
+msgid "{0} secondary panel color"
+msgstr "Колір вторинної панелі {0}"
+
+msgid "{0} success color"
+msgstr "Колір успіху {0}"
+
+msgid "{0} terminal background color"
+msgstr "Колір тла термінала {0}"
+
+msgid "{0} terminal foreground color"
+msgstr "Колір переднього плану термінала {0}"
+
+msgid "{0} terminal selection color"
+msgstr "Колір виділення термінала {0}"
+
+msgid "{0} text color"
+msgstr "Колір тексту {0}"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 стовпців, 3–100 рядків"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100–200 відсотків"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px за наявності сеансів"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 відсотків; 100 зберігає кольори термінала"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "Про програму"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "Дозволити локальні з’єднання без авторизації X"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "Вигляд"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "Програма"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "Сполучення клавіш для команди програми"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "Шрифт інтерфейсу програми"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "Застосувати одну колірну гаму до обох режимів відображення"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "Версія, ліцензія, інтерфейс, транспорт і середовище виконання AxSSH"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Обмеження пропускної здатності (MiB/s)"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "Миготливий курсор термінала"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "Яскраві кольори для напівжирного тексту"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "Повідомлення про помилки, журнали виконання та діагностика"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "Кешувати незмінені рядки термінала"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Зміни набудуть чинності після перезапуску AxSSH"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "Вибрати копіювання або вставлення правою кнопкою в терміналі"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "Вибрати системний, світлий або темний вигляд"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "Палітра кольорів"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "Компактне відтворення термінала"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "Налаштувати власну темну палітру програми й термінала"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "Налаштувати власну світлу палітру програми й термінала"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "Копіювати виділення термінала"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "Одразу копіювати завершені виділення термінала"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "Копіювати під час виділення"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "Власна темна палітра"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "Власний виконуваний файл"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "Власні шаблони імен файлів"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "Власна світла палітра"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "Типовий розмір термінала"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "Виявлені розташування"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "Режим відображення"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "Виконуваний файл для нових вкладок локального термінала"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "Експортувати вибране"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "Фільтрувати системні файли"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "Частота оновлення у фокусі"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "Родина шрифтів"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "Розмір шрифту"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "Загальні"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "Загальна кількість одночасних надсилань"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "Імпортувати з буфера обміну"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "Утримувати курсор на початку рядка під час прокручування"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "Відомі локальні встановлення X-сервера"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "Мова"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "Мова інтерфейсу AxSSH"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "Запустити власний виконуваний файл X-сервера"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "Запускати вибраний X-сервер лише за потреби"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "Висота рядка"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Локальна копія перед відкриттям; типово 512 MiB. 0 знімає обмеження розміру файлів і кешу та може зайняти багато місця на диску"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "Локальна копія для відкриття (MiB)"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "Пріоритет локального виділення"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "Локальна оболонка"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "Піктограма локальної оболонки"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "Режим сумісності лише для loopback"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "Маскувати імена користувачів і адреси IPv4 на бічній панелі сеансів"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "Максимальний розмір файлу (GiB)"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Максимальний розмір файлу для завантаження й надсилання під час зовнішнього редагування; типово 4 MiB, діапазон 1–64 MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Максимум одночасних надсилань і завантажень в одній вкладці SFTP"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Максимальний розмір одного надісланого або завантаженого файлу; 0 — без обмежень, типово 20 GiB"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Максимум надсилань для всіх вкладок SFTP"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Переходити на початок рядка після кожного кроку коліщатка в програмах з альтернативним екраном"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "Новий сервер"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "Наступна вкладка"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "Кількість рядків історії термінала, збережених у пам’яті"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Увімкнено: Alt/Option надсилає жести миші; вимкнено: звичайний xterm із виділенням через Shift"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "Один шаблон на рядок; * відповідає будь-яким символам"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "Відкрити налаштування"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option як Meta"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "Необов’язкові кольори посилань, шляхів, станів і рівнів журналювання"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "Вставити в термінал"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "Типові налаштування платформи"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "Попередня вкладка"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "Постачальник"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Зменшити кількість елементів термінала й не малювати прямокутники типового тла"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "Зберігання збережених паролів"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "Обмеження файлу для віддаленого редагування (MiB)"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "Засіб відтворення"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "Відновити типові фільтри для цієї платформи"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Повторно використовувати шари рядків GPU; може збільшити використання відеопам’яті"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "Копіювання або вставлення правою кнопкою"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "Історія термінала"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "Виділити все"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "Семантичне підсвічування"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "Символ маскування сеансів"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "Ширина бічної панелі сеансів"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "Сполучення клавіш для передавання сеансів"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Спільне для надсилання й завантаження в кожній вкладці SFTP; 0 — без обмежень"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "Сполучення клавіш"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Показувати миготливий курсор, коли термінал у фокусі"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Пропускати відповідні імена під час надсилання й завантаження SFTP"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "Програмне відображення"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "Запустити для першої програми X11"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "Підтримка"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "Перемкнути вкладку SSH/SFTP"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "Термінал"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "Шрифт символьних комірок термінала"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "Сполучення клавіш для команди термінала"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "Оновлення термінала, коли панель у фокусі"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "Яскравість тексту"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "Показати/приховати бічну панель сеансів"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "Передачі на вкладку SFTP"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "Частота оновлення без фокуса"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "Використовувати Option як Meta термінала в macOS"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Використовувати яскраву палітру ANSI для напівжирного тексту"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Для збережених паролів і нових паролів, введених у редакторі сеансів"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "Типово використовується система вузла. Зміни зберігаються одразу."
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Оновлення видимого термінала, коли інша панель у фокусі"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "Робоча область"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "Сполучення клавіш для команди робочої області"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "Ширина вкладки робочої області"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "X-сервер для перенаправлених графічних програм"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Спосіб відображення CPU у macOS; зміни набудуть чинності після перезапуску AxSSH"

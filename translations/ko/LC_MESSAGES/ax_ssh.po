@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: ko\n"
+"PO-Revision-Date: 2026-10-12 17:39+0800\n"
+"Last-Translator: AxSSH contributors\n"
+"Language-Team: 한국어\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial 또는 COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "소프트웨어 표시 블록당 터미널 1~16행"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10~300열, 3~100행"
+
+msgid "100-200 percent"
+msgstr "100~200%"
+
+msgid "100-50,000 retained lines"
+msgstr "100~50,000행 보관"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgid "180-420 px when sessions are available"
+msgstr "세션이 있을 때 180~420px"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60~120%; 100%는 터미널 색상 유지"
+
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "SSH, Telnet, 직렬 연결 및 로컬 셸을 위한 터미널 작업 공간입니다."
+
+msgid "APPLICATION"
+msgstr "애플리케이션"
+
+msgid "APPLICATION THEME"
+msgstr "애플리케이션 테마"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "애플리케이션 글꼴"
+
+msgid "About"
+msgstr "정보"
+
+msgid "About AxSSH"
+msgstr "AxSSH 정보"
+
+msgid "Accent / focus"
+msgstr "강조 / 포커스"
+
+msgid "Add Server"
+msgstr "서버 추가"
+
+msgid "Allow local connections without X authority"
+msgstr "X 인증 없이 로컬 연결 허용"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "원격 OSC 52 클립보드 접근 허용"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "기본 클립보드 쓰기 허용, 원격 읽기 전에 확인"
+
+msgid "Appearance"
+msgstr "모양"
+
+msgid "Application color palette"
+msgstr "애플리케이션 색상표"
+
+msgid "Application command"
+msgstr "애플리케이션 명령"
+
+msgid "Application display mode"
+msgstr "애플리케이션 표시 모드"
+
+msgid "Application font family"
+msgstr "애플리케이션 글꼴 모음"
+
+msgid "Application interface font"
+msgstr "애플리케이션 인터페이스 글꼴"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "새 SSH 연결에 적용되며 녹음이 자동으로 시작됩니다"
+
+msgid "Apply one color family to both display modes"
+msgstr "두 표시 모드에 동일한 색상 계열 적용"
+
+msgid "Apply this choice to this upload batch"
+msgstr "이 업로드 묶음에 선택 사항 적용"
+
+msgid "Async runtime"
+msgstr "비동기 런타임"
+
+msgid "Authentication"
+msgstr "인증"
+
+msgid "Authentication method"
+msgstr "인증 방식"
+
+msgid "Auto upload"
+msgstr "자동 업로드"
+
+msgid "Automatic"
+msgstr "자동"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "버퍼"
+
+msgid "Back"
+msgstr "뒤로"
+
+msgid "Background"
+msgstr "배경"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "대역폭 제한 (MiB/s)"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "대역폭 제한 (MiB/s, 0은 무제한)"
+
+msgid "Baud rate"
+msgstr "전송 속도"
+
+msgid "Blink terminal cursor"
+msgstr "터미널 커서 깜빡임"
+
+msgid "Border"
+msgstr "테두리"
+
+msgid "Bright colors for bold text"
+msgstr "굵은 글씨에 밝은 색상 사용"
+
+msgid "Bug reports"
+msgstr "버그 보고"
+
+msgid "CLIPBOARD"
+msgstr "클립보드"
+
+msgid "COMPATIBILITY"
+msgstr "호환성"
+
+msgid "CONTENT AND STATES"
+msgstr "콘텐츠 및 상태"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "사용자 지정 어두운 색상표"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "사용자 지정 밝은 색상표"
+
+msgid "Cache unchanged terminal rows"
+msgstr "변경되지 않은 터미널 행 캐시"
+
+msgid "Cancel"
+msgstr "취소"
+
+msgid "Cancel selected"
+msgstr "선택 항목 취소"
+
+msgid "Cancel {0}"
+msgstr "{0} 취소"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas (아직 지원되지 않음)"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "변경 사항은 AxSSH를 다시 시작한 후 적용됩니다"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "명령 셸 없이 이 경로를 실행하려면 사용자 지정을 선택하세요"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "작업 공간에서 이 연결을 표시하는 방식을 선택하세요."
+
+msgid "Choose system, light, or dark appearance"
+msgstr "시스템, 밝은 모드 또는 어두운 모드 선택"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "새 SFTP 탭에서 열 원격 및 로컬 디렉터리를 선택하세요."
+
+msgid "Clear"
+msgstr "지우기"
+
+msgid "Clear Recent"
+msgstr "최근 항목 지우기"
+
+msgid "Clear saved password"
+msgstr "저장된 비밀번호 지우기"
+
+msgid "Clear settings search"
+msgstr "설정 검색 지우기"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "{0}의 저장된 비밀번호를 지금 지우시겠습니까? 즉시 적용되며 다른 변경 사항은 저장되지 않은 상태로 남습니다."
+
+msgid "Close Current Tab"
+msgstr "현재 탭 닫기"
+
+msgid "Close Window"
+msgstr "창 닫기"
+
+msgid "Close tab"
+msgstr "탭 닫기"
+
+msgid "Close terminal pane"
+msgstr "터미널 창 영역 닫기"
+
+msgid "Collapse session sidebar"
+msgstr "세션 사이드바 접기"
+
+msgid "Collapse transfers"
+msgstr "전송 목록 접기"
+
+msgid "Collapse {0} group"
+msgstr "{0} 그룹 접기"
+
+msgid "Color palette"
+msgstr "색상표"
+
+msgid "Compact terminal rendering"
+msgstr "터미널 압축 렌더링"
+
+msgid "Connect"
+msgstr "연결"
+
+msgid "Connect to {0}"
+msgstr "{0}에 연결"
+
+msgid "Connected"
+msgstr "연결됨"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "연결됨 · SSH 지연 시간 측정 중"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "연결됨 · SSH RTT: {}ms\n업데이트: {}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "연결됨 · SSH 지연 시간 데이터 만료"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "연결됨 · SSH 지연 시간 측정 시간 초과"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "연결됨 · SSH 지연 시간 사용 불가"
+
+msgid "Connection protocol"
+msgstr "연결 프로토콜"
+
+msgid "Copy"
+msgstr "복사"
+
+msgid "Copy Address"
+msgstr "주소 복사"
+
+msgid "Copy Group"
+msgstr "그룹 복사"
+
+msgid "Copy Server"
+msgstr "서버 복사"
+
+msgid "Copy Terminal Selection"
+msgstr "터미널 선택 영역 복사"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "터미널 선택 영역 복사 단축키"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "선택 영역 복사, 선택 영역이 없으면 붙여넣기"
+
+msgid "Copy current path"
+msgstr "현재 경로 복사"
+
+msgid "Copy diagnostics"
+msgstr "진단 정보 복사"
+
+msgid "Copy selection on select"
+msgstr "선택 시 복사"
+
+msgid "Copy version and build information without connection data"
+msgstr "연결 데이터 없이 버전 및 빌드 정보 복사"
+
+msgid "Credential storage"
+msgstr "자격 증명 저장 위치"
+
+msgid "Credential vault password"
+msgstr "자격 증명 저장소 비밀번호"
+
+msgid "Credentials used for this SSH connection."
+msgstr "이 SSH 연결에 사용할 자격 증명입니다."
+
+msgid "Custom"
+msgstr "사용자 지정"
+
+msgid "Custom SFTP filename patterns"
+msgstr "사용자 지정 SFTP 파일 이름 패턴"
+
+msgid "Custom executable"
+msgstr "사용자 지정 실행 파일"
+
+msgid "Custom filename patterns"
+msgstr "사용자 지정 파일 이름 패턴"
+
+msgid "Cut"
+msgstr "잘라내기"
+
+msgid "DEFAULTS"
+msgstr "기본값"
+
+msgid "DISPLAY"
+msgstr "표시"
+
+msgid "Damage backing store (default)"
+msgstr "변경 영역 버퍼 (기본값)"
+
+msgid "Danger"
+msgstr "위험"
+
+msgid "Dark"
+msgstr "어두운 모드"
+
+msgid "Data bits"
+msgstr "데이터 비트"
+
+msgid "Default terminal background color"
+msgstr "기본 터미널 배경색"
+
+msgid "Default terminal columns"
+msgstr "기본 터미널 열 수"
+
+msgid "Default terminal rows"
+msgstr "기본 터미널 행 수"
+
+msgid "Default terminal size"
+msgstr "기본 터미널 크기"
+
+msgid "Default terminal text color"
+msgstr "기본 터미널 글자색"
+
+msgid "Delete"
+msgstr "삭제"
+
+msgid "Delete Group"
+msgstr "그룹 삭제"
+
+msgid "Delete Server"
+msgstr "서버 삭제"
+
+msgid "Delete group"
+msgstr "그룹 삭제"
+
+msgid "Delete server"
+msgstr "서버 삭제"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "{0} 및 저장된 자격 증명을 삭제하시겠습니까?"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "{0}을(를) 삭제하시겠습니까? 이 그룹의 서버는 그룹 없음으로 이동합니다."
+
+msgid "Detect again on next connection"
+msgstr "다음 연결 시 다시 감지"
+
+msgid "Detected key"
+msgstr "감지된 키"
+
+msgid "Detected locations"
+msgstr "감지된 위치"
+
+msgid "Detected private keys"
+msgstr "감지된 개인 키"
+
+msgid "Detected serial ports"
+msgstr "감지된 직렬 포트"
+
+msgid "Detected system: {}"
+msgstr "감지된 시스템: {}"
+
+msgid "Diagnostics"
+msgstr "진단"
+
+msgid "Dialog and transient overlay tint"
+msgstr "대화 상자 및 임시 오버레이 색조"
+
+msgid "Display mode"
+msgstr "표시 모드"
+
+msgid "Dividers and control outlines"
+msgstr "구분선 및 컨트롤 테두리"
+
+msgid "Download"
+msgstr "다운로드"
+
+msgid "Duplicate"
+msgstr "복제"
+
+msgid "Duplicate Group"
+msgstr "그룹 복제"
+
+msgid "Edit"
+msgstr "편집"
+
+msgid "Edit Server"
+msgstr "서버 편집"
+
+msgid "Edit selected remote file"
+msgstr "선택한 원격 파일 편집"
+
+msgid "Enable semantic highlighting"
+msgstr "의미 기반 강조 사용"
+
+msgid "Encrypted application vault"
+msgstr "애플리케이션 암호화 저장소"
+
+msgid "Endpoint"
+msgstr "연결 대상"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "#RRGGBB 또는 #RRGGBBAA 값을 입력하세요. 대비가 부족한 색상은 저장 시 읽기 쉬운 색상으로 대체됩니다."
+
+msgid "Enter the Telnet server address."
+msgstr "Telnet 서버 주소를 입력하세요."
+
+msgid "Enter the host address and SSH account."
+msgstr "호스트 주소와 SSH 계정을 입력하세요."
+
+msgid "Error"
+msgstr "오류"
+
+msgid "Error and destructive indicators"
+msgstr "오류 및 삭제 등의 작업 표시"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "오류 수준 및 HTTP 5xx"
+
+msgid "Executable path"
+msgstr "실행 파일 경로"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "새 로컬 터미널 탭에서 사용할 실행 파일"
+
+msgid "Existing session groups"
+msgstr "기존 세션 그룹"
+
+msgid "Expand session sidebar"
+msgstr "세션 사이드바 펼치기"
+
+msgid "Expand transfers"
+msgstr "전송 목록 펼치기"
+
+msgid "Expand {0} group"
+msgstr "{0} 그룹 펼치기"
+
+msgid "Export Selected"
+msgstr "선택 항목 내보내기"
+
+msgid "Export Selected shortcut"
+msgstr "선택 항목 내보내기 단축키"
+
+msgid "Export Selected to Clipboard"
+msgstr "선택 항목을 클립보드로 내보내기"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "실패 ({0})"
+
+msgid "File"
+msgstr "파일"
+
+msgid "File transfers"
+msgstr "파일 전송"
+
+msgid "Files and transfers area sizes"
+msgstr "파일 및 전송 영역 크기"
+
+msgid "Filter system files"
+msgstr "시스템 파일 필터링"
+
+msgid "Flow control"
+msgstr "흐름 제어"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "포커스 테두리, 선택 영역 및 활성 표시"
+
+msgid "Focused refresh rate"
+msgstr "포커스 상태 새로 고침 빈도"
+
+msgid "Focused terminal refresh rate"
+msgstr "포커스 상태 터미널 새로 고침 빈도"
+
+msgid "Follow system"
+msgstr "시스템 설정 따르기"
+
+msgid "Font family"
+msgstr "글꼴 모음"
+
+msgid "Font size"
+msgstr "글꼴 크기"
+
+msgid "Foreground"
+msgstr "전경"
+
+msgid "Forward"
+msgstr "앞으로"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "일반"
+
+msgid "Global simultaneous uploads"
+msgstr "전체 동시 업로드 수"
+
+msgid "Group"
+msgstr "그룹"
+
+msgid "Group name"
+msgstr "그룹 이름"
+
+msgid "HTTP 2xx responses"
+msgstr "HTTP 2xx 응답"
+
+msgid "Help"
+msgstr "도움말"
+
+msgid "Hidden"
+msgstr "숨김"
+
+msgid "Host"
+msgstr "호스트"
+
+msgid "Hover and secondary surfaces"
+msgstr "보조 영역 및 마우스 오버 영역"
+
+msgid "INTERFACE"
+msgstr "인터페이스"
+
+msgid "Identity"
+msgstr "식별 정보"
+
+msgid "Import from Clipboard"
+msgstr "클립보드에서 가져오기"
+
+msgid "Import from Clipboard shortcut"
+msgstr "클립보드에서 가져오기 단축키"
+
+msgid "Information"
+msgstr "정보"
+
+msgid "Interface"
+msgstr "인터페이스"
+
+msgid "Interface language"
+msgstr "인터페이스 언어"
+
+msgid "Item tree (current)"
+msgstr "항목 트리 (현재)"
+
+msgid "KEYBOARD"
+msgstr "키보드"
+
+msgid "Keep both"
+msgstr "둘 다 유지"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "스크롤할 때 커서를 줄 맨 앞에 유지"
+
+msgid "Keyboard Shortcuts"
+msgstr "키보드 단축키"
+
+msgid "LAYOUT"
+msgstr "레이아웃"
+
+msgid "LOCAL X SERVER"
+msgstr "로컬 X 서버"
+
+msgid "Language"
+msgstr "언어"
+
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 인터페이스에 사용할 언어"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "전달된 그래픽 앱이 열릴 때만 선택한 X 서버 실행"
+
+msgid "Layer images (fallback)"
+msgstr "레이어 이미지 (대체 방식)"
+
+msgid "Leave blank to keep saved password"
+msgstr "저장된 비밀번호를 유지하려면 비워 두세요"
+
+msgid "License"
+msgstr "라이선스"
+
+msgid "Light"
+msgstr "밝은 모드"
+
+msgid "Line height"
+msgstr "줄 높이"
+
+msgid "Loading"
+msgstr "불러오는 중"
+
+msgid "Loading..."
+msgstr "불러오는 중..."
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "SFTP 로컬 파일 열기 사본 제한 (MiB)"
+
+msgid "Local Shell"
+msgstr "로컬 셸"
+
+msgid "Local X server application path"
+msgstr "로컬 X 서버 애플리케이션 경로"
+
+msgid "Local X server provider"
+msgstr "로컬 X 서버 공급자"
+
+msgid "Local default directory"
+msgstr "기본 로컬 디렉터리"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "열기 전 로컬 사본 생성, 기본 512MiB. 0은 파일 및 캐시 크기 제한을 해제하며 디스크 공간을 많이 사용할 수 있습니다"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "로컬 파일 열기 사본 (MiB)"
+
+msgid "Local files"
+msgstr "로컬 파일"
+
+msgid "Local selection priority"
+msgstr "로컬 선택 우선"
+
+msgid "Local shell"
+msgstr "로컬 셸"
+
+msgid "Local shell icon"
+msgstr "로컬 셸 아이콘"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "로그 수준 및 HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "로그 수준 및 HTTP 상태 코드"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "루프백 전용, MacXServer 및 -ac Windows 서버에 필요"
+
+msgid "MICROPHONE"
+msgstr "마이크"
+
+msgid "MOUSE"
+msgstr "마우스"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "수동 선택이 자동 감지보다 우선합니다."
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "세션 사이드바의 사용자 이름과 IPv4 중간 옥텟 마스킹"
+
+msgid "Maximize Window"
+msgstr "창 최대화"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "SFTP 최대 파일 크기 (GiB)"
+
+msgid "Maximum file size (GiB)"
+msgstr "최대 파일 크기 (GiB)"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "외부 편집을 위해 다운로드 또는 업로드할 파일의 최대 크기, 기본 4MiB, 범위 1~64MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "SFTP 탭 하나의 최대 동시 업로드 및 다운로드 수"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "업로드 또는 다운로드할 파일 하나의 최대 크기, 0은 무제한, 기본 20GiB"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "모든 SFTP 탭이 공유하는 최대 업로드 수"
+
+msgid "Minimize Window"
+msgstr "창 최소화"
+
+msgid "Modified"
+msgstr "수정됨"
+
+msgid "Mono (1)"
+msgstr "모노 (1)"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "모노, 스테레오 또는 다중 채널, 로컬 장치에 맞춰 조정"
+
+msgid "More"
+msgstr "더 보기"
+
+msgid "Move Current Workspace to New Window"
+msgstr "현재 작업 공간을 새 창으로 이동"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "대체 화면 앱에서 휠을 한 단계 움직일 때마다 줄 맨 앞으로 이동"
+
+msgid "Move workspace to new window"
+msgstr "작업 공간을 새 창으로 이동"
+
+msgid "Muted text"
+msgstr "흐린 글자"
+
+msgid "Name"
+msgstr "이름"
+
+msgid "Navigation and title surfaces"
+msgstr "탐색 및 제목 영역"
+
+msgid "New Group"
+msgstr "새 그룹"
+
+msgid "New Local Shell"
+msgstr "새 로컬 셸"
+
+msgid "New Server"
+msgstr "새 서버"
+
+msgid "New Server shortcut"
+msgstr "새 서버 단축키"
+
+msgid "New group"
+msgstr "새 그룹"
+
+msgid "New name"
+msgstr "새 이름"
+
+msgid "Next Tab"
+msgstr "다음 탭"
+
+msgid "No failed transfers"
+msgstr "실패한 전송 없음"
+
+msgid "No files"
+msgstr "파일 없음"
+
+msgid "No known local X server was found"
+msgstr "알려진 로컬 X 서버를 찾지 못했습니다"
+
+msgid "No matching system icons"
+msgstr "일치하는 시스템 아이콘 없음"
+
+msgid "No saved connections"
+msgstr "저장된 연결 없음"
+
+msgid "No saved password"
+msgstr "저장된 비밀번호 없음"
+
+msgid "No saved servers"
+msgstr "저장된 서버 없음"
+
+msgid "No settings match this search."
+msgstr "이 검색과 일치하는 설정이 없습니다."
+
+msgid "No successful transfers"
+msgstr "성공한 전송 없음"
+
+msgid "No transfers in progress"
+msgstr "진행 중인 전송 없음"
+
+msgid "Off"
+msgstr "꺼짐"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "켜짐: Alt/Option으로 마우스 동작 전송, 꺼짐: 표준 xterm 및 Shift 선택"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "한 줄에 패턴 하나, *는 모든 문자와 일치"
+
+msgid "Open"
+msgstr "열기"
+
+msgid "Open Recent"
+msgstr "최근 항목 열기"
+
+msgid "Open SFTP"
+msgstr "SFTP 열기"
+
+msgid "Open Settings"
+msgstr "설정 열기"
+
+msgid "Open Settings shortcut"
+msgstr "설정 열기 단축키"
+
+msgid "Open Workspace"
+msgstr "작업 공간 열기"
+
+msgid "Open a new local shell tab"
+msgstr "새 로컬 셸 탭 열기"
+
+msgid "Open a saved session or create a new tab."
+msgstr "저장된 세션을 열거나 새 탭을 만드세요."
+
+msgid "Open folder"
+msgstr "폴더 열기"
+
+msgid "Open local shell"
+msgstr "로컬 셸 열기"
+
+msgid "Open log folder"
+msgstr "로그 폴더 열기"
+
+msgid "Open saved connection"
+msgstr "저장된 연결 열기"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "AxSSH 이슈 추적기 열기"
+
+msgid "Option acts as Meta"
+msgstr "Option을 Meta로 사용"
+
+msgid "Optional"
+msgstr "선택 사항"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "선택 사항, 비워 두면 로컬 자동 잠금 해제 사용"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "선택 사항, 연결하거나 저장할 때만 입력"
+
+msgid "Overlay"
+msgstr "오버레이"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "이 서버에서 전체 SFTP 설정을 재정의합니다. 0GiB는 무제한입니다."
+
+msgid "Overwrite"
+msgstr "덮어쓰기"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "Linux SSH 세션으로 전달되는 PCM 오디오"
+
+msgid "Pane"
+msgstr "창 영역"
+
+msgid "Panel"
+msgstr "패널"
+
+msgid "Panel alternative"
+msgstr "보조 패널"
+
+msgid "Parent directory"
+msgstr "상위 디렉터리"
+
+msgid "Parity"
+msgstr "패리티"
+
+msgid "Password"
+msgstr "비밀번호"
+
+msgid "Password authentication"
+msgstr "비밀번호 인증"
+
+msgid "Paste"
+msgstr "붙여넣기"
+
+msgid "Paste Into Terminal"
+msgstr "터미널에 붙여넣기"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "터미널에 붙여넣기 단축키"
+
+msgid "Path"
+msgstr "경로"
+
+msgid "Pause"
+msgstr "일시 중지"
+
+msgid "Pause selected"
+msgstr "선택 항목 일시 중지"
+
+msgid "Pause {0}"
+msgstr "{0} 일시 중지"
+
+msgid "Platform defaults"
+msgstr "플랫폼 기본값"
+
+msgid "Platform home directory"
+msgstr "플랫폼 홈 디렉터리"
+
+msgid "Port"
+msgstr "포트"
+
+msgid "Positive status indicators"
+msgstr "성공 상태 표시"
+
+msgid "Previous Tab"
+msgstr "이전 탭"
+
+msgid "Primary readable text"
+msgstr "읽기 쉬운 기본 글자"
+
+msgid "Primary workspace surface"
+msgstr "기본 작업 공간 영역"
+
+msgid "Private key"
+msgstr "개인 키"
+
+msgid "Private key authentication"
+msgstr "개인 키 인증"
+
+msgid "Private key passphrase"
+msgstr "개인 키 암호"
+
+msgid "Private key passphrase (optional)"
+msgstr "개인 키 암호 (선택 사항)"
+
+msgid "Private key path"
+msgstr "개인 키 경로"
+
+msgid "Production server"
+msgstr "운영 서버"
+
+msgid "Protocol"
+msgstr "프로토콜"
+
+msgid "Provider"
+msgstr "공급자"
+
+msgid "RENDERING"
+msgstr "렌더링"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "터미널 항목 수를 줄이고 기본 배경 사각형 생략"
+
+msgid "Refresh"
+msgstr "새로 고침"
+
+msgid "Refresh serial ports"
+msgstr "직렬 포트 새로 고침"
+
+msgid "Remembered password storage"
+msgstr "저장된 비밀번호 보관 위치"
+
+msgid "Remote and local file pane sizes"
+msgstr "원격 및 로컬 파일 영역 크기"
+
+msgid "Remote channels"
+msgstr "원격 채널 수"
+
+msgid "Remote default directory"
+msgstr "기본 원격 디렉터리"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "원격 편집 파일 제한 (MiB)"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "원격 편집 파일 크기 제한 (MiB)"
+
+msgid "Remote file already exists"
+msgstr "원격 파일이 이미 존재합니다"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "원격 파일: {0} - 수정: {1}"
+
+msgid "Remote files"
+msgstr "원격 파일"
+
+msgid "Remote sample rate"
+msgstr "원격 샘플링 주파수"
+
+msgid "Remove"
+msgstr "제거"
+
+msgid "Remove revoked record"
+msgstr "폐기된 키 기록 제거"
+
+msgid "Rename"
+msgstr "이름 바꾸기"
+
+msgid "Rename Group"
+msgstr "그룹 이름 바꾸기"
+
+msgid "Rename group"
+msgstr "그룹 이름 바꾸기"
+
+msgid "Rename selected remote entry"
+msgstr "선택한 원격 항목 이름 바꾸기"
+
+msgid "Renderer"
+msgstr "렌더러"
+
+msgid "Rendering backend"
+msgstr "렌더링 백엔드"
+
+msgid "Report a bug"
+msgstr "버그 보고"
+
+msgid "Reset defaults"
+msgstr "기본값 복원"
+
+msgid "Reset filters"
+msgstr "필터 초기화"
+
+msgid "Restore Window"
+msgstr "창 복원"
+
+msgid "Restore platform defaults"
+msgstr "플랫폼 기본값 복원"
+
+msgid "Restore the default filters for this platform"
+msgstr "이 플랫폼의 기본 필터 복원"
+
+msgid "Resume"
+msgstr "재개"
+
+msgid "Resume selected"
+msgstr "선택 항목 재개"
+
+msgid "Resume {0}"
+msgstr "{0} 재개"
+
+msgid "Return Workspace to Main Window"
+msgstr "작업 공간을 기본 창으로 되돌리기"
+
+msgid "Return workspace to main window"
+msgstr "작업 공간을 기본 창으로 되돌리기"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "GPU 행 레이어 재사용, 그래픽 메모리 사용량이 증가할 수 있음"
+
+msgid "Review before sharing"
+msgstr "공유 전에 확인"
+
+msgid "Right-click always pastes"
+msgstr "오른쪽 클릭 시 항상 붙여넣기"
+
+msgid "Right-click copy or paste"
+msgstr "오른쪽 클릭으로 복사 또는 붙여넣기"
+
+msgid "Runtime logs"
+msgstr "실행 로그"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "의미 기반 강조"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "SFTP 전송"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "SFTP 대역폭 제한 (초당 MiB)"
+
+msgid "SFTP directories"
+msgstr "SFTP 디렉터리"
+
+msgid "SFTP files"
+msgstr "SFTP 파일"
+
+msgid "SFTP local default directory"
+msgstr "SFTP 기본 로컬 디렉터리"
+
+msgid "SFTP remote default directory"
+msgstr "SFTP 기본 원격 디렉터리"
+
+msgid "SFTP transfer limits"
+msgstr "SFTP 전송 제한"
+
+msgid "SHA-256 fingerprint"
+msgstr "SHA-256 지문"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "SSH X11 전달 모드"
+
+msgid "SSH agent"
+msgstr "SSH 에이전트"
+
+msgid "SSH authentication method"
+msgstr "SSH 인증 방식"
+
+msgid "SSH host key changed"
+msgstr "SSH 호스트 키 변경됨"
+
+msgid "SSH host key revoked"
+msgstr "SSH 호스트 키 폐기됨"
+
+msgid "SSH password"
+msgstr "SSH 비밀번호"
+
+msgid "SSH transport"
+msgstr "SSH 전송"
+
+msgid "SSH username"
+msgstr "SSH 사용자 이름"
+
+msgid "SUPPORT"
+msgstr "지원"
+
+msgid "SURFACES"
+msgstr "영역"
+
+msgid "Save"
+msgstr "저장"
+
+msgid "Save & connect"
+msgstr "저장 및 연결"
+
+msgid "Save SSH password for future connections"
+msgstr "다음 연결을 위해 SSH 비밀번호 저장"
+
+msgid "Save Workspace"
+msgstr "작업 공간 저장"
+
+msgid "Save audio settings"
+msgstr "오디오 설정 저장"
+
+msgid "Save password (optional)"
+msgstr "비밀번호 저장 (선택 사항)"
+
+msgid "Save password in"
+msgstr "비밀번호 저장 위치"
+
+msgid "Save session"
+msgstr "세션 저장"
+
+msgid "Saved connections"
+msgstr "저장된 연결"
+
+msgid "Saved in {0}."
+msgstr "{0}에 저장되었습니다."
+
+msgid "Saved password"
+msgstr "저장된 비밀번호"
+
+msgid "Scrollback"
+msgstr "터미널 스크롤 기록"
+
+msgid "Search all settings"
+msgstr "모든 설정 검색"
+
+msgid "Search connections"
+msgstr "연결 검색"
+
+msgid "Search connections..."
+msgstr "연결 검색..."
+
+msgid "Search results"
+msgstr "검색 결과"
+
+msgid "Search settings"
+msgstr "설정 검색"
+
+msgid "Search system icons"
+msgstr "시스템 아이콘 검색"
+
+msgid "Secondary labels and metadata"
+msgstr "보조 레이블 및 메타데이터"
+
+msgid "Select All"
+msgstr "모두 선택"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "감지된 장치를 선택하거나 포트 이름을 직접 입력하세요."
+
+msgid "Select all files"
+msgstr "모든 파일 선택"
+
+msgid "Select the transport used by this saved connection."
+msgstr "이 저장된 연결에 사용할 전송 방식을 선택하세요."
+
+msgid "Select {0}"
+msgstr "{0} 선택"
+
+msgid "Selected"
+msgstr "선택됨"
+
+msgid "Selection"
+msgstr "선택 영역"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "Option+키를 Escape 접두어가 붙은 Meta 키로 전송"
+
+msgid "Serial"
+msgstr "직렬"
+
+msgid "Serial baud rate"
+msgstr "직렬 전송 속도"
+
+msgid "Serial data bits"
+msgstr "직렬 데이터 비트"
+
+msgid "Serial flow control"
+msgstr "직렬 흐름 제어"
+
+msgid "Serial parity"
+msgstr "직렬 패리티"
+
+msgid "Serial port"
+msgstr "직렬 포트"
+
+msgid "Serial port name"
+msgstr "직렬 포트 이름"
+
+msgid "Serial stop bits"
+msgstr "직렬 정지 비트"
+
+msgid "Serial transport"
+msgstr "직렬 전송"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "서버 SFTP 대역폭 제한 (초당 MiB)"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "서버 SFTP 최대 파일 크기 (GiB)"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "서버 SFTP 동시 전송 수"
+
+msgid "Session group"
+msgstr "세션 그룹"
+
+msgid "Session mask character"
+msgstr "세션 마스킹 문자"
+
+msgid "Session name"
+msgstr "세션 이름"
+
+msgid "Session sidebar width"
+msgstr "세션 사이드바 너비"
+
+msgid "Session transfer command"
+msgstr "세션 가져오기 및 내보내기 명령"
+
+msgid "Sessions"
+msgstr "세션"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Settings..."
+msgstr "설정..."
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "각 SFTP 탭의 업로드와 다운로드가 공유하며 0은 무제한"
+
+msgid "Shortcuts"
+msgstr "단축키"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "터미널에 포커스가 있을 때 커서 깜빡임"
+
+msgid "Show in Folder"
+msgstr "폴더에서 보기"
+
+msgid "Show local copy"
+msgstr "로컬 사본 보기"
+
+msgid "Simultaneous transfers"
+msgstr "동시 전송 수"
+
+msgid "Size"
+msgstr "크기"
+
+msgid "Skip"
+msgstr "건너뛰기"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 업로드 및 다운로드 시 일치하는 이름 건너뛰기"
+
+msgid "Skipped"
+msgstr "건너뜀"
+
+msgid "Software"
+msgstr "소프트웨어"
+
+msgid "Software block rows"
+msgstr "소프트웨어 블록 행 수"
+
+msgid "Software presentation"
+msgstr "소프트웨어 표시"
+
+msgid "Software presentation block rows"
+msgstr "소프트웨어 표시 블록 행 수"
+
+msgid "Software presentation path"
+msgstr "소프트웨어 표시 방식"
+
+msgid "Sort by modified time"
+msgstr "수정 시간순 정렬"
+
+msgid "Sort by name"
+msgstr "이름순 정렬"
+
+msgid "Sort by size"
+msgstr "크기순 정렬"
+
+msgid "Speed"
+msgstr "속도"
+
+msgid "Split active terminal horizontally"
+msgstr "활성 터미널 가로 분할"
+
+msgid "Split active terminal vertically"
+msgstr "활성 터미널 세로 분할"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "가로 분할 (Alt+Shift+J)"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "세로 분할 (Alt+Shift+L)"
+
+msgid "Start for first X11 application"
+msgstr "첫 X11 앱에서 실행"
+
+msgid "Status"
+msgstr "상태"
+
+msgid "Stereo (2)"
+msgstr "스테레오 (2)"
+
+msgid "Stop bits"
+msgstr "정지 비트"
+
+msgid "Stop editing"
+msgstr "편집 중지"
+
+msgid "Success"
+msgstr "성공"
+
+msgid "Success ({0})"
+msgstr "성공 ({0})"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "SSH/SFTP 탭 전환"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "SSH/SFTP 탭 전환 단축키"
+
+msgid "System credential store"
+msgstr "시스템 자격 증명 저장소"
+
+msgid "System icon"
+msgstr "시스템 아이콘"
+
+msgid "TERMINAL"
+msgstr "터미널"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "터미널 기본값"
+
+msgid "TRANSFER FILTERS"
+msgstr "전송 필터"
+
+msgid "TYPOGRAPHY"
+msgstr "글꼴"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Telnet 프로토콜"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet은 암호화나 호스트 신원 확인 없이 터미널 데이터를 전송합니다."
+
+msgid "Terminal"
+msgstr "터미널"
+
+msgid "Terminal character-cell font"
+msgstr "터미널 문자 셀 글꼴"
+
+msgid "Terminal command"
+msgstr "터미널 명령"
+
+msgid "Terminal drawing"
+msgstr "터미널 그리기"
+
+msgid "Terminal drawing path"
+msgstr "터미널 그리기 방식"
+
+msgid "Terminal error highlight color"
+msgstr "터미널 오류 강조색"
+
+msgid "Terminal font family"
+msgstr "터미널 글꼴 모음"
+
+msgid "Terminal font size"
+msgstr "터미널 글꼴 크기"
+
+msgid "Terminal information highlight color"
+msgstr "터미널 정보 강조색"
+
+msgid "Terminal line height percentage"
+msgstr "터미널 줄 높이 비율"
+
+msgid "Terminal pane heights"
+msgstr "터미널 영역 높이"
+
+msgid "Terminal pane widths"
+msgstr "터미널 영역 너비"
+
+msgid "Terminal scrollback lines"
+msgstr "터미널 스크롤 기록 행 수"
+
+msgid "Terminal success highlight color"
+msgstr "터미널 성공 강조색"
+
+msgid "Terminal text brightness"
+msgstr "터미널 글자 밝기"
+
+msgid "Terminal text selection background"
+msgstr "터미널 선택 영역 배경"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "영역에 포커스가 있을 때 터미널 업데이트"
+
+msgid "Terminal warning highlight color"
+msgstr "터미널 경고 강조색"
+
+msgid "Text"
+msgstr "글자"
+
+msgid "Text brightness"
+msgstr "글자 밝기"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Canvas 그리기 방식은 향후 렌더러를 위해 예약되어 있습니다"
+
+msgid "Theme default"
+msgstr "테마 기본값"
+
+msgid "Toggle Session Sidebar"
+msgstr "세션 사이드바 표시 전환"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "세션 사이드바 표시 전환 단축키"
+
+msgid "Transferring ({0})"
+msgstr "전송 중 ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "SFTP 탭당 전송 수"
+
+msgid "Trust and continue"
+msgstr "신뢰하고 계속"
+
+msgid "Trust new key"
+msgstr "새 키 신뢰"
+
+msgid "Trusted (-Y)"
+msgstr "신뢰됨 (-Y)"
+
+msgid "Unfocused refresh rate"
+msgstr "포커스 없음 새로 고침 빈도"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "포커스 없는 터미널 새로 고침 빈도"
+
+msgid "Unknown SSH host key"
+msgstr "알 수 없는 SSH 호스트 키"
+
+msgid "Unlock encrypted credentials"
+msgstr "암호화된 자격 증명 잠금 해제"
+
+msgid "Untrusted (-X)"
+msgstr "신뢰되지 않음 (-X)"
+
+msgid "Update session"
+msgstr "세션 업데이트"
+
+msgid "Upload"
+msgstr "업로드"
+
+msgid "Upload changes"
+msgstr "변경 사항 업로드"
+
+msgid "Upload selected local files"
+msgstr "선택한 로컬 파일 업로드"
+
+msgid "Use platform default filters"
+msgstr "플랫폼 기본 필터 사용"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "서버별 SFTP 전송 제한 사용"
+
+msgid "Use server-specific limits"
+msgstr "서버별 제한 사용"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "굵은 글씨에 밝은 ANSI 색상표 사용"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "저장된 비밀번호 및 세션 편집기에 입력한 새 비밀번호에 사용"
+
+msgid "Username"
+msgstr "사용자 이름"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "기본적으로 호스트 시스템을 사용합니다. 변경 사항은 즉시 저장됩니다."
+
+msgid "Vault password"
+msgstr "암호화 저장소 비밀번호"
+
+msgid "Version {0}"
+msgstr "버전 {0}"
+
+msgid "View"
+msgstr "보기"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "다른 영역에 포커스가 있을 때 표시되는 터미널 업데이트"
+
+msgid "WORKSPACE"
+msgstr "작업 공간"
+
+msgid "Warning"
+msgstr "경고"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "경고 수준 및 HTTP 4xx"
+
+msgid "Window"
+msgstr "창"
+
+msgid "Workspace"
+msgstr "작업 공간"
+
+msgid "Workspace command"
+msgstr "작업 공간 명령"
+
+msgid "Workspace file path"
+msgstr "작업 공간 파일 경로"
+
+msgid "Workspace tab width"
+msgstr "작업 공간 탭 너비"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "전달된 그래픽 앱에서 사용할 X 서버"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "X11 전달"
+
+msgid "lines"
+msgstr "줄"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 표시 방식, AxSSH를 다시 시작한 후 적용"
+
+msgid "px"
+msgstr "px"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "행"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "{0} 강조색"
+
+msgid "{0} background color"
+msgstr "{0} 배경색"
+
+msgid "{0} border color"
+msgstr "{0} 테두리색"
+
+msgid "{0} danger color"
+msgstr "{0} 위험 표시 색상"
+
+msgid "{0} muted text color"
+msgstr "{0} 흐린 글자색"
+
+msgid "{0} overlay color"
+msgstr "{0} 오버레이 색상"
+
+msgid "{0} panel color"
+msgstr "{0} 패널 색상"
+
+msgid "{0} secondary panel color"
+msgstr "{0} 보조 패널 색상"
+
+msgid "{0} success color"
+msgstr "{0} 성공 표시 색상"
+
+msgid "{0} terminal background color"
+msgstr "{0} 터미널 배경색"
+
+msgid "{0} terminal foreground color"
+msgstr "{0} 터미널 전경색"
+
+msgid "{0} terminal selection color"
+msgstr "{0} 터미널 선택 영역 색상"
+
+msgid "{0} text color"
+msgstr "{0} 글자색"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10~300열, 3~100행"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100~200%"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "세션이 있을 때 180~420px"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60~120%; 100%는 터미널 색상 유지"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "정보"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "X 인증 없이 로컬 연결 허용"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "모양"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "애플리케이션"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "애플리케이션 명령 단축키"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "애플리케이션 인터페이스 글꼴"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "두 표시 모드에 동일한 색상 계열 적용"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "AxSSH 버전, 라이선스, 인터페이스, 전송 및 런타임 정보"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "대역폭 제한 (MiB/s)"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "터미널 커서 깜빡임"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "굵은 글씨에 밝은 색상 사용"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "버그 보고, 실행 로그 및 진단"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "변경되지 않은 터미널 행 캐시"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "변경 사항은 AxSSH를 다시 시작한 후 적용됩니다"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "터미널 오른쪽 클릭 시 복사 또는 붙여넣기 선택"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "시스템, 밝은 모드 또는 어두운 모드 선택"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "색상표"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "터미널 압축 렌더링"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "애플리케이션 및 터미널의 사용자 지정 어두운 색상 설정"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "애플리케이션 및 터미널의 사용자 지정 밝은 색상 설정"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "터미널 선택 영역 복사"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "터미널 선택 완료 시 즉시 복사"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "선택 시 복사"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "사용자 지정 어두운 색상표"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "사용자 지정 실행 파일"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "사용자 지정 파일 이름 패턴"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "사용자 지정 밝은 색상표"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "기본 터미널 크기"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "감지된 위치"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "표시 모드"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "새 로컬 터미널 탭에서 사용할 실행 파일"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "선택 항목 내보내기"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "시스템 파일 필터링"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "포커스 상태 새로 고침 빈도"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "글꼴 모음"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "글꼴 크기"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "일반"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "전체 동시 업로드 수"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "클립보드에서 가져오기"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "스크롤할 때 커서를 줄 맨 앞에 유지"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "알려진 로컬 X 서버 설치 위치"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "언어"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 인터페이스에 사용할 언어"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "사용자 지정 X 서버 실행 파일 실행"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "필요할 때만 선택한 X 서버 실행"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "줄 높이"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "열기 전 로컬 사본 생성, 기본 512MiB. 0은 파일 및 캐시 크기 제한을 해제하며 디스크 공간을 많이 사용할 수 있습니다"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "로컬 파일 열기 사본 (MiB)"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "로컬 선택 우선"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "로컬 셸"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "로컬 셸 아이콘"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "루프백 전용 호환 모드"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "세션 사이드바의 사용자 이름과 IPv4 주소 마스킹"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "최대 파일 크기 (GiB)"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "외부 편집을 위해 다운로드 또는 업로드할 파일의 최대 크기, 기본 4MiB, 범위 1~64MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "SFTP 탭 하나의 최대 동시 업로드 및 다운로드 수"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "업로드 또는 다운로드할 파일 하나의 최대 크기, 0은 무제한, 기본 20GiB"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "모든 SFTP 탭이 공유하는 최대 업로드 수"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "대체 화면 앱에서 휠을 한 단계 움직일 때마다 줄 맨 앞으로 이동"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "새 서버"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "다음 탭"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "메모리에 보관할 터미널 기록 행 수"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "켜짐: Alt/Option으로 마우스 동작 전송, 꺼짐: 표준 xterm 및 Shift 선택"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "한 줄에 패턴 하나, *는 모든 문자와 일치"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "설정 열기"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option을 Meta로 사용"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "링크, 경로, 상태 및 로그 수준의 선택적 색상"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "터미널에 붙여넣기"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "플랫폼 기본값"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "이전 탭"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "공급자"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "터미널 항목 수를 줄이고 기본 배경 사각형 생략"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "저장된 비밀번호 보관 위치"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "원격 편집 파일 제한 (MiB)"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "렌더러"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "이 플랫폼의 기본 필터 복원"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "GPU 행 레이어 재사용, 그래픽 메모리 사용량이 증가할 수 있음"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "오른쪽 클릭으로 복사 또는 붙여넣기"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "터미널 스크롤 기록"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "모두 선택"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "의미 기반 강조"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "세션 마스킹 문자"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "세션 사이드바 너비"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "세션 가져오기 및 내보내기 명령 단축키"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "각 SFTP 탭의 업로드와 다운로드가 공유하며 0은 무제한"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "단축키"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "터미널에 포커스가 있을 때 커서 깜빡임"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 업로드 및 다운로드 시 일치하는 이름 건너뛰기"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "소프트웨어 표시"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "첫 X11 앱에서 실행"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "지원"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "SSH/SFTP 탭 전환"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "터미널"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "터미널 문자 셀 글꼴"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "터미널 명령 단축키"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "영역에 포커스가 있을 때 터미널 업데이트"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "글자 밝기"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "세션 사이드바 표시 전환"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "SFTP 탭당 전송 수"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "포커스 없음 새로 고침 빈도"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "macOS에서 Option을 터미널 Meta로 사용"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "굵은 글씨에 밝은 ANSI 색상표 사용"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "저장된 비밀번호 및 세션 편집기에 입력한 새 비밀번호에 사용"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "기본적으로 호스트 시스템을 사용합니다. 변경 사항은 즉시 저장됩니다."
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "다른 영역에 포커스가 있을 때 표시되는 터미널 업데이트"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "작업 공간"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "작업 공간 명령 단축키"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "작업 공간 탭 너비"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "전달된 그래픽 앱에서 사용할 X 서버"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 표시 방식, AxSSH를 다시 시작한 후 적용"

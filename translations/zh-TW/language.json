@@ -1,0 +1,10 @@
+{
+  "native_name": "繁體中文",
+  "aliases": [
+    "zh-Hant",
+    "zh-Hant-TW",
+    "zh-HK",
+    "zh-MO"
+  ],
+  "script": "Hant"
+}

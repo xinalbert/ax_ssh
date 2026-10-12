@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: ja\n"
+"PO-Revision-Date: 2026-10-12 14:00+0800\n"
+"Last-Translator: AxSSH maintainers\n"
+"Language-Team: Japanese\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial or COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "ソフトウェア表示ブロックあたり1～16行"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10～300列、3～100行"
+
+msgid "100-200 percent"
+msgstr "100～200%"
+
+msgid "100-50,000 retained lines"
+msgstr "履歴を100～50,000行保持"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120～260 px"
+
+msgid "180-420 px when sessions are available"
+msgstr "接続がある場合は180～420 px"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60～120%；100%では端末の元の色を保持"
+
+msgid "9-32 px"
+msgstr "9～32 px"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "SSH、Telnet、シリアル、ローカルシェルの接続に対応した端末ワークスペース。"
+
+msgid "APPLICATION"
+msgstr "アプリケーション"
+
+msgid "APPLICATION THEME"
+msgstr "アプリケーションテーマ"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "アプリケーションの文字"
+
+msgid "About"
+msgstr "このアプリについて"
+
+msgid "About AxSSH"
+msgstr "AxSSHについて"
+
+msgid "Accent / focus"
+msgstr "アクセント／フォーカス"
+
+msgid "Add Server"
+msgstr "サーバーを追加"
+
+msgid "Allow local connections without X authority"
+msgstr "X認証なしのローカル接続を許可"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "リモートのOSC 52クリップボードアクセスを許可"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "既定のクリップボードへの書き込みを許可し、リモートからの読み取りは確認"
+
+msgid "Appearance"
+msgstr "外観"
+
+msgid "Application color palette"
+msgstr "アプリケーションの配色"
+
+msgid "Application command"
+msgstr "アプリケーションコマンド"
+
+msgid "Application display mode"
+msgstr "アプリケーションの表示モード"
+
+msgid "Application font family"
+msgstr "アプリケーションのフォント"
+
+msgid "Application interface font"
+msgstr "アプリケーション画面のフォント"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "新しいSSH接続に適用；録音は自動的に開始"
+
+msgid "Apply one color family to both display modes"
+msgstr "両方の表示モードに同じ配色を適用"
+
+msgid "Apply this choice to this upload batch"
+msgstr "このアップロード一括処理に適用"
+
+msgid "Async runtime"
+msgstr "非同期ランタイム"
+
+msgid "Authentication"
+msgstr "認証"
+
+msgid "Authentication method"
+msgstr "認証方式"
+
+msgid "Auto upload"
+msgstr "自動アップロード"
+
+msgid "Automatic"
+msgstr "自動"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "バッファー"
+
+msgid "Back"
+msgstr "戻る"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "帯域幅の上限（MiB/s）"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "帯域幅の上限（MiB/s；0は無制限）"
+
+msgid "Baud rate"
+msgstr "ボーレート"
+
+msgid "Blink terminal cursor"
+msgstr "端末カーソルを点滅"
+
+msgid "Border"
+msgstr "枠線"
+
+msgid "Bright colors for bold text"
+msgstr "太字を明るい色で表示"
+
+msgid "Bug reports"
+msgstr "不具合報告"
+
+msgid "CLIPBOARD"
+msgstr "クリップボード"
+
+msgid "COMPATIBILITY"
+msgstr "互換性"
+
+msgid "CONTENT AND STATES"
+msgstr "内容と状態"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "カスタム暗色配色"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "カスタム明色配色"
+
+msgid "Cache unchanged terminal rows"
+msgstr "変更のない端末行をキャッシュ"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Cancel selected"
+msgstr "選択した項目をキャンセル"
+
+msgid "Cancel {0}"
+msgstr "{0}をキャンセル"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas（未対応）"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "AxSSHの再起動後に反映"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "「カスタム」を選ぶとコマンドシェルを使わずこのパスを実行"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "ワークスペースでの接続の表示方法を選択。"
+
+msgid "Choose system, light, or dark appearance"
+msgstr "システム、明色、暗色の外観を選択"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "新しいSFTPタブで開くリモートとローカルのディレクトリを選択。"
+
+msgid "Clear"
+msgstr "クリア"
+
+msgid "Clear Recent"
+msgstr "最近の履歴を消去"
+
+msgid "Clear saved password"
+msgstr "保存したパスワードを削除"
+
+msgid "Clear settings search"
+msgstr "設定の検索をクリア"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "{0}の保存済みパスワードを削除しますか？直ちに反映されます。他の編集内容は保存されません。"
+
+msgid "Close Current Tab"
+msgstr "現在のタブを閉じる"
+
+msgid "Close Window"
+msgstr "ウィンドウを閉じる"
+
+msgid "Close tab"
+msgstr "タブを閉じる"
+
+msgid "Close terminal pane"
+msgstr "端末ペインを閉じる"
+
+msgid "Collapse session sidebar"
+msgstr "接続サイドバーを折りたたむ"
+
+msgid "Collapse transfers"
+msgstr "転送一覧を折りたたむ"
+
+msgid "Collapse {0} group"
+msgstr "{0}グループを折りたたむ"
+
+msgid "Color palette"
+msgstr "配色"
+
+msgid "Compact terminal rendering"
+msgstr "端末の描画を簡略化"
+
+msgid "Connect"
+msgstr "接続"
+
+msgid "Connect to {0}"
+msgstr "{0}に接続"
+
+msgid "Connected"
+msgstr "接続済み"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "接続済み・SSH遅延を計測中"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "接続済み・SSH往復遅延：{} ms\n更新：{}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "接続済み・SSH遅延データが期限切れ"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "接続済み・SSH遅延計測がタイムアウト"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "接続済み・SSH遅延を取得できません"
+
+msgid "Connection protocol"
+msgstr "接続プロトコル"
+
+msgid "Copy"
+msgstr "コピー"
+
+msgid "Copy Address"
+msgstr "アドレスをコピー"
+
+msgid "Copy Group"
+msgstr "グループをコピー"
+
+msgid "Copy Server"
+msgstr "サーバーをコピー"
+
+msgid "Copy Terminal Selection"
+msgstr "端末の選択範囲をコピー"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "端末の選択範囲をコピーするショートカット"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "選択範囲があればコピー、なければ貼り付け"
+
+msgid "Copy current path"
+msgstr "現在のパスをコピー"
+
+msgid "Copy diagnostics"
+msgstr "診断情報をコピー"
+
+msgid "Copy selection on select"
+msgstr "選択時にコピー"
+
+msgid "Copy version and build information without connection data"
+msgstr "接続データを含めずバージョンとビルド情報をコピー"
+
+msgid "Credential storage"
+msgstr "認証情報の保存先"
+
+msgid "Credential vault password"
+msgstr "認証情報保管庫のパスワード"
+
+msgid "Credentials used for this SSH connection."
+msgstr "このSSH接続に使用する認証情報。"
+
+msgid "Custom"
+msgstr "カスタム"
+
+msgid "Custom SFTP filename patterns"
+msgstr "カスタムSFTPファイル名パターン"
+
+msgid "Custom executable"
+msgstr "カスタム実行ファイル"
+
+msgid "Custom filename patterns"
+msgstr "カスタムファイル名パターン"
+
+msgid "Cut"
+msgstr "切り取り"
+
+msgid "DEFAULTS"
+msgstr "既定値"
+
+msgid "DISPLAY"
+msgstr "表示"
+
+msgid "Damage backing store (default)"
+msgstr "変更領域バッキングストア（既定）"
+
+msgid "Danger"
+msgstr "危険"
+
+msgid "Dark"
+msgstr "暗色"
+
+msgid "Data bits"
+msgstr "データビット"
+
+msgid "Default terminal background color"
+msgstr "端末の既定の背景色"
+
+msgid "Default terminal columns"
+msgstr "端末の既定の列数"
+
+msgid "Default terminal rows"
+msgstr "端末の既定の行数"
+
+msgid "Default terminal size"
+msgstr "端末の既定のサイズ"
+
+msgid "Default terminal text color"
+msgstr "端末の既定の文字色"
+
+msgid "Delete"
+msgstr "削除"
+
+msgid "Delete Group"
+msgstr "グループを削除"
+
+msgid "Delete Server"
+msgstr "サーバーを削除"
+
+msgid "Delete group"
+msgstr "グループを削除"
+
+msgid "Delete server"
+msgstr "サーバーを削除"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "{0}と保存した認証情報を削除しますか？"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "{0}を削除しますか？このグループのサーバーは「未分類」に移動します。"
+
+msgid "Detect again on next connection"
+msgstr "次回の接続時に再検出"
+
+msgid "Detected key"
+msgstr "検出した鍵"
+
+msgid "Detected locations"
+msgstr "検出した場所"
+
+msgid "Detected private keys"
+msgstr "検出した秘密鍵"
+
+msgid "Detected serial ports"
+msgstr "検出したシリアルポート"
+
+msgid "Detected system: {}"
+msgstr "検出したシステム：{}"
+
+msgid "Diagnostics"
+msgstr "診断情報"
+
+msgid "Dialog and transient overlay tint"
+msgstr "ダイアログと一時オーバーレイの色"
+
+msgid "Display mode"
+msgstr "表示モード"
+
+msgid "Dividers and control outlines"
+msgstr "区切り線とコントロールの輪郭"
+
+msgid "Download"
+msgstr "ダウンロード"
+
+msgid "Duplicate"
+msgstr "複製"
+
+msgid "Duplicate Group"
+msgstr "グループを複製"
+
+msgid "Edit"
+msgstr "編集"
+
+msgid "Edit Server"
+msgstr "サーバーを編集"
+
+msgid "Edit selected remote file"
+msgstr "選択したリモートファイルを編集"
+
+msgid "Enable semantic highlighting"
+msgstr "意味に応じた色分けを有効化"
+
+msgid "Encrypted application vault"
+msgstr "暗号化されたアプリケーション保管庫"
+
+msgid "Endpoint"
+msgstr "接続先"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "#RRGGBBまたは#RRGGBBAAを入力。保存時にコントラストが不十分な色は読みやすい色に戻します。"
+
+msgid "Enter the Telnet server address."
+msgstr "Telnetサーバーのアドレスを入力。"
+
+msgid "Enter the host address and SSH account."
+msgstr "ホストのアドレスとSSHアカウントを入力。"
+
+msgid "Error"
+msgstr "エラー"
+
+msgid "Error and destructive indicators"
+msgstr "エラーと破壊的操作の表示"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "エラーレベルとHTTP 5xx"
+
+msgid "Executable path"
+msgstr "実行ファイルのパス"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "新しいローカル端末タブに使用する実行ファイル"
+
+msgid "Existing session groups"
+msgstr "既存の接続グループ"
+
+msgid "Expand session sidebar"
+msgstr "接続サイドバーを展開"
+
+msgid "Expand transfers"
+msgstr "転送一覧を展開"
+
+msgid "Expand {0} group"
+msgstr "{0}グループを展開"
+
+msgid "Export Selected"
+msgstr "選択した項目をエクスポート"
+
+msgid "Export Selected shortcut"
+msgstr "選択した項目をエクスポートするショートカット"
+
+msgid "Export Selected to Clipboard"
+msgstr "選択した項目をクリップボードにエクスポート"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "失敗（{0}）"
+
+msgid "File"
+msgstr "ファイル"
+
+msgid "File transfers"
+msgstr "ファイル転送"
+
+msgid "Files and transfers area sizes"
+msgstr "ファイルと転送領域のサイズ"
+
+msgid "Filter system files"
+msgstr "システムファイルを除外"
+
+msgid "Flow control"
+msgstr "フロー制御"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "フォーカス枠、選択、アクティブ状態の表示"
+
+msgid "Focused refresh rate"
+msgstr "フォーカス時の更新頻度"
+
+msgid "Focused terminal refresh rate"
+msgstr "フォーカス時の端末更新頻度"
+
+msgid "Follow system"
+msgstr "システムに従う"
+
+msgid "Font family"
+msgstr "フォント"
+
+msgid "Font size"
+msgstr "フォントサイズ"
+
+msgid "Foreground"
+msgstr "前景"
+
+msgid "Forward"
+msgstr "進む"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "一般"
+
+msgid "Global simultaneous uploads"
+msgstr "全体の同時アップロード数"
+
+msgid "Group"
+msgstr "グループ"
+
+msgid "Group name"
+msgstr "グループ名"
+
+msgid "HTTP 2xx responses"
+msgstr "HTTP 2xxレスポンス"
+
+msgid "Help"
+msgstr "ヘルプ"
+
+msgid "Hidden"
+msgstr "隠しファイル"
+
+msgid "Host"
+msgstr "ホスト"
+
+msgid "Hover and secondary surfaces"
+msgstr "ホバー状態と補助領域"
+
+msgid "INTERFACE"
+msgstr "インターフェース"
+
+msgid "Identity"
+msgstr "識別情報"
+
+msgid "Import from Clipboard"
+msgstr "クリップボードからインポート"
+
+msgid "Import from Clipboard shortcut"
+msgstr "クリップボードからインポートするショートカット"
+
+msgid "Information"
+msgstr "情報"
+
+msgid "Interface"
+msgstr "インターフェース"
+
+msgid "Interface language"
+msgstr "表示言語"
+
+msgid "Item tree (current)"
+msgstr "アイテムツリー（現在）"
+
+msgid "KEYBOARD"
+msgstr "キーボード"
+
+msgid "Keep both"
+msgstr "両方を保持"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "スクロール時にカーソルを行頭に維持"
+
+msgid "Keyboard Shortcuts"
+msgstr "キーボードショートカット"
+
+msgid "LAYOUT"
+msgstr "レイアウト"
+
+msgid "LOCAL X SERVER"
+msgstr "ローカルXサーバー"
+
+msgid "Language"
+msgstr "言語"
+
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSHの表示に使用する言語"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "転送されたグラフィカルアプリが開いたときだけ選択したXサーバーを起動"
+
+msgid "Layer images (fallback)"
+msgstr "レイヤー画像（代替）"
+
+msgid "Leave blank to keep saved password"
+msgstr "空欄にすると保存したパスワードを維持"
+
+msgid "License"
+msgstr "ライセンス"
+
+msgid "Light"
+msgstr "明色"
+
+msgid "Line height"
+msgstr "行の高さ"
+
+msgid "Loading"
+msgstr "読み込み中"
+
+msgid "Loading..."
+msgstr "読み込み中…"
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "ローカルSFTPファイルを開く際のコピー上限（MiB）"
+
+msgid "Local Shell"
+msgstr "ローカルシェル"
+
+msgid "Local X server application path"
+msgstr "ローカルXサーバーのアプリケーションパス"
+
+msgid "Local X server provider"
+msgstr "ローカルXサーバーのプロバイダー"
+
+msgid "Local default directory"
+msgstr "ローカルの既定ディレクトリ"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "開く前にローカルファイルをコピー；既定は512 MiB。0ではファイルとキャッシュの容量制限を解除し、多くのディスク容量を使用する場合があります"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "ローカルファイルを開く際のコピー上限（MiB）"
+
+msgid "Local files"
+msgstr "ローカルファイル"
+
+msgid "Local selection priority"
+msgstr "ローカル選択を優先"
+
+msgid "Local shell"
+msgstr "ローカルシェル"
+
+msgid "Local shell icon"
+msgstr "ローカルシェルのアイコン"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "ログレベルとHTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "ログレベルとHTTPステータスコード"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "ループバックのみ；MacXServerと-acを指定したWindowsサーバーで必要"
+
+msgid "MICROPHONE"
+msgstr "マイク"
+
+msgid "MOUSE"
+msgstr "マウス"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "手動の選択が自動検出より優先されます。"
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "接続サイドバーのユーザー名とIPv4アドレスの中央オクテットを隠す"
+
+msgid "Maximize Window"
+msgstr "ウィンドウを最大化"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "SFTPファイルサイズの上限（GiB）"
+
+msgid "Maximum file size (GiB)"
+msgstr "ファイルサイズの上限（GiB）"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部編集でダウンロード／アップロードするファイルの上限；既定は4 MiB、範囲は1～64 MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "1つのSFTPタブでの同時アップロード／ダウンロード数の上限"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "転送する1ファイルのサイズ上限；0は無制限、既定は20 GiB"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "すべてのSFTPタブで共有するアップロード数の上限"
+
+msgid "Minimize Window"
+msgstr "ウィンドウを最小化"
+
+msgid "Modified"
+msgstr "更新日時"
+
+msgid "Mono (1)"
+msgstr "モノラル（1）"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "モノラル、ステレオ、マルチチャンネル；ローカル機器から変換"
+
+msgid "More"
+msgstr "その他"
+
+msgid "Move Current Workspace to New Window"
+msgstr "現在のワークスペースを新しいウィンドウに移動"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "代替画面のアプリでホイール操作のたびに行頭へ移動"
+
+msgid "Move workspace to new window"
+msgstr "ワークスペースを新しいウィンドウに移動"
+
+msgid "Muted text"
+msgstr "控えめな文字"
+
+msgid "Name"
+msgstr "名前"
+
+msgid "Navigation and title surfaces"
+msgstr "ナビゲーションとタイトルの領域"
+
+msgid "New Group"
+msgstr "新しいグループ"
+
+msgid "New Local Shell"
+msgstr "新しいローカルシェル"
+
+msgid "New Server"
+msgstr "新しいサーバー"
+
+msgid "New Server shortcut"
+msgstr "新しいサーバーのショートカット"
+
+msgid "New group"
+msgstr "新しいグループ"
+
+msgid "New name"
+msgstr "新しい名前"
+
+msgid "Next Tab"
+msgstr "次のタブ"
+
+msgid "No failed transfers"
+msgstr "失敗した転送はありません"
+
+msgid "No files"
+msgstr "ファイルはありません"
+
+msgid "No known local X server was found"
+msgstr "既知のローカルXサーバーが見つかりません"
+
+msgid "No matching system icons"
+msgstr "一致するシステムアイコンはありません"
+
+msgid "No saved connections"
+msgstr "保存した接続はありません"
+
+msgid "No saved password"
+msgstr "保存したパスワードはありません"
+
+msgid "No saved servers"
+msgstr "保存したサーバーはありません"
+
+msgid "No settings match this search."
+msgstr "一致する設定はありません。"
+
+msgid "No successful transfers"
+msgstr "完了した転送はありません"
+
+msgid "No transfers in progress"
+msgstr "進行中の転送はありません"
+
+msgid "Off"
+msgstr "オフ"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "オン：Alt/Optionでマウス操作を転送；オフ：標準xterm方式、Shiftでローカル選択"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "1行に1パターン；*は任意の文字に一致"
+
+msgid "Open"
+msgstr "開く"
+
+msgid "Open Recent"
+msgstr "最近使った項目を開く"
+
+msgid "Open SFTP"
+msgstr "SFTPを開く"
+
+msgid "Open Settings"
+msgstr "設定を開く"
+
+msgid "Open Settings shortcut"
+msgstr "設定を開くショートカット"
+
+msgid "Open Workspace"
+msgstr "ワークスペースを開く"
+
+msgid "Open a new local shell tab"
+msgstr "新しいローカルシェルタブを開く"
+
+msgid "Open a saved session or create a new tab."
+msgstr "保存した接続を開くか、新しいタブを作成。"
+
+msgid "Open folder"
+msgstr "フォルダーを開く"
+
+msgid "Open local shell"
+msgstr "ローカルシェルを開く"
+
+msgid "Open log folder"
+msgstr "ログフォルダーを開く"
+
+msgid "Open saved connection"
+msgstr "保存した接続を開く"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "AxSSHの不具合報告ページを開く"
+
+msgid "Option acts as Meta"
+msgstr "OptionをMetaとして使用"
+
+msgid "Optional"
+msgstr "任意"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "任意；空欄にするとローカルの自動ロック解除を有効化"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "任意；接続時または保存時のみ入力"
+
+msgid "Overlay"
+msgstr "オーバーレイ"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "このサーバーで全体のSFTP設定を上書き；0 GiBは無制限。"
+
+msgid "Overwrite"
+msgstr "上書き"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "LinuxのSSH接続にPCM音声を転送"
+
+msgid "Pane"
+msgstr "ペイン"
+
+msgid "Panel"
+msgstr "パネル"
+
+msgid "Panel alternative"
+msgstr "補助パネル"
+
+msgid "Parent directory"
+msgstr "親ディレクトリ"
+
+msgid "Parity"
+msgstr "パリティ"
+
+msgid "Password"
+msgstr "パスワード"
+
+msgid "Password authentication"
+msgstr "パスワード認証"
+
+msgid "Paste"
+msgstr "貼り付け"
+
+msgid "Paste Into Terminal"
+msgstr "端末に貼り付け"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "端末に貼り付けるショートカット"
+
+msgid "Path"
+msgstr "パス"
+
+msgid "Pause"
+msgstr "一時停止"
+
+msgid "Pause selected"
+msgstr "選択した項目を一時停止"
+
+msgid "Pause {0}"
+msgstr "{0}を一時停止"
+
+msgid "Platform defaults"
+msgstr "プラットフォームの既定値"
+
+msgid "Platform home directory"
+msgstr "プラットフォームのホームディレクトリ"
+
+msgid "Port"
+msgstr "ポート"
+
+msgid "Positive status indicators"
+msgstr "正常状態の表示"
+
+msgid "Previous Tab"
+msgstr "前のタブ"
+
+msgid "Primary readable text"
+msgstr "主要な文字"
+
+msgid "Primary workspace surface"
+msgstr "主要なワークスペース領域"
+
+msgid "Private key"
+msgstr "秘密鍵"
+
+msgid "Private key authentication"
+msgstr "秘密鍵認証"
+
+msgid "Private key passphrase"
+msgstr "秘密鍵のパスフレーズ"
+
+msgid "Private key passphrase (optional)"
+msgstr "秘密鍵のパスフレーズ（任意）"
+
+msgid "Private key path"
+msgstr "秘密鍵のパス"
+
+msgid "Production server"
+msgstr "本番サーバー"
+
+msgid "Protocol"
+msgstr "プロトコル"
+
+msgid "Provider"
+msgstr "プロバイダー"
+
+msgid "RENDERING"
+msgstr "描画"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "端末の描画要素を減らし、既定の背景矩形を省略"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "Refresh serial ports"
+msgstr "シリアルポートを再検出"
+
+msgid "Remembered password storage"
+msgstr "保存するパスワードの保存先"
+
+msgid "Remote and local file pane sizes"
+msgstr "リモート／ローカルのファイルペインのサイズ"
+
+msgid "Remote channels"
+msgstr "リモートのチャンネル数"
+
+msgid "Remote default directory"
+msgstr "リモートの既定ディレクトリ"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "リモート編集ファイルの上限（MiB）"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "リモート編集ファイルのサイズ上限（MiB）"
+
+msgid "Remote file already exists"
+msgstr "リモートファイルは既に存在します"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "リモートファイル：{0} - 更新日時：{1}"
+
+msgid "Remote files"
+msgstr "リモートファイル"
+
+msgid "Remote sample rate"
+msgstr "リモートのサンプルレート"
+
+msgid "Remove"
+msgstr "削除"
+
+msgid "Remove revoked record"
+msgstr "失効した記録を削除"
+
+msgid "Rename"
+msgstr "名前を変更"
+
+msgid "Rename Group"
+msgstr "グループ名を変更"
+
+msgid "Rename group"
+msgstr "グループ名を変更"
+
+msgid "Rename selected remote entry"
+msgstr "選択したリモート項目の名前を変更"
+
+msgid "Renderer"
+msgstr "レンダラー"
+
+msgid "Rendering backend"
+msgstr "描画バックエンド"
+
+msgid "Report a bug"
+msgstr "不具合を報告"
+
+msgid "Reset defaults"
+msgstr "既定値に戻す"
+
+msgid "Reset filters"
+msgstr "フィルターをリセット"
+
+msgid "Restore Window"
+msgstr "ウィンドウを元に戻す"
+
+msgid "Restore platform defaults"
+msgstr "プラットフォームの既定値に戻す"
+
+msgid "Restore the default filters for this platform"
+msgstr "このプラットフォームの既定フィルターを復元"
+
+msgid "Resume"
+msgstr "再開"
+
+msgid "Resume selected"
+msgstr "選択した項目を再開"
+
+msgid "Resume {0}"
+msgstr "{0}を再開"
+
+msgid "Return Workspace to Main Window"
+msgstr "ワークスペースをメインウィンドウに戻す"
+
+msgid "Return workspace to main window"
+msgstr "ワークスペースをメインウィンドウに戻す"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "GPUの行レイヤーを再利用；グラフィックスメモリが増える場合があります"
+
+msgid "Review before sharing"
+msgstr "共有前に確認"
+
+msgid "Right-click always pastes"
+msgstr "右クリックで常に貼り付け"
+
+msgid "Right-click copy or paste"
+msgstr "右クリックでコピーまたは貼り付け"
+
+msgid "Runtime logs"
+msgstr "実行時ログ"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "意味に応じた色分け"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "SFTP転送"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "SFTP帯域幅の上限（MiB/秒）"
+
+msgid "SFTP directories"
+msgstr "SFTPディレクトリ"
+
+msgid "SFTP files"
+msgstr "SFTPファイル"
+
+msgid "SFTP local default directory"
+msgstr "SFTPローカルの既定ディレクトリ"
+
+msgid "SFTP remote default directory"
+msgstr "SFTPリモートの既定ディレクトリ"
+
+msgid "SFTP transfer limits"
+msgstr "SFTP転送の上限"
+
+msgid "SHA-256 fingerprint"
+msgstr "SHA-256フィンガープリント"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "SSH X11転送モード"
+
+msgid "SSH agent"
+msgstr "SSHエージェント"
+
+msgid "SSH authentication method"
+msgstr "SSH認証方式"
+
+msgid "SSH host key changed"
+msgstr "SSHホスト鍵が変更されています"
+
+msgid "SSH host key revoked"
+msgstr "SSHホスト鍵は失効しています"
+
+msgid "SSH password"
+msgstr "SSHパスワード"
+
+msgid "SSH transport"
+msgstr "SSH通信"
+
+msgid "SSH username"
+msgstr "SSHユーザー名"
+
+msgid "SUPPORT"
+msgstr "サポート"
+
+msgid "SURFACES"
+msgstr "表示領域"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Save & connect"
+msgstr "保存して接続"
+
+msgid "Save SSH password for future connections"
+msgstr "今後の接続用にSSHパスワードを保存"
+
+msgid "Save Workspace"
+msgstr "ワークスペースを保存"
+
+msgid "Save audio settings"
+msgstr "音声設定を保存"
+
+msgid "Save password (optional)"
+msgstr "パスワードを保存（任意）"
+
+msgid "Save password in"
+msgstr "パスワードの保存先"
+
+msgid "Save session"
+msgstr "接続を保存"
+
+msgid "Saved connections"
+msgstr "保存した接続"
+
+msgid "Saved in {0}."
+msgstr "{0}に保存済み。"
+
+msgid "Saved password"
+msgstr "保存したパスワード"
+
+msgid "Scrollback"
+msgstr "スクロールバック"
+
+msgid "Search all settings"
+msgstr "すべての設定を検索"
+
+msgid "Search connections"
+msgstr "接続を検索"
+
+msgid "Search connections..."
+msgstr "接続を検索…"
+
+msgid "Search results"
+msgstr "検索結果"
+
+msgid "Search settings"
+msgstr "設定を検索"
+
+msgid "Search system icons"
+msgstr "システムアイコンを検索"
+
+msgid "Secondary labels and metadata"
+msgstr "補助ラベルとメタデータ"
+
+msgid "Select All"
+msgstr "すべて選択"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "検出した機器を選択するか、ポート名を手動で入力。"
+
+msgid "Select all files"
+msgstr "すべてのファイルを選択"
+
+msgid "Select the transport used by this saved connection."
+msgstr "この接続で使用する通信方式を選択。"
+
+msgid "Select {0}"
+msgstr "{0}を選択"
+
+msgid "Selected"
+msgstr "選択済み"
+
+msgid "Selection"
+msgstr "選択"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "Option+キーをEscape接頭辞付きのMetaキーとして送信"
+
+msgid "Serial"
+msgstr "シリアル"
+
+msgid "Serial baud rate"
+msgstr "シリアルのボーレート"
+
+msgid "Serial data bits"
+msgstr "シリアルのデータビット"
+
+msgid "Serial flow control"
+msgstr "シリアルのフロー制御"
+
+msgid "Serial parity"
+msgstr "シリアルのパリティ"
+
+msgid "Serial port"
+msgstr "シリアルポート"
+
+msgid "Serial port name"
+msgstr "シリアルポート名"
+
+msgid "Serial stop bits"
+msgstr "シリアルのストップビット"
+
+msgid "Serial transport"
+msgstr "シリアル通信"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "サーバーのSFTP帯域幅上限（MiB/秒）"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "サーバーのSFTPファイルサイズ上限（GiB）"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "サーバーのSFTP同時転送数"
+
+msgid "Session group"
+msgstr "接続グループ"
+
+msgid "Session mask character"
+msgstr "接続情報のマスク文字"
+
+msgid "Session name"
+msgstr "接続名"
+
+msgid "Session sidebar width"
+msgstr "接続サイドバーの幅"
+
+msgid "Session transfer command"
+msgstr "接続情報の移行コマンド"
+
+msgid "Sessions"
+msgstr "接続"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Settings..."
+msgstr "設定…"
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "各SFTPタブのアップロードとダウンロードで共有；0は無制限"
+
+msgid "Shortcuts"
+msgstr "ショートカット"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "端末にフォーカスがあるときカーソルを点滅表示"
+
+msgid "Show in Folder"
+msgstr "フォルダーに表示"
+
+msgid "Show local copy"
+msgstr "ローカルコピーを表示"
+
+msgid "Simultaneous transfers"
+msgstr "同時転送数"
+
+msgid "Size"
+msgstr "サイズ"
+
+msgid "Skip"
+msgstr "スキップ"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP転送で一致する名前をスキップ"
+
+msgid "Skipped"
+msgstr "スキップ済み"
+
+msgid "Software"
+msgstr "ソフトウェア"
+
+msgid "Software block rows"
+msgstr "ソフトウェアブロックの行数"
+
+msgid "Software presentation"
+msgstr "ソフトウェア表示"
+
+msgid "Software presentation block rows"
+msgstr "ソフトウェア表示ブロックの行数"
+
+msgid "Software presentation path"
+msgstr "ソフトウェア表示方式"
+
+msgid "Sort by modified time"
+msgstr "更新日時順に並べ替え"
+
+msgid "Sort by name"
+msgstr "名前順に並べ替え"
+
+msgid "Sort by size"
+msgstr "サイズ順に並べ替え"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "Split active terminal horizontally"
+msgstr "アクティブな端末を横に分割"
+
+msgid "Split active terminal vertically"
+msgstr "アクティブな端末を縦に分割"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "横に分割（Alt+Shift+J）"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "縦に分割（Alt+Shift+L）"
+
+msgid "Start for first X11 application"
+msgstr "最初のX11アプリで起動"
+
+msgid "Status"
+msgstr "状態"
+
+msgid "Stereo (2)"
+msgstr "ステレオ（2）"
+
+msgid "Stop bits"
+msgstr "ストップビット"
+
+msgid "Stop editing"
+msgstr "編集を終了"
+
+msgid "Success"
+msgstr "成功"
+
+msgid "Success ({0})"
+msgstr "成功（{0}）"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "SSH/SFTPタブを切り替え"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "SSH/SFTPタブを切り替えるショートカット"
+
+msgid "System credential store"
+msgstr "システムの認証情報ストア"
+
+msgid "System icon"
+msgstr "システムアイコン"
+
+msgid "TERMINAL"
+msgstr "端末"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "端末の既定値"
+
+msgid "TRANSFER FILTERS"
+msgstr "転送フィルター"
+
+msgid "TYPOGRAPHY"
+msgstr "文字"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Telnetプロトコル"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnetでは通信の暗号化とホストの本人確認が行われません。"
+
+msgid "Terminal"
+msgstr "端末"
+
+msgid "Terminal character-cell font"
+msgstr "端末の文字セル用フォント"
+
+msgid "Terminal command"
+msgstr "端末コマンド"
+
+msgid "Terminal drawing"
+msgstr "端末の描画"
+
+msgid "Terminal drawing path"
+msgstr "端末の描画方式"
+
+msgid "Terminal error highlight color"
+msgstr "端末のエラー色"
+
+msgid "Terminal font family"
+msgstr "端末のフォント"
+
+msgid "Terminal font size"
+msgstr "端末のフォントサイズ"
+
+msgid "Terminal information highlight color"
+msgstr "端末の情報色"
+
+msgid "Terminal line height percentage"
+msgstr "端末の行の高さ（%）"
+
+msgid "Terminal pane heights"
+msgstr "端末ペインの高さ"
+
+msgid "Terminal pane widths"
+msgstr "端末ペインの幅"
+
+msgid "Terminal scrollback lines"
+msgstr "端末のスクロールバック行数"
+
+msgid "Terminal success highlight color"
+msgstr "端末の成功色"
+
+msgid "Terminal text brightness"
+msgstr "端末の文字の明るさ"
+
+msgid "Terminal text selection background"
+msgstr "端末の選択範囲の背景"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "ペインにフォーカスがあるときの端末更新"
+
+msgid "Terminal warning highlight color"
+msgstr "端末の警告色"
+
+msgid "Text"
+msgstr "文字"
+
+msgid "Text brightness"
+msgstr "文字の明るさ"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Canvas描画方式は将来のレンダラー用に予約されています"
+
+msgid "Theme default"
+msgstr "テーマの既定値"
+
+msgid "Toggle Session Sidebar"
+msgstr "接続サイドバーを切り替え"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "接続サイドバーを切り替えるショートカット"
+
+msgid "Transferring ({0})"
+msgstr "転送中（{0}）"
+
+msgid "Transfers per SFTP tab"
+msgstr "SFTPタブごとの転送数"
+
+msgid "Trust and continue"
+msgstr "信頼して続行"
+
+msgid "Trust new key"
+msgstr "新しい鍵を信頼"
+
+msgid "Trusted (-Y)"
+msgstr "信頼あり（-Y）"
+
+msgid "Unfocused refresh rate"
+msgstr "非フォーカス時の更新頻度"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "非フォーカス時の端末更新頻度"
+
+msgid "Unknown SSH host key"
+msgstr "未知のSSHホスト鍵"
+
+msgid "Unlock encrypted credentials"
+msgstr "暗号化された認証情報のロックを解除"
+
+msgid "Untrusted (-X)"
+msgstr "信頼なし（-X）"
+
+msgid "Update session"
+msgstr "接続を更新"
+
+msgid "Upload"
+msgstr "アップロード"
+
+msgid "Upload changes"
+msgstr "変更をアップロード"
+
+msgid "Upload selected local files"
+msgstr "選択したローカルファイルをアップロード"
+
+msgid "Use platform default filters"
+msgstr "プラットフォームの既定フィルターを使用"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "サーバー固有のSFTP転送上限を使用"
+
+msgid "Use server-specific limits"
+msgstr "サーバー固有の上限を使用"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "太字に明るいANSI配色を使用"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "保存するパスワードと接続エディターで入力した新しいパスワードに使用"
+
+msgid "Username"
+msgstr "ユーザー名"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "既定ではホストシステムを使用。変更は直ちに保存されます。"
+
+msgid "Vault password"
+msgstr "保管庫のパスワード"
+
+msgid "Version {0}"
+msgstr "バージョン{0}"
+
+msgid "View"
+msgstr "表示"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "他のペインにフォーカスがあるときの可視端末の更新"
+
+msgid "WORKSPACE"
+msgstr "ワークスペース"
+
+msgid "Warning"
+msgstr "警告"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "警告レベルとHTTP 4xx"
+
+msgid "Window"
+msgstr "ウィンドウ"
+
+msgid "Workspace"
+msgstr "ワークスペース"
+
+msgid "Workspace command"
+msgstr "ワークスペースコマンド"
+
+msgid "Workspace file path"
+msgstr "ワークスペースファイルのパス"
+
+msgid "Workspace tab width"
+msgstr "ワークスペースのタブ幅"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "転送されたグラフィカルアプリが使用するXサーバー"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "X11転送"
+
+msgid "lines"
+msgstr "行"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOSのCPU表示方式；AxSSHの再起動後に反映"
+
+msgid "px"
+msgstr "px"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "行"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "{0}のアクセント色"
+
+msgid "{0} background color"
+msgstr "{0}の背景色"
+
+msgid "{0} border color"
+msgstr "{0}の枠線の色"
+
+msgid "{0} danger color"
+msgstr "{0}の危険色"
+
+msgid "{0} muted text color"
+msgstr "{0}の控えめな文字色"
+
+msgid "{0} overlay color"
+msgstr "{0}のオーバーレイ色"
+
+msgid "{0} panel color"
+msgstr "{0}のパネル色"
+
+msgid "{0} secondary panel color"
+msgstr "{0}の補助パネル色"
+
+msgid "{0} success color"
+msgstr "{0}の成功色"
+
+msgid "{0} terminal background color"
+msgstr "{0}の端末背景色"
+
+msgid "{0} terminal foreground color"
+msgstr "{0}の端末前景色"
+
+msgid "{0} terminal selection color"
+msgstr "{0}の端末選択色"
+
+msgid "{0} text color"
+msgstr "{0}の文字色"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10～300列、3～100行"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100～200%"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120～260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "接続がある場合は180～420 px"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60～120%；100%では端末の元の色を保持"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9～32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "このアプリについて"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "X認証なしのローカル接続を許可"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "外観"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "アプリケーション"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "アプリケーションコマンドのショートカット"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "アプリケーション画面のフォント"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "両方の表示モードに同じ配色を適用"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "AxSSHのバージョン、ライセンス、画面、通信、ランタイムの詳細"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "帯域幅の上限（MiB/s）"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "端末カーソルを点滅"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "太字を明るい色で表示"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "不具合報告、実行時ログ、診断情報"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "変更のない端末行をキャッシュ"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "AxSSHの再起動後に反映"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "端末の右クリックでコピーか貼り付けかを選択"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "システム、明色、暗色の外観を選択"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "配色"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "端末の描画を簡略化"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "アプリケーションと端末のカスタム暗色を設定"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "アプリケーションと端末のカスタム明色を設定"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "端末の選択範囲をコピー"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "端末の選択が完了したら直ちにコピー"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "選択時にコピー"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "カスタム暗色配色"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "カスタム実行ファイル"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "カスタムファイル名パターン"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "カスタム明色配色"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "端末の既定のサイズ"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "検出した場所"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "表示モード"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "新しいローカル端末タブに使用する実行ファイル"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "選択した項目をエクスポート"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "システムファイルを除外"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "フォーカス時の更新頻度"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "フォント"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "フォントサイズ"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "一般"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "全体の同時アップロード数"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "クリップボードからインポート"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "スクロール時にカーソルを行頭に維持"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "既知のローカルXサーバーのインストール先"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "言語"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSHの表示に使用する言語"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "カスタムXサーバー実行ファイルを起動"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "必要なときだけ選択したXサーバーを起動"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "行の高さ"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "開く前にローカルファイルをコピー；既定は512 MiB。0ではファイルとキャッシュの容量制限を解除し、多くのディスク容量を使用する場合があります"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "ローカルファイルを開く際のコピー上限（MiB）"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "ローカル選択を優先"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "ローカルシェル"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "ローカルシェルのアイコン"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "ループバックのみの互換モード"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "接続サイドバーのユーザー名とIPv4アドレスを隠す"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "ファイルサイズの上限（GiB）"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部編集でダウンロード／アップロードするファイルの上限；既定は4 MiB、範囲は1～64 MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "1つのSFTPタブでの同時アップロード／ダウンロード数の上限"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "転送する1ファイルのサイズ上限；0は無制限、既定は20 GiB"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "すべてのSFTPタブで共有するアップロード数の上限"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "代替画面のアプリでホイール操作のたびに行頭へ移動"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "新しいサーバー"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "次のタブ"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "メモリに保持する端末の履歴行数"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "オン：Alt/Optionでマウス操作を転送；オフ：標準xterm方式、Shiftでローカル選択"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "1行に1パターン；*は任意の文字に一致"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "設定を開く"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "OptionをMetaとして使用"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "任意のリンク、パス、状態、ログレベルの色分け"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "端末に貼り付け"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "プラットフォームの既定値"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "前のタブ"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "プロバイダー"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "端末の描画要素を減らし、既定の背景矩形を省略"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "保存するパスワードの保存先"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "リモート編集ファイルの上限（MiB）"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "レンダラー"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "このプラットフォームの既定フィルターを復元"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "GPUの行レイヤーを再利用；グラフィックスメモリが増える場合があります"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "右クリックでコピーまたは貼り付け"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "スクロールバック"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "すべて選択"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "意味に応じた色分け"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "接続情報のマスク文字"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "接続サイドバーの幅"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "接続情報の移行コマンドのショートカット"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "各SFTPタブのアップロードとダウンロードで共有；0は無制限"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "ショートカット"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "端末にフォーカスがあるときカーソルを点滅表示"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP転送で一致する名前をスキップ"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "ソフトウェア表示"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "最初のX11アプリで起動"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "サポート"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "SSH/SFTPタブを切り替え"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "端末"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "端末の文字セル用フォント"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "端末コマンドのショートカット"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "ペインにフォーカスがあるときの端末更新"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "文字の明るさ"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "接続サイドバーを切り替え"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "SFTPタブごとの転送数"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "非フォーカス時の更新頻度"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "macOSの端末でOptionをMetaとして使用"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "太字に明るいANSI配色を使用"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "保存するパスワードと接続エディターで入力した新しいパスワードに使用"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "既定ではホストシステムを使用。変更は直ちに保存されます。"
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "他のペインにフォーカスがあるときの可視端末の更新"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "ワークスペース"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "ワークスペースコマンドのショートカット"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "ワークスペースのタブ幅"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "転送されたグラフィカルアプリが使用するXサーバー"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOSのCPU表示方式；AxSSHの再起動後に反映"

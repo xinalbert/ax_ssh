@@ -1,0 +1,14 @@
+{
+  "native_name": "简体中文",
+  "aliases": ["zh-Hans", "zh-SG"],
+  "setting_aliases": ["simplified-chinese", "zh"],
+  "script": "Hans",
+  "language_default": true,
+  "region_scripts": {
+    "CN": "Hans",
+    "SG": "Hans",
+    "TW": "Hant",
+    "HK": "Hant",
+    "MO": "Hant"
+  }
+}

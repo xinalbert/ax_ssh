@@ -2,6 +2,9 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+#[path = "build/languages.rs"]
+mod languages;
+
 fn main() {
     println!("cargo:rerun-if-env-changed=AXSSH_BUILD_REVISION");
     println!("cargo:rerun-if-changed=ui");
@@ -51,6 +54,10 @@ fn main() {
     embed_resource::compile(resource_file, embed_resource::NONE)
         .manifest_optional()
         .expect("failed to embed the Windows application icon");
+
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is missing"));
+    languages::generate(PathBuf::from("translations").as_path(), &out_dir)
+        .expect("failed to generate bundled language registry");
 
     let slint_config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("translations")

@@ -2,6 +2,41 @@ use super::*;
 use slint::Model;
 
 #[test]
+fn bundled_ui_languages_select_on_a_headless_component() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        super::super::settings_bridge::wire_ui_language_options(&harness.ui);
+        let options = harness
+            .ui
+            .invoke_ui_language_options("System test label".into());
+        assert_eq!(options.row_count(), UiLanguage::bundled().len() + 1);
+        assert_eq!(
+            options.row_data(0).expect("system option"),
+            "System test label"
+        );
+        for language in UiLanguage::bundled().rev() {
+            super::settings::apply_ui_language_to_open_windows(&harness.ui, language)
+                .expect("catalog should be compiled into the application");
+            assert_eq!(harness.ui.get_ui_language().as_str(), language.as_setting());
+            assert_eq!(
+                harness.ui.get_ui_language_index(),
+                language.selector_index()
+            );
+            assert_eq!(
+                options
+                    .row_data(language.selector_index() as usize)
+                    .expect("native option"),
+                language.native_name(),
+            );
+        }
+        assert!(slint::select_bundled_translation("unsupported").is_err());
+        assert_eq!(harness.ui.get_ui_language().as_str(), "en");
+    })
+    .join()
+    .expect("isolated UI language selection should complete");
+}
+
+#[test]
 fn sftp_unchanged_sources_skip_row_formatting_and_icons() {
     let builds = std::cell::Cell::new(0);
     let build = |entries: Vec<u8>, _: &HashSet<String>| {

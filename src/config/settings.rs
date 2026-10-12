@@ -20,73 +20,8 @@ use super::{
     MIN_SFTP_PER_TAB_TRANSFERS, MIN_SIDEBAR_WIDTH, MIN_TAB_WIDTH, MIN_TERMINAL_COLUMNS,
     MIN_TERMINAL_FONT_SIZE, MIN_TERMINAL_LINE_HEIGHT, MIN_TERMINAL_REFRESH_FPS, MIN_TERMINAL_ROWS,
     MIN_TERMINAL_SOFTWARE_BLOCK_ROWS, MIN_TERMINAL_TEXT_BRIGHTNESS_PERCENT, SYSTEM_DEFAULT_SHELL,
-    TerminalColorScheme, ThemeSettings,
+    TerminalColorScheme, ThemeSettings, UiLanguage,
 };
-
-/// The language-selection policy for AxSSH's fully translated UI locales.
-#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum UiLanguage {
-    #[default]
-    System,
-    English,
-    SimplifiedChinese,
-}
-
-impl UiLanguage {
-    pub const fn as_setting(self) -> &'static str {
-        match self {
-            Self::System => "system",
-            Self::English => "english",
-            Self::SimplifiedChinese => "simplified-chinese",
-        }
-    }
-
-    pub fn from_setting(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "english" | "en" => Self::English,
-            "simplified-chinese" | "zh" | "zh-cn" | "zh-hans" => Self::SimplifiedChinese,
-            _ => Self::System,
-        }
-    }
-
-    /// Keeps the selector independent from labels that change after locale selection.
-    pub const fn from_selector_index(index: i32) -> Self {
-        match index {
-            1 => Self::English,
-            2 => Self::SimplifiedChinese,
-            _ => Self::System,
-        }
-    }
-
-    pub const fn selector_index(self) -> i32 {
-        match self {
-            Self::System => 0,
-            Self::English => 1,
-            Self::SimplifiedChinese => 2,
-        }
-    }
-
-    pub fn resolved_locale(self, system_locale: Option<&str>) -> &'static str {
-        match self {
-            Self::System => system_locale
-                .and_then(|locale| locale.split(['-', '_', '@']).next())
-                .filter(|base| base.eq_ignore_ascii_case("zh"))
-                .map_or("en", |_| "zh-CN"),
-            Self::English => "en",
-            Self::SimplifiedChinese => "zh-CN",
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for UiLanguage {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Ok(Self::from_setting(&String::deserialize(deserializer)?))
-    }
-}
 
 /// Selects the renderer used when the next application process starts.
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]

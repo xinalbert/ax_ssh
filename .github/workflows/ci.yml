@@ -59,6 +59,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libasound2-dev
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Validate bundled translations
+        run: |
+          python scripts/check_translations.py
+          python scripts/build_translations.py --check
+          python -m unittest scripts/test_translations.py -v
       - name: Check
         run: cargo check --locked --target ${{ matrix.target }}
       - name: Clippy

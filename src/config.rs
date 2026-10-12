@@ -4,6 +4,7 @@
 //! the on-disk schema and can therefore be tested without creating a window or
 //! opening a network connection.
 
+mod language;
 mod persistence;
 mod session;
 mod settings;
@@ -18,6 +19,7 @@ pub use crate::terminal_dimensions::{
     MAX_TERMINAL_COLUMNS, MAX_TERMINAL_ROWS, MIN_TERMINAL_COLUMNS, MIN_TERMINAL_ROWS,
 };
 
+pub use self::language::UiLanguage;
 pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{
@@ -33,8 +35,8 @@ pub use self::settings::{
     AppSettings, AppSettingsInput, AppearanceSettings, AppearanceSettingsInput, AudioSettings,
     RendererPreference, SftpTransferFilterSettings, SftpTransferPolicy, SftpTransferSettings,
     ShortcutSettings, SoftwarePresentationMode, TerminalDrawingPreference, TerminalSemanticColors,
-    TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, UiLanguage,
-    WorkspaceSettings, WorkspaceSettingsInput, X11ServerProvider, X11Settings,
+    TerminalSemanticColorsInput, TerminalSettings, TerminalSettingsInput, WorkspaceSettings,
+    WorkspaceSettingsInput, X11ServerProvider, X11Settings,
 };
 pub use self::system_icons::{
     SystemDetection, SystemIconChoice, system_icon_choices, system_icon_id,

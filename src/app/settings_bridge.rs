@@ -1,263 +1,19 @@
 use super::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const SETTINGS_SEARCH_CATALOG: [(&str, &str, &str); 59] = [
-    (
-        "General",
-        "Local shell icon",
-        "Uses the host system by default. Changes are saved immediately.",
-    ),
-    (
-        "General",
-        "Language",
-        "Language used by the AxSSH interface",
-    ),
-    (
-        "General",
-        "Local shell",
-        "Executable used for new local terminal tabs",
-    ),
-    (
-        "General",
-        "Remembered password storage",
-        "Used for remembered passwords and new passwords entered in the session editor",
-    ),
-    (
-        "General",
-        "Default terminal size",
-        "10-300 columns, 3-100 rows",
-    ),
-    (
-        "SFTP",
-        "Filter system files",
-        "Skip matching names during SFTP uploads and downloads",
-    ),
-    (
-        "SFTP",
-        "Custom filename patterns",
-        "One pattern per line; * matches any characters",
-    ),
-    (
-        "SFTP",
-        "Transfers per SFTP tab",
-        "Maximum simultaneous uploads and downloads in one SFTP tab",
-    ),
-    (
-        "SFTP",
-        "Global simultaneous uploads",
-        "Maximum uploads shared by all SFTP tabs",
-    ),
-    (
-        "SFTP",
-        "Platform defaults",
-        "Restore the default filters for this platform",
-    ),
-    (
-        "SFTP",
-        "Maximum file size (GiB)",
-        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
-    ),
-    (
-        "SFTP",
-        "Local file open snapshot (MiB)",
-        "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
-    ),
-    (
-        "SFTP",
-        "Remote edit file limit (MiB)",
-        "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB",
-    ),
-    (
-        "SFTP",
-        "Bandwidth limit (MiB/s)",
-        "Shared by uploads and downloads in each SFTP tab; 0 means unlimited",
-    ),
-    ("Appearance", "Font family", "Application interface font"),
-    (
-        "Appearance",
-        "Renderer",
-        "Changes take effect after restarting AxSSH",
-    ),
-    (
-        "Appearance",
-        "Software presentation",
-        "macOS CPU presentation path; changes take effect after restarting AxSSH",
-    ),
-    (
-        "Appearance",
-        "Compact terminal rendering",
-        "Reduce terminal items and omit default background rectangles",
-    ),
-    (
-        "Appearance",
-        "Cache unchanged terminal rows",
-        "Reuse GPU row layers; may increase graphics memory",
-    ),
-    (
-        "Appearance",
-        "Blink terminal cursor",
-        "Show a blinking cursor while the terminal is focused",
-    ),
-    (
-        "Appearance",
-        "Focused refresh rate",
-        "Terminal updates while the pane is focused",
-    ),
-    (
-        "Appearance",
-        "Unfocused refresh rate",
-        "Visible terminal updates while another pane is focused",
-    ),
-    (
-        "Appearance",
-        "Display mode",
-        "Choose system, light, or dark appearance",
-    ),
-    (
-        "Appearance",
-        "Color palette",
-        "Apply one color family to both display modes",
-    ),
-    (
-        "Appearance",
-        "Custom light palette",
-        "Configure custom light application and terminal colors",
-    ),
-    (
-        "Appearance",
-        "Custom dark palette",
-        "Configure custom dark application and terminal colors",
-    ),
-    ("Terminal", "Font family", "Terminal character-cell font"),
-    ("Terminal", "Font size", "9-32 px"),
-    ("Terminal", "Line height", "100-200 percent"),
-    (
-        "Terminal",
-        "Text brightness",
-        "60-120 percent; 100 percent preserves terminal colors",
-    ),
-    (
-        "Terminal",
-        "Bright colors for bold text",
-        "Use the bright ANSI palette for bold text",
-    ),
-    (
-        "Terminal",
-        "Semantic highlighting",
-        "Optional link, path, status, and log-level colors",
-    ),
-    (
-        "Terminal",
-        "Scrollback",
-        "Number of terminal history lines retained in memory",
-    ),
-    (
-        "Terminal",
-        "Right-click copy or paste",
-        "Choose copy or paste behavior for terminal right click",
-    ),
-    (
-        "Terminal",
-        "Copy selection on select",
-        "Copy completed terminal selections immediately",
-    ),
-    (
-        "Terminal",
-        "Local selection priority",
-        "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
-    ),
-    (
-        "Terminal",
-        "Keep cursor at line start while scrolling",
-        "Move to line start after each wheel step in alternate-screen apps",
-    ),
-    (
-        "Terminal",
-        "Option acts as Meta",
-        "Use Option as terminal Meta on macOS",
-    ),
-    (
-        "X11",
-        "Provider",
-        "X server used by forwarded graphical applications",
-    ),
-    (
-        "X11",
-        "Detected locations",
-        "Known local X server installations",
-    ),
-    (
-        "X11",
-        "Custom executable",
-        "Launch a custom X server executable",
-    ),
-    (
-        "X11",
-        "Start for first X11 application",
-        "Launch the selected X server only when needed",
-    ),
-    (
-        "X11",
-        "Allow local connections without X authority",
-        "Loopback-only compatibility mode",
-    ),
-    (
-        "Workspace",
-        "Session sidebar width",
-        "180-420 px when sessions are available",
-    ),
-    ("Workspace", "Workspace tab width", "120-260 px"),
-    (
-        "Workspace",
-        "Session mask character",
-        "Masks usernames and IPv4 addresses in the session sidebar",
-    ),
-    ("Shortcuts", "Open Settings", "Application command shortcut"),
-    ("Shortcuts", "New Server", "Workspace command shortcut"),
-    (
-        "Shortcuts",
-        "Import from Clipboard",
-        "Session transfer command shortcut",
-    ),
-    (
-        "Shortcuts",
-        "Export Selected",
-        "Session transfer command shortcut",
-    ),
-    (
-        "Shortcuts",
-        "Toggle Session Sidebar",
-        "Workspace command shortcut",
-    ),
-    (
-        "Shortcuts",
-        "Switch SSH/SFTP Tab",
-        "Workspace command shortcut",
-    ),
-    (
-        "Shortcuts",
-        "Copy Terminal Selection",
-        "Terminal command shortcut",
-    ),
-    (
-        "Shortcuts",
-        "Paste Into Terminal",
-        "Terminal command shortcut",
-    ),
-    ("Shortcuts", "Select All", "Terminal command shortcut"),
-    ("Shortcuts", "Previous Tab", "Workspace command shortcut"),
-    ("Shortcuts", "Next Tab", "Workspace command shortcut"),
-    (
-        "About",
-        "Application",
-        "AxSSH version, license, interface, transport, and runtime details",
-    ),
-    (
-        "About",
-        "Support",
-        "Bug reports, runtime logs, and diagnostics",
-    ),
-];
+mod settings_search_catalog;
+
+use settings_search_catalog::{SETTINGS_SEARCH_CATALOG, localized_catalog};
+
+pub(super) fn wire_ui_language_options(ui: &AppWindow) {
+    ui.on_ui_language_options(|system_label| {
+        ModelRc::new(VecModel::from(
+            std::iter::once(system_label)
+                .chain(UiLanguage::bundled().map(|language| language.native_name().into()))
+                .collect::<Vec<_>>(),
+        ))
+    });
+}
 
 fn settings_search_matches(query: &str, section: &str, title: &str, description: &str) -> bool {
     let query = query.trim();
@@ -269,15 +25,18 @@ fn settings_search_matches(query: &str, section: &str, title: &str, description:
 }
 
 fn settings_search_results(query: &str, language: &str) -> Vec<SettingsSearchEntry> {
-    let chinese = UiLanguage::from_setting(language)
-        .resolved_locale(sys_locale::get_locale().as_deref())
-        == "zh-CN";
+    let locale =
+        UiLanguage::from_setting(language).resolved_locale(sys_locale::get_locale().as_deref());
+    let localized = localized_catalog(locale);
     SETTINGS_SEARCH_CATALOG
         .iter()
-        .filter(|(_, title, _)| cfg!(target_os = "macos") || *title != "Software presentation")
-        .filter_map(|(section, title, description)| {
-            let (display_section, display_title, display_description) =
-                localized_settings_search_entry(section, title, description, chinese);
+        .enumerate()
+        .filter(|(_, (_, title, _))| cfg!(target_os = "macos") || *title != "Software presentation")
+        .filter_map(|(index, (section, title, description))| {
+            let (display_section, display_title, display_description) = localized
+                .and_then(|catalog| catalog.get(index))
+                .copied()
+                .unwrap_or((section, title, description));
             settings_search_matches(query, section, title, description)
                 .then_some(())
                 .or_else(|| {
@@ -298,389 +57,6 @@ fn settings_search_results(query: &str, language: &str) -> Vec<SettingsSearchEnt
         .collect()
 }
 
-fn localized_settings_search_entry<'a>(
-    section: &'a str,
-    title: &'a str,
-    description: &'a str,
-    chinese: bool,
-) -> (&'a str, &'a str, &'a str) {
-    if !chinese {
-        return (section, title, description);
-    }
-    SETTINGS_SEARCH_CATALOG_ZH_CN
-        .iter()
-        .find(|(source_title, source_description, _, _)| {
-            source_title == &title && source_description == &description
-        })
-        .map(|(_, _, translated_title, translated_description)| {
-            (
-                localized_settings_section(section),
-                *translated_title,
-                *translated_description,
-            )
-        })
-        .unwrap_or((localized_settings_section(section), title, description))
-}
-
-fn localized_settings_section(section: &str) -> &str {
-    match section {
-        "General" => "通用",
-        "Appearance" => "外观",
-        "Terminal" => "终端",
-        "Workspace" => "工作区",
-        "Shortcuts" => "快捷键",
-        "About" => "关于",
-        _ => section,
-    }
-}
-
-const SETTINGS_SEARCH_CATALOG_ZH_CN: [(&str, &str, &str, &str); 59] = [
-    (
-        "Local shell icon",
-        "Uses the host system by default. Changes are saved immediately.",
-        "本地终端图标",
-        "默认使用本机系统图标，更改后立即保存。",
-    ),
-    (
-        "Language",
-        "Language used by the AxSSH interface",
-        "语言",
-        "AxSSH 界面使用的语言",
-    ),
-    (
-        "Local shell",
-        "Executable used for new local terminal tabs",
-        "本地 Shell",
-        "新建本地终端标签页使用的可执行程序",
-    ),
-    (
-        "Remembered password storage",
-        "Used for remembered passwords and new passwords entered in the session editor",
-        "已记住密码的存储方式",
-        "保存已记住密码所用的安全存储",
-    ),
-    (
-        "Default terminal size",
-        "10-300 columns, 3-100 rows",
-        "默认终端大小",
-        "10-300 列，3-100 行",
-    ),
-    (
-        "Filter system files",
-        "Skip matching names during SFTP uploads and downloads",
-        "过滤系统文件",
-        "SFTP 上传和下载时跳过匹配的名称",
-    ),
-    (
-        "Custom filename patterns",
-        "One pattern per line; * matches any characters",
-        "自定义文件名过滤模式",
-        "每行一个模式；* 匹配任意字符",
-    ),
-    (
-        "Transfers per SFTP tab",
-        "Maximum simultaneous uploads and downloads in one SFTP tab",
-        "每个 SFTP 标签页的传输数",
-        "单个 SFTP 标签页允许同时进行的上传和下载数",
-    ),
-    (
-        "Global simultaneous uploads",
-        "Maximum uploads shared by all SFTP tabs",
-        "全局同时上传数",
-        "所有 SFTP 标签页共享的同时上传数",
-    ),
-    (
-        "Platform defaults",
-        "Restore the default filters for this platform",
-        "平台默认值",
-        "恢复此平台的默认过滤规则",
-    ),
-    (
-        "Maximum file size (GiB)",
-        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
-        "单文件大小上限（GiB）",
-        "单个上传或下载文件的大小上限；0 表示不限大小，默认 20 GiB",
-    ),
-    (
-        "Local file open snapshot (MiB)",
-        "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
-        "本地文件打开快照（MiB）",
-        "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间",
-    ),
-    (
-        "Remote edit file limit (MiB)",
-        "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB",
-        "远程编辑文件大小上限（MiB）",
-        "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围 1–64 MiB",
-    ),
-    (
-        "Bandwidth limit (MiB/s)",
-        "Shared by uploads and downloads in each SFTP tab; 0 means unlimited",
-        "带宽上限（MiB/s）",
-        "每个 SFTP 标签页的上传与下载共享；0 表示不限速",
-    ),
-    (
-        "Font family",
-        "Application interface font",
-        "字体系列",
-        "应用界面字体",
-    ),
-    (
-        "Renderer",
-        "Changes take effect after restarting AxSSH",
-        "渲染器",
-        "重启 AxSSH 后生效",
-    ),
-    (
-        "Software presentation",
-        "macOS CPU presentation path; changes take effect after restarting AxSSH",
-        "软件呈现方式",
-        "macOS CPU 呈现路径；重启 AxSSH 后生效",
-    ),
-    (
-        "Display mode",
-        "Choose system, light, or dark appearance",
-        "显示模式",
-        "跟随系统、浅色或深色外观",
-    ),
-    (
-        "Color palette",
-        "Apply one color family to both display modes",
-        "配色方案",
-        "为两种显示模式应用同一配色系列",
-    ),
-    (
-        "Custom light palette",
-        "Configure custom light application and terminal colors",
-        "自定义浅色配色",
-        "配置应用和终端的浅色颜色",
-    ),
-    (
-        "Custom dark palette",
-        "Configure custom dark application and terminal colors",
-        "自定义深色配色",
-        "配置应用和终端的深色颜色",
-    ),
-    (
-        "Font family",
-        "Terminal character-cell font",
-        "字体系列",
-        "终端字符单元格字体",
-    ),
-    ("Font size", "9-32 px", "字体大小", "9-32 px"),
-    ("Line height", "100-200 percent", "行高", "100-200%"),
-    (
-        "Text brightness",
-        "60-120 percent; 100 percent preserves terminal colors",
-        "文字亮度",
-        "60-120%；100% 保留终端原色",
-    ),
-    (
-        "Bright colors for bold text",
-        "Use the bright ANSI palette for bold text",
-        "粗体使用亮色",
-        "为粗体使用明亮 ANSI 调色板",
-    ),
-    (
-        "Semantic highlighting",
-        "Optional link, path, status, and log-level colors",
-        "语义高亮",
-        "可选的链接、路径、状态和日志级别颜色",
-    ),
-    (
-        "Compact terminal rendering",
-        "Reduce terminal items and omit default background rectangles",
-        "紧凑终端渲染",
-        "减少终端绘制项并省略默认背景矩形",
-    ),
-    (
-        "Cache unchanged terminal rows",
-        "Reuse GPU row layers; may increase graphics memory",
-        "缓存未变化的终端行",
-        "复用 GPU 行图层；可能增加图形内存",
-    ),
-    (
-        "Blink terminal cursor",
-        "Show a blinking cursor while the terminal is focused",
-        "终端光标闪烁",
-        "终端聚焦时显示闪烁光标",
-    ),
-    (
-        "Focused refresh rate",
-        "Terminal updates while the pane is focused",
-        "聚焦刷新率",
-        "终端窗格聚焦时的刷新帧率",
-    ),
-    (
-        "Unfocused refresh rate",
-        "Visible terminal updates while another pane is focused",
-        "非聚焦刷新率",
-        "其他窗格聚焦时可见终端的刷新帧率",
-    ),
-    (
-        "Scrollback",
-        "Number of terminal history lines retained in memory",
-        "回滚行数",
-        "内存中保留的终端历史行数",
-    ),
-    (
-        "Right-click copy or paste",
-        "Choose copy or paste behavior for terminal right click",
-        "右键复制或粘贴",
-        "选择终端右键行为",
-    ),
-    (
-        "Copy selection on select",
-        "Copy completed terminal selections immediately",
-        "选中后复制",
-        "完成终端选择后立即复制",
-    ),
-    (
-        "Local selection priority",
-        "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection",
-        "本地选区优先",
-        "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择",
-    ),
-    (
-        "Keep cursor at line start while scrolling",
-        "Move to line start after each wheel step in alternate-screen apps",
-        "滚轮时保持光标在行首",
-        "在备用屏幕程序中，每次滚轮上下移动后回到行首",
-    ),
-    (
-        "Option acts as Meta",
-        "Use Option as terminal Meta on macOS",
-        "Option 作为 Meta",
-        "在 macOS 终端中把 Option 用作 Meta",
-    ),
-    (
-        "Provider",
-        "X server used by forwarded graphical applications",
-        "提供程序",
-        "转发图形应用使用的 X server",
-    ),
-    (
-        "Detected locations",
-        "Known local X server installations",
-        "检测到的位置",
-        "已知本地 X server 安装",
-    ),
-    (
-        "Custom executable",
-        "Launch a custom X server executable",
-        "自定义可执行文件",
-        "启动自定义 X server 程序",
-    ),
-    (
-        "Start for first X11 application",
-        "Launch the selected X server only when needed",
-        "首个 X11 应用时启动",
-        "仅在需要时启动所选 X server",
-    ),
-    (
-        "Allow local connections without X authority",
-        "Loopback-only compatibility mode",
-        "允许无 X authority 的本地连接",
-        "仅限回环地址的兼容模式",
-    ),
-    (
-        "Session sidebar width",
-        "180-420 px when sessions are available",
-        "会话侧栏宽度",
-        "有会话时为 180-420 px",
-    ),
-    (
-        "Workspace tab width",
-        "120-260 px",
-        "工作区标签宽度",
-        "120-260 px",
-    ),
-    (
-        "Session mask character",
-        "Masks usernames and IPv4 addresses in the session sidebar",
-        "会话掩码字符",
-        "遮盖侧栏中的用户名和 IPv4 地址",
-    ),
-    (
-        "Open Settings",
-        "Application command shortcut",
-        "打开设置",
-        "应用命令快捷键",
-    ),
-    (
-        "New Server",
-        "Workspace command shortcut",
-        "新建服务器",
-        "工作区命令快捷键",
-    ),
-    (
-        "Import from Clipboard",
-        "Session transfer command shortcut",
-        "从剪贴板导入",
-        "会话传输命令快捷键",
-    ),
-    (
-        "Export Selected",
-        "Session transfer command shortcut",
-        "导出所选项",
-        "会话传输命令快捷键",
-    ),
-    (
-        "Toggle Session Sidebar",
-        "Workspace command shortcut",
-        "切换会话侧栏",
-        "工作区命令快捷键",
-    ),
-    (
-        "Switch SSH/SFTP Tab",
-        "Workspace command shortcut",
-        "切换 SSH/SFTP 标签页",
-        "工作区命令快捷键",
-    ),
-    (
-        "Copy Terminal Selection",
-        "Terminal command shortcut",
-        "复制终端选择",
-        "终端命令快捷键",
-    ),
-    (
-        "Paste Into Terminal",
-        "Terminal command shortcut",
-        "粘贴到终端",
-        "终端命令快捷键",
-    ),
-    (
-        "Select All",
-        "Terminal command shortcut",
-        "全选",
-        "终端命令快捷键",
-    ),
-    (
-        "Previous Tab",
-        "Workspace command shortcut",
-        "上一个标签页",
-        "工作区命令快捷键",
-    ),
-    (
-        "Next Tab",
-        "Workspace command shortcut",
-        "下一个标签页",
-        "工作区命令快捷键",
-    ),
-    (
-        "Application",
-        "AxSSH version, license, interface, transport, and runtime details",
-        "应用",
-        "AxSSH 版本、许可证、界面、传输和运行时信息",
-    ),
-    (
-        "Support",
-        "Bug reports, runtime logs, and diagnostics",
-        "支持",
-        "错误报告、运行日志和诊断",
-    ),
-];
-
 pub(super) fn wire_settings(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
@@ -689,6 +65,7 @@ pub(super) fn wire_settings(
     window_router: WindowRouter,
     persistence: Arc<PersistenceCoordinator>,
 ) {
+    wire_ui_language_options(ui);
     ui.on_system_icon_choices(|query| {
         ModelRc::new(VecModel::from(system_icon_choices(query.as_str())))
     });
@@ -1428,7 +805,7 @@ mod tests {
         let mut settings = AppSettings::default();
         settings.terminal.scrollback_lines = 321;
         settings.terminal.alternate_scroll_to_home = true;
-        settings.ui_language = UiLanguage::SimplifiedChinese;
+        settings.ui_language = UiLanguage::from_setting("zh-CN");
 
         let expected_language = state.lock().unwrap().sessions.settings.ui_language;
 
@@ -1455,16 +832,16 @@ mod tests {
         )));
 
         let revision = AtomicU64::new(1);
-        assert!(save_ui_language(&state, UiLanguage::SimplifiedChinese, 1, &revision).unwrap());
+        assert!(save_ui_language(&state, UiLanguage::from_setting("zh-CN"), 1, &revision).unwrap());
 
         assert_eq!(
             state.lock().unwrap().sessions.settings.ui_language,
-            UiLanguage::SimplifiedChinese
+            UiLanguage::from_setting("zh-CN")
         );
         let persisted = ConfigStore::new(path).load().unwrap();
         assert_eq!(
             persisted.settings.ui_language,
-            UiLanguage::SimplifiedChinese
+            UiLanguage::from_setting("zh-CN")
         );
     }
 
@@ -1482,7 +859,7 @@ mod tests {
         apply_preview_settings(&state, preview).expect("preview should update memory");
 
         let revision = AtomicU64::new(1);
-        assert!(save_ui_language(&state, UiLanguage::SimplifiedChinese, 1, &revision).unwrap());
+        assert!(save_ui_language(&state, UiLanguage::from_setting("zh-CN"), 1, &revision).unwrap());
 
         assert_eq!(
             state
@@ -1501,7 +878,7 @@ mod tests {
         );
         assert_eq!(
             persisted.settings.ui_language,
-            UiLanguage::SimplifiedChinese
+            UiLanguage::from_setting("zh-CN")
         );
     }
 
@@ -1517,18 +894,26 @@ mod tests {
         let latest_revision = AtomicU64::new(2);
 
         assert!(
-            save_ui_language(&state, UiLanguage::SimplifiedChinese, 2, &latest_revision,).unwrap()
+            save_ui_language(
+                &state,
+                UiLanguage::from_setting("zh-CN"),
+                2,
+                &latest_revision,
+            )
+            .unwrap()
         );
-        assert!(!save_ui_language(&state, UiLanguage::English, 1, &latest_revision).unwrap());
+        assert!(
+            !save_ui_language(&state, UiLanguage::from_setting("en"), 1, &latest_revision).unwrap()
+        );
 
         assert_eq!(
             state.lock().unwrap().sessions.settings.ui_language,
-            UiLanguage::SimplifiedChinese
+            UiLanguage::from_setting("zh-CN")
         );
         let persisted = ConfigStore::new(path).load().unwrap();
         assert_eq!(
             persisted.settings.ui_language,
-            UiLanguage::SimplifiedChinese
+            UiLanguage::from_setting("zh-CN")
         );
     }
 
@@ -1620,6 +1005,98 @@ mod tests {
     fn settings_search_ignores_empty_and_unknown_queries() {
         assert!(settings_search_results("   ", "english").is_empty());
         assert!(settings_search_results("not-a-setting", "english").is_empty());
+    }
+
+    #[test]
+    fn settings_search_matches_japanese_and_english_with_stable_routes() {
+        let matches = settings_search_results("フォント", "japanese");
+        assert!(matches.iter().any(|entry| {
+            entry.section == "Appearance"
+                && entry.title == "フォント"
+                && entry.description == "アプリケーション画面のフォント"
+        }));
+        assert!(matches.iter().any(|entry| {
+            entry.section == "Terminal" && entry.description == "端末の文字セル用フォント"
+        }));
+        let language = settings_search_results("表示に使用する言語", "japanese");
+        assert_eq!(language.len(), 1);
+        assert_eq!(language[0].section, "General");
+        assert_eq!(language[0].title, "言語");
+        let english = settings_search_results("renderer", "japanese");
+        assert_eq!(english.len(), 1);
+        assert_eq!(english[0].title, "レンダラー");
+        assert_eq!(english[0].section, "Appearance");
+        let restarts = settings_search_results("再起動", "japanese");
+        assert_eq!(
+            restarts.len(),
+            if cfg!(target_os = "macos") { 2 } else { 1 }
+        );
+        for (query, title) in [("すべて選択", "すべて選択"), ("次のタブ", "次のタブ")]
+        {
+            let matches = settings_search_results(query, "ja");
+            assert_eq!(matches.len(), 1);
+            assert_eq!(matches[0].title, title);
+            assert_eq!(matches[0].section, "Shortcuts");
+        }
+    }
+
+    #[test]
+    fn settings_search_generated_locale_tables_match_source_rows() {
+        for language in UiLanguage::bundled().filter(|language| language.as_setting() != "en") {
+            let locale = language.as_setting();
+            let rows = localized_catalog(locale).expect("bundled locale has a search table");
+            assert_eq!(rows.len(), SETTINGS_SEARCH_CATALOG.len());
+            for (section, title, description) in rows {
+                assert!(!section.is_empty() && !title.is_empty() && !description.is_empty());
+            }
+        }
+        assert!(localized_catalog("en").is_none());
+        assert!(localized_catalog("unsupported").is_none());
+    }
+
+    #[test]
+    fn common_language_search_preserves_routes_and_localized_titles() {
+        for (locale, query, title) in [
+            ("de", "Schriftfamilie", "Schriftfamilie"),
+            ("es", "Familia de fuentes", "Familia de fuentes"),
+            ("fr", "Famille de polices", "Famille de polices"),
+            ("ko", "글꼴 모음", "글꼴 모음"),
+            ("pt-BR", "Família de fontes", "Família de fontes"),
+            ("zh-TW", "字型系列", "字型系列"),
+            ("ru", "Семейство шрифтов", "Семейство шрифтов"),
+            ("uk", "Родина шрифтів", "Родина шрифтів"),
+            ("en-GB", "Font family", "Font family"),
+        ] {
+            let matches = settings_search_results(query, locale);
+            assert!(
+                matches
+                    .iter()
+                    .any(|entry| { entry.section == "Appearance" && entry.title == title }),
+                "{locale} search must keep the English route with translated text"
+            );
+            assert!(
+                settings_search_results("renderer", locale)
+                    .iter()
+                    .any(|entry| entry.section == "Appearance")
+            );
+        }
+    }
+
+    #[test]
+    fn british_english_search_matches_localized_and_source_spellings() {
+        for query in ["colour", "color"] {
+            let matches = settings_search_results(query, "en-GB");
+            assert!(
+                matches.iter().any(|entry| {
+                    entry.section == "Appearance" && entry.title == "Colour palette"
+                })
+            );
+        }
+        assert!(
+            settings_search_results("licence", "en-GB")
+                .iter()
+                .any(|entry| entry.section == "About")
+        );
     }
 
     #[test]

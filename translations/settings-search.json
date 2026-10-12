@@ -1,0 +1,297 @@
+[
+  [
+    "General",
+    "Local shell icon",
+    "Uses the host system by default. Changes are saved immediately."
+  ],
+  [
+    "General",
+    "Language",
+    "Language used by the AxSSH interface"
+  ],
+  [
+    "General",
+    "Local shell",
+    "Executable used for new local terminal tabs"
+  ],
+  [
+    "General",
+    "Remembered password storage",
+    "Used for remembered passwords and new passwords entered in the session editor"
+  ],
+  [
+    "General",
+    "Default terminal size",
+    "10-300 columns, 3-100 rows"
+  ],
+  [
+    "SFTP",
+    "Filter system files",
+    "Skip matching names during SFTP uploads and downloads"
+  ],
+  [
+    "SFTP",
+    "Custom filename patterns",
+    "One pattern per line; * matches any characters"
+  ],
+  [
+    "SFTP",
+    "Transfers per SFTP tab",
+    "Maximum simultaneous uploads and downloads in one SFTP tab"
+  ],
+  [
+    "SFTP",
+    "Global simultaneous uploads",
+    "Maximum uploads shared by all SFTP tabs"
+  ],
+  [
+    "SFTP",
+    "Platform defaults",
+    "Restore the default filters for this platform"
+  ],
+  [
+    "SFTP",
+    "Maximum file size (GiB)",
+    "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+  ],
+  [
+    "SFTP",
+    "Local file open snapshot (MiB)",
+    "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+  ],
+  [
+    "SFTP",
+    "Remote edit file limit (MiB)",
+    "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+  ],
+  [
+    "SFTP",
+    "Bandwidth limit (MiB/s)",
+    "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+  ],
+  [
+    "Appearance",
+    "Font family",
+    "Application interface font"
+  ],
+  [
+    "Appearance",
+    "Renderer",
+    "Changes take effect after restarting AxSSH"
+  ],
+  [
+    "Appearance",
+    "Software presentation",
+    "macOS CPU presentation path; changes take effect after restarting AxSSH"
+  ],
+  [
+    "Appearance",
+    "Compact terminal rendering",
+    "Reduce terminal items and omit default background rectangles"
+  ],
+  [
+    "Appearance",
+    "Cache unchanged terminal rows",
+    "Reuse GPU row layers; may increase graphics memory"
+  ],
+  [
+    "Appearance",
+    "Blink terminal cursor",
+    "Show a blinking cursor while the terminal is focused"
+  ],
+  [
+    "Appearance",
+    "Focused refresh rate",
+    "Terminal updates while the pane is focused"
+  ],
+  [
+    "Appearance",
+    "Unfocused refresh rate",
+    "Visible terminal updates while another pane is focused"
+  ],
+  [
+    "Appearance",
+    "Display mode",
+    "Choose system, light, or dark appearance"
+  ],
+  [
+    "Appearance",
+    "Color palette",
+    "Apply one color family to both display modes"
+  ],
+  [
+    "Appearance",
+    "Custom light palette",
+    "Configure custom light application and terminal colors"
+  ],
+  [
+    "Appearance",
+    "Custom dark palette",
+    "Configure custom dark application and terminal colors"
+  ],
+  [
+    "Terminal",
+    "Font family",
+    "Terminal character-cell font"
+  ],
+  [
+    "Terminal",
+    "Font size",
+    "9-32 px"
+  ],
+  [
+    "Terminal",
+    "Line height",
+    "100-200 percent"
+  ],
+  [
+    "Terminal",
+    "Text brightness",
+    "60-120 percent; 100 percent preserves terminal colors"
+  ],
+  [
+    "Terminal",
+    "Bright colors for bold text",
+    "Use the bright ANSI palette for bold text"
+  ],
+  [
+    "Terminal",
+    "Semantic highlighting",
+    "Optional link, path, status, and log-level colors"
+  ],
+  [
+    "Terminal",
+    "Scrollback",
+    "Number of terminal history lines retained in memory"
+  ],
+  [
+    "Terminal",
+    "Right-click copy or paste",
+    "Choose copy or paste behavior for terminal right click"
+  ],
+  [
+    "Terminal",
+    "Copy selection on select",
+    "Copy completed terminal selections immediately"
+  ],
+  [
+    "Terminal",
+    "Local selection priority",
+    "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+  ],
+  [
+    "Terminal",
+    "Keep cursor at line start while scrolling",
+    "Move to line start after each wheel step in alternate-screen apps"
+  ],
+  [
+    "Terminal",
+    "Option acts as Meta",
+    "Use Option as terminal Meta on macOS"
+  ],
+  [
+    "X11",
+    "Provider",
+    "X server used by forwarded graphical applications"
+  ],
+  [
+    "X11",
+    "Detected locations",
+    "Known local X server installations"
+  ],
+  [
+    "X11",
+    "Custom executable",
+    "Launch a custom X server executable"
+  ],
+  [
+    "X11",
+    "Start for first X11 application",
+    "Launch the selected X server only when needed"
+  ],
+  [
+    "X11",
+    "Allow local connections without X authority",
+    "Loopback-only compatibility mode"
+  ],
+  [
+    "Workspace",
+    "Session sidebar width",
+    "180-420 px when sessions are available"
+  ],
+  [
+    "Workspace",
+    "Workspace tab width",
+    "120-260 px"
+  ],
+  [
+    "Workspace",
+    "Session mask character",
+    "Masks usernames and IPv4 addresses in the session sidebar"
+  ],
+  [
+    "Shortcuts",
+    "Open Settings",
+    "Application command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "New Server",
+    "Workspace command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Import from Clipboard",
+    "Session transfer command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Export Selected",
+    "Session transfer command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Toggle Session Sidebar",
+    "Workspace command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Switch SSH/SFTP Tab",
+    "Workspace command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Copy Terminal Selection",
+    "Terminal command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Paste Into Terminal",
+    "Terminal command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Select All",
+    "Terminal command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Previous Tab",
+    "Workspace command shortcut"
+  ],
+  [
+    "Shortcuts",
+    "Next Tab",
+    "Workspace command shortcut"
+  ],
+  [
+    "About",
+    "Application",
+    "AxSSH version, license, interface, transport, and runtime details"
+  ],
+  [
+    "About",
+    "Support",
+    "Bug reports, runtime logs, and diagnostics"
+  ]
+]

@@ -1074,7 +1074,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
         sftp_remote_edit_max_file_mib: 4,
     });
 
-    assert_eq!(settings.ui_language, UiLanguage::SimplifiedChinese);
+    assert_eq!(settings.ui_language, UiLanguage::from_setting("zh-CN"));
     assert_eq!(
         settings.appearance.renderer_preference,
         RendererPreference::Software
@@ -1244,30 +1244,54 @@ fn ui_language_defaults_to_system_and_serializes_stable_values() {
     let legacy: SessionStore = serde_json::from_str(r#"{"version":20,"settings":{}}"#)
         .expect("version twenty settings should migrate");
     assert_eq!(legacy.version, CURRENT_SCHEMA_VERSION);
-    assert_eq!(legacy.settings.ui_language, UiLanguage::System);
+    assert_eq!(legacy.settings.ui_language, UiLanguage::SYSTEM);
 
     let invalid: AppSettings = serde_json::from_str(r#"{"ui_language":"unsupported"}"#)
         .expect("unknown language should normalize");
-    assert_eq!(invalid.ui_language, UiLanguage::System);
+    assert_eq!(invalid.ui_language, UiLanguage::SYSTEM);
 
-    assert_eq!(UiLanguage::from_selector_index(0), UiLanguage::System);
-    assert_eq!(UiLanguage::from_selector_index(1), UiLanguage::English);
+    assert_eq!(UiLanguage::from_selector_index(0), UiLanguage::SYSTEM);
     assert_eq!(
-        UiLanguage::from_selector_index(2),
-        UiLanguage::SimplifiedChinese
+        UiLanguage::from_selector_index(1),
+        UiLanguage::from_setting("en")
     );
-    assert_eq!(UiLanguage::from_selector_index(99), UiLanguage::System);
-    assert_eq!(UiLanguage::SimplifiedChinese.selector_index(), 2);
+    assert_eq!(UiLanguage::from_selector_index(99), UiLanguage::SYSTEM);
 
     assert_eq!(
-        serde_json::to_value(UiLanguage::System).expect("system language should serialize"),
+        serde_json::to_value(UiLanguage::SYSTEM).expect("system language should serialize"),
         "system"
     );
     assert_eq!(
-        serde_json::to_value(UiLanguage::SimplifiedChinese)
+        serde_json::to_value(UiLanguage::from_setting("zh-CN"))
             .expect("Chinese language should serialize"),
-        "simplified-chinese"
+        "zh-CN"
     );
+    assert_eq!(
+        serde_json::to_value(UiLanguage::from_setting("ja"))
+            .expect("Japanese language should serialize"),
+        "ja"
+    );
+}
+
+#[test]
+fn japanese_ui_language_round_trips_and_accepts_locale_aliases() {
+    for alias in ["japanese", "ja", "ja-JP", " JAPANESE "] {
+        assert_eq!(
+            UiLanguage::from_setting(alias),
+            UiLanguage::from_setting("ja")
+        );
+    }
+    let source = r#"{"version":36,"settings":{"ui_language":"japanese"}}"#;
+    let store: SessionStore = serde_json::from_str(source).expect("Japanese settings should load");
+    assert_eq!(store.settings.ui_language, UiLanguage::from_setting("ja"));
+    let saved = serde_json::to_string(&store).expect("Japanese settings should serialize");
+    let restored: SessionStore =
+        serde_json::from_str(&saved).expect("Japanese settings round trip");
+    assert_eq!(
+        restored.settings.ui_language,
+        UiLanguage::from_setting("ja")
+    );
+    assert_eq!(restored.version, CURRENT_SCHEMA_VERSION);
 }
 
 #[test]
@@ -1512,13 +1536,34 @@ fn system_icons_theme_preference_survives_normalization_and_private_store_round_
 
 #[test]
 fn ui_language_resolves_only_bundled_system_locales() {
-    assert_eq!(UiLanguage::System.resolved_locale(Some("zh-CN")), "zh-CN");
-    assert_eq!(UiLanguage::System.resolved_locale(Some("zh_Hans")), "zh-CN");
-    assert_eq!(UiLanguage::System.resolved_locale(Some("en-US")), "en");
-    assert_eq!(UiLanguage::System.resolved_locale(Some("ja-JP")), "en");
-    assert_eq!(UiLanguage::System.resolved_locale(None), "en");
-    assert_eq!(UiLanguage::English.resolved_locale(Some("zh-CN")), "en");
-    assert_eq!(UiLanguage::SimplifiedChinese.resolved_locale(None), "zh-CN");
+    assert_eq!(UiLanguage::SYSTEM.resolved_locale(Some("zh-CN")), "zh-CN");
+    assert_eq!(UiLanguage::SYSTEM.resolved_locale(Some("zh_Hans")), "zh-CN");
+    assert_eq!(UiLanguage::SYSTEM.resolved_locale(Some("en-US")), "en");
+    for locale in [
+        "ja",
+        "ja-JP",
+        "ja_JP.UTF-8",
+        "JA_jp@calendar=japanese",
+        " ja-JP ",
+    ] {
+        assert_eq!(UiLanguage::SYSTEM.resolved_locale(Some(locale)), "ja");
+    }
+    for locale in ["it-IT", "pl_PL.UTF-8", "C", "", "javanese", "japanese"] {
+        assert_eq!(UiLanguage::SYSTEM.resolved_locale(Some(locale)), "en");
+    }
+    assert_eq!(
+        UiLanguage::from_setting("ja").resolved_locale(Some("en-US")),
+        "ja"
+    );
+    assert_eq!(UiLanguage::SYSTEM.resolved_locale(None), "en");
+    assert_eq!(
+        UiLanguage::from_setting("en").resolved_locale(Some("zh-CN")),
+        "en"
+    );
+    assert_eq!(
+        UiLanguage::from_setting("zh-CN").resolved_locale(None),
+        "zh-CN"
+    );
 }
 
 #[test]

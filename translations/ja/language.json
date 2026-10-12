@@ -1,0 +1,6 @@
+{
+  "native_name": "日本語",
+  "aliases": ["ja-JP"],
+  "setting_aliases": ["japanese"],
+  "language_default": true
+}

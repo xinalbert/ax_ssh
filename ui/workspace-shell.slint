@@ -662,6 +662,7 @@ export component WorkspaceShell inherits Rectangle {
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
+    pure callback ui-language-options(string) -> [string];
     callback save-local-shell-icon(string);
     callback connect-session(string);
     callback open-sftp-session(string);
@@ -1252,6 +1253,7 @@ export component WorkspaceShell inherits Rectangle {
                         }
                         save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
                         save-ui-language(index) => { root.save-ui-language(index); }
+                        ui-language-options(system-label) => { return root.ui-language-options(system-label); }
                         save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
                         system-icon-choices(query) => { return root.system-icon-choices(query); }
                         system-icon-choice(id) => { return root.system-icon-choice(id); }

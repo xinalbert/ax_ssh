@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: ru\n"
+"PO-Revision-Date: 2026-10-12 18:08+0800\n"
+"Last-Translator: AxSSH contributors\n"
+"Language-Team: Русский\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial или COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "1–16 строк терминала на блок программного отображения"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 столбцов, 3–100 строк"
+
+msgid "100-200 percent"
+msgstr "100–200 процентов"
+
+msgid "100-50,000 retained lines"
+msgstr "100–50 000 сохраняемых строк"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px при наличии сеансов"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 процентов; 100 сохраняет цвета терминала"
+
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "Рабочая область терминала для SSH, Telnet, последовательных портов и локальной оболочки."
+
+msgid "APPLICATION"
+msgstr "ПРИЛОЖЕНИЕ"
+
+msgid "APPLICATION THEME"
+msgstr "ТЕМА ПРИЛОЖЕНИЯ"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "ШРИФТЫ ПРИЛОЖЕНИЯ"
+
+msgid "About"
+msgstr "О программе"
+
+msgid "About AxSSH"
+msgstr "О программе AxSSH"
+
+msgid "Accent / focus"
+msgstr "Акцент / фокус"
+
+msgid "Add Server"
+msgstr "Добавить сервер"
+
+msgid "Allow local connections without X authority"
+msgstr "Разрешить локальные подключения без авторизации X"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "Разрешить удалённый доступ к буферу обмена через OSC 52"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "Разрешить запись в основной буфер обмена; спрашивать перед удалённым чтением"
+
+msgid "Appearance"
+msgstr "Оформление"
+
+msgid "Application color palette"
+msgstr "Цветовая палитра приложения"
+
+msgid "Application command"
+msgstr "Команда приложения"
+
+msgid "Application display mode"
+msgstr "Режим отображения приложения"
+
+msgid "Application font family"
+msgstr "Семейство шрифтов приложения"
+
+msgid "Application interface font"
+msgstr "Шрифт интерфейса приложения"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "Для новых подключений SSH; запись начинается автоматически"
+
+msgid "Apply one color family to both display modes"
+msgstr "Применить одну цветовую гамму к обоим режимам отображения"
+
+msgid "Apply this choice to this upload batch"
+msgstr "Применить этот выбор ко всей группе загрузок"
+
+msgid "Async runtime"
+msgstr "Асинхронная среда выполнения"
+
+msgid "Authentication"
+msgstr "Аутентификация"
+
+msgid "Authentication method"
+msgstr "Способ аутентификации"
+
+msgid "Auto upload"
+msgstr "Автоматическая отправка"
+
+msgid "Automatic"
+msgstr "Автоматически"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "БУФЕР"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Background"
+msgstr "Фон"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Ограничение пропускной способности (MiB/s)"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "Ограничение пропускной способности (MiB/s; 0 — без ограничений)"
+
+msgid "Baud rate"
+msgstr "Скорость в бодах"
+
+msgid "Blink terminal cursor"
+msgstr "Мигающий курсор терминала"
+
+msgid "Border"
+msgstr "Граница"
+
+msgid "Bright colors for bold text"
+msgstr "Яркие цвета для полужирного текста"
+
+msgid "Bug reports"
+msgstr "Сообщения об ошибках"
+
+msgid "CLIPBOARD"
+msgstr "БУФЕР ОБМЕНА"
+
+msgid "COMPATIBILITY"
+msgstr "СОВМЕСТИМОСТЬ"
+
+msgid "CONTENT AND STATES"
+msgstr "СОДЕРЖИМОЕ И СОСТОЯНИЯ"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "СВОЯ ТЁМНАЯ ПАЛИТРА"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "СВОЯ СВЕТЛАЯ ПАЛИТРА"
+
+msgid "Cache unchanged terminal rows"
+msgstr "Кэшировать неизменённые строки терминала"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Cancel selected"
+msgstr "Отменить выбранные"
+
+msgid "Cancel {0}"
+msgstr "Отменить {0}"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas (пока недоступен)"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Изменения вступят в силу после перезапуска AxSSH"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "Выберите «Свой», чтобы запустить этот путь без командной оболочки"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "Выберите, как это подключение отображается в рабочей области."
+
+msgid "Choose system, light, or dark appearance"
+msgstr "Выбрать системное, светлое или тёмное оформление"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "Выберите удалённые и локальные каталоги для новых вкладок SFTP."
+
+msgid "Clear"
+msgstr "Очистить"
+
+msgid "Clear Recent"
+msgstr "Очистить недавние"
+
+msgid "Clear saved password"
+msgstr "Удалить сохранённый пароль"
+
+msgid "Clear settings search"
+msgstr "Очистить поиск настроек"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "Удалить сохранённый пароль для {0} сейчас? Изменение вступит в силу сразу. Остальные правки останутся несохранёнными."
+
+msgid "Close Current Tab"
+msgstr "Закрыть текущую вкладку"
+
+msgid "Close Window"
+msgstr "Закрыть окно"
+
+msgid "Close tab"
+msgstr "Закрыть вкладку"
+
+msgid "Close terminal pane"
+msgstr "Закрыть панель терминала"
+
+msgid "Collapse session sidebar"
+msgstr "Свернуть боковую панель сеансов"
+
+msgid "Collapse transfers"
+msgstr "Свернуть передачи"
+
+msgid "Collapse {0} group"
+msgstr "Свернуть группу {0}"
+
+msgid "Color palette"
+msgstr "Цветовая палитра"
+
+msgid "Compact terminal rendering"
+msgstr "Компактная отрисовка терминала"
+
+msgid "Connect"
+msgstr "Подключить"
+
+msgid "Connect to {0}"
+msgstr "Подключиться к {0}"
+
+msgid "Connected"
+msgstr "Подключено"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "Подключено · Измерение задержки SSH"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "Подключено · SSH RTT: {} ms\nОбновлено: {}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "Подключено · Данные о задержке SSH устарели"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "Подключено · Истекло время проверки задержки SSH"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "Подключено · Задержка SSH недоступна"
+
+msgid "Connection protocol"
+msgstr "Протокол подключения"
+
+msgid "Copy"
+msgstr "Копировать"
+
+msgid "Copy Address"
+msgstr "Копировать адрес"
+
+msgid "Copy Group"
+msgstr "Копировать группу"
+
+msgid "Copy Server"
+msgstr "Копировать сервер"
+
+msgid "Copy Terminal Selection"
+msgstr "Копировать выделение терминала"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "Сочетание клавиш для копирования выделения терминала"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "Копировать выделение; иначе вставить"
+
+msgid "Copy current path"
+msgstr "Копировать текущий путь"
+
+msgid "Copy diagnostics"
+msgstr "Копировать диагностику"
+
+msgid "Copy selection on select"
+msgstr "Копировать при выделении"
+
+msgid "Copy version and build information without connection data"
+msgstr "Копировать версию и сведения о сборке без данных подключения"
+
+msgid "Credential storage"
+msgstr "Хранение учётных данных"
+
+msgid "Credential vault password"
+msgstr "Пароль хранилища учётных данных"
+
+msgid "Credentials used for this SSH connection."
+msgstr "Учётные данные для этого подключения SSH."
+
+msgid "Custom"
+msgstr "Свой"
+
+msgid "Custom SFTP filename patterns"
+msgstr "Свои шаблоны имён файлов SFTP"
+
+msgid "Custom executable"
+msgstr "Свой исполняемый файл"
+
+msgid "Custom filename patterns"
+msgstr "Свои шаблоны имён файлов"
+
+msgid "Cut"
+msgstr "Вырезать"
+
+msgid "DEFAULTS"
+msgstr "ПО УМОЛЧАНИЮ"
+
+msgid "DISPLAY"
+msgstr "ОТОБРАЖЕНИЕ"
+
+msgid "Damage backing store (default)"
+msgstr "Буфер изменённых областей (по умолчанию)"
+
+msgid "Danger"
+msgstr "Опасность"
+
+msgid "Dark"
+msgstr "Тёмный"
+
+msgid "Data bits"
+msgstr "Биты данных"
+
+msgid "Default terminal background color"
+msgstr "Цвет фона терминала по умолчанию"
+
+msgid "Default terminal columns"
+msgstr "Столбцы терминала по умолчанию"
+
+msgid "Default terminal rows"
+msgstr "Строки терминала по умолчанию"
+
+msgid "Default terminal size"
+msgstr "Размер терминала по умолчанию"
+
+msgid "Default terminal text color"
+msgstr "Цвет текста терминала по умолчанию"
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "Delete Group"
+msgstr "Удалить группу"
+
+msgid "Delete Server"
+msgstr "Удалить сервер"
+
+msgid "Delete group"
+msgstr "Удалить группу"
+
+msgid "Delete server"
+msgstr "Удалить сервер"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "Удалить {0} и сохранённые учётные данные?"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "Удалить {0}? Серверы этой группы будут перемещены в «Без группы»."
+
+msgid "Detect again on next connection"
+msgstr "Определить заново при следующем подключении"
+
+msgid "Detected key"
+msgstr "Обнаруженный ключ"
+
+msgid "Detected locations"
+msgstr "Обнаруженные расположения"
+
+msgid "Detected private keys"
+msgstr "Обнаруженные закрытые ключи"
+
+msgid "Detected serial ports"
+msgstr "Обнаруженные последовательные порты"
+
+msgid "Detected system: {}"
+msgstr "Обнаруженная система: {}"
+
+msgid "Diagnostics"
+msgstr "Диагностика"
+
+msgid "Dialog and transient overlay tint"
+msgstr "Оттенок диалогов и временных наложений"
+
+msgid "Display mode"
+msgstr "Режим отображения"
+
+msgid "Dividers and control outlines"
+msgstr "Разделители и границы элементов управления"
+
+msgid "Download"
+msgstr "Скачать"
+
+msgid "Duplicate"
+msgstr "Дублировать"
+
+msgid "Duplicate Group"
+msgstr "Дублировать группу"
+
+msgid "Edit"
+msgstr "Изменить"
+
+msgid "Edit Server"
+msgstr "Изменить сервер"
+
+msgid "Edit selected remote file"
+msgstr "Редактировать выбранный удалённый файл"
+
+msgid "Enable semantic highlighting"
+msgstr "Включить семантическую подсветку"
+
+msgid "Encrypted application vault"
+msgstr "Зашифрованное хранилище приложения"
+
+msgid "Endpoint"
+msgstr "Адрес подключения"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "Введите #RRGGBB или #RRGGBBAA. При сохранении недостаточный контраст будет заменён читаемыми цветами."
+
+msgid "Enter the Telnet server address."
+msgstr "Введите адрес сервера Telnet."
+
+msgid "Enter the host address and SSH account."
+msgstr "Введите адрес узла и учётную запись SSH."
+
+msgid "Error"
+msgstr "Ошибка"
+
+msgid "Error and destructive indicators"
+msgstr "Индикаторы ошибок и разрушительных действий"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "Уровни ошибок и HTTP 5xx"
+
+msgid "Executable path"
+msgstr "Путь к исполняемому файлу"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "Исполняемый файл для новых вкладок локального терминала"
+
+msgid "Existing session groups"
+msgstr "Существующие группы сеансов"
+
+msgid "Expand session sidebar"
+msgstr "Развернуть боковую панель сеансов"
+
+msgid "Expand transfers"
+msgstr "Развернуть передачи"
+
+msgid "Expand {0} group"
+msgstr "Развернуть группу {0}"
+
+msgid "Export Selected"
+msgstr "Экспортировать выбранное"
+
+msgid "Export Selected shortcut"
+msgstr "Сочетание клавиш для экспорта выбранного"
+
+msgid "Export Selected to Clipboard"
+msgstr "Экспортировать выбранное в буфер обмена"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "Ошибка ({0})"
+
+msgid "File"
+msgstr "Файл"
+
+msgid "File transfers"
+msgstr "Передача файлов"
+
+msgid "Files and transfers area sizes"
+msgstr "Размеры областей файлов и передач"
+
+msgid "Filter system files"
+msgstr "Фильтровать системные файлы"
+
+msgid "Flow control"
+msgstr "Управление потоком"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "Обводки фокуса, выделение и активные индикаторы"
+
+msgid "Focused refresh rate"
+msgstr "Частота обновления в фокусе"
+
+msgid "Focused terminal refresh rate"
+msgstr "Частота обновления терминала в фокусе"
+
+msgid "Follow system"
+msgstr "Как в системе"
+
+msgid "Font family"
+msgstr "Семейство шрифтов"
+
+msgid "Font size"
+msgstr "Размер шрифта"
+
+msgid "Foreground"
+msgstr "Передний план"
+
+msgid "Forward"
+msgstr "Вперёд"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "Общие"
+
+msgid "Global simultaneous uploads"
+msgstr "Общее число одновременных отправок"
+
+msgid "Group"
+msgstr "Группа"
+
+msgid "Group name"
+msgstr "Имя группы"
+
+msgid "HTTP 2xx responses"
+msgstr "Ответы HTTP 2xx"
+
+msgid "Help"
+msgstr "Справка"
+
+msgid "Hidden"
+msgstr "Скрыто"
+
+msgid "Host"
+msgstr "Узел"
+
+msgid "Hover and secondary surfaces"
+msgstr "Вторичные поверхности и наведение"
+
+msgid "INTERFACE"
+msgstr "ИНТЕРФЕЙС"
+
+msgid "Identity"
+msgstr "Идентификация"
+
+msgid "Import from Clipboard"
+msgstr "Импортировать из буфера обмена"
+
+msgid "Import from Clipboard shortcut"
+msgstr "Сочетание клавиш для импорта из буфера обмена"
+
+msgid "Information"
+msgstr "Информация"
+
+msgid "Interface"
+msgstr "Интерфейс"
+
+msgid "Interface language"
+msgstr "Язык интерфейса"
+
+msgid "Item tree (current)"
+msgstr "Дерево элементов (текущее)"
+
+msgid "KEYBOARD"
+msgstr "КЛАВИАТУРА"
+
+msgid "Keep both"
+msgstr "Сохранить оба"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "Удерживать курсор в начале строки при прокрутке"
+
+msgid "Keyboard Shortcuts"
+msgstr "Сочетания клавиш"
+
+msgid "LAYOUT"
+msgstr "КОМПОНОВКА"
+
+msgid "LOCAL X SERVER"
+msgstr "ЛОКАЛЬНЫЙ X-СЕРВЕР"
+
+msgid "Language"
+msgstr "Язык"
+
+msgid "Language used by the AxSSH interface"
+msgstr "Язык интерфейса AxSSH"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "Запускать выбранный X-сервер только при открытии перенаправленного графического приложения"
+
+msgid "Layer images (fallback)"
+msgstr "Изображения слоёв (резервный вариант)"
+
+msgid "Leave blank to keep saved password"
+msgstr "Оставьте пустым, чтобы сохранить прежний пароль"
+
+msgid "License"
+msgstr "Лицензия"
+
+msgid "Light"
+msgstr "Светлый"
+
+msgid "Line height"
+msgstr "Высота строки"
+
+msgid "Loading"
+msgstr "Загрузка"
+
+msgid "Loading..."
+msgstr "Загрузка…"
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "Ограничение локальной копии перед открытием файлов SFTP в MiB"
+
+msgid "Local Shell"
+msgstr "Локальная оболочка"
+
+msgid "Local X server application path"
+msgstr "Путь к приложению локального X-сервера"
+
+msgid "Local X server provider"
+msgstr "Поставщик локального X-сервера"
+
+msgid "Local default directory"
+msgstr "Локальный каталог по умолчанию"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Локальная копия перед открытием; по умолчанию 512 MiB. 0 снимает ограничения размера файлов и кэша и может занять много места на диске"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "Локальная копия для открытия (MiB)"
+
+msgid "Local files"
+msgstr "Локальные файлы"
+
+msgid "Local selection priority"
+msgstr "Приоритет локального выделения"
+
+msgid "Local shell"
+msgstr "Локальная оболочка"
+
+msgid "Local shell icon"
+msgstr "Значок локальной оболочки"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "Уровни журналирования и HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "Уровни журналирования и коды состояния HTTP"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "Только loopback; требуется для MacXServer и серверов Windows с -ac"
+
+msgid "MICROPHONE"
+msgstr "МИКРОФОН"
+
+msgid "MOUSE"
+msgstr "МЫШЬ"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "Ручной выбор имеет приоритет над автоматическим определением."
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "Маскировать имена пользователей и средние октеты IPv4 на боковой панели сеансов"
+
+msgid "Maximize Window"
+msgstr "Развернуть окно"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "Максимальный размер файла SFTP в GiB"
+
+msgid "Maximum file size (GiB)"
+msgstr "Максимальный размер файла (GiB)"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Максимальный размер файла для скачивания и отправки при внешнем редактировании; по умолчанию 4 MiB, диапазон 1–64 MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Максимум одновременных отправок и скачиваний в одной вкладке SFTP"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Максимальный размер одного отправляемого или скачиваемого файла; 0 — без ограничений, по умолчанию 20 GiB"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Максимум отправок для всех вкладок SFTP"
+
+msgid "Minimize Window"
+msgstr "Свернуть окно"
+
+msgid "Modified"
+msgstr "Изменено"
+
+msgid "Mono (1)"
+msgstr "Моно (1)"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "Моно, стерео или несколько каналов; адаптируется к локальному устройству"
+
+msgid "More"
+msgstr "Ещё"
+
+msgid "Move Current Workspace to New Window"
+msgstr "Переместить текущую рабочую область в новое окно"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Переходить к началу строки после каждого шага колеса в приложениях с альтернативным экраном"
+
+msgid "Move workspace to new window"
+msgstr "Переместить рабочую область в новое окно"
+
+msgid "Muted text"
+msgstr "Приглушённый текст"
+
+msgid "Name"
+msgstr "Имя"
+
+msgid "Navigation and title surfaces"
+msgstr "Поверхности навигации и заголовков"
+
+msgid "New Group"
+msgstr "Новая группа"
+
+msgid "New Local Shell"
+msgstr "Новая локальная оболочка"
+
+msgid "New Server"
+msgstr "Новый сервер"
+
+msgid "New Server shortcut"
+msgstr "Сочетание клавиш для нового сервера"
+
+msgid "New group"
+msgstr "Новая группа"
+
+msgid "New name"
+msgstr "Новое имя"
+
+msgid "Next Tab"
+msgstr "Следующая вкладка"
+
+msgid "No failed transfers"
+msgstr "Нет неудачных передач"
+
+msgid "No files"
+msgstr "Нет файлов"
+
+msgid "No known local X server was found"
+msgstr "Не найден известный локальный X-сервер"
+
+msgid "No matching system icons"
+msgstr "Нет подходящих системных значков"
+
+msgid "No saved connections"
+msgstr "Нет сохранённых подключений"
+
+msgid "No saved password"
+msgstr "Нет сохранённого пароля"
+
+msgid "No saved servers"
+msgstr "Нет сохранённых серверов"
+
+msgid "No settings match this search."
+msgstr "Нет настроек, соответствующих поиску."
+
+msgid "No successful transfers"
+msgstr "Нет успешных передач"
+
+msgid "No transfers in progress"
+msgstr "Нет активных передач"
+
+msgid "Off"
+msgstr "Выключено"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Включено: Alt/Option отправляет жесты мыши; выключено: обычный xterm с выделением через Shift"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "Один шаблон на строку; * соответствует любым символам"
+
+msgid "Open"
+msgstr "Открыть"
+
+msgid "Open Recent"
+msgstr "Открыть недавние"
+
+msgid "Open SFTP"
+msgstr "Открыть SFTP"
+
+msgid "Open Settings"
+msgstr "Открыть настройки"
+
+msgid "Open Settings shortcut"
+msgstr "Сочетание клавиш для открытия настроек"
+
+msgid "Open Workspace"
+msgstr "Открыть рабочую область"
+
+msgid "Open a new local shell tab"
+msgstr "Открыть новую вкладку локальной оболочки"
+
+msgid "Open a saved session or create a new tab."
+msgstr "Откройте сохранённый сеанс или создайте новую вкладку."
+
+msgid "Open folder"
+msgstr "Открыть папку"
+
+msgid "Open local shell"
+msgstr "Открыть локальную оболочку"
+
+msgid "Open log folder"
+msgstr "Открыть папку журналов"
+
+msgid "Open saved connection"
+msgstr "Открыть сохранённое подключение"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "Открыть трекер ошибок AxSSH"
+
+msgid "Option acts as Meta"
+msgstr "Option как Meta"
+
+msgid "Optional"
+msgstr "Необязательно"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "Необязательно; пустое значение включает автоматическую локальную разблокировку"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "Необязательно; вводить только при подключении или сохранении"
+
+msgid "Overlay"
+msgstr "Наложение"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "Переопределить общие настройки SFTP для этого сервера; 0 GiB — без ограничений."
+
+msgid "Overwrite"
+msgstr "Перезаписать"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "Аудио PCM, передаваемое в сеанс SSH Linux"
+
+msgid "Pane"
+msgstr "Панель"
+
+msgid "Panel"
+msgstr "Панель"
+
+msgid "Panel alternative"
+msgstr "Вторичная панель"
+
+msgid "Parent directory"
+msgstr "Родительский каталог"
+
+msgid "Parity"
+msgstr "Контроль чётности"
+
+msgid "Password"
+msgstr "Пароль"
+
+msgid "Password authentication"
+msgstr "Аутентификация по паролю"
+
+msgid "Paste"
+msgstr "Вставить"
+
+msgid "Paste Into Terminal"
+msgstr "Вставить в терминал"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "Сочетание клавиш для вставки в терминал"
+
+msgid "Path"
+msgstr "Путь"
+
+msgid "Pause"
+msgstr "Приостановить"
+
+msgid "Pause selected"
+msgstr "Приостановить выбранные"
+
+msgid "Pause {0}"
+msgstr "Приостановить {0}"
+
+msgid "Platform defaults"
+msgstr "Настройки платформы по умолчанию"
+
+msgid "Platform home directory"
+msgstr "Домашний каталог платформы"
+
+msgid "Port"
+msgstr "Порт"
+
+msgid "Positive status indicators"
+msgstr "Индикаторы успешного состояния"
+
+msgid "Previous Tab"
+msgstr "Предыдущая вкладка"
+
+msgid "Primary readable text"
+msgstr "Основной читаемый текст"
+
+msgid "Primary workspace surface"
+msgstr "Основная поверхность рабочей области"
+
+msgid "Private key"
+msgstr "Закрытый ключ"
+
+msgid "Private key authentication"
+msgstr "Аутентификация по закрытому ключу"
+
+msgid "Private key passphrase"
+msgstr "Парольная фраза закрытого ключа"
+
+msgid "Private key passphrase (optional)"
+msgstr "Парольная фраза закрытого ключа (необязательно)"
+
+msgid "Private key path"
+msgstr "Путь к закрытому ключу"
+
+msgid "Production server"
+msgstr "Рабочий сервер"
+
+msgid "Protocol"
+msgstr "Протокол"
+
+msgid "Provider"
+msgstr "Поставщик"
+
+msgid "RENDERING"
+msgstr "ОТРИСОВКА"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Уменьшить число элементов терминала и не рисовать прямоугольники стандартного фона"
+
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "Refresh serial ports"
+msgstr "Обновить последовательные порты"
+
+msgid "Remembered password storage"
+msgstr "Хранение сохранённых паролей"
+
+msgid "Remote and local file pane sizes"
+msgstr "Размеры панелей удалённых и локальных файлов"
+
+msgid "Remote channels"
+msgstr "Удалённые каналы"
+
+msgid "Remote default directory"
+msgstr "Удалённый каталог по умолчанию"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "Ограничение файла для удалённого редактирования (MiB)"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "Ограничение размера файла для удалённого редактирования в MiB"
+
+msgid "Remote file already exists"
+msgstr "Удалённый файл уже существует"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "Удалённый файл: {0} - Изменён: {1}"
+
+msgid "Remote files"
+msgstr "Удалённые файлы"
+
+msgid "Remote sample rate"
+msgstr "Удалённая частота дискретизации"
+
+msgid "Remove"
+msgstr "Убрать"
+
+msgid "Remove revoked record"
+msgstr "Удалить отозванную запись"
+
+msgid "Rename"
+msgstr "Переименовать"
+
+msgid "Rename Group"
+msgstr "Переименовать группу"
+
+msgid "Rename group"
+msgstr "Переименовать группу"
+
+msgid "Rename selected remote entry"
+msgstr "Переименовать выбранный удалённый элемент"
+
+msgid "Renderer"
+msgstr "Средство отрисовки"
+
+msgid "Rendering backend"
+msgstr "Механизм отрисовки"
+
+msgid "Report a bug"
+msgstr "Сообщить об ошибке"
+
+msgid "Reset defaults"
+msgstr "Восстановить настройки по умолчанию"
+
+msgid "Reset filters"
+msgstr "Сбросить фильтры"
+
+msgid "Restore Window"
+msgstr "Восстановить окно"
+
+msgid "Restore platform defaults"
+msgstr "Восстановить настройки платформы по умолчанию"
+
+msgid "Restore the default filters for this platform"
+msgstr "Восстановить фильтры по умолчанию для этой платформы"
+
+msgid "Resume"
+msgstr "Продолжить"
+
+msgid "Resume selected"
+msgstr "Продолжить выбранные"
+
+msgid "Resume {0}"
+msgstr "Продолжить {0}"
+
+msgid "Return Workspace to Main Window"
+msgstr "Вернуть рабочую область в главное окно"
+
+msgid "Return workspace to main window"
+msgstr "Вернуть рабочую область в главное окно"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Повторно использовать слои строк GPU; может увеличить расход видеопамяти"
+
+msgid "Review before sharing"
+msgstr "Проверить перед отправкой"
+
+msgid "Right-click always pastes"
+msgstr "Правый щелчок всегда вставляет"
+
+msgid "Right-click copy or paste"
+msgstr "Копирование или вставка правым щелчком"
+
+msgid "Runtime logs"
+msgstr "Журналы выполнения"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "СЕМАНТИЧЕСКАЯ ПОДСВЕТКА"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "ПЕРЕДАЧИ SFTP"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "Ограничение пропускной способности SFTP в MiB в секунду"
+
+msgid "SFTP directories"
+msgstr "Каталоги SFTP"
+
+msgid "SFTP files"
+msgstr "Файлы SFTP"
+
+msgid "SFTP local default directory"
+msgstr "Локальный каталог SFTP по умолчанию"
+
+msgid "SFTP remote default directory"
+msgstr "Удалённый каталог SFTP по умолчанию"
+
+msgid "SFTP transfer limits"
+msgstr "Ограничения передач SFTP"
+
+msgid "SHA-256 fingerprint"
+msgstr "Отпечаток SHA-256"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "Режим перенаправления X11 через SSH"
+
+msgid "SSH agent"
+msgstr "Агент SSH"
+
+msgid "SSH authentication method"
+msgstr "Способ аутентификации SSH"
+
+msgid "SSH host key changed"
+msgstr "Ключ узла SSH изменён"
+
+msgid "SSH host key revoked"
+msgstr "Ключ узла SSH отозван"
+
+msgid "SSH password"
+msgstr "Пароль SSH"
+
+msgid "SSH transport"
+msgstr "Транспорт SSH"
+
+msgid "SSH username"
+msgstr "Имя пользователя SSH"
+
+msgid "SUPPORT"
+msgstr "ПОДДЕРЖКА"
+
+msgid "SURFACES"
+msgstr "ПОВЕРХНОСТИ"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Save & connect"
+msgstr "Сохранить и подключиться"
+
+msgid "Save SSH password for future connections"
+msgstr "Сохранить пароль SSH для будущих подключений"
+
+msgid "Save Workspace"
+msgstr "Сохранить рабочую область"
+
+msgid "Save audio settings"
+msgstr "Сохранить настройки аудио"
+
+msgid "Save password (optional)"
+msgstr "Сохранить пароль (необязательно)"
+
+msgid "Save password in"
+msgstr "Сохранять пароль в"
+
+msgid "Save session"
+msgstr "Сохранить сеанс"
+
+msgid "Saved connections"
+msgstr "Сохранённые подключения"
+
+msgid "Saved in {0}."
+msgstr "Сохранено в {0}."
+
+msgid "Saved password"
+msgstr "Сохранённый пароль"
+
+msgid "Scrollback"
+msgstr "История терминала"
+
+msgid "Search all settings"
+msgstr "Поиск во всех настройках"
+
+msgid "Search connections"
+msgstr "Поиск подключений"
+
+msgid "Search connections..."
+msgstr "Поиск подключений…"
+
+msgid "Search results"
+msgstr "Результаты поиска"
+
+msgid "Search settings"
+msgstr "Поиск настроек"
+
+msgid "Search system icons"
+msgstr "Поиск системных значков"
+
+msgid "Secondary labels and metadata"
+msgstr "Вторичные подписи и метаданные"
+
+msgid "Select All"
+msgstr "Выделить всё"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "Выберите обнаруженное устройство или введите имя порта вручную."
+
+msgid "Select all files"
+msgstr "Выделить все файлы"
+
+msgid "Select the transport used by this saved connection."
+msgstr "Выберите транспорт для этого сохранённого подключения."
+
+msgid "Select {0}"
+msgstr "Выбрать {0}"
+
+msgid "Selected"
+msgstr "Выбрано"
+
+msgid "Selection"
+msgstr "Выделение"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "Отправлять Option+клавишу как Meta с префиксом Escape"
+
+msgid "Serial"
+msgstr "Последовательный порт"
+
+msgid "Serial baud rate"
+msgstr "Скорость последовательного порта в бодах"
+
+msgid "Serial data bits"
+msgstr "Биты данных последовательного порта"
+
+msgid "Serial flow control"
+msgstr "Управление потоком последовательного порта"
+
+msgid "Serial parity"
+msgstr "Контроль чётности последовательного порта"
+
+msgid "Serial port"
+msgstr "Последовательный порт"
+
+msgid "Serial port name"
+msgstr "Имя последовательного порта"
+
+msgid "Serial stop bits"
+msgstr "Стоповые биты последовательного порта"
+
+msgid "Serial transport"
+msgstr "Последовательный транспорт"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "Ограничение пропускной способности SFTP сервера в MiB в секунду"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "Максимальный размер файла SFTP сервера в GiB"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "Одновременные передачи SFTP сервера"
+
+msgid "Session group"
+msgstr "Группа сеансов"
+
+msgid "Session mask character"
+msgstr "Символ маскирования сеансов"
+
+msgid "Session name"
+msgstr "Имя сеанса"
+
+msgid "Session sidebar width"
+msgstr "Ширина боковой панели сеансов"
+
+msgid "Session transfer command"
+msgstr "Команда передачи сеансов"
+
+msgid "Sessions"
+msgstr "Сеансы"
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Settings..."
+msgstr "Настройки…"
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Общее для отправки и скачивания в каждой вкладке SFTP; 0 — без ограничений"
+
+msgid "Shortcuts"
+msgstr "Сочетания клавиш"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Показывать мигающий курсор, когда терминал в фокусе"
+
+msgid "Show in Folder"
+msgstr "Показать в папке"
+
+msgid "Show local copy"
+msgstr "Показать локальную копию"
+
+msgid "Simultaneous transfers"
+msgstr "Одновременные передачи"
+
+msgid "Size"
+msgstr "Размер"
+
+msgid "Skip"
+msgstr "Пропустить"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Пропускать совпадающие имена при отправке и скачивании SFTP"
+
+msgid "Skipped"
+msgstr "Пропущено"
+
+msgid "Software"
+msgstr "Программная"
+
+msgid "Software block rows"
+msgstr "Строки программного блока"
+
+msgid "Software presentation"
+msgstr "Программное отображение"
+
+msgid "Software presentation block rows"
+msgstr "Строки блока программного отображения"
+
+msgid "Software presentation path"
+msgstr "Способ программного отображения"
+
+msgid "Sort by modified time"
+msgstr "Сортировать по времени изменения"
+
+msgid "Sort by name"
+msgstr "Сортировать по имени"
+
+msgid "Sort by size"
+msgstr "Сортировать по размеру"
+
+msgid "Speed"
+msgstr "Скорость"
+
+msgid "Split active terminal horizontally"
+msgstr "Разделить активный терминал по горизонтали"
+
+msgid "Split active terminal vertically"
+msgstr "Разделить активный терминал по вертикали"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "Разделить по горизонтали (Alt+Shift+J)"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "Разделить по вертикали (Alt+Shift+L)"
+
+msgid "Start for first X11 application"
+msgstr "Запустить для первого приложения X11"
+
+msgid "Status"
+msgstr "Состояние"
+
+msgid "Stereo (2)"
+msgstr "Стерео (2)"
+
+msgid "Stop bits"
+msgstr "Стоповые биты"
+
+msgid "Stop editing"
+msgstr "Завершить редактирование"
+
+msgid "Success"
+msgstr "Успех"
+
+msgid "Success ({0})"
+msgstr "Успех ({0})"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "Переключить вкладку SSH/SFTP"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "Сочетание клавиш для переключения вкладки SSH/SFTP"
+
+msgid "System credential store"
+msgstr "Системное хранилище учётных данных"
+
+msgid "System icon"
+msgstr "Значок системы"
+
+msgid "TERMINAL"
+msgstr "ТЕРМИНАЛ"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "НАСТРОЙКИ ТЕРМИНАЛА ПО УМОЛЧАНИЮ"
+
+msgid "TRANSFER FILTERS"
+msgstr "ФИЛЬТРЫ ПЕРЕДАЧ"
+
+msgid "TYPOGRAPHY"
+msgstr "ШРИФТЫ"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Протокол Telnet"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet передаёт данные терминала без шифрования и проверки подлинности узла."
+
+msgid "Terminal"
+msgstr "Терминал"
+
+msgid "Terminal character-cell font"
+msgstr "Шрифт символьных ячеек терминала"
+
+msgid "Terminal command"
+msgstr "Команда терминала"
+
+msgid "Terminal drawing"
+msgstr "Отрисовка терминала"
+
+msgid "Terminal drawing path"
+msgstr "Способ отрисовки терминала"
+
+msgid "Terminal error highlight color"
+msgstr "Цвет подсветки ошибок терминала"
+
+msgid "Terminal font family"
+msgstr "Семейство шрифтов терминала"
+
+msgid "Terminal font size"
+msgstr "Размер шрифта терминала"
+
+msgid "Terminal information highlight color"
+msgstr "Цвет информационной подсветки терминала"
+
+msgid "Terminal line height percentage"
+msgstr "Высота строки терминала в процентах"
+
+msgid "Terminal pane heights"
+msgstr "Высота панелей терминала"
+
+msgid "Terminal pane widths"
+msgstr "Ширина панелей терминала"
+
+msgid "Terminal scrollback lines"
+msgstr "Строки истории терминала"
+
+msgid "Terminal success highlight color"
+msgstr "Цвет подсветки успеха в терминале"
+
+msgid "Terminal text brightness"
+msgstr "Яркость текста терминала"
+
+msgid "Terminal text selection background"
+msgstr "Фон выделения текста терминала"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "Обновления терминала, когда панель в фокусе"
+
+msgid "Terminal warning highlight color"
+msgstr "Цвет подсветки предупреждений терминала"
+
+msgid "Text"
+msgstr "Текст"
+
+msgid "Text brightness"
+msgstr "Яркость текста"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Способ отрисовки Canvas зарезервирован для будущего механизма"
+
+msgid "Theme default"
+msgstr "По умолчанию в теме"
+
+msgid "Toggle Session Sidebar"
+msgstr "Показать/скрыть боковую панель сеансов"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "Сочетание клавиш для показа/скрытия боковой панели сеансов"
+
+msgid "Transferring ({0})"
+msgstr "Передача ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "Передачи на вкладку SFTP"
+
+msgid "Trust and continue"
+msgstr "Доверять и продолжить"
+
+msgid "Trust new key"
+msgstr "Доверять новому ключу"
+
+msgid "Trusted (-Y)"
+msgstr "Доверенный (-Y)"
+
+msgid "Unfocused refresh rate"
+msgstr "Частота обновления без фокуса"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "Частота обновления терминала без фокуса"
+
+msgid "Unknown SSH host key"
+msgstr "Неизвестный ключ узла SSH"
+
+msgid "Unlock encrypted credentials"
+msgstr "Разблокировать зашифрованные учётные данные"
+
+msgid "Untrusted (-X)"
+msgstr "Недоверенный (-X)"
+
+msgid "Update session"
+msgstr "Обновить сеанс"
+
+msgid "Upload"
+msgstr "Отправить"
+
+msgid "Upload changes"
+msgstr "Отправить изменения"
+
+msgid "Upload selected local files"
+msgstr "Отправить выбранные локальные файлы"
+
+msgid "Use platform default filters"
+msgstr "Использовать фильтры платформы по умолчанию"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "Использовать ограничения передач SFTP для этого сервера"
+
+msgid "Use server-specific limits"
+msgstr "Использовать ограничения этого сервера"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Использовать яркую палитру ANSI для полужирного текста"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Для сохранённых паролей и новых паролей, введённых в редакторе сеансов"
+
+msgid "Username"
+msgstr "Имя пользователя"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "По умолчанию используется система узла. Изменения сохраняются сразу."
+
+msgid "Vault password"
+msgstr "Пароль хранилища"
+
+msgid "Version {0}"
+msgstr "Версия {0}"
+
+msgid "View"
+msgstr "Вид"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Обновления видимого терминала, когда другая панель в фокусе"
+
+msgid "WORKSPACE"
+msgstr "РАБОЧАЯ ОБЛАСТЬ"
+
+msgid "Warning"
+msgstr "Предупреждение"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "Уровни предупреждений и HTTP 4xx"
+
+msgid "Window"
+msgstr "Окно"
+
+msgid "Workspace"
+msgstr "Рабочая область"
+
+msgid "Workspace command"
+msgstr "Команда рабочей области"
+
+msgid "Workspace file path"
+msgstr "Путь к файлу рабочей области"
+
+msgid "Workspace tab width"
+msgstr "Ширина вкладки рабочей области"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "X-сервер для перенаправленных графических приложений"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "Перенаправление X11"
+
+msgid "lines"
+msgstr "строк"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Способ отображения CPU в macOS; изменения вступят в силу после перезапуска AxSSH"
+
+msgid "px"
+msgstr "px"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "строк"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "Акцентный цвет {0}"
+
+msgid "{0} background color"
+msgstr "Цвет фона {0}"
+
+msgid "{0} border color"
+msgstr "Цвет границ {0}"
+
+msgid "{0} danger color"
+msgstr "Цвет опасности {0}"
+
+msgid "{0} muted text color"
+msgstr "Цвет приглушённого текста {0}"
+
+msgid "{0} overlay color"
+msgstr "Цвет наложения {0}"
+
+msgid "{0} panel color"
+msgstr "Цвет панели {0}"
+
+msgid "{0} secondary panel color"
+msgstr "Цвет вторичной панели {0}"
+
+msgid "{0} success color"
+msgstr "Цвет успеха {0}"
+
+msgid "{0} terminal background color"
+msgstr "Цвет фона терминала {0}"
+
+msgid "{0} terminal foreground color"
+msgstr "Цвет переднего плана терминала {0}"
+
+msgid "{0} terminal selection color"
+msgstr "Цвет выделения терминала {0}"
+
+msgid "{0} text color"
+msgstr "Цвет текста {0}"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 столбцов, 3–100 строк"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100–200 процентов"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px при наличии сеансов"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 процентов; 100 сохраняет цвета терминала"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "О программе"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "Разрешить локальные подключения без авторизации X"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "Оформление"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "Приложение"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "Сочетание клавиш для команды приложения"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "Шрифт интерфейса приложения"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "Применить одну цветовую гамму к обоим режимам отображения"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "Версия, лицензия, интерфейс, транспорт и среда выполнения AxSSH"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Ограничение пропускной способности (MiB/s)"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "Мигающий курсор терминала"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "Яркие цвета для полужирного текста"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "Сообщения об ошибках, журналы выполнения и диагностика"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "Кэшировать неизменённые строки терминала"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Изменения вступят в силу после перезапуска AxSSH"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "Выбрать копирование или вставку по правому щелчку в терминале"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "Выбрать системное, светлое или тёмное оформление"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "Цветовая палитра"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "Компактная отрисовка терминала"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "Настроить свою тёмную палитру приложения и терминала"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "Настроить свою светлую палитру приложения и терминала"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "Копировать выделение терминала"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "Сразу копировать завершённые выделения терминала"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "Копировать при выделении"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "Своя тёмная палитра"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "Свой исполняемый файл"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "Свои шаблоны имён файлов"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "Своя светлая палитра"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "Размер терминала по умолчанию"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "Обнаруженные расположения"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "Режим отображения"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "Исполняемый файл для новых вкладок локального терминала"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "Экспортировать выбранное"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "Фильтровать системные файлы"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "Частота обновления в фокусе"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "Семейство шрифтов"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "Размер шрифта"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "Общие"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "Общее число одновременных отправок"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "Импортировать из буфера обмена"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "Удерживать курсор в начале строки при прокрутке"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "Известные локальные установки X-сервера"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "Язык"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "Язык интерфейса AxSSH"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "Запустить свой исполняемый файл X-сервера"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "Запускать выбранный X-сервер только при необходимости"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "Высота строки"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Локальная копия перед открытием; по умолчанию 512 MiB. 0 снимает ограничения размера файлов и кэша и может занять много места на диске"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "Локальная копия для открытия (MiB)"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "Приоритет локального выделения"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "Локальная оболочка"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "Значок локальной оболочки"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "Режим совместимости только для loopback"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "Маскировать имена пользователей и адреса IPv4 на боковой панели сеансов"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "Максимальный размер файла (GiB)"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Максимальный размер файла для скачивания и отправки при внешнем редактировании; по умолчанию 4 MiB, диапазон 1–64 MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Максимум одновременных отправок и скачиваний в одной вкладке SFTP"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Максимальный размер одного отправляемого или скачиваемого файла; 0 — без ограничений, по умолчанию 20 GiB"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Максимум отправок для всех вкладок SFTP"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Переходить к началу строки после каждого шага колеса в приложениях с альтернативным экраном"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "Новый сервер"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "Следующая вкладка"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "Число строк истории терминала, сохраняемых в памяти"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Включено: Alt/Option отправляет жесты мыши; выключено: обычный xterm с выделением через Shift"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "Один шаблон на строку; * соответствует любым символам"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "Открыть настройки"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option как Meta"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "Необязательные цвета ссылок, путей, состояний и уровней журналирования"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "Вставить в терминал"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "Настройки платформы по умолчанию"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "Предыдущая вкладка"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "Поставщик"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Уменьшить число элементов терминала и не рисовать прямоугольники стандартного фона"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "Хранение сохранённых паролей"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "Ограничение файла для удалённого редактирования (MiB)"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "Средство отрисовки"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "Восстановить фильтры по умолчанию для этой платформы"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Повторно использовать слои строк GPU; может увеличить расход видеопамяти"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "Копирование или вставка правым щелчком"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "История терминала"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "Выделить всё"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "Семантическая подсветка"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "Символ маскирования сеансов"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "Ширина боковой панели сеансов"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "Сочетание клавиш для передачи сеансов"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Общее для отправки и скачивания в каждой вкладке SFTP; 0 — без ограничений"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "Сочетания клавиш"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Показывать мигающий курсор, когда терминал в фокусе"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Пропускать совпадающие имена при отправке и скачивании SFTP"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "Программное отображение"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "Запустить для первого приложения X11"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "Поддержка"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "Переключить вкладку SSH/SFTP"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "Терминал"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "Шрифт символьных ячеек терминала"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "Сочетание клавиш для команды терминала"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "Обновления терминала, когда панель в фокусе"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "Яркость текста"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "Показать/скрыть боковую панель сеансов"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "Передачи на вкладку SFTP"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "Частота обновления без фокуса"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "Использовать Option как Meta терминала в macOS"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Использовать яркую палитру ANSI для полужирного текста"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Для сохранённых паролей и новых паролей, введённых в редакторе сеансов"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "По умолчанию используется система узла. Изменения сохраняются сразу."
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Обновления видимого терминала, когда другая панель в фокусе"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "Рабочая область"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "Сочетание клавиш для команды рабочей области"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "Ширина вкладки рабочей области"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "X-сервер для перенаправленных графических приложений"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Способ отображения CPU в macOS; изменения вступят в силу после перезапуска AxSSH"

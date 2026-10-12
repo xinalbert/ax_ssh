@@ -109,6 +109,9 @@ msgstr "应用字体系列"
 msgid "Application interface font"
 msgstr "应用界面字体"
 
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "新 SSH 连接生效；录音自动接入"
+
 msgid "Apply one color family to both display modes"
 msgstr "为两种显示模式应用同一配色系列"
 
@@ -445,9 +448,6 @@ msgstr "应用加密保险库"
 msgid "Endpoint"
 msgstr "端点"
 
-msgid "English"
-msgstr "English"
-
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "输入 #RRGGBB 或 #RRGGBBAA。保存时，对比度不足的颜色会回退为可读颜色。"
 
@@ -682,6 +682,9 @@ msgstr "日志等级和 HTTP 状态码"
 msgid "Loopback only; required by MacXServer and -ac Windows servers"
 msgstr "仅限回环地址；MacXServer 和使用 -ac 的 Windows server 需要此项"
 
+msgid "MICROPHONE"
+msgstr "麦克风"
+
 msgid "MOUSE"
 msgstr "鼠标"
 
@@ -699,6 +702,9 @@ msgstr "SFTP 单文件大小上限（GiB）"
 
 msgid "Maximum file size (GiB)"
 msgstr "单文件大小上限（GiB）"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围 1–64 MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
@@ -975,6 +981,12 @@ msgstr "远端声道"
 
 msgid "Remote default directory"
 msgstr "远端默认目录"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "远程编辑文件大小上限（MiB）"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "远程编辑文件大小上限，单位 MiB"
 
 msgid "Remote file already exists"
 msgstr "远端文件已存在"
@@ -1279,8 +1291,8 @@ msgstr "终端聚焦时显示闪烁光标"
 msgid "Show in Folder"
 msgstr "在文件夹中显示"
 
-msgid "Simplified Chinese"
-msgstr "Simplified Chinese"
+msgid "Show local copy"
+msgstr "显示本地副本"
 
 msgid "Simultaneous transfers"
 msgstr "同时传输数"
@@ -1347,6 +1359,9 @@ msgstr "立体声 (2)"
 
 msgid "Stop bits"
 msgstr "停止位"
+
+msgid "Stop editing"
+msgstr "停止编辑"
 
 msgid "Success"
 msgstr "成功"
@@ -1495,6 +1510,9 @@ msgstr "更新会话"
 msgid "Upload"
 msgstr "上传"
 
+msgid "Upload changes"
+msgstr "上传修改"
+
 msgid "Upload selected local files"
 msgstr "上传选中的本地文件"
 
@@ -1633,26 +1651,474 @@ msgstr "~"
 msgid "~/.ssh/id_ed25519"
 msgstr "~/.ssh/id_ed25519"
 
-msgid "Upload changes"
-msgstr "上传修改"
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10-300 列，3-100 行"
 
-msgid "Show local copy"
-msgstr "显示本地副本"
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100-200%"
 
-msgid "Stop editing"
-msgstr "停止编辑"
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
 
-msgid "Remote edit file limit (MiB)"
-msgstr "远程编辑文件大小上限（MiB）"
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "有会话时为 180-420 px"
 
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60-120%；100% 保留终端原色"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "关于"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "允许无 X authority 的本地连接"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "外观"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "应用"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "应用命令快捷键"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "应用界面字体"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "为两种显示模式应用同一配色系列"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "AxSSH 版本、许可证、界面、传输和运行时信息"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "带宽上限（MiB/s）"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "终端光标闪烁"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "粗体使用亮色"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "错误报告、运行日志和诊断"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "缓存未变化的终端行"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "重启 AxSSH 后生效"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "选择终端右键行为"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "跟随系统、浅色或深色外观"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "配色方案"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "紧凑终端渲染"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "配置应用和终端的深色颜色"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "配置应用和终端的浅色颜色"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "复制终端选择"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "完成终端选择后立即复制"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "选中后复制"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "自定义深色配色"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "自定义可执行文件"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "自定义文件名过滤模式"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "自定义浅色配色"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "默认终端大小"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "检测到的位置"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "显示模式"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "新建本地终端标签页使用的可执行程序"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "导出所选项"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "过滤系统文件"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "聚焦刷新率"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "字体系列"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "字体大小"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "通用"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "全局同时上传数"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "从剪贴板导入"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "滚轮时保持光标在行首"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "已知本地 X server 安装"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "语言"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 界面使用的语言"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "启动自定义 X server 程序"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "仅在需要时启动所选 X server"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "行高"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "本地文件打开快照（MiB）"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "本地选区优先"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "本地 Shell"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "本地终端图标"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "仅限回环地址的兼容模式"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "遮盖侧栏中的用户名和 IPv4 地址"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "单文件大小上限（GiB）"
+
+msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部编辑下载和回传的文件大小上限；默认 4 MiB，范围 1–64 MiB"
 
-msgid "Remote edit file size limit in MiB"
-msgstr "远程编辑文件大小上限，单位 MiB"
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "单个 SFTP 标签页允许同时进行的上传和下载数"
 
-msgid "MICROPHONE"
-msgstr "麦克风"
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "单个上传或下载文件的大小上限；0 表示不限大小，默认 20 GiB"
 
-msgid "Applies to new SSH connections; recording starts automatically"
-msgstr "新 SSH 连接生效；录音自动接入"
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "所有 SFTP 标签页共享的同时上传数"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "在备用屏幕程序中，每次滚轮上下移动后回到行首"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "新建服务器"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "下一个标签页"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "内存中保留的终端历史行数"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "每行一个模式；* 匹配任意字符"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "打开设置"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option 作为 Meta"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "可选的链接、路径、状态和日志级别颜色"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "粘贴到终端"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "平台默认值"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "上一个标签页"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "提供程序"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "减少终端绘制项并省略默认背景矩形"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "已记住密码的存储方式"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "远程编辑文件大小上限（MiB）"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "渲染器"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "恢复此平台的默认过滤规则"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "复用 GPU 行图层；可能增加图形内存"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "右键复制或粘贴"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "回滚行数"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "全选"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "语义高亮"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "会话掩码字符"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "会话侧栏宽度"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "会话传输命令快捷键"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "每个 SFTP 标签页的上传与下载共享；0 表示不限速"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "快捷键"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "终端聚焦时显示闪烁光标"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 上传和下载时跳过匹配的名称"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "软件呈现方式"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "首个 X11 应用时启动"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "支持"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "切换 SSH/SFTP 标签页"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "终端"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "终端字符单元格字体"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "终端命令快捷键"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "终端窗格聚焦时的刷新帧率"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "文字亮度"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "切换会话侧栏"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "每个 SFTP 标签页的传输数"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "非聚焦刷新率"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "在 macOS 终端中把 Option 用作 Meta"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "为粗体使用明亮 ANSI 调色板"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "保存已记住密码所用的安全存储"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "默认使用本机系统图标，更改后立即保存。"
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "其他窗格聚焦时可见终端的刷新帧率"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "工作区"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "工作区命令快捷键"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "工作区标签宽度"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "转发图形应用使用的 X server"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 呈现路径；重启 AxSSH 后生效"

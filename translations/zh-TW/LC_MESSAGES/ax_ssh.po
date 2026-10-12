@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: zh-TW\n"
+"PO-Revision-Date: 2026-10-12 17:39+0800\n"
+"Last-Translator: AxSSH contributors\n"
+"Language-Team: 繁體中文\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial or COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "每個軟體呈現塊包含 1-16 個終端機行"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10-300 列，3-100 行"
+
+msgid "100-200 percent"
+msgstr "100%-200%"
+
+msgid "100-50,000 retained lines"
+msgstr "保留 100-50,000 行"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 畫素"
+
+msgid "180-420 px when sessions are available"
+msgstr "存在會話時為 180-420 畫素"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60%-120%；100% 保留終端機原色"
+
+msgid "9-32 px"
+msgstr "9-32 畫素"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "專注於 SSH、Telnet、串列埠和本地 Shell 會話的終端機工作區。"
+
+msgid "APPLICATION"
+msgstr "應用"
+
+msgid "APPLICATION THEME"
+msgstr "應用主題"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "應用字型"
+
+msgid "About"
+msgstr "關於"
+
+msgid "About AxSSH"
+msgstr "關於 AxSSH"
+
+msgid "Accent / focus"
+msgstr "強調色 / 焦點"
+
+msgid "Add Server"
+msgstr "新增伺服器"
+
+msgid "Allow local connections without X authority"
+msgstr "允許無 X authority 的本地連線"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "允許遠端 OSC 52 訪問剪貼簿"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "允許寫入預設剪貼簿；遠端讀取前需要確認"
+
+msgid "Appearance"
+msgstr "外觀"
+
+msgid "Application color palette"
+msgstr "應用配色方案"
+
+msgid "Application command"
+msgstr "應用命令"
+
+msgid "Application display mode"
+msgstr "應用顯示模式"
+
+msgid "Application font family"
+msgstr "應用字型系列"
+
+msgid "Application interface font"
+msgstr "應用介面字型"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "新 SSH 連線生效；錄音自動接入"
+
+msgid "Apply one color family to both display modes"
+msgstr "為兩種顯示模式應用同一配色系列"
+
+msgid "Apply this choice to this upload batch"
+msgstr "對本次上傳批次應用此選擇"
+
+msgid "Async runtime"
+msgstr "非同步執行時"
+
+msgid "Authentication"
+msgstr "身份驗證"
+
+msgid "Authentication method"
+msgstr "身份驗證方式"
+
+msgid "Auto upload"
+msgstr "自動上傳"
+
+msgid "Automatic"
+msgstr "自動"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "緩衝區"
+
+msgid "Back"
+msgstr "後退"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "頻寬上限（MiB/s）"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "頻寬上限（MiB/s；0 不限速）"
+
+msgid "Baud rate"
+msgstr "鮑率"
+
+msgid "Blink terminal cursor"
+msgstr "終端機游標閃爍"
+
+msgid "Border"
+msgstr "邊框"
+
+msgid "Bright colors for bold text"
+msgstr "粗體文字使用亮色"
+
+msgid "Bug reports"
+msgstr "問題報告"
+
+msgid "CLIPBOARD"
+msgstr "剪貼簿"
+
+msgid "COMPATIBILITY"
+msgstr "相容性"
+
+msgid "CONTENT AND STATES"
+msgstr "內容和狀態"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "自定義深色配色"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "自定義淺色配色"
+
+msgid "Cache unchanged terminal rows"
+msgstr "快取未變化的終端機行"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Cancel selected"
+msgstr "取消所選"
+
+msgid "Cancel {0}"
+msgstr "取消 {0}"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas（尚不可用）"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "重啟 AxSSH 後生效"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "選擇“自定義”以直接啟動此路徑，不經過命令 Shell"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "選擇此連線在工作區中的顯示方式。"
+
+msgid "Choose system, light, or dark appearance"
+msgstr "選擇跟隨系統、淺色或深色外觀"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "選擇新建 SFTP 分頁開啟的遠端和本地目錄。"
+
+msgid "Clear"
+msgstr "清除"
+
+msgid "Clear Recent"
+msgstr "清除最近記錄"
+
+msgid "Clear saved password"
+msgstr "清除已儲存密碼"
+
+msgid "Clear settings search"
+msgstr "清除設定搜尋"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "立即清除{0}的已儲存密碼？確認後立即生效，其他編輯內容不會隨之儲存。"
+
+msgid "Close Current Tab"
+msgstr "關閉當前分頁"
+
+msgid "Close Window"
+msgstr "關閉視窗"
+
+msgid "Close tab"
+msgstr "關閉分頁"
+
+msgid "Close terminal pane"
+msgstr "關閉終端機窗格"
+
+msgid "Collapse session sidebar"
+msgstr "收起會話側欄"
+
+msgid "Collapse transfers"
+msgstr "收起傳輸"
+
+msgid "Collapse {0} group"
+msgstr "收起 {0} 組"
+
+msgid "Color palette"
+msgstr "配色方案"
+
+msgid "Compact terminal rendering"
+msgstr "緊湊終端機渲染"
+
+msgid "Connect"
+msgstr "連線"
+
+msgid "Connect to {0}"
+msgstr "連線到 {0}"
+
+msgid "Connected"
+msgstr "已連線"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "已連線 · 正在測量 SSH 延遲"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "已連線 · SSH 往返延遲：{} ms\n更新時間：{}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "已連線 · SSH 延遲資料已過期"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "已連線 · SSH 延遲探測超時"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "已連線 · 無法獲取 SSH 延遲"
+
+msgid "Connection protocol"
+msgstr "連線協議"
+
+msgid "Copy"
+msgstr "複製"
+
+msgid "Copy Address"
+msgstr "複製地址"
+
+msgid "Copy Group"
+msgstr "複製組"
+
+msgid "Copy Server"
+msgstr "複製伺服器"
+
+msgid "Copy Terminal Selection"
+msgstr "複製終端機選區"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "複製終端機選區快捷鍵"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "有選區時複製，否則貼上"
+
+msgid "Copy current path"
+msgstr "複製當前路徑"
+
+msgid "Copy diagnostics"
+msgstr "複製診斷資訊"
+
+msgid "Copy selection on select"
+msgstr "選中後複製"
+
+msgid "Copy version and build information without connection data"
+msgstr "複製不含連線資料的版本和構建資訊"
+
+msgid "Credential storage"
+msgstr "認證資料儲存"
+
+msgid "Credential vault password"
+msgstr "認證資料保險庫密碼"
+
+msgid "Credentials used for this SSH connection."
+msgstr "此 SSH 連線使用的認證資料。"
+
+msgid "Custom"
+msgstr "自定義"
+
+msgid "Custom SFTP filename patterns"
+msgstr "自定義 SFTP 檔名過濾模式"
+
+msgid "Custom executable"
+msgstr "自定義可執行檔案"
+
+msgid "Custom filename patterns"
+msgstr "自定義檔名過濾模式"
+
+msgid "Cut"
+msgstr "剪下"
+
+msgid "DEFAULTS"
+msgstr "預設值"
+
+msgid "DISPLAY"
+msgstr "顯示"
+
+msgid "Damage backing store (default)"
+msgstr "髒區後備儲存（預設）"
+
+msgid "Danger"
+msgstr "危險"
+
+msgid "Dark"
+msgstr "深色"
+
+msgid "Data bits"
+msgstr "資料位元"
+
+msgid "Default terminal background color"
+msgstr "預設終端機背景色"
+
+msgid "Default terminal columns"
+msgstr "預設終端機列數"
+
+msgid "Default terminal rows"
+msgstr "預設終端機行數"
+
+msgid "Default terminal size"
+msgstr "預設終端機尺寸"
+
+msgid "Default terminal text color"
+msgstr "預設終端機文字顏色"
+
+msgid "Delete"
+msgstr "刪除"
+
+msgid "Delete Group"
+msgstr "刪除組"
+
+msgid "Delete Server"
+msgstr "刪除伺服器"
+
+msgid "Delete group"
+msgstr "刪除組"
+
+msgid "Delete server"
+msgstr "刪除伺服器"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "刪除 {0} 及其已儲存的認證資料？"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "刪除 {0}？該組中的伺服器將移至“未分組”。"
+
+msgid "Detect again on next connection"
+msgstr "下次連線時重新識別"
+
+msgid "Detected key"
+msgstr "檢測到的金鑰"
+
+msgid "Detected locations"
+msgstr "檢測到的位置"
+
+msgid "Detected private keys"
+msgstr "檢測到的私密金鑰"
+
+msgid "Detected serial ports"
+msgstr "檢測到的串列埠"
+
+msgid "Detected system: {}"
+msgstr "已識別系統：{}"
+
+msgid "Diagnostics"
+msgstr "診斷資訊"
+
+msgid "Dialog and transient overlay tint"
+msgstr "對話方塊和臨時遮罩色"
+
+msgid "Display mode"
+msgstr "顯示模式"
+
+msgid "Dividers and control outlines"
+msgstr "分隔線和控制元件輪廓"
+
+msgid "Download"
+msgstr "下載"
+
+msgid "Duplicate"
+msgstr "建立副本"
+
+msgid "Duplicate Group"
+msgstr "建立組副本"
+
+msgid "Edit"
+msgstr "編輯"
+
+msgid "Edit Server"
+msgstr "編輯伺服器"
+
+msgid "Edit selected remote file"
+msgstr "編輯選中的遠端檔案"
+
+msgid "Enable semantic highlighting"
+msgstr "啟用語義高亮"
+
+msgid "Encrypted application vault"
+msgstr "應用加密保險庫"
+
+msgid "Endpoint"
+msgstr "端點"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "輸入 #RRGGBB 或 #RRGGBBAA。儲存時，對比度不足的顏色會回退為可讀顏色。"
+
+msgid "Enter the Telnet server address."
+msgstr "輸入 Telnet 伺服器地址。"
+
+msgid "Enter the host address and SSH account."
+msgstr "輸入主機地址和 SSH 賬戶。"
+
+msgid "Error"
+msgstr "錯誤"
+
+msgid "Error and destructive indicators"
+msgstr "錯誤和破壞性操作指示"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "錯誤等級和 HTTP 5xx"
+
+msgid "Executable path"
+msgstr "可執行檔案路徑"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "新建本地終端機分頁使用的可執行檔案"
+
+msgid "Existing session groups"
+msgstr "現有會話組"
+
+msgid "Expand session sidebar"
+msgstr "展開會話側欄"
+
+msgid "Expand transfers"
+msgstr "展開傳輸"
+
+msgid "Expand {0} group"
+msgstr "展開 {0} 組"
+
+msgid "Export Selected"
+msgstr "匯出所選項"
+
+msgid "Export Selected shortcut"
+msgstr "匯出所選項快捷鍵"
+
+msgid "Export Selected to Clipboard"
+msgstr "將所選項匯出到剪貼簿"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "失敗 ({0})"
+
+msgid "File"
+msgstr "檔案"
+
+msgid "File transfers"
+msgstr "檔案傳輸"
+
+msgid "Files and transfers area sizes"
+msgstr "檔案和傳輸區域大小"
+
+msgid "Filter system files"
+msgstr "過濾系統檔案"
+
+msgid "Flow control"
+msgstr "流量控制"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "焦點環、選擇和活動狀態指示"
+
+msgid "Focused refresh rate"
+msgstr "聚焦重新整理率"
+
+msgid "Focused terminal refresh rate"
+msgstr "聚焦終端機重新整理率"
+
+msgid "Follow system"
+msgstr "跟隨系統"
+
+msgid "Font family"
+msgstr "字型系列"
+
+msgid "Font size"
+msgstr "字型大小"
+
+msgid "Foreground"
+msgstr "前景"
+
+msgid "Forward"
+msgstr "前進"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "一般"
+
+msgid "Global simultaneous uploads"
+msgstr "全域性同時上傳數"
+
+msgid "Group"
+msgstr "組"
+
+msgid "Group name"
+msgstr "組名"
+
+msgid "HTTP 2xx responses"
+msgstr "HTTP 2xx 響應"
+
+msgid "Help"
+msgstr "幫助"
+
+msgid "Hidden"
+msgstr "隱藏"
+
+msgid "Host"
+msgstr "主機"
+
+msgid "Hover and secondary surfaces"
+msgstr "懸停和次級表面"
+
+msgid "INTERFACE"
+msgstr "介面"
+
+msgid "Identity"
+msgstr "標識"
+
+msgid "Import from Clipboard"
+msgstr "從剪貼簿匯入"
+
+msgid "Import from Clipboard shortcut"
+msgstr "從剪貼簿匯入快捷鍵"
+
+msgid "Information"
+msgstr "資訊"
+
+msgid "Interface"
+msgstr "介面"
+
+msgid "Interface language"
+msgstr "介面語言"
+
+msgid "Item tree (current)"
+msgstr "Item tree（當前方式）"
+
+msgid "KEYBOARD"
+msgstr "鍵盤"
+
+msgid "Keep both"
+msgstr "兩者都保留"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "滾輪時保持游標在行首"
+
+msgid "Keyboard Shortcuts"
+msgstr "鍵盤快捷鍵"
+
+msgid "LAYOUT"
+msgstr "佈局"
+
+msgid "LOCAL X SERVER"
+msgstr "本地 X SERVER"
+
+msgid "Language"
+msgstr "語言"
+
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 介面使用的語言"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "僅在轉發的圖形應用開啟時啟動所選 X server"
+
+msgid "Layer images (fallback)"
+msgstr "圖層影象（回退）"
+
+msgid "Leave blank to keep saved password"
+msgstr "留空以保留已儲存的密碼"
+
+msgid "License"
+msgstr "許可證"
+
+msgid "Light"
+msgstr "淺色"
+
+msgid "Line height"
+msgstr "行高"
+
+msgid "Loading"
+msgstr "正在載入"
+
+msgid "Loading..."
+msgstr "正在載入..."
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "SFTP 本地檔案開啟快照上限（MiB）"
+
+msgid "Local Shell"
+msgstr "本地 Shell"
+
+msgid "Local X server application path"
+msgstr "本地 X server 應用路徑"
+
+msgid "Local X server provider"
+msgstr "本地 X server 提供程式"
+
+msgid "Local default directory"
+msgstr "本地預設目錄"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "開啟前複製的本地檔案；預設上限 512 MiB，0 取消檔案和快取位元組限制，可能佔用大量磁碟空間"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "本地檔案開啟快照（MiB）"
+
+msgid "Local files"
+msgstr "本地檔案"
+
+msgid "Local selection priority"
+msgstr "本地選區優先"
+
+msgid "Local shell"
+msgstr "本地 Shell"
+
+msgid "Local shell icon"
+msgstr "本地終端機圖示"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "日誌等級和 HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "日誌等級和 HTTP 狀態碼"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "僅限迴環地址；MacXServer 和使用 -ac 的 Windows server 需要此項"
+
+msgid "MICROPHONE"
+msgstr "麥克風"
+
+msgid "MOUSE"
+msgstr "滑鼠"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "手動選擇優先於自動識別。"
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "在會話側欄中遮蓋使用者名稱和 IPv4 地址的中間欄位"
+
+msgid "Maximize Window"
+msgstr "最大化視窗"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "SFTP 單檔案大小上限（GiB）"
+
+msgid "Maximum file size (GiB)"
+msgstr "單檔案大小上限（GiB）"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部編輯下載和回傳的檔案大小上限；預設 4 MiB，範圍 1–64 MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "單個 SFTP 分頁允許同時進行的上傳和下載數"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "單個上傳或下載檔案的大小上限；0 表示不限大小，預設 20 GiB"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "所有 SFTP 分頁共享的同時上傳數"
+
+msgid "Minimize Window"
+msgstr "最小化視窗"
+
+msgid "Modified"
+msgstr "修改時間"
+
+msgid "Mono (1)"
+msgstr "單聲道 (1)"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "單聲道、立體聲或多聲道，由本機裝置格式轉換"
+
+msgid "More"
+msgstr "更多"
+
+msgid "Move Current Workspace to New Window"
+msgstr "將當前工作區移至新視窗"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "在備用螢幕程式中，每次滾輪上下移動後回到行首"
+
+msgid "Move workspace to new window"
+msgstr "將工作區移至新視窗"
+
+msgid "Muted text"
+msgstr "弱化文字"
+
+msgid "Name"
+msgstr "名稱"
+
+msgid "Navigation and title surfaces"
+msgstr "導航和標題表面"
+
+msgid "New Group"
+msgstr "新建組"
+
+msgid "New Local Shell"
+msgstr "新建本地 Shell"
+
+msgid "New Server"
+msgstr "新建伺服器"
+
+msgid "New Server shortcut"
+msgstr "新建伺服器快捷鍵"
+
+msgid "New group"
+msgstr "新建組"
+
+msgid "New name"
+msgstr "新名稱"
+
+msgid "Next Tab"
+msgstr "下一個分頁"
+
+msgid "No failed transfers"
+msgstr "沒有失敗的傳輸"
+
+msgid "No files"
+msgstr "沒有檔案"
+
+msgid "No known local X server was found"
+msgstr "未找到已知的本地 X server"
+
+msgid "No matching system icons"
+msgstr "沒有匹配的系統圖示"
+
+msgid "No saved connections"
+msgstr "沒有已儲存的連線"
+
+msgid "No saved password"
+msgstr "未儲存密碼"
+
+msgid "No saved servers"
+msgstr "沒有已儲存的伺服器"
+
+msgid "No settings match this search."
+msgstr "沒有與此搜尋匹配的設定。"
+
+msgid "No successful transfers"
+msgstr "沒有成功的傳輸"
+
+msgid "No transfers in progress"
+msgstr "沒有正在傳輸的檔案"
+
+msgid "Off"
+msgstr "關閉"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "開啟：Alt/Option 轉發滑鼠手勢；關閉：標準 xterm，Shift 本地選擇"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "每行一個模式；* 匹配任意字元"
+
+msgid "Open"
+msgstr "開啟"
+
+msgid "Open Recent"
+msgstr "開啟最近檔案"
+
+msgid "Open SFTP"
+msgstr "開啟 SFTP"
+
+msgid "Open Settings"
+msgstr "開啟設定"
+
+msgid "Open Settings shortcut"
+msgstr "開啟設定快捷鍵"
+
+msgid "Open Workspace"
+msgstr "開啟工作區"
+
+msgid "Open a new local shell tab"
+msgstr "開啟新的本地 Shell 分頁"
+
+msgid "Open a saved session or create a new tab."
+msgstr "開啟已儲存的會話或新建分頁。"
+
+msgid "Open folder"
+msgstr "開啟資料夾"
+
+msgid "Open local shell"
+msgstr "開啟本地 Shell"
+
+msgid "Open log folder"
+msgstr "開啟日誌資料夾"
+
+msgid "Open saved connection"
+msgstr "開啟已儲存的連線"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "開啟 AxSSH 問題跟蹤器"
+
+msgid "Option acts as Meta"
+msgstr "Option 作為 Meta"
+
+msgid "Optional"
+msgstr "可選"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "可選；留空啟用本地自動解鎖"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "可選；僅在連線或儲存時輸入"
+
+msgid "Overlay"
+msgstr "遮罩"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "為此伺服器覆蓋全域性 SFTP 設定；0 GiB 表示不限大小。"
+
+msgid "Overwrite"
+msgstr "覆蓋"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "轉發到 Linux SSH 會話的 PCM 音訊"
+
+msgid "Pane"
+msgstr "窗格"
+
+msgid "Panel"
+msgstr "面板"
+
+msgid "Panel alternative"
+msgstr "次級面板"
+
+msgid "Parent directory"
+msgstr "上一層目錄"
+
+msgid "Parity"
+msgstr "同位檢查"
+
+msgid "Password"
+msgstr "密碼"
+
+msgid "Password authentication"
+msgstr "密碼驗證"
+
+msgid "Paste"
+msgstr "貼上"
+
+msgid "Paste Into Terminal"
+msgstr "貼上到終端機"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "貼上到終端機快捷鍵"
+
+msgid "Path"
+msgstr "路徑"
+
+msgid "Pause"
+msgstr "暫停"
+
+msgid "Pause selected"
+msgstr "暫停所選"
+
+msgid "Pause {0}"
+msgstr "暫停 {0}"
+
+msgid "Platform defaults"
+msgstr "平臺預設值"
+
+msgid "Platform home directory"
+msgstr "平臺主目錄"
+
+msgid "Port"
+msgstr "埠"
+
+msgid "Positive status indicators"
+msgstr "成功狀態指示"
+
+msgid "Previous Tab"
+msgstr "上一個分頁"
+
+msgid "Primary readable text"
+msgstr "主要可讀文字"
+
+msgid "Primary workspace surface"
+msgstr "主要工作區表面"
+
+msgid "Private key"
+msgstr "私密金鑰"
+
+msgid "Private key authentication"
+msgstr "私密金鑰驗證"
+
+msgid "Private key passphrase"
+msgstr "私密金鑰密碼"
+
+msgid "Private key passphrase (optional)"
+msgstr "私密金鑰密碼（可選）"
+
+msgid "Private key path"
+msgstr "私密金鑰路徑"
+
+msgid "Production server"
+msgstr "生產伺服器"
+
+msgid "Protocol"
+msgstr "協議"
+
+msgid "Provider"
+msgstr "提供程式"
+
+msgid "RENDERING"
+msgstr "渲染"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "減少終端機繪製項並省略預設背景矩形"
+
+msgid "Refresh"
+msgstr "重新整理"
+
+msgid "Refresh serial ports"
+msgstr "重新整理串列埠"
+
+msgid "Remembered password storage"
+msgstr "已記住密碼的儲存位置"
+
+msgid "Remote and local file pane sizes"
+msgstr "遠端和本地檔案窗格大小"
+
+msgid "Remote channels"
+msgstr "遠端聲道"
+
+msgid "Remote default directory"
+msgstr "遠端預設目錄"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "遠端編輯檔案大小上限（MiB）"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "遠端編輯檔案大小上限，單位 MiB"
+
+msgid "Remote file already exists"
+msgstr "遠端檔案已存在"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "遠端檔案：{0} - 修改時間：{1}"
+
+msgid "Remote files"
+msgstr "遠端檔案"
+
+msgid "Remote sample rate"
+msgstr "遠端取樣率"
+
+msgid "Remove"
+msgstr "移除"
+
+msgid "Remove revoked record"
+msgstr "移除已撤銷記錄"
+
+msgid "Rename"
+msgstr "重新命名"
+
+msgid "Rename Group"
+msgstr "重新命名組"
+
+msgid "Rename group"
+msgstr "重新命名組"
+
+msgid "Rename selected remote entry"
+msgstr "重新命名選中的遠端條目"
+
+msgid "Renderer"
+msgstr "渲染器"
+
+msgid "Rendering backend"
+msgstr "渲染後端"
+
+msgid "Report a bug"
+msgstr "報告問題"
+
+msgid "Reset defaults"
+msgstr "恢復預設值"
+
+msgid "Reset filters"
+msgstr "重置過濾規則"
+
+msgid "Restore Window"
+msgstr "還原視窗"
+
+msgid "Restore platform defaults"
+msgstr "恢復平臺預設值"
+
+msgid "Restore the default filters for this platform"
+msgstr "恢復此平臺的預設過濾規則"
+
+msgid "Resume"
+msgstr "繼續"
+
+msgid "Resume selected"
+msgstr "繼續所選"
+
+msgid "Resume {0}"
+msgstr "繼續 {0}"
+
+msgid "Return Workspace to Main Window"
+msgstr "將工作區返回主視窗"
+
+msgid "Return workspace to main window"
+msgstr "將工作區返回主視窗"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "複用 GPU 行圖層；可能增加圖形記憶體"
+
+msgid "Review before sharing"
+msgstr "分享前請檢查內容"
+
+msgid "Right-click always pastes"
+msgstr "右鍵始終貼上"
+
+msgid "Right-click copy or paste"
+msgstr "右鍵複製或貼上"
+
+msgid "Runtime logs"
+msgstr "執行日誌"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "語義高亮"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "SFTP 傳輸"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "SFTP 頻寬上限（MiB/秒）"
+
+msgid "SFTP directories"
+msgstr "SFTP 目錄"
+
+msgid "SFTP files"
+msgstr "SFTP 檔案"
+
+msgid "SFTP local default directory"
+msgstr "SFTP 本地預設目錄"
+
+msgid "SFTP remote default directory"
+msgstr "SFTP 遠端預設目錄"
+
+msgid "SFTP transfer limits"
+msgstr "SFTP 傳輸限制"
+
+msgid "SHA-256 fingerprint"
+msgstr "SHA-256 指紋"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "SSH X11 轉發方式"
+
+msgid "SSH agent"
+msgstr "SSH agent"
+
+msgid "SSH authentication method"
+msgstr "SSH 身份驗證方式"
+
+msgid "SSH host key changed"
+msgstr "SSH 主機金鑰已更改"
+
+msgid "SSH host key revoked"
+msgstr "SSH 主機金鑰已撤銷"
+
+msgid "SSH password"
+msgstr "SSH 密碼"
+
+msgid "SSH transport"
+msgstr "SSH 傳輸"
+
+msgid "SSH username"
+msgstr "SSH 使用者名稱"
+
+msgid "SUPPORT"
+msgstr "支援"
+
+msgid "SURFACES"
+msgstr "表面"
+
+msgid "Save"
+msgstr "儲存"
+
+msgid "Save & connect"
+msgstr "儲存並連線"
+
+msgid "Save SSH password for future connections"
+msgstr "儲存 SSH 密碼供以後連線使用"
+
+msgid "Save Workspace"
+msgstr "儲存工作區"
+
+msgid "Save audio settings"
+msgstr "儲存音訊設定"
+
+msgid "Save password (optional)"
+msgstr "儲存密碼（可選）"
+
+msgid "Save password in"
+msgstr "密碼儲存位置"
+
+msgid "Save session"
+msgstr "儲存會話"
+
+msgid "Saved connections"
+msgstr "已儲存的連線"
+
+msgid "Saved in {0}."
+msgstr "已儲存至{0}。"
+
+msgid "Saved password"
+msgstr "已儲存密碼"
+
+msgid "Scrollback"
+msgstr "回滾行數"
+
+msgid "Search all settings"
+msgstr "搜尋所有設定"
+
+msgid "Search connections"
+msgstr "搜尋連線"
+
+msgid "Search connections..."
+msgstr "搜尋連線…"
+
+msgid "Search results"
+msgstr "搜尋結果"
+
+msgid "Search settings"
+msgstr "搜尋設定"
+
+msgid "Search system icons"
+msgstr "搜尋系統圖示"
+
+msgid "Secondary labels and metadata"
+msgstr "次級標籤和後設資料"
+
+msgid "Select All"
+msgstr "全選"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "選擇檢測到的裝置，或手動輸入埠名稱。"
+
+msgid "Select all files"
+msgstr "選擇所有檔案"
+
+msgid "Select the transport used by this saved connection."
+msgstr "選擇此已儲存連線使用的傳輸方式。"
+
+msgid "Select {0}"
+msgstr "選擇 {0}"
+
+msgid "Selected"
+msgstr "已選擇"
+
+msgid "Selection"
+msgstr "選擇"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "將 Option+按鍵作為帶 Escape 字首的 Meta 鍵傳送"
+
+msgid "Serial"
+msgstr "串列埠"
+
+msgid "Serial baud rate"
+msgstr "串列埠鮑率"
+
+msgid "Serial data bits"
+msgstr "串列埠資料位元"
+
+msgid "Serial flow control"
+msgstr "串列埠流量控制"
+
+msgid "Serial parity"
+msgstr "串列埠同位檢查"
+
+msgid "Serial port"
+msgstr "串列埠"
+
+msgid "Serial port name"
+msgstr "串列埠名稱"
+
+msgid "Serial stop bits"
+msgstr "串列埠停止位元"
+
+msgid "Serial transport"
+msgstr "串列埠傳輸"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "伺服器 SFTP 頻寬上限（MiB/秒）"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "伺服器 SFTP 單檔案大小上限（GiB）"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "伺服器 SFTP 同時傳輸數"
+
+msgid "Session group"
+msgstr "會話組"
+
+msgid "Session mask character"
+msgstr "會話掩碼字元"
+
+msgid "Session name"
+msgstr "會話名稱"
+
+msgid "Session sidebar width"
+msgstr "會話側欄寬度"
+
+msgid "Session transfer command"
+msgstr "會話傳輸命令"
+
+msgid "Sessions"
+msgstr "會話"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Settings..."
+msgstr "設定..."
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "每個 SFTP 分頁的上傳與下載共享；0 表示不限速"
+
+msgid "Shortcuts"
+msgstr "快捷鍵"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "終端機聚焦時顯示閃爍游標"
+
+msgid "Show in Folder"
+msgstr "在資料夾中顯示"
+
+msgid "Show local copy"
+msgstr "顯示本地副本"
+
+msgid "Simultaneous transfers"
+msgstr "同時傳輸數"
+
+msgid "Size"
+msgstr "大小"
+
+msgid "Skip"
+msgstr "跳過"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 上傳和下載時跳過匹配的名稱"
+
+msgid "Skipped"
+msgstr "已跳過"
+
+msgid "Software"
+msgstr "軟體"
+
+msgid "Software block rows"
+msgstr "軟體呈現塊行數"
+
+msgid "Software presentation"
+msgstr "軟體呈現方式"
+
+msgid "Software presentation block rows"
+msgstr "軟體呈現塊的終端機行數"
+
+msgid "Software presentation path"
+msgstr "軟體呈現路徑"
+
+msgid "Sort by modified time"
+msgstr "按修改時間排序"
+
+msgid "Sort by name"
+msgstr "按名稱排序"
+
+msgid "Sort by size"
+msgstr "按大小排序"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "Split active terminal horizontally"
+msgstr "水平拆分當前終端機"
+
+msgid "Split active terminal vertically"
+msgstr "垂直拆分當前終端機"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "水平拆分（Alt+Shift+J）"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "垂直拆分（Alt+Shift+L）"
+
+msgid "Start for first X11 application"
+msgstr "首個 X11 應用開啟時啟動"
+
+msgid "Status"
+msgstr "狀態"
+
+msgid "Stereo (2)"
+msgstr "立體聲 (2)"
+
+msgid "Stop bits"
+msgstr "停止位元"
+
+msgid "Stop editing"
+msgstr "停止編輯"
+
+msgid "Success"
+msgstr "成功"
+
+msgid "Success ({0})"
+msgstr "成功 ({0})"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "切換 SSH/SFTP 分頁"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "切換 SSH/SFTP 分頁快捷鍵"
+
+msgid "System credential store"
+msgstr "系統認證資料儲存"
+
+msgid "System icon"
+msgstr "系統圖示"
+
+msgid "TERMINAL"
+msgstr "終端機"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "終端機預設設定"
+
+msgid "TRANSFER FILTERS"
+msgstr "傳輸過濾規則"
+
+msgid "TYPOGRAPHY"
+msgstr "字型"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Telnet 協議"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet 傳輸終端機流量時不加密，也不驗證主機身份。"
+
+msgid "Terminal"
+msgstr "終端機"
+
+msgid "Terminal character-cell font"
+msgstr "終端機字元單元格字型"
+
+msgid "Terminal command"
+msgstr "終端機命令"
+
+msgid "Terminal drawing"
+msgstr "終端機繪製"
+
+msgid "Terminal drawing path"
+msgstr "終端機繪製方式"
+
+msgid "Terminal error highlight color"
+msgstr "終端機錯誤高亮顏色"
+
+msgid "Terminal font family"
+msgstr "終端機字型系列"
+
+msgid "Terminal font size"
+msgstr "終端機字型大小"
+
+msgid "Terminal information highlight color"
+msgstr "終端機資訊高亮顏色"
+
+msgid "Terminal line height percentage"
+msgstr "終端機行高百分比"
+
+msgid "Terminal pane heights"
+msgstr "終端機窗格高度"
+
+msgid "Terminal pane widths"
+msgstr "終端機窗格寬度"
+
+msgid "Terminal scrollback lines"
+msgstr "終端機回滾行數"
+
+msgid "Terminal success highlight color"
+msgstr "終端機成功高亮顏色"
+
+msgid "Terminal text brightness"
+msgstr "終端機文字亮度"
+
+msgid "Terminal text selection background"
+msgstr "終端機文字選擇背景"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "終端機窗格聚焦時的重新整理幀率"
+
+msgid "Terminal warning highlight color"
+msgstr "終端機警告高亮顏色"
+
+msgid "Text"
+msgstr "文字"
+
+msgid "Text brightness"
+msgstr "文字亮度"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "Canvas 繪製方式為未來 renderer 預留"
+
+msgid "Theme default"
+msgstr "主題預設值"
+
+msgid "Toggle Session Sidebar"
+msgstr "切換會話側欄"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "切換會話側欄快捷鍵"
+
+msgid "Transferring ({0})"
+msgstr "傳輸中 ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "每個 SFTP 分頁的傳輸數"
+
+msgid "Trust and continue"
+msgstr "信任並繼續"
+
+msgid "Trust new key"
+msgstr "信任新金鑰"
+
+msgid "Trusted (-Y)"
+msgstr "受信任（-Y）"
+
+msgid "Unfocused refresh rate"
+msgstr "非聚焦重新整理率"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "非聚焦終端機重新整理率"
+
+msgid "Unknown SSH host key"
+msgstr "未知 SSH 主機金鑰"
+
+msgid "Unlock encrypted credentials"
+msgstr "解鎖加密認證資料"
+
+msgid "Untrusted (-X)"
+msgstr "非信任（-X）"
+
+msgid "Update session"
+msgstr "更新會話"
+
+msgid "Upload"
+msgstr "上傳"
+
+msgid "Upload changes"
+msgstr "上傳修改"
+
+msgid "Upload selected local files"
+msgstr "上傳選中的本地檔案"
+
+msgid "Use platform default filters"
+msgstr "使用平臺預設過濾規則"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "使用伺服器專屬 SFTP 傳輸限制"
+
+msgid "Use server-specific limits"
+msgstr "使用伺服器專屬限制"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "為粗體文字使用明亮 ANSI 調色盤"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "用於已記住的密碼和在會話編輯器中新輸入的密碼"
+
+msgid "Username"
+msgstr "使用者名稱"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "預設使用本機系統圖示，更改後立即儲存。"
+
+msgid "Vault password"
+msgstr "保險庫密碼"
+
+msgid "Version {0}"
+msgstr "版本 {0}"
+
+msgid "View"
+msgstr "檢視"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "其他窗格聚焦時可見終端機的重新整理幀率"
+
+msgid "WORKSPACE"
+msgstr "工作區"
+
+msgid "Warning"
+msgstr "警告"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "警告等級和 HTTP 4xx"
+
+msgid "Window"
+msgstr "視窗"
+
+msgid "Workspace"
+msgstr "工作區"
+
+msgid "Workspace command"
+msgstr "工作區命令"
+
+msgid "Workspace file path"
+msgstr "工作區檔案路徑"
+
+msgid "Workspace tab width"
+msgstr "工作區分頁寬度"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "轉發圖形應用使用的 X server"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "X11 轉發"
+
+msgid "lines"
+msgstr "行"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 呈現路徑；重啟 AxSSH 後生效"
+
+msgid "px"
+msgstr "畫素"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "行"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "{0} 強調色"
+
+msgid "{0} background color"
+msgstr "{0} 背景色"
+
+msgid "{0} border color"
+msgstr "{0} 邊框色"
+
+msgid "{0} danger color"
+msgstr "{0} 危險色"
+
+msgid "{0} muted text color"
+msgstr "{0} 弱化文字顏色"
+
+msgid "{0} overlay color"
+msgstr "{0} 遮罩色"
+
+msgid "{0} panel color"
+msgstr "{0} 面板顏色"
+
+msgid "{0} secondary panel color"
+msgstr "{0} 次級面板顏色"
+
+msgid "{0} success color"
+msgstr "{0} 成功色"
+
+msgid "{0} terminal background color"
+msgstr "{0} 終端機背景色"
+
+msgid "{0} terminal foreground color"
+msgstr "{0} 終端機前景色"
+
+msgid "{0} terminal selection color"
+msgstr "{0} 終端機選擇顏色"
+
+msgid "{0} text color"
+msgstr "{0} 文字顏色"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10-300 列，3-100 行"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100-200%"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "有會話時為 180-420 px"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60-120%；100% 保留終端機原色"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "關於"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "允許無 X authority 的本地連線"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "外觀"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "應用"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "應用命令快捷鍵"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "應用介面字型"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "為兩種顯示模式應用同一配色系列"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "AxSSH 版本、許可證、介面、傳輸和執行時資訊"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "頻寬上限（MiB/s）"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "終端機游標閃爍"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "粗體使用亮色"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "錯誤報告、執行日誌和診斷"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "快取未變化的終端機行"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "重啟 AxSSH 後生效"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "選擇終端機右鍵行為"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "跟隨系統、淺色或深色外觀"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "配色方案"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "緊湊終端機渲染"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "配置應用和終端機的深色顏色"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "配置應用和終端機的淺色顏色"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "複製終端機選擇"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "完成終端機選擇後立即複製"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "選中後複製"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "自定義深色配色"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "自定義可執行檔案"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "自定義檔名過濾模式"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "自定義淺色配色"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "預設終端機大小"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "檢測到的位置"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "顯示模式"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "新建本地終端機分頁使用的可執行程式"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "匯出所選項"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "過濾系統檔案"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "聚焦重新整理率"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "字型系列"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "字型大小"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "一般"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "全域性同時上傳數"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "從剪貼簿匯入"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "滾輪時保持游標在行首"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "已知本地 X server 安裝"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "語言"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "AxSSH 介面使用的語言"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "啟動自定義 X server 程式"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "僅在需要時啟動所選 X server"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "行高"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "開啟前複製的本地檔案；預設上限 512 MiB，0 取消檔案和快取位元組限制，可能佔用大量磁碟空間"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "本地檔案開啟快照（MiB）"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "本地選區優先"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "本地 Shell"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "本地終端機圖示"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "僅限迴環地址的相容模式"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "遮蓋側欄中的使用者名稱和 IPv4 地址"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "單檔案大小上限（GiB）"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "外部編輯下載和回傳的檔案大小上限；預設 4 MiB，範圍 1–64 MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "單個 SFTP 分頁允許同時進行的上傳和下載數"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "單個上傳或下載檔案的大小上限；0 表示不限大小，預設 20 GiB"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "所有 SFTP 分頁共享的同時上傳數"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "在備用螢幕程式中，每次滾輪上下移動後回到行首"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "新建伺服器"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "下一個分頁"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "記憶體中保留的終端機歷史行數"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "開啟：Alt/Option 轉發滑鼠手勢；關閉：標準 xterm，Shift 本地選擇"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "每行一個模式；* 匹配任意字元"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "開啟設定"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option 作為 Meta"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "可選的連結、路徑、狀態和日誌級別顏色"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "貼上到終端機"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "平臺預設值"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "上一個分頁"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "提供程式"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "減少終端機繪製項並省略預設背景矩形"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "已記住密碼的儲存方式"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "遠端編輯檔案大小上限（MiB）"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "渲染器"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "恢復此平臺的預設過濾規則"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "複用 GPU 行圖層；可能增加圖形記憶體"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "右鍵複製或貼上"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "回滾行數"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "全選"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "語義高亮"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "會話掩碼字元"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "會話側欄寬度"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "會話傳輸命令快捷鍵"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "每個 SFTP 分頁的上傳與下載共享；0 表示不限速"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "快捷鍵"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "終端機聚焦時顯示閃爍游標"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "SFTP 上傳和下載時跳過匹配的名稱"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "軟體呈現方式"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "首個 X11 應用時啟動"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "支援"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "切換 SSH/SFTP 分頁"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "終端機"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "終端機字元單元格字型"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "終端機命令快捷鍵"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "終端機窗格聚焦時的重新整理幀率"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "文字亮度"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "切換會話側欄"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "每個 SFTP 分頁的傳輸數"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "非聚焦重新整理率"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "在 macOS 終端機中把 Option 用作 Meta"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "為粗體使用明亮 ANSI 調色盤"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "儲存已記住密碼所用的安全儲存"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "預設使用本機系統圖示，更改後立即儲存。"
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "其他窗格聚焦時可見終端機的重新整理幀率"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "工作區"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "工作區命令快捷鍵"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "工作區標籤寬度"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "轉發圖形應用使用的 X server"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "macOS CPU 呈現路徑；重啟 AxSSH 後生效"

@@ -22,6 +22,7 @@ import { KeyboardEvent } from "components/keyboard-input.slint";
 // same candidate when its Settings tab is closed.
 export struct SettingsViewState {
     ui_language: string,
+    ui_language_index: int,
     local_shell_icon_override: string,
     local_shell_automatic_platform: string,
     local_shell_options: [string],
@@ -267,6 +268,7 @@ export component SettingsPane inherits Rectangle {
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
+    pure callback ui-language-options(string) -> [string];
     callback save-local-shell-icon(string);
     callback format-shortcut(KeyboardEvent) -> string;
     callback shortcut-recording-changed(bool);
@@ -782,7 +784,8 @@ export component SettingsPane inherits Rectangle {
                         draft-columns <=> root.draft-columns;
                         draft-rows <=> root.draft-rows;
                         draft-credential-storage <=> root.draft-credential-storage;
-                        ui-language: root.ui-language;
+                        ui-language-index: root.source.ui_language_index;
+                        ui-language-options(system-label) => { return root.ui-language-options(system-label); }
                         local-shell-icon-override: root.source.local_shell_icon_override;
                         local-shell-automatic-platform: root.source.local_shell_automatic_platform;
                         save-ui-language(index) => { root.save-ui-language(index); }

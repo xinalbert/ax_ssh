@@ -1,0 +1,2124 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AxSSH\n"
+"Language: es\n"
+"PO-Revision-Date: 2026-10-12 17:39+0800\n"
+"Last-Translator: AxSSH contributors\n"
+"Language-Team: Español\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "%"
+msgstr "%"
+
+msgid "+"
+msgstr "+"
+
+msgid "/dev/cu.usbserial or COM3"
+msgstr "/dev/cu.usbserial o COM3"
+
+msgid "1-16 terminal rows per software presentation block"
+msgstr "1–16 filas de terminal por bloque de presentación por software"
+
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 columnas, 3–100 filas"
+
+msgid "100-200 percent"
+msgstr "100–200 por ciento"
+
+msgid "100-50,000 retained lines"
+msgstr "100–50.000 líneas retenidas"
+
+msgid "115200"
+msgstr "115200"
+
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px cuando hay sesiones"
+
+msgid "22"
+msgstr "22"
+
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 por ciento; 100 conserva los colores del terminal"
+
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgid "<"
+msgstr "<"
+
+msgid ">"
+msgstr ">"
+
+msgid ">_"
+msgstr ">_"
+
+msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
+msgstr "Un espacio de trabajo de terminal para SSH, Telnet, puertos serie y shell local."
+
+msgid "APPLICATION"
+msgstr "APLICACIÓN"
+
+msgid "APPLICATION THEME"
+msgstr "TEMA DE LA APLICACIÓN"
+
+msgid "APPLICATION TYPOGRAPHY"
+msgstr "TIPOGRAFÍA DE LA APLICACIÓN"
+
+msgid "About"
+msgstr "Acerca de"
+
+msgid "About AxSSH"
+msgstr "Acerca de AxSSH"
+
+msgid "Accent / focus"
+msgstr "Acento / foco"
+
+msgid "Add Server"
+msgstr "Añadir servidor"
+
+msgid "Allow local connections without X authority"
+msgstr "Permitir conexiones locales sin autorización X"
+
+msgid "Allow remote OSC 52 clipboard access"
+msgstr "Permitir acceso remoto al portapapeles mediante OSC 52"
+
+msgid "Allow writes to the default clipboard; ask before remote reads"
+msgstr "Permitir escribir en el portapapeles predeterminado; preguntar antes de lecturas remotas"
+
+msgid "Appearance"
+msgstr "Apariencia"
+
+msgid "Application color palette"
+msgstr "Paleta de colores de la aplicación"
+
+msgid "Application command"
+msgstr "Comando de la aplicación"
+
+msgid "Application display mode"
+msgstr "Modo de visualización de la aplicación"
+
+msgid "Application font family"
+msgstr "Familia de fuentes de la aplicación"
+
+msgid "Application interface font"
+msgstr "Fuente de la interfaz de la aplicación"
+
+msgid "Applies to new SSH connections; recording starts automatically"
+msgstr "Se aplica a nuevas conexiones SSH; la grabación comienza automáticamente"
+
+msgid "Apply one color family to both display modes"
+msgstr "Aplicar la misma familia de colores a ambos modos de visualización"
+
+msgid "Apply this choice to this upload batch"
+msgstr "Aplicar esta opción a este lote de subida"
+
+msgid "Async runtime"
+msgstr "Entorno de ejecución asíncrono"
+
+msgid "Authentication"
+msgstr "Autenticación"
+
+msgid "Authentication method"
+msgstr "Método de autenticación"
+
+msgid "Auto upload"
+msgstr "Subida automática"
+
+msgid "Automatic"
+msgstr "Automático"
+
+msgid "AxSSH"
+msgstr "AxSSH"
+
+msgid "BUFFER"
+msgstr "BÚFER"
+
+msgid "Back"
+msgstr "Atrás"
+
+msgid "Background"
+msgstr "Fondo"
+
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Límite de ancho de banda (MiB/s)"
+
+msgid "Bandwidth limit (MiB/s; 0 unlimited)"
+msgstr "Límite de ancho de banda (MiB/s; 0 = sin límite)"
+
+msgid "Baud rate"
+msgstr "Velocidad en baudios"
+
+msgid "Blink terminal cursor"
+msgstr "Hacer parpadear el cursor del terminal"
+
+msgid "Border"
+msgstr "Borde"
+
+msgid "Bright colors for bold text"
+msgstr "Colores brillantes para texto en negrita"
+
+msgid "Bug reports"
+msgstr "Informes de errores"
+
+msgid "CLIPBOARD"
+msgstr "PORTAPAPELES"
+
+msgid "COMPATIBILITY"
+msgstr "COMPATIBILIDAD"
+
+msgid "CONTENT AND STATES"
+msgstr "CONTENIDO Y ESTADOS"
+
+msgid "CUSTOM DARK PALETTE"
+msgstr "PALETA OSCURA PERSONALIZADA"
+
+msgid "CUSTOM LIGHT PALETTE"
+msgstr "PALETA CLARA PERSONALIZADA"
+
+msgid "Cache unchanged terminal rows"
+msgstr "Guardar en caché las filas de terminal sin cambios"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Cancel selected"
+msgstr "Cancelar seleccionadas"
+
+msgid "Cancel {0}"
+msgstr "Cancelar {0}"
+
+msgid "Canvas (not available yet)"
+msgstr "Canvas (aún no disponible)"
+
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Los cambios surten efecto al reiniciar AxSSH"
+
+msgid "Choose Custom to launch this path without a command shell"
+msgstr "Elija Personalizado para ejecutar esta ruta sin un shell de comandos"
+
+msgid "Choose how this connection appears in the workspace."
+msgstr "Elija cómo se muestra esta conexión en el espacio de trabajo."
+
+msgid "Choose system, light, or dark appearance"
+msgstr "Elegir apariencia del sistema, clara u oscura"
+
+msgid "Choose the remote and local directories opened by new SFTP tabs."
+msgstr "Elija los directorios remotos y locales que abren las nuevas pestañas SFTP."
+
+msgid "Clear"
+msgstr "Limpiar"
+
+msgid "Clear Recent"
+msgstr "Borrar recientes"
+
+msgid "Clear saved password"
+msgstr "Borrar contraseña guardada"
+
+msgid "Clear settings search"
+msgstr "Limpiar búsqueda de ajustes"
+
+msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
+msgstr "¿Borrar ahora la contraseña guardada de {0}? El cambio es inmediato. Las demás modificaciones seguirán sin guardar."
+
+msgid "Close Current Tab"
+msgstr "Cerrar pestaña actual"
+
+msgid "Close Window"
+msgstr "Cerrar ventana"
+
+msgid "Close tab"
+msgstr "Cerrar pestaña"
+
+msgid "Close terminal pane"
+msgstr "Cerrar panel del terminal"
+
+msgid "Collapse session sidebar"
+msgstr "Contraer barra lateral de sesiones"
+
+msgid "Collapse transfers"
+msgstr "Contraer transferencias"
+
+msgid "Collapse {0} group"
+msgstr "Contraer grupo {0}"
+
+msgid "Color palette"
+msgstr "Paleta de colores"
+
+msgid "Compact terminal rendering"
+msgstr "Renderizado compacto del terminal"
+
+msgid "Connect"
+msgstr "Conectar"
+
+msgid "Connect to {0}"
+msgstr "Conectar a {0}"
+
+msgid "Connected"
+msgstr "Conectado"
+
+msgid "Connected · Measuring SSH latency"
+msgstr "Conectado · Midiendo latencia SSH"
+
+msgid "Connected · SSH RTT: {} ms\nUpdated: {}"
+msgstr "Conectado · RTT SSH: {} ms\nActualizado: {}"
+
+msgid "Connected · SSH latency data expired"
+msgstr "Conectado · Datos de latencia SSH caducados"
+
+msgid "Connected · SSH latency probe timed out"
+msgstr "Conectado · Tiempo de espera agotado al medir latencia SSH"
+
+msgid "Connected · SSH latency unavailable"
+msgstr "Conectado · Latencia SSH no disponible"
+
+msgid "Connection protocol"
+msgstr "Protocolo de conexión"
+
+msgid "Copy"
+msgstr "Copiar"
+
+msgid "Copy Address"
+msgstr "Copiar dirección"
+
+msgid "Copy Group"
+msgstr "Copiar grupo"
+
+msgid "Copy Server"
+msgstr "Copiar servidor"
+
+msgid "Copy Terminal Selection"
+msgstr "Copiar selección del terminal"
+
+msgid "Copy Terminal Selection shortcut"
+msgstr "Atajo Copiar selección del terminal"
+
+msgid "Copy a selection; otherwise paste"
+msgstr "Copiar la selección; de lo contrario, pegar"
+
+msgid "Copy current path"
+msgstr "Copiar ruta actual"
+
+msgid "Copy diagnostics"
+msgstr "Copiar diagnóstico"
+
+msgid "Copy selection on select"
+msgstr "Copiar al seleccionar"
+
+msgid "Copy version and build information without connection data"
+msgstr "Copiar información de versión y compilación sin datos de conexión"
+
+msgid "Credential storage"
+msgstr "Almacenamiento de credenciales"
+
+msgid "Credential vault password"
+msgstr "Contraseña de la bóveda de credenciales"
+
+msgid "Credentials used for this SSH connection."
+msgstr "Credenciales utilizadas para esta conexión SSH."
+
+msgid "Custom"
+msgstr "Personalizado"
+
+msgid "Custom SFTP filename patterns"
+msgstr "Patrones de nombres de archivo SFTP personalizados"
+
+msgid "Custom executable"
+msgstr "Ejecutable personalizado"
+
+msgid "Custom filename patterns"
+msgstr "Patrones de nombres de archivo personalizados"
+
+msgid "Cut"
+msgstr "Cortar"
+
+msgid "DEFAULTS"
+msgstr "VALORES PREDETERMINADOS"
+
+msgid "DISPLAY"
+msgstr "VISUALIZACIÓN"
+
+msgid "Damage backing store (default)"
+msgstr "Almacén de regiones modificadas (predeterminado)"
+
+msgid "Danger"
+msgstr "Peligro"
+
+msgid "Dark"
+msgstr "Oscuro"
+
+msgid "Data bits"
+msgstr "Bits de datos"
+
+msgid "Default terminal background color"
+msgstr "Color de fondo predeterminado del terminal"
+
+msgid "Default terminal columns"
+msgstr "Columnas predeterminadas del terminal"
+
+msgid "Default terminal rows"
+msgstr "Filas predeterminadas del terminal"
+
+msgid "Default terminal size"
+msgstr "Tamaño predeterminado del terminal"
+
+msgid "Default terminal text color"
+msgstr "Color de texto predeterminado del terminal"
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Delete Group"
+msgstr "Eliminar grupo"
+
+msgid "Delete Server"
+msgstr "Eliminar servidor"
+
+msgid "Delete group"
+msgstr "Eliminar grupo"
+
+msgid "Delete server"
+msgstr "Eliminar servidor"
+
+msgid "Delete {0} and its saved credential?"
+msgstr "¿Eliminar {0} y sus credenciales guardadas?"
+
+msgid "Delete {0}? Servers in this group will move to Ungrouped."
+msgstr "¿Eliminar {0}? Los servidores de este grupo pasarán a Sin grupo."
+
+msgid "Detect again on next connection"
+msgstr "Detectar de nuevo en la próxima conexión"
+
+msgid "Detected key"
+msgstr "Clave detectada"
+
+msgid "Detected locations"
+msgstr "Ubicaciones detectadas"
+
+msgid "Detected private keys"
+msgstr "Claves privadas detectadas"
+
+msgid "Detected serial ports"
+msgstr "Puertos serie detectados"
+
+msgid "Detected system: {}"
+msgstr "Sistema detectado: {}"
+
+msgid "Diagnostics"
+msgstr "Diagnóstico"
+
+msgid "Dialog and transient overlay tint"
+msgstr "Tinte de diálogos y capas temporales"
+
+msgid "Display mode"
+msgstr "Modo de visualización"
+
+msgid "Dividers and control outlines"
+msgstr "Separadores y bordes de controles"
+
+msgid "Download"
+msgstr "Descargar"
+
+msgid "Duplicate"
+msgstr "Duplicar"
+
+msgid "Duplicate Group"
+msgstr "Duplicar grupo"
+
+msgid "Edit"
+msgstr "Editar"
+
+msgid "Edit Server"
+msgstr "Editar servidor"
+
+msgid "Edit selected remote file"
+msgstr "Editar archivo remoto seleccionado"
+
+msgid "Enable semantic highlighting"
+msgstr "Activar resaltado semántico"
+
+msgid "Encrypted application vault"
+msgstr "Bóveda cifrada de la aplicación"
+
+msgid "Endpoint"
+msgstr "Destino"
+
+msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
+msgstr "Introduzca valores #RRGGBB o #RRGGBBAA. Un contraste insuficiente se sustituye por colores legibles al guardar."
+
+msgid "Enter the Telnet server address."
+msgstr "Introduzca la dirección del servidor Telnet."
+
+msgid "Enter the host address and SSH account."
+msgstr "Introduzca la dirección del host y la cuenta SSH."
+
+msgid "Error"
+msgstr "Error"
+
+msgid "Error and destructive indicators"
+msgstr "Indicadores de errores y acciones destructivas"
+
+msgid "Error levels and HTTP 5xx"
+msgstr "Niveles de error y HTTP 5xx"
+
+msgid "Executable path"
+msgstr "Ruta del ejecutable"
+
+msgid "Executable used for new local terminal tabs"
+msgstr "Ejecutable usado para nuevas pestañas de terminal local"
+
+msgid "Existing session groups"
+msgstr "Grupos de sesiones existentes"
+
+msgid "Expand session sidebar"
+msgstr "Expandir barra lateral de sesiones"
+
+msgid "Expand transfers"
+msgstr "Expandir transferencias"
+
+msgid "Expand {0} group"
+msgstr "Expandir grupo {0}"
+
+msgid "Export Selected"
+msgstr "Exportar selección"
+
+msgid "Export Selected shortcut"
+msgstr "Atajo Exportar selección"
+
+msgid "Export Selected to Clipboard"
+msgstr "Exportar selección al portapapeles"
+
+msgid "FPS"
+msgstr "FPS"
+
+msgid "Failed ({0})"
+msgstr "Error ({0})"
+
+msgid "File"
+msgstr "Archivo"
+
+msgid "File transfers"
+msgstr "Transferencias de archivos"
+
+msgid "Files and transfers area sizes"
+msgstr "Tamaños de áreas de archivos y transferencias"
+
+msgid "Filter system files"
+msgstr "Filtrar archivos del sistema"
+
+msgid "Flow control"
+msgstr "Control de flujo"
+
+msgid "Focus rings, selection, and active indicators"
+msgstr "Contornos de foco, selección e indicadores activos"
+
+msgid "Focused refresh rate"
+msgstr "Frecuencia de actualización con foco"
+
+msgid "Focused terminal refresh rate"
+msgstr "Frecuencia de actualización del terminal con foco"
+
+msgid "Follow system"
+msgstr "Seguir el sistema"
+
+msgid "Font family"
+msgstr "Familia de fuentes"
+
+msgid "Font size"
+msgstr "Tamaño de fuente"
+
+msgid "Foreground"
+msgstr "Primer plano"
+
+msgid "Forward"
+msgstr "Adelante"
+
+msgid "GPU"
+msgstr "GPU"
+
+msgid "General"
+msgstr "General"
+
+msgid "Global simultaneous uploads"
+msgstr "Subidas simultáneas globales"
+
+msgid "Group"
+msgstr "Grupo"
+
+msgid "Group name"
+msgstr "Nombre del grupo"
+
+msgid "HTTP 2xx responses"
+msgstr "Respuestas HTTP 2xx"
+
+msgid "Help"
+msgstr "Ayuda"
+
+msgid "Hidden"
+msgstr "Oculto"
+
+msgid "Host"
+msgstr "Host"
+
+msgid "Hover and secondary surfaces"
+msgstr "Superficies secundarias y al pasar el cursor"
+
+msgid "INTERFACE"
+msgstr "INTERFAZ"
+
+msgid "Identity"
+msgstr "Identidad"
+
+msgid "Import from Clipboard"
+msgstr "Importar del portapapeles"
+
+msgid "Import from Clipboard shortcut"
+msgstr "Atajo Importar del portapapeles"
+
+msgid "Information"
+msgstr "Información"
+
+msgid "Interface"
+msgstr "Interfaz"
+
+msgid "Interface language"
+msgstr "Idioma de la interfaz"
+
+msgid "Item tree (current)"
+msgstr "Árbol de elementos (actual)"
+
+msgid "KEYBOARD"
+msgstr "TECLADO"
+
+msgid "Keep both"
+msgstr "Conservar ambos"
+
+msgid "Keep cursor at line start while scrolling"
+msgstr "Mantener el cursor al inicio de la línea al desplazarse"
+
+msgid "Keyboard Shortcuts"
+msgstr "Atajos de teclado"
+
+msgid "LAYOUT"
+msgstr "DISEÑO"
+
+msgid "LOCAL X SERVER"
+msgstr "SERVIDOR X LOCAL"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Language used by the AxSSH interface"
+msgstr "Idioma usado por la interfaz de AxSSH"
+
+msgid "Launch the selected X server only when a forwarded graphical app opens"
+msgstr "Iniciar el servidor X elegido solo al abrir una aplicación gráfica reenviada"
+
+msgid "Layer images (fallback)"
+msgstr "Imágenes por capa (alternativa)"
+
+msgid "Leave blank to keep saved password"
+msgstr "Dejar vacío para conservar la contraseña guardada"
+
+msgid "License"
+msgstr "Licencia"
+
+msgid "Light"
+msgstr "Claro"
+
+msgid "Line height"
+msgstr "Altura de línea"
+
+msgid "Loading"
+msgstr "Cargando"
+
+msgid "Loading..."
+msgstr "Cargando…"
+
+msgid "Local SFTP file open snapshot limit in MiB"
+msgstr "Límite de copia local antes de abrir archivos SFTP en MiB"
+
+msgid "Local Shell"
+msgstr "Shell local"
+
+msgid "Local X server application path"
+msgstr "Ruta de la aplicación del servidor X local"
+
+msgid "Local X server provider"
+msgstr "Proveedor de servidor X local"
+
+msgid "Local default directory"
+msgstr "Directorio local predeterminado"
+
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Copia local antes de abrir; 512 MiB por defecto, 0 elimina los límites de archivos y caché y puede consumir mucho espacio en disco"
+
+msgid "Local file open snapshot (MiB)"
+msgstr "Copia local para abrir archivos (MiB)"
+
+msgid "Local files"
+msgstr "Archivos locales"
+
+msgid "Local selection priority"
+msgstr "Prioridad de selección local"
+
+msgid "Local shell"
+msgstr "Shell local"
+
+msgid "Local shell icon"
+msgstr "Icono del shell local"
+
+msgid "Log levels and HTTP 1xx/3xx"
+msgstr "Niveles de registro y HTTP 1xx/3xx"
+
+msgid "Log levels and HTTP status codes"
+msgstr "Niveles de registro y códigos HTTP"
+
+msgid "Loopback only; required by MacXServer and -ac Windows servers"
+msgstr "Solo bucle local; necesario para MacXServer y servidores Windows -ac"
+
+msgid "MICROPHONE"
+msgstr "MICRÓFONO"
+
+msgid "MOUSE"
+msgstr "RATÓN"
+
+msgid "Manual selection takes priority over automatic detection."
+msgstr "La selección manual tiene prioridad sobre la detección automática."
+
+msgid "Masks usernames and the middle IPv4 octets in the session sidebar"
+msgstr "Ocultar usuarios y octetos centrales de IPv4 en la barra lateral de sesiones"
+
+msgid "Maximize Window"
+msgstr "Maximizar ventana"
+
+msgid "Maximum SFTP file size in GiB"
+msgstr "Tamaño máximo de archivos SFTP en GiB"
+
+msgid "Maximum file size (GiB)"
+msgstr "Tamaño máximo de archivo (GiB)"
+
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Tamaño máximo de un archivo descargado o subido para edición externa; 4 MiB por defecto, de 1 a 64 MiB"
+
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Máximo de subidas y descargas simultáneas en una pestaña SFTP"
+
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Tamaño máximo de un archivo subido o descargado; 0 = sin límite, 20 GiB por defecto"
+
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Máximo de subidas compartidas por todas las pestañas SFTP"
+
+msgid "Minimize Window"
+msgstr "Minimizar ventana"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "Mono (1)"
+msgstr "Mono (1)"
+
+msgid "Mono, stereo, or multi-channel; adapted from the local device"
+msgstr "Mono, estéreo o multicanal; adaptado al dispositivo local"
+
+msgid "More"
+msgstr "Más"
+
+msgid "Move Current Workspace to New Window"
+msgstr "Mover espacio de trabajo actual a una ventana nueva"
+
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Ir al inicio de línea tras cada paso de rueda en aplicaciones de pantalla alternativa"
+
+msgid "Move workspace to new window"
+msgstr "Mover espacio de trabajo a una ventana nueva"
+
+msgid "Muted text"
+msgstr "Texto atenuado"
+
+msgid "Name"
+msgstr "Nombre"
+
+msgid "Navigation and title surfaces"
+msgstr "Superficies de navegación y título"
+
+msgid "New Group"
+msgstr "Nuevo grupo"
+
+msgid "New Local Shell"
+msgstr "Nuevo shell local"
+
+msgid "New Server"
+msgstr "Nuevo servidor"
+
+msgid "New Server shortcut"
+msgstr "Atajo Nuevo servidor"
+
+msgid "New group"
+msgstr "Nuevo grupo"
+
+msgid "New name"
+msgstr "Nuevo nombre"
+
+msgid "Next Tab"
+msgstr "Pestaña siguiente"
+
+msgid "No failed transfers"
+msgstr "No hay transferencias fallidas"
+
+msgid "No files"
+msgstr "No hay archivos"
+
+msgid "No known local X server was found"
+msgstr "No se encontró ningún servidor X local conocido"
+
+msgid "No matching system icons"
+msgstr "No hay iconos de sistema coincidentes"
+
+msgid "No saved connections"
+msgstr "No hay conexiones guardadas"
+
+msgid "No saved password"
+msgstr "No hay contraseña guardada"
+
+msgid "No saved servers"
+msgstr "No hay servidores guardados"
+
+msgid "No settings match this search."
+msgstr "Ningún ajuste coincide con esta búsqueda."
+
+msgid "No successful transfers"
+msgstr "No hay transferencias completadas"
+
+msgid "No transfers in progress"
+msgstr "No hay transferencias en curso"
+
+msgid "Off"
+msgstr "Desactivado"
+
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Activado: Alt/Option envía gestos del ratón; desactivado: xterm estándar con selección mediante Mayús"
+
+msgid "One pattern per line; * matches any characters"
+msgstr "Un patrón por línea; * coincide con cualquier carácter"
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Open Recent"
+msgstr "Abrir recientes"
+
+msgid "Open SFTP"
+msgstr "Abrir SFTP"
+
+msgid "Open Settings"
+msgstr "Abrir ajustes"
+
+msgid "Open Settings shortcut"
+msgstr "Atajo Abrir ajustes"
+
+msgid "Open Workspace"
+msgstr "Abrir espacio de trabajo"
+
+msgid "Open a new local shell tab"
+msgstr "Abrir una nueva pestaña de shell local"
+
+msgid "Open a saved session or create a new tab."
+msgstr "Abra una sesión guardada o cree una pestaña nueva."
+
+msgid "Open folder"
+msgstr "Abrir carpeta"
+
+msgid "Open local shell"
+msgstr "Abrir shell local"
+
+msgid "Open log folder"
+msgstr "Abrir carpeta de registros"
+
+msgid "Open saved connection"
+msgstr "Abrir conexión guardada"
+
+msgid "Open the AxSSH issue tracker"
+msgstr "Abrir el seguimiento de incidencias de AxSSH"
+
+msgid "Option acts as Meta"
+msgstr "Option actúa como Meta"
+
+msgid "Optional"
+msgstr "Opcional"
+
+msgid "Optional; blank enables local automatic unlock"
+msgstr "Opcional; dejar vacío permite desbloqueo local automático"
+
+msgid "Optional; enter only when connecting or saving"
+msgstr "Opcional; introducir solo al conectar o guardar"
+
+msgid "Overlay"
+msgstr "Superposición"
+
+msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
+msgstr "Reemplazar los ajustes SFTP globales para este servidor; 0 GiB significa sin límite."
+
+msgid "Overwrite"
+msgstr "Sobrescribir"
+
+msgid "PCM audio forwarded to the Linux SSH session"
+msgstr "Audio PCM reenviado a la sesión SSH de Linux"
+
+msgid "Pane"
+msgstr "Panel"
+
+msgid "Panel"
+msgstr "Panel"
+
+msgid "Panel alternative"
+msgstr "Panel alternativo"
+
+msgid "Parent directory"
+msgstr "Directorio superior"
+
+msgid "Parity"
+msgstr "Paridad"
+
+msgid "Password"
+msgstr "Contraseña"
+
+msgid "Password authentication"
+msgstr "Autenticación por contraseña"
+
+msgid "Paste"
+msgstr "Pegar"
+
+msgid "Paste Into Terminal"
+msgstr "Pegar en el terminal"
+
+msgid "Paste Into Terminal shortcut"
+msgstr "Atajo Pegar en el terminal"
+
+msgid "Path"
+msgstr "Ruta"
+
+msgid "Pause"
+msgstr "Pausar"
+
+msgid "Pause selected"
+msgstr "Pausar seleccionadas"
+
+msgid "Pause {0}"
+msgstr "Pausar {0}"
+
+msgid "Platform defaults"
+msgstr "Valores predeterminados de la plataforma"
+
+msgid "Platform home directory"
+msgstr "Directorio personal de la plataforma"
+
+msgid "Port"
+msgstr "Puerto"
+
+msgid "Positive status indicators"
+msgstr "Indicadores de estado positivo"
+
+msgid "Previous Tab"
+msgstr "Pestaña anterior"
+
+msgid "Primary readable text"
+msgstr "Texto principal legible"
+
+msgid "Primary workspace surface"
+msgstr "Superficie principal del espacio de trabajo"
+
+msgid "Private key"
+msgstr "Clave privada"
+
+msgid "Private key authentication"
+msgstr "Autenticación por clave privada"
+
+msgid "Private key passphrase"
+msgstr "Frase de contraseña de la clave privada"
+
+msgid "Private key passphrase (optional)"
+msgstr "Frase de contraseña de la clave privada (opcional)"
+
+msgid "Private key path"
+msgstr "Ruta de la clave privada"
+
+msgid "Production server"
+msgstr "Servidor de producción"
+
+msgid "Protocol"
+msgstr "Protocolo"
+
+msgid "Provider"
+msgstr "Proveedor"
+
+msgid "RENDERING"
+msgstr "RENDERIZADO"
+
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Reducir elementos del terminal y omitir rectángulos del fondo predeterminado"
+
+msgid "Refresh"
+msgstr "Actualizar"
+
+msgid "Refresh serial ports"
+msgstr "Actualizar puertos serie"
+
+msgid "Remembered password storage"
+msgstr "Almacenamiento de contraseñas guardadas"
+
+msgid "Remote and local file pane sizes"
+msgstr "Tamaños de paneles de archivos remotos y locales"
+
+msgid "Remote channels"
+msgstr "Canales remotos"
+
+msgid "Remote default directory"
+msgstr "Directorio remoto predeterminado"
+
+msgid "Remote edit file limit (MiB)"
+msgstr "Límite de archivo para edición remota (MiB)"
+
+msgid "Remote edit file size limit in MiB"
+msgstr "Límite de tamaño de archivo para edición remota en MiB"
+
+msgid "Remote file already exists"
+msgstr "El archivo remoto ya existe"
+
+msgid "Remote file: {0} - Modified: {1}"
+msgstr "Archivo remoto: {0} - Modificado: {1}"
+
+msgid "Remote files"
+msgstr "Archivos remotos"
+
+msgid "Remote sample rate"
+msgstr "Frecuencia de muestreo remota"
+
+msgid "Remove"
+msgstr "Quitar"
+
+msgid "Remove revoked record"
+msgstr "Quitar registro revocado"
+
+msgid "Rename"
+msgstr "Renombrar"
+
+msgid "Rename Group"
+msgstr "Renombrar grupo"
+
+msgid "Rename group"
+msgstr "Renombrar grupo"
+
+msgid "Rename selected remote entry"
+msgstr "Renombrar elemento remoto seleccionado"
+
+msgid "Renderer"
+msgstr "Motor de renderizado"
+
+msgid "Rendering backend"
+msgstr "Motor de renderizado"
+
+msgid "Report a bug"
+msgstr "Informar de un error"
+
+msgid "Reset defaults"
+msgstr "Restablecer valores predeterminados"
+
+msgid "Reset filters"
+msgstr "Restablecer filtros"
+
+msgid "Restore Window"
+msgstr "Restaurar ventana"
+
+msgid "Restore platform defaults"
+msgstr "Restaurar valores predeterminados de la plataforma"
+
+msgid "Restore the default filters for this platform"
+msgstr "Restaurar los filtros predeterminados de esta plataforma"
+
+msgid "Resume"
+msgstr "Reanudar"
+
+msgid "Resume selected"
+msgstr "Reanudar seleccionadas"
+
+msgid "Resume {0}"
+msgstr "Reanudar {0}"
+
+msgid "Return Workspace to Main Window"
+msgstr "Devolver espacio de trabajo a la ventana principal"
+
+msgid "Return workspace to main window"
+msgstr "Devolver espacio de trabajo a la ventana principal"
+
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Reutilizar capas GPU de las filas; puede aumentar la memoria gráfica"
+
+msgid "Review before sharing"
+msgstr "Revisar antes de compartir"
+
+msgid "Right-click always pastes"
+msgstr "El clic derecho siempre pega"
+
+msgid "Right-click copy or paste"
+msgstr "Copiar o pegar con clic derecho"
+
+msgid "Runtime logs"
+msgstr "Registros de ejecución"
+
+msgid "SEMANTIC HIGHLIGHTING"
+msgstr "RESALTADO SEMÁNTICO"
+
+msgid "SFTP"
+msgstr "SFTP"
+
+msgid "SFTP TRANSFERS"
+msgstr "TRANSFERENCIAS SFTP"
+
+msgid "SFTP bandwidth limit in MiB per second"
+msgstr "Límite de ancho de banda SFTP en MiB por segundo"
+
+msgid "SFTP directories"
+msgstr "Directorios SFTP"
+
+msgid "SFTP files"
+msgstr "Archivos SFTP"
+
+msgid "SFTP local default directory"
+msgstr "Directorio local SFTP predeterminado"
+
+msgid "SFTP remote default directory"
+msgstr "Directorio remoto SFTP predeterminado"
+
+msgid "SFTP transfer limits"
+msgstr "Límites de transferencias SFTP"
+
+msgid "SHA-256 fingerprint"
+msgstr "Huella SHA-256"
+
+msgid "SLINT"
+msgstr "SLINT"
+
+msgid "SSH"
+msgstr "SSH"
+
+msgid "SSH X11 forwarding mode"
+msgstr "Modo de reenvío X11 por SSH"
+
+msgid "SSH agent"
+msgstr "Agente SSH"
+
+msgid "SSH authentication method"
+msgstr "Método de autenticación SSH"
+
+msgid "SSH host key changed"
+msgstr "La clave de host SSH ha cambiado"
+
+msgid "SSH host key revoked"
+msgstr "Clave de host SSH revocada"
+
+msgid "SSH password"
+msgstr "Contraseña SSH"
+
+msgid "SSH transport"
+msgstr "Transporte SSH"
+
+msgid "SSH username"
+msgstr "Usuario SSH"
+
+msgid "SUPPORT"
+msgstr "SOPORTE"
+
+msgid "SURFACES"
+msgstr "SUPERFICIES"
+
+msgid "Save"
+msgstr "Guardar"
+
+msgid "Save & connect"
+msgstr "Guardar y conectar"
+
+msgid "Save SSH password for future connections"
+msgstr "Guardar contraseña SSH para futuras conexiones"
+
+msgid "Save Workspace"
+msgstr "Guardar espacio de trabajo"
+
+msgid "Save audio settings"
+msgstr "Guardar ajustes de audio"
+
+msgid "Save password (optional)"
+msgstr "Guardar contraseña (opcional)"
+
+msgid "Save password in"
+msgstr "Guardar contraseña en"
+
+msgid "Save session"
+msgstr "Guardar sesión"
+
+msgid "Saved connections"
+msgstr "Conexiones guardadas"
+
+msgid "Saved in {0}."
+msgstr "Guardado en {0}."
+
+msgid "Saved password"
+msgstr "Contraseña guardada"
+
+msgid "Scrollback"
+msgstr "Historial del terminal"
+
+msgid "Search all settings"
+msgstr "Buscar en todos los ajustes"
+
+msgid "Search connections"
+msgstr "Buscar conexiones"
+
+msgid "Search connections..."
+msgstr "Buscar conexiones…"
+
+msgid "Search results"
+msgstr "Resultados de búsqueda"
+
+msgid "Search settings"
+msgstr "Buscar ajustes"
+
+msgid "Search system icons"
+msgstr "Buscar iconos del sistema"
+
+msgid "Secondary labels and metadata"
+msgstr "Etiquetas secundarias y metadatos"
+
+msgid "Select All"
+msgstr "Seleccionar todo"
+
+msgid "Select a detected device or enter its port name manually."
+msgstr "Seleccione un dispositivo detectado o introduzca el nombre de puerto manualmente."
+
+msgid "Select all files"
+msgstr "Seleccionar todos los archivos"
+
+msgid "Select the transport used by this saved connection."
+msgstr "Seleccione el transporte de esta conexión guardada."
+
+msgid "Select {0}"
+msgstr "Seleccionar {0}"
+
+msgid "Selected"
+msgstr "Seleccionado"
+
+msgid "Selection"
+msgstr "Selección"
+
+msgid "Send Option+key as an Escape-prefixed Meta key"
+msgstr "Enviar Option+tecla como tecla Meta precedida de Escape"
+
+msgid "Serial"
+msgstr "Serie"
+
+msgid "Serial baud rate"
+msgstr "Velocidad del puerto serie"
+
+msgid "Serial data bits"
+msgstr "Bits de datos del puerto serie"
+
+msgid "Serial flow control"
+msgstr "Control de flujo del puerto serie"
+
+msgid "Serial parity"
+msgstr "Paridad del puerto serie"
+
+msgid "Serial port"
+msgstr "Puerto serie"
+
+msgid "Serial port name"
+msgstr "Nombre del puerto serie"
+
+msgid "Serial stop bits"
+msgstr "Bits de parada del puerto serie"
+
+msgid "Serial transport"
+msgstr "Transporte serie"
+
+msgid "Server SFTP bandwidth limit in MiB per second"
+msgstr "Límite de ancho de banda SFTP del servidor en MiB por segundo"
+
+msgid "Server SFTP maximum file size in GiB"
+msgstr "Tamaño máximo de archivos SFTP del servidor en GiB"
+
+msgid "Server SFTP simultaneous transfers"
+msgstr "Transferencias SFTP simultáneas del servidor"
+
+msgid "Session group"
+msgstr "Grupo de sesiones"
+
+msgid "Session mask character"
+msgstr "Carácter de ocultación de sesiones"
+
+msgid "Session name"
+msgstr "Nombre de la sesión"
+
+msgid "Session sidebar width"
+msgstr "Ancho de barra lateral de sesiones"
+
+msgid "Session transfer command"
+msgstr "Comando de transferencia de sesiones"
+
+msgid "Sessions"
+msgstr "Sesiones"
+
+msgid "Settings"
+msgstr "Ajustes"
+
+msgid "Settings..."
+msgstr "Ajustes…"
+
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Compartido por subidas y descargas de cada pestaña SFTP; 0 = sin límite"
+
+msgid "Shortcuts"
+msgstr "Atajos"
+
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Mostrar un cursor parpadeante cuando el terminal tiene el foco"
+
+msgid "Show in Folder"
+msgstr "Mostrar en carpeta"
+
+msgid "Show local copy"
+msgstr "Mostrar copia local"
+
+msgid "Simultaneous transfers"
+msgstr "Transferencias simultáneas"
+
+msgid "Size"
+msgstr "Tamaño"
+
+msgid "Skip"
+msgstr "Omitir"
+
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Omitir nombres coincidentes durante subidas y descargas SFTP"
+
+msgid "Skipped"
+msgstr "Omitido"
+
+msgid "Software"
+msgstr "Software"
+
+msgid "Software block rows"
+msgstr "Filas por bloque de software"
+
+msgid "Software presentation"
+msgstr "Presentación por software"
+
+msgid "Software presentation block rows"
+msgstr "Filas por bloque de presentación por software"
+
+msgid "Software presentation path"
+msgstr "Ruta de presentación por software"
+
+msgid "Sort by modified time"
+msgstr "Ordenar por fecha de modificación"
+
+msgid "Sort by name"
+msgstr "Ordenar por nombre"
+
+msgid "Sort by size"
+msgstr "Ordenar por tamaño"
+
+msgid "Speed"
+msgstr "Velocidad"
+
+msgid "Split active terminal horizontally"
+msgstr "Dividir terminal activo horizontalmente"
+
+msgid "Split active terminal vertically"
+msgstr "Dividir terminal activo verticalmente"
+
+msgid "Split horizontally (Alt+Shift+J)"
+msgstr "Dividir horizontalmente (Alt+Mayús+J)"
+
+msgid "Split vertically (Alt+Shift+L)"
+msgstr "Dividir verticalmente (Alt+Mayús+L)"
+
+msgid "Start for first X11 application"
+msgstr "Iniciar para la primera aplicación X11"
+
+msgid "Status"
+msgstr "Estado"
+
+msgid "Stereo (2)"
+msgstr "Estéreo (2)"
+
+msgid "Stop bits"
+msgstr "Bits de parada"
+
+msgid "Stop editing"
+msgstr "Dejar de editar"
+
+msgid "Success"
+msgstr "Éxito"
+
+msgid "Success ({0})"
+msgstr "Éxito ({0})"
+
+msgid "Switch SSH/SFTP Tab"
+msgstr "Cambiar pestaña SSH/SFTP"
+
+msgid "Switch SSH/SFTP Tab shortcut"
+msgstr "Atajo Cambiar pestaña SSH/SFTP"
+
+msgid "System credential store"
+msgstr "Almacén de credenciales del sistema"
+
+msgid "System icon"
+msgstr "Icono del sistema"
+
+msgid "TERMINAL"
+msgstr "TERMINAL"
+
+msgid "TERMINAL DEFAULTS"
+msgstr "VALORES PREDETERMINADOS DEL TERMINAL"
+
+msgid "TRANSFER FILTERS"
+msgstr "FILTROS DE TRANSFERENCIA"
+
+msgid "TYPOGRAPHY"
+msgstr "TIPOGRAFÍA"
+
+msgid "Telnet"
+msgstr "Telnet"
+
+msgid "Telnet protocol"
+msgstr "Protocolo Telnet"
+
+msgid "Telnet sends terminal traffic without encryption or host identity verification."
+msgstr "Telnet envía el tráfico del terminal sin cifrado ni verificación de identidad del host."
+
+msgid "Terminal"
+msgstr "Terminal"
+
+msgid "Terminal character-cell font"
+msgstr "Fuente de celdas de caracteres del terminal"
+
+msgid "Terminal command"
+msgstr "Comando del terminal"
+
+msgid "Terminal drawing"
+msgstr "Dibujo del terminal"
+
+msgid "Terminal drawing path"
+msgstr "Ruta de dibujo del terminal"
+
+msgid "Terminal error highlight color"
+msgstr "Color de resaltado de errores del terminal"
+
+msgid "Terminal font family"
+msgstr "Familia de fuentes del terminal"
+
+msgid "Terminal font size"
+msgstr "Tamaño de fuente del terminal"
+
+msgid "Terminal information highlight color"
+msgstr "Color de resaltado de información del terminal"
+
+msgid "Terminal line height percentage"
+msgstr "Altura de línea del terminal en porcentaje"
+
+msgid "Terminal pane heights"
+msgstr "Altura de paneles del terminal"
+
+msgid "Terminal pane widths"
+msgstr "Ancho de paneles del terminal"
+
+msgid "Terminal scrollback lines"
+msgstr "Líneas del historial del terminal"
+
+msgid "Terminal success highlight color"
+msgstr "Color de resaltado de éxitos del terminal"
+
+msgid "Terminal text brightness"
+msgstr "Brillo del texto del terminal"
+
+msgid "Terminal text selection background"
+msgstr "Fondo de selección de texto del terminal"
+
+msgid "Terminal updates while the pane is focused"
+msgstr "Actualizaciones del terminal cuando el panel tiene el foco"
+
+msgid "Terminal warning highlight color"
+msgstr "Color de resaltado de advertencias del terminal"
+
+msgid "Text"
+msgstr "Texto"
+
+msgid "Text brightness"
+msgstr "Brillo del texto"
+
+msgid "The Canvas drawing path is reserved for a future renderer"
+msgstr "La ruta de dibujo Canvas está reservada para un futuro motor de renderizado"
+
+msgid "Theme default"
+msgstr "Valor predeterminado del tema"
+
+msgid "Toggle Session Sidebar"
+msgstr "Mostrar/ocultar barra lateral de sesiones"
+
+msgid "Toggle Session Sidebar shortcut"
+msgstr "Atajo Mostrar/ocultar barra lateral de sesiones"
+
+msgid "Transferring ({0})"
+msgstr "Transfiriendo ({0})"
+
+msgid "Transfers per SFTP tab"
+msgstr "Transferencias por pestaña SFTP"
+
+msgid "Trust and continue"
+msgstr "Confiar y continuar"
+
+msgid "Trust new key"
+msgstr "Confiar en la nueva clave"
+
+msgid "Trusted (-Y)"
+msgstr "De confianza (-Y)"
+
+msgid "Unfocused refresh rate"
+msgstr "Frecuencia de actualización sin foco"
+
+msgid "Unfocused terminal refresh rate"
+msgstr "Frecuencia de actualización del terminal sin foco"
+
+msgid "Unknown SSH host key"
+msgstr "Clave de host SSH desconocida"
+
+msgid "Unlock encrypted credentials"
+msgstr "Desbloquear credenciales cifradas"
+
+msgid "Untrusted (-X)"
+msgstr "No confiable (-X)"
+
+msgid "Update session"
+msgstr "Actualizar sesión"
+
+msgid "Upload"
+msgstr "Subir"
+
+msgid "Upload changes"
+msgstr "Subir cambios"
+
+msgid "Upload selected local files"
+msgstr "Subir archivos locales seleccionados"
+
+msgid "Use platform default filters"
+msgstr "Usar filtros predeterminados de la plataforma"
+
+msgid "Use server-specific SFTP transfer limits"
+msgstr "Usar límites de transferencia SFTP específicos del servidor"
+
+msgid "Use server-specific limits"
+msgstr "Usar límites específicos del servidor"
+
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Usar la paleta ANSI brillante para texto en negrita"
+
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Usado para contraseñas guardadas y nuevas contraseñas introducidas en el editor de sesiones"
+
+msgid "Username"
+msgstr "Usuario"
+
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "Usa el sistema del host por defecto. Los cambios se guardan inmediatamente."
+
+msgid "Vault password"
+msgstr "Contraseña de la bóveda"
+
+msgid "Version {0}"
+msgstr "Versión {0}"
+
+msgid "View"
+msgstr "Ver"
+
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Actualizaciones del terminal visible cuando otro panel tiene el foco"
+
+msgid "WORKSPACE"
+msgstr "ESPACIO DE TRABAJO"
+
+msgid "Warning"
+msgstr "Advertencia"
+
+msgid "Warning levels and HTTP 4xx"
+msgstr "Niveles de advertencia y HTTP 4xx"
+
+msgid "Window"
+msgstr "Ventana"
+
+msgid "Workspace"
+msgstr "Espacio de trabajo"
+
+msgid "Workspace command"
+msgstr "Comando del espacio de trabajo"
+
+msgid "Workspace file path"
+msgstr "Ruta del archivo de espacio de trabajo"
+
+msgid "Workspace tab width"
+msgstr "Ancho de pestañas del espacio de trabajo"
+
+msgid "X server used by forwarded graphical applications"
+msgstr "Servidor X usado por aplicaciones gráficas reenviadas"
+
+msgid "X11"
+msgstr "X11"
+
+msgid "X11 forwarding"
+msgstr "Reenvío X11"
+
+msgid "lines"
+msgstr "líneas"
+
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Ruta de presentación por CPU en macOS; surte efecto al reiniciar AxSSH"
+
+msgid "px"
+msgstr "px"
+
+msgid "root"
+msgstr "root"
+
+msgid "rows"
+msgstr "filas"
+
+msgid "server.example.com"
+msgstr "server.example.com"
+
+msgid "x"
+msgstr "x"
+
+msgid "{0} accent color"
+msgstr "Color de acento {0}"
+
+msgid "{0} background color"
+msgstr "Color de fondo {0}"
+
+msgid "{0} border color"
+msgstr "Color de borde {0}"
+
+msgid "{0} danger color"
+msgstr "Color de peligro {0}"
+
+msgid "{0} muted text color"
+msgstr "Color de texto atenuado {0}"
+
+msgid "{0} overlay color"
+msgstr "Color de superposición {0}"
+
+msgid "{0} panel color"
+msgstr "Color de panel {0}"
+
+msgid "{0} secondary panel color"
+msgstr "Color de panel secundario {0}"
+
+msgid "{0} success color"
+msgstr "Color de éxito {0}"
+
+msgid "{0} terminal background color"
+msgstr "Color de fondo del terminal {0}"
+
+msgid "{0} terminal foreground color"
+msgstr "Color de primer plano del terminal {0}"
+
+msgid "{0} terminal selection color"
+msgstr "Color de selección del terminal {0}"
+
+msgid "{0} text color"
+msgstr "Color de texto {0}"
+
+msgid "{0}: {1}"
+msgstr "{0}: {1}"
+
+msgid "~"
+msgstr "~"
+
+msgid "~/.ssh/id_ed25519"
+msgstr "~/.ssh/id_ed25519"
+
+msgctxt "settings-search"
+msgid "10-300 columns, 3-100 rows"
+msgstr "10–300 columnas, 3–100 filas"
+
+msgctxt "settings-search"
+msgid "100-200 percent"
+msgstr "100–200 por ciento"
+
+msgctxt "settings-search"
+msgid "120-260 px"
+msgstr "120-260 px"
+
+msgctxt "settings-search"
+msgid "180-420 px when sessions are available"
+msgstr "180–420 px cuando hay sesiones"
+
+msgctxt "settings-search"
+msgid "60-120 percent; 100 percent preserves terminal colors"
+msgstr "60–120 por ciento; 100 conserva los colores del terminal"
+
+msgctxt "settings-search"
+msgid "9-32 px"
+msgstr "9-32 px"
+
+msgctxt "settings-search"
+msgid "About"
+msgstr "Acerca de"
+
+msgctxt "settings-search"
+msgid "Allow local connections without X authority"
+msgstr "Permitir conexiones locales sin autorización X"
+
+msgctxt "settings-search"
+msgid "Appearance"
+msgstr "Apariencia"
+
+msgctxt "settings-search"
+msgid "Application"
+msgstr "Aplicación"
+
+msgctxt "settings-search"
+msgid "Application command shortcut"
+msgstr "Atajo de comando de la aplicación"
+
+msgctxt "settings-search"
+msgid "Application interface font"
+msgstr "Fuente de la interfaz de la aplicación"
+
+msgctxt "settings-search"
+msgid "Apply one color family to both display modes"
+msgstr "Aplicar la misma familia de colores a ambos modos de visualización"
+
+msgctxt "settings-search"
+msgid "AxSSH version, license, interface, transport, and runtime details"
+msgstr "Versión, licencia, interfaz, transporte y entorno de ejecución de AxSSH"
+
+msgctxt "settings-search"
+msgid "Bandwidth limit (MiB/s)"
+msgstr "Límite de ancho de banda (MiB/s)"
+
+msgctxt "settings-search"
+msgid "Blink terminal cursor"
+msgstr "Hacer parpadear el cursor del terminal"
+
+msgctxt "settings-search"
+msgid "Bright colors for bold text"
+msgstr "Colores brillantes para texto en negrita"
+
+msgctxt "settings-search"
+msgid "Bug reports, runtime logs, and diagnostics"
+msgstr "Informes de errores, registros de ejecución y diagnóstico"
+
+msgctxt "settings-search"
+msgid "Cache unchanged terminal rows"
+msgstr "Guardar en caché las filas de terminal sin cambios"
+
+msgctxt "settings-search"
+msgid "Changes take effect after restarting AxSSH"
+msgstr "Los cambios surten efecto al reiniciar AxSSH"
+
+msgctxt "settings-search"
+msgid "Choose copy or paste behavior for terminal right click"
+msgstr "Elegir copiar o pegar al hacer clic derecho en el terminal"
+
+msgctxt "settings-search"
+msgid "Choose system, light, or dark appearance"
+msgstr "Elegir apariencia del sistema, clara u oscura"
+
+msgctxt "settings-search"
+msgid "Color palette"
+msgstr "Paleta de colores"
+
+msgctxt "settings-search"
+msgid "Compact terminal rendering"
+msgstr "Renderizado compacto del terminal"
+
+msgctxt "settings-search"
+msgid "Configure custom dark application and terminal colors"
+msgstr "Configurar colores oscuros personalizados de la aplicación y el terminal"
+
+msgctxt "settings-search"
+msgid "Configure custom light application and terminal colors"
+msgstr "Configurar colores claros personalizados de la aplicación y el terminal"
+
+msgctxt "settings-search"
+msgid "Copy Terminal Selection"
+msgstr "Copiar selección del terminal"
+
+msgctxt "settings-search"
+msgid "Copy completed terminal selections immediately"
+msgstr "Copiar inmediatamente las selecciones completadas del terminal"
+
+msgctxt "settings-search"
+msgid "Copy selection on select"
+msgstr "Copiar al seleccionar"
+
+msgctxt "settings-search"
+msgid "Custom dark palette"
+msgstr "Paleta oscura personalizada"
+
+msgctxt "settings-search"
+msgid "Custom executable"
+msgstr "Ejecutable personalizado"
+
+msgctxt "settings-search"
+msgid "Custom filename patterns"
+msgstr "Patrones de nombres de archivo personalizados"
+
+msgctxt "settings-search"
+msgid "Custom light palette"
+msgstr "Paleta clara personalizada"
+
+msgctxt "settings-search"
+msgid "Default terminal size"
+msgstr "Tamaño predeterminado del terminal"
+
+msgctxt "settings-search"
+msgid "Detected locations"
+msgstr "Ubicaciones detectadas"
+
+msgctxt "settings-search"
+msgid "Display mode"
+msgstr "Modo de visualización"
+
+msgctxt "settings-search"
+msgid "Executable used for new local terminal tabs"
+msgstr "Ejecutable usado para nuevas pestañas de terminal local"
+
+msgctxt "settings-search"
+msgid "Export Selected"
+msgstr "Exportar selección"
+
+msgctxt "settings-search"
+msgid "Filter system files"
+msgstr "Filtrar archivos del sistema"
+
+msgctxt "settings-search"
+msgid "Focused refresh rate"
+msgstr "Frecuencia de actualización con foco"
+
+msgctxt "settings-search"
+msgid "Font family"
+msgstr "Familia de fuentes"
+
+msgctxt "settings-search"
+msgid "Font size"
+msgstr "Tamaño de fuente"
+
+msgctxt "settings-search"
+msgid "General"
+msgstr "General"
+
+msgctxt "settings-search"
+msgid "Global simultaneous uploads"
+msgstr "Subidas simultáneas globales"
+
+msgctxt "settings-search"
+msgid "Import from Clipboard"
+msgstr "Importar del portapapeles"
+
+msgctxt "settings-search"
+msgid "Keep cursor at line start while scrolling"
+msgstr "Mantener el cursor al inicio de la línea al desplazarse"
+
+msgctxt "settings-search"
+msgid "Known local X server installations"
+msgstr "Instalaciones locales conocidas de servidores X"
+
+msgctxt "settings-search"
+msgid "Language"
+msgstr "Idioma"
+
+msgctxt "settings-search"
+msgid "Language used by the AxSSH interface"
+msgstr "Idioma usado por la interfaz de AxSSH"
+
+msgctxt "settings-search"
+msgid "Launch a custom X server executable"
+msgstr "Ejecutar un servidor X personalizado"
+
+msgctxt "settings-search"
+msgid "Launch the selected X server only when needed"
+msgstr "Iniciar el servidor X elegido solo cuando sea necesario"
+
+msgctxt "settings-search"
+msgid "Line height"
+msgstr "Altura de línea"
+
+msgctxt "settings-search"
+msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
+msgstr "Copia local antes de abrir; 512 MiB por defecto, 0 elimina los límites de archivos y caché y puede consumir mucho espacio en disco"
+
+msgctxt "settings-search"
+msgid "Local file open snapshot (MiB)"
+msgstr "Copia local para abrir archivos (MiB)"
+
+msgctxt "settings-search"
+msgid "Local selection priority"
+msgstr "Prioridad de selección local"
+
+msgctxt "settings-search"
+msgid "Local shell"
+msgstr "Shell local"
+
+msgctxt "settings-search"
+msgid "Local shell icon"
+msgstr "Icono del shell local"
+
+msgctxt "settings-search"
+msgid "Loopback-only compatibility mode"
+msgstr "Modo de compatibilidad solo de bucle local"
+
+msgctxt "settings-search"
+msgid "Masks usernames and IPv4 addresses in the session sidebar"
+msgstr "Ocultar usuarios y direcciones IPv4 en la barra lateral de sesiones"
+
+msgctxt "settings-search"
+msgid "Maximum file size (GiB)"
+msgstr "Tamaño máximo de archivo (GiB)"
+
+msgctxt "settings-search"
+msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
+msgstr "Tamaño máximo de un archivo descargado o subido para edición externa; 4 MiB por defecto, de 1 a 64 MiB"
+
+msgctxt "settings-search"
+msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
+msgstr "Máximo de subidas y descargas simultáneas en una pestaña SFTP"
+
+msgctxt "settings-search"
+msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
+msgstr "Tamaño máximo de un archivo subido o descargado; 0 = sin límite, 20 GiB por defecto"
+
+msgctxt "settings-search"
+msgid "Maximum uploads shared by all SFTP tabs"
+msgstr "Máximo de subidas compartidas por todas las pestañas SFTP"
+
+msgctxt "settings-search"
+msgid "Move to line start after each wheel step in alternate-screen apps"
+msgstr "Ir al inicio de línea tras cada paso de rueda en aplicaciones de pantalla alternativa"
+
+msgctxt "settings-search"
+msgid "New Server"
+msgstr "Nuevo servidor"
+
+msgctxt "settings-search"
+msgid "Next Tab"
+msgstr "Pestaña siguiente"
+
+msgctxt "settings-search"
+msgid "Number of terminal history lines retained in memory"
+msgstr "Número de líneas del historial del terminal conservadas en memoria"
+
+msgctxt "settings-search"
+msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
+msgstr "Activado: Alt/Option envía gestos del ratón; desactivado: xterm estándar con selección mediante Mayús"
+
+msgctxt "settings-search"
+msgid "One pattern per line; * matches any characters"
+msgstr "Un patrón por línea; * coincide con cualquier carácter"
+
+msgctxt "settings-search"
+msgid "Open Settings"
+msgstr "Abrir ajustes"
+
+msgctxt "settings-search"
+msgid "Option acts as Meta"
+msgstr "Option actúa como Meta"
+
+msgctxt "settings-search"
+msgid "Optional link, path, status, and log-level colors"
+msgstr "Colores opcionales de enlaces, rutas, estados y niveles de registro"
+
+msgctxt "settings-search"
+msgid "Paste Into Terminal"
+msgstr "Pegar en el terminal"
+
+msgctxt "settings-search"
+msgid "Platform defaults"
+msgstr "Valores predeterminados de la plataforma"
+
+msgctxt "settings-search"
+msgid "Previous Tab"
+msgstr "Pestaña anterior"
+
+msgctxt "settings-search"
+msgid "Provider"
+msgstr "Proveedor"
+
+msgctxt "settings-search"
+msgid "Reduce terminal items and omit default background rectangles"
+msgstr "Reducir elementos del terminal y omitir rectángulos del fondo predeterminado"
+
+msgctxt "settings-search"
+msgid "Remembered password storage"
+msgstr "Almacenamiento de contraseñas guardadas"
+
+msgctxt "settings-search"
+msgid "Remote edit file limit (MiB)"
+msgstr "Límite de archivo para edición remota (MiB)"
+
+msgctxt "settings-search"
+msgid "Renderer"
+msgstr "Motor de renderizado"
+
+msgctxt "settings-search"
+msgid "Restore the default filters for this platform"
+msgstr "Restaurar los filtros predeterminados de esta plataforma"
+
+msgctxt "settings-search"
+msgid "Reuse GPU row layers; may increase graphics memory"
+msgstr "Reutilizar capas GPU de las filas; puede aumentar la memoria gráfica"
+
+msgctxt "settings-search"
+msgid "Right-click copy or paste"
+msgstr "Copiar o pegar con clic derecho"
+
+msgctxt "settings-search"
+msgid "SFTP"
+msgstr "SFTP"
+
+msgctxt "settings-search"
+msgid "Scrollback"
+msgstr "Historial del terminal"
+
+msgctxt "settings-search"
+msgid "Select All"
+msgstr "Seleccionar todo"
+
+msgctxt "settings-search"
+msgid "Semantic highlighting"
+msgstr "Resaltado semántico"
+
+msgctxt "settings-search"
+msgid "Session mask character"
+msgstr "Carácter de ocultación de sesiones"
+
+msgctxt "settings-search"
+msgid "Session sidebar width"
+msgstr "Ancho de barra lateral de sesiones"
+
+msgctxt "settings-search"
+msgid "Session transfer command shortcut"
+msgstr "Atajo de comando de transferencia de sesiones"
+
+msgctxt "settings-search"
+msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
+msgstr "Compartido por subidas y descargas de cada pestaña SFTP; 0 = sin límite"
+
+msgctxt "settings-search"
+msgid "Shortcuts"
+msgstr "Atajos"
+
+msgctxt "settings-search"
+msgid "Show a blinking cursor while the terminal is focused"
+msgstr "Mostrar un cursor parpadeante cuando el terminal tiene el foco"
+
+msgctxt "settings-search"
+msgid "Skip matching names during SFTP uploads and downloads"
+msgstr "Omitir nombres coincidentes durante subidas y descargas SFTP"
+
+msgctxt "settings-search"
+msgid "Software presentation"
+msgstr "Presentación por software"
+
+msgctxt "settings-search"
+msgid "Start for first X11 application"
+msgstr "Iniciar para la primera aplicación X11"
+
+msgctxt "settings-search"
+msgid "Support"
+msgstr "Soporte"
+
+msgctxt "settings-search"
+msgid "Switch SSH/SFTP Tab"
+msgstr "Cambiar pestaña SSH/SFTP"
+
+msgctxt "settings-search"
+msgid "Terminal"
+msgstr "Terminal"
+
+msgctxt "settings-search"
+msgid "Terminal character-cell font"
+msgstr "Fuente de celdas de caracteres del terminal"
+
+msgctxt "settings-search"
+msgid "Terminal command shortcut"
+msgstr "Atajo de comando del terminal"
+
+msgctxt "settings-search"
+msgid "Terminal updates while the pane is focused"
+msgstr "Actualizaciones del terminal cuando el panel tiene el foco"
+
+msgctxt "settings-search"
+msgid "Text brightness"
+msgstr "Brillo del texto"
+
+msgctxt "settings-search"
+msgid "Toggle Session Sidebar"
+msgstr "Mostrar/ocultar barra lateral de sesiones"
+
+msgctxt "settings-search"
+msgid "Transfers per SFTP tab"
+msgstr "Transferencias por pestaña SFTP"
+
+msgctxt "settings-search"
+msgid "Unfocused refresh rate"
+msgstr "Frecuencia de actualización sin foco"
+
+msgctxt "settings-search"
+msgid "Use Option as terminal Meta on macOS"
+msgstr "Usar Option como Meta del terminal en macOS"
+
+msgctxt "settings-search"
+msgid "Use the bright ANSI palette for bold text"
+msgstr "Usar la paleta ANSI brillante para texto en negrita"
+
+msgctxt "settings-search"
+msgid "Used for remembered passwords and new passwords entered in the session editor"
+msgstr "Usado para contraseñas guardadas y nuevas contraseñas introducidas en el editor de sesiones"
+
+msgctxt "settings-search"
+msgid "Uses the host system by default. Changes are saved immediately."
+msgstr "Usa el sistema del host por defecto. Los cambios se guardan inmediatamente."
+
+msgctxt "settings-search"
+msgid "Visible terminal updates while another pane is focused"
+msgstr "Actualizaciones del terminal visible cuando otro panel tiene el foco"
+
+msgctxt "settings-search"
+msgid "Workspace"
+msgstr "Espacio de trabajo"
+
+msgctxt "settings-search"
+msgid "Workspace command shortcut"
+msgstr "Atajo de comando del espacio de trabajo"
+
+msgctxt "settings-search"
+msgid "Workspace tab width"
+msgstr "Ancho de pestañas del espacio de trabajo"
+
+msgctxt "settings-search"
+msgid "X server used by forwarded graphical applications"
+msgstr "Servidor X usado por aplicaciones gráficas reenviadas"
+
+msgctxt "settings-search"
+msgid "X11"
+msgstr "X11"
+
+msgctxt "settings-search"
+msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"
+msgstr "Ruta de presentación por CPU en macOS; surte efecto al reiniciar AxSSH"

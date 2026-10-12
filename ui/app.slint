@@ -273,7 +273,8 @@ export component AppWindow inherits Window {
     in property <int> sftp-rate-limit-mib-per-second: 0;
     in property <int> sftp-local-open-max-file-mib: 512;
     in property <int> sftp-remote-edit-max-file-mib: 4;
-    in property <string> ui-language: "english";
+    in property <string> ui-language: "system";
+    in property <int> ui-language-index: 0;
     in property <int> sidebar-width: 220;
     in property <int> tab-width: 172;
     in property <string> session-mask-character: "*";
@@ -377,6 +378,7 @@ export component AppWindow inherits Window {
         },
         settings: {
             ui_language: root.ui-language,
+            ui_language_index: root.ui-language-index,
             local_shell_icon_override: root.local-shell-icon-override,
             local_shell_automatic_platform: root.local-shell-automatic-platform,
             local_shell_options: root.local-shell-options,
@@ -538,6 +540,7 @@ export component AppWindow inherits Window {
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
+    pure callback ui-language-options(string) -> [string];
     callback save-local-shell-icon(string);
     callback connect-session(string);
     callback open-sftp-session(string);
@@ -1029,6 +1032,7 @@ export component AppWindow inherits Window {
             }
             save-audio-settings(rate, channels, executable, model) => { root.save-audio-settings(rate, channels, executable, model); }
             save-ui-language(index) => { root.save-ui-language(index); }
+            ui-language-options(system-label) => { return root.ui-language-options(system-label); }
             save-local-shell-icon(id) => { root.save-local-shell-icon(id); }
             system-icon-choices(query) => { return root.system-icon-choices(query); }
             system-icon-choice(id) => { return root.system-icon-choice(id); }

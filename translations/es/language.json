@@ -1,0 +1,8 @@
+{
+  "native_name": "Español",
+  "aliases": [
+    "es-ES"
+  ],
+  "script": "Latn",
+  "language_default": true
+}

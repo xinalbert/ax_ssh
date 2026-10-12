@@ -23,6 +23,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
             .into(),
     );
     ui.set_ui_language(settings.ui_language.as_setting().into());
+    ui.set_ui_language_index(settings.ui_language.selector_index());
     apply_theme_to_component(ui, settings);
     ui.set_application_font_family(settings.appearance.application_font_family.clone().into());
     ui.set_application_font_index(font_option_index(
@@ -257,10 +258,12 @@ pub(in crate::app) fn apply_ui_language_to_open_windows(
 ) -> Result<()> {
     select_ui_language(language)?;
     ui.set_ui_language(language.as_setting().into());
+    ui.set_ui_language_index(language.selector_index());
     if let Some(router) = global_window_router() {
         for detached_ui in router.detached_uis() {
             if let Some(detached_ui) = detached_ui.upgrade() {
                 detached_ui.set_ui_language(language.as_setting().into());
+                detached_ui.set_ui_language_index(language.selector_index());
             }
         }
     }

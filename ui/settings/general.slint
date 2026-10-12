@@ -7,7 +7,8 @@ import { ThemedComboBox } from "../components/themed-combo-box.slint";
 export component GeneralSettingsPage inherits SettingsPage {
     pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     pure callback system-icon-choice(string) -> SystemIconChoiceRow;
-    in property <string> ui-language;
+    in property <int> ui-language-index;
+    pure callback ui-language-options(string) -> [string];
     in property <string> local-shell-icon-override;
     in property <string> local-shell-automatic-platform;
     private property <int> selected-ui-language-index: 0;
@@ -20,11 +21,9 @@ export component GeneralSettingsPage inherits SettingsPage {
     callback save-ui-language(int);
     callback save-local-shell-icon(string);
     init => { root.restore-ui-language-selection(); }
-    changed ui-language => { root.restore-ui-language-selection(); }
+    changed ui-language-index => { root.restore-ui-language-selection(); }
     function restore-ui-language-selection() {
-        root.selected-ui-language-index = root.ui-language == "simplified-chinese"
-            ? 2
-            : (root.ui-language == "english" ? 1 : 0);
+        root.selected-ui-language-index = root.ui-language-index;
     }
     SettingsSectionHeading { label: @tr("INTERFACE"); }
     SettingsRow {
@@ -34,7 +33,7 @@ export component GeneralSettingsPage inherits SettingsPage {
             ThemedComboBox {
                 width: parent.width;
                 height: Theme.settings-control-height;
-                model: [@tr("Follow system"), @tr("English"), @tr("Simplified Chinese")];
+                model: root.ui-language-options(@tr("Follow system"));
                 current-index <=> root.selected-ui-language-index;
                 accessible-label: @tr("Interface language");
                 selected(_value, _index) => {
