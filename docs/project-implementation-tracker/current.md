@@ -16,7 +16,7 @@
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：否
 - 远端交付：用户授权 origin/master 推送与远端核对；网络错误使用命令级 7897 代理
@@ -32,8 +32,8 @@
 | A4 | completed | 应用 SFTP/terminal 功能子模块与 workspace 启动恢复归位 | 实际 callback/monitor、状态和本地文件专项 | 保留弱 UI 引用及 event-loop dispatch |
 | A5 | completed | 分类 settings、Tab 状态子模块与 SFTP UI 组件 | 配置迁移、Tab/workspace 与 Slint 重编测试 | 无 schema 或布局行为变化 |
 | A6 | completed | 双语契约、地图、环境/实施记录与完整门禁 | fmt/check/严格 Clippy/test、可用 macOS CI target check/Clippy/build、链接/skill/tracker/diff | GUI 与真实系统后端由用户验收，Windows/Linux 交原生 CI |
-| A7 | in_progress | 按结果分项提交，显式暂存和 index 审查 | staged diff/check 与每次提交后的 status | 不改写历史，不包含缓存/报告 |
-| A8 | pending | 推送 origin/master 并核对远端 HEAD | push 与 ls-remote SHA 一致、最终工作区状态 | 直连失败用本机 7897 命令级代理 |
+| A7 | completed | 按结果分项提交，显式暂存和 index 审查 | staged diff/check 与每次提交后的 status | 不改写历史，不包含缓存/报告 |
+| A8 | completed | 推送 origin/master 并核对远端 HEAD | push 与 ls-remote SHA 一致、最终工作区状态 | 直连失败用本机 7897 命令级代理 |
 
 ## 已完成
 
@@ -44,6 +44,14 @@
 - 权限和目录 fsync 错误传播；临时文件权限在原子替换前确认；上传成功包含 close 响应且取消不能返回 Published；非 macOS 无用字段不再用 allow(dead_code) 掩盖。
 - SFTP 与终端 bridge 已按实际功能拆成私有子模块；本地上传扫描归入 local_files；启动恢复归入 workspace；settings 分类、Tab 快照/刷新/终端状态和 SFTP UI 组件完成迁移和完整验证。
 
+## 提交与交付
+
+- `19a01d6`：保护自动解锁密钥、私有写入错误和隔离凭据测试。
+- `b9b4ce8`：SFTP close/取消发布门禁和传输职责拆分。
+- `c23c75a`：application/config/state/UI 职责拆分、平台 cfg 与队列错误处理。
+- `e6d5973`：双语架构、地图、环境与完整验证记录。
+- 已经由命令级 7897 代理推送，核对远端 master 为 `e6d5973c29b80a76a3bdf4fce3dec183d0fda142`，与当时本地 HEAD 一致。本完成记录随最后一项文档提交同步，随后核对最终 HEAD 和干净工作区。
+
 ## 验证
 
 - 已完成：最终源码 fmt、locked/offline check、严格 all-target Clippy、完整默认并发 test 全部通过；391 library + 413 binary（804），Doc tests 0。
@@ -51,7 +59,7 @@
 - 翻译/脚本/文档：665 条消息 × 11 个翻译目录、translation build check、22 项 Python 回归、145 条 Markdown 相对链接、skill/tracker 与 diff 检查通过。
 - 结构复核：Rust 无 mod.rs；SFTP/terminal 回调注册与 Slint struct/component/callback 契约保留；生成 Slint 类型仅在 app.rs。新增 entry provider 返回自有值/通用错误，平台错误保留在 credentials 内部。
 - 已处理的验证问题：写入 fixture 使用独立目录，已有 0700 不重复 chmod；Skia 下载停滞后核验同版本/架构/特性完整归档，用临时 file URL 和用户指定 7897 代理完成目标构建，不改变依赖或 CI。
-- 未完成：分项提交与推送/远端核对；自动验证边界：未访问真实系统凭据、设备或 SSH/GUI；Windows/Linux SDK 不可用，保留原生 CI；GUI 验收由用户完成，不自行截图。
+- 未完成：本轮代码与交付无剩余；自动验证边界：未访问真实系统凭据、设备或 SSH/GUI；Windows/Linux SDK 不可用，保留原生 CI；GUI 验收由用户完成，不自行截图。
 
 ## 文件职责整理
 
@@ -75,8 +83,8 @@ AGENTS.md 没有统一行数上限；本轮依据职责混合、错误处理和�
 
 ## 下一步
 
-- 显式暂存并复核各组提交，通过本机 7897 命令级代理推送 origin/master，核对远端 SHA 和最终工作区。
+- 本轮交付完成；Windows/Linux 继续原生 CI，真实系统凭据、设备、GUI/SSH 由用户验收。
 
 ## 最后更新时间
 
-- 2026-10-13 08:37 +0800
+- 2026-10-13 08:41 +0800
