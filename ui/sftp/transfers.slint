@@ -101,16 +101,13 @@ component SftpTransferEntry inherits Rectangle {
         border-radius: Theme.radius-small;
         background: root.selectable && root.transfer.selected ? Theme.accent : transparent;
 
-        Text {
+        Image {
             visible: root.selectable && root.transfer.selected;
             width: parent.width;
             height: parent.height;
-            text: @tr("x");
-            color: Theme.background;
-            font-size: Theme.font-caption;
-            font-weight: 700;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+            source: @image-url("../icons/sftp-check.svg");
+            colorize: Theme.background;
+            image-fit: contain;
         }
     }
 
@@ -306,7 +303,7 @@ export component SftpTransferQueue inherits Rectangle {
 
         Rectangle {
             height: Theme.sftp-transfer-toolbar-height;
-            background: Theme.panel-alt;
+            background: Theme.sftp-toolbar-surface;
             HorizontalLayout {
                 padding-left: Theme.sftp-column-padding;
                 padding-right: Theme.sftp-column-padding;
@@ -398,7 +395,7 @@ export component SftpTransferQueue inherits Rectangle {
                     - Theme.sftp-column-gap - self.action-slot-width,
             );
             height: Theme.sftp-transfer-header-height;
-            background: Theme.panel;
+            background: Theme.sftp-header-surface;
             Text {
                 x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
                 width: max(0px, parent.content-width * 0.48 - Theme.sftp-column-gap - self.x);

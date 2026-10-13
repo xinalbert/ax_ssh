@@ -1,5 +1,33 @@
 use super::*;
 
+mod paths;
+
+pub(super) enum SftpPathKind {
+    Remote,
+    Local,
+}
+
+pub(super) fn sftp_path_rows(
+    current: ModelRc<SftpPathSegment>,
+    path: &str,
+    kind: SftpPathKind,
+) -> ModelRc<SftpPathSegment> {
+    let style = match kind {
+        SftpPathKind::Remote => paths::PathStyle::Posix,
+        SftpPathKind::Local if cfg!(target_os = "windows") => paths::PathStyle::Windows,
+        SftpPathKind::Local => paths::PathStyle::Posix,
+    };
+    let rows = paths::breadcrumbs(path, style)
+        .into_iter()
+        .map(|segment| SftpPathSegment {
+            label: segment.label.into(),
+            path: segment.path.into(),
+            current: segment.current,
+        })
+        .collect();
+    update_sftp_rows(current, rows, |old, new| old.path == new.path)
+}
+
 const SLINT_ICON_CACHE_CAPACITY: usize = 128;
 type SlintIconCache =
     std::collections::HashMap<FileIconKey, (super::super::file_icons::FileIcon, slint::Image)>;

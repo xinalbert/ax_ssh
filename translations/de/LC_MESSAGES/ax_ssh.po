@@ -49,12 +49,6 @@ msgstr "60–120 Prozent; 100 erhält die Terminalfarben"
 msgid "9-32 px"
 msgstr "9-32 px"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "Trennlinien und Bedienelementrahmen"
 msgid "Download"
 msgstr "Herunterladen"
 
+msgid "Download ({0})"
+msgstr "Herunterladen ({0})"
+
 msgid "Duplicate"
 msgstr "Duplizieren"
 
@@ -435,6 +432,9 @@ msgstr "Bearbeiten"
 
 msgid "Edit Server"
 msgstr "Server bearbeiten"
+
+msgid "Edit path"
+msgstr "Pfad bearbeiten"
 
 msgid "Edit selected remote file"
 msgstr "Ausgewählte Remote-Datei bearbeiten"
@@ -1510,11 +1510,11 @@ msgstr "Sitzung aktualisieren"
 msgid "Upload"
 msgstr "Hochladen"
 
+msgid "Upload ({0})"
+msgstr "Hochladen ({0})"
+
 msgid "Upload changes"
 msgstr "Änderungen hochladen"
-
-msgid "Upload selected local files"
-msgstr "Ausgewählte lokale Dateien hochladen"
 
 msgid "Use platform default filters"
 msgstr "Standardfilter der Plattform verwenden"

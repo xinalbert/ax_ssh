@@ -5,7 +5,7 @@ import { FlatTextInput } from "components/flat-text-input.slint";
 import { SftpActionButton, SftpPathCopyButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
 
-export { SftpEntryRow, SftpTransferRow, SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
+export { SftpEntryRow, SftpPathSegment, SftpTransferRow, SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
 import { SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
 import { SftpDirectoryPane } from "sftp/directory.slint";
 import { SftpTransferQueue } from "sftp/transfers.slint";
@@ -330,6 +330,8 @@ export component SftpPane inherits Rectangle {
                 loading: root.view.loading;
                 upload-ready: root.view.upload_ready;
                 path: root.view.path;
+                path-segments: root.view.path_segments;
+                download-ready: root.view.available && !root.view.local_loading && !root.view.local_path.is-empty;
                 truncated: root.view.truncated;
                 status: root.view.status;
                 has-more: root.view.has_more;
@@ -354,7 +356,6 @@ export component SftpPane inherits Rectangle {
                 open-file(path) => { root.open-remote-file(path); }
                 download-selected => { root.download-selected-remote(); }
                 remove-selected => { root.remove-selected-remote(); }
-                upload-selected => { root.upload-selected-local(); }
                 rename-entry(path, name) => { root.rename-remote(path, name); }
                 edit-selected => { root.edit-remote(); }
                 toggle-selection(path, selected) => {
@@ -408,6 +409,7 @@ export component SftpPane inherits Rectangle {
                 upload-ready: root.view.upload_ready && root.view.local_upload_selection_ready;
                 allow-refresh: true;
                 path: root.view.local_path;
+                path-segments: root.view.local_path_segments;
                 has-more: root.view.local_has_more;
                 truncated: root.view.local_truncated;
                 status: root.view.local_status;
@@ -416,6 +418,7 @@ export component SftpPane inherits Rectangle {
                 sort-column: root.view.local_sort_column;
                 sort-descending: root.view.local_sort_descending;
                 list-directory(path) => { root.list-local-directory(path); }
+                upload-selected => { root.upload-selected-local(); }
                 refresh => { root.list-local-directory(root.view.local_path); }
                 load-more => { root.load-more-local(); }
                 navigate-back => { root.navigate-local-back(); }

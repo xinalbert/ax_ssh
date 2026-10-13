@@ -49,12 +49,6 @@ msgstr "60–120 відсотків; 100 зберігає кольори тер�
 msgid "9-32 px"
 msgstr "9-32 px"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "Розділювачі та межі елементів керуванн
 msgid "Download"
 msgstr "Завантажити"
 
+msgid "Download ({0})"
+msgstr "Завантажити ({0})"
+
 msgid "Duplicate"
 msgstr "Дублювати"
 
@@ -435,6 +432,9 @@ msgstr "Редагувати"
 
 msgid "Edit Server"
 msgstr "Редагувати сервер"
+
+msgid "Edit path"
+msgstr "Редагувати шлях"
 
 msgid "Edit selected remote file"
 msgstr "Редагувати вибраний віддалений файл"
@@ -1510,11 +1510,11 @@ msgstr "Оновити сеанс"
 msgid "Upload"
 msgstr "Надіслати"
 
+msgid "Upload ({0})"
+msgstr "Надіслати ({0})"
+
 msgid "Upload changes"
 msgstr "Надіслати зміни"
-
-msgid "Upload selected local files"
-msgstr "Надіслати вибрані локальні файли"
 
 msgid "Use platform default filters"
 msgstr "Використовувати типові фільтри платформи"

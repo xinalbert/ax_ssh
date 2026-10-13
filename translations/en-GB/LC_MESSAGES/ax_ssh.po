@@ -49,12 +49,6 @@ msgstr "60-120 percent; 100 percent preserves terminal colours"
 msgid "9-32 px"
 msgstr "9-32 px"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "Dividers and control outlines"
 msgid "Download"
 msgstr "Download"
 
+msgid "Download ({0})"
+msgstr "Download ({0})"
+
 msgid "Duplicate"
 msgstr "Duplicate"
 
@@ -435,6 +432,9 @@ msgstr "Edit"
 
 msgid "Edit Server"
 msgstr "Edit Server"
+
+msgid "Edit path"
+msgstr "Edit path"
 
 msgid "Edit selected remote file"
 msgstr "Edit selected remote file"
@@ -1510,11 +1510,11 @@ msgstr "Update session"
 msgid "Upload"
 msgstr "Upload"
 
+msgid "Upload ({0})"
+msgstr "Upload ({0})"
+
 msgid "Upload changes"
 msgstr "Upload changes"
-
-msgid "Upload selected local files"
-msgstr "Upload selected local files"
 
 msgid "Use platform default filters"
 msgstr "Use platform default filters"

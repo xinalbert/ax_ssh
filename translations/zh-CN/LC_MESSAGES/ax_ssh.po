@@ -49,12 +49,6 @@ msgstr "60%-120%；100% 保留终端原色"
 msgid "9-32 px"
 msgstr "9-32 像素"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "分隔线和控件轮廓"
 msgid "Download"
 msgstr "下载"
 
+msgid "Download ({0})"
+msgstr "下载 ({0})"
+
 msgid "Duplicate"
 msgstr "创建副本"
 
@@ -435,6 +432,9 @@ msgstr "编辑"
 
 msgid "Edit Server"
 msgstr "编辑服务器"
+
+msgid "Edit path"
+msgstr "编辑路径"
 
 msgid "Edit selected remote file"
 msgstr "编辑选中的远端文件"
@@ -1510,11 +1510,11 @@ msgstr "更新会话"
 msgid "Upload"
 msgstr "上传"
 
+msgid "Upload ({0})"
+msgstr "上传 ({0})"
+
 msgid "Upload changes"
 msgstr "上传修改"
-
-msgid "Upload selected local files"
-msgstr "上传选中的本地文件"
 
 msgid "Use platform default filters"
 msgstr "使用平台默认过滤规则"

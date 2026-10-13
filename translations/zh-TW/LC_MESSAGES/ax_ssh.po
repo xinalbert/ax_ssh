@@ -49,12 +49,6 @@ msgstr "60%-120%；100% 保留終端機原色"
 msgid "9-32 px"
 msgstr "9-32 畫素"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "分隔線和控制元件輪廓"
 msgid "Download"
 msgstr "下載"
 
+msgid "Download ({0})"
+msgstr "下載 ({0})"
+
 msgid "Duplicate"
 msgstr "建立副本"
 
@@ -435,6 +432,9 @@ msgstr "編輯"
 
 msgid "Edit Server"
 msgstr "編輯伺服器"
+
+msgid "Edit path"
+msgstr "編輯路徑"
 
 msgid "Edit selected remote file"
 msgstr "編輯選中的遠端檔案"
@@ -1510,11 +1510,11 @@ msgstr "更新會話"
 msgid "Upload"
 msgstr "上傳"
 
+msgid "Upload ({0})"
+msgstr "上傳 ({0})"
+
 msgid "Upload changes"
 msgstr "上傳修改"
-
-msgid "Upload selected local files"
-msgstr "上傳選中的本地檔案"
 
 msgid "Use platform default filters"
 msgstr "使用平臺預設過濾規則"

@@ -49,12 +49,6 @@ msgstr "60～120%；100%では端末の元の色を保持"
 msgid "9-32 px"
 msgstr "9～32 px"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "区切り線とコントロールの輪郭"
 msgid "Download"
 msgstr "ダウンロード"
 
+msgid "Download ({0})"
+msgstr "ダウンロード ({0})"
+
 msgid "Duplicate"
 msgstr "複製"
 
@@ -435,6 +432,9 @@ msgstr "編集"
 
 msgid "Edit Server"
 msgstr "サーバーを編集"
+
+msgid "Edit path"
+msgstr "パスを編集"
 
 msgid "Edit selected remote file"
 msgstr "選択したリモートファイルを編集"
@@ -1510,11 +1510,11 @@ msgstr "接続を更新"
 msgid "Upload"
 msgstr "アップロード"
 
+msgid "Upload ({0})"
+msgstr "アップロード ({0})"
+
 msgid "Upload changes"
 msgstr "変更をアップロード"
-
-msgid "Upload selected local files"
-msgstr "選択したローカルファイルをアップロード"
 
 msgid "Use platform default filters"
 msgstr "プラットフォームの既定フィルターを使用"

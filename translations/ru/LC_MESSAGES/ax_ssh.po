@@ -49,12 +49,6 @@ msgstr "60–120 процентов; 100 сохраняет цвета терм�
 msgid "9-32 px"
 msgstr "9-32 px"
 
-msgid "<"
-msgstr "<"
-
-msgid ">"
-msgstr ">"
-
 msgid ">_"
 msgstr ">_"
 
@@ -424,6 +418,9 @@ msgstr "Разделители и границы элементов управл
 msgid "Download"
 msgstr "Скачать"
 
+msgid "Download ({0})"
+msgstr "Скачать ({0})"
+
 msgid "Duplicate"
 msgstr "Дублировать"
 
@@ -435,6 +432,9 @@ msgstr "Изменить"
 
 msgid "Edit Server"
 msgstr "Изменить сервер"
+
+msgid "Edit path"
+msgstr "Изменить путь"
 
 msgid "Edit selected remote file"
 msgstr "Редактировать выбранный удалённый файл"
@@ -1510,11 +1510,11 @@ msgstr "Обновить сеанс"
 msgid "Upload"
 msgstr "Отправить"
 
+msgid "Upload ({0})"
+msgstr "Отправить ({0})"
+
 msgid "Upload changes"
 msgstr "Отправить изменения"
-
-msgid "Upload selected local files"
-msgstr "Отправить выбранные локальные файлы"
 
 msgid "Use platform default filters"
 msgstr "Использовать фильтры платформы по умолчанию"

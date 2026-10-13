@@ -940,6 +940,13 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_sftp_loading(snapshot.loading);
     ui.set_sftp_upload_ready(snapshot.upload_ready);
     ui.set_sftp_home(snapshot.home.into());
+    if ui.get_sftp_path().as_str() != snapshot.path {
+        ui.set_sftp_path_segments(sftp_path_rows(
+            ui.get_sftp_path_segments(),
+            &snapshot.path,
+            SftpPathKind::Remote,
+        ));
+    }
     ui.set_sftp_path(snapshot.path.into());
     let icon_revision = global_provider().revision();
     ui.set_sftp_entries(update_file_rows(
@@ -987,6 +994,13 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_local_sftp_loading(snapshot.local.loading);
     ui.set_local_sftp_loaded(snapshot.local.loaded);
     ui.set_local_sftp_upload_selection_ready(snapshot.local.upload_selection_ready);
+    if ui.get_local_sftp_path().as_str() != snapshot.local.path {
+        ui.set_local_sftp_path_segments(sftp_path_rows(
+            ui.get_local_sftp_path_segments(),
+            &snapshot.local.path,
+            SftpPathKind::Local,
+        ));
+    }
     ui.set_local_sftp_path(snapshot.local.path.into());
     ui.set_local_sftp_entries(update_file_rows(
         ui.get_local_sftp_entries(),

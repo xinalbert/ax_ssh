@@ -1,6 +1,8 @@
 use super::*;
 use slint::Model;
 
+mod sftp_navigation;
+
 #[test]
 fn bundled_ui_languages_select_on_a_headless_component() {
     std::thread::spawn(|| {
@@ -66,6 +68,34 @@ fn sftp_unchanged_sources_skip_row_formatting_and_icons() {
     assert_eq!(builds.get(), 3);
     assert!(current == changed_entry);
     assert_eq!(changed_entry.row_data(0).expect("row").size.as_str(), "2");
+}
+
+#[test]
+fn sftp_path_models_reuse_unchanged_rows_and_reset_navigation_identity() {
+    let current = sftp_path_rows(ModelRc::default(), "/home/研究/data", SftpPathKind::Remote);
+    assert_eq!(current.row_count(), 4);
+    assert_eq!(
+        current.row_data(2).expect("unicode ancestor").path.as_str(),
+        "/home/研究"
+    );
+    let refreshed = sftp_path_rows(current.clone(), "/home/研究/data", SftpPathKind::Remote);
+    assert!(
+        current == refreshed,
+        "progress updates must retain breadcrumb identity"
+    );
+    assert!(refreshed.row_data(3).expect("current directory").current);
+    let moved = sftp_path_rows(refreshed, "/other/directory", SftpPathKind::Remote);
+    assert!(current != moved);
+    assert_eq!(
+        moved.row_data(2).expect("new directory").path.as_str(),
+        "/other/directory"
+    );
+    let fallback = sftp_path_rows(moved, "relative/path", SftpPathKind::Remote);
+    assert_eq!(
+        fallback.row_count(),
+        0,
+        "relative prefixes must never become navigation targets"
+    );
 }
 
 #[test]

@@ -5,6 +5,9 @@ export component SftpActionButton inherits FocusScope {
     in property <string> text;
     in property <string> tooltip-text;
     in property <string> accessible-name: root.text;
+    in property <image> icon;
+    in property <bool> show-icon: false;
+    in property <bool> icon-only: false;
     in property <bool> subtle: false;
     in property <bool> prominent: false;
     in property <bool> active: false;
@@ -18,7 +21,9 @@ export component SftpActionButton inherits FocusScope {
     // Callers may still provide a larger width for stable toolbar geometry.
     private property <length> natural-width: max(
         Theme.sftp-control-min-width,
-        label.natural-width + 2 * Theme.space-md,
+        root.icon-only ? Theme.sftp-nav-icon-button-width
+            : label.natural-width + 2 * Theme.space-md
+                + (root.show-icon ? Theme.sftp-control-icon-size + Theme.space-sm : 0px),
     );
     out property <length> control-height: max(
         Theme.sftp-control-min-height,
@@ -72,17 +77,28 @@ export component SftpActionButton inherits FocusScope {
         opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
 
         label := ElidedLabel {
-            x: Theme.space-md;
-            width: parent.width - 2 * Theme.space-md;
+            visible: !root.icon-only;
+            x: Theme.space-md + (root.show-icon ? Theme.sftp-control-icon-size + Theme.space-sm : 0px);
+            width: max(0px, parent.width - self.x - Theme.space-md);
             height: parent.height;
             text: root.text;
             tooltip-text: root.tooltip-text;
-            text-color: root.prominent
+            text-color: !root.enabled ? Theme.muted : root.prominent
                 ? Theme.background
                 : (root.active ? Theme.accent : Theme.text);
             font-size: root.font-size;
             font-weight: root.font-weight;
             horizontal-alignment: TextHorizontalAlignment.center;
+        }
+        Image {
+            visible: root.show-icon;
+            x: root.icon-only ? (parent.width - self.width) / 2 : Theme.space-md;
+            y: (parent.height - self.height) / 2;
+            width: Theme.sftp-control-icon-size;
+            height: Theme.sftp-control-icon-size;
+            source: root.icon;
+            image-fit: contain;
+            colorize: !root.enabled ? Theme.muted : (root.prominent ? Theme.background : Theme.text);
         }
         touch := TouchArea {
             pointer-event(event) => {
@@ -94,90 +110,21 @@ export component SftpActionButton inherits FocusScope {
             mouse-cursor: root.enabled ? pointer : default;
             clicked => { root.clicked(); }
         }
-    }
-}
-
-component SftpCopyPathGlyph inherits Rectangle {
-    in property <color> glyph-color: Theme.muted;
-
-    width: 14px;
-    height: 14px;
-    background: transparent;
-
-    Rectangle {
-        x: Theme.hairline;
-        y: Theme.hairline;
-        width: parent.width - 4px;
-        height: parent.height - 4px;
-        background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: root.glyph-color.with-alpha(0.7);
-        border-radius: Theme.radius-small;
-    }
-    Rectangle {
-        x: 3px;
-        y: 3px;
-        width: parent.width - 4px;
-        height: parent.height - 4px;
-        background: Theme.panel-alt;
-        border-width: Theme.hairline;
-        border-color: root.glyph-color;
-        border-radius: Theme.radius-small;
-    }
-}
-
-
-export component SftpPathCopyButton inherits FocusScope {
-    in property <string> accessible-name: @tr("Copy current path");
-    in property <string> tooltip-text: root.accessible-name;
-    callback clicked();
-
-    width: Theme.sftp-nav-icon-button-width;
-    height: Theme.sftp-control-min-height;
-    focus-on-click: true;
-    focus-on-tab-navigation: true;
-    accessible-role: button;
-    accessible-label: root.accessible-name;
-    accessible-enabled: root.enabled;
-    accessible-action-default => {
-        if root.enabled {
-            root.clicked();
-        }
-    }
-
-    key-pressed(event) => {
-        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
-            root.clicked();
-            return EventResult.accept;
-        }
-        return EventResult.reject;
-    }
-
-    Rectangle {
-        border-width: Theme.hairline;
-        border-color: root.has-focus ? Theme.focus : Theme.control-border;
-        border-radius: Theme.radius-small;
-        background: !root.enabled
-            ? Theme.hover
-            : (copy-touch.has-hover || root.has-focus ? Theme.hover : Theme.panel-alt);
-        opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
-
-        SftpCopyPathGlyph {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            glyph-color: copy-touch.has-hover || root.has-focus ? Theme.text : Theme.muted;
-        }
-
-        copy-touch := TouchArea {
-            enabled: root.enabled;
-            mouse-cursor: root.enabled ? pointer : default;
-            clicked => { root.clicked(); }
-        }
-
-        if !root.tooltip-text.is-empty : Tooltip {
+        if root.icon-only : Tooltip {
             ElidedTooltipContent {
-                text: root.tooltip-text;
+                text: root.tooltip-text.is-empty ? root.accessible-name : root.tooltip-text;
             }
         }
     }
+}
+export component SftpIconButton inherits SftpActionButton {
+    show-icon: true;
+    icon-only: true;
+    subtle: true;
+    width: Theme.sftp-nav-icon-button-width;
+}
+
+export component SftpPathCopyButton inherits SftpIconButton {
+    accessible-name: @tr("Copy current path");
+    icon: @image-url("../icons/sftp-copy.svg");
 }

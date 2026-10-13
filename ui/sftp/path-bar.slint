@@ -1,0 +1,185 @@
+import { Theme } from "../theme.slint";
+import { ElidedLabel, ElidedTooltipContent } from "../components/elided-controls.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
+import { SftpIconButton } from "../components/sftp-controls.slint";
+import { SftpPathSegment } from "types.slint";
+
+component PathCrumb inherits FocusScope {
+    in property <SftpPathSegment> segment;
+    callback activated();
+    min-width: 0px;
+    preferred-width: min(Theme.sftp-breadcrumb-max-width, label.natural-width + 2 * Theme.space-sm);
+    max-width: Theme.sftp-breadcrumb-max-width;
+    horizontal-stretch: root.segment.current ? 3 : 1;
+    focus-on-click: true;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: @tr("Open") + ": " + root.segment.path;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.activated(); } }
+    key-pressed(event) => {
+        if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+            root.activated();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+    Rectangle {
+        border-radius: Theme.radius-small;
+        border-width: root.has-focus ? Theme.hairline : 0px;
+        border-color: Theme.focus;
+        background: touch.has-hover || root.has-focus ? Theme.hover : transparent;
+        label := ElidedLabel {
+            x: Theme.space-sm;
+            width: max(0px, parent.width - 2 * Theme.space-sm);
+            height: parent.height;
+            text: root.segment.label;
+            tooltip-enabled: false;
+            text-color: root.segment.current ? Theme.text : Theme.muted;
+            font-size: Theme.font-body;
+            font-weight: root.segment.current ? 600 : 400;
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.activated(); }
+        }
+        Tooltip {
+            ElidedTooltipContent { text: root.segment.path; }
+        }
+    }
+}
+
+export component SftpPathBar inherits FocusScope {
+    in property <string> path;
+    in property <[SftpPathSegment]> segments;
+    in property <bool> compact: false;
+    in property <bool> can-go-back;
+    in property <bool> can-go-forward;
+    in property <bool> can-go-up;
+    in property <length> control-height: Theme.sftp-control-min-height;
+    callback navigate(string);
+    callback back();
+    callback forward();
+    callback up();
+    private property <bool> editing: false;
+    private property <bool> return-focus: false;
+    private property <string> draft: root.path;
+    private property <bool> show-editor: root.editing || root.segments.length == 0;
+    changed path => { root.draft = root.path; root.editing = false; }
+    changed enabled => {
+        if root.enabled && root.return-focus {
+            root.return-focus = false;
+            edit-button.focus();
+        }
+    }
+    function edit-path() {
+        root.editing = true;
+        path-input.focus();
+    }
+    function submit-path() {
+        if root.enabled && !root.draft.is-empty {
+            root.editing = false;
+            root.open-path(root.draft);
+        }
+    }
+    function open-path(path: string) {
+        root.return-focus = true;
+        root.navigate(path);
+        if root.enabled {
+            root.return-focus = false;
+            edit-button.focus();
+        }
+    }
+    capture-key-pressed(event) => {
+        if root.enabled && (event.modifiers.control || event.modifiers.meta)
+            && (event.text == "l" || event.text == "L") {
+            root.edit-path();
+            return EventResult.accept;
+        }
+        if root.show-editor && event.text == Key.Escape {
+            root.draft = root.path;
+            root.editing = false;
+            edit-button.focus();
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+    min-width: 0px;
+    height: root.control-height;
+    horizontal-stretch: 1;
+
+    HorizontalLayout {
+        spacing: Theme.space-sm;
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-back.svg");
+            height: root.control-height;
+            accessible-name: @tr("Back");
+            enabled: root.enabled && root.can-go-back;
+            clicked => { root.back(); }
+        }
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-forward.svg");
+            height: root.control-height;
+            accessible-name: @tr("Forward");
+            enabled: root.enabled && root.can-go-forward;
+            clicked => { root.forward(); }
+        }
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-up.svg");
+            height: root.control-height;
+            accessible-name: @tr("Parent directory");
+            enabled: root.enabled && root.can-go-up;
+            clicked => { root.up(); }
+        }
+        path-surface := Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            background: Theme.sftp-path-surface;
+            border-radius: Theme.radius-small;
+            border-width: Theme.hairline;
+            border-color: Theme.divider.with-alpha(0.45);
+            clip: true;
+            HorizontalLayout {
+                visible: !root.show-editor;
+                padding-left: Theme.space-xs;
+                padding-right: Theme.space-xs;
+                for segment[index] in root.segments : HorizontalLayout {
+                    min-width: 0px;
+                    max-width: root.compact && !segment.current
+                        ? 0px : Theme.sftp-breadcrumb-max-width + Theme.space-md;
+                    horizontal-stretch: root.compact && !segment.current ? 0 : (segment.current ? 3 : 1);
+                    if index > 0 && !root.compact : Image {
+                        width: Theme.space-md;
+                        height: Theme.sftp-control-icon-size;
+                        source: @image-url("../icons/sftp-forward.svg");
+                        colorize: Theme.muted;
+                        image-fit: contain;
+                    }
+                    if !root.compact || segment.current : PathCrumb {
+                        segment: segment;
+                        enabled: root.enabled;
+                        activated => { root.open-path(segment.path); }
+                    }
+                }
+            }
+            path-input := FlatTextInput {
+                visible: root.show-editor;
+                width: parent.width;
+                height: parent.height;
+                text <=> root.draft;
+                placeholder-text: @tr("Path");
+                control-min-height: root.control-height;
+                enabled: root.enabled;
+                accepted(path) => { root.submit-path(); }
+            }
+        }
+        edit-button := SftpIconButton {
+            icon: root.show-editor ? @image-url("../icons/sftp-forward.svg") : @image-url("../icons/sftp-edit.svg");
+            height: root.control-height;
+            accessible-name: root.show-editor ? @tr("Open") : @tr("Edit path");
+            enabled: root.enabled && (!root.show-editor || !root.draft.is-empty);
+            clicked => { if root.show-editor { root.submit-path(); } else { root.edit-path(); } }
+        }
+    }
+}
