@@ -9,6 +9,7 @@ macOS 与 Linux Codecov job 编译的原生代码不同，本机结果不能代�
 ```bash
 cargo install cargo-llvm-cov --locked
 rustup component add llvm-tools-preview
+mkdir -p target/coverage
 cargo llvm-cov --locked --offline --workspace --lcov --output-path target/coverage/after.lcov
 cargo llvm-cov report --html --output-dir target/coverage
 ```
@@ -25,6 +26,10 @@ LLVM tools 必须与当前工具链匹配。冷缓存下 Skia build script 仍�
 | `src/app/behavior_tests.rs` | 生成的 Slint callback、应用控制器、model 和真实 Telnet worker | 子进程中的无窗口 event-loop proxy、loopback TCP；按键/粘贴/焦点字节、resize、模态/身份闸门、断开与 Tab 保留 |
 | `src/app/connection_monitor/behavior_tests.rs` | SSH event monitor 与 AppState 状态转换 | 有界事件流；输出解析、延迟、安全重试、SFTP 状态与旧 attempt 拒绝 |
 | `src/app/connection/direct/behavior_tests.rs` | Telnet/Serial 共用 event monitor | 实际事件适配；输出、失败、重连调度、EOF 和替换 attempt |
+| `src/app/local_directory_watch/tests.rs` | 生产通知循环、去抖、重试和本地目录导航门禁 | 私有后端与暂停 Tokio 时钟；突发通知、切目录、进行中刷新、注册失败、取消和 Tab 关闭 |
+| `src/app/connection/worker_start/tests.rs` | 认证阶段转换与实际 SSH/SFTP worker 创建 | profile/target/phase 校验、重复启动拒绝、loopback listener 和有界关闭；不绕过信任 |
+| `src/app/terminal_bridge/clipboard/tests.rs` 和 `src/app/behavior_tests.rs` 的剪贴板用例 | 授权过期、拒绝与 OSC 52 响应 | 注入读取器和真实 Telnet 字节；外部窗口、长度上限、权限撤销、旧 token 与一次性授权 |
+| `src/app/terminal_media/tests.rs` | 转录/剪贴板粘贴、图像准备和任务/文件所有权 | loopback transport、注入剪贴板内容、PNG 校验、私有本地文件、取消与迟到结果拒绝；不访问录音设备 |
 | `src/ssh/worker/behavior_tests.rs` | 实际 SSH Handler 与 russh channel 上的 SFTP worker | 确定性公钥/显式信任快照、内存协议 peer；下载/上传字节、冲突决策、编辑保护、取消清理与子系统失败 |
 | `src/serial/worker_tests.rs` | 实际有界串口 worker | 注入端口获取与 duplex/错误 stream；粘贴完整性、接收时间、EOF、背压与阻塞写入关闭 |
 | `src/audio/worker_tests.rs` | 实际采集控制器、blocking worker 与 PCM 转换 | 注入权限/设备源；启动结果、错误、溢出、取消和设备关闭前仍持有租约 |
@@ -59,3 +64,33 @@ LLVM tools 必须与当前工具链匹配。冷缓存下 Skia build script 仍�
 `after-summary.json` 和 `html/index.html`；最终验证记录在[实施跟踪](project-implementation-tracker/current.md)。
 新增 fixture 也增加可执行行数，因此同时关注比例与新命中的既有源码行。
 原生 GUI、硬件、系统凭据后端和真实服务器路径仍按各自人工验证边界验收。
+
+## 2026-10-13 低覆盖补测
+
+本轮使用 macOS ARM64、Rust 1.99.0 和 cargo-llvm-cov 0.9.1。
+基线以 `--test-threads=1` 通过 804 项；最终以相同参数通过 820 项。
+另一次完整普通与插桩运行均以默认并发通过 820 项。下表使用归一化 LCOV `DA` 行，
+与文件树对照一致；LLVM JSON/HTML summary 采用不同聚合，不能混用计数。
+
+| 范围 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 归一化 `src/` 总计 | 64.80%（29,012/44,770） | 66.12%（29,615/44,792） |
+| `src/app/` | 56.46%（15,329/27,152） | 58.59%（15,921/27,174） |
+| `local_directory_watch.rs` | 0.00%（0/107） | 75.19%（100/133） |
+| `terminal_bridge/clipboard.rs` | 0.00%（0/88） | 89.00%（89/100） |
+| `connection/worker_start.rs` | 0.00%（0/146） | 97.95%（143/146） |
+| `terminal_media.rs` | 10.73%（60/559） | 43.46%（236/543） |
+
+媒体测试已移到独立测试文件。它的纯生产代码基线为 6.55%（35/534）；
+移除 inline 测试改变分母，不能只用原始比例衡量。对照不变业务行并排除 inline 测试后，
+新增命中 578 行既有代码。新增测试使用独立文件，不计为生产代码覆盖。
+
+目录监听取消现在清理注册，即使任务尚未首次 poll；监听路径变化时清空旧通知。
+剪贴板注入保留全部授权和身份复核。macOS 音频 helper fixture 共用仅测试启用的异步门禁：
+实际采样观察到并发 fixture shell 在执行脚本前阻塞于 dyld 启动通知。
+Linux 保留并发 fixture；生产 helper、超时和 CI 并发参数未改。启动失败保留隔离 stderr 诊断。
+
+报告位于 ignored `target/coverage/`：`codecov-serial.lcov`（基线）、
+`low-coverage-after-serial.lcov`（相同参数对比）、`low-coverage-after.lcov`（默认并发）、
+`low-coverage-comparison.json` 和 `low-coverage-html/html/index.html`。
+原生剪贴板/窗口、录音和真实 SSH 服务路径仍按各自人工验证边界验收。

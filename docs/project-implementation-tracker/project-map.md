@@ -40,6 +40,8 @@
 | `src/ssh/worker/behavior_tests.rs` | loopback SSH/SFTP 协议 peer 与 worker 回归 | `Peer`、`FilePeer`、`Fixture` | 显式信任快照、冲突/编辑/取消、真实 Handler 的默认拒绝 |
 | `src/audio/worker_tests.rs`、`src/serial/worker_tests.rs` | 注入设备边界的实际 worker | `CaptureSource`、`DeviceLease`、`BrokenPort` | 音频租约/取消/错误，串口背压/输入/EOF/关闭 |
 | `src/credentials/behavior_tests.rs`、`src/logging/behavior_tests.rs` | 内存凭据与隔离日志生命周期 | `MemoryKeyring`、`LoggingGuard::init_in` | 无真实 keyring、密文备份/AAD、子进程 panic/flush |
+| `src/app/local_directory_watch/tests.rs`、`src/app/terminal_bridge/clipboard/tests.rs` | 通知 worker 与 OSC 52 授权回归 | 暂停时钟、私有后端、一次性 token/connection generation | 去抖/重试/切目录/取消与授权过期；实际 clipboard 字节在 headless callback fixture 验证 |
+| `src/app/connection/worker_start/tests.rs`、`src/app/terminal_media/tests.rs` | worker 启动和媒体生命周期回归 | phase/profile/target gate、paste/PNG/job owner | loopback listener/transport、私有临时文件；不访问真实凭据/录音设备 |
 | `docs/coverage.md`、`docs/coverage.zh.md` | 双语 coverage 复现与边界说明 | 测试边界、测量记录 | 同平台 LCOV、原生未覆盖项与 artifact 位置 |
 | `src/app/remote_edit.rs`、`src/sftp/edit.rs` 及各自 `tests.rs` | 外部编辑副本/监听和 guarded 字节回传；大小上限由 Settings > SFTP 的 remote_edit_max_file_mib 控制 | `RemoteEdit`、`read_edit_file`、`write_edit_file` | 系统关联程序、原子保存、迟到结果、冲突及副本保留 |
 | `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
@@ -213,7 +215,7 @@
 
 ## 刷新规则
 
-- 最近依据：2026-10-13 代码职责合规修复及现代子模块拆分；2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
+- 最近依据：2026-10-13 低覆盖行为补测、通知取消清理与 macOS helper fixture 诊断；2026-10-13 代码职责合规修复及现代子模块拆分；2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
 - 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
