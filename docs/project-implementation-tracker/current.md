@@ -15,7 +15,7 @@
 
 ## 当前状态
 
-- 阶段：实施中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -30,7 +30,7 @@
 | C4 | completed | 完整本机门禁和最终 diff | fmt/check/严格 Clippy/test、ARM64 CI 命令 | GUI 验收由用户进行 |
 | C5 | completed | 源码/回归和文档/记录两组本地提交 | staged diff、commit 和最终工作区核对 | 用户已授权提交；保存到本地分支 |
 | C6 | completed | 主目录 master 合并与本机验证 | 合并 diff、光标/呈现回归和完整 Rust 门禁 | 保留 SFTP 修复；不改写已有提交 |
-| C7 | in_progress | 推送 origin/master 并核对远端 | 普通 push、远端 SHA 和干净工作区 | 用户明确授权；网络失败用本机 7897 代理 |
+| C7 | completed | 推送 origin/master 并核对远端 | 普通 push、远端 SHA 和干净工作区 | 直连成功；未使用代理 |
 
 ## 已完成
 
@@ -47,13 +47,15 @@
 - 用户明确要求创建提交；index 为空，工作区仅含本轮 10 个 Rust 和 6 个文档文件，ignore 已覆盖 target、日志、macOS/Python 缓存。
 - 本地分支 `codex/standard-terminal-cursor` 保存提交；源码和回归提交为 `50c9e9b`，双语文档与本记录作为下一组独立提交交付。
 - 用户追加授权将 `50c9e9b`、`1dc8956` 合并到主目录 master 并推送远端；直连 fetch 成功，起始 master/origin 均为 `52a4272`。
-- 分支已无冲突合并到主目录 index，保留现有 SFTP 修复；源码与已验证的光标分支一致，合并后的本机门禁全部通过。
+- 正常合并提交 `942f202` 已保存两个光标提交并保留现有 SFTP 修复；主目录源码与已验证的光标分支一致，合并后的本机门禁全部通过。
+- 合并提交已普通推送到 origin/master；独立 ls-remote 返回 `942f20211d374baea5480eb02af7fa74cf91cbe9`，与本地 HEAD 一致，核验时工作区干净。直连成功，未使用代理；本记录随后由独立文档提交收尾。
 
 ## 验证
 
 - 已完成：本轮实现、9 个 cursor/12 个呈现调度测试、fmt/check/严格 all-target Clippy、836 个 Rust 测试、ARM64 target check/严格 Clippy/build、diff、6 个 Markdown 相对链接和技能校验；tracker 与 HEAD 比较无新增错误，85 个历史格式错误保留。
 - 已完成：主目录合并后的 9 个 cursor/12 个呈现调度回归、fmt、locked/offline check、严格 all-target Clippy、391 library + 445 binary（836）完整 Rust 测试、6 个相对链接及技能校验；tracker 忽略因新增条目而变化的编号后仍为 85 个历史错误，无新增错误。
-- 未完成：远端同步；用户 GUI/LLM CLI 实际场景验收；Windows/Linux 原生 runner 验证由 CI 负责。
+- 已完成：合并提交普通 push、远端 master SHA 与本地 HEAD 核对、工作区检查。
+- 未完成：用户 GUI/LLM CLI 实际场景验收；Windows/Linux 原生 runner 验证由 CI 负责。
 
 ## 风险与阻塞
 
@@ -64,9 +66,8 @@
 
 ## 下一步
 
-- 创建合并提交，推送 origin/master 并核对远端 SHA。
 - 用户退出旧版后运行 `./target/aarch64-apple-darwin/debug/ax_ssh`，验证原来的 LLM CLI 场景。
 
 ## 最后更新时间
 
-- 2026-10-13 18:22 +0800
+- 2026-10-13 18:24 +0800
