@@ -182,11 +182,26 @@ browsers keep the available height. After a transfer appears, use the bar's
 chevron to expand or collapse the transfer list; the horizontal divider remains
 available for manual sizing.
 
-Each browser's title row has **Hidden**, copy path, and **Refresh**. Hidden
-includes dot files in that browser, including Local files. Copy path and
-Refresh appear when the pane has room, including for selected-file actions.
-The path row has
-**Back**, **Forward**, **Parent directory**, the path field, and **Open**.
+Each browser's title row makes **Download** (remote to local) or **Upload**
+(local to remote) the primary action. Its arrow shows the direction, and a
+selection adds the number of selected entries to the label. The action is
+available only with a ready selection and destination. **Refresh** uses an icon;
+copy path and remote **Edit** remain secondary controls when there is room.
+**Hidden** includes dot files in that browser: it stays in the title row on wide
+panes and moves to the status row on narrow panes.
+
+The path row has **Back**, **Forward**, **Parent directory**, and clickable path
+segments. Hover a segment to see its complete navigation target. At most six
+segments are shown; a deep path keeps the root, an ellipsis for the nearest
+omitted parent, and the final four segments. Narrow panes show the current
+directory, while the navigation and edit controls remain available. Select
+**Edit path** to enter the original path, then press Enter or the arrow button
+to open it; Escape returns to the current directory display. Control/Command+L
+also starts editing while a path control has focus. Unsupported or relative
+presentation paths remain in the full-path editor rather than guessing
+ancestor targets. Remote paths follow POSIX rules; local Windows paths preserve
+drive, UNC, and supported extended prefixes.
+
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit
 was elsewhere. A successful parent navigation can be reversed with Back. The
@@ -196,7 +211,7 @@ Refresh reloads the displayed directory without changing
 Back or Forward history; Forward becomes available after going Back.
 
 Enter an absolute path, a path relative to the
-current directory, or `~` in the remote browser, then use **Open**; double-click
+current directory, or `~` in the remote browser through **Edit path**, then press Enter or **Open**; double-click
 a folder to enter it. The remote browser starts at the SSH profile's configured
 default directory. The local browser starts at its configured directory (or the
 platform home directory when that value is empty), and reads only bounded file

@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：代码职责与 AGENTS.md 合规修复；凭据迁移、私有持久化、SFTP/terminal/config/state/UI 子模块拆分，保持工具链、依赖和 CI target 矩阵。
+- 当前环境范围：SFTP 主操作、视觉层次、统一图标和有界路径分段导航；保持工具链、依赖、配置 schema 与 CI target 矩阵。
 
 ## 运行环境
 
@@ -12,6 +12,8 @@
 - CI target 矩阵：`x86_64-pc-windows-msvc`、`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`、`aarch64-apple-darwin`、`x86_64-apple-darwin`。
 
 ## 测试环境
+
+- 本轮 SFTP 最终源码：60 专项与 842 完整 Rust 测试（391 library + 451 binary）、fmt、locked/offline check 和严格 all-target Clippy 已通过；ARM64/Intel macOS 的 CI 同款 check/严格 all-target Clippy/build 和 Mach-O 架构核对全部通过；不运行 Intel 非原生测试。665 × 11 翻译、8 Python、119 文档相对链接、九个 SVG 与 skill/tracker/staged diff 已通过；实际 GUI/焦点仍待用户验收。
 
 - 2026-10-12 覆盖率环境：本机 rustc/Cargo 1.97.1、rustfmt 1.9.0、Clippy 0.1.97、Python 3.10.20，ARM64/Intel macOS target 均可用；已安装 cargo-llvm-cov 0.9.1 与匹配 LLVM tools，后者归档 SHA-256 与工具链 manifest 一致。原生基线默认并发 770 项通过，最终普通/插桩 799 项通过。Skia 下载失败使用经核验的同版本/架构/特性本机归档恢复；项目依赖/工具链/CI 未改。
 - 最终覆盖率验证：386 library + 413 binary（799）在普通/插桩模式均默认并发通过；fmt、locked/offline check、严格 all-target Clippy、CI 同款 ARM64 check/Clippy 通过。canonical src 从 57.96% 升至 65.78%；报告在 `target/coverage/`。Intel/Windows/Linux 本轮未验证，线上 Codecov 待原生 CI，真实设备/keyring/GUI 未访问。
@@ -697,3 +699,20 @@ git diff --check
 - 验证：fmt/check/严格 all-target Clippy/完整 test（391 + 413 = 804）；ARM64/Intel CI 同款 check/Clippy/build 与对应 Mach-O 架构；22 Python、665 × 11 翻译、145 Markdown 相对链接、skill/tracker/diff 全通过。
 - 程序：`target/aarch64-apple-darwin/debug/ax_ssh` 与 `target/x86_64-apple-darwin/debug/ax_ssh`，不执行 Intel 非原生测试。
 - 边界：Windows/Linux 交原生 CI；真实 keyring/GUI/SSH 和设备由用户验收，无自主截图。施工和本机验证完成，提交推送已授权。
+
+## 2026-10-13 23:10 +0800 SFTP 四项视觉施工预检
+
+- 项目边界：独立 Rust/Slint 应用的 SFTP 视图与展示模型，不调整 transport、凭据、配置 schema 或侧栏/路由。
+- 环境记忆：核对 Cargo.toml/Cargo.lock/build.rs/CI、项目地图与源码；Rust 2024/MSRV 1.92.0、Slint 1.18.1/russh 0.64.1 保持。
+- 本机：Rust/Cargo 1.97.1，ARM64/Intel macOS target 已安装；已有同版本/架构/特性 Skia 归档可供临时构建缓存。
+- 验证命令：Cargo fmt/check/严格 all-target Clippy/test，两个 macOS target 的 CI 同款 check/Clippy/build；translation/link/skill/tracker/diff 校验。
+- 环境变化：无依赖、工具链或 CI 变化；Windows/Linux SDK 不可用，Intel 不执行测试。GUI 视觉/键盘/焦点以用户提供截图/确认验收，不自主截图。
+- 开工判定：允许开工；先落盘实施计划，再修改实现。
+
+## 2026-10-14 00:12 +0800 SFTP 四项视觉最终环境验证
+
+- 环境：Rust 2024/MSRV 1.92.0、本机 Rust/Cargo 1.97.1、锁定依赖和 CI 矩阵保持。
+- 构建：使用匹配 tag 0.153.3/架构/特性 key 的已核验 Skia 本机归档作为临时 file URL，HTTP(S) 代理仅作用于命令，端口 7897。
+- 验证：60 专项、842 完整 Rust、fmt、locked/offline check/严格 Clippy；两 macOS target 的 CI 参数 check/严格 Clippy/build 和 Mach-O arm64/x86_64；665 × 11 翻译、8 Python、119 相对链接、九个 SVG、skill/tracker/staged diff 均通过。
+- 程序：`target/aarch64-apple-darwin/debug/ax_ssh`、`target/x86_64-apple-darwin/debug/ax_ssh`。Intel 仅编译链接，Windows/Linux 交原生 CI；GUI/键盘/焦点由用户运行新版验收，不自主截图。
+- 开工判定：施工和本机自动验证完成，提交推送已授权；用户视觉验收待完成。

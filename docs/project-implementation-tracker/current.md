@@ -2,72 +2,61 @@
 
 ## 当前目标
 
-- 目标 ID：20261013-standard-terminal-cursor
-- 目标：按标准终端语义发布光标，移除光标隐藏的固定等待，并在绘制前有界处理已经到达的 worker 事件。
-- 交付物：简化的终端显隐状态、四协议共用的有界事件处理策略、分包/同步/持续输出回归、双语架构、实施记录、两组本地 Git 提交及主目录 master 合并/远端同步。
+- 目标 ID：20261013-sftp-actions-and-navigation
+- 目标：按用户截图与选定四项改进 SFTP 主操作、区域层次、导航控件和长路径分段导航。
+- 交付物：带方向和选中数量的上传/下载入口；统一 SVG 控件与主题层次；有界的跨平台路径分段模型及编辑模式；双语说明、翻译、回归、编译与交付记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/state*`、`src/app/terminal_presentation.rs`、SSH/Local/Telnet/Serial monitor、相关测试、`docs/architecture*.md`、实施记录及 Git master/origin 同步。
-- 不在本轮范围内：依赖/工具链升级、光标外观或闪烁设置、应用安装、真实 SSH/SFTP 服务访问、tag 和发布。
-- 所有权：终端模型维护协议光标和同步状态；应用 monitor 有界处理已到达事件并发布 snapshot；Slint 只绘制。SSH 信任、凭据和 transport 生命周期不变。
+- 当前范围：`ui/sftp/`、`ui/sftp-pane.slint`、SFTP 控件/图标与 Theme、`src/app/view/` 的展示模型映射、翻译、双语 usage/architecture 和环境/实施记录。
+- 不在本轮范围内：空传输区折叠行为、侧栏/页面路由或全局主题开关、SSH trust/认证、transport/worker、配置 schema、依赖/工具链/CI 与 tag/Release。
+- 所有权：应用展示层从当前路径生成小型 owned 分段模型；Slint 负责编辑状态、视觉和已有导航/传输意图；原 worker 校验、限制、取消与发布流程保持。
+- 安全：不在 UI 访问文件系统/网络；路径模型数量与重复文本有界，remote 按 POSIX、local 按平台规则处理；不新增秘密或协议句柄。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
+- 交付：沿用用户先前提交并 push 的授权；网络错误采用本机 7897 命令级代理。GUI 视觉/焦点验收按 AGENTS.md 交给用户提供截图。
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| C1 | completed | 移除 24ms 显隐等待和状态 | 显隐、脏行、同步输出回归 | 仅标准 2026 帧可保留旧画面 |
-| C2 | completed | 四协议在重绘前有界处理已到达事件 | 分包重绘、处理预算、空/关闭队列 | 无新增计时等待或输出缓冲区 |
-| C3 | completed | 双语架构、地图和来源说明 | 相对链接、tracker/skill validator | 不修改历史实施条目 |
-| C4 | completed | 完整本机门禁和最终 diff | fmt/check/严格 Clippy/test、ARM64 CI 命令 | GUI 验收由用户进行 |
-| C5 | completed | 源码/回归和文档/记录两组本地提交 | staged diff、commit 和最终工作区核对 | 用户已授权提交；保存到本地分支 |
-| C6 | completed | 主目录 master 合并与本机验证 | 合并 diff、光标/呈现回归和完整 Rust 门禁 | 保留 SFTP 修复；不改写已有提交 |
-| C7 | completed | 推送 origin/master 并核对远端 | 普通 push、远端 SHA 和干净工作区 | 直连成功；未使用代理 |
+| U1 | completed | 环境预检、页面/应用契约、截图与 plan-first 计划 | manifest/lock/build/CI、工具链、地图和现有 callback 核对 | Rust 2024/MSRV 1.92.0；本机 1.97.1，两个 macOS target |
+| U2 | completed | 显著上传/下载、方向/数量、统一图标和主题层次 | 既有 callback 与 readiness/selection 条件、Cargo Slint 重编 | 保留紧凑双栏表格和既有分页/排序 |
+| U3 | completed | 有界路径分段导航与原始路径编辑模式 | POSIX/Unicode/Windows drive/UNC/deep path 及模型稳定性回归 | 复用 list-directory，不新增 transport API |
+| U4 | completed | 双语说明、翻译、项目地图与实施记录 | translation/link/skill/tracker 校验 | 新用户文本覆盖已有 11 个语言目录 |
+| U5 | completed | 定向与完整 Rust/Slint/可用平台门禁 | fmt/check/严格 all-target Clippy/test、两个 macOS target check/Clippy/build、diff | 不运行 Intel 非原生测试；Windows/Linux 交原生 CI |
+| U6 | in_progress | 分项提交与 push、远端 SHA 核对 | 显式暂存/index 审查、push/ls-remote、最终状态 | 不改全局代理或历史 |
+| U7 | pending | 用户 GUI 视觉和键盘/焦点验收 | 用户运行新版并确认/提供截图 | 代理不自行捕获或检查应用截图 |
 
 ## 已完成
 
-- 用户授权改为标准实现；工作区干净。此前已检查行列映射、Slint overlay、显隐和同步输出源码。
-- 前轮 6 个显隐/4 个同步相关测试通过，隔离探针验证正常复位顺序、任意字节分包和同步超时；探针未保留到仓库。
-- 核对 xterm DECTCEM、同步输出协议和锁定 Alacritty 的有界读取后唤醒路径；150ms 同步超时沿用上游。
-- 本机 Rust 1.99.0、原生 ARM64 和共享 Cargo cache 可用；保留 Rust 2024/MSRV 1.92 及全部 CI target。
-- 删除隐藏合并常量、deadline、初始化和保留旧帧分支；只有标准同步输出保留最近发布帧，脏行仍合并。
-- 四协议 monitor 共用 64 事件处理预算；预算用完让出 Tokio，再优先已经到期的呈现；空/关闭队列不加等待。
-- 首批 9 个 cursor 相关测试通过，覆盖立即显隐、scrollback/resize/断开、任意字节分包和已到达重绘片段的光标复位。
-- 12 个呈现调度测试通过，包含 64 事件预算和空/关闭队列回归；双语架构、地图与来源记录已同步。
-- 完整 391 library + 445 binary（836）测试通过；默认与原生 ARM64 的严格编译/lint 门禁通过，可运行 ARM64 程序已生成。
-- 最终 diff 只含本轮终端状态、monitor/呈现回归与双语文档；无参考项目耦合、秘密日志、新输出队列、UI 阻塞或 public API 扩展。
-- 用户明确要求创建提交；index 为空，工作区仅含本轮 10 个 Rust 和 6 个文档文件，ignore 已覆盖 target、日志、macOS/Python 缓存。
-- 本地分支 `codex/standard-terminal-cursor` 保存提交；源码和回归提交为 `50c9e9b`，双语文档与本记录作为下一组独立提交交付。
-- 用户追加授权将 `50c9e9b`、`1dc8956` 合并到主目录 master 并推送远端；直连 fetch 成功，起始 master/origin 均为 `52a4272`。
-- 正常合并提交 `942f202` 已保存两个光标提交并保留现有 SFTP 修复；主目录源码与已验证的光标分支一致，合并后的本机门禁全部通过。
-- 合并提交已普通推送到 origin/master；独立 ls-remote 返回 `942f20211d374baea5480eb02af7fa74cf91cbe9`，与本地 HEAD 一致，核验时工作区干净。直连成功，未使用代理；本记录随后由独立文档提交收尾。
+- 已读取截图、AGENTS.md、Rust/Slint 与相关引用、项目地图、环境和既有 UI/应用映射源码。
+- 工作区起始干净；Rust/Cargo 1.97.1、ARM64/Intel macOS target、edition 2024/MSRV 1.92.0 和锁定依赖保持。
+- 已核对主操作可复用现有上传/下载 callback；原 toolbar Upload 条件与本地导航不兼容，属于本轮修正范围。
+- 页面入口和侧栏不变；前端清晰度规则限于用户选定的四项。先落盘计划，再改实现。
 
 ## 验证
 
-- 已完成：本轮实现、9 个 cursor/12 个呈现调度测试、fmt/check/严格 all-target Clippy、836 个 Rust 测试、ARM64 target check/严格 Clippy/build、diff、6 个 Markdown 相对链接和技能校验；tracker 与 HEAD 比较无新增错误，85 个历史格式错误保留。
-- 已完成：主目录合并后的 9 个 cursor/12 个呈现调度回归、fmt、locked/offline check、严格 all-target Clippy、391 library + 445 binary（836）完整 Rust 测试、6 个相对链接及技能校验；tracker 忽略因新增条目而变化的编号后仍为 85 个历史错误，无新增错误。
-- 已完成：合并提交普通 push、远端 master SHA 与本地 HEAD 核对、工作区检查。
-- 未完成：用户 GUI/LLM CLI 实际场景验收；Windows/Linux 原生 runner 验证由 CI 负责。
+- 已完成：环境/契约预检、最终 Slint 重编；60 项 SFTP 专项、391 library + 451 binary（842）完整测试、fmt、locked/offline check 和严格 all-target Clippy 通过。665 消息 × 11 目录、8 Python 翻译测试、119 个仓库文档相对链接、九个 SVG 与 skill/tracker/staged diff 校验通过。窄栏零宽、上传回调和焦点恢复均纳入最终源码。
+- 已完成：ARM64/Intel macOS 的 CI 同款 check、严格 all-target Clippy 与 build；Mach-O arm64/x86_64 核对。整个最终门禁期间源码 SHA-256 未变化；未执行 Intel 非原生测试。
+- 未完成：提交推送、用户 GUI 视觉/键盘/焦点验收；Windows/Linux 原生构建交 CI。
 
 ## 风险与阻塞
 
-- 标准实现仍会显示未被应用隐藏或同步保护的光标移动；不能承诺所有 CLI 或超时帧均无闪跳。
-- 不捕获或检查应用截图；实际 LLM CLI 的视觉验收由用户完成。
-- 本机没有 Windows MSVC/Linux 原生 SDK，这些平台保留 CI 验证。
-- tracker 历史存在既有格式错误；本轮验证区分基线与新增条目。
+- 狭窄双栏需优先保留主操作，辅助控件按宽度收敛；长路径模型不能造成无界重复字符串或 UI 子项。
+- Windows 本地路径与 remote POSIX 必须分开，不能按本机 Path 规则解释远端路径。
+- GUI 渲染、键盘与焦点由用户验收；不使用代理自主截图，Windows/Linux SDK 不可用。
 
 ## 下一步
 
-- 用户退出旧版后运行 `./target/aarch64-apple-darwin/debug/ax_ssh`，验证原来的 LLM CLI 场景。
+- 分项提交和 push，核对远端 SHA 与工作区；用户随后运行 `target/aarch64-apple-darwin/debug/ax_ssh` 验收页面和键盘/焦点。
 
 ## 最后更新时间
 
-- 2026-10-13 18:24 +0800
+- 2026-10-14 00:12 +0800

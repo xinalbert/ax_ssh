@@ -135,7 +135,10 @@
 | `src/telnet.rs` | Telnet transport 与 worker | `TelnetFrameBuffer`、`TelnetSessionHandle`、`TelnetSessionEvent` | 明文 TCP、64 KiB 完整帧组装、IAC 过滤、选项拒绝、NAWS、有界队列、同尺寸 watch 去重；输出非空时才启动一次性 16ms flush，空闲连接不循环 tick；保留取消和分片/loopback 回归 |
 | `src/serial.rs` | Serial 发现、身份解析与 worker | `discover_serial_ports`、`resolve_serial_port`、`SerialSessionHandle` | 只读枚举、稳定 USB 匹配、歧义拒绝、串口参数、设备 I/O 和有界关闭；发现不得自动打开 |
 | `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`SftpNativeDropRegion`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar`、`execute-menu-command` | Rust property/callback 接口、共享 event loop 的多窗口标记、Windows/Linux 无边框顶栏与隐藏快捷键菜单、macOS 原生标题栏、统一菜单动作、Rust 发布的稳定 menu-state 布尔值、Terminal Edit accelerator、平台修饰键的 terminal target hover/activate、直接 Tab UUID 的 Move/Return/terminal/divider callbacks，以及顶栏偏移后的终端呈现和 SFTP 原生拖放几何；不在此保存选区或局部草稿 |
-| `ui/components/sftp-controls.slint` | 可复用 SFTP 操作与路径按钮 | `SftpActionButton`、`SftpPathCopyButton` | 有界高度、键盘/无障碍 button 语义、Tooltip 与 SFTP 视觉 token；不保存 SFTP 状态或执行 I/O |
+| `ui/components/sftp-controls.slint`、`ui/icons/sftp-*.svg` | SFTP 有界图标/文本操作按钮及统一矢量资源 | `SftpActionButton`、`SftpIconButton`、`SftpPathCopyButton` | 方向/选中数量、hover/focus/禁用状态、Tooltip/键盘语义，样式来自 Theme |
+| `ui/sftp/path-bar.slint`、`src/app/view/sftp/paths.rs` | 分段导航与有界路径展示 | `SftpPathBar`、`PathCrumb`、`breadcrumbs`、`PathStyle` | 六段/4096 字节上限、POSIX/盘符/UNC、窄栏与编辑/焦点状态；不访问文件系统 |
+| `src/app/view/sftp.rs`、`src/app/view/terminal.rs` | 路径 ModelRc 映射及当前 snapshot dispatch | `sftp_path_rows`、`apply_sftp_snapshot`、`SftpPathKind` | 只在路径变化时生成分段，保留传输期间模型身份并复用原导航/传输回调 |
+| `src/app/view/tests/sftp_navigation.rs` | SFTP 端到端无窗口意图回归 | 主操作/compact 路径 pointer test | 宽窄栏上传/下载、不可用选择与零宽祖先目录点击；只验证事件/数值，不保存或查看图像 |
 | `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 显式接收显示文本、tooltip 覆盖、无障碍名称和 enabled，转发标准 Button 的 focus/pressed/click；仅真实溢出时显示有界全文 Tooltip，不保存业务状态 |
 | `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`native-sftp-drop-target-at`、`native-sftp-local-drop-region`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；主布局 SFTP/Terminal 仅在主窗口创建，detached 只保留一份可见组件与几何来源；Terminal surface 使用集中式顶部/底部外间距，detached 分屏入口归 macOS 原生标题栏；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、主/独立窗口均按 UUID 转发 `terminal-pointer-input` 等 terminal callback、SFTP 运行时分栏比例/Transfers 折叠，以及将条件 SFTP 组件的 Remote/Local 接收几何绑定为窗口坐标 DTO、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/icons/`、`ui/theme.slint` | 主/子窗口动作的共用矢量图像与外观 | `workspace-move-icon`、`workspace-return-icon`、`terminal-split-right-icon`、`terminal-split-down-icon` | 修改分屏/移出/返回图标时；原生 raster 从相同图像值生成 |
@@ -279,6 +282,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-13 23:54 +0800：SFTP 主操作、统一 SVG、分段导航与无窗口交互回归路由更新。
 
 - 2026-10-13 17:55 +0800：终端显隐移除固定等待，四协议新增有界事件处理和分包/预算回归。
 - 2026-10-13 17:00 +0800：SFTP 原生鼠标事件、文件承诺生命周期与行为回归路由更新。

@@ -132,6 +132,8 @@ The SFTP application facade composes private `sftp_bridge/{navigation,files,drag
 
 `CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
+SFTP path navigation uses an application-owned presentation model of at most six segments from a path of at most 4096 bytes. Only the root, nearest omitted parent and final segments allocate navigation strings; relative or unsupported prefixes fall back to the original editor. The UI consumes owned labels and exact prefix targets, keeps transient edit/focus state, and invokes the existing directory callback. Remote paths use POSIX syntax independently of the host; local Windows drive/UNC prefixes are preserved. Unchanged paths retain their model during transfer updates. Header Upload/Download actions reuse the existing selection and worker readiness contract; no persistence schema, transport API or credential boundary changes.
+
 ## Application icon ownership
 
 `assets/ion/terminal_icon.svg` is the only canonical icon source. The generated

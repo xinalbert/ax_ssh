@@ -1201,3 +1201,19 @@
 - 受影响文件：本轮 `src/`、`ui/`、双语 architecture/usage 和环境/实施记录。
 - 更新后的命令或环境：保留 locked/offline 门禁，两个 macOS target 使用 CI 同款 check/Clippy/build；Skia 外部下载停滞恢复为同版本/架构/特性完整本地归档的临时 file URL，临时 7897 代理可用，无全局修改。
 - 验证结果：804 Rust、22 Python、665 × 11 翻译、145 Markdown 相对链接、skill/tracker/diff 及两个 macOS 架构门禁全部通过；Intel 仅编译链接，Windows/Linux/真实系统后端与 GUI 保留原生 CI/人工边界。
+
+## 2026-10-13 23:10 +0800 SFTP 四项视觉施工环境预检
+
+- 日期：2026-10-13
+- 变化摘要：范围切换为 SFTP 操作/导航与样式；环境声明保持。
+- 受影响文件：`ui/`、`src/app/view/`、翻译和配套记录。
+- 更新后的命令或环境：Rust/Cargo 1.97.1、Rust 2024/MSRV 1.92.0、两个 macOS target，Cargo 锁定依赖；不改变 CI/配置 schema。
+- 验证结果：预检允许开工；自动门禁待实现，GUI 验收由用户执行，Windows/Linux 交原生 CI。
+
+## 2026-10-14 00:12 +0800 SFTP 四项视觉最终环境验证
+
+- 日期：2026-10-14
+- 变化摘要：Slint 页面/DTO 与有界路径展示完成，工具链/依赖/CI 保持。
+- 受影响文件：`ui/`、`src/app/view/`、11 个语言目录和双语/实施记录。
+- 更新后的命令或环境：锁定 offline Cargo 门禁、ARM64/Intel CI 同款 check/严格 all-target Clippy/build；临时匹配 Skia file URL 与 7897 代理，无全局设置变化。
+- 验证结果：60 专项、842 Rust、8 Python、665 × 11 翻译、119 相对链接、九个 SVG 与 skill/tracker/staged diff 通过，两架构 Mach-O 核对；实际 GUI/焦点与 Windows/Linux 原生验证待用户/CI 验收。
