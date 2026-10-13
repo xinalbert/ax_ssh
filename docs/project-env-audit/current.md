@@ -3,7 +3,7 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：应用控制器与 transport worker 的行为覆盖率提升；文件/设备/凭据边界隔离，保持 CPAL/Tokio/russh 和 CI target 矩阵。
+- 当前环境范围：代码职责与 AGENTS.md 合规修复；凭据迁移、私有持久化、SFTP/terminal/config/state/UI 子模块拆分，保持工具链、依赖和 CI target 矩阵。
 
 ## 运行环境
 
@@ -679,3 +679,21 @@ git diff --check
 - 环境变化：无工具链、依赖或 CI 变化；配置 schema v36，以默认 4 MiB 兼容旧文件。
 - 验证结果：24 项专项和 743 项全量测试、fmt/check/严格 all-target Clippy、native ARM64 build/Mach-O、562 条翻译、30 条链接、skill/tracker/diff 通过。
 - 验证边界：本轮只执行 native macOS；Intel/Windows/Linux 仍需 CI，GUI/系统关联/真实远端验收保留，不自行截图。开工判定：施工和本机自动验证完成。
+
+## 2026-10-13 代码职责合规施工预检
+
+- 项目边界：独立 Rust/Slint 桌面应用；本轮为 credentials/config/SFTP/application/UI 的错误处理和职责拆分。
+- 环境记忆状态：已读取并核对 manifest、Cargo.lock、build.rs、CI、架构和地图；Rust 2024/MSRV 1.92.0，Slint 1.18.1/russh 0.64.1，无依赖变化。
+- 运行环境：本机 rustc/Cargo 1.97.1，ARM64/Intel macOS target 已安装；Cargo 管理锁定依赖，UI 单入口仍为 ui/app.slint。
+- 测试环境：隔离 keyring/临时文件、loopback SFTP 和无窗口 Slint；locked/offline fmt/check/严格 all-target Clippy/test，两个可用 macOS target 按 CI 参数 check/Clippy/build。
+- 环境变化检查：否；不访问真实凭据、设备或远端，不截图；Windows/Linux SDK 不可用，交原生 CI。
+- 开工判定：允许开工；已先落盘计划，再进行代码施工。
+
+## 2026-10-13 08:37 +0800 代码职责合规最终环境验证
+
+- 范围：credentials/config/SFTP/application/state/UI 的错误处理、安全迁移和职责拆分。
+- 环境：Rust 2024/MSRV 1.92.0；本机 Rust/Cargo 1.97.1，锁定 Slint 1.18.1/russh 0.64.1；manifest/lock/build.rs/CI 未更改。
+- 构建恢复：依赖 build script 的下载不受 Cargo offline 控制。目标检查下载停滞后，以已校验 gzip/tar、tag 0.153.3 与各架构/特性 key 的本机 Skia 归档作为临时 SKIA_BINARIES_URL；临时 HTTP(S)_PROXY 使用用户指定的 127.0.0.1:7897，不改全局配置。
+- 验证：fmt/check/严格 all-target Clippy/完整 test（391 + 413 = 804）；ARM64/Intel CI 同款 check/Clippy/build 与对应 Mach-O 架构；22 Python、665 × 11 翻译、145 Markdown 相对链接、skill/tracker/diff 全通过。
+- 程序：`target/aarch64-apple-darwin/debug/ax_ssh` 与 `target/x86_64-apple-darwin/debug/ax_ssh`，不执行 Intel 非原生测试。
+- 边界：Windows/Linux 交原生 CI；真实 keyring/GUI/SSH 和设备由用户验收，无自主截图。施工和本机验证完成，提交推送已授权。

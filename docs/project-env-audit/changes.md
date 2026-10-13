@@ -1185,3 +1185,19 @@
 - 受影响文件：`docs/project-env-audit/current.md`、`docs/coverage.md`、`docs/coverage.zh.md`、`docs/project-implementation-tracker/current.md`。
 - 更新后的命令或环境：同一 Rust 1.97.1/cargo-llvm-cov 0.9.1/native ARM64；匹配的本机 Skia 归档仅通过临时环境变量使用；保留 locked/offline 和 CI 原有 target 矩阵。
 - 验证结果：普通/插桩均默认并发 799 项、fmt/check/严格 all-target Clippy、ARM64 CI 同款 check/Clippy、Markdown/skill/tracker/diff 全通过；canonical src 覆盖率 57.96% -> 65.78%，HTML/LCOV/JSON 已生成。Intel/Windows/Linux 和线上 Codecov 待原生 CI；真实设备、系统凭据和 GUI 未访问。
+
+## 2026-10-13 07:23 +0800 代码职责合规环境预检
+
+- 目的：确认代码错误处理、安全迁移和职责拆分可在现有环境实施。
+- 改动范围：`src/`、`ui/` 与配套双语文档和跟踪；不更改 manifest、lockfile、工具链或 CI。
+- 执行内容：核对 Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0、锁定 Slint/russh 和单 UI 构建入口；启动 baseline offline check。
+- 验证结果：轻量环境核对完成，允许开工；代码和目标门禁随后执行。
+- 风险/待办：系统凭据使用隔离实现；Windows/Linux/GUI 与真实后端人工验收保留。
+
+## 2026-10-13 08:37 +0800 合规施工最终构建与验证
+
+- 日期：2026-10-13
+- 变化摘要：工具链、依赖和 CI 未改变；代码职责及安全/错误边界修复完成。
+- 受影响文件：本轮 `src/`、`ui/`、双语 architecture/usage 和环境/实施记录。
+- 更新后的命令或环境：保留 locked/offline 门禁，两个 macOS target 使用 CI 同款 check/Clippy/build；Skia 外部下载停滞恢复为同版本/架构/特性完整本地归档的临时 file URL，临时 7897 代理可用，无全局修改。
+- 验证结果：804 Rust、22 Python、665 × 11 翻译、145 Markdown 相对链接、skill/tracker/diff 及两个 macOS 架构门禁全部通过；Intel 仅编译链接，Windows/Linux/真实系统后端与 GUI 保留原生 CI/人工边界。

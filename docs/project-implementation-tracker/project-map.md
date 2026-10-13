@@ -102,7 +102,7 @@
 | `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、Tab wrap、duplicate tab、pane transfer、SFTP transfer、SSH/SFTP companion、active prompt、attempt/credential isolation tests | 修改 Tab、pane、配对导航、认证 phase 或 attempt 生命周期后 |
 | `src/app/session_groups.rs` | 会话分组/展示/编辑辅助逻辑 | `session_groups`、`group_options`、`profile_endpoint`、`profile_sidebar_endpoint`、`profile_sidebar_details` | 持久化空 Group 与 profile 聚合、编辑器组选项、行内脱敏 sidebar endpoint 与完整非秘密悬停详情 |
-| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking`；读取有界超时、mutation 软截止、rollback 和隐藏随机保险库解锁材料 | 在 UI 线程外调用系统凭据库和加密保险库；默认自动解锁使用应用私有文件，旧 profile 缺少本地文件时才一次性读取并迁移旧 keyring 条目；读取可超时，保存/删除/回滚则等待不可取消的 blocking 操作完成后才释放持久化闸门；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时用原 CredentialStore 恢复记录，自动生成的保险库解锁密钥不进入 UI 或 profile JSON |
+| `src/app/credential_tasks.rs` | 凭据异步边界 | Tokio `spawn_blocking`；读取有界超时、mutation 软截止、rollback 和隐藏随机保险库解锁材料 | 在 UI 线程外调用系统凭据库和加密保险库；自动解锁密钥保存于系统凭据后端；旧本地文件只读迁移，成功保存后才清理；读取可超时，保存/删除/回滚则等待不可取消的 blocking 操作完成后才释放持久化闸门；短期秘密用 `Zeroizing` 跨任务并在 profile 事务失败时用原 CredentialStore 恢复记录，自动生成的保险库解锁密钥不进入 UI 或 profile JSON |
 | `src/app/serial_bridge.rs` | Serial 按需发现 bridge | `wire_serial_port_discovery`、`refresh_serial_ports`、`invalidate_serial_port_discovery` | Session Editor 进入 Serial 或显式刷新时枚举 descriptor，离开/关闭时清理并用 generation 丢弃迟到结果；启动不扫描，不得打开设备 |
 | `src/app/sftp_bridge.rs` | SFTP 浏览、本地打开、远端递归下载与 transfer intent bridge | `wire_sftp`、`handle_native_dropped_file_on_remote_pane`、`queue_remote_downloads`、`queue_native_remote_download`、`wire_selected_transfer_actions`、`navigate_sftp_tab_to_path`、`prepare_local_file_open`、`open_local_file`、`reveal_local_path` | 所有 SFTP UI intent 在 callback 时按来源窗口经 `WindowRouter::active_tab` 解析 Tab，并将该 UUID 传入状态/worker；不使用进程级 active Tab；只接受 connected 的 SFTP Tab 当前 snapshot；右键重命名确认前重新校验原始 Tab/路径、稳定目录及唯一选择；表头排序在 AppState 中切换；远端 `More` 请求下一页，本地 `More` 释放当前有界快照的下一页；Winit 外部文件仅在上游已确认 Remote files 目标后进入同一上传队列，桥接再次拒绝 loading 的远端目录；Slint DropArea 的内部拖放按本地/远端来源前缀分流为上传或下载；macOS 远端普通文件的 file-promise 仅在接受目标后进入明确本地路径下载，发起窗口的返回拖放使用开始时捕获的 local directory 和 Local files 原生区域；上传、Finder 拖入、远端选择下载和远端拖动均应用 AppSettings 的平台/自定义文件名过滤；远端选择发送当前 local directory 和小型下载根，暂停/继续/取消先校验 AppState；本地行与终态 transfer 的显示位置操作都在 blocking worker 重验非链接路径，bridge 不持有协议 session |
 | `src/app/local_directory_watch.rs` | SFTP 本地栏当前目录的文件系统事件监听 | `ensure_local_directory_watch`、`queue_local_change_refresh` | 每个已加载的 SFTP Tab 至多一条 Tokio 监听任务；只监听当前目录直接子项，单槽事件通道合并变化，延迟 150ms 后通过状态门禁与既有后台读取刷新；切换目录重新注册，关闭 Tab 退出；事件不可用时保留手动 Refresh |
@@ -114,7 +114,7 @@
 | `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SessionProfile::validate`、`RendererPreference`、`SoftwarePresentationMode`、`TerminalSemanticColors`、`SessionStore::validate`、`ConfigStore`、`MAX_CONFIG_FILE_BYTES`、profile/store 共享上限 | schema v36 增加远程编辑上限 remote_edit_max_file_mib（默认 4 MiB，1–64 MiB）；schema v34 增加配置文件专用的 `settings.appearance.system_icons_follow_theme`，默认 false 保留系统图标原色，Settings 预览/保存保留该值；schema v30 增加最多 8 条经过校验的 workspace 路径 MRU；旧 `sessions.json` 通过默认空列表兼容，历史只保存非敏感路径，不保存 snapshot/凭据；schema v29 保存默认 `encrypted-vault` 和应用私有自动解锁标记（兼容旧 keyring 字段名）；schema v27 保存 macOS CPU `layer-images`/`damage-backing-store` 呈现偏好，缺失/无效值默认使用 damage backing store，显式 `layer-images` 为兼容性回退；schema v25/v26 保存紧凑渲染、行 cache 和刷新上限；旧 `terminal_partition_strategy` JSON 字段作为未知字段忽略；schema v24 保存 `automatic`/`gpu`/`software` renderer 偏好；两个启动偏好只在首个 Slint window/surface 前应用；profile/store 上限、私有原子写入和 SSH-only 安全字段隔离不变 |
 | `src/config/workspace.rs` | 版本化、有界 workspace snapshot DTO 与 Tab/window/PaneTree 引用校验 | `WorkspaceSnapshot`、`WorkspaceTabSnapshot`、`WorkspaceWindowSnapshot`、`PaneNodeSnapshot`、`WindowPlacement` | 独立 `workspace.json` 或用户选定文件的运行时布局/文本路径边界；不保存 worker、live handle、凭据或临时 host-key 状态 |
 | `src/config/language.rs`、`src/config/language/tests.rs` | 静态语言策略与无 UI 的 locale 回归 | `UiLanguage`、`resolve_locale_in`、构建期注册表 include | 稳定 locale 配置、旧值兼容、精确/script/region/语言/英文回退；无 Slint、目录扫描、PO 解析或 worker |
-| `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore` | 显式选择时访问 Keychain/Credential Manager/Secret Service；默认自动解锁使用权限受限的应用私有文件，并兼容一次性旧 keyring 迁移；另含 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
+| `src/credentials.rs` | 系统凭据和加密保险库边界 | `CredentialStore`、`PasswordEntry`、`with_entry_factory` | 系统密码及自动解锁密钥使用 Keychain/Credential Manager/Secret Service；旧本地解锁文件迁移失败保留；另含 Argon2id + XChaCha20-Poly1305 profile 记录；回滚期间清零系统密码副本 |
 | `src/terminal.rs`、`src/terminal/model.rs`、`src/terminal/render.rs`、`src/terminal/selection.rs` 与 `src/terminal/input.rs` | 有界终端 DTO、模型生命周期/scrollback、增量可见行 snapshot、cell 样式/光标、选区映射、按键与 mouse/focus reporting 编码 | `TerminalModel`、`TerminalSnapshot`、`TerminalStyledLine`、`TermDamage`、`selection_text`、`size`、`resize`、`encode_focus_event`、`TerminalMouseEvent`、`TerminalMouseReporting` | shell 输出原样解析、主屏 reflow、soft-wrap/hard-break 选区提取、规范化尺寸比较、光标和宽字符安全映射；`cursor_visibility_requested` 无损读取 `CSI ?25l/h` 可见性供 application 合并，不触发 parser 缓冲；`CSI ?2026h/l` 才在结束或上游 deadline 前进行协议级同步输出，首帧也不发布局部内容；协议应答经单个有界队列回写原 transport，覆盖 DSR、动态 OSC 颜色、`CSI 14 t` 文本区像素和 `CSI 16 t` 单元像素查询；鼠标按程序选择默认 X10、1005、1015、1006 或 1016 格式，1016 使用实测物理文本区坐标；DEC 1004 仅在实际启用时生成固定 `CSI I`/`CSI O`。快照解析终端局部 OSC 颜色、光标形状/闪烁及 SGR 隐藏/单/双/曲/点/虚线样式，并复用稳定 `Arc` 行 identity，以 64-bit revision 标记变更；application-keypad 不再作为当前输入能力。 |
 | `src/terminal_input.rs` | 跨 transport 的有界 motion 入队策略 | `try_queue_tokio_motion`、`try_queue_sync_motion` | motion 队列满时静默丢弃中间帧，closed/disconnected 仍返回错误；Tokio command queue 为 press/release 等可靠事件保留一个槽位 |
 | `src/terminal_dimensions.rs` | 终端模型、设置和后端共享的尺寸契约 | `MIN_TERMINAL_*`、`MAX_TERMINAL_*` | 统一 `10x3..300x100` UI/模型边界与 worker 的 `300x100` 最大值；PTY 入口仍单独允许 `1x1`；完整可见行数向下取整，网格从顶部起始，底部余量不参与字符格或坐标上报。 |
@@ -167,6 +167,17 @@
 | `src/app/state/sftp.rs` | SFTP/本地目录状态 | `complete_directory_history` | 两类导航共用有界 back/forward 状态机，读取/校验/page/request ID 保留原边界 |
 | `docs/duplicate-link-cleanup.md`、`docs/duplicate-link-cleanup.zh.md` | 本轮清理交付记录 | 三批处理表、移除方法和验收边界 | 对应 tracker 当前计划与月度历史 |
 
+| Path | Role | Key Symbols / Sections | Read For |
+| --- | --- | --- | --- |
+| `src/sftp/transfer/{control,upload,download,discovery,tests}.rs` | 有界传输功能与回归 | limiter、upload_initialized、stream_remote_file | 修改传输控制、上传/下载协议或递归发现 |
+| `src/app/sftp_bridge/` | SFTP 功能 callback 与上下文 | drag/files/navigation/transfers | 修改对应 UI 意图；facade 只组合回调 |
+| `src/app/terminal_bridge/` | 终端输入/输出与 UI 编排 | input/native/geometry/output/clipboard/targets/panes/local_shell | 按功能修改桥接；parser 和 transport 保留原 owner |
+| `src/app/local_files/upload.rs` | 无 UI 的本地上传扫描 | discover_local_uploads、PreparedLocalUpload | 修改树发现、名称和 scan/path/file 上限 |
+| `src/app/workspace/startup.rs` | 启动工作区恢复 | load_startup_workspace | 修改 checkpoint 优先级与最近文件清理 |
+| `src/config/settings/` | 分类设置 schema/规范化 | appearance/audio/sftp/shortcuts/terminal/workspace/x11 | 分类字段修改；settings.rs 保留 aggregate 与显式导出 |
+| `src/app/state/tabs/` | 无 Slint 的 Tab 刷新/快照/终端状态 | refresh/snapshots/terminal | 修改状态转换；tabs.rs 保留生命周期 |
+| `ui/sftp/` | SFTP DTO、目录与传输组件 | types.slint、directory.slint、transfers.slint | 修改对应视觉组件；sftp-pane 只组合分栏 |
+
 ## 常用定位
 
 - 终端滚轮/鼠标失效：检查 `ui/workspace-shell.slint` 主/独立窗口两条 `terminal-pointer-input` 转发链；`src/app/view/tests.rs` 用相同 Slint 滚轮事件覆盖两种布局。
@@ -202,7 +213,7 @@
 
 ## 刷新规则
 
-- 最近依据：2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
+- 最近依据：2026-10-13 代码职责合规修复及现代子模块拆分；2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
 - 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
 
 - 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
@@ -263,6 +274,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-13 08:37 +0800：代码职责合规拆分、受保护密钥后端及回归入口更新。
 
 - 2026-10-12 23:20 +0800：刷新 Codecov 行为覆盖测试与双语测量入口；生成报告只位于 ignored target。
 - 2026-10-12 +0800：标准录音需求驱动音频桥接、共享设备租约、取消/源清理回归与无手动媒体行路由；翻译维护脚本与当前目录一致。

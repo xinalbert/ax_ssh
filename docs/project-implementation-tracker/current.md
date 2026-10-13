@@ -2,66 +2,81 @@
 
 ## 当前目标
 
-- 目标 ID：20261012-behavior-coverage
-- 目标：针对用户提供的 Codecov 低覆盖报告，补齐实际应用控制器和 transport worker 的行为测试，测量同平台前后覆盖率。
-- 交付物：可重复的覆盖率基线与最终报告；控制器事件、worker I/O/取消/错误行为回归；必要的私有边界注入；双语开发说明和实施记录；分项提交并推送 origin/master。
+- 目标 ID：20261013-code-ownership-compliance
+- 目标：按 AGENTS.md 和架构契约修复错误处理、平台 cfg 与秘密持久化问题，并按实际职责拆分审查指出的代码文件。
+- 交付物：安全凭据迁移及错误路径回归；SFTP/终端应用桥接、配置和状态子模块；拆分后的 Slint SFTP 组件；双语契约、项目地图和完整验证记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/app/`、`src/ssh/` 及覆盖报告选定的 `src/{serial,audio,credentials,logging}.rs` 薄弱路径、相关测试与开发文档；本机 coverage 工具和报告输出位于 `target/`。
-- 不在本轮范围内：UI 视觉改版、依赖/工具链升级、真实设备和系统凭据访问、真实远端会话、release/tag、无关历史文档整修。
-- 所有权：AppState/控制器拥有状态和事件消费；transport worker 独占连接、I/O 和取消；仅文件、设备、凭据等边界允许注入，不复制控制器实现。
-- 安全：未知/不匹配/revoked 主机密钥继续拒绝；凭据测试使用隔离实现和临时目录，不访问真实 keyring，不持久化明文秘密；有界通道和 shutdown/join 契约保持。
+- 当前范围：`src/credentials.rs`、`src/config/`、`src/sftp/transfer.rs`、`src/app.rs` 与相关 `src/app/` 子模块、`ui/sftp-pane.slint`、配套测试和双语文档。
+- 不在本轮范围内：依赖或工具链升级、CI 矩阵修改、视觉改版、真实凭据/设备/远端访问、tag/Release 发布、无关历史文档整理。
+- 所有权：config 独占 schema/私有文件写入；credentials 独占秘密后端与迁移；SFTP worker 独占传输；应用子模块编排 owned DTO 和回调；Slint 仅组合视觉组件。
+- 安全：自动解锁密钥不再新写明文文件；旧文件仅在系统凭据保存成功后清理，失败保持恢复能力。主机信任、短期认证输入、有界队列和 worker 取消/关闭保持。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
+- 远端交付：用户授权 origin/master 推送与远端核对；网络错误使用命令级 7897 代理
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| COV1 | completed | 环境预检、工具及 target/coverage/baseline.lcov | 原生基线默认并发 770 项通过；locked/offline check 通过 | cargo-llvm-cov 0.9.1；LLVM 归档与已安装工具链 manifest SHA-256 一致；使用匹配 Skia 本机归档 |
-| COV2 | completed | 实际控制器、monitor 与 loopback worker 回归 | SFTP/Handler/monitor 与全部 callback 专项通过，含精确 socket 字节与正常关闭 | 最后一项修正 fixture 的原生修饰键快照注入，保持真实输入归一化和物理键盘隔离 |
-| COV3 | completed | 音频/串口实际 worker、隔离凭据与日志回归 | 默认并发库测试中全部边界回归通过；无真实设备/keyring | 私有设备/权限/entry factory；日志及 Slint process-global 状态在子进程隔离 |
-| COV4 | completed | 最终 LCOV/JSON/HTML、源码行对照与完整门禁 | 799 默认并发普通/插桩 test、fmt/check/严格 Clippy、原生 ARM64 CI 同款 check/Clippy、文档/skill/tracker/diff 全通过 | canonical src 总覆盖 57.96% -> 65.78%，新增命中 3,580 行既有业务代码；线上 Linux 仍待 CI |
-| COV5 | completed | 控制器/SSH、隔离边界测试、双语文档与记录分项提交 | 代码 3c5586e/cea1a99、双语说明 b5d1fc1；审计/实施记录随本页提交 | 每组显式暂存并审查 index；生成报告和缓存不入 Git |
-| COV6 | completed | origin/master 推送与远端 HEAD 核对 | 前三项提交已推送，代理 ls-remote 与本地 b5d1fc1 完整 SHA 一致 | 记录提交随后同步并核对；直连核对出现 HTTP2 错误时使用命令级 7897 代理 |
+| A1 | completed | 环境预检、审查证据和施工计划 | manifest/lock/build/CI、工具链及地图核对 | Rust 2024/MSRV 1.92.0；本机 1.97.1，两个 macOS target |
+| A2 | completed | 秘密后端迁移、权限/fsync/上传 close 错误传播及平台 cfg 修复 | 隔离 keyring、持久化与 SFTP 错误回归 | 不访问真实用户凭据；旧文件迁移失败不删除 |
+| A3 | completed | SFTP upload/download/discovery 与测试现代子模块 | 实际 loopback SFTP、取消与传输专项 | 保持现有 crate API 与 worker 所有权 |
+| A4 | completed | 应用 SFTP/terminal 功能子模块与 workspace 启动恢复归位 | 实际 callback/monitor、状态和本地文件专项 | 保留弱 UI 引用及 event-loop dispatch |
+| A5 | completed | 分类 settings、Tab 状态子模块与 SFTP UI 组件 | 配置迁移、Tab/workspace 与 Slint 重编测试 | 无 schema 或布局行为变化 |
+| A6 | completed | 双语契约、地图、环境/实施记录与完整门禁 | fmt/check/严格 Clippy/test、可用 macOS CI target check/Clippy/build、链接/skill/tracker/diff | GUI 与真实系统后端由用户验收，Windows/Linux 交原生 CI |
+| A7 | in_progress | 按结果分项提交，显式暂存和 index 审查 | staged diff/check 与每次提交后的 status | 不改写历史，不包含缓存/报告 |
+| A8 | pending | 推送 origin/master 并核对远端 HEAD | push 与 ls-remote SHA 一致、最终工作区状态 | 直连失败用本机 7897 命令级代理 |
 
 ## 已完成
 
-- 已读取三项指定技能、地图、当前环境和架构；工作区起始干净。
-- 核对 Rust 2024/MSRV 1.92.0、Slint 1.18.1、russh 0.64.1、Cargo.lock、build.rs 与 CI；本机 Rust/Cargo 1.97.1、Python 3.10.20，两个 macOS target 可用。
-- 用户明确本轮目标为处理 Codecov 低覆盖；前轮多语言交付记录保留在月度历史，母语/GUI 验收仍由用户进行。
-- 原生基线默认并发 770 项通过，报告 `target/coverage/baseline.lcov`；cargo-llvm-cov 0.9.1/LLVM tools 已补齐，Skia 使用已核验版本/架构/特性的本机归档。
-- 新增控制器 callback、SSH/直连 monitor、实际 SFTP worker 与 Handler、音频/串口 worker、内存凭据和日志生命周期回归；注入保持私有，public API 和依赖未改变。
-- 刷新地图，新增双语 `docs/coverage*.md`、同步开发/文档索引；删除开发文档中已不存在的真实 keyring ignored test 说明。
-- 最终新增 29 项行为测试；386 library + 413 binary（799）在普通和 LLVM 插桩模式都默认并发通过；完整 callback 到实际 worker 验证精确按键/粘贴/焦点/Control-C 字节、resize、显式断开与 Tab 保留。
-- canonical src 覆盖率 26,723/46,107（57.96%）提升到 30,381/46,185（65.78%）；归一化 LLVM 路径别名不混入 build registry，未调整报告的业务源码排除规则。新命中 3,580 行与原始 Git 完全相同的 runtime 代码，排除 inline tests 与所有新 fixture。
-- 报告位于 `target/coverage/{baseline.lcov,after.lcov,comparison.json,after-summary.json}` 和 `target/coverage/html/index.html`；双语 coverage 页面保留测量口径、逐模块对比和可复现命令。
-- 按用户授权将控制器/SSH、隔离边界测试与双语说明分项提交为 3c5586e、cea1a99、b5d1fc1；已推送 origin/master 并核对远端完整 SHA。环境审计与实施记录随包含本页的提交同步；未纳入生成报告或缓存，保持追加历史。
+- 已读取 AGENTS.md、Rust/Slint 技能及引用、架构模块职责和项目地图；用户授权处理代码审查结果，工作区起始干净。
+- 已核对本机 Rust/Cargo 1.97.1、ARM64/Intel macOS target 与既有锁定环境；不新增依赖或修改 CI。
+- 已在代码施工前落盘本计划；前轮覆盖率交付保留在月度历史。
+- 自动解锁密钥改用系统凭据后端，保留只读旧文件迁移和失败恢复；新增最小的受保护 entry provider crate 边界，让 binary 应用测试使用独立内存凭据而不接触真实 keyring。
+- 权限和目录 fsync 错误传播；临时文件权限在原子替换前确认；上传成功包含 close 响应且取消不能返回 Published；非 macOS 无用字段不再用 allow(dead_code) 掩盖。
+- SFTP 与终端 bridge 已按实际功能拆成私有子模块；本地上传扫描归入 local_files；启动恢复归入 workspace；settings 分类、Tab 快照/刷新/终端状态和 SFTP UI 组件完成迁移和完整验证。
 
 ## 验证
 
-- 已完成：原生 770 基线及最终普通/插桩 799 默认并发全量、专项、fmt、locked/offline check、严格 all-target Clippy；CI 同款 ARM64 target check/严格 all-target Clippy；LCOV/JSON/HTML、源码对照、相对链接、skill/tracker/diff。
-- 未完成：Windows/Linux/Intel 目标本轮验证与线上 Codecov 上传；真实 GUI、系统 keyring、麦克风/串口和真实服务器人工验收。本轮未启动/截图 GUI，不发布。
+- 已完成：最终源码 fmt、locked/offline check、严格 all-target Clippy、完整默认并发 test 全部通过；391 library + 413 binary（804），Doc tests 0。
+- macOS 平台：ARM64/Intel 均通过 CI 同款 target check、严格 all-target Clippy 与 build；Mach-O 架构分别为 arm64/x86_64。不在 ARM64 主机运行 Intel 测试。
+- 翻译/脚本/文档：665 条消息 × 11 个翻译目录、translation build check、22 项 Python 回归、145 条 Markdown 相对链接、skill/tracker 与 diff 检查通过。
+- 结构复核：Rust 无 mod.rs；SFTP/terminal 回调注册与 Slint struct/component/callback 契约保留；生成 Slint 类型仅在 app.rs。新增 entry provider 返回自有值/通用错误，平台错误保留在 credentials 内部。
+- 已处理的验证问题：写入 fixture 使用独立目录，已有 0700 不重复 chmod；Skia 下载停滞后核验同版本/架构/特性完整归档，用临时 file URL 和用户指定 7897 代理完成目标构建，不改变依赖或 CI。
+- 未完成：分项提交与推送/远端核对；自动验证边界：未访问真实系统凭据、设备或 SSH/GUI；Windows/Linux SDK 不可用，保留原生 CI；GUI 验收由用户完成，不自行截图。
+
+## 文件职责整理
+
+AGENTS.md 没有统一行数上限；本轮依据职责混合、错误处理和平台边界判断，不把长文件本身当作违规。
+
+| 原入口 | 原行数 | 当前行数 | 功能归位 |
+| --- | --- | --- | --- |
+| `src/app.rs` | 955 | 850 | checkpoint 恢复归入 workspace |
+| `src/app/sftp_bridge.rs` | 3126 | 195 | 导航、文件、拖放、传输；本地发现归入 local_files |
+| `src/app/terminal_bridge.rs` | 2673 | 89 | 输入、原生事件、几何、输出、剪贴板、targets、panes、本地 shell |
+| `src/sftp/transfer.rs` | 3658 | 892 | 控制、上传、下载、发现、隔离 peer 测试 |
+| `src/config/settings.rs` | 1454 | 155 | appearance/audio/sftp/shortcuts/terminal/workspace/x11 |
+| `src/app/state/tabs.rs` | 1537 | 633 | refresh/snapshots/terminal；编辑器状态归入 editor |
+| `ui/sftp-pane.slint` | 1927 | 541 | types/directory/transfers，单 app.slint 构建入口保持 |
 
 ## 风险与阻塞
 
-- 用户表格来自 Linux Codecov，本机是 macOS；平台专属代码与分母不同，必须分别标记，不能将本机数字当作 Codecov 已更新。
-- 测量工具已齐备，原生基线和本轮库全量验证未复现旧音频 helper 超时；不以串行运行代替默认并发。
-- Windows/Linux 原生 SDK 不可用；GUI 与真实 SSH/设备手动验收不由本轮自动测试代替。
-- 仍有较大 UI/native 路径未覆盖，尤其启动与原生窗口/设备适配；本轮提升测试范围而非宣称全部路径覆盖。Intel target 虽已安装，本轮只执行 native ARM64 验证。
-- tracker 全局校验当前通过；保留历史，不改写旧记录。
+- 系统凭据后端可能失败或触发系统授权；旧解锁文件必须在可恢复迁移成功后才能清理，错误不含秘密。
+- 模块移动需保持私有辅助函数、测试可见性和平台 cfg，不能用 allow(dead_code) 掩盖跨平台问题。
+- Windows/Linux SDK 不可用；Intel macOS 仅编译链接，不在 ARM64 主机运行测试。
 
 ## 下一步
 
-- 由原生 CI 重测 Linux Codecov；后续可继续对 SFTP/terminal bridge 剩余交互及平台适配补测，保留实际 controller/worker 和隔离边界约束。
+- 显式暂存并复核各组提交，通过本机 7897 命令级代理推送 origin/master，核对远端 SHA 和最终工作区。
 
 ## 最后更新时间
 
-- 2026-10-13 00:07 +0800
+- 2026-10-13 08:37 +0800

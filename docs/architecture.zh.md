@@ -87,9 +87,9 @@ Slint UI（.slint）
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/native_file_drop.rs` | Windows 与 Linux 系统文件管理器拖入时的原生光标查询、逻辑坐标转换和安全回退边界 | 文件系统访问、SFTP 状态、transfer queue 或目标选择 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
-| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
+| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view,sftp_bridge,terminal_bridge}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
 | `src/app/file_icons.rs` 与 `src/app/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
-| `src/app/local_files.rs` | SFTP 本地栏的有界目录元数据发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
+| `src/app/local_files.rs` | 无 UI 状态的有界本地目录元数据、上传树发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
 | `src/app/diagnostics.rs` | 脱敏键盘分类、固定 diagnostics route/action 字段和专用 tracing target | 原始终端/剪贴板文本、路径、profile 标签、主机、凭据或传输状态 |
@@ -107,6 +107,12 @@ Slint UI（.slint）
 | `src/serial.rs` | 不打开设备的端口发现、稳定 USB 身份匹配、串口参数映射和单设备有界 worker | 自动打开/探测设备、UI 状态或持久化 profile 修改 |
 | `src/logging.rs` | 全局 tracing subscriber、日志目录、按日滚动、保留和 flush guard | 凭据、功能状态、UI 或 SSH handle |
 | `src/main.rs` | 进程启动和日志 guard 生命周期 | 功能逻辑 |
+
+SFTP facade 组合私有 `sftp_bridge/{navigation,files,drag,transfers}.rs`；本地上传扫描归于 `local_files/upload.rs`。terminal facade 按输入、原生事件、几何、输出、剪贴板、链接目标、pane 动作和本地 shell 监控组合子模块；`workspace/startup.rs` 负责 checkpoint 恢复与最近文件清理。生成 Slint 类型仍只在 `src/app.rs` 声明。
+
+`config/settings.rs` 聚合分类设置并显式导出；`state/tabs.rs` 保留生命周期，其子模块负责刷新、快照和终端状态。SFTP transfer 子模块负责控制、上传、下载和递归发现，worker handle 与 public DTO 保持原 facade。`ui/sftp/{types,directory,transfers}.slint` 由 pane 显式导入；schema、callback payload、布局和 transport 所有权保持原契约。
+
+`CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。
 
 ## 应用图标归属
 
@@ -410,7 +416,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    边界读取已记住的凭据或打开密码弹窗；会话编辑器也可以直接提交新的内嵌密码，空值
    保留既有后端引用；非空值可作为 **Save & connect** 对应 Tab 的一次性秘密，只有勾选
    **Save password (optional)** 时才会在 profile 保存前更新所选后端。若请求加密保险库但未提供
-   保险库口令，保存会为该 profile 生成随机解锁密钥并保存到应用私有目录的 `0600` 文件，SSH 密码仍保存在加密保险库中；密钥不会暴露给 UI，也不会通过系统密钥库读取。既有用户管理的保险库记录仍是保险库记录，解锁时仍需要
+   保险库口令，保存会为该 profile 生成随机解锁密钥并保存到系统凭据后端，SSH 密码仍保存在加密保险库中；密钥不会暴露给 UI；系统凭据后端可能请求授权。既有用户管理的保险库记录仍是保险库记录，解锁时仍需要
 其保险库口令。私钥 profile 在 UI 线程外加载
    所选路径，只有加密密钥无法空口令打开时才请求一次性 passphrase。SSH agent profile 不读取
    凭据存储，也不打开秘密输入弹窗；主机信任建立后由 worker 连接当前运行时 agent。安全覆盖层只渲染活动
@@ -424,10 +430,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    普通密码弹窗会以该设置初始化后端选择，也可以只为本次提示覆盖选择；未勾选 **Save password (optional)**
    时不会使用该选择。会话编辑器只用既有后端或 Settings 默认后端初始化选择器；未勾选
    **Save password (optional)** 时，内嵌密码只供 **Save & connect** 使用一次，单独保存会丢弃该密码。
-   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会把随机隐藏解锁密钥保存到应用私有目录，不会把 SSH 密码后端改为系统凭据库，也不会创建无法解锁的保险库记录；
+   勾选后才把密码与 profile 事务性写入所选后端；缺少保险库口令时会把随机隐藏解锁密钥保存到系统凭据后端，不会把 SSH 密码后端改为系统凭据库，也不会创建无法解锁的保险库记录；
    秘密不会返回 source snapshot 或写入 profile。修改默认值不会迁移或破坏既有凭据。删除 profile、切换为私钥或 SSH agent 认证，或拒绝已
    保存密码时，会事务性删除该引用的凭据，但不会停止已经打开的终端 worker。
-   明确的“清除已保存密码”操作共用后台凭据删除与回滚，包括自动保险库解锁文件；只在原 profile
+   明确的“清除已保存密码”操作共用后台凭据删除与回滚，包括受保护的自动解锁条目及旧本地解锁文件；只在原 profile
    副本上清空后端引用和解锁标记并提交，不改变编辑器 draft UUID、主机信任、系统识别缓存或 worker。
    只更新持久化 store 中该 profile 的字段，内存中尚未保存的 Settings 预览不会随之写盘或被重置。
    只读状态刷新不会重置局部输入；回滚持有执行该次变更的同一 CredentialStore 实例。
@@ -862,9 +868,9 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 `credential_storage` 后端引用，以及自动生成解锁密钥的非敏感标记，绝不包含密码或保险库密钥。编辑器中的密码和保险库口令每次
 打开都为空，提交后立即清空；非空密码默认只由对应 Tab 短期持有，主机密钥确认完成并由 SSH worker
 接管后即清除。只有勾选 **Save password (optional)** 才会额外通过所选后端写入，profile 持久化失败时回滚。
-若选择加密保险库但未提供保险库口令，保存会为该 profile 生成并保存到应用私有目录的 `0600` 文件，不会把 SSH 密码后端改为系统凭据库，也不会创建空口令保险库记录；既有用户管理的保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
+若选择加密保险库但未提供保险库口令，保存会为该 profile 生成解锁密钥并保存到系统凭据后端，不会把 SSH 密码后端改为系统凭据库，也不会创建空口令保险库记录；既有用户管理的保险库记录仍需要其保险库口令才能解锁。Settings > General 初始化以后保存密码时使用的
 后端：系统后端使用 macOS Keychain、Windows Credential Manager 或 Unix Secret Service；保险库
-后端使用按 profile 分隔的应用记录；自动生成的保险库密钥随机、按 profile 分隔，并单独保存到应用私有目录。默认本机自动解锁不需要再次访问系统密钥库，但同一操作系统账户下有文件访问权限的进程仍可读取该解锁文件。保险库对每条记录用 Argon2id 派生密钥、用
+后端使用按 profile 分隔的应用记录；自动生成的保险库密钥随机、按 profile 分隔，保存到系统凭据后端的 `vault-unlock:<UUID>` 条目；系统可能请求授权。旧本地 `.unlock` 文件仅用于有界迁移，受保护后端保存成功后才删除源文件，失败时保留恢复能力；旧系统条目继续使用原 account。保险库对每条记录用 Argon2id 派生密钥、用
 XChaCha20-Poly1305 加密并将 profile UUID 绑定为附加认证数据，保险库口令始终是短期输入。私钥
 profile 只持久化路径；私钥内容和可选 passphrase 只在一次 blocking 加载/认证任务中短暂存在，
 不进入配置、tracing 字段或 UI model。独立的非秘密 `.ssh` 候选路径扫描只有在 Session Editor
@@ -1304,7 +1310,7 @@ config 领域会拒绝控制字符，并对 profile 名称、host、username、�
 `sessions.json` 在反序列化前与编码后都不得超过 8 MiB。每个反序列化 profile 和每次 store 保存
 都会经过同一套领域校验。私有配置与保险库写入使用同目录隐藏 UUID 临时文件、`create_new`、Unix
 `0600` mode 和普通文件校验；写入或替换失败时由 guard 删除临时文件。文件同步、平台原子替换、
-最终私有权限和父目录同步仍属于同一次提交，不再跟随固定 `.tmp` 路径。
+替换前私有权限检查和父目录同步仍属于同一次提交，不再跟随固定 `.tmp` 路径。
 
 即使没有已保存 profile，展开会话侧栏也会保留列表空白区域的右键菜单，用于新建空 Group
 或添加第一台服务器。用户手动收起后切换为窄栏，窄栏仍保留 Local Shell 和相同的行/列表

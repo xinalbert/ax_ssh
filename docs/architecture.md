@@ -105,9 +105,9 @@ Process startup (src/main.rs)
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/native_file_drop.rs` | Windows and Linux native cursor lookup for external file-manager drops, with logical-coordinate conversion and safe fallback boundaries | Filesystem access, SFTP state, transfer queue, or target selection |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
-| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
+| `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view,sftp_bridge,terminal_bridge}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
 | `src/app/file_icons.rs` and `src/app/file_icons/platform/` | Bounded process-local file-icon keys/cache and owned RGBA fallbacks; cfg-scoped platform resolvers | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
-| `src/app/local_files.rs` | Bounded local directory metadata discovery and regular-file revalidation for the SFTP local pane | Slint types, file mutation, persistence, or SSH handles |
+| `src/app/local_files.rs` | Bounded local directory metadata, upload-tree discovery and regular-file revalidation without UI state | Slint types, file mutation, persistence, or SSH handles |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
 | `src/app/diagnostics.rs` | Redacted keyboard classification, fixed diagnostic route/action fields, and the dedicated tracing target | Raw terminal/clipboard text, paths, profile labels, hosts, credentials, or transport state |
@@ -125,6 +125,12 @@ Process startup (src/main.rs)
 | `src/serial.rs` | Non-opening port discovery, stable USB identity matching, serial parameter mapping, and one bounded device worker | Automatic device opening/probing, UI state or persisted profile mutation |
 | `src/logging.rs` | Global tracing subscriber, log directory, daily rolling writer, retention and flush guard | Credentials, feature state, UI or SSH handles |
 | `src/main.rs` | Process startup and logging-guard lifetime | Feature logic |
+
+The SFTP application facade composes private `sftp_bridge/{navigation,files,drag,transfers}.rs` modules; local upload discovery belongs to `local_files/upload.rs`. The terminal facade composes input, native events, geometry, output, clipboard, targets, pane actions and local-shell monitoring. `workspace/startup.rs` owns checkpoint recovery and recent-file reconciliation. Generated Slint types remain declared only in `src/app.rs`.
+
+`config/settings.rs` aggregates category modules with explicit exports; `state/tabs.rs` keeps Tab lifecycle while its children own refresh batching, snapshots and terminal state. SFTP transfer children own control, upload, download and discovery; worker handles and public DTOs retain their existing facade. `ui/sftp/{types,directory,transfers}.slint` are imported explicitly by the pane. These moves preserve schema, callback payloads, layout and transport ownership.
+
+`CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
 ## Application icon ownership
 
@@ -647,9 +653,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    Tab-scoped one-time secret, and it updates the selected backend before the
    profile save only when **Save password (optional)** is checked. A requested
    encrypted-vault save without a vault password generates a per-profile random
-   unlock key, stores that key in a private `0600` application file, and keeps
-   the SSH password encrypted in the vault. The key is never exposed to Slint
-   or read through the system keychain. Existing user-managed vault records
+   unlock key, stores that key in the protected system credential store, and keeps
+   the SSH password encrypted in the vault. The key is never exposed to Slint. Existing user-managed vault records
    remain vault records and still require their vault password to unlock.
    Private-key profiles
    load the selected path off the UI thread and
@@ -672,17 +677,16 @@ tab-local terminal connection notice deliberately remains non-blocking.
    connect** and a save-only action discards it. With **Save password (optional)**
    enabled, the
    selected backend is updated transactionally with the profile. A missing vault
-   password generates a hidden per-profile unlock key in the private application
-   credential directory instead of selecting the system credential store for
-   the SSH password. This is the default behavior, so ordinary save and startup
-   do not invoke the system keychain.
+   password generates a hidden per-profile unlock key in the system credential store.
+   The SSH password remains in the encrypted vault; accessing its automatic
+   unlock key may require authorization from the platform credential store.
    The secret is
    never returned in the source snapshot or serialized profile, and changing
    the default neither migrates nor breaks an existing credential. Deleting a profile, switching it
    to private-key or SSH-agent authentication, or rejecting a stored password removes its
    referenced credential transactionally without stopping an already-open
    terminal worker. Explicit **Clear saved password** uses the same credential
-   deletion and rollback task, including the automatic vault unlock file, and
+   deletion and rollback task, including the protected automatic vault unlock entry and any legacy local file, and
    commits only the cleared backend reference and unlock marker on a clone of
    the expected profile. The editor draft UUID, host trust, system detection,
    and live workers stay intact. Only the referenced profile in the persisted
@@ -1360,8 +1364,8 @@ an explicit user decision adds that exact fingerprint to the profile. A changed
 key requires a second explicit decision. Passwords are transient callback
 inputs and are not part of `SessionStore`. A password profile contains only an
 optional `credential_storage` reference keyed by its stable UUID, plus a
-non-secret marker for an auto-generated vault key held separately in the
-private application credential directory; it never contains the password or
+non-secret marker for an auto-generated vault key held in the protected
+system credential store; it never contains the password or
 vault key. The session editor keeps its masked password and
 vault-password fields blank on every open and clears them after submission. A
 non-empty editor password stays transient by default and is carried only by the
@@ -1369,16 +1373,18 @@ corresponding Tab until host-key confirmation completes and the SSH worker takes
 ownership. Checking **Save password (optional)** additionally writes it through
 the selected backend, with rollback if profile persistence fails. If an
 encrypted-vault save has no vault password, AxSSH generates a random
-    per-profile unlock key and stores it separately in the private application
-    credential directory; the SSH password remains in the encrypted vault and the key is
+per-profile unlock key and stores it in the protected system credential store;
+the SSH password remains in the encrypted vault and the key is
 never returned to the UI. Existing user-managed vault records still require
 their vault password to unlock. Settings > General initializes
 the backend for a future
 checked save-password action: macOS Keychain, Windows Credential
 Manager, or Unix Secret Service for the system backend; or a per-profile
 application-vault record. Auto-generated vault keys are random and profile-scoped
-and are stored only in a separate private `0600` file. Legacy profiles whose
-local file is missing may read their old keyring entry once and migrate it.
+and use the `vault-unlock:<UUID>` system account. Legacy local `.unlock` files
+are read only for bounded migration: the source is removed after the protected
+save succeeds, and backend failures preserve it. Existing keyring entries stay
+in their protected account. The OS may request credential-store authorization.
 The vault derives
 a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and
