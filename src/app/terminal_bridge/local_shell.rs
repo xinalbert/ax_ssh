@@ -77,18 +77,23 @@ pub(super) fn spawn_local_shell_monitor(
         let mut presentation =
             crate::app::terminal_presentation::TerminalPresentation::new();
         loop {
-            let event = tokio::select! {
-                event = events.recv() => {
-                    let Some(event) = event else {
-                        break;
-                    };
-                    event
-                }
-                _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
-                    if prepare_terminal_output_snapshot(&state, tab_id) {
-                        dispatch_terminal_snapshot(&ui, &state, tab_id);
+            let event = if let Some(event) = presentation.try_recv_before_present(&mut events).await {
+                event
+            } else {
+                tokio::select! {
+                    biased;
+                    _ = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                        if prepare_terminal_output_snapshot(&state, tab_id) {
+                            dispatch_terminal_snapshot(&ui, &state, tab_id);
+                        }
+                        continue;
                     }
-                    continue;
+                    event = events.recv() => {
+                        let Some(event) = event else {
+                            break;
+                        };
+                        event
+                    }
                 }
             };
             match event {

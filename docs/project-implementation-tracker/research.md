@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-10-13 标准光标显隐与有界重绘
+
+- 时间：2026-10-13 17:55 +0800
+- 检索问题：如何遵循标准显隐和同步输出语义，同时减少 LLM CLI 分包重绘时的临时光标位置？
+- 检索原因：用户确认无 tmux 也会偶发闪跳，并要求改成标准终端实现。
+- 来源列表：[xterm DECTCEM](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html)；[同步输出规范](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)；[Alacritty event loop](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/event_loop.rs)；锁定 `alacritty_terminal 0.26.0`/`vte 0.15.0` 的本机源码。
+- 关键结论：DECTCEM 只指定显隐，不定义一帧的边界；2026 才保留上一帧直到结束/超时。锁定解析器沿用 150ms 超时；Alacritty 先有界解析可用 PTY 数据再发 redraw wakeup。AxSSH 的 24ms 隐藏等待是额外启发式，无法判断复位指令何时到达。隔离探针验证正常隐藏/复位/显示和未超时同步帧不会暴露临时位置，而未同步可见移动、提前显示或同步超时均可能暴露。
+- 对实施计划的影响：删除 24ms 状态；沿用标准同步帧和上游 timeout。在现有 worker channel 内按序处理最多 64 个已到达事件，再让出 Tokio 并优先到期呈现；保留 renderer/FPS/Slint 和协议模型所有权，不扩展公共 API。
+- 未解决问题：未获得实际闪跳时的原始控制序列，不能断言原截图命中某个探针条件；实际 LLM CLI 的视觉验收仍需用户确认，标准实现不保证无同步保护的任意应用都无闪跳。
+
 ## 2026-10-01 Rust 1.99 原子 API 弃用与 MSRV
 
 - 时间：2026-10-01 23:56 +0800

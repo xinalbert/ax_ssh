@@ -383,20 +383,27 @@ Parsing, protocol responses, worker errors, disconnect, and shutdown still run
 immediately; SSH retains the earliest worker receive timestamp across a
 coalesced presentation batch.
 
-`TerminalTabState` also coalesces a transient remote cursor hide across output
-batches. If a connected terminal's last published frame has a visible cursor,
-`?25l` retains that frame for a fixed 24 ms grace period. `?25h` releases it
-early; further output and an unpublished hide/show/hide sequence cannot extend
-the original deadline. The existing monitor timer wakes for a persistent hide
-even without another output event. Both terminal-only and full-route snapshots
-honor the hold and merge pending row damage when it ends. Initial hidden frames
-and an already hidden scrollback cursor need no grace period; resize/scroll
-invalidate it, and disconnected state bypasses it. Standard synchronized output
-can hold longer until its own end/deadline. This application-layer heuristic is
-independent of the local blink preference: it leaves protocol visibility intact,
-adds at most 24 ms of coalescing wait before existing presentation limits, and
-cannot conceal hide/show batches separated by longer intervals. Parsing and
-protocol responses continue immediately; no additional output buffer is added.
+Cursor visibility follows [DECTCEM](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html):
+`CSI ?25l` hides the model cursor and `CSI ?25h` shows it at its current
+position. Both changes reach the next ordinary presentation without a separate
+cursor timer or a retained-frame grace period. Visibility is independent of
+the local blink preference and does not declare a redraw transaction.
+Only [synchronized output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
+(`CSI ?2026h` / `CSI ?2026l`) retains the last complete published frame until
+the end sequence or the locked upstream 150 ms timeout.
+
+Before scheduling a terminal redraw, all four protocol monitors process up to
+64 already queued worker events in order. They then yield to Tokio and give an
+eligible redraw priority before receiving more events. This follows Alacritty's
+bounded read-before-wakeup approach within AxSSH's worker-channel ownership:
+available redraw fragments can restore the cursor before publication, while
+continuous output cannot starve presentation or other tasks. An empty queue
+adds no wait, no additional output queue is created, and existing focused,
+unfocused, and hidden presentation policies remain in force. An application
+that leaves its cursor visible during unsynchronized drawing, shows it before
+restoring its position across separate arrivals, or exceeds the synchronization
+timeout can still expose intermediate positions; AxSSH does not infer a final
+input position from screen contents.
 
 For a matching pane, the bridge also retains the existing render-line and run
 `VecModel` identities. It writes new rows through those subscribed models, or

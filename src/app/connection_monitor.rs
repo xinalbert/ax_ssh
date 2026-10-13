@@ -88,32 +88,37 @@ pub(super) fn spawn_session_monitor(
         let mut route_changes = global_window_router().map(|router| router.subscribe_terminal_presentation_changes());
         update_latency_foreground(&state, tab_id, profile.id, attempt_id);
         loop {
-            let event = tokio::select! {
-                changed = async {
-                    match route_changes.as_mut() {
-                        Some(rx) => rx.changed().await,
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    if changed.is_err() { route_changes = None; }
-                    else { update_latency_foreground(&state, tab_id, profile.id, attempt_id); }
-                    continue;
-                }
-                event = events.recv() => {
-                    let Some(event) = event else {
-                        break;
-                    };
-                    event
-                }
-                ready = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
-                    if prepare_terminal_output_snapshot(&state, tab_id) {
-                        if let Some(received_at) = ready.output_received_at {
-                            dispatch_terminal_output_snapshot(&ui, &state, tab_id, received_at);
-                        } else {
-                            dispatch_terminal_snapshot(&ui, &state, tab_id);
+            let event = if let Some(event) = presentation.try_recv_before_present(&mut events).await {
+                event
+            } else {
+                tokio::select! {
+                    biased;
+                    ready = presentation.wait_until_ready(tab_id), if presentation.has_pending_output() => {
+                        if prepare_terminal_output_snapshot(&state, tab_id) {
+                            if let Some(received_at) = ready.output_received_at {
+                                dispatch_terminal_output_snapshot(&ui, &state, tab_id, received_at);
+                            } else {
+                                dispatch_terminal_snapshot(&ui, &state, tab_id);
+                            }
                         }
+                        continue;
                     }
-                    continue;
+                    changed = async {
+                        match route_changes.as_mut() {
+                            Some(rx) => rx.changed().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        if changed.is_err() { route_changes = None; }
+                        else { update_latency_foreground(&state, tab_id, profile.id, attempt_id); }
+                        continue;
+                    }
+                    event = events.recv() => {
+                        let Some(event) = event else {
+                            break;
+                        };
+                        event
+                    }
                 }
             };
             match event {

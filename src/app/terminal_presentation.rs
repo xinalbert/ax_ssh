@@ -1,7 +1,7 @@
 use std::future::pending;
 use std::time::Instant as StdInstant;
 
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio::time::{Duration, Instant, sleep_until};
 use uuid::Uuid;
 
@@ -13,6 +13,7 @@ const FOCUSED_SUSTAINED_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 
 const QUIET_RESET_INTERVAL: Duration = Duration::from_millis(250);
 const BALANCED_AFTER: Duration = Duration::from_millis(500);
 const SUSTAINED_AFTER: Duration = Duration::from_secs(2);
+const MAX_EVENTS_BEFORE_PRESENT: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TerminalPresentationMode {
@@ -80,6 +81,7 @@ pub(super) struct TerminalPresentation {
     policy_changes: Option<watch::Receiver<TerminalPresentationPolicy>>,
     earliest_output_received_at: Option<StdInstant>,
     output_hold_until: Option<Instant>,
+    queued_events_processed: usize,
 }
 
 impl TerminalPresentation {
@@ -92,6 +94,33 @@ impl TerminalPresentation {
                 .map(|router| router.subscribe_terminal_presentation_policy()),
             earliest_output_received_at: None,
             output_hold_until: None,
+            queued_events_processed: 0,
+        }
+    }
+
+    /// Process already queued worker events before drawing their latest state.
+    /// The fixed event budget returns control to the monitor's ready-first
+    /// select and yields to Tokio, so continuous output cannot starve an
+    /// eligible redraw or another task. An empty queue adds no wait and no
+    /// output is buffered outside the worker channel.
+    pub(super) async fn try_recv_before_present<T>(
+        &mut self,
+        events: &mut mpsc::Receiver<T>,
+    ) -> Option<T> {
+        if self.queued_events_processed >= MAX_EVENTS_BEFORE_PRESENT {
+            self.queued_events_processed = 0;
+            tokio::task::yield_now().await;
+            return None;
+        }
+        match events.try_recv() {
+            Ok(event) => {
+                self.queued_events_processed += 1;
+                Some(event)
+            }
+            Err(_) => {
+                self.queued_events_processed = 0;
+                None
+            }
         }
     }
 
@@ -310,6 +339,76 @@ mod tests {
     use super::*;
 
     const DEFAULT_POLICY: TerminalPresentationPolicy = TerminalPresentationPolicy::new(60, 4);
+
+    #[tokio::test(start_paused = true)]
+    async fn queued_event_budget_yields_to_ready_presentation_without_losing_events() {
+        let mut presentation = TerminalPresentation::new();
+        let (sender, mut events) = mpsc::channel(MAX_EVENTS_BEFORE_PRESENT + 1);
+        for value in 0..=MAX_EVENTS_BEFORE_PRESENT {
+            sender.try_send(value).expect("queued event");
+        }
+        presentation.record_output(None, None);
+        for value in 0..MAX_EVENTS_BEFORE_PRESENT {
+            assert_eq!(
+                presentation.try_recv_before_present(&mut events).await,
+                Some(value)
+            );
+        }
+        assert!(
+            presentation
+                .try_recv_before_present(&mut events)
+                .await
+                .is_none()
+        );
+        assert!(presentation.is_ready(
+            TerminalPresentationMode::Focused,
+            DEFAULT_POLICY.with_software_renderer(true),
+            Instant::now()
+        ));
+        assert_eq!(
+            events.len(),
+            1,
+            "redraw gets a turn before the queue is empty"
+        );
+        assert_eq!(
+            presentation.try_recv_before_present(&mut events).await,
+            Some(MAX_EVENTS_BEFORE_PRESENT)
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn empty_and_closed_event_queues_add_no_presentation_wait() {
+        let mut presentation = TerminalPresentation::new();
+        let (sender, mut events) = mpsc::channel::<u8>(1);
+        let started_at = Instant::now();
+        assert!(
+            presentation
+                .try_recv_before_present(&mut events)
+                .await
+                .is_none()
+        );
+        assert_eq!(Instant::now(), started_at);
+        sender
+            .try_send(7)
+            .expect("queued event after an empty read");
+        assert_eq!(
+            presentation.try_recv_before_present(&mut events).await,
+            Some(7)
+        );
+        drop(sender);
+        assert!(
+            presentation
+                .try_recv_before_present(&mut events)
+                .await
+                .is_none()
+        );
+        assert!(
+            events.recv().await.is_none(),
+            "closed channel remains observable"
+        );
+        assert_eq!(Instant::now(), started_at);
+    }
+
     #[test]
     fn clean_state_has_no_deadline() {
         let state = TerminalPresentationState::default();

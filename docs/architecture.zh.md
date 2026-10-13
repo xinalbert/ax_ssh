@@ -254,13 +254,18 @@ revision 发布变化；macOS UI 线程另以 500ms 间隔读取每个 `NSWindow
 deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worker
 错误、断开和 shutdown 仍立即处理；SSH 会在合并呈现批次中保留最早的 worker 接收时间。
 
-`TerminalTabState` 还合并跨输出批次的短暂远端光标隐藏：已连接终端的上个发布帧有可见光标时，
-`?25l` 最多保留该帧 24 ms；`?25h` 提前解除等待，后续输出及尚未发布的 hide/show/hide 都不延长
-原截止时间。即使不再收到输出，已有 monitor timer 也会唤醒并发布持续隐藏状态。terminal-only 与完整
-路由快照都遵守该窗口，结束后合并 pending 脏行。首次隐藏帧及 scrollback 中已经不可见的光标无需等待；
-resize/scroll 使窗口失效，断开状态直接绕过等待。标准同步输出可以按自身结束序列/deadline 保持更久。
-此应用层启发式独立于本地闪烁偏好，保留协议可见性，最多在原有呈现限制前增加 24 ms 合并等待；
-超过该间隔的 hide/show 仍可能被看到。parser 和协议响应立即处理，不增加输出缓冲区。
+光标可见性遵循 [DECTCEM](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html)：
+`CSI ?25l` 隐藏模型光标，`CSI ?25h` 在当前协议位置显示光标，两者直接进入下一次普通呈现，
+没有独立光标 timer 或旧帧保留窗口。显隐独立于本地闪烁偏好，也不表示重绘事务。
+仅[同步输出](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
+（`CSI ?2026h` / `CSI ?2026l`）保留最近的完整发布帧，直到结束序列或锁定上游的 150ms 超时。
+
+四协议 monitor 在安排终端重绘前，按顺序处理最多 64 个已经到达的 worker 事件，随后让出 Tokio，
+并让已经到期的重绘优先于接收更多事件。此策略在 AxSSH 的 worker channel 边界内采用 Alacritty
+的有界读取后唤醒方式：已到达的重绘片段有机会在发布前复位光标，持续输出也不会使呈现或其它任务
+一直得不到执行。空队列不增加等待，不创建额外输出队列，已有聚焦/未聚焦/隐藏呈现策略继续生效。
+应用若在未同步的绘制中保持光标可见、跨独立到达批次先显示再复位，或超过同步超时，仍可能暴露中间
+位置；AxSSH 不根据屏幕内容推断最终输入位置。
 
 对于 identity 匹配的 pane，bridge 还会保留已有 render-line 与 run `VecModel` 的身份：先通过
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
