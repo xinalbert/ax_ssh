@@ -22,31 +22,86 @@ pub(super) fn ensure_local_directory_watch(
     ui: Weak<AppWindow>,
     tab_id: Uuid,
 ) {
-    let should_start = match state.lock() {
-        Ok(mut app) => app
-            .terminal_mut(tab_id)
-            .filter(|terminal| terminal.is_sftp())
-            .is_some_and(|terminal| terminal.sftp.local.mark_watcher_running()),
-        Err(_) => false,
-    };
-    if !should_start {
-        return;
+    let refresh_runtime = runtime.clone();
+    let refresh_state = state.clone();
+    spawn_directory_watch(
+        runtime,
+        state,
+        tab_id,
+        |event_tx| notify::recommended_watcher(move |result| record_change(&event_tx, result)),
+        move |request_id, path| {
+            dispatch_active_snapshot(&ui, &refresh_state);
+            super::sftp_bridge::load_local_directory(
+                &refresh_runtime,
+                refresh_state.clone(),
+                ui.clone(),
+                tab_id,
+                request_id,
+                path,
+            );
+        },
+    );
+}
+
+// Only native notification acquisition is replaced in tests. The same task,
+// single-slot queue, deadlines and application gates run in both paths.
+trait DirectoryWatcher: Send + 'static {
+    fn watch(&mut self, path: &Path) -> notify::Result<()>;
+    fn unwatch(&mut self, path: &Path) -> notify::Result<()>;
+}
+
+impl DirectoryWatcher for notify::RecommendedWatcher {
+    fn watch(&mut self, path: &Path) -> notify::Result<()> {
+        Watcher::watch(self, path, RecursiveMode::NonRecursive)
     }
 
-    let runtime = runtime.clone();
-    runtime.clone().spawn(async move {
-        // The callback never blocks the notify backend: one slot represents
-        // "the displayed directory changed" regardless of burst size.
+    fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+        Watcher::unwatch(self, path)
+    }
+}
+
+struct WatchRegistration {
+    state: Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+}
+
+impl Drop for WatchRegistration {
+    fn drop(&mut self) {
+        mark_watcher_stopped(&self.state, self.tab_id);
+    }
+}
+
+fn record_change(events: &std_mpsc::SyncSender<()>, result: notify::Result<notify::Event>) {
+    if !matches!(result, Ok(ref event) if matches!(event.kind, EventKind::Access(_))) {
+        // A full slot already represents the change; never block the backend.
+        let _ = events.try_send(());
+    }
+}
+
+fn spawn_directory_watch<W: DirectoryWatcher>(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    create: impl FnOnce(std_mpsc::SyncSender<()>) -> notify::Result<W> + Send + 'static,
+    mut refresh: impl FnMut(u64, String) + Send + 'static,
+) -> Option<tokio::task::JoinHandle<()>> {
+    let should_start = state.lock().ok().is_some_and(|mut app| {
+        app.terminal_mut(tab_id)
+            .filter(|terminal| terminal.is_sftp())
+            .is_some_and(|terminal| terminal.sftp.local.mark_watcher_running())
+    });
+    if !should_start {
+        return None;
+    }
+    // Capture before spawning so aborting even an unpolled task clears its lease.
+    let registration = WatchRegistration { state, tab_id };
+    Some(runtime.spawn(async move {
+        let state = &registration.state;
         let (event_tx, event_rx) = std_mpsc::sync_channel(1);
-        let mut watcher = match notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-            if !matches!(result, Ok(ref event) if matches!(event.kind, EventKind::Access(_))) {
-                let _ = event_tx.try_send(());
-            }
-        }) {
+        let mut watcher = match create(event_tx) {
             Ok(watcher) => watcher,
             Err(error) => {
                 warn!(tab_id = %tab_id, %error, "could not start local directory watcher");
-                mark_watcher_stopped(&state, tab_id);
                 return;
             }
         };
@@ -58,7 +113,7 @@ pub(super) fn ensure_local_directory_watch(
 
         loop {
             checks.tick().await;
-            let Some(directory) = current_local_directory(&state, tab_id) else {
+            let Some(directory) = current_local_directory(state, tab_id) else {
                 break;
             };
             if watched_directory.as_deref() != Some(directory.as_str()) {
@@ -68,11 +123,14 @@ pub(super) fn ensure_local_directory_watch(
                     warn!(tab_id = %tab_id, %error, "could not release previous local directory watch");
                 }
                 if attempted_directory.as_deref() != Some(directory.as_str()) {
+                    // Notifications queued for the old directory must not refresh
+                    // a newly selected directory.
+                    while event_rx.try_recv().is_ok() {}
                     attempted_directory = Some(directory.clone());
                     retry_after = Instant::now();
                 }
                 if Instant::now() >= retry_after {
-                    match watcher.watch(Path::new(&directory), RecursiveMode::NonRecursive) {
+                    match watcher.watch(Path::new(&directory)) {
                         Ok(()) => watched_directory = Some(directory),
                         Err(error) => {
                             retry_after = Instant::now() + WATCH_RETRY_INTERVAL;
@@ -90,22 +148,13 @@ pub(super) fn ensure_local_directory_watch(
             let Some(watched) = watched_directory.as_deref() else {
                 continue;
             };
-            let request = queue_local_change_refresh(&state, tab_id, watched);
-            if let Some((request_id, path)) = request {
-                dispatch_active_snapshot(&ui, &state);
-                super::sftp_bridge::load_local_directory(
-                    &runtime,
-                    state.clone(),
-                    ui.clone(),
-                    tab_id,
-                    request_id,
-                    path,
-                );
+            if let Some((request_id, path)) = queue_local_change_refresh(state, tab_id, watched) {
+                refresh(request_id, path);
             }
         }
-        // Dropping the watcher stops native notifications for this Tab.
-        mark_watcher_stopped(&state, tab_id);
-    });
+        // Dropping the native watcher stops notifications; the registration
+        // also resets the state on early failure or runtime cancellation.
+    }))
 }
 
 fn current_local_directory(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> Option<String> {
@@ -145,3 +194,6 @@ fn mark_watcher_stopped(state: &Arc<Mutex<AppState>>, tab_id: Uuid) {
         terminal.sftp.local.mark_watcher_stopped();
     }
 }
+
+#[cfg(test)]
+mod tests;

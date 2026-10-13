@@ -136,6 +136,8 @@ async fn automatic_audio_helper_term_cleans_up_an_idle_fifo_without_a_reader() {
 
 #[cfg(unix)]
 async fn helper_fixture(external_default: bool, stop_while_idle: bool) {
+    #[cfg(target_os = "macos")]
+    let _launch_guard = super::super::MACOS_HELPER_FIXTURE_GATE.lock().await;
     use std::os::unix::fs::PermissionsExt;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     let root = std::env::temp_dir().join(format!("axssh-automatic-audio-{}", Uuid::new_v4()));
@@ -191,21 +193,20 @@ esac
         .env("AXSSH_TEST_IDLE", if stop_while_idle { "1" } else { "" })
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stderr(std::fs::File::create(root.join("helper-stderr.log")).unwrap())
         .kill_on_drop(true)
         .spawn()
         .unwrap();
     let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
-    assert_eq!(
-        timeout(Duration::from_secs(3), lines.next_line())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap(),
-        "AXSSH_AUDIO_READY"
+    let ready = timeout(Duration::from_secs(10), lines.next_line()).await;
+    assert!(
+        ready.is_ok(),
+        "helper startup: {}",
+        std::fs::read_to_string(root.join("helper-stderr.log")).unwrap()
     );
+    assert_eq!(ready.unwrap().unwrap().unwrap(), "AXSSH_AUDIO_READY");
     assert_eq!(
-        timeout(Duration::from_secs(3), lines.next_line())
+        timeout(Duration::from_secs(10), lines.next_line())
             .await
             .unwrap()
             .unwrap()
@@ -219,14 +220,14 @@ esac
             .args(["-TERM", &child.id().unwrap().to_string()])
             .status();
         assert!(
-            timeout(Duration::from_secs(3), signal)
+            timeout(Duration::from_secs(10), signal)
                 .await
                 .unwrap()
                 .unwrap()
                 .success()
         );
         assert!(
-            timeout(Duration::from_secs(3), child.wait())
+            timeout(Duration::from_secs(10), child.wait())
                 .await
                 .unwrap()
                 .unwrap()
@@ -252,7 +253,7 @@ esac
     std::fs::write(root.join("streams"), "Source Output #17\n\tSource: 23\n\tCorked: no\n\tProperties:\n\t\tapplication.name = arbitrary-recorder\n").unwrap();
     std::fs::write(root.join("notify"), "").unwrap();
     assert_eq!(
-        timeout(Duration::from_secs(3), lines.next_line())
+        timeout(Duration::from_secs(10), lines.next_line())
             .await
             .unwrap()
             .unwrap()
@@ -270,7 +271,7 @@ esac
     std::fs::write(root.join("streams"), "").unwrap();
     std::fs::write(root.join("notify"), "").unwrap();
     assert_eq!(
-        timeout(Duration::from_secs(3), lines.next_line())
+        timeout(Duration::from_secs(10), lines.next_line())
             .await
             .unwrap()
             .unwrap()
@@ -281,7 +282,7 @@ esac
         std::fs::write(root.join("default"), "external").unwrap();
     }
     drop(child.stdin.take());
-    let status = timeout(Duration::from_secs(3), child.wait())
+    let status = timeout(Duration::from_secs(10), child.wait())
         .await
         .unwrap()
         .unwrap();

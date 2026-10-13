@@ -36,6 +36,21 @@ pub(super) fn handle_osc52_clipboard_read(
     let Some(ui) = ui.upgrade() else {
         return false;
     };
+    handle_osc52_clipboard_read_with(router, window_id, tab_id, state, &ui, || {
+        platform_clipboard_text(&ui)
+    })
+}
+
+// Keep system clipboard access outside the validation and response path so
+// tests can exercise consent without touching the user's clipboard.
+pub(in crate::app) fn handle_osc52_clipboard_read_with(
+    router: &WindowRouter,
+    window_id: Uuid,
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &AppWindow,
+    read: impl FnOnce() -> Result<String>,
+) -> bool {
     let Some((token, generation)) = state.lock().ok().and_then(|app| {
         if !router.owns_terminal_pane(window_id, tab_id, &app) {
             return None;
@@ -46,7 +61,7 @@ pub(super) fn handle_osc52_clipboard_read(
         return false;
     };
 
-    let text = match platform_clipboard_text(&ui) {
+    let text = match read() {
         Ok(text) if text.len() <= ax_ssh::terminal::MAX_OSC52_CLIPBOARD_BYTES => text,
         result => {
             let message = match result {
@@ -108,3 +123,6 @@ pub(super) fn handle_osc52_clipboard_deny(
     }
     cleared
 }
+
+#[cfg(test)]
+mod tests;

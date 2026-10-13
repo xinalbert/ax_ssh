@@ -144,6 +144,8 @@ async fn failed_attachment_keeps_cleanup_target_and_returns_no_path() {
 #[cfg(unix)]
 #[tokio::test]
 async fn microphone_helper_streams_pcm_and_restores_source_on_eof() {
+    #[cfg(target_os = "macos")]
+    let _launch_guard = MACOS_HELPER_FIXTURE_GATE.lock().await;
     use std::os::unix::fs::PermissionsExt;
     use tokio::io::AsyncWriteExt;
     let root = std::env::temp_dir().join(format!("axssh-audio-test-{}", Uuid::new_v4()));

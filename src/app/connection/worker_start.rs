@@ -173,3 +173,6 @@ pub(super) fn set_awaiting_authentication(
         terminal.set_ssh_phase(SshConnectionPhase::AwaitingAuthentication { vault_unlock_only })
     })
 }
+
+#[cfg(test)]
+mod tests;

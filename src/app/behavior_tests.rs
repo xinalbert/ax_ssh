@@ -597,3 +597,162 @@ fn terminal_callbacks_connect_to_a_real_worker_and_forward_keys_paste_focus_and_
         },
     );
 }
+
+#[test]
+fn clipboard_consent_revalidates_identity_limits_and_permission_before_sending_bytes() {
+    isolated(
+        "clipboard_consent_revalidates_identity_limits_and_permission_before_sending_bytes",
+        || {
+            use tokio::io::AsyncReadExt;
+            let harness = Harness::new();
+            let (tab, mut stream, mut events) = harness._runtime.block_on(async {
+                let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                    .await
+                    .unwrap();
+                let mut profile = SessionProfile::new_telnet("Clipboard fixture", "127.0.0.1");
+                let ConnectionProfile::Telnet(config) = &mut profile.connection else {
+                    panic!("Telnet config")
+                };
+                config.port = listener.local_addr().unwrap().port();
+                let (worker, events) = TelnetSessionHandle::spawn(
+                    harness._runtime.handle(),
+                    Uuid::new_v4(),
+                    config.clone(),
+                    80,
+                    24,
+                );
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut negotiation = [0; 9];
+                stream.read_exact(&mut negotiation).await.unwrap();
+                let mut app = harness.state.lock().unwrap();
+                let tab = app.open_terminal_tab(&profile);
+                let terminal = app.terminal_mut(tab).unwrap();
+                terminal.worker = Some(TerminalWorker::Telnet(worker));
+                terminal.connected = true;
+                terminal.worker_running = true;
+                terminal
+                    .terminal
+                    .as_mut()
+                    .unwrap()
+                    .set_osc52_clipboard_enabled(true);
+                harness.router.activate_tab(MAIN_WINDOW_ID, tab, &mut app);
+                (tab, stream, events)
+            });
+            let offer = || {
+                let mut app = harness.state.lock().unwrap();
+                let terminal = app.terminal_mut(tab).unwrap();
+                let model = terminal.terminal.as_mut().unwrap();
+                model.set_osc52_clipboard_enabled(true);
+                model.process(b"\x1b]52;c;?\x07");
+                let formatter = model.take_clipboard_load().unwrap();
+                terminal.offer_clipboard_read(formatter).unwrap();
+            };
+            let read = |operation| {
+                terminal_bridge::handle_osc52_clipboard_read_with(
+                    &harness.router,
+                    MAIN_WINDOW_ID,
+                    tab,
+                    &harness.state,
+                    &harness.ui,
+                    operation,
+                )
+            };
+            offer();
+            assert!(!terminal_bridge::handle_osc52_clipboard_read_with(
+                &harness.router,
+                Uuid::new_v4(),
+                tab,
+                &harness.state,
+                &harness.ui,
+                || panic!("foreign window must not read clipboard"),
+            ));
+            assert!(!read(
+                Box::new(|| Err(anyhow::anyhow!("injected clipboard error")))
+                    as Box<dyn FnOnce() -> Result<String>>
+            ));
+            assert!(harness.status().contains("injected clipboard error"));
+            assert!(
+                harness
+                    .state
+                    .lock()
+                    .unwrap()
+                    .terminal(tab)
+                    .unwrap()
+                    .clipboard_read_key()
+                    .is_none()
+            );
+            offer();
+            assert!(!read(Box::new(|| Ok(
+                "x".repeat(ax_ssh::terminal::MAX_OSC52_CLIPBOARD_BYTES + 1)
+            ))));
+            assert!(harness.status().contains("64 KiB"));
+            offer();
+            assert!(!read(Box::new(|| {
+                harness
+                    .state
+                    .lock()
+                    .unwrap()
+                    .terminal_mut(tab)
+                    .unwrap()
+                    .terminal
+                    .as_mut()
+                    .unwrap()
+                    .set_osc52_clipboard_enabled(false);
+                Ok("must not leak".into())
+            })));
+            offer();
+            assert!(!read(Box::new(|| {
+                offer();
+                Ok("stale consent".into())
+            })));
+            assert!(
+                harness
+                    .state
+                    .lock()
+                    .unwrap()
+                    .terminal(tab)
+                    .unwrap()
+                    .clipboard_read_key()
+                    .is_some()
+            );
+            assert!(harness.ui.invoke_terminal_pane_command(
+                tab.to_string().into(),
+                "deny-osc52-clipboard-read".into()
+            ));
+            offer();
+            assert!(read(Box::new(|| Ok("private fixture".into()))));
+            harness._runtime.block_on(async {
+                let expected = b"\x1b]52;c;cHJpdmF0ZSBmaXh0dXJl\x07";
+                let mut bytes = vec![0; expected.len()];
+                timeout(Duration::from_secs(3), stream.read_exact(&mut bytes))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(bytes, expected);
+                assert!(
+                    timeout(Duration::from_millis(50), stream.read_u8())
+                        .await
+                        .is_err(),
+                    "rejected reads cannot leak bytes"
+                );
+                while events.try_recv().is_ok() {}
+                let worker = harness
+                    .state
+                    .lock()
+                    .unwrap()
+                    .terminal_mut(tab)
+                    .unwrap()
+                    .worker
+                    .take()
+                    .unwrap();
+                timeout(Duration::from_secs(3), worker.shutdown())
+                    .await
+                    .unwrap()
+                    .unwrap();
+            });
+            assert!(!read(Box::new(|| panic!(
+                "consent is consumed exactly once"
+            ))));
+        },
+    );
+}

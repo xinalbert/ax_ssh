@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(not(windows))]
+use ax_ssh::local_shell::{LocalShellEvent, LocalShellHandle};
 
 fn wheel_event(button: TerminalMouseButton) -> TerminalMouseEvent {
     TerminalMouseEvent {

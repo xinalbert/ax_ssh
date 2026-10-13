@@ -284,7 +284,17 @@ fn paste_clipboard(
     ui: &slint::Weak<AppWindow>,
     runtime: &tokio::runtime::Handle,
 ) -> bool {
-    let content = match read_clipboard() {
+    paste_clipboard_with(tab_id, state, ui, runtime, read_clipboard)
+}
+
+fn paste_clipboard_with(
+    tab_id: Uuid,
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    runtime: &tokio::runtime::Handle,
+    read: impl FnOnce() -> Result<ClipboardContent>,
+) -> bool {
+    let content = match read() {
         Ok(content) => content,
         Err(error) => return report(ui, Err(error)),
     };
@@ -685,40 +695,4 @@ async fn run_dictation(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn multiline_dictation_does_not_submit_in_a_terminal_without_bracketed_paste() {
-        let terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
-        let text = single_line_transcript("请分析项目\r\n并解释结果\n保留配置\r继续");
-        let encoded = terminal.encode_paste(&text).unwrap();
-        assert_eq!(
-            String::from_utf8(encoded.clone()).unwrap(),
-            "请分析项目 并解释结果 保留配置 继续"
-        );
-        assert!(!encoded.contains(&b'\r'));
-        assert!(!encoded.contains(&b'\n'));
-    }
-
-    #[test]
-    fn attachment_paths_cannot_inject_shell_commands() {
-        assert_eq!(attachment_text("/tmp/a.png"), "/tmp/a.png");
-        assert_eq!(attachment_text("/tmp/a b's.png"), "'/tmp/a b'\\''s.png'");
-        assert_eq!(
-            attachment_text("/tmp/$(whoami).png"),
-            "'/tmp/$(whoami).png'"
-        );
-    }
-    #[test]
-    fn dropping_media_job_revokes_capture() {
-        let (stop, stopped) = watch::channel(false);
-        drop(MediaJob {
-            id: Uuid::new_v4(),
-            mode: "microphone",
-            stop,
-            task: None,
-        });
-        assert!(*stopped.borrow());
-    }
-}
+mod tests;

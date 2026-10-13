@@ -317,5 +317,11 @@ async fn close_audio_channel(channel: &mut russh::Channel<russh::client::Msg>) {
     }
 }
 
+// Concurrent POSIX fixture trees can stall in macOS dyld startup notifications
+// before their scripts run. Limit only these test-owned process trees; Linux
+// continues to exercise them concurrently and production has no gate.
+#[cfg(all(test, target_os = "macos"))]
+static MACOS_HELPER_FIXTURE_GATE: Mutex<()> = Mutex::const_new(());
+
 #[cfg(test)]
 mod tests;

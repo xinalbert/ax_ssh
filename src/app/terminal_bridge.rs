@@ -15,12 +15,14 @@ pub(super) use self::output::{
     TerminalOutputEffects, apply_terminal_output_effects, process_terminal_output,
 };
 
+#[cfg(test)]
+pub(in crate::app) use self::clipboard::handle_osc52_clipboard_read_with;
 use self::clipboard::*;
 #[cfg(test)]
 use self::geometry::*;
 use self::input::*;
-#[cfg(test)]
-use self::local_shell::*;
+#[cfg(all(test, not(windows)))]
+use self::local_shell::{finish_local_terminal, spawn_local_shell_monitor};
 #[cfg(test)]
 use self::native::*;
 #[cfg(test)]
