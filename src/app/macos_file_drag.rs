@@ -17,11 +17,11 @@ use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
     NSApplication, NSDragOperation, NSDraggingContext, NSDraggingDestination, NSDraggingInfo,
-    NSDraggingItem, NSDraggingSession, NSDraggingSource, NSFilePromiseProvider,
-    NSFilePromiseProviderDelegate, NSFilePromiseReceiver, NSView,
+    NSDraggingItem, NSDraggingSession, NSDraggingSource, NSEvent, NSEventType,
+    NSFilePromiseProvider, NSFilePromiseProviderDelegate, NSFilePromiseReceiver, NSView,
 };
 use objc2_foundation::{
-    NSArray, NSError, NSObject, NSOperationQueue, NSPoint, NSRect, NSSize, NSString,
+    NSArray, NSError, NSObject, NSOperationQueue, NSPoint, NSRect, NSSize, NSString, NSURL,
 };
 use uuid::Uuid;
 
@@ -30,8 +30,173 @@ use super::macos_window;
 const FILE_PROMISE_UTI: &str = "public.data";
 const FILE_PROMISE_ERROR_DOMAIN: &str = "AxSSHSftpFilePromise";
 const MAX_FILE_NAME_CHARS: usize = 512;
+const MAX_NATIVE_DRAGS: usize = 64;
+const MAX_MOUSE_DOWN_WINDOWS: usize = 64;
 
 type PromiseCompletion = RcBlock<dyn Fn(*mut NSError)>;
+
+/// A promise belongs to one connection attempt, including across reconnects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct FilePromiseOwner {
+    pub(super) tab_id: Uuid,
+    pub(super) attempt_id: Uuid,
+}
+
+/// Ensure a stopped or aborted monitor cannot leave Finder waiting forever.
+pub(super) struct FilePromiseAttemptGuard {
+    owner: FilePromiseOwner,
+    cancelled: bool,
+}
+
+impl FilePromiseAttemptGuard {
+    pub(super) fn new(tab_id: Uuid, attempt_id: Uuid) -> Self {
+        Self {
+            owner: FilePromiseOwner { tab_id, attempt_id },
+            cancelled: false,
+        }
+    }
+
+    pub(super) fn cancel(&mut self) {
+        if !self.cancelled {
+            self.cancelled = true;
+            cancel_file_promise_attempt(self.owner);
+        }
+    }
+}
+
+impl Drop for FilePromiseAttemptGuard {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
+struct CapturedMouseDown<T> {
+    window_number: isize,
+    event: T,
+}
+
+struct MouseDownEvents<T> {
+    by_window: HashMap<Uuid, CapturedMouseDown<T>>,
+}
+
+impl<T> Default for MouseDownEvents<T> {
+    fn default() -> Self {
+        Self {
+            by_window: HashMap::new(),
+        }
+    }
+}
+
+impl<T> MouseDownEvents<T> {
+    fn record(
+        &mut self,
+        window_id: Uuid,
+        event_type: NSEventType,
+        event_window: isize,
+        native_window: isize,
+        event: T,
+    ) -> Result<()> {
+        self.clear(window_id);
+        if event_type != NSEventType::LeftMouseDown
+            || event_window <= 0
+            || event_window != native_window
+        {
+            anyhow::bail!("native drag requires a left mouse-down event from this window");
+        }
+        if self.by_window.len() >= MAX_MOUSE_DOWN_WINDOWS {
+            anyhow::bail!("too many windows hold native mouse-down events");
+        }
+        self.by_window.insert(
+            window_id,
+            CapturedMouseDown {
+                window_number: event_window,
+                event,
+            },
+        );
+        Ok(())
+    }
+
+    fn clear(&mut self, window_id: Uuid) {
+        self.by_window.remove(&window_id);
+    }
+
+    fn take(&mut self, window_id: Uuid, native_window: isize, left_pressed: bool) -> Result<T> {
+        let captured = self
+            .by_window
+            .remove(&window_id)
+            .context("native drag has no active mouse-down event")?;
+        if !left_pressed || captured.window_number != native_window {
+            anyhow::bail!("native drag's mouse gesture has ended or changed windows");
+        }
+        Ok(captured.event)
+    }
+}
+
+/// Called before Slint handles the Winit press, while AppKit still owns it.
+pub(super) fn capture_file_drag_mouse_down(window: &slint::Window, window_id: Uuid) -> Result<()> {
+    clear_file_drag_mouse_down(window_id);
+    let mtm = MainThreadMarker::new().context("native mouse capture requires the main thread")?;
+    let event = NSApplication::sharedApplication(mtm)
+        .currentEvent()
+        .context("macOS did not provide a mouse-down event")?;
+    macos_window::with_native_view(window, |view| {
+        let native_window = view.window().context("native drag window is unavailable")?;
+        MOUSE_DOWN_EVENTS.with(|events| {
+            events.borrow_mut().record(
+                window_id,
+                event.r#type(),
+                event.windowNumber(),
+                native_window.windowNumber(),
+                event,
+            )
+        })
+    })
+}
+
+pub(super) fn clear_file_drag_mouse_down(window_id: Uuid) {
+    MOUSE_DOWN_EVENTS.with(|events| events.borrow_mut().clear(window_id));
+}
+
+struct PromiseRequest {
+    owner: FilePromiseOwner,
+    transfer_id: Option<Uuid>,
+    completion: Option<PromiseCompletion>,
+}
+
+impl PromiseRequest {
+    fn new(owner: FilePromiseOwner) -> Self {
+        Self {
+            owner,
+            transfer_id: None,
+            completion: None,
+        }
+    }
+
+    fn start(
+        &mut self,
+        transfer_id: Uuid,
+        completion: &mut Option<PromiseCompletion>,
+    ) -> Result<()> {
+        if self.transfer_id.is_some() {
+            anyhow::bail!("native file promise was already requested");
+        }
+        self.transfer_id = Some(transfer_id);
+        self.completion = completion.take();
+        Ok(())
+    }
+
+    fn finish(&mut self, succeeded: bool) {
+        if let Some(completion) = self.completion.take() {
+            call_promise_completion(&completion, succeeded);
+        }
+    }
+}
+
+impl Drop for PromiseRequest {
+    fn drop(&mut self) {
+        self.finish(false);
+    }
+}
 
 /// Logical coordinates of the Local files target, relative to the Slint
 /// content area. This is an owned UI DTO; AppKit receives only the resulting
@@ -86,20 +251,27 @@ impl NativeDropRegion {
 
 #[derive(Default)]
 struct PromiseTransferRegistry {
-    drag_by_transfer: HashMap<Uuid, Uuid>,
+    drag_by_transfer: HashMap<Uuid, (Uuid, FilePromiseOwner)>,
 }
 
 impl PromiseTransferRegistry {
-    fn register(&mut self, transfer_id: Uuid, drag_id: Uuid) {
-        self.drag_by_transfer.insert(transfer_id, drag_id);
+    fn register(&mut self, transfer_id: Uuid, drag_id: Uuid, owner: FilePromiseOwner) {
+        self.drag_by_transfer.insert(transfer_id, (drag_id, owner));
     }
 
     fn take_completed_drag(&mut self, transfer_id: Uuid) -> Option<Uuid> {
-        self.drag_by_transfer.remove(&transfer_id)
+        self.drag_by_transfer
+            .remove(&transfer_id)
+            .map(|(drag_id, _)| drag_id)
     }
 
     fn remove_drag_transfer(&mut self, transfer_id: Uuid) {
         self.drag_by_transfer.remove(&transfer_id);
+    }
+
+    fn remove_attempt(&mut self, owner: FilePromiseOwner) {
+        self.drag_by_transfer
+            .retain(|_, (_, current)| *current != owner);
     }
 }
 
@@ -107,8 +279,7 @@ struct NativeFilePromiseDrag {
     file_name: String,
     local_target: PathBuf,
     queue_download: Box<dyn Fn(Uuid, PathBuf) -> Result<()>>,
-    transfer_id: Option<Uuid>,
-    completion: Option<PromiseCompletion>,
+    request: PromiseRequest,
     // AppKit's provider delegate is weak. Retain all native objects for the
     // life of the drag / promised transfer so their callbacks remain valid.
     _provider: Retained<NSFilePromiseProvider>,
@@ -119,6 +290,7 @@ struct NativeFilePromiseDrag {
 
 thread_local! {
     static ACTIVE_DRAGS: RefCell<HashMap<Uuid, NativeFilePromiseDrag>> = RefCell::new(HashMap::new());
+    static MOUSE_DOWN_EVENTS: RefCell<MouseDownEvents<Retained<NSEvent>>> = RefCell::default();
 }
 
 fn promised_transfers() -> &'static Mutex<PromiseTransferRegistry> {
@@ -161,18 +333,13 @@ define_class!(
         fn filePromiseProvider_writePromiseToURL_completionHandler(
             &self,
             _provider: &NSFilePromiseProvider,
-            url: &objc2_foundation::NSURL,
+            url: &NSURL,
             completion_handler: &block2::DynBlock<dyn Fn(*mut NSError)>,
         ) {
-            let Some(path) = url.path() else {
-                complete_drag(self.ivars().drag_id, false);
-                return;
-            };
-            let completion = completion_handler.copy();
-            let _ = queue_drag_download(
+            fulfill_file_promise(
                 self.ivars().drag_id,
-                PathBuf::from(path.to_string()),
-                Some(completion),
+                file_promise_target(url),
+                completion_handler.copy(),
             );
         }
 
@@ -232,7 +399,7 @@ define_class!(
             operation: NSDragOperation,
         ) {
             if operation == NSDragOperation::None {
-                discard_drag(self.ivars().drag_id);
+                complete_drag(self.ivars().drag_id, false);
             }
         }
     }
@@ -304,7 +471,7 @@ define_class!(
             let Some(local_target) = local_target else {
                 return false.into();
             };
-            queue_drag_download(self.ivars().drag_id, local_target, None).is_ok()
+            queue_drag_download(self.ivars().drag_id, local_target, &mut None).is_ok()
         }
     }
 );
@@ -328,6 +495,8 @@ impl NativeFilePromiseDropDestination {
 /// transfer ID.
 pub(super) fn begin_file_promise_drag(
     window: &slint::Window,
+    window_id: Uuid,
+    owner: FilePromiseOwner,
     file_name: String,
     local_target: PathBuf,
     local_drop_region: Option<NativeDropRegion>,
@@ -336,12 +505,20 @@ pub(super) fn begin_file_promise_drag(
     validate_file_name(&file_name)?;
     let mtm =
         MainThreadMarker::new().context("macOS native file drag must start on the main thread")?;
-    let event = NSApplication::sharedApplication(mtm)
-        .currentEvent()
-        .context("macOS did not provide a drag event")?;
+    if ACTIVE_DRAGS.with(|drags| drags.borrow().len() >= MAX_NATIVE_DRAGS) {
+        anyhow::bail!("too many native file promises are pending");
+    }
     let drag_id = Uuid::new_v4();
 
     macos_window::with_native_view(window, |view| {
+        let native_window = view.window().context("native drag window is unavailable")?;
+        let event = MOUSE_DOWN_EVENTS.with(|events| {
+            events.borrow_mut().take(
+                window_id,
+                native_window.windowNumber(),
+                NSEvent::pressedMouseButtons() & 1 != 0,
+            )
+        })?;
         let delegate = NativeFilePromiseDelegate::new(mtm, drag_id);
         let file_type = NSString::from_str(FILE_PROMISE_UTI);
         let provider = NSFilePromiseProvider::initWithFileType_delegate(
@@ -353,7 +530,8 @@ pub(super) fn begin_file_promise_drag(
             NSDraggingItem::alloc(),
             ProtocolObject::from_ref(&*provider),
         );
-        item.setDraggingFrame(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(48.0, 24.0)));
+        let origin = view.convertPoint_fromView(event.locationInWindow(), None);
+        item.setDraggingFrame(NSRect::new(origin, NSSize::new(48.0, 24.0)));
         let source = NativeFilePromiseDragSource::new(mtm, drag_id);
         let destination = local_drop_region.and_then(|region| {
             let frame = region.frame_in_view(view)?;
@@ -370,8 +548,7 @@ pub(super) fn begin_file_promise_drag(
                     file_name,
                     local_target,
                     queue_download: Box::new(queue_download),
-                    transfer_id: None,
-                    completion: None,
+                    request: PromiseRequest::new(owner),
                     _provider: provider,
                     _delegate: delegate,
                     _source: source.clone(),
@@ -389,6 +566,31 @@ pub(super) fn begin_file_promise_drag(
         session.setAnimatesToStartingPositionsOnCancelOrFail(true);
         Ok(())
     })
+}
+
+/// Remove only promises from the retired attempt; newer connections survive.
+fn cancel_file_promise_attempt(owner: FilePromiseOwner) {
+    if let Ok(mut transfers) = promised_transfers().lock() {
+        transfers.remove_attempt(owner);
+    }
+    if slint::invoke_from_event_loop(move || {
+        let drag_ids = ACTIVE_DRAGS.with(|drags| {
+            drags
+                .borrow()
+                .iter()
+                .filter(|(_, drag)| drag.request.owner == owner)
+                .map(|(drag_id, _)| *drag_id)
+                .collect::<Vec<_>>()
+        });
+        for drag_id in drag_ids {
+            complete_drag(drag_id, false);
+        }
+    })
+    .is_err()
+    {
+        tracing::debug!(target: "ax_ssh::sftp_drag", stage = "shutdown-ui-unavailable",
+            "SFTP native promise event loop has stopped");
+    }
 }
 
 /// Return true when a SFTP terminal event was consumed by a native promise.
@@ -446,27 +648,23 @@ fn sender_matches_drag(sender: &ProtocolObject<dyn NSDraggingInfo>, drag_id: Uui
 fn queue_drag_download(
     drag_id: Uuid,
     local_target: PathBuf,
-    completion: Option<PromiseCompletion>,
+    completion: &mut Option<PromiseCompletion>,
 ) -> Result<()> {
     let transfer_id = Uuid::new_v4();
-    ACTIVE_DRAGS.with(|drags| {
+    let owner = ACTIVE_DRAGS.with(|drags| {
         let mut drags = drags.borrow_mut();
         let drag = drags
             .get_mut(&drag_id)
             .context("native file drag is no longer active")?;
-        if drag.transfer_id.is_some() {
-            anyhow::bail!("native file promise was already requested")
-        }
-        drag.completion = completion;
-        drag.transfer_id = Some(transfer_id);
-        Ok::<_, anyhow::Error>(())
+        drag.request.start(transfer_id, completion)?;
+        Ok::<_, anyhow::Error>(drag.request.owner)
     })?;
     {
         let Ok(mut transfers) = promised_transfers().lock() else {
             complete_drag(drag_id, false);
             anyhow::bail!("native file promise state is unavailable");
         };
-        transfers.register(transfer_id, drag_id);
+        transfers.register(transfer_id, drag_id, owner);
     }
     let queued = ACTIVE_DRAGS.with(|drags| {
         let drags = drags.borrow();
@@ -483,12 +681,45 @@ fn queue_drag_download(
     Ok(())
 }
 
-fn discard_drag(drag_id: Uuid) {
-    let drag = remove_drag(drag_id);
-    if let Some(drag) = drag
-        && let Some(destination) = drag.destination
-    {
-        destination.removeFromSuperview();
+fn file_promise_target(url: &NSURL) -> Result<PathBuf> {
+    if !url.isFileURL() {
+        anyhow::bail!("native file promise destination is not a file URL");
+    }
+    let path = url
+        .path()
+        .context("native file promise destination has no local path")?;
+    let path = PathBuf::from(path.to_string());
+    if !path.is_absolute() {
+        anyhow::bail!("native file promise destination is not absolute");
+    }
+    Ok(path)
+}
+
+fn fulfill_file_promise(
+    drag_id: Uuid,
+    local_target: Result<PathBuf>,
+    completion: PromiseCompletion,
+) {
+    let mut completion = Some(completion);
+    let result =
+        local_target.and_then(|target| queue_drag_download(drag_id, target, &mut completion));
+    if result.is_err() {
+        // Before registration the caller still owns this callback. After it,
+        // PromiseRequest owns completion and queue errors finish that request.
+        if let Some(completion) = completion {
+            call_promise_completion(&completion, false);
+        }
+        let unrequested = ACTIVE_DRAGS.with(|drags| {
+            drags
+                .borrow()
+                .get(&drag_id)
+                .is_some_and(|drag| drag.request.transfer_id.is_none())
+        });
+        if unrequested {
+            complete_drag(drag_id, false);
+        }
+        tracing::debug!(target: "ax_ssh::sftp_drag", stage = "promise-request-rejected",
+            "SFTP native promise request rejected");
     }
 }
 
@@ -504,15 +735,16 @@ fn remove_drop_destination(drag_id: Uuid) {
 
 fn complete_drag(drag_id: Uuid, succeeded: bool) {
     let drag = remove_drag(drag_id);
-    let Some(drag) = drag else {
+    let Some(mut drag) = drag else {
         return;
     };
-    if let Some(destination) = drag.destination {
+    if let Some(destination) = &drag.destination {
         destination.removeFromSuperview();
     }
-    let Some(completion) = drag.completion else {
-        return;
-    };
+    drag.request.finish(succeeded);
+}
+
+fn call_promise_completion(completion: &PromiseCompletion, succeeded: bool) {
     if succeeded {
         completion.call((std::ptr::null_mut(),));
     } else {
@@ -527,7 +759,7 @@ fn complete_drag(drag_id: Uuid, succeeded: bool) {
 
 fn remove_drag(drag_id: Uuid) -> Option<NativeFilePromiseDrag> {
     let drag = ACTIVE_DRAGS.with(|drags| drags.borrow_mut().remove(&drag_id));
-    if let Some(transfer_id) = drag.as_ref().and_then(|drag| drag.transfer_id)
+    if let Some(transfer_id) = drag.as_ref().and_then(|drag| drag.request.transfer_id)
         && let Ok(mut transfers) = promised_transfers().lock()
     {
         transfers.remove_drag_transfer(transfer_id);
@@ -536,36 +768,4 @@ fn remove_drag(drag_id: Uuid) -> Option<NativeFilePromiseDrag> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn native_drop_region_requires_finite_non_empty_logical_geometry() {
-        assert!(NativeDropRegion::from_logical(10.0, 20.0, 30.0, 40.0).is_some());
-        assert!(NativeDropRegion::from_logical(-1.0, 0.0, 30.0, 40.0).is_none());
-        assert!(NativeDropRegion::from_logical(0.0, 0.0, 0.0, 40.0).is_none());
-        assert!(NativeDropRegion::from_logical(0.0, 0.0, f32::NAN, 40.0).is_none());
-    }
-
-    #[test]
-    fn promise_completion_resolves_the_originating_drag() {
-        let first_drag = Uuid::new_v4();
-        let first_transfer = Uuid::new_v4();
-        let second_drag = Uuid::new_v4();
-        let second_transfer = Uuid::new_v4();
-        let mut registry = PromiseTransferRegistry::default();
-
-        registry.register(first_transfer, first_drag);
-        registry.register(second_transfer, second_drag);
-
-        assert_eq!(
-            registry.take_completed_drag(second_transfer),
-            Some(second_drag)
-        );
-        assert_eq!(
-            registry.take_completed_drag(first_transfer),
-            Some(first_drag)
-        );
-        assert_eq!(registry.take_completed_drag(first_transfer), None);
-    }
-}
+mod tests;

@@ -598,6 +598,57 @@ fn terminal_callbacks_connect_to_a_real_worker_and_forward_keys_paste_focus_and_
     );
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn native_sftp_drag_errors_reach_the_sftp_status_without_creating_a_transfer() {
+    isolated(
+        "native_sftp_drag_errors_reach_the_sftp_status_without_creating_a_transfer",
+        || {
+            let harness = Harness::new();
+            assert!(GLOBAL_WINDOW_ROUTER.set(harness.router.clone()).is_ok());
+            let tab = {
+                let mut app = harness.state.lock().expect("state");
+                let tab = app.open_sftp_tab(&harness.profile);
+                let terminal = app.terminal_mut(tab).expect("SFTP tab");
+                terminal.connected = true;
+                terminal.sftp.open = true;
+                terminal.sftp.status = "Directory ready".into();
+                harness.router.activate_tab(MAIN_WINDOW_ID, tab, &mut app);
+                tab
+            };
+            harness
+                .ui
+                .invoke_begin_native_remote_file_drag_sftp("/missing.txt".into());
+            harness.wait_for(|app| {
+                app.terminal(tab).is_some_and(|terminal| {
+                    terminal
+                        .sftp
+                        .status
+                        .contains("remote entry is no longer visible")
+                })
+            });
+            harness.status();
+            assert!(
+                harness
+                    .ui
+                    .get_sftp_status()
+                    .contains("Cannot start native SFTP drag")
+            );
+            assert!(
+                harness
+                    .state
+                    .lock()
+                    .expect("state")
+                    .terminal(tab)
+                    .expect("SFTP tab")
+                    .sftp
+                    .transfers
+                    .is_empty()
+            );
+        },
+    );
+}
+
 #[test]
 fn clipboard_consent_revalidates_identity_limits_and_permission_before_sending_bytes() {
     isolated(

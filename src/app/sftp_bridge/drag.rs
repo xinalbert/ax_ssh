@@ -86,10 +86,18 @@ pub(super) fn wire_drag(
                 path.as_str(),
             );
             if let Err(error) = result {
-                set_status(
-                    &ui_for_native_drag,
-                    &format!("Cannot start native SFTP drag: {error}"),
-                );
+                let message = format!("Cannot start native SFTP drag: {error}");
+                if let Some(tab_id) = router_for_native_drag.active_tab(window_id) {
+                    set_native_sftp_drag_status(
+                        &state_for_native_drag,
+                        &ui_for_native_drag,
+                        tab_id,
+                        None,
+                        &message,
+                    );
+                } else {
+                    set_status(&ui_for_native_drag, &message);
+                }
             }
         });
     }
@@ -422,6 +430,36 @@ pub(super) fn handle_drop_on_remote_pane(
 }
 
 #[cfg(target_os = "macos")]
+fn set_native_sftp_drag_status(
+    state: &Arc<Mutex<AppState>>,
+    ui: &slint::Weak<AppWindow>,
+    tab_id: Uuid,
+    attempt_id: Option<Uuid>,
+    message: &str,
+) {
+    let changed = match state.lock() {
+        Ok(mut app) => app.terminal_mut(tab_id).is_some_and(|terminal| {
+            if !terminal.is_sftp()
+                || attempt_id.is_some_and(|attempt| {
+                    terminal.ssh_route().and_then(|(_, attempt)| attempt) != Some(attempt)
+                })
+            {
+                return false;
+            }
+            terminal.sftp.status = message.to_owned();
+            true
+        }),
+        Err(_) => {
+            set_status(ui, message);
+            return;
+        }
+    };
+    if changed {
+        dispatch_active_snapshot(ui, state);
+    }
+}
+
+#[cfg(target_os = "macos")]
 pub(super) fn begin_native_remote_file_drag(
     state: &Arc<Mutex<AppState>>,
     ui: &AppWindow,
@@ -433,7 +471,7 @@ pub(super) fn begin_native_remote_file_drag(
     let tab_id = router
         .active_tab(window_id)
         .context("no active SFTP tab for this window")?;
-    let (file_name, remote_path, total_bytes, local_target) =
+    let (file_name, remote_path, total_bytes, local_target, attempt_id) =
         with_sftp_terminal_for_tab(state, tab_id, |terminal| {
             let entry = terminal
                 .sftp
@@ -452,11 +490,16 @@ pub(super) fn begin_native_remote_file_drag(
             if local_directory.as_os_str().is_empty() {
                 anyhow::bail!("local SFTP directory is not ready")
             }
+            let attempt_id = terminal
+                .ssh_route()
+                .and_then(|(_, attempt)| attempt)
+                .context("SFTP connection attempt is no longer available")?;
             Ok((
                 entry.name.clone(),
                 entry.path,
                 entry.size,
                 local_directory.join(entry.name),
+                attempt_id,
             ))
         })?;
 
@@ -476,6 +519,8 @@ pub(super) fn begin_native_remote_file_drag(
         .flatten();
     super::macos_file_drag::begin_file_promise_drag(
         ui.window(),
+        window_id,
+        super::macos_file_drag::FilePromiseOwner { tab_id, attempt_id },
         file_name,
         local_target,
         local_drop_region,
@@ -483,15 +528,19 @@ pub(super) fn begin_native_remote_file_drag(
             let result = queue_native_remote_download(
                 &state_for_transfer,
                 tab_id,
+                attempt_id,
                 transfer_id,
                 remote_path.clone(),
                 total_bytes,
                 target,
             );
-            if result.is_err() {
-                set_status(
+            if let Err(error) = &result {
+                set_native_sftp_drag_status(
+                    &state_for_transfer,
                     &ui_for_transfer,
-                    "Cannot queue the native SFTP file download",
+                    tab_id,
+                    Some(attempt_id),
+                    &format!("Cannot queue the native SFTP file download: {error}"),
                 );
             }
             result
@@ -503,12 +552,17 @@ pub(super) fn begin_native_remote_file_drag(
 pub(super) fn queue_native_remote_download(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
+    attempt_id: Uuid,
     transfer_id: Uuid,
     remote_path: String,
     total_bytes: u64,
     local_target: PathBuf,
 ) -> Result<()> {
     with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        if terminal.ssh_route().and_then(|(_, attempt)| attempt) != Some(attempt_id) {
+            anyhow::bail!("SFTP connection changed since the drag started");
+        }
+        let worker = terminal.worker.as_ref().context("SFTP tab has no worker")?;
         let name = remote_path
             .rsplit('/')
             .next()
@@ -518,24 +572,60 @@ pub(super) fn queue_native_remote_download(
         terminal
             .sftp
             .queue_transfer(transfer_id, name, total_bytes)?;
-        let result = terminal
-            .worker
-            .as_ref()
-            .context("SFTP tab has no worker")?
-            .request_open_sftp_file_at_local_path(
-                transfer_id,
-                remote_path,
-                local_target,
-                total_bytes,
-            );
+        let result = worker.request_open_sftp_file_at_local_path(
+            transfer_id,
+            remote_path,
+            local_target,
+            total_bytes,
+        );
         if let Err(error) = result {
             terminal.sftp.finish_transfer(
                 transfer_id,
                 SftpTransferPhase::Failed,
-                "Native download request was rejected".to_owned(),
+                format!("Native download request was rejected: {error}"),
             );
             return Err(error);
         }
         Ok(())
     })
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn late_native_drag_errors_do_not_replace_a_new_connections_status() {
+        let mut app = AppState::new(
+            ConfigStore::new(
+                std::env::temp_dir().join(format!("axssh-drag-status-{}.json", Uuid::new_v4())),
+            ),
+            SessionStore::default(),
+        );
+        let profile = SessionProfile::new("fixture", "fixture.invalid", "fixture");
+        let tab_id = app.open_sftp_tab(&profile);
+        let old_attempt = Uuid::new_v4();
+        let current_attempt = Uuid::new_v4();
+        let terminal = app.terminal_mut(tab_id).expect("SFTP tab");
+        terminal.set_ssh_attempt(Some(current_attempt));
+        terminal.sftp.status = "New connection ready".into();
+        let state = Arc::new(Mutex::new(app));
+        set_native_sftp_drag_status(
+            &state,
+            &slint::Weak::default(),
+            tab_id,
+            Some(old_attempt),
+            "obsolete error",
+        );
+        assert_eq!(
+            state
+                .lock()
+                .expect("state")
+                .terminal(tab_id)
+                .expect("tab")
+                .sftp
+                .status,
+            "New connection ready"
+        );
+    }
 }

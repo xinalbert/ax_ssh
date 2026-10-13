@@ -80,6 +80,8 @@ pub(super) fn spawn_session_monitor(
     };
     let runtime_for_monitor = runtime.clone();
     Some(runtime.spawn(async move {
+        #[cfg(target_os = "macos")]
+        let mut promise_attempt = super::macos_file_drag::FilePromiseAttemptGuard::new(tab_id, attempt_id);
         let mut terminal_event = false;
         let mut presentation =
             crate::app::terminal_presentation::TerminalPresentation::new();
@@ -871,6 +873,8 @@ pub(super) fn spawn_session_monitor(
                 }
             }
             if terminal_event {
+                #[cfg(target_os = "macos")]
+                promise_attempt.cancel();
                 presentation.clear_pending_output();
             }
         }

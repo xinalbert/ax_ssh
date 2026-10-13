@@ -145,6 +145,33 @@ pub(in crate::app) fn install_native_window_input_hook(
             _window.with_winit_window(|window| window_router.capture_placement(window_id, window));
         }
         match event {
+            #[cfg(target_os = "macos")]
+            WindowEvent::MouseInput {
+                state,
+                button: slint::winit_030::winit::event::MouseButton::Left,
+                ..
+            } => {
+                if *state == ElementState::Pressed {
+                    if let Some(ui) = ui_for_native.upgrade()
+                        && super::super::macos_file_drag::capture_file_drag_mouse_down(
+                            ui.window(),
+                            window_id,
+                        )
+                        .is_err()
+                    {
+                        tracing::debug!(target: "ax_ssh::sftp_drag", stage = "mouse-down-rejected",
+                            "SFTP native drag mouse-down capture rejected");
+                    }
+                } else {
+                    // Clear before Slint flushes the last coalesced move. That
+                    // move must not start an AppKit drag after the physical up.
+                    super::super::macos_file_drag::clear_file_drag_mouse_down(window_id);
+                }
+            }
+            #[cfg(target_os = "macos")]
+            WindowEvent::CloseRequested => {
+                super::super::macos_file_drag::clear_file_drag_mouse_down(window_id);
+            }
             WindowEvent::DroppedFile(path) => {
                 let Some(ui) = ui_for_drop.upgrade() else {
                     log_native_file_drop("dropped-ui-gone", 0, None);
@@ -229,6 +256,8 @@ pub(in crate::app) fn install_native_window_input_hook(
                 );
             }
             WindowEvent::Focused(false) => {
+                #[cfg(target_os = "macos")]
+                super::super::macos_file_drag::clear_file_drag_mouse_down(window_id);
                 modifiers_for_event.set(ModifiersState::default());
                 clear_native_event_modifiers();
                 native_file_drop_pointer_for_event.borrow_mut().clear();

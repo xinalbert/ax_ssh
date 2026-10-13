@@ -1,6 +1,46 @@
 use super::*;
 use std::collections::HashSet;
 
+#[cfg(target_os = "macos")]
+#[test]
+fn native_download_rejects_a_retired_attempt_and_workerless_targets_before_queueing() {
+    let mut app = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let tab_id = app.open_sftp_tab(&profile);
+    let old_attempt = Uuid::new_v4();
+    let current_attempt = Uuid::new_v4();
+    let terminal = app.terminal_mut(tab_id).expect("SFTP tab");
+    terminal.connected = true;
+    terminal.set_ssh_attempt(Some(current_attempt));
+    let state = Arc::new(Mutex::new(app));
+    for (attempt, expected) in [
+        (old_attempt, "connection changed"),
+        (current_attempt, "no worker"),
+    ] {
+        let error = queue_native_remote_download(
+            &state,
+            tab_id,
+            attempt,
+            Uuid::new_v4(),
+            "/remote/file.txt".into(),
+            1,
+            std::env::temp_dir().join("unused-file.txt"),
+        )
+        .expect_err("invalid download owner");
+        assert!(error.to_string().contains(expected));
+        assert!(
+            state
+                .lock()
+                .expect("state")
+                .terminal(tab_id)
+                .expect("tab")
+                .sftp
+                .transfers
+                .is_empty()
+        );
+    }
+}
+
 fn test_state() -> AppState {
     AppState::new(
         ConfigStore::new(std::env::temp_dir().join(format!("ax-ssh-sftp-{}.json", Uuid::new_v4()))),
