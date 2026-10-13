@@ -25,7 +25,10 @@ pub(in crate::app) fn process_terminal_output(
         .map(TerminalModel::osc52_permission_generation)
         .unwrap_or_default();
     let clipboard_generation = terminal.reconnect_generation;
-    let presentation_hold = terminal.terminal_output_presentation_hold();
+    let presentation_hold = terminal
+        .terminal
+        .as_ref()
+        .and_then(TerminalModel::synchronized_output_remaining);
     let clipboard_read_requested = clipboard_formatter
         .and_then(|formatter| terminal.offer_clipboard_read(formatter))
         .is_some();

@@ -343,7 +343,6 @@ impl AppState {
                             pending_terminal_snapshot: None,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
-                            cursor_hide_deadline: None,
                             status: if snapshot.status.is_empty() {
                                 "Restored; reconnecting...".to_owned()
                             } else {
@@ -385,7 +384,6 @@ impl AppState {
                             pending_terminal_snapshot: None,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
-                            cursor_hide_deadline: None,
                             status: snapshot.status.clone(),
                             connected: false,
                             connection_latency: ConnectionLatency::default(),

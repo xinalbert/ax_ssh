@@ -156,7 +156,6 @@ pub(super) struct TerminalTabState {
     pending_terminal_snapshot: Option<TerminalSnapshot>,
     published_terminal_snapshot: Option<TerminalSnapshot>,
     published_terminal_state: Option<TerminalVisibleState>,
-    cursor_hide_deadline: Option<tokio::time::Instant>,
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) connection_latency: ConnectionLatency,
