@@ -574,3 +574,13 @@
 - 关键结论：使用 cargo install cargo-llvm-cov --locked；工具依赖匹配 Rust 的 llvm-tools-preview；支持 LCOV/JSON/report 和独立 coverage target directory；no-run/report 时须防止旧 profraw 混入。
 - 对实施计划的影响：补齐工具，先测未修改源码基线，最终清理 profile 后同命令重测，输出至 target，不排除业务源码来提高比例。
 - 未解决问题：本机与 Linux Codecov 平台不同；最终 Linux 指标仍需原生 CI。
+
+## 2026-10-13 14:36 +0800 macOS 文件承诺事件与回调契约
+
+- 时间：2026-10-13 14:36 +0800
+- 检索问题：Slint 延后 moved 回调能否使用 AppKit currentEvent 启动拖拽，文件承诺失败后如何收尾？
+- 检索原因：用户授权修复 SFTP 拖出偶发失败，原生事件和 completion 契约影响实现。
+- 来源列表：[Apple beginDraggingSession](https://developer.apple.com/documentation/appkit/nsview/begindraggingsession%28with%3Aevent%3Asource%3A%29)；[Apple currentEvent](https://developer.apple.com/documentation/appkit/nsapplication/currentevent)；[Apple file promise completion](https://developer.apple.com/documentation/appkit/nsfilepromiseproviderdelegate/filepromiseprovider%28_%3Awritepromiseto%3Acompletionhandler%3A%29)；锁定 Slint 1.18.1 的 `vendor/i-slint-backend-winit/{winitwindowadapter,event_loop}.rs` 和本机 Winit 0.30.13。
+- 关键结论：AppKit drag 使用起始 mouse-down，currentEvent 只指最近事件；Slint 会先补发 moved 再处理 release，因此后读 currentEvent 不可靠。写 promise 后须调用 completion；断线/重复/非法目标应保留一次性 owner，不可静默丢弃回调。
+- 对实施计划的影响：原生 press hook 保存事件；启动按窗口和实际按键校验；promise 绑定 SSH attempt 并由 monitor 生命周期清理，错误映射到 SFTP 状态。
+- 未解决问题：实际 Finder 操作和用户的目标目录/文件系统尚未人工验证；无截图或真实远端连接验证。

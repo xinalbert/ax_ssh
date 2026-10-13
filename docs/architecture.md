@@ -1841,6 +1841,23 @@ request is queued, so it cannot intercept normal AxSSH input while the transfer
 runs; the provider and delegate stay retained only until that terminal transfer
 event completes the promise.
 
+The native input hook captures and validates the actual left mouse-down event
+before Slint dispatch. Drag initiation consumes that event once and checks the
+native window and live button state; release, focus loss and window closure
+clear it before a coalesced Slint move can reuse the gesture. It does not read
+AppKit's later `currentEvent` from the `moved` callback. Mouse snapshots and
+pending native promises are each limited to 64 entries.
+
+Each promise belongs to a Tab UUID and SSH attempt UUID. Download submission
+revalidates that attempt, and the session monitor cancels its promises on a
+terminal event, receiver closure or task drop. A newer connection is unaffected.
+Every Finder completion has one owner and is called once on success, failure
+or cancellation, including invalid destinations and late requests. A duplicate
+request fails its own callback without replacing the original callback. Drag
+startup and queue errors appear in the originating SFTP pane's status; late
+errors from an old attempt cannot overwrite a newer connection's status. The
+normal local writer still refuses to overwrite an existing destination.
+
 
 ### External file editing
 

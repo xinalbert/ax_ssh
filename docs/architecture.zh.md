@@ -1104,6 +1104,10 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 
 在 macOS 上，从可见远端普通文件开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。远端目录、链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
 
+原生输入 hook 在 Slint 分发前捕获并校验真实的左键按下事件。启动拖拽只消费该事件一次，并复核原生窗口和实际按键状态；松开、失焦和窗口关闭会先清理快照，防止合并后的 Slint moved 重用已结束的手势。moved 回调不再读取 AppKit 后来的 `currentEvent`。鼠标快照和待完成原生 promise 各限制为 64 项。
+
+每个 promise 绑定 Tab UUID 和 SSH attempt UUID。下载入队时重新校验该连接代次；session monitor 在终态事件、接收端关闭或任务释放时取消本代次的 promise，不影响新连接。每个 Finder completion 只有一个 owner，在成功、失败或取消时调用一次，非法目标和迟到请求也返回失败。重复请求只拒绝自己的回调，不替换原回调。启动和入队错误显示在发起 SFTP 栏的状态中，旧代次的迟到错误不能覆盖新连接的状态。普通 local writer 继续拒绝覆盖已存在的目标文件。
+
 ### 外部文件编辑
 
 `src/app/remote_edit.rs` 持有每 SFTP Tab 最多 8 个编辑上下文、私有本地副本、系统关联打开和父目录监听。下载和回传复用有界、有序的 SFTP 写 worker；`ReadEditFile`/`WriteEditFile` 与 `src/sftp/edit.rs` 保持任意编码/二进制字节，采用 `settings.sftp_transfers.remote_edit_max_file_mib`（schema v36，默认 4 MiB，规范化范围 1–64 MiB，旧配置缺失时默认 4）。主窗/独立窗口 Settings 的预览和保存传递该值；每个编辑网络操作携带自己的字节上限，SFTP 在文件访问前复核。本地副本创建、打开、有界读取和回传入队读取当前设置；设置变化时监听器强制重新检查，即使文件元数据未变化。已排队网络操作保留当时的上限；超限本地副本保留，已有更大的远端原文件可以回传符合新上限的缩小版本。下载前后核对路径和 handle 的 size/mtime，要求预期 EOF，并复用 16 请求窗口。回传独占创建私有远端临时文件，保留普通权限位，发布前复核原文件 size/mtime 和权限，再使用 `posix-rename@openssh.com` 原子替换。扩展缺失、冲突或写失败保留原文件；断线后无法保证远端临时文件清理。远端 inode 替换不保留 hard-link identity 或 ACL。

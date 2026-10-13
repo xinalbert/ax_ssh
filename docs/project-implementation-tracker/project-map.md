@@ -99,7 +99,7 @@
 | `src/app/input.rs`、`ui/components/keyboard-input.slint` | Slint/native 输入边界映射与统一键盘事件规范化 | `ApplicationKeyboardKey`、`NormalizedKeyboardInput`、`normalized_keyboard_input_from_ui`、`normalized_keyboard_input_from_winit`、`terminal_key_from_normalized_input`、``format_shortcut_event`、`menu_shortcut_from_setting` | 按通用逻辑键/文本与物理 `KeyCode`/`KeyLocation` 分离建模；Slint callback 只传 `KeyboardEvent` 或带上下文 DTO；字符键优先使用原生事件的 layout-resolved text，只有文本为空才回退 logical key；特殊键（含 F1-F24）、物理键元数据、Tab/Terminal Edit accelerator、原生菜单 `slint::Keys`、事件级 modifier snapshot、composing/repeat/synthetic 状态和 Apple 物理修饰键还原；只在终端编码边界转换为 `TerminalKey`；无稳定 xterm/terminfo 定义的 modified Escape/Tab/Return fail-closed，Kitty keyboard protocol、CSI-u 与 `modifyOtherKeys` 保持关闭 |
 | `src/app/diagnostics.rs` | 脱敏键盘、UI/menu action 和输入耗时日志边界 | `log_keyboard_event`、`log_terminal_input`、`log_terminal_input_latency`、`log_ui_action`、`log_menu_action` | 调试快捷键/功能调用/输入请求耗时；文字只记 `Text`，菜单只记白名单 action，不得增加内容长度、路径、主机、名称、Clipboard 或秘密字段 |
 | `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `DetachedTitlebarStyle`、`configure_detached_titlebar_buttons`、`update_detached_titlebar_style`、`update_detached_system_icon`、`current_modifier_state`、`current_cursor_position`、`configure_application_menu` | 标准标题栏和弱引用动作；共用 Slint SVG/Theme 尺寸/间距/颜色，无底座原生按钮及有界 raster；系统身份图像保留 source cache；菜单幂等绑定及主线程生命周期 |
-| `src/app/macos_file_drag.rs` | macOS SFTP 原生 file-promise 拖放 bridge | `NativeDropRegion`、`begin_file_promise_drag`、`complete_file_promise_transfer` | 只在 AppKit 主线程持有 provider/delegate/source/destination；远端普通文件通过 copy-only `NSFilePromiseProvider` 输出，Finder 最终路径或发起窗口捕获的 Local files 目标仅以 owned path 进入 SFTP worker；返回接收视图仅覆盖启动时由 Slint 提供、经有限值校验的 Local files 矩形，并只接受精确 native source；区域外或区域不可用的回拖拒绝，不读远端内容、不写文件、不持有 Slint/russh handle，不扩展到目录或链接 |
+| `src/app/macos_file_drag.rs`、`src/app/macos_file_drag/tests.rs` | macOS SFTP 原生 file-promise 拖放 bridge 和生命周期回归 | `MouseDownEvents`、`FilePromiseOwner`、`FilePromiseAttemptGuard`、`NativeDropRegion`、`begin_file_promise_drag`、`complete_file_promise_transfer` | 主线程捕获并消费真实左键按下事件；窗口/实际按键校验，松开/失焦/关闭清理；快照和 promise 各最多 64 项。provider/delegate/source/destination 留在 AppKit 主线程，Tab/SSH attempt 绑定的 owned 路径进入 SFTP worker；断线/EOF/任务释放取消本代次，completion 在所有路径仅调用一次；保留精确 Local files 返回区域和 copy-only 普通文件边界，不读远端内容、不写文件、不持有 russh handle |
 | `src/app/state.rs` 与 `src/app/state/{tabs,editor,sftp,terminal}.rs` | 工作区 Tab、窗口 transfer、终端、SFTP transfer、编辑器 draft、transport route、UI 刷新代次、SSH phase 与 profile mutation 所有权 | `AppState`、`PersistenceCoordinator`、`UiRefreshBatch`、`WorkspaceTransfer`、`PaneSessionSource`、`ActiveTabSnapshot`、`TerminalNoticeSnapshot`、`selection_revision`、`resize_terminal`、`scroll_terminal`、`scroll_terminal_to_bottom`、`TerminalWorker`、`SshConnectionPhase` | `state/terminal.rs` 以单截止时间合并跨批次光标 hide/show，固定 24 ms、后续输出不续期；full/terminal 快照都保留旧帧，show/超时发布最新行，resize/scroll/断开解除。generation gate 合并 full/脏 terminal UUID、最早输出时间和请求数；snapshot 前请求进入当前批次，snapshot 后请求最多补排一次。SFTP 状态按 2 MiB 目录文本预算保持有界，并持有远端/本地 Name/Size/Modified 排序；成功下载进入非活动 `Completed`/`Downloaded` 终态并保留本地路径，不派生平台 opener；远端/本地目录状态各持有有界的待刷新路径，导航离开时丢弃。本地完整快照在状态层按 250 条分页并保留 pending 条目，Slint 仅得到本地路径能力和 opaque ID。输出 snapshot 不推进 selection revision，真实 resize 先比较 `TerminalModel::size()`，仅有效变化才推进 selection revision 和请求 worker；进程级 persistence gate 串行化完整配置写入，profile token 拒绝陈旧的配置、凭据和 host-key 事务；窗口 transfer 只含 UUID |
 | `src/app/state/transitions.rs` | SSH attempt 与 credential phase 状态转换 | retry/retire/credential storage helpers | 迟到 worker/凭据结果隔离、认证/host-key 重试、仅仍在 loading phase 的后端引用清理 |
 | `src/app/state/tests.rs` | 应用状态回归 | singleton、Tab wrap、duplicate tab、pane transfer、SFTP transfer、SSH/SFTP companion、active prompt、attempt/credential isolation tests | 修改 Tab、pane、配对导航、认证 phase 或 attempt 生命周期后 |
@@ -215,6 +215,7 @@
 
 ## 刷新规则
 
+- 最近依据：2026-10-13 SFTP Finder 文件承诺修复：按原生 press 捕获 NSEvent，64 项有界存储，Tab/SSH attempt 生命周期与一次性 completion；新增 `src/app/macos_file_drag/tests.rs`。
 - 最近依据：2026-10-13 低覆盖行为补测、通知取消清理与 macOS helper fixture 诊断；2026-10-13 代码职责合规修复及现代子模块拆分；2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
 - 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
 
@@ -277,6 +278,7 @@
 
 ## 最后更新时间
 
+- 2026-10-13 17:00 +0800：SFTP 原生鼠标事件、文件承诺生命周期与行为回归路由更新。
 - 2026-10-13 08:37 +0800：代码职责合规拆分、受保护密钥后端及回归入口更新。
 
 - 2026-10-12 23:20 +0800：刷新 Codecov 行为覆盖测试与双语测量入口；生成报告只位于 ignored target。
