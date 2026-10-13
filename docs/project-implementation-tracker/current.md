@@ -31,7 +31,7 @@
 | U3 | completed | 有界路径分段导航与原始路径编辑模式 | POSIX/Unicode/Windows drive/UNC/deep path 及模型稳定性回归 | 复用 list-directory，不新增 transport API |
 | U4 | completed | 双语说明、翻译、项目地图与实施记录 | translation/link/skill/tracker 校验 | 新用户文本覆盖已有 11 个语言目录 |
 | U5 | completed | 定向与完整 Rust/Slint/可用平台门禁 | fmt/check/严格 all-target Clippy/test、两个 macOS target check/Clippy/build、diff | 不运行 Intel 非原生测试；Windows/Linux 交原生 CI |
-| U6 | in_progress | 分项提交与 push、远端 SHA 核对 | 显式暂存/index 审查、push/ls-remote、最终状态 | 不改全局代理或历史 |
+| U6 | completed | 分项提交与 push、远端 SHA 核对 | 显式暂存/index 审查、push/ls-remote、最终状态 | 直连 HTTP/2 失败后使用命令级 7897 代理/HTTP1.1，远端已核对 |
 | U7 | pending | 用户 GUI 视觉和键盘/焦点验收 | 用户运行新版并确认/提供截图 | 代理不自行捕获或检查应用截图 |
 
 ## 已完成
@@ -40,12 +40,14 @@
 - 工作区起始干净；Rust/Cargo 1.97.1、ARM64/Intel macOS target、edition 2024/MSRV 1.92.0 和锁定依赖保持。
 - 已核对主操作可复用现有上传/下载 callback；原 toolbar Upload 条件与本地导航不兼容，属于本轮修正范围。
 - 页面入口和侧栏不变；前端清晰度规则限于用户选定的四项。先落盘计划，再改实现。
+- 界面/回归提交 `9c0f035` 与双语文档/实施提交 `1a106f1` 已普通推送；独立 ls-remote 核对远端 master 为 `1a106f159a2db95cf9b0df3919347bf098cfc0aa`，与本地 HEAD 一致且工作区干净。本条作为独立交付记录提交后再推送并核对最终 SHA。
 
 ## 验证
 
 - 已完成：环境/契约预检、最终 Slint 重编；60 项 SFTP 专项、391 library + 451 binary（842）完整测试、fmt、locked/offline check 和严格 all-target Clippy 通过。665 消息 × 11 目录、8 Python 翻译测试、119 个仓库文档相对链接、九个 SVG 与 skill/tracker/staged diff 校验通过。窄栏零宽、上传回调和焦点恢复均纳入最终源码。
 - 已完成：ARM64/Intel macOS 的 CI 同款 check、严格 all-target Clippy 与 build；Mach-O arm64/x86_64 核对。整个最终门禁期间源码 SHA-256 未变化；未执行 Intel 非原生测试。
-- 未完成：提交推送、用户 GUI 视觉/键盘/焦点验收；Windows/Linux 原生构建交 CI。
+- 已完成：两组提交、普通 push 和远端 SHA 核对；直连 HTTP/2 错误后命令级 7897 代理/HTTP1.1 成功，无全局代理修改。
+- 未完成：用户 GUI 视觉/键盘/焦点验收；Windows/Linux 原生构建交 CI。
 
 ## 风险与阻塞
 
@@ -55,8 +57,8 @@
 
 ## 下一步
 
-- 分项提交和 push，核对远端 SHA 与工作区；用户随后运行 `target/aarch64-apple-darwin/debug/ax_ssh` 验收页面和键盘/焦点。
+- 用户运行 `target/aarch64-apple-darwin/debug/ax_ssh`，确认宽/窄双栏、选中后的主操作、路径编辑/Enter/Escape 与焦点；提供 SFTP 截图继续视觉迭代。U7 未收到用户确认前保持 pending。
 
 ## 最后更新时间
 
-- 2026-10-14 00:12 +0800
+- 2026-10-14 00:16 +0800
