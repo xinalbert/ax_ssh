@@ -17,7 +17,6 @@ use uuid::Uuid;
 use super::*;
 
 #[derive(Clone, Copy)]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(super) struct LogicalRegion {
     pub(super) x: f32,
     pub(super) y: f32,
@@ -36,7 +35,7 @@ static WINDOW_LAYOUTS: OnceLock<Mutex<HashMap<Uuid, WindowLayout>>> = OnceLock::
 static SOFTWARE_PRESENTATION_ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn set_enabled(enabled: bool) {
-    SOFTWARE_PRESENTATION_ENABLED.store(enabled && cfg!(target_os = "macos"), Ordering::Release);
+    SOFTWARE_PRESENTATION_ENABLED.store(enabled, Ordering::Release);
 }
 
 pub(super) fn is_enabled() -> bool {
@@ -144,8 +143,6 @@ pub(super) fn remove_layout(ui: &AppWindow, window_id: Uuid) {
     }
     #[cfg(target_os = "macos")]
     softbuffer::remove_presentation_layout(window_key(ui));
-    #[cfg(not(target_os = "macos"))]
-    let _ = ui;
 }
 
 #[cfg(target_os = "macos")]
@@ -185,9 +182,6 @@ fn window_key(ui: &AppWindow) -> u64 {
         })
         .unwrap_or(0)
 }
-
-#[cfg(not(target_os = "macos"))]
-fn publish_layout(_ui: &AppWindow, _layout: &WindowLayout) {}
 
 #[cfg(target_os = "macos")]
 fn physical_start(value: f32, scale: f64) -> Option<u32> {

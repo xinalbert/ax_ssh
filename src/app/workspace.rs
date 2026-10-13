@@ -3,6 +3,7 @@ use super::*;
 mod files;
 mod session_editor;
 mod session_management;
+mod startup;
 mod tabs;
 
 pub(super) use self::files::{set_recent_workspace_paths, wire_workspace_file_actions};
@@ -11,6 +12,7 @@ pub(in crate::app) use self::session_editor::{
     ensure_profile_mutation_current, finish_profile_mutation, wire_session_editor,
 };
 pub(super) use self::session_management::wire_session_management;
+pub(super) use self::startup::load_startup_workspace;
 pub(super) use self::tabs::{close_terminal_child_pane, close_workspace_tab, wire_workspace_tabs};
 
 use self::session_editor::{clear_saved_password, delete_session_profile};

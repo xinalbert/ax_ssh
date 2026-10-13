@@ -1,0 +1,91 @@
+// Bounded presentation DTOs shared by the SFTP pane and its views.
+
+export struct SftpEntryRow {
+    name: string,
+    path: string,
+    kind: string,
+    icon: image,
+    has_icon: bool,
+    size: string,
+    modified: string,
+    hidden: bool,
+    selected: bool,
+}
+
+// Rust owns the bounded transfer snapshot and updates it in batches. Slint
+// only renders these presentation fields and returns opaque IDs for intents.
+export struct SftpTransferRow {
+    id: string,
+    name: string,
+    direction: string,
+    state: string,
+    status: string,
+    progress: float,
+    size: string,
+    speed: string,
+    selected: bool,
+    pausable: bool,
+    resumable: bool,
+    cancellable: bool,
+    has_local_path: bool,
+}
+
+// The Rust native-drag bridge uses this owned geometry only to place the
+// platform destination over the visible Local files DropArea.
+export struct SftpNativeDropRegion {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    accepts: bool,
+}
+
+export struct SftpViewState {
+    available: bool,
+    open: bool,
+    loading: bool,
+    upload_ready: bool,
+    home: string,
+    path: string,
+    entries: [SftpEntryRow],
+    remote_sort_column: string,
+    remote_sort_descending: bool,
+    has_more: bool,
+    truncated: bool,
+    status: string,
+    can_go_back: bool,
+    can_go_forward: bool,
+    can_go_up: bool,
+    selected_count: int,
+    all_selected: bool,
+    local_loading: bool,
+    local_loaded: bool,
+    local_upload_selection_ready: bool,
+    local_path: string,
+    local_entries: [SftpEntryRow],
+    local_sort_column: string,
+    local_sort_descending: bool,
+    local_has_more: bool,
+    local_truncated: bool,
+    local_status: string,
+    local_can_go_back: bool,
+    local_can_go_forward: bool,
+    local_can_go_up: bool,
+    local_selected_count: int,
+    local_all_selected: bool,
+    active_transfers: [SftpTransferRow],
+    failed_transfers: [SftpTransferRow],
+    completed_transfers: [SftpTransferRow],
+    transfer_active_count: int,
+    transfer_failed_count: int,
+    transfer_completed_count: int,
+    transfer_selected_active_count: int,
+    transfer_selected_pausable_count: int,
+    transfer_selected_resumable_count: int,
+    editor_path: string,
+    editor_local_path: string,
+    editor_status: string,
+    editor_can_upload: bool,
+    rename_name: string,
+    editor_auto_upload: bool,
+}

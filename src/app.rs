@@ -6,7 +6,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -97,6 +97,7 @@ mod serial_bridge;
 mod session_groups;
 mod settings_bridge;
 mod sftp_bridge;
+#[cfg(target_os = "macos")]
 mod software_presentation;
 mod state;
 mod system_icons;
@@ -165,39 +166,6 @@ pub(crate) fn configure_window_lifecycle() {
     enable_slint_destroy_window_on_hide();
 }
 
-fn load_startup_workspace(
-    config: &ConfigStore,
-    sessions: &mut SessionStore,
-) -> Option<ax_ssh::config::WorkspaceSnapshot> {
-    // The recovery checkpoint reflects the most recent running workspace.
-    // A manually opened file is a template until the user explicitly saves it.
-    match config.load_workspace() {
-        Ok(Some(snapshot)) => return Some(snapshot),
-        Ok(None) => {}
-        Err(error) => warn!(%error, "automatic workspace checkpoint could not be loaded"),
-    }
-    let recent_paths = sessions.recent_workspace_paths().to_vec();
-    let mut removed_unavailable_path = false;
-    for path in recent_paths {
-        match ConfigStore::load_workspace_file(Path::new(&path)) {
-            Ok(snapshot) => {
-                if removed_unavailable_path && let Err(error) = config.save(sessions) {
-                    warn!(%error, "failed to persist cleaned recent workspace history");
-                }
-                return Some(snapshot);
-            }
-            Err(error) => {
-                warn!(%error, path, "recent workspace could not be restored; removing it from history");
-                removed_unavailable_path |= sessions.remove_workspace_path(Path::new(&path));
-            }
-        }
-    }
-    if removed_unavailable_path && let Err(error) = config.save(sessions) {
-        warn!(%error, "failed to persist cleaned recent workspace history");
-    }
-    None
-}
-
 pub fn run(log_directory: PathBuf) -> Result<()> {
     terminal_render::prepare_semantic_highlighting();
     terminal_targets::prepare();
@@ -234,6 +202,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let initial_fonts =
         load_startup_bundled_fonts(runtime.handle(), &font_registry, initial_font_families);
     let software_renderer = renderer_selection.uses_software();
+    #[cfg(target_os = "macos")]
     software_presentation::set_enabled(software_renderer);
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let restore_font_registry = font_registry.clone();
@@ -246,6 +215,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         })
         .context("failed to create Slint window")?;
     renderer_window_created("main");
+    #[cfg(target_os = "macos")]
     ui.set_software_presentation_enabled(software_presentation::is_enabled());
     let window_router = WindowRouter::new(ui.as_weak());
     window_router.set_terminal_presentation_software_renderer(software_renderer);
@@ -538,6 +508,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     drop(_window_activation_poll);
     release_detached_windows(&detached_windows);
     clear_file_icon_cache();
+    #[cfg(target_os = "macos")]
     software_presentation::remove_layout(&ui, MAIN_WINDOW_ID);
     release_window_resources(&ui);
     hide_window_for_release(&ui);
@@ -796,6 +767,7 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
         window_router.clone(),
         persistence_for_settings,
     );
+    #[cfg(target_os = "macos")]
     if let Ok(app) = state.lock() {
         software_presentation::set_rows(
             ui,
@@ -874,82 +846,5 @@ mod tests {
         assert_eq!(2, super::tokio_worker_thread_count_for_parallelism(2));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(4));
         assert_eq!(4, super::tokio_worker_thread_count_for_parallelism(32));
-    }
-
-    #[test]
-    fn startup_uses_latest_checkpoint_instead_of_stale_recent_template() {
-        let root = std::env::temp_dir().join(format!("axssh-startup-{}", Uuid::new_v4()));
-        let config = ConfigStore::new(root.join("sessions.json"));
-        let template = root.join("template.json");
-        let old = ax_ssh::config::WorkspaceSnapshot {
-            version: ax_ssh::config::WORKSPACE_SNAPSHOT_VERSION,
-            ..Default::default()
-        };
-        ConfigStore::save_workspace_file(&template, &old).expect("template");
-        let mut latest = old.clone();
-        latest
-            .windows
-            .push(ax_ssh::config::WorkspaceWindowSnapshot {
-                placement: Some(ax_ssh::config::WindowPlacement {
-                    width: 900,
-                    height: 600,
-                    position: None,
-                    maximized: true,
-                }),
-                ..Default::default()
-            });
-        config.save_workspace(&latest).expect("checkpoint");
-        let mut sessions = SessionStore::default();
-        sessions
-            .record_workspace_path(&template)
-            .expect("recent template");
-        assert_eq!(load_startup_workspace(&config, &mut sessions), Some(latest));
-        assert_eq!(
-            ConfigStore::load_workspace_file(&template).expect("unchanged template"),
-            old
-        );
-        std::fs::write(config.workspace_path(), b"invalid JSON").expect("corrupt checkpoint");
-        assert_eq!(load_startup_workspace(&config, &mut sessions), Some(old));
-        std::fs::remove_dir_all(root).expect("cleanup");
-    }
-
-    #[test]
-    fn startup_workspace_skips_missing_recent_path_and_restores_next_available() {
-        let root = std::env::temp_dir().join(format!("ax-ssh-startup-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(&root).expect("create startup workspace test directory");
-        let config = ConfigStore::new(root.join("sessions.json"));
-        let valid_path = root.join("valid-workspace.json");
-        let missing_path = root.join("missing-workspace.json");
-        let expected = ax_ssh::config::WorkspaceSnapshot {
-            version: ax_ssh::config::WORKSPACE_SNAPSHOT_VERSION,
-            ..Default::default()
-        };
-
-        ConfigStore::save_workspace_file(&valid_path, &expected)
-            .expect("save startup workspace test snapshot");
-        let mut sessions = SessionStore::default();
-        sessions
-            .record_workspace_path(&valid_path)
-            .expect("record valid workspace path");
-        sessions
-            .record_workspace_path(&missing_path)
-            .expect("record missing workspace path");
-
-        let restored = load_startup_workspace(&config, &mut sessions)
-            .expect("restore the next available recent workspace");
-
-        assert_eq!(restored, expected);
-        assert_eq!(
-            sessions.recent_workspace_paths(),
-            &[valid_path.to_string_lossy().into_owned()]
-        );
-        assert_eq!(
-            config
-                .load()
-                .expect("load cleaned session store")
-                .recent_workspaces,
-            sessions.recent_workspaces
-        );
-        std::fs::remove_dir_all(root).expect("remove startup workspace test directory");
     }
 }

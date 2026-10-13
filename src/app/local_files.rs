@@ -1,3 +1,6 @@
+mod upload;
+pub(super) use upload::{MAX_LOCAL_UPLOAD_FILES, PreparedLocalUpload, discover_local_uploads};
+
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

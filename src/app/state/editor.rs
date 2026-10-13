@@ -167,3 +167,53 @@ impl SessionEditorState {
         }
     }
 }
+
+impl AppState {
+    pub(in crate::app) fn active_editor_profile_id(&self) -> Option<Option<Uuid>> {
+        self.active_editor_identity()
+            .map(|(_, _, profile_id)| profile_id)
+    }
+
+    pub(in crate::app) fn active_editor_identity(&self) -> Option<(Uuid, Uuid, Option<Uuid>)> {
+        let active_id = self.active_tab_id?;
+        let tab = self.tabs.iter().find(|tab| tab.id == active_id)?;
+        let WorkspaceTabKind::SessionEditor(editor) = &tab.kind else {
+            return None;
+        };
+        Some((tab.id, editor.draft_id, editor.profile_id))
+    }
+
+    pub(in crate::app) fn editor_matches(&self, tab_id: Uuid, draft_id: Uuid) -> bool {
+        self.tabs.iter().any(|tab| {
+            tab.id == tab_id
+                && matches!(
+                    &tab.kind,
+                    WorkspaceTabKind::SessionEditor(editor) if editor.draft_id == draft_id
+                )
+        })
+    }
+
+    pub(in crate::app) fn begin_profile_mutation(&mut self, profile_id: Uuid) -> Uuid {
+        let token = Uuid::new_v4();
+        self.profile_mutations.insert(profile_id, token);
+        token
+    }
+
+    pub(in crate::app) fn profile_mutation_is_current(
+        &self,
+        profile_id: Uuid,
+        token: Uuid,
+    ) -> bool {
+        self.profile_mutations.get(&profile_id) == Some(&token)
+    }
+
+    pub(in crate::app) fn profile_mutation_is_pending(&self, profile_id: Uuid) -> bool {
+        self.profile_mutations.contains_key(&profile_id)
+    }
+
+    pub(in crate::app) fn finish_profile_mutation(&mut self, profile_id: Uuid, token: Uuid) {
+        if self.profile_mutation_is_current(profile_id, token) {
+            self.profile_mutations.remove(&profile_id);
+        }
+    }
+}

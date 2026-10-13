@@ -274,6 +274,7 @@ pub(in crate::app) fn apply_ui_language_to_open_windows(
 
 pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &AppSettings) {
     apply_settings_to_component(ui, settings);
+    #[cfg(target_os = "macos")]
     software_presentation::set_rows(
         ui,
         MAIN_WINDOW_ID,
@@ -282,14 +283,15 @@ pub(in crate::app) fn apply_settings_to_open_windows(ui: &AppWindow, settings: &
     let Some(router) = global_window_router() else {
         return;
     };
-    for (window_id, detached_ui) in router.detached_window_entries() {
+    for (_window_id, detached_ui) in router.detached_window_entries() {
         let Some(detached_ui) = detached_ui.upgrade() else {
             continue;
         };
         apply_settings_to_component(&detached_ui, settings);
+        #[cfg(target_os = "macos")]
         software_presentation::set_rows(
             &detached_ui,
-            window_id,
+            _window_id,
             settings.appearance.terminal_software_block_rows,
         );
         #[cfg(target_os = "macos")]

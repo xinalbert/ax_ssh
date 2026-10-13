@@ -51,6 +51,7 @@ pub(super) fn restore_detached_workspaces(
             initialize_detached_component(&ui, state)
                 .map_err(|error| slint::PlatformError::from(error.to_string()))?;
             ui.set_detached_window(true);
+            #[cfg(target_os = "macos")]
             ui.set_software_presentation_enabled(software_presentation::is_enabled());
             window_state::prepare(&ui, window.placement);
             renderer_window_created("detached");
@@ -104,6 +105,7 @@ pub(super) fn restore_detached_workspaces(
         refresh_workspace(&detached_ui.as_weak(), state);
         #[cfg(target_os = "macos")]
         schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_actions);
+        #[cfg(target_os = "macos")]
         schedule_detached_presentation_refresh(&detached_ui, new_window_id);
         detached_windows
             .borrow_mut()
@@ -147,6 +149,7 @@ fn restored_detached_route(
     ))
 }
 
+#[cfg(target_os = "macos")]
 fn schedule_detached_presentation_refresh(ui: &AppWindow, window_id: Uuid) {
     if !software_presentation::is_enabled() {
         return;
@@ -180,6 +183,7 @@ pub(super) fn install_window_activation_hook(window_router: &WindowRouter) -> Re
                 ui.set_window_active(*active);
             }
         }
+        #[cfg(target_os = "macos")]
         if software_presentation::is_enabled()
             && matches!(event, WindowEvent::ScaleFactorChanged { .. })
             && let Some((window_id, ui)) = router.window_for_adapter(adapter)
@@ -371,8 +375,9 @@ pub(super) fn hide_window_for_release(ui: &AppWindow) {
     }
 }
 
-fn prepare_detached_window_for_release(ui: &AppWindow, window_id: Uuid) {
-    software_presentation::remove_layout(ui, window_id);
+fn prepare_detached_window_for_release(ui: &AppWindow, _window_id: Uuid) {
+    #[cfg(target_os = "macos")]
+    software_presentation::remove_layout(ui, _window_id);
     release_window_resources(ui);
     renderer_window_destroyed("detached");
 }
@@ -491,6 +496,7 @@ pub(super) fn wire_window_actions(
                 .and_then(|detached_ui| {
                     initialize_detached_component(&detached_ui, &state_for_show)?;
                     detached_ui.set_detached_window(true);
+                    #[cfg(target_os = "macos")]
                     detached_ui
                         .set_software_presentation_enabled(software_presentation::is_enabled());
                     renderer_window_created("detached");
@@ -597,6 +603,7 @@ pub(super) fn wire_window_actions(
             #[cfg(target_os = "macos")]
             schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_titlebar_actions);
             refresh_workspace(&detached_ui.as_weak(), &state_for_show);
+            #[cfg(target_os = "macos")]
             schedule_detached_presentation_refresh(&detached_ui, detached_id);
             windows_for_show
                 .borrow_mut()

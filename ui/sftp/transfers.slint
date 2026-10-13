@@ -1,0 +1,496 @@
+import { CheckBox, ListView } from "std-widgets.slint";
+import { ActionMenuItem, FlatActionMenu } from "../components/flat-action-menu.slint";
+import { ElidedLabel } from "../components/elided-controls.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
+import { SftpActionButton, SftpPathCopyButton } from "../components/sftp-controls.slint";
+import { Theme } from "../theme.slint";
+
+import { SftpTransferRow } from "types.slint";
+
+component SftpTransferEntry inherits Rectangle {
+    function show-menu-at(position: Point) {
+        transfer-actions.show-at(position);
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+
+    in property <SftpTransferRow> transfer;
+    callback toggle-selection(string, bool);
+    callback pause(string);
+    callback resume(string);
+    callback cancel(string);
+    callback reveal-local(string);
+    callback remove(string);
+
+    function action(action-id: string, title: string) -> ActionMenuItem {
+        {
+            action-id: action-id,
+            title: title,
+            enabled: true,
+        }
+    }
+
+    // Progress-only snapshots preserve the open menu model and keyboard focus.
+    private property <bool> menu-pausable: root.transfer.pausable;
+    private property <bool> menu-resumable: root.transfer.resumable;
+    private property <bool> menu-cancellable: root.transfer.cancellable;
+    private property <bool> menu-has-local-path: root.transfer.has_local_path;
+    private property <[ActionMenuItem]> context-actions: root.menu-pausable
+        ? [
+            root.action("pause", @tr("Pause")),
+            root.action("cancel", @tr("Cancel")),
+        ]
+        : (root.menu-resumable
+            ? [
+                root.action("resume", @tr("Resume")),
+                root.action("cancel", @tr("Cancel")),
+            ]
+            : (root.menu-cancellable
+                ? [root.action("cancel", @tr("Cancel"))]
+                : (root.menu-has-local-path
+                    ? [
+                        root.action("show-in-folder", @tr("Show in Folder")),
+                        root.action("remove", @tr("Remove")),
+                    ]
+                    : [root.action("remove", @tr("Remove"))])));
+
+    // Reserve one slot for Pause/Resume and one for Cancel so both actions
+    // remain visible for a running transfer.
+    private property <length> action-slot-width:
+        2 * Theme.sftp-transfer-action-width + 2 * Theme.sftp-column-gap;
+    private property <length> content-width: max(
+        0px,
+        root.width - Theme.sftp-column-padding - Theme.sftp-selection-width
+            - Theme.sftp-column-gap - root.action-slot-width,
+    );
+    private property <length> name-x:
+        Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
+    private property <length> status-x: root.name-x + root.content-width * 0.48;
+    private property <length> size-x: root.name-x + root.content-width * 0.72;
+    private property <length> speed-x: root.name-x + root.content-width * 0.86;
+    private property <float> bounded-progress:
+        max(0.0, min(1.0, root.transfer.progress));
+    private property <color> state-color: root.transfer.state == "failed"
+        ? Theme.danger
+        : (root.transfer.state == "completed" ? Theme.success
+        : (root.transfer.state == "skipped" || root.transfer.state == "cancelled" ? Theme.muted
+        : Theme.accent));
+    private property <bool> selectable: root.transfer.pausable || root.transfer.resumable
+        || root.transfer.cancellable;
+
+    height: Theme.sftp-row-height;
+    clip: true;
+    background: action-button.has-focus ? Theme.hover : transparent;
+    accessible-role: list-item;
+    accessible-label: root.transfer.direction + ", " + root.transfer.name + ", "
+        + (root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status)
+        + (root.transfer.size.is-empty ? "" : ", " + root.transfer.size);
+
+    Rectangle {
+        x: Theme.sftp-column-padding;
+        width: Theme.sftp-selection-width;
+        height: Theme.sftp-selection-width;
+        y: (parent.height - self.height) / 2;
+        border-width: Theme.hairline;
+        border-color: root.selectable && root.transfer.selected ? Theme.accent : Theme.control-border;
+        border-radius: Theme.radius-small;
+        background: root.selectable && root.transfer.selected ? Theme.accent : transparent;
+
+        Text {
+            visible: root.selectable && root.transfer.selected;
+            width: parent.width;
+            height: parent.height;
+            text: @tr("x");
+            color: Theme.background;
+            font-size: Theme.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Text {
+        x: root.name-x;
+        width: max(0px, root.status-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.direction + "  " + root.transfer.name;
+        color: Theme.text;
+        font-size: Theme.font-body;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: root.status-x;
+        y: parent.height - Theme.space-sm;
+        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
+        height: Theme.space-xxs;
+        border-radius: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+
+        Rectangle {
+            width: parent.width * root.bounded-progress;
+            height: parent.height;
+            border-radius: parent.border-radius;
+            background: root.state-color;
+        }
+    }
+    Text {
+        x: root.status-x;
+        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
+        height: parent.height - Theme.space-sm;
+        text: root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status;
+        color: root.state-color;
+        font-size: Theme.font-caption;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.size-x;
+        width: max(0px, root.speed-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.size;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.speed-x;
+        width: max(
+            0px,
+            parent.width - root.action-slot-width - Theme.sftp-column-gap - self.x,
+        );
+        height: parent.height;
+        text: root.transfer.speed;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
+        x: 0px;
+        width: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        height: parent.height;
+        mouse-cursor: root.selectable ? pointer : default;
+        accessible-role: checkbox;
+        accessible-label: @tr("Select {0}", root.transfer.name);
+        accessible-checked: root.transfer.selected;
+        accessible-enabled: root.selectable;
+        accessible-action-default => {
+            if root.selectable {
+                root.toggle-selection(root.transfer.id, !root.transfer.selected);
+            }
+        }
+        clicked => {
+            if root.selectable {
+                root.toggle-selection(root.transfer.id, !root.transfer.selected);
+            }
+        }
+    }
+    if root.transfer.pausable : SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
+        x: parent.width - Theme.sftp-column-padding - self.width
+            - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-transfer-action-width;
+        height: Theme.sftp-control-min-height;
+        text: @tr("Pause");
+        accessible-name: @tr("Pause {0}", root.transfer.name);
+        font-size: Theme.font-small;
+        clicked => { root.pause(root.transfer.id); }
+    }
+    if root.transfer.resumable : SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
+        x: parent.width - Theme.sftp-column-padding - self.width
+            - Theme.sftp-column-gap - Theme.sftp-transfer-action-width;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-transfer-action-width;
+        height: Theme.sftp-control-min-height;
+        text: @tr("Resume");
+        accessible-name: @tr("Resume {0}", root.transfer.name);
+        font-size: Theme.font-small;
+        clicked => { root.resume(root.transfer.id); }
+    }
+    action-button := SftpActionButton {
+        context-requested(position) => {
+            root.show-menu-at({ x: self.x + position.x, y: self.y + position.y });
+        }
+        visible: root.transfer.cancellable;
+        x: parent.width - Theme.sftp-column-padding - self.width;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-transfer-action-width;
+        height: Theme.sftp-control-min-height;
+        text: @tr("Cancel");
+        accessible-name: @tr("Cancel {0}", root.transfer.name);
+        font-size: Theme.font-small;
+        enabled: root.transfer.cancellable;
+        clicked => { root.cancel(root.transfer.id); }
+    }
+    transfer-actions := FlatActionMenu {
+        actions: root.context-actions;
+        triggered(action-id) => {
+            if action-id == "pause" {
+                root.pause(root.transfer.id);
+            } else if action-id == "resume" {
+                root.resume(root.transfer.id);
+            } else if action-id == "cancel" {
+                root.cancel(root.transfer.id);
+            } else if action-id == "show-in-folder" {
+                root.reveal-local(root.transfer.id);
+            } else if action-id == "remove" {
+                root.remove(root.transfer.id);
+            }
+        }
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+    }
+}
+
+export component SftpTransferQueue inherits Rectangle {
+    in property <bool> collapsed: false;
+    in property <[SftpTransferRow]> active-transfers;
+    in property <[SftpTransferRow]> failed-transfers;
+    in property <[SftpTransferRow]> completed-transfers;
+    in property <int> active-count: 0;
+    in property <int> failed-count: 0;
+    in property <int> completed-count: 0;
+    in property <int> selected-active-count: 0;
+    in property <int> selected-pausable-count: 0;
+    in property <int> selected-resumable-count: 0;
+    callback toggle-collapse();
+    callback toggle-selection(string, bool);
+    callback pause-transfer(string);
+    callback resume-transfer(string);
+    callback cancel-transfer(string);
+    callback reveal-transfer-local(string);
+    callback remove-transfer(string);
+    callback pause-selected();
+    callback resume-selected();
+    callback cancel-selected();
+
+    private property <string> page: "active";
+    private property <[SftpTransferRow]> visible-transfers: root.page == "active"
+        ? root.active-transfers : (root.page == "failed" ? root.failed-transfers
+        : root.completed-transfers);
+    private property <bool> show-content: !root.collapsed;
+
+    background: Theme.panel;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: Theme.sftp-transfer-toolbar-height;
+            background: Theme.panel-alt;
+            HorizontalLayout {
+                padding-left: Theme.sftp-column-padding;
+                padding-right: Theme.sftp-column-padding;
+                spacing: Theme.space-sm;
+
+                SftpActionButton {
+                    width: 126px;
+                    height: parent.height;
+                    font-size: Theme.font-caption;
+                    text: @tr("Transferring ({0})", root.active-count);
+                    subtle: true;
+                    active: root.page == "active";
+                    enabled: true;
+                    clicked => { root.page = "active"; }
+                }
+                SftpActionButton {
+                    width: 82px;
+                    height: parent.height;
+                    font-size: Theme.font-caption;
+                    text: @tr("Failed ({0})", root.failed-count);
+                    subtle: true;
+                    active: root.page == "failed";
+                    enabled: true;
+                    clicked => { root.page = "failed"; }
+                }
+                SftpActionButton {
+                    width: 94px;
+                    height: parent.height;
+                    font-size: Theme.font-caption;
+                    text: @tr("Success ({0})", root.completed-count);
+                    subtle: true;
+                    active: root.page == "completed";
+                    enabled: true;
+                    clicked => { root.page = "completed"; }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+                if root.show-content && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Pause");
+                    tooltip-text: @tr("Pause selected");
+                    accessible-name: @tr("Pause selected");
+                    enabled: root.selected-pausable-count > 0;
+                    clicked => { root.pause-selected(); }
+                }
+                if root.show-content && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Resume");
+                    tooltip-text: @tr("Resume selected");
+                    accessible-name: @tr("Resume selected");
+                    enabled: root.selected-resumable-count > 0;
+                    clicked => { root.resume-selected(); }
+                }
+                if root.show-content && root.page == "active" : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: parent.height;
+                    text: @tr("Cancel");
+                    tooltip-text: @tr("Cancel selected");
+                    accessible-name: @tr("Cancel selected");
+                    enabled: root.selected-active-count > 0;
+                    clicked => { root.cancel-selected(); }
+                }
+                if root.active-count > 0 || root.failed-count > 0 || root.completed-count > 0 : SftpActionButton {
+                    width: 30px;
+                    height: parent.height;
+                    text: root.collapsed ? "⌃" : "⌄";
+                    tooltip-text: root.collapsed ? @tr("Expand transfers") : @tr("Collapse transfers");
+                    accessible-name: root.collapsed ? @tr("Expand transfers") : @tr("Collapse transfers");
+                    subtle: true;
+                    clicked => { root.toggle-collapse(); }
+                }
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+        if root.show-content : Rectangle {
+            private property <length> action-slot-width:
+                2 * Theme.sftp-transfer-action-width + 2 * Theme.sftp-column-gap;
+            private property <length> content-width: max(
+                0px,
+                self.width - Theme.sftp-column-padding - Theme.sftp-selection-width
+                    - Theme.sftp-column-gap - self.action-slot-width,
+            );
+            height: Theme.sftp-transfer-header-height;
+            background: Theme.panel;
+            Text {
+                x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
+                width: max(0px, parent.content-width * 0.48 - Theme.sftp-column-gap - self.x);
+                height: parent.height;
+                text: @tr("Name");
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Text {
+                x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
+                    + parent.content-width * 0.48;
+                width: max(0px, parent.content-width * 0.24 - Theme.sftp-column-gap);
+                height: parent.height;
+                text: @tr("Status");
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Text {
+                x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
+                    + parent.content-width * 0.72;
+                width: max(0px, parent.content-width * 0.14 - Theme.sftp-column-gap);
+                height: parent.height;
+                text: @tr("Size");
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                horizontal-alignment: right;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Text {
+                x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
+                    + parent.content-width * 0.86;
+                width: max(
+                    0px,
+                    parent.width - parent.action-slot-width - Theme.sftp-column-gap - self.x,
+                );
+                height: parent.height;
+                text: @tr("Speed");
+                color: Theme.muted;
+                font-size: Theme.font-caption;
+                font-weight: 700;
+                horizontal-alignment: right;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+        if root.show-content && root.visible-transfers.length > 0 : ListView {
+            vertical-stretch: 1;
+            min-height: 0px;
+            accessible-role: list;
+            accessible-label: @tr("File transfers");
+
+            for transfer in root.visible-transfers : Rectangle {
+                width: parent.width;
+                height: Theme.sftp-row-height;
+
+                SftpTransferEntry {
+                    width: parent.width;
+                    height: parent.height;
+                    transfer: transfer;
+                    toggle-selection(id, selected) => { root.toggle-selection(id, selected); }
+                    pause(id) => { root.pause-transfer(id); }
+                    resume(id) => { root.resume-transfer(id); }
+                    cancel(id) => { root.cancel-transfer(id); }
+                    reveal-local(id) => { root.reveal-transfer-local(id); }
+                    remove(id) => { root.remove-transfer(id); }
+                }
+            }
+        }
+        if root.show-content && root.visible-transfers.length == 0 : Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: root.page == "active" ? @tr("No transfers in progress")
+                    : (root.page == "failed" ? @tr("No failed transfers") : @tr("No successful transfers"));
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

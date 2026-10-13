@@ -1,0 +1,820 @@
+import { CheckBox, ListView } from "std-widgets.slint";
+import { ActionMenuItem, FlatActionMenu } from "../components/flat-action-menu.slint";
+import { ElidedLabel } from "../components/elided-controls.slint";
+import { FlatTextInput } from "../components/flat-text-input.slint";
+import { SftpActionButton, SftpPathCopyButton } from "../components/sftp-controls.slint";
+import { Theme } from "../theme.slint";
+
+import { SftpEntryRow } from "types.slint";
+
+component SftpDirectoryHeader inherits Rectangle {
+    in property <bool> selection-checked: false;
+    in property <bool> selection-enabled: false;
+    in property <string> sort-column: "modified";
+    in property <bool> sort-descending: true;
+    callback select-all(bool);
+    callback sort(string);
+    private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
+    private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
+    private property <length> leading-x: Theme.sftp-column-padding;
+    private property <length> icon-x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+    private property <length> name-x: root.icon-x + Theme.sftp-icon-width + Theme.sftp-column-gap;
+    private property <length> modified-x:
+        root.width - Theme.sftp-column-padding - Theme.sftp-time-width;
+    private property <length> size-x: root.show-modified
+        ? root.modified-x - Theme.sftp-column-gap - Theme.sftp-size-width
+        : root.width - Theme.sftp-column-padding - Theme.sftp-size-width;
+    private property <length> name-right: root.show-size
+        ? root.size-x - Theme.sftp-column-gap
+        : root.width - Theme.sftp-column-padding;
+
+    height: Theme.sftp-header-height;
+    background: Theme.panel-alt;
+    clip: true;
+
+    Rectangle {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: Theme.sftp-selection-width;
+        y: (parent.height - self.height) / 2;
+        border-width: Theme.hairline;
+        border-color: Theme.control-border;
+        border-radius: Theme.radius-small;
+        background: root.selection-checked ? Theme.accent : transparent;
+
+        Text {
+            visible: root.selection-checked;
+            width: parent.width;
+            height: parent.height;
+            text: @tr("x");
+            color: Theme.background;
+            font-size: Theme.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: parent.height;
+        enabled: root.selection-enabled;
+        mouse-cursor: pointer;
+        accessible-role: checkbox;
+        accessible-label: @tr("Select all files");
+        accessible-checked: root.selection-checked;
+        accessible-enabled: root.selection-enabled;
+        accessible-action-default => { root.select-all(!root.selection-checked); }
+        clicked => { root.select-all(!root.selection-checked); }
+    }
+    Text {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: @tr("Name");
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        mouse-cursor: pointer;
+        accessible-role: button;
+        accessible-label: @tr("Sort by name");
+        clicked => { root.sort("name"); }
+    }
+    Text {
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        text: @tr("Size");
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        mouse-cursor: pointer;
+        accessible-role: button;
+        accessible-label: @tr("Sort by size");
+        clicked => { root.sort("size"); }
+    }
+    Text {
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        text: @tr("Modified");
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        mouse-cursor: pointer;
+        accessible-role: button;
+        accessible-label: @tr("Sort by modified time");
+        clicked => { root.sort("modified"); }
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider;
+    }
+}
+
+component SftpEntry inherits Rectangle {
+    function show-menu-at(position: Point) {
+        file-actions.show-at(position);
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+
+    in property <SftpEntryRow> entry;
+    in property <bool> shown: true;
+    in property <bool> interactive: true;
+    in property <bool> remote-actions: false;
+    in property <bool> local-actions: false;
+    in property <int> selection-count: 0;
+    callback open-directory(string);
+    callback open-file(string);
+    callback toggle-selection(string, bool);
+    callback replace-selection(string);
+    callback download-selected();
+    callback remove-selected();
+    callback rename-entry(string, string);
+    callback upload-selected();
+    callback reveal-local(string);
+    callback begin-native-file-drag(string);
+    pure callback drag-data(string) -> data-transfer;
+    callback drag-diagnostic(string);
+    in property <bool> drag-enabled: false;
+    in property <bool> native-file-drag-enabled: false;
+    private property <bool> native-drag-started: false;
+    private property <length> native-drag-start-x: 0px;
+    private property <length> native-drag-start-y: 0px;
+    private property <length> native-drag-threshold: Theme.space-sm;
+
+    function action(action-id: string, title: string, enabled: bool) -> ActionMenuItem {
+        {
+            action-id: action-id,
+            title: title,
+            enabled: root.interactive && enabled,
+        }
+    }
+
+    private property <[ActionMenuItem]> context-actions: root.remote-actions
+        ? [
+            root.action("download", @tr("Download"), true),
+            root.action("rename", @tr("Rename"), !root.entry.selected || root.selection-count == 1),
+            root.action("delete", @tr("Delete"), true),
+        ]
+        : (root.local-actions
+            ? [
+                root.action("open", root.entry.kind == "folder" ? @tr("Open folder") : @tr("Open"), root.entry.kind == "file" || root.entry.kind == "folder"),
+                root.action("show-in-folder", @tr("Show in Folder"), root.entry.kind != "link"),
+                root.action("upload", @tr("Upload"), root.entry.kind == "file" || root.entry.kind == "folder"),
+            ]
+            : []);
+
+    private property <bool> show-size: root.width >= Theme.sftp-size-visible-width;
+    private property <bool> show-modified: root.width >= Theme.sftp-time-visible-width;
+    private property <length> leading-x: Theme.sftp-column-padding;
+    private property <length> icon-x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+    private property <length> name-x: root.icon-x + Theme.sftp-icon-width + Theme.sftp-column-gap;
+    private property <length> modified-x:
+        root.width - Theme.sftp-column-padding - Theme.sftp-time-width;
+    private property <length> size-x: root.show-modified
+        ? root.modified-x - Theme.sftp-column-gap - Theme.sftp-size-width
+        : root.width - Theme.sftp-column-padding - Theme.sftp-size-width;
+    private property <length> name-right: root.show-size
+        ? root.size-x - Theme.sftp-column-gap
+        : root.width - Theme.sftp-column-padding;
+
+    visible: root.shown;
+    clip: true;
+    background: root.entry.selected
+        ? Theme.selected
+        : (touch.has-hover ? Theme.hover : transparent);
+    accessible-role: list-item;
+    accessible-label: root.entry.name;
+
+    Rectangle {
+        x: root.leading-x;
+        width: Theme.sftp-selection-width;
+        height: Theme.sftp-selection-width;
+        y: (parent.height - self.height) / 2;
+        border-width: Theme.hairline;
+        border-color: root.entry.selected ? Theme.accent : Theme.control-border;
+        border-radius: Theme.radius-small;
+        background: root.entry.selected ? Theme.accent : transparent;
+
+        Text {
+            visible: root.entry.selected;
+            width: parent.width;
+            height: parent.height;
+            text: @tr("x");
+            color: Theme.background;
+            font-size: Theme.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        visible: !root.entry.has_icon && root.entry.kind != "file";
+        x: root.icon-x;
+        width: Theme.sftp-icon-width;
+        height: parent.height;
+        text: root.entry.kind == "folder" ? ">" : (root.entry.kind == "link" ? "@" : "");
+        color: root.entry.kind == "folder" ? Theme.accent : Theme.muted;
+        font-size: Theme.font-body;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        visible: !root.entry.has_icon && root.entry.kind == "file";
+        x: root.icon-x + Theme.space-xs;
+        y: (parent.height - self.height) / 2;
+        width: max(Theme.hairline, Theme.sftp-icon-width - 2 * Theme.space-xs);
+        height: Theme.sftp-icon-width - Theme.space-xs;
+        border-width: Theme.hairline;
+        border-color: Theme.muted;
+        border-radius: Theme.hairline;
+        background: transparent;
+    }
+    Image {
+        visible: root.entry.has_icon;
+        x: root.icon-x;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sftp-icon-width;
+        height: Theme.sftp-icon-width;
+        source: root.entry.icon;
+        image-fit: contain;
+    }
+    ElidedLabel {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: root.entry.name;
+        tooltip-text: root.entry.name;
+        text-color: Theme.text;
+        font-size: Theme.font-body;
+        font-weight: root.entry.kind == "folder" ? 600 : 400;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        text: root.entry.size;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        text: root.entry.modified;
+        color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: Theme.divider.with-alpha(0.44);
+    }
+    touch := TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
+        width: parent.width;
+        height: parent.height;
+        enabled: root.shown && root.interactive;
+        mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
+            ? pointer : default;
+        double-clicked => {
+            if root.entry.kind == "folder" {
+                root.open-directory(root.entry.path);
+            } else if root.entry.kind == "file" {
+                root.open-file(root.entry.path);
+            }
+        }
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+        }
+
+        x: 0px;
+        width: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        height: parent.height;
+        enabled: root.shown && root.interactive;
+        mouse-cursor: pointer;
+        accessible-role: checkbox;
+        accessible-label: @tr("Select {0}", root.entry.name);
+        accessible-checked: root.entry.selected;
+        accessible-enabled: root.shown && root.interactive;
+        accessible-action-default => {
+            root.toggle-selection(root.entry.path, !root.entry.selected);
+        }
+        clicked => { root.toggle-selection(root.entry.path, !root.entry.selected); }
+    }
+    DragArea {
+        x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        width: max(0px, parent.width - self.x);
+        height: parent.height;
+        enabled: root.shown && root.interactive && root.drag-enabled
+            && (root.entry.kind == "file" || root.entry.kind == "folder")
+            && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
+        allow-copy: true;
+        data: root.drag-data(root.entry.path);
+        changed dragging => {
+            if self.dragging {
+                root.drag-diagnostic("started");
+            }
+        }
+        drag-finished(action) => {
+            root.drag-diagnostic(action == DragAction.copy ? "finished-copy" : "finished-no-copy");
+        }
+
+        // DragArea owns a file-row press for drag initiation. Keep activation
+        // in its child so a double-click still reaches the same directory/file
+        // callbacks instead of being swallowed by the drag hit target.
+        TouchArea {
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                    root.show-menu-at({
+                        x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                        y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                    });
+                }
+            }
+
+            width: parent.width;
+            height: parent.height;
+            enabled: root.shown && root.interactive && root.drag-enabled
+                && (root.entry.kind == "file" || root.entry.kind == "folder")
+                && !(root.native-file-drag-enabled && root.remote-actions
+                    && root.entry.kind == "file");
+            mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
+                ? pointer : default;
+            double-clicked => {
+                if root.entry.kind == "folder" {
+                    root.open-directory(root.entry.path);
+                } else if root.entry.kind == "file" {
+                    root.open-file(root.entry.path);
+                }
+            }
+        }
+    }
+    TouchArea {
+        x: root.leading-x + Theme.sftp-selection-width + Theme.sftp-column-gap;
+        width: max(0px, parent.width - self.x);
+        height: parent.height;
+        enabled: root.shown && root.interactive && root.native-file-drag-enabled
+            && root.remote-actions && root.entry.kind == "file";
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                root.show-menu-at({
+                    x: self.absolute-position.x - root.absolute-position.x + self.mouse-x,
+                    y: self.absolute-position.y - root.absolute-position.y + self.mouse-y,
+                });
+            }
+
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.native-drag-started = false;
+                root.native-drag-start-x = self.mouse-x;
+                root.native-drag-start-y = self.mouse-y;
+            }
+        }
+        moved => {
+            if self.pressed && !root.native-drag-started
+                && (self.mouse-x - root.native-drag-start-x > root.native-drag-threshold
+                    || root.native-drag-start-x - self.mouse-x > root.native-drag-threshold
+                    || self.mouse-y - root.native-drag-start-y > root.native-drag-threshold
+                    || root.native-drag-start-y - self.mouse-y > root.native-drag-threshold)
+            {
+                root.native-drag-started = true;
+                root.begin-native-file-drag(root.entry.path);
+            }
+        }
+        double-clicked => { root.open-file(root.entry.path); }
+    }
+    file-actions := FlatActionMenu {
+        actions: root.context-actions;
+        context-enabled: root.shown && root.interactive && (root.remote-actions || root.local-actions);
+        triggered(action-id) => {
+            if !root.entry.selected {
+                root.replace-selection(root.entry.path);
+            }
+            if action-id == "download" {
+                root.download-selected();
+            } else if action-id == "rename" {
+                root.rename-entry(root.entry.path, root.entry.name);
+            } else if action-id == "delete" {
+                root.remove-selected();
+            } else if action-id == "open" {
+                if root.entry.kind == "folder" {
+                    root.open-directory(root.entry.path);
+                } else {
+                    root.open-file(root.entry.path);
+                }
+            } else if action-id == "show-in-folder" {
+                root.reveal-local(root.entry.path);
+            } else if action-id == "upload" {
+                root.upload-selected();
+            }
+        }
+    }
+}
+
+export component SftpDirectoryPane inherits Rectangle {
+    in property <bool> interactive: true;
+    in property <string> title;
+    in property <[SftpEntryRow]> entries;
+    in property <bool> loading;
+    in property <bool> upload-ready: false;
+    in property <string> path;
+    in property <bool> truncated;
+    in property <string> status;
+    in property <bool> has-more: false;
+    in property <bool> selection-all: false;
+    in property <int> selection-count: 0;
+    in property <bool> allow-hidden: true;
+    in property <bool> allow-refresh: false;
+    in property <bool> allow-navigation: false;
+    in property <bool> can-go-back: false;
+    in property <bool> can-go-forward: false;
+    in property <bool> can-go-up: false;
+    in property <bool> allow-drag: false;
+    in property <bool> allow-drop: false;
+    in property <bool> local-actions: false;
+    in property <bool> native-file-drag-enabled: false;
+    in property <string> sort-column: "modified";
+    in property <bool> sort-descending: true;
+    callback list-directory(string);
+    callback load-more();
+    callback refresh();
+    callback navigate-back();
+    callback navigate-forward();
+    callback navigate-up();
+    callback open-file(string);
+    callback download-selected();
+    callback toggle-selection(string, bool);
+    callback select-all(bool);
+    callback copy-path(string);
+    callback remove-selected();
+    callback upload-selected();
+    callback edit-selected();
+    callback rename-entry(string, string);
+    callback reveal-local(string);
+    callback sort(string);
+    callback dropped(data-transfer);
+    callback begin-native-file-drag(string);
+    pure callback drag-data(string) -> data-transfer;
+    callback drag-diagnostic(string);
+
+    private property <string> current-path: root.path;
+    private property <string> path-draft: root.current-path;
+    private property <bool> show-hidden: false;
+    private property <length> control-text-height:
+        control-text-probe.font-metrics.ascent - control-text-probe.font-metrics.descent;
+    private property <length> control-height: max(
+        Theme.sftp-control-min-height,
+        root.control-text-height + 2 * Theme.sftp-control-padding-y,
+    );
+    private property <length> path-row-height:
+        root.control-height + 2 * Theme.sftp-path-row-padding-y;
+    private property <length> status-height:
+        root.control-height + 2 * Theme.sftp-status-row-padding-y;
+    private property <bool> show-remote-edit-actions:
+        root.allow-navigation && !root.local-actions && root.selection-count == 1;
+    private property <bool> show-local-upload-action:
+        !root.allow-navigation && root.selection-count > 0;
+    private property <bool> show-toolbar-copy:
+        root.width >= 300px + (root.show-remote-edit-actions ? Theme.sftp-toolbar-action-reserve-width : 0px);
+    private property <bool> show-toolbar-refresh:
+        root.allow-refresh
+        && root.width >= 340px + (root.show-remote-edit-actions ? Theme.sftp-toolbar-action-reserve-width : 0px);
+    private property <int> toolbar-action-count:
+        (root.allow-hidden ? 1 : 0)
+        + (root.show-toolbar-copy ? 1 : 0)
+        + (root.show-toolbar-refresh ? 1 : 0)
+        + (root.show-remote-edit-actions ? 1 : 0)
+        + (root.show-local-upload-action ? 1 : 0);
+    private property <length> toolbar-actions-preferred-width:
+        (root.allow-hidden ? Theme.sftp-hidden-control-width : 0px)
+        + (root.show-toolbar-copy ? Theme.sftp-nav-icon-button-width : 0px)
+        + (root.show-toolbar-refresh ? Theme.sftp-refresh-button-width : 0px)
+        + (root.show-remote-edit-actions
+            ? Theme.sftp-toolbar-action-reserve-width : 0px)
+        + (root.show-local-upload-action
+            ? Theme.sftp-toolbar-action-reserve-width : 0px)
+        + max(0, root.toolbar-action-count - 1) * Theme.space-sm;
+    private property <length> title-actions-width: root.toolbar-actions-preferred-width;
+
+    changed current-path => { root.path-draft = root.current-path; }
+
+    background: Theme.panel;
+    clip: true;
+    min-width: 0px;
+    min-height: 0px;
+
+    control-text-probe := Text {
+        visible: false;
+        text: @tr("Open");
+        font-size: Theme.sftp-control-font-size;
+        font-weight: Theme.sftp-control-font-weight;
+    }
+
+    VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: Theme.sftp-toolbar-height;
+            background: Theme.panel-alt;
+
+            Text {
+                x: Theme.sftp-column-padding;
+                width: max(
+                    0px,
+                    parent.width - 2 * Theme.sftp-column-padding - root.title-actions-width,
+                );
+                height: parent.height;
+                text: root.title;
+                color: Theme.accent;
+                font-size: Theme.font-body;
+                font-weight: 700;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            toolbar-actions := HorizontalLayout {
+                x: max(
+                    Theme.sftp-column-padding,
+                    parent.width - Theme.sftp-column-padding - self.width,
+                );
+                width: min(
+                    max(0px, parent.width - 2 * Theme.sftp-column-padding),
+                    root.toolbar-actions-preferred-width,
+                );
+                height: parent.height;
+                spacing: Theme.space-sm;
+                if root.allow-hidden : CheckBox {
+                    width: Theme.sftp-hidden-control-width;
+                    height: parent.height;
+                    text: @tr("Hidden");
+                    checked <=> root.show-hidden;
+                    enabled: root.interactive;
+                }
+                if root.show-toolbar-copy : SftpPathCopyButton {
+                    accessible-name: @tr("Copy current path");
+                    enabled: root.interactive && !root.path.is-empty;
+                    clicked => { root.copy-path(root.path); }
+                }
+                if root.show-toolbar-refresh : SftpActionButton {
+                    width: Theme.sftp-refresh-button-width;
+                    height: root.control-height;
+                    text: @tr("Refresh");
+                    subtle: true;
+                    enabled: root.interactive && !root.loading && !root.current-path.is-empty;
+                    clicked => { root.refresh(); }
+                }
+                if root.show-remote-edit-actions : SftpActionButton {
+                    height: root.control-height;
+                    text: @tr("Edit");
+                    subtle: true;
+                    accessible-name: @tr("Edit selected remote file");
+                    enabled: root.interactive && !root.loading;
+                    clicked => { root.edit-selected(); }
+                }
+                if root.show-local-upload-action : SftpActionButton {
+                    height: root.control-height;
+                    text: @tr("Upload");
+                    subtle: true;
+                    accessible-name: @tr("Upload selected local files");
+                    enabled: root.interactive && root.upload-ready;
+                    clicked => { root.upload-selected(); }
+                }
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+
+        Rectangle {
+            height: root.path-row-height;
+            background: Theme.panel;
+
+            HorizontalLayout {
+                padding-left: Theme.sftp-column-padding;
+                padding-right: Theme.sftp-column-padding;
+                padding-top: Theme.sftp-path-row-padding-y;
+                padding-bottom: Theme.sftp-path-row-padding-y;
+                spacing: Theme.space-sm;
+
+                if root.allow-navigation : SftpActionButton {
+                    width: Theme.sftp-nav-icon-button-width;
+                    height: root.control-height;
+                    text: @tr("<");
+                    subtle: true;
+                    accessible-name: @tr("Back");
+                    enabled: root.interactive && !root.loading && root.can-go-back;
+                    clicked => { root.navigate-back(); }
+                }
+                if root.allow-navigation : SftpActionButton {
+                    width: Theme.sftp-nav-icon-button-width;
+                    height: root.control-height;
+                    text: @tr(">");
+                    subtle: true;
+                    accessible-name: @tr("Forward");
+                    enabled: root.interactive && !root.loading && root.can-go-forward;
+                    clicked => { root.navigate-forward(); }
+                }
+                if root.allow-navigation : SftpActionButton {
+                    width: Theme.sftp-nav-icon-button-width;
+                    height: root.control-height;
+                    text: "↑";
+                    subtle: true;
+                    accessible-name: @tr("Parent directory");
+                    enabled: root.interactive && !root.loading && root.can-go-up;
+                    clicked => { root.navigate-up(); }
+                }
+
+                FlatTextInput {
+                    horizontal-stretch: 1;
+                    text <=> root.path-draft;
+                    placeholder-text: @tr("Path");
+                    height: root.control-height;
+                    control-min-height: root.control-height;
+                    font-size: Theme.sftp-control-font-size;
+                    font-weight: Theme.sftp-control-font-weight;
+                    enabled: root.interactive && !root.loading;
+                    accepted(path) => { root.list-directory(path); }
+                }
+                SftpActionButton {
+                    width: Theme.sftp-open-button-width;
+                    height: root.control-height;
+                    text: @tr("Open");
+                    prominent: true;
+                    enabled: root.interactive && !root.loading && !root.path-draft.is-empty;
+                    clicked => { root.list-directory(root.path-draft); }
+                }
+            }
+            Rectangle {
+                y: parent.height - Theme.hairline;
+                width: parent.width;
+                height: Theme.hairline;
+                background: Theme.divider;
+            }
+        }
+
+        SftpDirectoryHeader {
+            selection-checked: root.selection-all;
+            selection-enabled: root.interactive && root.entries.length > 0 && !root.loading;
+            sort-column: root.sort-column;
+            sort-descending: root.sort-descending;
+            select-all(checked) => { root.select-all(checked); }
+            sort(column) => { root.sort(column); }
+        }
+
+        if root.entries.length > 0 : ListView {
+            vertical-stretch: 1;
+            min-height: 0px;
+
+            // The direct ListView delegate owns its height. Keeping this
+            // geometry outside SftpEntry makes virtualized rows advance even
+            // when the entry is nested in another reusable component.
+            for entry in root.entries : Rectangle {
+                width: parent.width;
+                height: root.show-hidden || !entry.hidden
+                    ? Theme.sftp-row-height : 0px;
+                clip: true;
+
+                SftpEntry {
+                    width: parent.width;
+                    height: parent.height;
+                    entry: entry;
+                    shown: root.show-hidden || !entry.hidden;
+                    interactive: root.interactive && !root.loading;
+                    drag-enabled: root.allow-drag;
+                    native-file-drag-enabled: root.native-file-drag-enabled;
+                    remote-actions: root.allow-navigation;
+                    local-actions: root.local-actions;
+                    selection-count: root.selection-count;
+                    open-directory(path) => { root.list-directory(path); }
+                    open-file(path) => { root.open-file(path); }
+                    toggle-selection(path, selected) => { root.toggle-selection(path, selected); }
+                    replace-selection(path) => {
+                        root.select-all(false);
+                        root.toggle-selection(path, true);
+                    }
+                    download-selected => { root.download-selected(); }
+                    remove-selected => { root.remove-selected(); }
+                    rename-entry(path, name) => { root.rename-entry(path, name); }
+                    upload-selected => { root.upload-selected(); }
+                    reveal-local(path) => { root.reveal-local(path); }
+                    begin-native-file-drag(path) => { root.begin-native-file-drag(path); }
+                    drag-data(path) => { return root.drag-data(path); }
+                    drag-diagnostic(stage) => { root.drag-diagnostic(stage); }
+                }
+            }
+        }
+
+        if root.entries.length == 0 : Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: root.loading ? @tr("Loading...") : @tr("No files");
+                color: Theme.muted;
+                font-size: Theme.font-body;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            height: root.status-height;
+            background: Theme.panel-alt;
+
+            Text {
+                x: Theme.sftp-column-padding;
+                width: parent.width - 2 * Theme.sftp-column-padding
+                    - (root.has-more ? Theme.sftp-more-button-width + Theme.space-sm : 0px);
+                height: parent.height;
+                text: root.status;
+                color: root.truncated ? Theme.danger : Theme.muted;
+                font-size: Theme.font-caption;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+            if root.has-more : SftpActionButton {
+                x: parent.width - Theme.sftp-column-padding - self.width;
+                y: (parent.height - self.height) / 2;
+                width: Theme.sftp-more-button-width;
+                height: root.control-height;
+                text: root.loading ? @tr("Loading") : @tr("More");
+                enabled: root.interactive && !root.loading;
+                clicked => { root.load-more(); }
+            }
+        }
+    }
+
+    DropArea {
+        enabled: root.allow-drop && root.interactive
+            && (root.local-actions ? !root.loading : root.upload-ready);
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        can-drop(event) => { return event.proposed-action; }
+        dropped(event) => {
+            root.dropped(event.data);
+            return event.proposed-action;
+        }
+    }
+}
