@@ -27,17 +27,17 @@ impl MemoryEntry {
     }
 }
 impl PasswordEntry for MemoryEntry {
-    fn get_password(&self) -> keyring::Result<String> {
+    fn get_password(&self) -> Result<Option<String>> {
         self.check(1)?;
-        self.keyring
+        Ok(self
+            .keyring
             .values
             .lock()
             .expect("isolated keyring")
             .get(&self.account)
-            .map(|value| value.to_string())
-            .ok_or(Error::NoEntry)
+            .map(|value| value.to_string()))
     }
-    fn set_password(&self, value: &str) -> keyring::Result<()> {
+    fn set_password(&self, value: &str) -> Result<()> {
         self.check(2)?;
         self.keyring
             .values
@@ -46,15 +46,14 @@ impl PasswordEntry for MemoryEntry {
             .insert(self.account.clone(), Zeroizing::new(value.to_owned()));
         Ok(())
     }
-    fn delete_credential(&self) -> keyring::Result<()> {
+    fn delete_credential(&self) -> Result<()> {
         self.check(3)?;
         self.keyring
             .values
             .lock()
             .expect("isolated keyring")
-            .remove(&self.account)
-            .map(|_| ())
-            .ok_or(Error::NoEntry)
+            .remove(&self.account);
+        Ok(())
     }
 }
 
@@ -211,7 +210,7 @@ fn system_backend_errors_preserve_context_and_legacy_accounts_remain_separate() 
     assert_eq!(
         fixture
             .store
-            .load_legacy_vault_unlock_password(id)
+            .load_vault_unlock_password(id)
             .expect("legacy account")
             .as_deref(),
         Some("ephemeral legacy fixture")
@@ -225,11 +224,11 @@ fn system_backend_errors_preserve_context_and_legacy_accounts_remain_separate() 
     );
     fixture
         .store
-        .delete_legacy_vault_unlock_password(id)
+        .delete_vault_unlock_password(id)
         .expect("legacy delete");
     fixture
         .store
-        .delete_legacy_vault_unlock_password(id)
+        .delete_vault_unlock_password(id)
         .expect("legacy idempotent delete");
     assert_eq!(
         fs::read_dir(&fixture.directory)
@@ -364,4 +363,118 @@ fn credential_files_reject_malformed_oversized_and_unreadable_records() {
             .expect("absent unlock")
             .is_none()
     );
+}
+
+#[test]
+fn protected_unlock_keys_are_scoped_and_never_create_plaintext_files() {
+    let fixture = Fixture::new();
+    let id = Uuid::new_v4();
+    fixture
+        .store
+        .save_vault_unlock_password(id, "ephemeral unlock fixture")
+        .expect("save");
+    assert_eq!(
+        fixture
+            .store
+            .load_or_migrate_vault_unlock_password(id)
+            .expect("load")
+            .as_deref(),
+        Some("ephemeral unlock fixture")
+    );
+    assert!(
+        fixture
+            .store
+            .load_vault_unlock_password(Uuid::new_v4())
+            .expect("other profile")
+            .is_none()
+    );
+    assert_eq!(fs::read_dir(&fixture.directory).expect("files").count(), 0);
+    let backup = fixture
+        .store
+        .backup_vault_unlock_password(id)
+        .expect("backup");
+    fixture
+        .store
+        .delete_vault_unlock_password(id)
+        .expect("delete");
+    fixture
+        .store
+        .restore_vault_unlock_password(id, backup)
+        .expect("restore");
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_unlock_password(id)
+            .expect("restored key")
+            .as_deref(),
+        Some("ephemeral unlock fixture")
+    );
+    fixture
+        .store
+        .delete_vault_unlock_password(id)
+        .expect("delete");
+    fixture
+        .store
+        .delete_vault_unlock_password(id)
+        .expect("idempotent delete");
+    assert!(fixture.keyring.values.lock().expect("entries").is_empty());
+}
+
+#[test]
+fn legacy_unlock_migration_keeps_source_until_protected_save_succeeds() {
+    let fixture = Fixture::new();
+    let id = Uuid::new_v4();
+    let path = fixture.store.vault_unlock_path(id);
+    fs::write(&path, b"ephemeral legacy unlock fixture").expect("legacy fixture");
+    fixture.keyring.failure.store(2, Ordering::Relaxed);
+    let error = fixture
+        .store
+        .load_or_migrate_vault_unlock_password(id)
+        .expect_err("protected backend failure");
+    assert!(error.to_string().contains("protected vault unlock key"));
+    assert!(!format!("{error:#}").contains("ephemeral legacy unlock fixture"));
+    assert_eq!(
+        fs::read(&path).expect("recoverable source"),
+        b"ephemeral legacy unlock fixture"
+    );
+    fixture.keyring.failure.store(0, Ordering::Relaxed);
+    assert_eq!(
+        fixture
+            .store
+            .load_or_migrate_vault_unlock_password(id)
+            .expect("migration")
+            .as_deref(),
+        Some("ephemeral legacy unlock fixture")
+    );
+    assert!(!path.exists());
+    assert_eq!(
+        fixture
+            .store
+            .load_vault_unlock_password(id)
+            .expect("protected key")
+            .as_deref(),
+        Some("ephemeral legacy unlock fixture")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn legacy_unlock_migration_rejects_symlinks_without_touching_the_target() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let id = Uuid::new_v4();
+    let target = fixture.directory.join("target");
+    fs::write(&target, b"ephemeral target fixture").expect("target");
+    symlink(&target, fixture.store.vault_unlock_path(id)).expect("symlink");
+    assert!(
+        fixture
+            .store
+            .load_or_migrate_vault_unlock_password(id)
+            .is_err()
+    );
+    assert_eq!(
+        fs::read(&target).expect("untouched target"),
+        b"ephemeral target fixture"
+    );
+    assert!(fixture.keyring.values.lock().expect("entries").is_empty());
 }

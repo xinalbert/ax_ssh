@@ -248,8 +248,8 @@ fn workspace_file_load_rejects_an_unsupported_snapshot_version() {
 
 #[test]
 fn store_round_trips_and_upserts() {
-    let temp = std::env::temp_dir().join(format!("ax-ssh-{}", Uuid::new_v4()));
-    let store = ConfigStore::new(&temp);
+    let root = std::env::temp_dir().join(format!("ax-ssh-{}", Uuid::new_v4()));
+    let store = ConfigStore::new(root.join("sessions.json"));
     let mut data = SessionStore::default();
     assert!(
         data.add_group(" Empty group ")
@@ -270,7 +270,7 @@ fn store_round_trips_and_upserts() {
     data.sessions[0].name = "saved-again".into();
     store.save(&data).expect("replacement save should succeed");
     assert_eq!(store.load().expect("replacement load should succeed"), data);
-    let _ = fs::remove_file(temp);
+    fs::remove_dir_all(root).expect("isolated configuration directory should be removed");
 }
 
 #[test]

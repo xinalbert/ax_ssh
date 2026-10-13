@@ -156,13 +156,23 @@ pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
-        set_private_directory_permissions(parent);
+        set_private_directory_permissions(parent)?;
     }
     write_file_contents_atomically(path, bytes, path.parent())
 }
 
 fn write_file_contents_atomically(path: &Path, bytes: &[u8], parent: Option<&Path>) -> Result<()> {
+    write_file_contents_with_sync(path, bytes, parent, sync_parent_directory)
+}
+
+fn write_file_contents_with_sync(
+    path: &Path,
+    bytes: &[u8],
+    parent: Option<&Path>,
+    sync_parent: impl FnOnce(&Path) -> io::Result<()>,
+) -> Result<()> {
     let (mut file, mut temporary) = create_private_temporary_file(path)?;
+    set_private_file_permissions(temporary.path())?;
     // ReplaceFileW requires the replacement file handle to be closed first.
     let write_result = file.write_all(bytes).and_then(|_| file.sync_all());
     drop(file);
@@ -175,9 +185,10 @@ fn write_file_contents_atomically(path: &Path, bytes: &[u8], parent: Option<&Pat
         )
     })?;
     temporary.disarm();
-    set_private_file_permissions(path);
     if let Some(parent) = parent {
-        sync_parent_directory(parent);
+        sync_parent(parent).with_context(|| {
+            format!("failed to sync persistence directory {}", parent.display())
+        })?;
     }
     Ok(())
 }
@@ -205,7 +216,7 @@ fn create_private_temporary_file(path: &Path) -> Result<(File, TemporaryPath)> {
                     Ok(metadata) => metadata,
                     Err(error) => {
                         drop(file);
-                        let _ = fs::remove_file(&temporary_path);
+                        cleanup_temporary_file(&temporary_path);
                         return Err(error).with_context(|| {
                             format!("failed to inspect {}", temporary_path.display())
                         });
@@ -213,7 +224,7 @@ fn create_private_temporary_file(path: &Path) -> Result<(File, TemporaryPath)> {
                 };
                 if !metadata.is_file() {
                     drop(file);
-                    let _ = fs::remove_file(&temporary_path);
+                    cleanup_temporary_file(&temporary_path);
                     anyhow::bail!(
                         "private persistence temporary path is not a regular file: {}",
                         temporary_path.display()
@@ -253,44 +264,59 @@ impl TemporaryPath {
 impl Drop for TemporaryPath {
     fn drop(&mut self) {
         if self.armed {
-            let _ = fs::remove_file(&self.path);
+            cleanup_temporary_file(&self.path);
         }
     }
 }
 
 #[cfg(unix)]
-fn set_private_directory_permissions(path: &Path) {
+fn set_private_directory_permissions(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
 
-    if let Ok(mut permissions) = fs::metadata(path).map(|metadata| metadata.permissions()) {
-        permissions.set_mode(0o700);
-        let _ = fs::set_permissions(path, permissions);
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("failed to inspect private directory {}", path.display()))?;
+    if metadata.permissions().mode() & 0o7777 == 0o700 {
+        return Ok(());
     }
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+        .with_context(|| format!("failed to restrict private directory {}", path.display()))
 }
 
 #[cfg(not(unix))]
-fn set_private_directory_permissions(_: &Path) {}
+fn set_private_directory_permissions(_: &Path) -> Result<()> {
+    Ok(())
+}
 
 #[cfg(unix)]
-fn set_private_file_permissions(path: &Path) {
+fn set_private_file_permissions(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
 
-    if let Ok(mut permissions) = fs::metadata(path).map(|metadata| metadata.permissions()) {
-        permissions.set_mode(0o600);
-        let _ = fs::set_permissions(path, permissions);
-    }
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("failed to restrict private file {}", path.display()))
 }
 
 #[cfg(not(unix))]
-fn set_private_file_permissions(_: &Path) {}
+fn set_private_file_permissions(_: &Path) -> Result<()> {
+    Ok(())
+}
 
 #[cfg(unix)]
-fn sync_parent_directory(path: &Path) {
-    let _ = File::open(path).and_then(|directory| directory.sync_all());
+fn sync_parent_directory(path: &Path) -> io::Result<()> {
+    File::open(path).and_then(|directory| directory.sync_all())
 }
 
 #[cfg(not(unix))]
-fn sync_parent_directory(_: &Path) {}
+fn sync_parent_directory(_: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+fn cleanup_temporary_file(path: &Path) {
+    if let Err(error) = fs::remove_file(path)
+        && error.kind() != io::ErrorKind::NotFound
+    {
+        tracing::warn!(%error, "failed to clean up private persistence temporary file");
+    }
+}
 
 #[cfg(not(target_os = "windows"))]
 fn replace_file_atomically(temporary: &Path, destination: &Path) -> io::Result<()> {
@@ -345,6 +371,39 @@ fn replace_file_atomically(temporary: &Path, destination: &Path) -> io::Result<(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn directory_sync_failure_is_reported_after_atomic_publication() {
+        let root = std::env::temp_dir().join(format!("axssh-sync-failure-{}", Uuid::new_v4()));
+        fs::create_dir(&root).expect("fixture directory");
+        let destination = root.join("sessions.json");
+        fs::write(&destination, b"old").expect("original file");
+        let error = write_file_contents_with_sync(&destination, b"new", Some(&root), |_| {
+            Err(io::Error::other("injected directory sync failure"))
+        })
+        .expect_err("durability failure must not report success");
+        assert!(format!("{error:#}").contains("injected directory sync failure"));
+        assert_eq!(fs::read(&destination).expect("published file"), b"new");
+        assert_eq!(fs::read_dir(&root).expect("fixture entries").count(), 1);
+        fs::remove_dir_all(root).expect("fixture cleanup");
+    }
+
+    #[test]
+    fn private_permission_failures_are_returned_with_context() {
+        let missing = std::env::temp_dir().join(format!("axssh-missing-{}", Uuid::new_v4()));
+        assert!(
+            set_private_directory_permissions(&missing)
+                .expect_err("missing directory")
+                .to_string()
+                .contains("inspect private directory")
+        );
+        assert!(
+            set_private_file_permissions(&missing)
+                .expect_err("missing file")
+                .to_string()
+                .contains("restrict private file")
+        );
+    }
 
     #[test]
     fn user_and_private_writes_keep_distinct_parent_permissions() {

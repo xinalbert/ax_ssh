@@ -1,5 +1,11 @@
 use super::*;
 
+fn isolated_config_path(label: &str) -> PathBuf {
+    std::env::temp_dir()
+        .join(format!("ax-ssh-{label}-{}", Uuid::new_v4()))
+        .join("sessions.json")
+}
+
 #[test]
 fn save_and_connect_is_limited_to_ssh_profiles() {
     let ssh = SessionProfile::new("server", "server.example", "alice");
@@ -499,7 +505,7 @@ fn switching_to_ssh_agent_discards_password_input_and_credential_reference() {
 
 #[test]
 fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-groups-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("groups");
     let mut sessions = SessionStore::default();
     let mut profile = SessionProfile::new("server", "server.example", "alice");
     profile.group_name = "Production".into();
@@ -519,7 +525,8 @@ fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
         app.sessions
     );
     drop(app);
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
@@ -540,7 +547,7 @@ fn duplicate_session_name_gets_a_unique_copy_suffix() {
 
 #[test]
 fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-duplicate-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("duplicate");
     let mut sessions = SessionStore::default();
     let mut source = SessionProfile::new("production", "server.example", "alice");
     source.group_name = "Production".into();
@@ -580,7 +587,8 @@ fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
         app.sessions
     );
     drop(app);
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
@@ -716,7 +724,7 @@ fn importing_a_server_rekeys_redacts_and_resolves_name_conflicts() {
 
 #[test]
 fn duplicating_a_group_rekeys_profiles_and_keeps_empty_groups_supported() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-group-copy-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("group-copy");
     let mut sessions = SessionStore::default();
     sessions
         .add_group("Production")
@@ -758,7 +766,8 @@ fn duplicating_a_group_rekeys_profiles_and_keeps_empty_groups_supported() {
     assert_eq!(ssh.credential_storage, None);
     assert_eq!(ssh.host_key_fingerprint.as_deref(), Some("SHA256:trusted"));
     drop(app);
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
@@ -798,7 +807,7 @@ fn automatic_group_import_normalizes_conflicts_and_preserves_empty_groups() {
 
 #[tokio::test]
 async fn deleting_a_profile_keeps_open_terminal_tabs() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-delete-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("delete");
     let mut sessions = SessionStore::default();
     let profile = SessionProfile::new("server", "server.example", "alice");
     sessions.upsert(profile.clone());
@@ -819,12 +828,13 @@ async fn deleting_a_profile_keeps_open_terminal_tabs() {
     assert!(app.sessions.sessions.is_empty());
     assert!(app.terminal(terminal_id).is_some());
     drop(app);
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
 fn overlapping_profile_mutations_are_rejected() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-save-order-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("save-order");
     let original = SessionProfile::new("server", "server.example", "alice");
     let mut sessions = SessionStore::default();
     sessions.upsert(original.clone());
@@ -849,12 +859,13 @@ fn overlapping_profile_mutations_are_rejected() {
             .name,
         "saved"
     );
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
 fn profile_delete_waits_for_an_in_progress_mutation_to_finish() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-save-delete-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("save-delete");
     let original = SessionProfile::new("server", "server.example", "alice");
     let mut sessions = SessionStore::default();
     sessions.upsert(original.clone());
@@ -877,13 +888,13 @@ fn profile_delete_waits_for_an_in_progress_mutation_to_finish() {
             .sessions
             .is_empty()
     );
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
 }
 
 #[test]
 fn credential_storage_commit_requires_the_current_profile_mutation() {
-    let path =
-        std::env::temp_dir().join(format!("ax-ssh-credential-storage-{}.json", Uuid::new_v4()));
+    let path = isolated_config_path("credential-storage");
     let original = SessionProfile::new("server", "server.example", "alice");
     let mut sessions = SessionStore::default();
     sessions.upsert(original.clone());
@@ -911,7 +922,43 @@ fn credential_storage_commit_requires_the_current_profile_mutation() {
             .credential_storage,
         Some(CredentialStorage::SystemKeyring)
     );
-    let _ = std::fs::remove_file(path);
+    std::fs::remove_dir_all(path.parent().expect("isolated configuration directory"))
+        .expect("isolated configuration cleanup");
+}
+
+struct IsolatedPasswordEntry {
+    account: String,
+    entries: Arc<Mutex<HashMap<String, zeroize::Zeroizing<String>>>>,
+}
+
+impl ax_ssh::credentials::PasswordEntry for IsolatedPasswordEntry {
+    fn get_password(&self) -> Result<Option<String>> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("isolated credential entries")
+            .get(&self.account)
+            .map(|value| value.to_string()))
+    }
+
+    fn set_password(&self, password: &str) -> Result<()> {
+        self.entries
+            .lock()
+            .expect("isolated credential entries")
+            .insert(
+                self.account.clone(),
+                zeroize::Zeroizing::new(password.to_owned()),
+            );
+        Ok(())
+    }
+
+    fn delete_credential(&self) -> Result<()> {
+        self.entries
+            .lock()
+            .expect("isolated credential entries")
+            .remove(&self.account);
+        Ok(())
+    }
 }
 
 struct PasswordClearFixture {
@@ -924,7 +971,16 @@ struct PasswordClearFixture {
 impl PasswordClearFixture {
     fn new(storage: CredentialStorage, generated: bool) -> Self {
         let root = std::env::temp_dir().join(format!("ax-ssh-password-clear-{}", Uuid::new_v4()));
-        let store = ax_ssh::credentials::CredentialStore::new(root.join("credentials"));
+        let entries = Arc::new(Mutex::new(HashMap::new()));
+        let store = ax_ssh::credentials::CredentialStore::with_entry_factory(
+            root.join("credentials"),
+            move |account| {
+                Ok(Box::new(IsolatedPasswordEntry {
+                    account: account.to_owned(),
+                    entries: entries.clone(),
+                }))
+            },
+        );
         let mut profile = SessionProfile::new("server", "server.example", "alice");
         profile.group_name = "Production".into();
         profile.system_icon_override = Some("ubuntu".into());
