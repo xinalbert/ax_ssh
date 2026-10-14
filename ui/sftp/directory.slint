@@ -653,7 +653,8 @@ export component SftpDirectoryPane inherits Rectangle {
                     interactive: root.interactive && !root.loading;
                     drag-enabled: root.allow-drag;
                     native-file-drag-enabled: root.native-file-drag-enabled;
-                    remote-actions: root.allow-navigation;
+                    // Pane identity selects row actions independently of navigation.
+                    remote-actions: !root.local-actions;
                     local-actions: root.local-actions;
                     selection-count: root.selection-count;
                     open-directory(path) => { root.list-directory(path); }
