@@ -604,3 +604,13 @@
 - 关键结论：macOS Control 对应 Slint meta，Command 对应 control；标准输入缺少 A/E 等 Control 字母映射。标准事件已有段落、grapheme、删除、行移动、选区、IME 和撤销；游标 offset getter 被 compiler 标为内部测试用途，不用于生产光标状态。
 - 对实施计划的影响：共享 EditingTextInput 只传按键事件，应用集中读取真实聚焦输入策略并通过 item 标准事件执行已匹配动作；Windows/Linux/macOS 主快捷键原样处理，密码内核和适配器均保留保护。
 - 未解决问题：平台真实键盘/IME 和原生 popup 行为仍需用户验收；升级 Slint 时必须核对版本适配。Windows/Linux 本机 SDK 不可用，原生 CI 保留。
+
+## 2026-10-14 15:28 +0800 Slint Tab 标准控件与悬浮提示
+
+- 时间：2026-10-14 15:28 +0800
+- 检索问题：Slint 标准控件能否直接替代现有工作区 Tab，并扩大 SSH RTT hover 的触发区域？
+- 检索原因：用户要求核对切换/关闭标准实现并展示 hover 延迟，控件契约决定是否重构工作区。
+- 来源列表：[Slint TabWidget](https://docs.slint.dev/latest/docs/slint/reference/std-widgets/views/tabwidget/)；[Slint Tooltip](https://docs.slint.dev/latest/docs/slint/reference/window/tooltip/)；项目锁定 Slint 1.18.1 的 Cargo 编译结果。
+- 关键结论：TabWidget 提供 Tab/title/current-index 等基础页面切换，公开契约没有现有关闭、重排和窗口分离意图；Tooltip 可在元素上提供延时悬浮提示和自定义单子元素内容。编译确认 Tooltip 不能直接挂 HorizontalLayout，需使用非布局容器。
+- 对实施计划的影响：保留已有工作区生命周期和指针路径，在透明主体容器上复用标准 Tooltip；组合已有摘要与译文，不增加依赖、网络请求或计时器。
+- 未解决问题：GUI 视觉、平台原生 hover/焦点和真实 SSH 更新由用户验收；本机编译与无窗口指针测试不能代替其他平台原生验证。

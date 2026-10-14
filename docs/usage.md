@@ -495,8 +495,12 @@ the active workspace Tab and scrolls it into view; the editor then focuses its
 
 Connected SSH and SFTP Tabs use the status dot to show smoothed SSH round-trip
 response time: green below 100 ms, yellow from 100 to below 250 ms, orange from
-250 to below 500 ms, and red at 500 ms or above. Hover the dot for the current
-value and last update time. Colours use a 20% exponentially weighted moving
+250 to below 500 ms, and red at 500 ms or above. Hover the Tab's title, icon,
+order or status dot for its full title, available system details, latency and
+last update time, even when its title fits. Measuring, timed-out, expired or
+unavailable data shows the corresponding state; disconnecting removes the
+connection data. Dragging temporarily hides the tooltip, and close/window
+buttons keep their own action areas. Colours use a 20% exponentially weighted moving
 average and require two consecutive samples in a new band before changing.
 The first sample and recovery after a timeout use the fresh value immediately.
 

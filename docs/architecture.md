@@ -1532,7 +1532,13 @@ Authenticated connections follow this lifecycle:
   old routes and reset on reconnect. A coalesced Tab-only refresh uses router
   summaries without terminal/SFTP snapshots; Slint receives only quality,
   milliseconds, and a bounded local update-time label. Local/Telnet/Serial have
-  no SSH measurement; the visible split Tab represents its root session;
+  no SSH measurement; the visible split Tab represents its root session.
+  The standard Slint `Tooltip` covers the Tab's icon, order, title, and status
+  dot, showing the full title, available system release, SSH RTT and update
+  time even when the title fits. Measuring, timeout, stale and unavailable
+  states replace the numeric reading; disconnected Tabs omit connection data.
+  Close/window actions keep their own pointer regions, and dragging disables
+  summary tooltips, including the preview;
 - the SFTP-only worker observes a closed SSH transport, while the browser
   observes SFTP subsystem channel closure, even without UI commands; either
   enters the existing bounded reconnect path. Transport/protocol failure in a

@@ -960,7 +960,10 @@ fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、�
 - 应用层 `state/latency.rs` 保存有界临时样本、20% EWMA 和连续两次样本的颜色切换缓冲。
   monitor 的 attempt guard 拒绝旧路由事件，重连清空数据；Tab-only 刷新共用现有合并门控，
   router 只构造摘要，不重建终端/SFTP snapshot。Slint 只接收档位、毫秒和有界本地更新时间。
-  Local/Telnet/Serial 没有 SSH 测量，分屏可见 Tab 表示根会话；
+  Local/Telnet/Serial 没有 SSH 测量，分屏可见 Tab 表示根会话。
+  标准 Slint `Tooltip` 覆盖 Tab 的图标、序号、标题和状态点，即使标题未截断，也显示完整标题、
+  已知系统版本、SSH RTT 和更新时间；测量中、超时、过期及不可用状态替代数值，断开后不显示
+  连接数据。关闭/窗口操作保留独立指针区域，拖动期间（包括预览）禁用摘要提示；
 - SFTP-only worker 观察 SSH transport，浏览器观察 SFTP subsystem channel；即使没有界面命令，
   任一连接关闭也会进入既有有界重连流程。目录请求遇到传输或协议故障时也会结束浏览器，路径或权限
   状态错误则只影响该次请求；
