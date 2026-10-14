@@ -33,7 +33,7 @@
 | S2 | completed | 侧栏改动完整验证和双语说明 | fmt/check/严格 Clippy/test/build、翻译、链接、tracker/diff | 857 项 Rust 测试通过，本机调试程序已重建 |
 | S3 | pending | 用户侧栏视觉验收 | 用户确认或截图 | 位置、大小和留白；不捕获代理应用截图 |
 | G1 | completed | 分项本地提交 | 显式暂存、逐组审阅 staged diff、提交范围 | 代码分别保存为 59f6e3b、bb9a00a；双语文档独立归档 |
-| G2 | in_progress | 推送并确认 origin/master | 远端 master SHA、祖先关系、正常 push、独立 ls-remote | 直连失败后使用本机 7897 代理；不改全局配置 |
+| G2 | completed | 推送并确认 origin/master | 正常 push 与独立 ls-remote 的 SHA 一致 | 5 条待推送提交已到 a4c6b51；使用本机 7897 代理，不改全局配置 |
 
 ## 已完成
 
@@ -51,6 +51,7 @@
 - 侧栏改动再次通过 locked/offline check、严格 all-target Clippy、391 library + 466 binary（857）完整测试和本机 debug build；前轮连接等待期修复同时通过回归。
 - 用户追加授权分项提交与推送；代码已正常提交为 `59f6e3b`（连接前布局/焦点）和 `bb9a00a`（侧栏图标/缩进），配套双语说明与跟踪记录独立归档。
 - 直连 origin 查询发生 curl 28 低速超时；本机 7897 代理可用，命令级 HTTP 代理读取远端 master 为 `ca729ae65a9728eee1e36d5b1f8f340310c0ecd9`，祖先关系核查通过。
+- 配套文档已提交为 `a4c6b51`；通过命令级 7897 代理正常推送前轮两条 Tab hover 与本轮三条修复/文档提交，独立查询确认 origin/master 与本地 HEAD 同为 `a4c6b51a3d1f9600294144aedd94e23e3aceccaa`。
 
 ## 验证
 
@@ -65,8 +66,8 @@
 
 ## 下一步
 
-- 完成 G2 正常推送与独立远端 SHA 核对，并归档推送结果；C4/S3 仍由用户验收，不据推送推定 GUI 已通过。
+- G1/G2 已完成；C4/S3 仍由用户验收，不据推送推定 GUI 已通过。
 
 ## 最后更新时间
 
-- 2026-10-14 18:23 +0800
+- 2026-10-14 18:26 +0800
