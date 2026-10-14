@@ -114,7 +114,7 @@ SFTP facade 组合私有 `sftp_bridge/{navigation,files,drag,transfers}.rs`；�
 
 `CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。
 
-SFTP 路径导航由应用展示层从最多 4096 字节的路径生成至多六段模型，只为根目录、最近省略父目录和尾部目录分配导航字符串；相对或不支持的前缀保留原始输入框。UI 接收自有标签和精确前缀目标，仅保存短暂编辑/焦点状态并调用既有目录 callback。远端独立于本机按 POSIX 解析，Windows 本地盘符/UNC 前缀保持；传输更新时未变化路径复用模型。标题行上传/下载复用既有选择与 worker readiness 契约，不改变配置 schema、transport API 或凭据边界。
+SFTP 路径以原文作为唯一导航值。Slint 使用与可见文本相同的字体测量有界候选文本，在布局绑定之外执行有界二分适配。应用侧无状态格式化 helper 仅省略中间内容，保持 UTF-8 字符边界并优先保留末尾，单个候选最多 4096 字符。栏宽/字体变化重新适配，不保留分段模型或平台路径解析器。路径和齿轮菜单保存短暂编辑/焦点状态，使用原文调用已有目录/history/clipboard callback。标题上传/下载保持既有选择/readiness 契约，持久化、transport 和凭据仍由原所有者负责。
 
 ## 应用图标归属
 

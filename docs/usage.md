@@ -190,17 +190,19 @@ copy path and remote **Edit** remain secondary controls when there is room.
 **Hidden** includes dot files in that browser: it stays in the title row on wide
 panes and moves to the status row on narrow panes.
 
-The path row has **Back**, **Forward**, **Parent directory**, and clickable path
-segments. Hover a segment to see its complete navigation target. At most six
-segments are shown; a deep path keeps the root, an ellipsis for the nearest
-omitted parent, and the final four segments. Narrow panes show the current
-directory, while the navigation and edit controls remain available. Select
-**Edit path** to enter the original path, then press Enter or the arrow button
-to open it; Escape returns to the current directory display. Control/Command+L
-also starts editing while a path control has focus. Unsupported or relative
-presentation paths remain in the full-path editor rather than guessing
-ancestor targets. Remote paths follow POSIX rules; local Windows paths preserve
-drive, UNC, and supported extended prefixes.
+The path row gives nearly all available width to the current path and keeps a
+single **Path: Settings** gear at the right. A fitting path is shown in full;
+otherwise only the middle is replaced by `…`. Both ends are retained whenever
+space allows, with roughly three quarters of the retained characters reserved
+for the tail. The display uses the actual font width and updates on resizing
+or font changes. Hover an abbreviated path to see the complete original.
+
+Click the path, or choose **Edit path** in the gear menu, to edit the original
+path. Press Enter or choose **Open** in that menu to navigate; Escape returns
+to the current path. Control/Command+L also starts editing while a path control
+has focus. The gear menu includes **Copy current path**, **Back**, **Forward**,
+and **Parent directory**. Copying and navigation always use the original path;
+the displayed ellipsis never becomes part of a filesystem target.
 
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit

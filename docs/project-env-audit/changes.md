@@ -1217,3 +1217,19 @@
 - 受影响文件：`ui/`、`src/app/view/`、11 个语言目录和双语/实施记录。
 - 更新后的命令或环境：锁定 offline Cargo 门禁、ARM64/Intel CI 同款 check/严格 all-target Clippy/build；临时匹配 Skia file URL 与 7897 代理，无全局设置变化。
 - 验证结果：60 专项、842 Rust、8 Python、665 × 11 翻译、119 相对链接、九个 SVG 与 skill/tracker/staged diff 通过，两架构 Mach-O 核对；实际 GUI/焦点与 Windows/Linux 原生验证待用户/CI 验收。
+
+## 2026-10-14 07:54 +0800 SFTP 直接路径施工预检
+
+- 日期：2026-10-14
+- 变化摘要：当前 UI 范围改为直接路径与中间省略/菜单；环境和工具链保持。
+- 受影响文件：`ui/`、应用展示/DTO/回归、双语说明与实施记录。
+- 更新后的命令或环境：本机 Rust/Cargo 1.97.1、两 macOS target、锁定 offline Cargo 门禁与 CI 同款目标检查。
+- 验证结果：预检允许开工；实际字符串宽度/交互及完整验证待实现后执行，GUI 验收由用户完成。
+
+## 2026-10-14 08:25 +0800 SFTP 直接路径最终环境验证
+
+- 日期：2026-10-14
+- 变化摘要：直接路径、中间省略与齿轮菜单替换分段模型；环境保持。
+- 受影响文件：`ui/`、`src/app.rs`、`src/app/view/`、双语说明和配套记录。
+- 更新后的命令或环境：标准 locked/offline Cargo 门禁和 ARM64/Intel CI 同款目标检查/Clippy/build；临时匹配 Skia file URL 和 7897 代理，无全局修改。
+- 验证结果：59 专项/841 Rust、8 Python、665 × 11 翻译、119 相对链接、六个 SVG 和 skill/tracker/diff 全通过；两架构 Mach-O 正确，实际 GUI/键盘与 Windows/Linux 原生验证待用户/CI。
