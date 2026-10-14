@@ -2,17 +2,17 @@
 
 ## 当前目标
 
-- 目标 ID：20261014-tab-hover-latency
-- 目标：核查 Tab 切换/关闭的标准能力与现有路径，将 SSH 延迟提示扩展到 Tab 主体。
-- 交付物：共享 Tab 主体 Tooltip、状态和交互验证、双语架构说明与跟踪记录，并按用户追加授权分项本地提交。
+- 目标 ID：20261014-workspace-connecting-layout-focus
+- 目标：修复 Workspace 连接等待期的布局/焦点问题，并统一侧栏两种形态的 Group 图标、展开箭头和紧凑缩进。
+- 交付物：连接前尺寸更新与焦点承接、共用 Group glyph、紧凑侧栏缩进、回归与双语记录；按用户追加授权分项提交并推送 origin/master。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/components/workspace-titlebar.slint`、`src/app/view/tests/text_overflow.rs`、双语架构/使用说明和 `docs/project-implementation-tracker/`。
-- 不在本轮范围内：transport/凭据/信任/探测频率、配置 schema、Tab 生命周期语义、依赖/工具链、推送或发布。
-- 所有权：Slint 组合已有 Tab 摘要和 Tooltip；Rust 应用层继续负责路由/生命周期，worker 继续负责采样和关闭。
-- 安全：不增加网络请求或持久化，不暴露凭据，不改变 SSH host-key 校验。
+- 当前范围：`ui/terminal-pane.slint`、`ui/components/session-navigation.slint`、`ui/components/sidebar-controls.slint`、`ui/theme.slint`、`src/app/view/tests.rs`、`src/app/view/tests/terminal_connection.rs`、`src/app/state/tests.rs`、双语架构/使用说明和 `docs/project-implementation-tracker/`。
+- 不在本轮范围内：transport/信任/认证/凭据、配置 schema、同服务器多连接能力、依赖/工具链、发布 tag 或改写历史。
+- 所有权：Slint 负责 pane 几何、等待焦点及侧栏 glyph/布局，Theme 管理统一尺寸；现有 UUID 定向 resize 入口更新模型和 worker，只有 connected 的 IME 输入进入 transport。
+- 安全：不缓冲连接前的键入，不影响模态安全对话框，不新增网络请求或凭据持久化。
 
 ## 当前状态
 
@@ -25,38 +25,48 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| T1 | completed | 标准控件与现有切换/关闭/延迟路径核查 | 本地源码、既有回归、Slint 官方文档 | TabWidget 没有现有动态关闭/排序/分离操作；保留工作区组件 |
-| T2 | completed | Tab 主体悬浮提示和双语说明 | 编译 UI、指针事件/焦点与状态回归 | 复用 Tooltip 和已翻译延迟文案；拖动预览不提示 |
-| T3 | completed | 仓库门禁与记录 | fmt/check/严格 Clippy/test、翻译、相对链接、tracker/diff | 本机调试程序已构建；GUI 验收由用户完成 |
-| T4 | pending | 用户 GUI 验收 | 用户确认或提供的截图 | hover、切换、关闭、拖动与焦点 |
-| T5 | completed | 按功能和文档分项本地提交 | index 审阅、提交范围、最终工作区 | 源码/回归 8ea0797；文档单独归档 |
+| C1 | completed | 用户截图与尺寸/焦点根因核查 | 恢复模型、Slint resize/focus 条件、Slint/WAI/RFC 文档 | 用户确认连接成功后自动恢复；10×3 初始模型被 connected 条件卡住 |
+| C2 | completed | 连接前几何与等待焦点修复、定向回归 | 实际指针/Enter、主/独立窗口、模型重排 | 保留多连接意图与安全输入边界 |
+| C3 | completed | 完整仓库验证和说明 | fmt/check/严格 Clippy/test/build、翻译、相对链接、tracker/diff | 本机 ARM64 macOS 调试程序已重建；不捕获应用截图 |
+| C4 | pending | 用户 GUI/真实连接确认 | 恢复、连接等待、Enter、模态框和重连 | 视觉验收由用户完成 |
+| S1 | completed | 共用 Group glyph 与紧凑缩进 | 静态布局差异、Slint 重编译 | 按收起栏：文件夹右侧 7px 箭头，展开向下/折叠向右；缩进 42px 改为 20px |
+| S2 | completed | 侧栏改动完整验证和双语说明 | fmt/check/严格 Clippy/test/build、翻译、链接、tracker/diff | 857 项 Rust 测试通过，本机调试程序已重建 |
+| S3 | pending | 用户侧栏视觉验收 | 用户确认或截图 | 位置、大小和留白；不捕获代理应用截图 |
+| G1 | completed | 分项本地提交 | 显式暂存、逐组审阅 staged diff、提交范围 | 代码分别保存为 59f6e3b、bb9a00a；双语文档独立归档 |
+| G2 | in_progress | 推送并确认 origin/master | 远端 master SHA、祖先关系、正常 push、独立 ls-remote | 直连失败后使用本机 7897 代理；不改全局配置 |
 
 ## 已完成
 
-- 初始工作区干净；Slint 锁定 1.18.1，Rust edition 2024/MSRV 1.92.0；本机 ARM64 macOS、rustc 1.99.0。
-- 核对 Tab 单击/键盘激活、窗口路由内循环切换、拖动排序、Settings 保存后关闭、相邻选择、旧事件隔离和异步 worker shutdown。
-- 延迟毫秒/更新时间已进入 UI，原提示仅在状态点；Slint 标准 Tooltip 可观察 hover 并转发点击。
-- 透明主体容器覆盖图标/序号/标题/状态点，组合完整标题、系统版本与连接摘要，动作按钮保持独立；拖动源及预览禁用 Tooltip。
-- 新增实际指针回归已通过：短标题可 hover、打开中的提示实时更新、测量/超时/过期/不可用替代旧值、非 SSH 只显示已连接、断开清除连接数据、焦点不变、激活/关闭点击可达。
-- 双语架构/使用说明、地图和官方文档研究记录已同步；没有新增网络请求、计时器、翻译键、依赖或跨层 API。
-- fmt、locked/offline check、严格 all-target Clippy、391 library + 463 binary（854）完整测试与本机 debug build 全通过。
-- 用户追加授权本地提交；源码与指针回归以 `8ea0797` 独立保存，双语说明和跟踪记录由配套文档提交归档。没有推送、改写历史或创建 tag。
+- 初始工作区干净，前轮 Tab hover 已分项本地提交。
+- Workspace 历史以 10×3 重建；TerminalPane 的尺寸上报和焦点交接均要求 connected，等待期间侧栏仍接收 Enter 并执行创建新 Tab。
+- 用户确认连接成功后窄列自动恢复，与 connected 门槛一致。
+- 核对 Slint 焦点、WAI 聚焦项激活与 RFC 4254 的 PTY/window-change；问题是本地几何/焦点条件，不据截图推断 SSH 故障。
+- TerminalPane 在连接前上报实测尺寸；等待 FocusScope 承接焦点和 Enter/Space，不启用 IME 或发送输入；connected 后转到原生 IME，阻塞提示保持优先。
+- 3 项定向回归通过：主/独立窗口在连接前 resize；展开/收起侧栏真实点击后连续 Enter 不重复建连，等待输入不补发，主机密钥确认焦点不被抢占，连接后的 Enter 正常，主动点击可打开第二个连接；恢复模型无 worker 时可按实测尺寸重排。
+- 双语架构/使用说明、项目地图与研究记录已同步；无 transport、schema、凭据、依赖或工具链改动。
+- fmt、locked/offline check、严格 all-target Clippy、391 library + 466 binary（857）完整测试与本机 debug build 全通过，定向回归覆盖的源码保持一致。
+- 用户追加截图要求侧栏箭头统一并减少展开态左侧留白；确认展开栏使用 14px 左置上下箭头和 42px 子项缩进，收起栏使用 7px 右置向右/向下箭头。
+- 两种侧栏现共用 `SidebarGroupGlyph` 的 20px 文件夹、3px 间隔和 7px 箭头，展开向下/折叠向右；收起栏的原图标/箭头位置保持，展开栏移除前置箭头槽，子项缩进由 Theme 派生为 20px，名称与组名对齐。
+- 修改后的 Slint 已重编译，既有主/独立窗口几何及展开/收起侧栏真实点击/Enter/焦点回归通过；双语架构/使用说明和地图已同步，665 × 11 翻译/生成、8 项翻译脚本、12 个相对链接及新 tracker 记录通过。
+- 侧栏改动再次通过 locked/offline check、严格 all-target Clippy、391 library + 466 binary（857）完整测试和本机 debug build；前轮连接等待期修复同时通过回归。
+- 用户追加授权分项提交与推送；代码已正常提交为 `59f6e3b`（连接前布局/焦点）和 `bb9a00a`（侧栏图标/缩进），配套双语说明与跟踪记录独立归档。
+- 直连 origin 查询发生 curl 28 低速超时；本机 7897 代理可用，命令级 HTTP 代理读取远端 master 为 `ca729ae65a9728eee1e36d5b1f8f340310c0ecd9`，祖先关系核查通过。
 
 ## 验证
 
-- 已完成：源码/所有权审查、官方能力核查、Slint 实际重编译、专项指针/焦点/状态测试、fmt/check/严格 Clippy/854 项 Rust 测试/build/diff、665 × 11 翻译与生成检查、8 项翻译脚本测试、12 个相对 Markdown 链接、skill 校验；tracker 新记录和 current/map 校验通过，完整校验旧错误数仍为 84（对照 HEAD 无新增）。
-- 未完成：用户 GUI 视觉/真实 SSH hover 验收；Windows/Linux 原生 CI 验证未在本机执行。
+- 已完成：源码/用户症状/标准核对，Slint 实际重编译和 3 项定向回归，fmt/check/严格 Clippy/857 项 Rust 测试/build/diff、665 × 11 翻译/生成、8 项翻译脚本测试、12 个相对链接；current/map/新记录单独有效，完整 tracker 对照 HEAD 仍为 84 项旧错误且无新增；最终 diff 保留既有地图历史。
+- 已完成：侧栏改动的 fmt/check/严格 Clippy/857 项测试/build/diff、翻译/生成和双语文档检查；完整 tracker 的 84 项旧格式问题对照 HEAD 无新增。
+- 未完成：C4/S3 用户 GUI 验收；其他平台原生 CI 未在本机执行。
 
 ## 风险与阻塞
 
-- 指针/焦点回归已通过；真实平台 hover、拖动与焦点手感仍需用户验收。
-- 本地不能替代 Windows/Linux 原生 CI；GUI 视觉与真实 SSH 悬浮行为待用户验收。
-- 历史 tracker 已记有 84 项格式问题；本轮新增记录单独校验，避免改写历史。
+- 等待终端必须接收焦点但不启用 IME/网络输入；安全对话框仍优先持有焦点。
+- 完整 tracker 已有 84 项旧格式问题；本轮记录单独验证并与 HEAD 比较错误集。
 
 ## 下一步
 
-- T1–T3 与 T5 已完成；用户使用 `target/debug/ax_ssh` 完成 T4 的视觉、拖动与焦点验收。
+- 完成 G2 正常推送与独立远端 SHA 核对，并归档推送结果；C4/S3 仍由用户验收，不据推送推定 GUI 已通过。
 
 ## 最后更新时间
 
-- 2026-10-14 16:58 +0800
+- 2026-10-14 18:23 +0800

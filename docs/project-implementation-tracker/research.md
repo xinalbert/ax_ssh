@@ -614,3 +614,13 @@
 - 关键结论：TabWidget 提供 Tab/title/current-index 等基础页面切换，公开契约没有现有关闭、重排和窗口分离意图；Tooltip 可在元素上提供延时悬浮提示和自定义单子元素内容。编译确认 Tooltip 不能直接挂 HorizontalLayout，需使用非布局容器。
 - 对实施计划的影响：保留已有工作区生命周期和指针路径，在透明主体容器上复用标准 Tooltip；组合已有摘要与译文，不增加依赖、网络请求或计时器。
 - 未解决问题：GUI 视觉、平台原生 hover/焦点和真实 SSH 更新由用户验收；本机编译与无窗口指针测试不能代替其他平台原生验证。
+
+## 2026-10-14 17:12 +0800 连接等待期终端几何与焦点约定
+
+- 时间：2026-10-14 17:12 +0800
+- 检索问题：连接前的终端展示和侧栏 Enter 激活应由哪一层控制，能否独立于 transport 更新布局？
+- 检索原因：用户截图与确认表明窄列只存在于连接期间，Enter 则因焦点仍在侧栏而重复新建连接。
+- 来源列表：[Slint FocusScope](https://docs.slint.dev/latest/docs/slint/reference/keyboard-input/focusscope/)；[WAI Tree View 键盘交互](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/)；[RFC 4254 PTY 与窗口尺寸](https://www.rfc-editor.org/rfc/rfc4254.html)。
+- 关键结论：Slint 键盘事件沿聚焦元素链分发；WAI 将 Enter 定义为聚焦节点的默认激活，选择与焦点不同。RFC 定义远端 PTY 尺寸和 window-change，但不要求本地历史展示等待连接。将新终端作为等待焦点目的地是本应用的交互选择，不是 RFC 强制规则。
+- 对实施计划的影响：移除本地实测尺寸上报的 connected 前提，保留有界 resize 路径；新终端以非文本 FocusScope 承接焦点，IME/网络输入仍要求 connected，安全覆盖层优先；不禁止主动创建多连接。
+- 未解决问题：真实 SSH 连接期间的 GUI、键盘/IME 手感仍需用户验收；其他平台原生行为交 CI 和人工验证。

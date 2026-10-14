@@ -183,7 +183,11 @@ Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属�
 窄窗口的动作按钮纵向排列，提示不压缩终端网格。
 其中的 Retry 与 Close 意图会把 pane UUID 交回 application；application 在重新启动既有 worker 路由或关闭对应
 Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不显示该 notice，既有的阻塞式安全覆盖层仍是唯一权威。
-只有新建的 `TerminalPane` 会把一次 IME 焦点重试排到首次布局完成后，并在聚焦原生 proxy 前重新核验其仍可见、focused 且已连接。组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步聚焦已有原生 proxy。终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
+只有新建的 `TerminalPane` 会把一次输入焦点重试排到首次布局完成后，并重新核验其仍可见、focused 且没有阻塞提示。
+已连接 pane 聚焦原生 IME proxy；连接中的 pane 聚焦不接受文本的 `FocusScope`，承接 Enter/Space 而不缓冲或发送输入，
+避免旧侧栏焦点再次打开连接。IME proxy 和远端输入仍要求 `connected`，安全覆盖层继续优先持有焦点。
+组件身份不变时，terminal identity、分屏聚焦、连接、可见性及 divider release 请求会同步使用同一焦点选择。
+终端输入、resize、滚动和选区 callback 都携带终端 Tab UUID，应用只在该 UUID 属于当前窗口
 pane tree 时才处理。
 鼠标输入遵循同一所有权边界。`TerminalModel` 从当前私有 mouse mode 分别暴露 button 与 wheel 能力，
 并按程序选择的格式生成有界事件：默认 X10、UTF-8 1005、URXVT 1015、SGR 1006 或 SGR 像素坐标 1016。
@@ -594,6 +598,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    该 UI 任务实际执行时才从 `AppState` 复制当前快照，而不应用先前
    worker 事件已捕获的旧快照；因此已经排队的 Output 不会在用户持续拖动窗口时把界面
    恢复为旧网格。worker 随后到达的 `Resized` 仍只作为传输确认。
+   几何上报不要求 transport 已连接。恢复的 `10x3` 历史模型在连接/认证期间就会按实测 pane 尺寸重排，
+   尚无 worker 时也可更新本地模型；已有 worker 时复用有界 resize 路径传递最新尺寸。
+   键盘和 IME 输入仍必须等待连接完成。
    SSH 与 Telnet 输出以有界的 16 KiB 批次跨越 worker 边界；只有输出缓冲区从空变为非空后才启动
    一次性 16ms flush，因此空闲连接没有循环输出 timer。终端输入后观察到的首个 SSH 输出会立即
    刷新当前批次，降低交互回显的本地绘制等待，同时不做本地预测或重复回显；持续的无关输出仍
@@ -687,7 +694,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     model，以保留当前展开状态。持久化 Group 名称仍由 `SessionStore` 持有，空 Group
     也能跨重启保留。展开态依次渲染独立侧栏切换行、Local Shell 卡片、有界连接搜索输入、
     可折叠的 Group 父行和单行服务器子项；搜索匹配组名、服务器名称和连接详情。
-    Group 显示文件夹图标、名称、数量和展开尖角。服务器显示系统图标、名称和遮蔽后的
+    Group 显示文件夹图标、名称、数量和展开尖角。两种侧栏形态共用 `SidebarGroupGlyph`，
+    统一使用 20px 文件夹及其右侧 7px 箭头：展开向下、折叠向右。展开栏移除前置箭头槽，
+    服务器使用 20px 缩进，子项名称与组名对齐。服务器显示系统图标、名称和遮蔽后的
     endpoint；非秘密完整详情仍用于悬停提示。
     收起态固定使用 52px 图标窄栏：Group 显示文件夹图标和展开指示，服务器按已读取的
     release 显示 Linux 发行版、Windows 或 macOS 图标，未知/未读取系统显示通用服务器图标。
@@ -846,8 +855,8 @@ detached 初始化时不再填充 sidebar、连接选择器、Settings、会话�
 无障碍 slider 操作，以及双击或 Enter/Space 复位都会映射到 0.1-0.9 的比例。比例变化复用每个 pane
 按 UUID 定向的 terminal resize 路径，因此 PTY/NAWS/本地模型尺寸会跟随新几何。比例在 Tab 切换和
 detached/return 转移中保留，并随 workspace 快照恢复；不进入设置、worker 或 transport 状态。
-divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只请求当前 focused、connected terminal pane
-的 IME proxy 取得焦点。键盘和无障碍 divider 操作继续保留自身焦点。
+divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只请求当前 focused terminal pane 的输入目标
+取得焦点：已连接时为 IME proxy，连接中则为非文本等待区域。键盘和无障碍 divider 操作继续保留自身焦点。
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；

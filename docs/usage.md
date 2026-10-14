@@ -407,7 +407,10 @@ navigator. Right-click blank list space to create an empty group or an
 Ungrouped server even before any profile exists. Use the search field to find a
 group or server by name or connection details; matching groups expand to show
 results. Groups show a folder icon, name, count, and disclosure chevron. Click a
-group row, or focus it and press Enter or Space, to expand or collapse it. Every
+group row, or focus it and press Enter or Space, to expand or collapse it.
+Both sidebar modes use the same small chevron to the folder's right: down for
+expanded groups and right for collapsed groups. The expanded sidebar keeps a
+compact server inset and aligns server names with group names. Every
 visible server has a system icon, name, and masked endpoint on a single indented
 row. After a successful SSH or SFTP connection, AxSSH tries to read a short
 remote release label for the tab and its sidebar icon. An unavailable release
@@ -532,6 +535,11 @@ When activation moves to a Tab outside the visible strip, the Tab bar scrolls
 that Tab into view automatically.
 Activating a connected Terminal Tab restores its native input focus after the
 Tab layout update, so the next keystroke is ready for the selected session.
+During connection, the new terminal page already takes focus, so Enter does
+not repeatedly reopen the sidebar server. Input typed while waiting is discarded
+and is never replayed after login. Restored history also reflows to the actual
+pane width before the connection completes. Explicitly activating a server
+again still opens an independent connection.
 Returning to AxSSH from another application or window also restores the active
 Terminal Tab's input focus automatically (unless a blocking dialog is open).
 Moving between existing split panes focuses the destination immediately.
@@ -652,8 +660,9 @@ space beyond the maximum row count also remains below the grid. Only a pane
 shorter than the three-row floor clips older top rows.
 This clipping and top-aligned grid are established on the pane's initial layout,
 not only after the first window or divider resize.
-Releasing or cancelling a mouse drag returns input focus to the focused,
-connected terminal pane; keyboard and accessibility divider actions retain
+Releasing or cancelling a mouse drag returns focus to the focused terminal
+pane's input target, including its waiting area while connecting;
+keyboard and accessibility divider actions retain
 divider focus.
 The window client area has no additional application-drawn outer frame;
 individual Terminal panes remain borderless, including split panes.

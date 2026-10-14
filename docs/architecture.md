@@ -251,11 +251,15 @@ carry the pane UUID back to the application, which revalidates the window route
 before restarting the existing worker route or closing the affected tab. The
 notice is deliberately absent while a host-key or authentication security phase
 is active; those existing blocking security overlays remain authoritative.
-Only a newly created `TerminalPane` queues one IME focus retry until its first
-layout pass completes, then rechecks visible, focused, and connected state
-before focusing the native proxy. Identity-preserving terminal identity,
-split-pane focus, connection, visibility, and divider-release requests focus the existing
-native proxy synchronously. Terminal input, resize, scroll, and selection callbacks
+Only a newly created `TerminalPane` queues one input focus retry until its first
+layout pass completes, then rechecks visibility, pane focus, and blocking notices.
+A connected pane focuses its native IME proxy; a connecting pane focuses a
+non-text `FocusScope` instead. That waiting scope consumes Enter/Space without
+buffering or sending input, so the previously focused sidebar row cannot open
+another connection. The IME proxy and remote input remain gated on `connected`,
+and security overlays retain focus. Identity-preserving terminal identity,
+split-pane focus, connection, visibility, and divider-release requests use the
+same focus choice synchronously. Terminal input, resize, scroll, and selection callbacks
 carry the terminal Tab UUID, which the application validates against the
 current window's pane tree before acting.
 Mouse input follows the same ownership boundary. `TerminalModel` exposes
@@ -980,6 +984,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    already queued Output update cannot restore an older grid while the user is
    still dragging the window. The worker's later `Resized` acknowledgement
    remains transport confirmation only.
+   Geometry publication does not require a connected transport. A restored
+   `10x3` history model reflows to the measured pane size during connection or
+   authentication, including when no worker exists yet. If a worker exists,
+   the same bounded resize path carries the latest dimensions; keyboard and
+   IME input still require a completed connection.
    SSH and Telnet output crosses the worker boundary in bounded 16 KiB batches.
    A one-shot 16 ms flush is armed only after the output buffer becomes non-empty,
    so an idle connection has no recurring output timer. The first SSH output
@@ -1138,7 +1147,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
     the sidebar toggle, Local Shell card, bounded connection search input, and
     collapsible groups with single-line server children. Search matches group
     names, server names, and connection details. Groups show a folder icon, name,
-    count, and disclosure chevron. Servers show a platform icon, name, and masked
+    count, and disclosure chevron. Both sidebar modes use `SidebarGroupGlyph`:
+    the same 20px folder and 7px trailing chevron, pointing down when expanded
+    and right when collapsed. The expanded view has no leading chevron slot;
+    its 20px server inset aligns child names with the group name.
+    Servers show a platform icon, name, and masked
     inline endpoint; full non-secret details remain available in tooltips.
     The collapsed sidebar always uses the 52px icon rail: groups show a folder
     icon and disclosure indicator; servers show Linux distribution, Windows, or macOS icons
@@ -1333,8 +1346,9 @@ sizes follow the new geometry. Ratios remain while switching Tabs or moving the
 tree through detach/return, but are intentionally reset after application
 restart and never enter settings, workers, or transport state.
 The divider keeps its local drag state through pointer release or cancellation,
-then requests focus only for the currently focused, connected terminal pane's
-IME proxy. Keyboard and accessibility divider actions retain their own focus.
+then requests the currently focused terminal pane's input target: its IME proxy
+when connected, or the non-text waiting scope while connecting.
+Keyboard and accessibility divider actions retain their own focus.
 
 The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.
