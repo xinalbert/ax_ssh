@@ -6,6 +6,7 @@ import {
     SidebarRailItem,
     SidebarRailToggle,
     SidebarPlatformGlyph,
+    SidebarGroupGlyph,
 } from "sidebar-controls.slint";
 
 export struct SessionProfileRow {
@@ -28,22 +29,6 @@ enum SessionActionMenuKind {
     group,
     ungrouped,
     server,
-}
-
-// Draw the disclosure chevron so its shape does not depend on font coverage.
-component GroupDisclosureChevron inherits Path {
-    in property <bool> expanded;
-
-    width: Theme.sidebar-group-chevron-size;
-    height: Theme.sidebar-group-chevron-size;
-    commands: root.expanded
-        ? "M 2 4 L 8 10 L 14 4"
-        : "M 2 10 L 8 4 L 14 10";
-    fill: transparent;
-    stroke: Theme.muted;
-    stroke-width: Theme.sidebar-group-chevron-stroke;
-    stroke-line-cap: round;
-    stroke-line-join: round;
 }
 
 component SessionProfileTooltipContent inherits Rectangle {
@@ -304,22 +289,9 @@ component SessionNavigationRow inherits FocusScope {
             padding-right: Theme.sidebar-card-padding;
             spacing: Theme.space-sm;
 
-            if root.group : Rectangle {
-                width: Theme.sidebar-group-chevron-width + Theme.sidebar-group-icon-size + Theme.space-xs;
-                GroupDisclosureChevron {
-                    x: 0px;
-                    y: (parent.height - self.height) / 2;
-                    expanded: root.expanded;
-                }
-                Image {
-                    x: Theme.sidebar-group-chevron-width + Theme.space-xs;
-                    y: (parent.height - self.height) / 2;
-                    width: Theme.sidebar-group-icon-size;
-                    height: Theme.sidebar-group-icon-size;
-                    source: @image-url("../../assets/os-icons/ui/folder/material-symbols-folder.svg");
-                    colorize: root.selected ? Theme.accent : Theme.muted;
-                    image-fit: contain;
-                }
+            if root.group : SidebarGroupGlyph {
+                expanded: root.expanded;
+                glyph-color: root.selected ? Theme.accent : Theme.muted;
             }
 
             if !root.group : SidebarPlatformGlyph {

@@ -224,12 +224,13 @@ export global Theme {
     out property <length> sidebar-group-spacing: 8px;
     out property <length> sidebar-card-padding: 10px;
     out property <length> sidebar-leading-icon-slot-width: sidebar-glyph-size;
-    out property <length> sidebar-group-chevron-width: 20px;
     out property <length> sidebar-group-count-width: 20px;
-    out property <length> sidebar-group-chevron-size: 14px;
+    out property <length> sidebar-group-chevron-size: 7px;
+    out property <length> sidebar-group-chevron-gap: 3px;
     out property <length> sidebar-group-chevron-stroke: 1.5px;
     out property <length> sidebar-group-icon-size: sidebar-glyph-size;
-    out property <length> sidebar-session-indent: 42px;
+    out property <length> sidebar-session-indent:
+        sidebar-card-padding + sidebar-group-chevron-gap + sidebar-group-chevron-size;
     out property <length> sidebar-session-endpoint-width: 70px;
     out property <length> sidebar-session-tooltip-min-width: 168px;
     out property <length> sidebar-session-tooltip-max-width: 320px;

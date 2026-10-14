@@ -78,6 +78,40 @@ export component SidebarPlatformGlyph inherits Rectangle {
     }
 }
 
+// The folder stays centered in the compact rail; both sidebar modes use this
+// same trailing disclosure glyph and its dimensions.
+export component SidebarGroupGlyph inherits Rectangle {
+    in property <bool> expanded;
+    in property <color> glyph-color: Theme.text;
+
+    width: Theme.sidebar-group-icon-size
+        + Theme.sidebar-group-chevron-gap + Theme.sidebar-group-chevron-size;
+    height: Theme.sidebar-group-icon-size;
+    background: transparent;
+
+    SidebarPlatformGlyph {
+        width: Theme.sidebar-group-icon-size;
+        height: Theme.sidebar-group-icon-size;
+        platform: "folder";
+        glyph-color: root.glyph-color;
+    }
+
+    Path {
+        x: Theme.sidebar-group-icon-size + Theme.sidebar-group-chevron-gap;
+        y: (parent.height - self.height) / 2;
+        width: Theme.sidebar-group-chevron-size;
+        height: Theme.sidebar-group-chevron-size;
+        commands: root.expanded
+            ? "M 1 2 L 4 5 L 7 2"
+            : "M 2 1 L 5 4 L 2 7";
+        fill: transparent;
+        stroke: Theme.muted;
+        stroke-width: Theme.sidebar-group-chevron-stroke;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+    }
+}
+
 export component SidebarToggleGlyph inherits Rectangle {
     in property <bool> expanded;
 
@@ -259,7 +293,7 @@ export component SidebarRailItem inherits FocusScope {
             : (root.selected || root.group ? Theme.accent : Theme.control-border);
         border-radius: Theme.radius;
 
-        SidebarPlatformGlyph {
+        if !root.expandable : SidebarPlatformGlyph {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             platform: root.icon-kind.is-empty
@@ -268,19 +302,11 @@ export component SidebarRailItem inherits FocusScope {
             glyph-color: root.selected || item-touch.has-hover ? Theme.accent : Theme.text;
         }
 
-        if root.expandable : Path {
-            x: parent.width - self.width - Theme.space-xxs;
+        if root.expandable : SidebarGroupGlyph {
+            x: (parent.width - Theme.sidebar-group-icon-size) / 2;
             y: (parent.height - self.height) / 2;
-            width: Theme.sidebar-group-chevron-size / 2;
-            height: Theme.sidebar-group-chevron-size / 2;
-            commands: root.expanded
-                ? "M 1 2 L 4 5 L 7 2"
-                : "M 2 1 L 5 4 L 2 7";
-            fill: transparent;
-            stroke: Theme.muted;
-            stroke-width: Theme.sidebar-group-chevron-stroke;
-            stroke-line-cap: round;
-            stroke-line-join: round;
+            expanded: root.expanded;
+            glyph-color: root.selected || item-touch.has-hover ? Theme.accent : Theme.text;
         }
 
         if root.tooltip-enabled : Tooltip {
