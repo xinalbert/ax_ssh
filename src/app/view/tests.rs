@@ -2,6 +2,7 @@ use super::*;
 use slint::Model;
 
 mod sftp_navigation;
+mod text_editing;
 
 #[test]
 fn bundled_ui_languages_select_on_a_headless_component() {
@@ -255,6 +256,7 @@ struct LayoutTestHarness {
     ui: AppWindow,
     window: std::rc::Rc<slint::platform::software_renderer::MinimalSoftwareWindow>,
     time: std::rc::Rc<std::cell::Cell<std::time::Duration>>,
+    clipboard: std::rc::Rc<std::cell::RefCell<[Option<String>; 2]>>,
 }
 
 #[test]
@@ -306,13 +308,14 @@ impl LayoutTestHarness {
     fn new() -> Self {
         use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
         use slint::platform::{Platform, WindowAdapter};
-        use std::cell::Cell;
+        use std::cell::{Cell, RefCell};
         use std::rc::Rc;
         use std::time::Duration;
 
         struct LayoutPlatform {
             window: Rc<MinimalSoftwareWindow>,
             time: Rc<Cell<Duration>>,
+            clipboard: Rc<RefCell<[Option<String>; 2]>>,
         }
 
         impl Platform for LayoutPlatform {
@@ -323,13 +326,33 @@ impl LayoutTestHarness {
             fn duration_since_start(&self) -> Duration {
                 self.time.get()
             }
+
+            fn set_clipboard_text(&self, text: &str, clipboard: slint::platform::Clipboard) {
+                let index = match clipboard {
+                    slint::platform::Clipboard::DefaultClipboard => 0,
+                    slint::platform::Clipboard::SelectionClipboard => 1,
+                    _ => return,
+                };
+                self.clipboard.borrow_mut()[index] = Some(text.to_owned());
+            }
+
+            fn clipboard_text(&self, clipboard: slint::platform::Clipboard) -> Option<String> {
+                let index = match clipboard {
+                    slint::platform::Clipboard::DefaultClipboard => 0,
+                    slint::platform::Clipboard::SelectionClipboard => 1,
+                    _ => return None,
+                };
+                self.clipboard.borrow()[index].clone()
+            }
         }
 
         let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
         let time = Rc::new(Cell::new(Duration::ZERO));
+        let clipboard = Rc::new(RefCell::new([None, None]));
         slint::platform::set_platform(Box::new(LayoutPlatform {
             window: window.clone(),
             time: time.clone(),
+            clipboard: clipboard.clone(),
         }))
         .expect("isolated layout platform should initialize");
         let mut fonts = font_bridge::FontRegistry::new();
@@ -344,7 +367,13 @@ impl LayoutTestHarness {
 
         let ui = AppWindow::new().expect("test UI should instantiate");
         wire_path_presentation(&ui);
-        Self { ui, window, time }
+        wire_text_editing(&ui);
+        Self {
+            ui,
+            window,
+            time,
+            clipboard,
+        }
     }
 
     fn settle(&self) {

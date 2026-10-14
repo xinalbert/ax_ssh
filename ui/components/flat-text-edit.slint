@@ -1,6 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
+import { EditingTextInput } from "editing-text-input.slint";
 
 // Multiline editing keeps TextInput's selection/IME and the shared themed menu.
 export component FlatTextEdit inherits FocusScope {
@@ -58,7 +59,7 @@ export component FlatTextEdit inherits FocusScope {
                 content-width: root.wrap == TextWrap.no-wrap
                     ? max(self.visible-width, input.preferred-width) : self.visible-width;
                 content-height: max(self.visible-height, input.preferred-height);
-                input := TextInput {
+                input := EditingTextInput {
                     width: scroll.content-width;
                     height: scroll.content-height;
                     text <=> root.text;

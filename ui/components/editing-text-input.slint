@@ -1,0 +1,25 @@
+// Shared keyboard adapter. TextInput retains text, selection, IME, and undo.
+export global TextEditing {
+    callback handle-key(KeyEvent) -> EventResult;
+}
+
+export component EditingTextInput inherits TextInput {
+    key-pressed(event) => {
+        // Keep clipboard protection local even before Rust callbacks are wired.
+        if root.input-type == InputType.password {
+            if (event.modifiers.control || event.modifiers.meta)
+                && (event.text == "c" || event.text == "C" || event.text == "x" || event.text == "X") {
+                return EventResult.accept;
+            }
+            if (event.modifiers.control
+                || (event.modifiers.meta && Platform.os != OperatingSystemType.macos))
+                && (event.text == "a" || event.text == "A") {
+                return EventResult.accept;
+            }
+        }
+        if event.modifiers.control || event.modifiers.meta {
+            return TextEditing.handle-key(event);
+        }
+        return EventResult.reject;
+    }
+}

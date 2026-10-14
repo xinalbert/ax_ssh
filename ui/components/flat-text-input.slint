@@ -1,5 +1,6 @@
 import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
+import { EditingTextInput } from "editing-text-input.slint";
 
 // A theme-owned single-line input that avoids platform widget chrome.
 export component FlatTextInput inherits FocusScope {
@@ -73,7 +74,7 @@ export component FlatTextInput inherits FocusScope {
                 }
             }
 
-            input := TextInput {
+            input := EditingTextInput {
                 private property <length> computed-x: Theme.combo-box-horizontal-padding;
 
                 x: min(

@@ -106,6 +106,7 @@ mod terminal_media;
 mod terminal_presentation;
 mod terminal_render;
 mod terminal_targets;
+mod text_editing;
 mod view;
 mod window_bridge;
 mod window_router;
@@ -542,6 +543,16 @@ fn wire_path_presentation(ui: &AppWindow) {
         .on_elide(|path, budget| view::elide_path(path.as_str(), budget).into());
 }
 
+fn wire_text_editing(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<TextEditing>().on_handle_key(move |event| {
+        weak.upgrade()
+            .map_or(i_slint_core::items::EventResult::Reject, |ui| {
+                text_editing::handle_key(ui.window(), &event)
+            })
+    });
+}
+
 fn wire_menu_helpers(ui: &AppWindow) {
     ui.global::<MenuActions>()
         .on_recent_items(|paths, enabled, clear_title| {
@@ -576,6 +587,7 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
     terminal_media::wire_settings(ui, context.state.clone(), context.runtime.clone());
     wire_menu_helpers(ui);
     wire_path_presentation(ui);
+    wire_text_editing(ui);
     let WindowCallbackContext {
         state,
         runtime,

@@ -44,7 +44,8 @@ export component SftpPathBar inherits FocusScope {
         }
     }
     capture-key-pressed(event) => {
-        if root.enabled && (event.modifiers.control || event.modifiers.meta)
+        if root.enabled && event.modifiers.control && !event.modifiers.meta
+            && !event.modifiers.alt && !event.modifiers.shift
             && (event.text == "l" || event.text == "L") {
             root.edit-path();
             return EventResult.accept;
