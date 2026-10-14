@@ -111,16 +111,6 @@ component SftpTransferEntry inherits Rectangle {
         }
     }
 
-    Text {
-        x: root.name-x;
-        width: max(0px, root.status-x - Theme.sftp-column-gap - self.x);
-        height: parent.height;
-        text: root.transfer.direction + "  " + root.transfer.name;
-        color: Theme.text;
-        font-size: Theme.font-body;
-        overflow: elide;
-        vertical-alignment: center;
-    }
     Rectangle {
         x: root.status-x;
         y: parent.height - Theme.space-sm;
@@ -135,41 +125,6 @@ component SftpTransferEntry inherits Rectangle {
             border-radius: parent.border-radius;
             background: root.state-color;
         }
-    }
-    Text {
-        x: root.status-x;
-        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
-        height: parent.height - Theme.space-sm;
-        text: root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status;
-        color: root.state-color;
-        font-size: Theme.font-caption;
-        overflow: elide;
-        vertical-alignment: center;
-    }
-    Text {
-        x: root.size-x;
-        width: max(0px, root.speed-x - Theme.sftp-column-gap - self.x);
-        height: parent.height;
-        text: root.transfer.size;
-        color: Theme.muted;
-        font-size: Theme.font-caption;
-        horizontal-alignment: right;
-        overflow: elide;
-        vertical-alignment: center;
-    }
-    Text {
-        x: root.speed-x;
-        width: max(
-            0px,
-            parent.width - root.action-slot-width - Theme.sftp-column-gap - self.x,
-        );
-        height: parent.height;
-        text: root.transfer.speed;
-        color: Theme.muted;
-        font-size: Theme.font-caption;
-        horizontal-alignment: right;
-        overflow: elide;
-        vertical-alignment: center;
     }
     TouchArea {
         pointer-event(event) => {
@@ -264,6 +219,55 @@ component SftpTransferEntry inherits Rectangle {
         width: parent.width;
         height: Theme.hairline;
         background: Theme.divider.with-alpha(0.44);
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.speed-x;
+        width: max(
+            0px,
+            parent.width - root.action-slot-width - Theme.sftp-column-gap - self.x,
+        );
+        height: parent.height;
+        text: root.transfer.speed;
+        text-color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.size-x;
+        width: max(0px, root.speed-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.size;
+        text-color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.status-x;
+        width: max(0px, root.size-x - Theme.sftp-column-gap - self.x);
+        height: parent.height - Theme.space-sm;
+        text: root.transfer.state == "skipped" ? @tr("Skipped") : root.transfer.status;
+        text-color: root.state-color;
+        font-size: Theme.font-caption;
+        vertical-alignment: center;
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.name-x;
+        width: max(0px, root.status-x - Theme.sftp-column-gap - self.x);
+        height: parent.height;
+        text: root.transfer.direction + "  " + root.transfer.name;
+        text-color: Theme.text;
+        font-size: Theme.font-body;
+        vertical-alignment: center;
     }
 }
 
@@ -396,43 +400,48 @@ export component SftpTransferQueue inherits Rectangle {
             );
             height: Theme.sftp-transfer-header-height;
             background: Theme.sftp-header-surface;
-            Text {
+            ElidedLabel {
+                accessible-role: text;
+                accessible-label: self.text;
                 x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap;
                 width: max(0px, parent.content-width * 0.48 - Theme.sftp-column-gap - self.x);
                 height: parent.height;
                 text: @tr("Name");
-                color: Theme.muted;
+                text-color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
-                overflow: elide;
                 vertical-alignment: center;
             }
-            Text {
+            ElidedLabel {
+                accessible-role: text;
+                accessible-label: self.text;
                 x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
                     + parent.content-width * 0.48;
                 width: max(0px, parent.content-width * 0.24 - Theme.sftp-column-gap);
                 height: parent.height;
                 text: @tr("Status");
-                color: Theme.muted;
+                text-color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
-                overflow: elide;
                 vertical-alignment: center;
             }
-            Text {
+            ElidedLabel {
+                accessible-role: text;
+                accessible-label: self.text;
                 x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
                     + parent.content-width * 0.72;
                 width: max(0px, parent.content-width * 0.14 - Theme.sftp-column-gap);
                 height: parent.height;
                 text: @tr("Size");
-                color: Theme.muted;
+                text-color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
                 horizontal-alignment: right;
-                overflow: elide;
                 vertical-alignment: center;
             }
-            Text {
+            ElidedLabel {
+                accessible-role: text;
+                accessible-label: self.text;
                 x: Theme.sftp-column-padding + Theme.sftp-selection-width + Theme.sftp-column-gap
                     + parent.content-width * 0.86;
                 width: max(
@@ -441,11 +450,10 @@ export component SftpTransferQueue inherits Rectangle {
                 );
                 height: parent.height;
                 text: @tr("Speed");
-                color: Theme.muted;
+                text-color: Theme.muted;
                 font-size: Theme.font-caption;
                 font-weight: 700;
                 horizontal-alignment: right;
-                overflow: elide;
                 vertical-alignment: center;
             }
             Rectangle {

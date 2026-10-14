@@ -1,5 +1,5 @@
 import { CheckBox } from "std-widgets.slint";
-import { ElidedButton } from "elided-controls.slint";
+import { ElidedButton, ElidedLabel } from "elided-controls.slint";
 import { ModalFrame } from "modal-frame.slint";
 import { SecretTextInput } from "secret-text-input.slint";
 import { ThemedComboBox } from "themed-combo-box.slint";
@@ -111,17 +111,19 @@ export component AuthenticationDialog inherits ModalFrame {
             font-size: Theme.font-title;
             font-weight: 700;
         }
-        Text {
+        ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             text: root.endpoint;
-            color: Theme.muted;
+            text-color: Theme.muted;
             font-size: Theme.font-body;
-            overflow: elide;
         }
-        if root.private-key : Text {
+        if root.private-key : ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             text: root.key-path;
-            color: Theme.text;
+            text-color: Theme.text;
             font-size: Theme.font-small;
-            overflow: elide;
         }
         secret-edit := SecretTextInput {
             visible: !root.vault-unlock-only;

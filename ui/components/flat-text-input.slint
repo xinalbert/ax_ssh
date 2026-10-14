@@ -1,3 +1,4 @@
+import { ElidedLabel } from "elided-controls.slint";
 import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
 import { EditingTextInput } from "editing-text-input.slint";
@@ -44,23 +45,6 @@ export component FlatTextInput inherits FocusScope {
         border-radius: Theme.radius-small;
         clip: true;
         opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
-
-        placeholder := Text {
-            x: Theme.combo-box-horizontal-padding;
-            width: parent.width - 2 * Theme.combo-box-horizontal-padding;
-            height: parent.height;
-            text: root.text.is-empty && input.preedit-text.is-empty
-                ? root.placeholder-text
-                : "";
-            color: Theme.muted;
-            font-size: root.font-size;
-            font-family: root.font-family;
-            font-weight: root.font-weight;
-            horizontal-alignment: root.horizontal-alignment;
-            vertical-alignment: center;
-            overflow: elide;
-            accessible-role: none;
-        }
 
         TouchArea {
             width: parent.width;
@@ -121,6 +105,22 @@ export component FlatTextInput inherits FocusScope {
                 accepted => { root.accepted(root.text); }
                 edited => { root.edited(root.text); }
             }
+        }
+
+        placeholder := ElidedLabel {
+            x: Theme.combo-box-horizontal-padding;
+            width: parent.width - 2 * Theme.combo-box-horizontal-padding;
+            height: parent.height;
+            text: root.text.is-empty && input.preedit-text.is-empty
+                ? root.placeholder-text
+                : "";
+            text-color: Theme.muted;
+            font-size: root.font-size;
+            font-family: root.font-family;
+            font-weight: root.font-weight;
+            horizontal-alignment: root.horizontal-alignment;
+            vertical-alignment: center;
+            accessible-role: none;
         }
     }
 

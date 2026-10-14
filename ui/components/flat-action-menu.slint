@@ -1,3 +1,4 @@
+import { ElidedLabel } from "elided-controls.slint";
 import { Theme } from "../theme.slint";
 
 export struct ActionMenuItem {
@@ -129,7 +130,10 @@ component ActionMenuBody inherits FocusScope {
                     spacing: 0px;
                     for action[index] in root.actions : Rectangle {
                         height: action.action-id.is-empty ? Theme.menu-separator-height : Theme.menu-row-height;
-                        min-width: metrics.preferred-width + 2 * Theme.menu-horizontal-padding
+                        // Natural text guides sizing without forcing rows wider
+                        // than the bounded menu viewport (and hiding overflow).
+                        min-width: 0px;
+                        preferred-width: metrics.preferred-width + 2 * Theme.menu-horizontal-padding
                             + Theme.menu-chevron-size;
                         metrics := Text {
                             visible: false;
@@ -165,16 +169,6 @@ component ActionMenuBody inherits FocusScope {
                                 background: action.enabled && (touch.has-hover || root.highlighted == index)
                                     ? Theme.hover : transparent;
                                 border-radius: Theme.radius-small;
-                                Text {
-                                    x: Theme.menu-horizontal-padding;
-                                    width: parent.width - 2 * Theme.menu-horizontal-padding - Theme.menu-chevron-size;
-                                    height: parent.height;
-                                    text: action.title;
-                                    color: action.enabled ? Theme.text : Theme.muted;
-                                    font-size: Theme.font-body;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
                                 if action.action-id == root.submenu-id : Path {
                                     x: parent.width - Theme.menu-horizontal-padding - self.width;
                                     y: (parent.height - self.height) / 2;
@@ -201,6 +195,17 @@ component ActionMenuBody inherits FocusScope {
                                         }
                                     }
                                     clicked => { root.activate(index, self.absolute-position.y - rows.absolute-position.y); }
+                                }
+                                ElidedLabel {
+                                    accessible-role: text;
+                                    accessible-label: self.text;
+                                    x: Theme.menu-horizontal-padding;
+                                    width: parent.width - 2 * Theme.menu-horizontal-padding - Theme.menu-chevron-size;
+                                    height: parent.height;
+                                    text: action.title;
+                                    text-color: action.enabled ? Theme.text : Theme.muted;
+                                    font-size: Theme.font-body;
+                                    vertical-alignment: center;
                                 }
                             }
                         }

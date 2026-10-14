@@ -2,6 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import {
     ElidedButton,
+    ElidedLabel,
     ElidedTooltipContent,
 } from "components/elided-controls.slint";
 import {
@@ -213,12 +214,13 @@ export component TerminalNoticeCard inherits FocusScope {
             padding: Theme.dialog-padding;
             spacing: Theme.space-xl;
 
-            Text {
+            ElidedLabel {
+                accessible-role: text;
+                accessible-label: self.text;
                 text: root.notice.title;
-                color: Theme.text;
+                text-color: Theme.text;
                 font-size: Theme.font-body-strong;
                 font-weight: 700;
-                overflow: elide;
             }
 
             message-scroll := ScrollView {

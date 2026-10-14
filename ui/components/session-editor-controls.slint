@@ -1,12 +1,13 @@
+import { ElidedLabel } from "elided-controls.slint";
 import { Theme } from "../theme.slint";
 
 export component SessionEditorSectionHeading inherits Rectangle {
     in property <string> label;
     in property <string> description;
     private property <length> title-line-height:
-        title-label.font-metrics.ascent - title-label.font-metrics.descent;
+        title-label.line-height;
     private property <length> description-line-height:
-        description-label.font-metrics.ascent - description-label.font-metrics.descent;
+        description-label.line-height;
     private property <length> heading-height: max(
         Theme.editor-section-min-height,
         root.title-line-height
@@ -20,19 +21,22 @@ export component SessionEditorSectionHeading inherits Rectangle {
     vertical-stretch: 0;
     background: transparent;
 
-    title-label := Text {
+    title-label := ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
         y: Theme.editor-section-padding-y;
         width: parent.width;
         height: root.title-line-height;
         text: root.label;
-        color: Theme.text;
+        text-color: Theme.text;
         font-size: Theme.font-body-strong;
         font-weight: 700;
         vertical-alignment: center;
-        overflow: elide;
     }
 
-    description-label := Text {
+    description-label := ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
         visible: !root.description.is-empty;
         y: Theme.editor-section-padding-y
             + root.title-line-height
@@ -40,10 +44,9 @@ export component SessionEditorSectionHeading inherits Rectangle {
         width: parent.width;
         height: root.description.is-empty ? 0px : root.description-line-height;
         text: root.description;
-        color: Theme.muted;
+        text-color: Theme.muted;
         font-size: Theme.font-caption;
         vertical-alignment: center;
-        overflow: elide;
     }
 }
 
@@ -51,7 +54,7 @@ export component SessionEditorField inherits Rectangle {
     in property <string> label;
     in property <length> control-height: Theme.editor-input-row-height;
     private property <length> label-line-height:
-        field-label.font-metrics.ascent - field-label.font-metrics.descent;
+        field-label.line-height;
     private property <length> field-height: max(
         Theme.editor-field-min-height,
         root.label-line-height + Theme.space-xs + root.control-height,
@@ -64,13 +67,14 @@ export component SessionEditorField inherits Rectangle {
     VerticalLayout {
         spacing: Theme.space-xs;
 
-        field-label := Text {
+        field-label := ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             height: root.label-line-height;
             text: root.label;
-            color: Theme.muted;
+            text-color: Theme.muted;
             font-size: Theme.font-caption;
             vertical-alignment: center;
-            overflow: elide;
         }
 
         Rectangle {

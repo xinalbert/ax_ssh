@@ -386,13 +386,14 @@ export component SettingsHeader inherits Rectangle {
         height: Theme.settings-control-height;
         spacing: Theme.space-md;
 
-        Text {
+        ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             width: Theme.settings-search-title-width;
             text: root.title;
-            color: Theme.text;
+            text-color: Theme.text;
             font-size: Theme.font-header;
             font-weight: 700;
-            overflow: elide;
             vertical-alignment: center;
         }
         FlatTextInput {
@@ -550,18 +551,20 @@ export component SettingsRow inherits Rectangle {
                 height: self.preferred-height;
                 spacing: root.description.is-empty ? 0px : Theme.space-xxs;
 
-                Text {
+                ElidedLabel {
+                    accessible-role: text;
+                    accessible-label: self.text;
                     text: root.label;
-                    color: Theme.text;
+                    text-color: Theme.text;
                     font-size: Theme.font-body;
-                    overflow: elide;
                     vertical-alignment: center;
                 }
-                if !root.description.is-empty : Text {
+                if !root.description.is-empty : ElidedLabel {
+                    accessible-role: text;
+                    accessible-label: self.text;
                     text: root.description;
-                    color: Theme.muted;
+                    text-color: Theme.muted;
                     font-size: Theme.font-caption;
-                    overflow: elide;
                     vertical-alignment: center;
                 }
             }
@@ -676,17 +679,18 @@ export component ShortcutRecorder inherits FocusScope {
         border-width: root.has-focus ? 2 * Theme.hairline : Theme.hairline;
         border-color: root.has-focus ? Theme.focus : Theme.control-border;
         border-radius: Theme.radius-small;
-        Text {
+        ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             x: Theme.space-lg;
             width: parent.width - 2 * Theme.space-lg;
             height: parent.height;
             text: root.shortcut;
-            color: Theme.text;
+            text-color: Theme.text;
             font-family: Theme.application-font-family;
             font-size: Theme.font-caption;
             horizontal-alignment: center;
             vertical-alignment: center;
-            overflow: elide;
         }
     }
 }

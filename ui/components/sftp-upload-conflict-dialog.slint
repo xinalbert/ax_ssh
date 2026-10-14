@@ -1,5 +1,5 @@
 import { CheckBox } from "std-widgets.slint";
-import { ElidedButton } from "elided-controls.slint";
+import { ElidedButton, ElidedLabel } from "elided-controls.slint";
 import { ModalFrame } from "modal-frame.slint";
 import { Theme } from "../theme.slint";
 
@@ -24,12 +24,12 @@ export component SftpUploadConflictDialog inherits ModalFrame {
             font-size: Theme.font-title;
             font-weight: 700;
         }
-        Text {
+        ElidedLabel {
+            accessible-role: text;
+            accessible-label: self.text;
             text: root.file-name;
-            color: Theme.text;
+            text-color: Theme.text;
             font-size: Theme.font-body;
-            wrap: word-wrap;
-            overflow: elide;
         }
         Text {
             text: @tr("Remote file: {0} - Modified: {1}", root.remote-size, root.remote-modified);

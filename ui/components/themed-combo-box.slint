@@ -1,3 +1,4 @@
+import { ElidedLabel } from "elided-controls.slint";
 import { Theme } from "../theme.slint";
 
 component ComboBoxChevron inherits Path {
@@ -122,21 +123,6 @@ export component ThemedComboBox inherits FocusScope {
         border-radius: Theme.radius-small;
         opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
 
-        Text {
-            x: Theme.combo-box-horizontal-padding;
-            width: parent.width
-                - 2 * Theme.combo-box-horizontal-padding
-                - Theme.combo-box-chevron-size
-                - Theme.space-sm;
-            height: parent.height;
-            text: root.current-value;
-            color: Theme.text;
-            font-size: Theme.font-body;
-            horizontal-alignment: left;
-            vertical-alignment: center;
-            overflow: elide;
-            accessible-role: none;
-        }
 
         ComboBoxChevron {
             x: parent.width - Theme.combo-box-horizontal-padding - self.width;
@@ -171,6 +157,20 @@ export component ThemedComboBox inherits FocusScope {
                 }
                 return EventResult.reject;
             }
+        }
+        ElidedLabel {
+            x: Theme.combo-box-horizontal-padding;
+            width: parent.width
+                - 2 * Theme.combo-box-horizontal-padding
+                - Theme.combo-box-chevron-size
+                - Theme.space-sm;
+            height: parent.height;
+            text: root.current-value;
+            text-color: Theme.text;
+            font-size: Theme.font-body;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+            accessible-role: none;
         }
     }
 
@@ -247,7 +247,15 @@ export component ThemedComboBox inherits FocusScope {
                             border-radius: Theme.hairline;
                         }
 
-                        Text {
+
+                        option-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.select(index);
+                                root.close-popup();
+                            }
+                        }
+                        ElidedLabel {
                             x: Theme.combo-box-horizontal-padding;
                             width: parent.width
                                 - 2 * Theme.combo-box-horizontal-padding
@@ -256,21 +264,12 @@ export component ThemedComboBox inherits FocusScope {
                                     : 0px);
                             height: parent.height;
                             text: value;
-                            color: Theme.text;
+                            text-color: Theme.text;
                             font-size: Theme.font-body;
                             font-weight: index == root.current-index ? 600 : 400;
                             horizontal-alignment: left;
                             vertical-alignment: center;
-                            overflow: elide;
                             accessible-role: none;
-                        }
-
-                        option-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.select(index);
-                                root.close-popup();
-                            }
                         }
                     }
                 }

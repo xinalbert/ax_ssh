@@ -65,17 +65,6 @@ component SftpDirectoryHeader inherits Rectangle {
         accessible-action-default => { root.select-all(!root.selection-checked); }
         clicked => { root.select-all(!root.selection-checked); }
     }
-    Text {
-        x: root.name-x;
-        width: max(0px, root.name-right - self.x);
-        height: parent.height;
-        text: @tr("Name");
-        color: Theme.muted;
-        font-size: Theme.font-caption;
-        font-weight: 700;
-        overflow: elide;
-        vertical-alignment: center;
-    }
     TouchArea {
         x: root.name-x;
         width: max(0px, root.name-right - self.x);
@@ -134,6 +123,18 @@ component SftpDirectoryHeader inherits Rectangle {
         width: parent.width;
         height: Theme.hairline;
         background: Theme.divider;
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: @tr("Name");
+        text-color: Theme.muted;
+        font-size: Theme.font-caption;
+        font-weight: 700;
+        vertical-alignment: center;
     }
 }
 
@@ -267,41 +268,6 @@ component SftpEntry inherits Rectangle {
         height: Theme.sftp-icon-width;
         source: root.entry.icon;
         image-fit: contain;
-    }
-    ElidedLabel {
-        x: root.name-x;
-        width: max(0px, root.name-right - self.x);
-        height: parent.height;
-        text: root.entry.name;
-        tooltip-text: root.entry.name;
-        text-color: Theme.text;
-        font-size: Theme.font-body;
-        font-weight: root.entry.kind == "folder" ? 600 : 500;
-        vertical-alignment: center;
-    }
-    Text {
-        x: root.size-x;
-        width: Theme.sftp-size-width;
-        height: parent.height;
-        visible: root.show-size;
-        text: root.entry.size;
-        color: Theme.muted;
-        font-size: Theme.font-caption;
-        horizontal-alignment: right;
-        overflow: elide;
-        vertical-alignment: center;
-    }
-    Text {
-        x: root.modified-x;
-        width: Theme.sftp-time-width;
-        height: parent.height;
-        visible: root.show-modified;
-        text: root.entry.modified;
-        color: Theme.muted;
-        font-size: Theme.font-caption;
-        horizontal-alignment: right;
-        overflow: elide;
-        vertical-alignment: center;
     }
     Rectangle {
         y: parent.height - Theme.hairline;
@@ -464,6 +430,43 @@ component SftpEntry inherits Rectangle {
             }
         }
     }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.modified-x;
+        width: Theme.sftp-time-width;
+        height: parent.height;
+        visible: root.show-modified;
+        text: root.entry.modified;
+        text-color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    ElidedLabel {
+        accessible-role: text;
+        accessible-label: self.text;
+        x: root.size-x;
+        width: Theme.sftp-size-width;
+        height: parent.height;
+        visible: root.show-size;
+        text: root.entry.size;
+        text-color: Theme.muted;
+        font-size: Theme.font-caption;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    ElidedLabel {
+        x: root.name-x;
+        width: max(0px, root.name-right - self.x);
+        height: parent.height;
+        text: root.entry.name;
+        tooltip-text: root.entry.name;
+        text-color: Theme.text;
+        font-size: Theme.font-body;
+        font-weight: root.entry.kind == "folder" ? 600 : 500;
+        vertical-alignment: center;
+    }
 }
 
 export component SftpDirectoryPane inherits Rectangle {
@@ -547,14 +550,15 @@ export component SftpDirectoryPane inherits Rectangle {
                 padding-left: Theme.sftp-column-padding;
                 padding-right: Theme.sftp-column-padding;
                 spacing: Theme.space-sm;
-                Text {
+                ElidedLabel {
+                    accessible-role: text;
+                    accessible-label: self.text;
                     horizontal-stretch: 1;
                     min-width: 0px;
                     text: root.title;
-                    color: Theme.text;
+                    text-color: Theme.text;
                     font-size: Theme.font-body-strong;
                     font-weight: 600;
-                    overflow: elide;
                     vertical-alignment: center;
                 }
                 if root.allow-hidden && root.width >= Theme.sftp-toolbar-full-width : CheckBox {

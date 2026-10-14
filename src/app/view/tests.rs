@@ -3,6 +3,7 @@ use slint::Model;
 
 mod sftp_navigation;
 mod text_editing;
+mod text_overflow;
 
 #[test]
 fn bundled_ui_languages_select_on_a_headless_component() {
