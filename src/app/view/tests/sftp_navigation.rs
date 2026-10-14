@@ -63,10 +63,13 @@ fn sftp_primary_actions_and_full_path_editor_keep_their_pointer_routes() {
 
         let local = ui.invoke_native_sftp_local_drop_region();
         let theme = ui.global::<Theme>();
-        // The full path occupies the row; editing must submit the original
-        // string even when only its ends fit in the display.
+        // Click the path after the navigation buttons; editing must submit
+        // the original string even when only its ends fit in the display.
         harness.click(slint::LogicalPosition::new(
-            local.x + theme.get_sftp_column_padding() + 24.0,
+            local.x
+                + theme.get_sftp_column_padding()
+                + 3.0 * (theme.get_sftp_nav_icon_button_width() + theme.get_space_xs())
+                + 24.0,
             local.y
                 + theme.get_sftp_toolbar_height()
                 + theme.get_sftp_path_row_padding_y()
@@ -134,7 +137,7 @@ fn sftp_middle_elision_fits_real_font_width_and_restores_full_path_on_resize() {
                         .text()
                         .apply_pin(text.as_pin_ref())
                         .get();
-                    if value.starts_with("/root/") && value.ends_with("最新结果") {
+                    if value.starts_with('/') && value.ends_with("最新结果") {
                         let measured = harness.window.renderer().text_size(
                             text.as_pin_ref(),
                             item,
@@ -162,11 +165,12 @@ fn sftp_middle_elision_fits_real_font_width_and_restores_full_path_on_resize() {
             "display must fit actual font width"
         );
         let (head, tail) = shortened.split_once('…').expect("ellipsis");
+        assert!(path.starts_with(head) && path.ends_with(tail));
         assert!(tail.chars().count() >= head.chars().count());
         let local = ui.invoke_native_sftp_local_drop_region();
         assert!(
-            available > local.width * 0.8,
-            "path must own most of its row"
+            available > local.width * 0.5,
+            "path must keep most of its row alongside navigation controls"
         );
 
         harness.window.set_size(slint::PhysicalSize::new(1800, 740));

@@ -63,6 +63,39 @@ export component SftpPathBar inherits FocusScope {
 
     HorizontalLayout {
         spacing: Theme.space-xs;
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-back.svg");
+            height: root.control-height;
+            accessible-name: @tr("Back");
+            enabled: root.enabled && root.can-go-back;
+            clicked => {
+                root.return-focus = true;
+                root.back();
+                root.restore-focus();
+            }
+        }
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-forward.svg");
+            height: root.control-height;
+            accessible-name: @tr("Forward");
+            enabled: root.enabled && root.can-go-forward;
+            clicked => {
+                root.return-focus = true;
+                root.forward();
+                root.restore-focus();
+            }
+        }
+        SftpIconButton {
+            icon: @image-url("../icons/sftp-up.svg");
+            height: root.control-height;
+            accessible-name: @tr("Parent directory");
+            enabled: root.enabled && root.can-go-up;
+            clicked => {
+                root.return-focus = true;
+                root.up();
+                root.restore-focus();
+            }
+        }
         path-surface := Rectangle {
             horizontal-stretch: 1;
             min-width: 0px;
