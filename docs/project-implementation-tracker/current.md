@@ -11,7 +11,7 @@
 - 根目录：`<repo-root>`
 - 当前范围：`ui/sftp/path-bar.slint`、`ui/components/` 路径展示、`ui/icons/`、相关应用展示映射/DTO/回归、双语 usage/architecture、环境和实施记录。
 - 不在本轮范围内：上传/下载样式、传输区行为、SSH transport/trust/认证、文件系统解析/校验、配置 schema、工具链/依赖/CI 和 tag/Release。
-- 所有权：UI 根据实际字体/宽度计算展示与编辑/菜单状态；应用展示层仅提供有界纯文本裁剪辅助或字体测量，原始路径始终用于已有目录/复制 callback；移除分段导航 DTO。
+- 所有权：UI 根据实际字体/宽度计算展示与编辑/菜单状态；应用展示层仅提供有界纯文本裁剪辅助，原始路径始终用于已有目录/复制 callback；移除分段导航 DTO。
 - 安全：省略后的路径不得成为文件系统或 SSH 意图目标；保持 owned 值、显示计算有界且无 I/O；无新增秘密、协议句柄或持久化。
 
 ## 当前状态
@@ -30,7 +30,7 @@
 | F2 | completed | 路径最大占宽、首尾保留中间省略与齿轮菜单 | 实际字体宽度、完整路径编辑/导航/复制、最窄/Unicode 长路径回归 | 尾部优先；沿用既有路径意图 |
 | F3 | completed | 删除分段 DTO/映射及同步双语 docs/地图/翻译 | Cargo Slint 重编、翻译/链接/skill/tracker/diff | 不保留无调用的旧解析器 |
 | F4 | completed | 标准 Rust 门禁和可用平台构建 | fmt/check/严格 all-target Clippy/test 与 macOS target check/Clippy/build | 不执行非原生 Intel 测试；Windows/Linux 交 CI |
-| F5 | in_progress | 分项提交与普通 push | index 审查、远端 SHA 与干净工作区 | 不改写历史或全局代理 |
+| F5 | completed | 分项提交与普通 push | index 审查、远端 SHA 与干净工作区 | 不改写历史或全局代理 |
 | F6 | pending | 用户视觉与键盘验收 | 用户运行新版并提供截图/确认 | 不捕获或检查代理自身应用截图 |
 
 ## 已完成
@@ -46,7 +46,8 @@
 - 已完成：预检、Slint/全新回调编译与 59 项 SFTP 专项通过，包括真实字体适配/扩宽、原文编辑/复制与 Unicode 有界展示；8 Python、665 × 11 翻译、119 相对链接、六个 SFTP SVG、skill/tracker/diff 通过。测试路径加长以避免 Linux 无 CJK 字体时不触发省略；最终版本与二分 upper-mid 调整纳入完整门禁。
 - 已完成：冻结源码的 59 项专项、391 library + 450 binary（841）完整测试、fmt、locked/offline check 与严格 all-target Clippy；ARM64 target check 通过。
 - 已完成：ARM64/Intel CI 同款 check、严格 all-target Clippy/build 与 Mach-O 架构核对；整个门禁期间源码指纹未变。
-- 未完成：提交/push 与用户视觉/键盘验收；Windows/Linux 原生验证交 CI，Intel 不执行测试。
+- 已完成：实现提交 `cbd3a2c` 和文档提交 `bfc629b` 已通过命令级 7897 代理/HTTP1.1 普通 push；独立 ls-remote 与本地 HEAD 均为 `bfc629b9c740bd6136fae03075dd6312f1540b0d`，核对时工作区干净。本条作为后续交付记录提交并再次推送/核对。
+- 未完成：用户视觉/键盘验收；Windows/Linux 原生验证交 CI，Intel 不执行测试。
 
 ## 风险与阻塞
 
@@ -56,8 +57,8 @@
 
 ## 下一步
 
-- 已完成代码/翻译/链接/skill/tracker/diff 审查；分项提交并通过命令级 7897 代理 push，核对远端 SHA 和最终工作区。用户随后运行新版验收路径和齿轮菜单。
+- 用户运行 `target/aarch64-apple-darwin/debug/ax_ssh`，检查完整/超长路径、栏宽/字体变化、齿轮导航/复制与点击编辑/Enter/Escape，并提供截图确认。F6 在用户验收前保持 pending。
 
 ## 最后更新时间
 
-- 2026-10-14 08:25 +0800
+- 2026-10-14 08:27 +0800
