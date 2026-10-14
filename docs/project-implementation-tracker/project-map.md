@@ -139,7 +139,8 @@
 | `ui/sftp/path-bar.slint`、`ui/components/middle-elided-path.slint`、`src/app/view/sftp/path_display.rs` | 原文路径显示、字体适配和齿轮意图 | `SftpPathBar`、`MiddleElidedPath`、`PathPresentation`、`elide` | 最大占宽、中间省略/尾部优先、4096 字符候选；原文编辑/复制/导航与现有回调 |
 | `src/app/view/sftp.rs`、`src/app/view/terminal.rs` | 文件/传输稳定模型与 snapshot 展示映射 | `elide_path`、`apply_sftp_snapshot`、`update_sftp_rows` | 路径直接使用快照原文，不创建分段模型；纯格式化回调由 app 组装 |
 | `src/app/view/tests/sftp_navigation.rs` | SFTP 无窗口路径与意图回归 | 主操作、路径原文、真实字体适配与菜单 copy test | 宽窄栏主操作/禁用、首尾省略与最大占宽、扩宽恢复、原文编辑/复制；不保存或检查图像 |
-| `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 显式接收显示文本、tooltip 覆盖、无障碍名称和 enabled，转发标准 Button 的 focus/pressed/click；仅真实溢出时显示有界全文 Tooltip，不保存业务状态 |
+| `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 按实际字体/内边距预留按钮宽度；表单/下拉/菜单/SFTP/弹窗共用截断与有界全文 Tooltip，保留标准 Button 的 focus/pressed/click；占位只传说明，不传秘密正文 |
+| `src/app/view/tests/text_overflow.rs` | 共享文字呈现的实际页面回归 | 会话动作实测字体宽度、overflow hover、按钮点击、密码占位 | 无截图数字布局；英语/德语/中文与字体/窗口变化；Tooltip 不抢焦点或吞点击，不显示密码正文 |
 | `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`native-sftp-drop-target-at`、`native-sftp-local-drop-region`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；主布局 SFTP/Terminal 仅在主窗口创建，detached 只保留一份可见组件与几何来源；Terminal surface 使用集中式顶部/底部外间距，detached 分屏入口归 macOS 原生标题栏；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、主/独立窗口均按 UUID 转发 `terminal-pointer-input` 等 terminal callback、SFTP 运行时分栏比例/Transfers 折叠，以及将条件 SFTP 组件的 Remote/Local 接收几何绑定为窗口坐标 DTO、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/icons/`、`ui/theme.slint` | 主/子窗口动作的共用矢量图像与外观 | `workspace-move-icon`、`workspace-return-icon`、`terminal-split-right-icon`、`terminal-split-down-icon` | 修改分屏/移出/返回图标时；原生 raster 从相同图像值生成 |
 | `ui/components/workspace-titlebar.slint` | 工作区标题栏与统一窗口/分屏 glyph | `WorkspaceTitlebar`、`WorkspaceTabContent`、`WorkspaceTransferGlyph`、`TerminalSplitButton`、`WorkspaceTabRow`、`ConnectableSessionRow`、`ConnectionPicker` | 左起 Tab strip、跟随指针的拖拽副本/源槽/目标槽、位置序号、SSH/SFTP inline Move/Return 动作、主窗口保存连接选择器（20px 共用服务器图标）、共用 Theme SVG 的窗口转移与 split 图标、滚动和关闭；已读取系统的远端 Tab 显示 release/平台图标，Local Tab 按本机系统显示图标，默认彩色、配置可启用主题着色；仅 macOS 标题栏未覆盖区转发原生拖窗 |
@@ -220,6 +221,8 @@
 
 ## 刷新规则
 
+- 最近依据：2026-10-14 共享按钮按覆盖标签实测宽度加内边距计算 preferred-width；遗漏的单行展示/占位统一到 ElidedLabel，新增真实会话页面的字体/语言/hover/点击和密码占位回归。
+
 - 最近依据：2026-10-14 共享 EditingTextInput 和 text_editing 适配，统一 macOS Control、平台标准直通和密码/只读/IME 策略；新增主/独立地址、Unicode/撤销、密码剪贴板与多行事件回归。
 
 - 最近依据：2026-10-13 标准光标发布：删除 24ms 隐藏等待，仅 2026 同步帧保留旧快照；四协议重绘前处理最多 64 个已到达事件，让出 Tokio 后优先已经到期的呈现。
@@ -286,6 +289,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-14 10:47 +0800：补入共享文字实际宽度/截断提示和会话页面数字布局/hover/点击/秘密占位回归路由。
 
 - 2026-10-14 09:45 +0800：补入共享编辑内核、平台/安全策略和真实键盘回归路由；直接路径/中间省略和两侧导航保持既有边界。
 

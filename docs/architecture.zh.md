@@ -1362,7 +1362,12 @@ TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用�
 `overflowed`；仅在标签真实溢出时创建有最大宽度且可换行的全文 tooltip。`ElidedButton`
 继续让 Slint 标准 `Button` 拥有焦点、键盘、enabled、pressed、可访问性和点击语义，只在其上
 覆盖共享标签。调用方显式传入显示 `text`、可选 `tooltip-text`、独立的
-`accessible-name`、`enabled` 和 `clicked()`；纯图标按钮保留自身的用途 tooltip。这些 UI
+`accessible-name`、`enabled` 和 `clicked()`；纯图标按钮保留自身的用途 tooltip。
+按钮 preferred-width 同时满足覆盖标签的实测自然宽度加横向内边距，以及平台按钮的最小宽度；
+字体和内边距通过共享参数与 Theme 默认值管理。显式限宽按钮仍可缩小并使用同一溢出 tooltip。
+会话标题/字段标签、Settings 标签、下拉值/选项、菜单标签、SFTP 列、弹窗标签和空输入占位说明
+统一复用 `ElidedLabel`；占位提示只传说明，绝不传入编辑正文或秘密值。标签放在重叠的指针
+处理层之上，让 Tooltip 观察 hover 而不接管点击或焦点。这些 UI
 局部值不会进入 Rust、持久化、diagnostics、worker 或 transport。
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、

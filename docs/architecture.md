@@ -2382,7 +2382,16 @@ label actually overflows. `ElidedButton` keeps the standard Slint `Button` as
 the focus, keyboard, enabled, pressed, accessibility, and click owner while
 overlaying that label. Callers pass display `text`, optional `tooltip-text`,
 independent `accessible-name`, `enabled`, and `clicked()` explicitly. Icon-only
-buttons keep their purpose-specific tooltips. These UI-local values do not
+buttons keep their purpose-specific tooltips. Button preferred width reserves
+the overlay label's measured natural width plus its configured horizontal
+padding, as well as the platform widget's minimum; typography and padding have
+shared parameters and Theme defaults. Explicitly constrained buttons remain
+shrinkable and show the same overflow tooltip. Session headings/field labels,
+Settings labels, dropdown values/options, menu labels, SFTP columns, dialog
+labels, and empty-input placeholders share `ElidedLabel`; placeholders pass
+only their instructions, never editable or secret values. Labels above overlapping
+pointer handlers let Tooltip observe hover without claiming clicks or focus.
+These UI-local values do not
 cross into Rust, persistence, diagnostics, workers, or transports.
 `ui/components/flat-text-input.slint` owns the matching theme-native single-line
 control for non-secret Settings, session-editor, and management-dialog fields.

@@ -469,9 +469,13 @@ views, and release updates preserve the current group's disclosure state.
 Deleting a group moves its servers to Ungrouped. Deleting a profile also removes
 its remembered password but does not close terminal tabs already open.
 
-Text-bearing buttons and button-like rows stay on one line. When their label
-does not fit, AxSSH shows an ellipsis; hover the control to read the complete
-label in a bounded tooltip. Icon-only controls continue to describe their
+Text buttons, including the session editor's Cancel, Save & connect, and
+Save session actions, reserve enough width for their actual font when space
+allows. When constrained, their label shows an ellipsis; hover to read the
+complete text in a bounded tooltip. Form labels/descriptions, dropdown values
+and options, menu labels, and SFTP columns use the same behavior. Empty-field
+instructions can also show a full-text hint; password values never do.
+Icon-only controls continue to describe their
 action with their existing tooltip and accessible name.
 
 The sidebar masks usernames and IPv4 addresses by default: a username keeps its
