@@ -16,7 +16,7 @@
 
 ## 当前状态
 
-- 阶段：实施中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -27,8 +27,8 @@
 | --- | --- | --- | --- | --- |
 | R1 | completed | 发行规则、日期与编号核查 | 本地/远端 tags、reflog、release helper/工作流 | 本地、origin、gitea 今日 tag 均为空；上海日期 2026-10-14 |
 | R2 | completed | 同步 metadata 与发布/标准 Rust 门禁 | sync/verify、14 helper tests、fmt/check/严格 Clippy/test/diff | 只修改 package 版本；程序源码已通过 853 测试 |
-| R3 | in_progress | metadata 与发行准备记录提交 | index 审阅、HEAD metadata 核对 | 只提交同步的三份元数据及本轮记录 |
-| R4 | pending | annotated tag 创建、顺序推送及独立远端验证 | master 在先、tag 在后；对象类型/ls-remote SHA/Release run | tag 指向已提交的匹配版本；正常 push，不覆盖历史 |
+| R3 | completed | metadata 与发行准备记录提交 | index 审阅、HEAD metadata 核对 | 只提交同步的三份元数据及本轮记录 |
+| R4 | completed | annotated tag 创建、顺序推送及独立远端验证 | master 在先、tag 在后；对象类型/ls-remote SHA/Release run | tag 指向已提交的匹配版本；正常 push，不覆盖历史 |
 
 ## 已完成
 
@@ -37,11 +37,15 @@
 - 本地、origin 和 gitea 均没有 `2026-10-14*`；GitHub Release workflow 历史最近仍为 2026-10-10，无今日发行尝试，选择首发 `2026-10-14`。
 - 14 项 release version/highlights helper 测试通过；前轮源码完成 853 Rust 测试、严格 Clippy 及 ARM64 CI 同款 check/build。
 - 环境快速核查及完整跟踪，无联网方法研究或多 agent/Worker。
+- 版本/发行准备提交 `0eb2563` 已正常推送 origin/master；随后创建并推送 annotated tag `2026-10-14`，固定指向 `0eb2563ef70840af314e848c9b8ac4cf8b4a0884`。
+- 独立 ls-remote 核对 tag 对象 `2d8065b950b0592936272c96c906defd6ef91494` 与 peeled commit 一致；GitHub Release run `38514871065` 已启动，head SHA 与 tag 一致。
+- 直连 push 75 秒连接超时，确认已有 7897 端口后用命令级 HTTP 代理/HTTP1.1 正常推送；不修改全局 Git 配置。
 
 ## 验证
 
 - 已完成：sync/verify 确认 Cargo/lock/macOS 为 2026.10.14、macOS build 为 20261014；14 helper tests、fmt、locked/offline check、严格 all-target Clippy、391 library + 462 binary（853）完整测试及 diff 全通过。
-- 未完成：metadata 提交/tag 创建、master/tag 推送和远端一致性。
+- 已完成：metadata 与发行记录 index 审阅/提交、master 在先/tag 在后的正常推送、annotated 对象类型、远端对象/peeled commit 和 Release run SHA 核对。后续交付记录仅更新文档，不移动 tag。
+- 未完成：Release workflow 的多平台构建/资产发布仍在运行；用户 GUI/键盘/IME 验收和其他平台原生验证待各自完成，不据 tag 推送宣称成功。
 
 ## 风险与阻塞
 
@@ -51,8 +55,8 @@
 
 ## 下一步
 
-- 审阅并提交 metadata 和发行准备记录；先正常推送 master 并独立核对，再创建/推送 annotated tag。
+- 通过 [Release run](https://github.com/xinalbert/ax_ssh/actions/runs/38514871065) 查看自动构建与资产发布；当前 run 为 in_progress。
 
 ## 最后更新时间
 
-- 2026-10-14 13:02 +0800
+- 2026-10-14 13:08 +0800
