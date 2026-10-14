@@ -32,6 +32,8 @@ export component ElidedTooltipContent inherits Rectangle {
     }
 }
 
+// Place after overlapping pointer handlers so Tooltip can observe hover;
+// it forwards events and does not own clicks or keyboard focus.
 export component ElidedLabel inherits Rectangle {
     in property <string> text;
     in property <string> tooltip-text;
@@ -96,6 +98,10 @@ export component ElidedLabel inherits Rectangle {
 export component ElidedButton inherits Rectangle {
     in property <string> text;
     in property <string> tooltip-text;
+    in property <string> font-family: Theme.application-font-family;
+    in property <length> font-size: Theme.font-body;
+    in property <int> font-weight: 400;
+    in property <length> content-padding-x: Theme.text-button-padding-x;
     in property <string> accessible-name: root.text;
     in property <bool> enabled: true;
     in property <bool> primary: false;
@@ -105,9 +111,17 @@ export component ElidedButton inherits Rectangle {
         root.tooltip-text.is-empty ? root.text : root.tooltip-text;
     callback clicked();
 
-    min-width: 32px;
-    preferred-width: max(standard-size-probe.min-width, 32px);
-    min-height: max(standard-size-probe.min-height, 32px);
+    min-width: Theme.text-button-min-width;
+    // The overlay's font and padding can differ from the platform Button.
+    // Reserve its actual width, while fixed-width callers can still elide.
+    preferred-width: max(
+        standard-size-probe.min-width,
+        max(Theme.text-button-min-width, button-label.natural-width + 2 * root.content-padding-x),
+    );
+    min-height: max(
+        standard-size-probe.min-height,
+        max(Theme.text-button-min-height, button-label.line-height + 2 * Theme.space-xs),
+    );
     horizontal-stretch: 0;
     vertical-stretch: 0;
     forward-focus: standard-button;
@@ -129,10 +143,13 @@ export component ElidedButton inherits Rectangle {
     }
 
     button-label := ElidedLabel {
-        x: Theme.space-xl;
-        width: max(0px, parent.width - 2 * Theme.space-xl);
+        x: root.content-padding-x;
+        width: max(0px, parent.width - 2 * root.content-padding-x);
         height: parent.height;
         text: root.text;
+        font-family: root.font-family;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
         tooltip-text: root.tooltip-text;
         tooltip-enabled: false;
         text-color: root.primary ? Palette.accent-foreground : Palette.control-foreground;
