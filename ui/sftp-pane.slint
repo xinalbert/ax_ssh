@@ -5,7 +5,7 @@ import { FlatTextInput } from "components/flat-text-input.slint";
 import { SftpActionButton, SftpPathCopyButton } from "components/sftp-controls.slint";
 import { Theme } from "theme.slint";
 
-export { SftpEntryRow, SftpPathSegment, SftpTransferRow, SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
+export { SftpEntryRow, SftpTransferRow, SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
 import { SftpNativeDropRegion, SftpViewState } from "sftp/types.slint";
 import { SftpDirectoryPane } from "sftp/directory.slint";
 import { SftpTransferQueue } from "sftp/transfers.slint";
@@ -330,7 +330,6 @@ export component SftpPane inherits Rectangle {
                 loading: root.view.loading;
                 upload-ready: root.view.upload_ready;
                 path: root.view.path;
-                path-segments: root.view.path_segments;
                 download-ready: root.view.available && !root.view.local_loading && !root.view.local_path.is-empty;
                 truncated: root.view.truncated;
                 status: root.view.status;
@@ -409,7 +408,6 @@ export component SftpPane inherits Rectangle {
                 upload-ready: root.view.upload_ready && root.view.local_upload_selection_ready;
                 allow-refresh: true;
                 path: root.view.local_path;
-                path-segments: root.view.local_path_segments;
                 has-more: root.view.local_has_more;
                 truncated: root.view.local_truncated;
                 status: root.view.local_status;

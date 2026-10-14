@@ -1,13 +1,14 @@
 use super::*;
 
 #[test]
-fn sftp_primary_actions_and_compact_path_keep_their_pointer_routes() {
+fn sftp_primary_actions_and_full_path_editor_keep_their_pointer_routes() {
     std::thread::spawn(|| {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;
 
         let harness = LayoutTestHarness::new();
         let ui = &harness.ui;
+        wire_menu_helpers(ui);
         ui.set_detached_window(true);
         ui.set_active_tab_kind("sftp".into());
         ui.set_sftp_available(true);
@@ -18,13 +19,8 @@ fn sftp_primary_actions_and_compact_path_keep_their_pointer_routes() {
         ui.set_sftp_selected_count(2);
         ui.set_local_sftp_selected_count(2);
         ui.set_sftp_path("/remote".into());
-        let path = "/a/b/c/d/e/f/g/当前目录";
+        let path = "/a/b/c/d/e/f/g/very-long-intermediate-directory/another-long-directory/final-artifacts/当前目录";
         ui.set_local_sftp_path(path.into());
-        ui.set_local_sftp_path_segments(sftp_path_rows(
-            ModelRc::default(),
-            path,
-            SftpPathKind::Remote,
-        ));
 
         let downloads = Rc::new(Cell::new(0));
         let received_downloads = downloads.clone();
@@ -39,6 +35,9 @@ fn sftp_primary_actions_and_compact_path_keep_their_pointer_routes() {
         let paths = Rc::new(RefCell::new(Vec::new()));
         let received_paths = paths.clone();
         ui.on_list_local_sftp_directory(move |path| received_paths.borrow_mut().push(path));
+        let copied = Rc::new(RefCell::new(Vec::new()));
+        let received_copies = copied.clone();
+        ui.on_write_clipboard(move |path| received_copies.borrow_mut().push(path));
 
         ui.show().expect("headless SFTP window should show");
         for width in [1180, 940] {
@@ -64,19 +63,29 @@ fn sftp_primary_actions_and_compact_path_keep_their_pointer_routes() {
 
         let local = ui.invoke_native_sftp_local_drop_region();
         let theme = ui.global::<Theme>();
-        // A compact leaf must start immediately after navigation, without
-        // retaining the invisible ancestors' layout space.
+        // The full path occupies the row; editing must submit the original
+        // string even when only its ends fit in the display.
         harness.click(slint::LogicalPosition::new(
-            local.x
-                + theme.get_sftp_column_padding()
-                + 3.0 * (theme.get_sftp_nav_icon_button_width() + theme.get_space_sm())
-                + 24.0,
+            local.x + theme.get_sftp_column_padding() + 24.0,
             local.y
                 + theme.get_sftp_toolbar_height()
                 + theme.get_sftp_path_row_padding_y()
                 + theme.get_sftp_control_min_height() / 2.0,
         ));
+        harness.press_key(slint::platform::Key::Return);
         assert_eq!(paths.borrow().as_slice(), &[SharedString::from(path)]);
+
+        // The gear menu's copy action also keeps the exact original path.
+        harness.click(slint::LogicalPosition::new(
+            local.x + local.width - theme.get_sftp_column_padding() - 16.0,
+            local.y
+                + theme.get_sftp_toolbar_height()
+                + theme.get_sftp_path_row_padding_y()
+                + theme.get_sftp_control_min_height() / 2.0,
+        ));
+        harness.press_key(slint::platform::Key::DownArrow);
+        harness.press_key(slint::platform::Key::Return);
+        assert_eq!(copied.borrow().as_slice(), &[SharedString::from(path)]);
 
         ui.set_sftp_selected_count(0);
         ui.set_local_sftp_upload_selection_ready(false);
@@ -93,4 +102,80 @@ fn sftp_primary_actions_and_compact_path_keep_their_pointer_routes() {
     })
     .join()
     .expect("SFTP pointer routes should pass");
+}
+
+#[test]
+fn sftp_middle_elision_fits_real_font_width_and_restores_full_path_on_resize() {
+    std::thread::spawn(|| {
+        use slint::platform::WindowAdapter;
+        use std::ops::ControlFlow;
+
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_detached_window(true);
+        ui.set_active_tab_kind("sftp".into());
+        ui.set_sftp_available(true);
+        ui.set_sftp_open(true);
+        ui.set_local_sftp_loaded(true);
+        let path =
+            "/root/共享数据/研究/working/directory/intermediate-folder/latest-artifacts/最新结果";
+        ui.set_local_sftp_path(path.into());
+        ui.show().expect("headless path window should show");
+
+        let displayed_path = || {
+            let window = i_slint_core::window::WindowInner::from_pub(ui.window());
+            let root = i_slint_core::item_tree::ItemRc::new_root(window.component());
+            root.visit_descendants(|item| {
+                if !item.is_visible() {
+                    return ControlFlow::Continue(());
+                }
+                if let Some(text) = item.downcast::<i_slint_core::items::ComplexText>() {
+                    let value = i_slint_core::items::ComplexText::FIELD_OFFSETS
+                        .text()
+                        .apply_pin(text.as_pin_ref())
+                        .get();
+                    if value.starts_with("/root/") && value.ends_with("最新结果") {
+                        let measured = harness.window.renderer().text_size(
+                            text.as_pin_ref(),
+                            item,
+                            None,
+                            i_slint_core::items::TextWrap::NoWrap,
+                        );
+                        return ControlFlow::Break((
+                            value,
+                            measured.width,
+                            item.geometry().size.width,
+                        ));
+                    }
+                }
+                ControlFlow::Continue(())
+            })
+            .expect("visible path text must be present")
+        };
+
+        harness.window.set_size(slint::PhysicalSize::new(760, 740));
+        harness.settle();
+        let (shortened, measured, available) = displayed_path();
+        assert!(shortened.contains('…'), "narrow path must elide the middle");
+        assert!(
+            measured <= available + 0.5,
+            "display must fit actual font width"
+        );
+        let (head, tail) = shortened.split_once('…').expect("ellipsis");
+        assert!(tail.chars().count() >= head.chars().count());
+        let local = ui.invoke_native_sftp_local_drop_region();
+        assert!(
+            available > local.width * 0.8,
+            "path must own most of its row"
+        );
+
+        harness.window.set_size(slint::PhysicalSize::new(1800, 740));
+        harness.settle();
+        let (expanded, measured, available) = displayed_path();
+        assert_eq!(expanded, path, "a fitting path must be shown in full");
+        assert!(measured <= available + 0.5);
+        ui.hide().expect("headless path window should hide");
+    })
+    .join()
+    .expect("path fitting assertions should pass");
 }

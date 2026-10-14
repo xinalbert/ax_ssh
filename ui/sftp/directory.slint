@@ -5,7 +5,7 @@ import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SftpActionButton, SftpIconButton, SftpPathCopyButton } from "../components/sftp-controls.slint";
 import { Theme } from "../theme.slint";
 
-import { SftpEntryRow, SftpPathSegment } from "types.slint";
+import { SftpEntryRow } from "types.slint";
 import { SftpPathBar } from "path-bar.slint";
 
 component SftpDirectoryHeader inherits Rectangle {
@@ -473,7 +473,6 @@ export component SftpDirectoryPane inherits Rectangle {
     in property <bool> loading;
     in property <bool> upload-ready: false;
     in property <string> path;
-    in property <[SftpPathSegment]> path-segments;
     in property <bool> download-ready: false;
     in property <bool> truncated;
     in property <string> status;
@@ -610,14 +609,13 @@ export component SftpDirectoryPane inherits Rectangle {
                 padding-bottom: Theme.sftp-path-row-padding-y;
                 SftpPathBar {
                     path: root.path;
-                    compact: root.width < Theme.sftp-toolbar-full-width;
-                    segments: root.path-segments;
                     control-height: root.control-height;
                     can-go-back: root.can-go-back;
                     can-go-forward: root.can-go-forward;
                     can-go-up: root.can-go-up;
                     enabled: root.interactive && !root.loading;
                     navigate(path) => { root.list-directory(path); }
+                    copy-path(path) => { root.copy-path(path); }
                     back => { root.navigate-back(); }
                     forward => { root.navigate-forward(); }
                     up => { root.navigate-up(); }

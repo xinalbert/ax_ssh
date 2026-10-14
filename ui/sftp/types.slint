@@ -12,13 +12,6 @@ export struct SftpEntryRow {
     selected: bool,
 }
 
-// Application-owned navigation targets; never resolve paths in the UI.
-export struct SftpPathSegment {
-    label: string,
-    path: string,
-    current: bool,
-}
-
 // Rust owns the bounded transfer snapshot and updates it in batches. Slint
 // only renders these presentation fields and returns opaque IDs for intents.
 export struct SftpTransferRow {
@@ -54,7 +47,6 @@ export struct SftpViewState {
     upload_ready: bool,
     home: string,
     path: string,
-    path_segments: [SftpPathSegment],
     entries: [SftpEntryRow],
     remote_sort_column: string,
     remote_sort_descending: bool,
@@ -70,7 +62,6 @@ export struct SftpViewState {
     local_loaded: bool,
     local_upload_selection_ready: bool,
     local_path: string,
-    local_path_segments: [SftpPathSegment],
     local_entries: [SftpEntryRow],
     local_sort_column: string,
     local_sort_descending: bool,

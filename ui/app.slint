@@ -1,3 +1,4 @@
+export { PathPresentation } from "components/middle-elided-path.slint";
 export { ActionMenuItem, MenuActions } from "components/flat-action-menu.slint";
 import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
 import { SystemPlatformIcon } from "components/system-platform-icon.slint";
@@ -11,7 +12,6 @@ import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
 import {
     SftpEntryRow,
-    SftpPathSegment,
     SftpNativeDropRegion,
     SftpTransferRow,
     SftpViewState,
@@ -130,7 +130,6 @@ export component AppWindow inherits Window {
     in property <bool> sftp-upload-ready: false;
     in property <string> sftp-home: "";
     in property <string> sftp-path: "";
-    in property <[SftpPathSegment]> sftp-path-segments;
     in property <[SftpEntryRow]> sftp-entries;
     in property <string> sftp-sort-column: "modified";
     in property <bool> sftp-sort-descending: true;
@@ -151,7 +150,6 @@ export component AppWindow inherits Window {
     in property <bool> local-sftp-loaded: false;
     in property <bool> local-sftp-upload-selection-ready: false;
     in property <string> local-sftp-path: "";
-    in property <[SftpPathSegment]> local-sftp-path-segments;
     in property <[SftpEntryRow]> local-sftp-entries;
     in property <string> local-sftp-sort-column: "modified";
     in property <bool> local-sftp-sort-descending: true;
@@ -348,7 +346,6 @@ export component AppWindow inherits Window {
             available: root.sftp-available, open: root.sftp-open, loading: root.sftp-loading,
             upload_ready: root.sftp-upload-ready,
             home: root.sftp-home, path: root.sftp-path, entries: root.sftp-entries,
-            path_segments: root.sftp-path-segments,
             remote_sort_column: root.sftp-sort-column, remote_sort_descending: root.sftp-sort-descending,
             has_more: root.sftp-has-more, truncated: root.sftp-truncated, status: root.sftp-status,
             can_go_back: root.sftp-can-go-back, can_go_forward: root.sftp-can-go-forward,
@@ -357,7 +354,6 @@ export component AppWindow inherits Window {
             local_loading: root.local-sftp-loading, local_loaded: root.local-sftp-loaded,
             local_upload_selection_ready: root.local-sftp-upload-selection-ready,
             local_path: root.local-sftp-path,
-            local_path_segments: root.local-sftp-path-segments,
             local_entries: root.local-sftp-entries, local_sort_column: root.local-sftp-sort-column,
             local_sort_descending: root.local-sftp-sort-descending, local_has_more: root.local-sftp-has-more,
             local_truncated: root.local-sftp-truncated,

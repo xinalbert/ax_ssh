@@ -1,0 +1,84 @@
+import { Theme } from "../theme.slint";
+import { ElidedTooltipContent } from "elided-controls.slint";
+
+// Stateless text formatting; UI Text probes own font measurement.
+export global PathPresentation {
+    pure callback elide(string, int) -> string;
+}
+
+export component MiddleElidedPath inherits Rectangle {
+    in property <string> text;
+    in property <string> font-family: Theme.application-font-family;
+    in property <length> font-size: Theme.font-body;
+    in property <int> font-weight: 400;
+    private property <string> displayed;
+    private property <int> low: 0;
+    private property <int> high: 0;
+    private property <int> candidate: 0;
+    private property <bool> fitting: false;
+    private property <string> trial: PathPresentation.elide(root.text, root.candidate);
+    private property <length> available-width: max(0px, root.width - 2 * Theme.space-sm);
+
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    accessible-role: none;
+    changed text => { root.fit(); }
+    changed available-width => { root.fit(); }
+    changed font-family => { root.fit(); }
+    changed font-size => { root.fit(); }
+    changed font-weight => { root.fit(); }
+    init => { root.fit(); }
+
+    function fit() {
+        root.low = 0;
+        root.high = min(root.text.character-count, 4096);
+        root.candidate = root.high;
+        root.displayed = "";
+        root.fitting = !root.text.is-empty && root.available-width > 0px;
+    }
+    function step() {
+        if probe.preferred-width <= root.available-width {
+            root.displayed = root.trial;
+            root.low = root.candidate;
+        } else {
+            root.high = root.candidate - 1;
+        }
+        if root.low >= root.high {
+            root.fitting = false;
+        } else {
+            root.candidate = floor((root.low + root.high + 1) / 2);
+        }
+    }
+    // A bounded binary search stays outside layout bindings. Each trial uses
+    // the same font as the visible label and measures at most 4096 characters.
+    Timer {
+        interval: 1ms;
+        running: root.fitting;
+        triggered => { root.step(); }
+    }
+    Text {
+        x: Theme.space-sm;
+        width: root.available-width;
+        height: parent.height;
+        text: root.displayed;
+        font-family: root.font-family;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        color: Theme.text;
+        vertical-alignment: center;
+        overflow: clip;
+        accessible-role: none;
+    }
+    probe := Text {
+        visible: false;
+        text: root.trial;
+        font-family: root.font-family;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        accessible-role: none;
+    }
+    if root.displayed != root.text && !root.text.is-empty : Tooltip {
+        ElidedTooltipContent { text: root.text; }
+    }
+}

@@ -537,6 +537,11 @@ struct WindowCallbackContext {
     detached_windows: Rc<RefCell<HashMap<Uuid, AppWindow>>>,
 }
 
+fn wire_path_presentation(ui: &AppWindow) {
+    ui.global::<PathPresentation>()
+        .on_elide(|path, budget| view::elide_path(path.as_str(), budget).into());
+}
+
 fn wire_menu_helpers(ui: &AppWindow) {
     ui.global::<MenuActions>()
         .on_recent_items(|paths, enabled, clear_title| {
@@ -570,6 +575,7 @@ fn wire_menu_helpers(ui: &AppWindow) {
 fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
     terminal_media::wire_settings(ui, context.state.clone(), context.runtime.clone());
     wire_menu_helpers(ui);
+    wire_path_presentation(ui);
     let WindowCallbackContext {
         state,
         runtime,
