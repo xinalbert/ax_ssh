@@ -1227,6 +1227,44 @@ fn restored_workspace_terminal_keeps_soft_wrap_and_hard_break_boundaries() {
 }
 
 #[test]
+fn restored_terminal_can_reflow_to_measured_size_before_a_worker_exists() {
+    let mut state = test_state();
+    let tab_id = state.open_local_shell_tab();
+    state
+        .terminal_mut(tab_id)
+        .unwrap()
+        .terminal
+        .as_mut()
+        .unwrap()
+        .process(b"0123456789abcdefghijXYZ\r\nsecond");
+    let workspace = state.workspace_snapshot();
+    let mut restored = test_state();
+    restored.restore_workspace_tabs(&workspace.tabs);
+    assert!(!restored.terminal(tab_id).unwrap().connected);
+    assert!(restored.terminal(tab_id).unwrap().worker.is_none());
+    assert!(
+        restored
+            .resize_terminal_with_metrics(tab_id, 100, 30, 8, 16)
+            .unwrap()
+    );
+    let frame = restored
+        .terminal_mut(tab_id)
+        .unwrap()
+        .terminal
+        .as_mut()
+        .unwrap()
+        .snapshot();
+    assert_eq!(frame.max_columns, 100);
+    assert_eq!(
+        frame.lines[0].runs[0].text.trim_end(),
+        "0123456789abcdefghijXYZ"
+    );
+    assert_eq!(frame.lines[1].runs[0].text.trim_end(), "second");
+    assert!(!restored.terminal(tab_id).unwrap().connected);
+    assert!(restored.terminal(tab_id).unwrap().worker.is_none());
+}
+
+#[test]
 fn sftp_snapshots_require_connected_sftp_tabs_and_remain_isolated() {
     let mut state = test_state();
     let first_profile = SessionProfile::new("first", "first.example", "alice");

@@ -2,6 +2,7 @@ use super::*;
 use slint::Model;
 
 mod sftp_navigation;
+mod terminal_connection;
 mod text_editing;
 mod text_overflow;
 

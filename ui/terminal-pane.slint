@@ -485,8 +485,12 @@ export component TerminalPane inherits Rectangle {
     };
 
     function focus-input() {
-        if root.connected && !root.notice.visible && !root.input-blocked {
-            ime-input.focus();
+        if !root.notice.visible && !root.input-blocked {
+            if root.connected {
+                ime-input.focus();
+            } else {
+                waiting-input.focus();
+            }
         }
     }
 
@@ -512,7 +516,7 @@ export component TerminalPane inherits Rectangle {
     }
 
     function update-terminal-size() {
-        if root.connected {
+        if !root.terminal-id.is-empty {
             root.resized(root.terminal-columns, root.terminal-rows, root.cell-width, root.cell-height);
         }
     }
@@ -742,7 +746,7 @@ export component TerminalPane inherits Rectangle {
         root.pressed-button = -1;
         root.clear-selection();
         root.schedule-terminal-size-update();
-        if root.focused && root.connected {
+        if root.focused {
             root.focus-input();
         }
     }
@@ -753,13 +757,13 @@ export component TerminalPane inherits Rectangle {
             root.clear-selection();
         }
         root.schedule-terminal-size-update();
-        if root.connected && root.focused {
+        if root.focused {
             root.focus-input();
         }
         root.sync-terminal-focus-report();
     }
     changed notice => {
-        if !root.notice.visible && root.focused && root.connected && !root.input-blocked {
+        if !root.notice.visible && root.focused && !root.input-blocked {
             root.focus-input();
         }
     }
@@ -770,7 +774,7 @@ export component TerminalPane inherits Rectangle {
         }
     }
     changed focused => {
-        if root.focused && root.connected {
+        if root.focused {
             root.focus-input();
         } else {
             root.clear-selection();
@@ -795,13 +799,13 @@ export component TerminalPane inherits Rectangle {
         }
     }
     changed focus-request-revision => {
-        if root.focused && root.connected {
+        if root.focused {
             root.focus-input();
         }
     }
     changed visible => {
         root.schedule-geometry-report();
-        if root.visible && root.focused && root.connected {
+        if root.visible && root.focused {
             root.focus-input();
         }
     }
@@ -901,10 +905,28 @@ export component TerminalPane inherits Rectangle {
         interval: 1ms;
         triggered => {
             root.initial-input-focus-pending = false;
-            if root.visible && root.focused && root.connected {
+            if root.visible && root.focused {
                 root.focus-input();
             }
             root.sync-terminal-focus-report();
+        }
+    }
+
+    // New terminal pages take focus while connecting without enabling text or
+    // IME input. Enter then belongs to this page instead of reopening a server
+    // from the previously focused sidebar row; nothing is buffered for login.
+    waiting-input := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: !root.connected && !root.notice.visible && !root.input-blocked;
+        focus-on-tab-navigation: true;
+        accessible-role: tab-panel;
+        accessible-label: @tr("Terminal");
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == Key.Space {
+                return EventResult.accept;
+            }
+            return EventResult.reject;
         }
     }
 
