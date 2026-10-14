@@ -132,7 +132,7 @@ The SFTP application facade composes private `sftp_bridge/{navigation,files,drag
 
 `CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
-SFTP path display keeps the original path as the sole navigation value. Slint measures bounded display candidates with the same font as the visible text and performs a bounded binary search outside layout bindings. The stateless application formatter elides only the middle, preserves UTF-8 character boundaries, prioritizes the suffix, and caps a candidate at 4096 characters. Resizing and font changes restart fitting; no breadcrumb model or platform-dependent path parser is retained. The path and gear menu preserve transient editing/focus state and invoke existing directory/history/clipboard callbacks with the original value. Header Upload/Download actions keep their selection/readiness contract; persistence, transport and credentials remain with their existing owners.
+SFTP path display keeps the original path as the sole navigation value. Slint measures bounded display candidates with the same font as the visible text and performs a bounded binary search outside layout bindings. The stateless application formatter elides only the middle, preserves UTF-8 character boundaries, prioritizes the suffix, and caps a candidate at 4096 characters. Resizing and font changes restart fitting; no breadcrumb model or platform-dependent path parser is retained. Both local and remote path bars place Back, Forward, and Parent directory icon buttons before the path; existing history capabilities and loading state control their availability. The path and gear menu preserve transient editing/focus state and invoke existing directory/history/clipboard callbacks with the original value. Header Upload/Download actions keep their selection/readiness contract; persistence, transport and credentials remain with their existing owners.
 
 ## Application icon ownership
 
@@ -1691,6 +1691,10 @@ This setting does not affect streamed SFTP
 transfers or a remote file dragged to Finder: that file is downloaded directly
 to its explicit destination through the normal local writer.
 
+File-row menus use the pane's local/remote identity independently of directory
+navigation. Remote rows offer Download/Rename/Delete; local rows offer
+Open (or Open folder), Show in Folder, and Upload.
+
 Each remote file row owns a Slint-only context menu backed by the shared
 `FlatActionMenu`. Activating Download or Delete on an unselected row first
 replaces the remote selection with that row; activating it on a selected row
@@ -2384,6 +2388,23 @@ cross into Rust, persistence, diagnostics, workers, or transports.
 control for non-secret Settings, session-editor, and management-dialog fields.
 It keeps native cursor placement, selection, IME, keyboard focus, accessibility,
 and the standard Copy, Cut, Paste, Select All shortcuts and edit context menu.
+All three text wrappers use `ui/components/editing-text-input.slint` as their
+shared TextInput primitive. Its stateless `TextEditing.handle-key` callback
+passes only a KeyEvent; `src/app.rs` registers it once for each main/detached
+window using a weak handle. `src/app/text_editing.rs` derives a single edit
+policy from the focused input's platform, input type, read-only/single-line
+properties, and IME preedit state. macOS physical Control (`meta` in Slint)
+maps A/E, B/F, H/D, and multiline P/N to standard paragraph, grapheme, deletion,
+and visual-line events. Shift preserves the native selection anchor for ordinary
+movement. Windows/Linux events and macOS Command/Option shortcuts retain native
+handling. Secret inputs retain local clipboard/select-all guards even before
+callback registration; the adapter rechecks their policy and suppresses selection
+extension. Recognized deletion in read-only fields and added actions during
+composition are consumed without editing. The adapter uses the pinned
+i-slint-core 1.18.1 focus/item event boundary to call only the focused TextInput,
+avoiding global redispatch, terminal routing, or a second text/cursor/undo store.
+Slint upgrades must verify that boundary and rerun Unicode, reverse-selection,
+undo, IME, and protected-clipboard regressions.
 `ui/components/secret-text-input.slint` is the separate password-only control
 for SSH passwords, vault passwords, and private-key passphrases; it deliberately
 allows paste from its context action but does not inherit ordinary selection or

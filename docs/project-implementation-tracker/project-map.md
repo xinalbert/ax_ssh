@@ -154,6 +154,8 @@
 | `ui/components/themed-combo-box.slint` | AxSSH 主题化共享下拉 | `ThemedComboBox`、`ComboBoxChevron` | 需要控件本体、弹层、选中/hover、焦点和滚动指示完全消费语义主题色时 |
 | `ui/components/flat-text-edit.slint` | 主题化非秘密多行输入 | `FlatTextEdit` | SFTP 编辑器/过滤设置的 TextInput 选区、IME、光标可见滚动和共用编辑菜单 |
 | `ui/components/flat-text-input.slint` | AxSSH 主题化共享非秘密文本输入 | `FlatTextInput` | Settings、会话编辑器和管理弹窗的单行编辑、原生文本选择以及 Copy/Cut/Paste/Select All 和编辑菜单 |
+| `ui/components/editing-text-input.slint`、`src/app/text_editing.rs` 及 `src/app/text_editing/tests.rs` | 共享输入键盘内核与锁定 Slint 编辑适配 | `EditingTextInput`、`TextEditing`、`EditPolicy`、`edit_decision`、`handle_key` | macOS Control 段落/光标/删除、Windows/Linux 标准直通、密码/只读/IME 策略；不维护第二份光标/文本 |
+| `src/app/view/tests/text_editing.rs` | 共用输入的真实键盘事件回归 | 主/独立地址、密码剪贴板、多行输入 | Unicode/反向选区/撤销、只读/组合态、平台标准按键和无 callback 密码保护 |
 | `ui/components/secret-text-input.slint` | AxSSH 专用秘密输入 | `SecretTextInput` | 密码遮蔽、IME/focus、不可读取的可访问性语义、仅允许粘贴，禁止复制/剪切/鼠标选择泄漏 |
 | `ui/components/security-dialogs.slint` | 安全覆盖层组件 | `HostKeyDialog`、`AuthenticationDialog`、`ModalFrame`、`prompt-id`、`selected-credential-storage` | host-key 确认、系统凭据/加密保险库密码、私钥 passphrase UI；普通密码弹窗从 General 初始化后端选择并允许本次覆盖；提交接收、取消或切换 prompt 时清空秘密 |
 | `ui/components/terminal-grid.slint` | 有界终端网格渲染与指针/菜单意图组件 | `TerminalGrid`、`TerminalGridView`、`TerminalSelectionView`、`TerminalTargetHighlight`、`TerminalRenderLine` | 按 pane 的底部锚定原点绘制 Rust 可见字符格；单层 repeater 直接遍历行，紧凑分支直接绘制 Text 和合并背景/装饰 span，旧分支用于配置 A/B；可选 layer 只缓存静态行内容，逐格选区、光标、目标高亮和 IME 在层外；pointer callback 同时发送所在格与最近插入边界，remote mouse 使用前者、本地选区使用后者；Slint 的 Back/Forward 侧键映射为 8/9，滚动事件独立累计 x/y 并为远端带上 6/7 横向滚轮；所有 run 和光标文字从其协议定义 cell span 的左边缘绘制，网格、preedit 和指针共享同一原点；不持有终端数据、worker 状态或焦点 |
@@ -217,6 +219,8 @@
 - 本机 Cargo registry/cache 只用于验证，不属于仓库事实。
 
 ## 刷新规则
+
+- 最近依据：2026-10-14 共享 EditingTextInput 和 text_editing 适配，统一 macOS Control、平台标准直通和密码/只读/IME 策略；新增主/独立地址、Unicode/撤销、密码剪贴板与多行事件回归。
 
 - 最近依据：2026-10-13 标准光标发布：删除 24ms 隐藏等待，仅 2026 同步帧保留旧快照；四协议重绘前处理最多 64 个已到达事件，让出 Tokio 后优先已经到期的呈现。
 
@@ -283,7 +287,7 @@
 
 ## 最后更新时间
 
-- 2026-10-14 08:04 +0800：直接路径/齿轮菜单与有界中间省略取代分段模型，回归路由已刷新。
+- 2026-10-14 09:45 +0800：补入共享编辑内核、平台/安全策略和真实键盘回归路由；直接路径/中间省略和两侧导航保持既有边界。
 
 - 2026-10-13 23:54 +0800：SFTP 主操作、统一 SVG、分段导航与无窗口交互回归路由更新。
 

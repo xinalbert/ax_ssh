@@ -114,7 +114,7 @@ SFTP facade 组合私有 `sftp_bridge/{navigation,files,drag,transfers}.rs`；�
 
 `CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。
 
-SFTP 路径以原文作为唯一导航值。Slint 使用与可见文本相同的字体测量有界候选文本，在布局绑定之外执行有界二分适配。应用侧无状态格式化 helper 仅省略中间内容，保持 UTF-8 字符边界并优先保留末尾，单个候选最多 4096 字符。栏宽/字体变化重新适配，不保留分段模型或平台路径解析器。路径和齿轮菜单保存短暂编辑/焦点状态，使用原文调用已有目录/history/clipboard callback。标题上传/下载保持既有选择/readiness 契约，持久化、transport 和凭据仍由原所有者负责。
+SFTP 路径以原文作为唯一导航值。Slint 使用与可见文本相同的字体测量有界候选文本，在布局绑定之外执行有界二分适配。应用侧无状态格式化 helper 仅省略中间内容，保持 UTF-8 字符边界并优先保留末尾，单个候选最多 4096 字符。栏宽/字体变化重新适配，不保留分段模型或平台路径解析器。本地和远端路径栏都在地址前提供后退、前进和父目录图标按钮，由既有历史能力和加载状态决定是否可用。路径和齿轮菜单保存短暂编辑/焦点状态，使用原文调用已有目录/history/clipboard callback。标题上传/下载保持既有选择/readiness 契约，持久化、transport 和凭据仍由原所有者负责。
 
 ## 应用图标归属
 
@@ -1053,6 +1053,9 @@ Settings > SFTP 保存应用级本地打开快照上限（默认 512 MiB，有�
 等待复制的 30 分钟超时会向 blocking 任务发出取消信号，使其在下一次有界读取前停止并清理 partial 文件。
 该设置不影响常规流式 SFTP 传输，也不限制远端文件拖到 Finder；后者走明确目标路径的普通本地 writer。
 
+文件行菜单按所属栏的本地/远端身份选择，与目录导航能力独立。远端行提供 Download/Rename/Delete；
+本地行提供 Open（目录为 Open folder）、Show in Folder 和 Upload。
+
 每个远端文件行持有只属于 Slint 的右键菜单，并复用共享 `FlatActionMenu`。在未选中行触发下载或删除时，
 先把远端选择替换为该行；在已选中行触发时保留当前多选集合。重命名仅在单项已选中，或未选中命中行将成为唯一选择时可用。
 `OverlayHost` 保存重命名草稿及原始 Tab/路径；Enter 确认、Escape 取消，SSH 安全提示仍优先。
@@ -1364,6 +1367,15 @@ TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用�
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、
 IME、键盘焦点、可访问性以及 Copy、Cut、Paste、Select All 快捷键和标准文本编辑右键菜单。
+三类文本 wrapper 共用 `ui/components/editing-text-input.slint` 的 TextInput 内核。
+无状态 `TextEditing.handle-key` 只传 KeyEvent；`src/app.rs` 为主/独立窗口通过弱句柄各注册一次。
+`src/app/text_editing.rs` 从聚焦输入的实际平台、input type、只读/单行属性和 IME preedit 派生统一策略。
+macOS 物理 Control（Slint 的 meta）将 A/E、B/F、H/D、多行 P/N 转成标准段落、grapheme、删除和可视行事件；
+普通移动的 Shift 保留原生选区锚点。Windows/Linux 事件以及 macOS Command/Option 继续由原生编辑处理。
+密码的复制/剪切/全选保护在 callback 注册前仍由共享内核执行，适配器再次校验秘密策略并禁止扩展选区。
+只读删除和 IME 组合态中的新增动作会被消费且不编辑。适配器集中使用锁定 i-slint-core 1.18.1 的焦点/item
+事件边界，只调用聚焦 TextInput，不重新分发全局事件、不走终端路由，也不另存文本、光标或撤销栈。
+升级 Slint 时必须核对该边界并重跑 Unicode、反向选区、撤销、IME 和密码剪贴板回归。
 `ui/components/secret-text-input.slint` 是 SSH 密码、保险库口令和私钥 passphrase 专用的
 密码输入，提供粘贴右键操作但不继承普通字段的选择或复制/剪切行为。数值输入继续使用标准 `SpinBox`，不重复
 实现范围与增减语义。

@@ -594,3 +594,13 @@
 - 关键结论：AppKit drag 使用起始 mouse-down，currentEvent 只指最近事件；Slint 会先补发 moved 再处理 release，因此后读 currentEvent 不可靠。写 promise 后须调用 completion；断线/重复/非法目标应保留一次性 owner，不可静默丢弃回调。
 - 对实施计划的影响：原生 press hook 保存事件；启动按窗口和实际按键校验；promise 绑定 SSH attempt 并由 monitor 生命周期清理，错误映射到 SFTP 状态。
 - 未解决问题：实际 Finder 操作和用户的目标目录/文件系统尚未人工验证；无截图或真实远端连接验证。
+
+## 2026-10-14 09:23 +0800 Slint 平台文本编辑边界
+
+- 时间：2026-10-14 09:23 +0800
+- 检索问题：如何补充 macOS Control 编辑并让多种输入框复用，且保持其他平台、Unicode、IME、撤销和密码保护？
+- 检索原因：用户授权实现通用编辑；Slint 公开选区接口不足以安全重建完整编辑行为，平台修饰键含义影响实现。
+- 来源列表：[Slint 键盘与平台修饰键](https://docs.slint.dev/latest/docs/slint/reference/keyboard-input/overview/)；[Slint TextInput API](https://docs.slint.dev/latest/docs/slint/reference/keyboard-input/textinput/)；[锁定 1.18.1 标准编辑映射](https://github.com/slint-ui/slint/blob/v1.18.1/internal/core/input.rs)；本机锁定 core/compiler 源码与仓库现有 Slint 集成。
+- 关键结论：macOS Control 对应 Slint meta，Command 对应 control；标准输入缺少 A/E 等 Control 字母映射。标准事件已有段落、grapheme、删除、行移动、选区、IME 和撤销；游标 offset getter 被 compiler 标为内部测试用途，不用于生产光标状态。
+- 对实施计划的影响：共享 EditingTextInput 只传按键事件，应用集中读取真实聚焦输入策略并通过 item 标准事件执行已匹配动作；Windows/Linux/macOS 主快捷键原样处理，密码内核和适配器均保留保护。
+- 未解决问题：平台真实键盘/IME 和原生 popup 行为仍需用户验收；升级 Slint 时必须核对版本适配。Windows/Linux 本机 SDK 不可用，原生 CI 保留。

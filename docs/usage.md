@@ -190,8 +190,9 @@ copy path and remote **Edit** remain secondary controls when there is room.
 **Hidden** includes dot files in that browser: it stays in the title row on wide
 panes and moves to the status row on narrow panes.
 
-The path row gives nearly all available width to the current path and keeps a
-single **Path: Settings** gear at the right. A fitting path is shown in full;
+Both path rows place **Back**, **Forward**, and **Parent directory** buttons
+before the current path and a **Path: Settings** gear at the right. The path
+fills the remaining width. A fitting path is shown in full;
 otherwise only the middle is replaced by `…`. Both ends are retained whenever
 space allows, with roughly three quarters of the retained characters reserved
 for the tail. The display uses the actual font width and updates on resizing
@@ -199,8 +200,8 @@ or font changes. Hover an abbreviated path to see the complete original.
 
 Click the path, or choose **Edit path** in the gear menu, to edit the original
 path. Press Enter or choose **Open** in that menu to navigate; Escape returns
-to the current path. Control/Command+L also starts editing while a path control
-has focus. The gear menu includes **Copy current path**, **Back**, **Forward**,
+to the current path. `Cmd+L` on macOS or `Ctrl+L` on Windows/Linux also starts
+editing while a path control has focus. The gear menu includes **Copy current path**, **Back**, **Forward**,
 and **Parent directory**. Copying and navigation always use the original path;
 the displayed ellipsis never becomes part of a filesystem target.
 
@@ -556,6 +557,18 @@ or Home/End to select an enabled action, Enter/Space to activate, and Escape
 or a click outside to close. Recent workspaces open a submenu on hover, click,
 or Right; Left returns to the parent menu. Long menus scroll. Secret inputs
 continue to offer Paste only. The macOS screen menu retains the system appearance.
+
+Text fields in SFTP, Settings, session editors, and dialogs use the platform's
+standard editing shortcuts: `Cmd+A/C/X/V/Z` on macOS and `Ctrl+A/C/X/V/Z` on
+Windows/Linux. macOS also supports `Ctrl+A/E` for the beginning/end of the
+current paragraph (the whole field for single-line input), `Ctrl+B/F` for
+backward/forward movement, and `Ctrl+H/D` for backward/forward deletion.
+Multiline fields support `Ctrl+P/N` for the previous/next visual line. Shift
+extends ordinary selections for these movement commands. Password fields
+permit navigation and paste while blocking select-all, copy, and cut; Control
+movement never extends a password selection. Read-only fields permit movement
+but block deletion. Added Control actions wait until IME composition ends.
+These field shortcuts do not change terminal key handling.
 
 On Windows and Linux, the main window's menu shares the top row with the
 window controls; there is no separate visible system title bar. Drag the empty
