@@ -85,6 +85,125 @@ fn show_editor(harness: &LayoutTestHarness, width: u32) {
 }
 
 #[test]
+fn tab_summary_hover_tracks_latency_without_taking_focus_or_pointer_actions() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        let mut tab = WorkspaceTabRow {
+            id: "ssh-tab".into(),
+            title: "SSH".into(),
+            kind: "terminal".into(),
+            connected: true,
+            latency_state: "good".into(),
+            latency_ms: 42,
+            latency_updated_at: "15:30:00".into(),
+            system_release: "Debian GNU/Linux 12".into(),
+            ..Default::default()
+        };
+        let model = std::rc::Rc::new(VecModel::from(vec![tab.clone()]));
+        ui.set_workspace_tabs(ModelRc::from(model.clone()));
+        let activated = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let received = activated.clone();
+        ui.on_activate_tab(move |id| *received.borrow_mut() = Some(id));
+        let closed = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let received = closed.clone();
+        ui.on_close_tab(move |id| *received.borrow_mut() = Some(id));
+        ui.show().expect("tab hover window");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        harness.settle();
+
+        let title = displayed_text(&harness, "SSH");
+        assert!(natural_width(&harness, &title) <= title.geometry().size.width + 0.5);
+        let focus_before = WindowInner::from_pub(ui.window())
+            .focus_item
+            .borrow()
+            .upgrade();
+        hover(&harness, &title);
+        assert_eq!(
+            tooltip_text(&harness).as_deref(),
+            Some("SSH\nDebian GNU/Linux 12\nConnected · SSH RTT: 42 ms\nUpdated: 15:30:00")
+        );
+        assert_eq!(
+            WindowInner::from_pub(ui.window())
+                .focus_item
+                .borrow()
+                .upgrade(),
+            focus_before,
+            "hover must keep keyboard focus in the current page"
+        );
+
+        tab.latency_ms = 73;
+        tab.latency_updated_at = "15:30:10".into();
+        model.set_row_data(0, tab.clone());
+        harness.settle();
+        assert_eq!(
+            tooltip_text(&harness).as_deref(),
+            Some("SSH\nDebian GNU/Linux 12\nConnected · SSH RTT: 73 ms\nUpdated: 15:30:10"),
+            "an open tooltip must follow fresh samples"
+        );
+
+        for (state, message) in [
+            ("measuring", "Connected · Measuring SSH latency"),
+            ("timeout", "Connected · SSH latency probe timed out"),
+            ("stale", "Connected · SSH latency data expired"),
+            ("unavailable", "Connected · SSH latency unavailable"),
+            ("", "Connected"),
+        ] {
+            tab.latency_state = state.into();
+            model.set_row_data(0, tab.clone());
+            harness.settle();
+            assert_eq!(
+                tooltip_text(&harness).as_deref(),
+                Some(format!("SSH\nDebian GNU/Linux 12\n{message}").as_str()),
+                "{state} must not expose the previous numeric reading"
+            );
+        }
+        tab.connected = false;
+        model.set_row_data(0, tab);
+        harness.settle();
+        assert_eq!(
+            tooltip_text(&harness).as_deref(),
+            Some("SSH\nDebian GNU/Linux 12"),
+            "disconnect must remove connection data"
+        );
+
+        let size = title.geometry().size;
+        let point = title.map_to_window(LogicalPoint::new(size.width / 2.0, size.height / 2.0));
+        harness.click(slint::LogicalPosition::new(point.x, point.y));
+        assert_eq!(activated.borrow().as_deref(), Some("ssh-tab"));
+        let close = ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
+            .visit_descendants(|item| {
+                if item.is_visible()
+                    && item
+                        .accessible_string_property(
+                            i_slint_core::accessibility::AccessibleStringProperty::Label,
+                        )
+                        .as_deref()
+                        == Some("Close tab")
+                {
+                    return ControlFlow::Break(item.clone());
+                }
+                ControlFlow::Continue(())
+            })
+            .expect("accessible tab close control");
+        hover(&harness, &close);
+        assert!(
+            tooltip_text(&harness).is_none(),
+            "close keeps its own region"
+        );
+        let point = close.map_to_window(LogicalPoint::new(
+            close.geometry().size.width / 2.0,
+            close.geometry().size.height / 2.0,
+        ));
+        harness.click(slint::LogicalPosition::new(point.x, point.y));
+        assert_eq!(closed.borrow().as_deref(), Some("ssh-tab"));
+        ui.hide().expect("hide tab hover window");
+    })
+    .join()
+    .expect("tab hover and pointer regression");
+}
+
+#[test]
 fn shared_text_buttons_fit_session_actions_across_languages_and_fonts() {
     std::thread::spawn(|| {
         let harness = LayoutTestHarness::new();

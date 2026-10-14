@@ -84,6 +84,7 @@ component WorkspaceTabContent inherits HorizontalLayout {
     in property <string> latency-state;
     in property <int> latency-ms;
     in property <string> latency-updated-at;
+    in property <bool> tooltip-enabled: true;
     private property <string> connection-tooltip:
         root.latency-state.is-empty ? @tr("Connected")
         : root.latency-state == "measuring" ? @tr("Connected · Measuring SSH latency")
@@ -91,6 +92,9 @@ component WorkspaceTabContent inherits HorizontalLayout {
         : root.latency-state == "stale" ? @tr("Connected · SSH latency data expired")
         : root.latency-state == "unavailable" ? @tr("Connected · SSH latency unavailable")
         : @tr("Connected · SSH RTT: {} ms\nUpdated: {}", root.latency-ms, root.latency-updated-at);
+    private property <string> tab-tooltip: root.title
+        + (root.system-release.is-empty ? "" : "\n" + root.system-release)
+        + (root.connected ? "\n" + root.connection-tooltip : "");
     in property <string> system-release;
     in property <string> system-platform;
     in property <bool> active: false;
@@ -116,49 +120,60 @@ component WorkspaceTabContent inherits HorizontalLayout {
     spacing: Theme.tab-content-spacing;
 
     Rectangle {
-        width: Theme.tab-platform-icon-size;
-        background: transparent;
-        TabKindGlyph {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            kind: root.kind;
-            system-platform: root.system-platform;
-            glyph-color: root.active ? Theme.text : Theme.muted;
-        }
-    }
-    Text {
-        width: Theme.tab-order-width;
-        text: "\{root.order}";
-        color: Theme.muted;
-        font-size: Theme.tab-order-font-size;
-        font-weight: Theme.tab-order-font-weight;
-        horizontal-alignment: right;
-        vertical-alignment: center;
-    }
-    ElidedLabel {
         horizontal-stretch: 1;
-        text: root.title;
-        tooltip-text: root.system-release;
-        tooltip-enabled: !root.system-release.is-empty;
-        text-color: root.active ? Theme.tab-active-text : Theme.tab-inactive-text;
-        font-size: Theme.tab-title-font-size;
-        font-weight: root.active
-            ? Theme.tab-title-active-font-weight
-            : Theme.tab-title-inactive-font-weight;
-    }
-    if root.connected : Rectangle {
-        width: Theme.tab-status-size;
-        height: Theme.tab-status-size;
-        border-radius: Theme.tab-status-size / 2;
-        background: root.latency-state.is-empty || root.latency-state == "good" ? Theme.success
-            : root.latency-state == "moderate" ? Theme.latency-moderate-color
-            : root.latency-state == "high" ? Theme.latency-high-color
-            : root.latency-state == "poor" || root.latency-state == "timeout" ? Theme.danger
-            : Theme.muted;
-        accessible-role: text;
-        accessible-label: root.connection-tooltip;
-        Tooltip {
-            ElidedTooltipContent { text: root.connection-tooltip; }
+        background: transparent;
+
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: Theme.tab-content-spacing;
+
+            Rectangle {
+                width: Theme.tab-platform-icon-size;
+                background: transparent;
+                TabKindGlyph {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    kind: root.kind;
+                    system-platform: root.system-platform;
+                    glyph-color: root.active ? Theme.text : Theme.muted;
+                }
+            }
+            Text {
+                width: Theme.tab-order-width;
+                text: "\{root.order}";
+                color: Theme.muted;
+                font-size: Theme.tab-order-font-size;
+                font-weight: Theme.tab-order-font-weight;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            ElidedLabel {
+                horizontal-stretch: 1;
+                text: root.title;
+                tooltip-enabled: false;
+                text-color: root.active ? Theme.tab-active-text : Theme.tab-inactive-text;
+                font-size: Theme.tab-title-font-size;
+                font-weight: root.active
+                    ? Theme.tab-title-active-font-weight
+                    : Theme.tab-title-inactive-font-weight;
+            }
+            if root.connected : Rectangle {
+                width: Theme.tab-status-size;
+                height: Theme.tab-status-size;
+                border-radius: Theme.tab-status-size / 2;
+                background: root.latency-state.is-empty || root.latency-state == "good" ? Theme.success
+                    : root.latency-state == "moderate" ? Theme.latency-moderate-color
+                    : root.latency-state == "high" ? Theme.latency-high-color
+                    : root.latency-state == "poor" || root.latency-state == "timeout" ? Theme.danger
+                    : Theme.muted;
+                accessible-role: text;
+                accessible-label: root.connection-tooltip;
+            }
+        }
+        // Observe the whole tab summary without taking its click/drag or focus.
+        if root.tooltip-enabled : Tooltip {
+            ElidedTooltipContent { text: root.tab-tooltip; }
         }
     }
     if root.window-action-enabled : Rectangle {
@@ -770,6 +785,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                         latency-state: tab.latency_state;
                         latency-ms: tab.latency_ms;
                         latency-updated-at: tab.latency_updated_at;
+                        tooltip-enabled: root.drag-source-index < 0;
                         system-release: tab.system_release;
                         system-platform: tab.system_platform;
                         active: tab.id == root.active-tab-id;
@@ -882,6 +898,7 @@ export component WorkspaceTitlebar inherits Rectangle {
                     latency-state: root.drag-latency-state;
                     latency-ms: root.drag-latency-ms;
                     latency-updated-at: root.drag-latency-updated-at;
+                    tooltip-enabled: false;
                     system-release: root.drag-system-release;
                     system-platform: root.drag-system-platform;
                     active: true;
